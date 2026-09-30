@@ -12,9 +12,24 @@
     "roadmap"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "2648c002-3297-4e5a-9063-e541cf8dee19",
+      "author": "home",
+      "text": "HANDOFF 2026-09-30: Human requested immediate stop due to exhausted weekly limit; persistent goal paused, not completed. Decision-Flywheel core checkout is clean at published 6137fa185a1a98afa84b5e6d5948d1780df5d56d, with 194 specs and successful CI 36779694166. Native/provider-neutral decision-context optimizer and fake-tested initial adapters are implemented; NO DSPy. Main remaining sequence is evaluations: initial Jev selection-by-size, then fixed-membership ordering, then eligible Kev/Laya comparisons. Laya labeled context unsupported upstream: retain explicit zero-only/exclusion, do not fabricate support. Full detailed local WIP handoff is in companion Decision-Flywheel-Evaluations Kanbus task decision-flywheel-evaluations-b7796fc5-0fd4-51f6-aa05-397e635cfff6. All current code edits are in that checkout; do not modify unrelated dirty Jev-Flywheel. No new paid model calls or results have occurred, and the proposed 42-attempt pilot still lacks explicit human approval. Resume with Terra subagents if authorized; do not mark the entire plan complete because infrastructure passes.",
+      "created_at": "2026-09-30T23:20:07.354023Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-09-30T17:59:29.094144Z",
-  "updated_at": "2026-09-30T18:09:31.895414Z",
+  "updated_at": "2026-09-30T23:20:07.354103Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
