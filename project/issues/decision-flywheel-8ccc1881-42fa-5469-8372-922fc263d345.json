@@ -3,7 +3,7 @@
   "title": "Enforce trusted candidate labels and target exclusion",
   "description": "## Scope\n\nAdd a shared candidate validation boundary for every selector. The current RandomBalanced selector lacks target exclusion and lexical retrieval excludes only matching IDs. Exclude matching IDs and exact normalized-text duplicates, reject unsupported labels or untrusted sources, and define insufficient-label-pool behavior.\n\n## Definition of done\n\nSpecs prove both random and retrieval policies exclude the target under a different ID, reject invalid pools, and cannot access development or scoreboard labels through the selection API.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Enforce trusted candidate labels and target exclusion\n  Scenario: Required observable behavior\n    Given a candidate has the same normalized text as the target under another ID\n    When any context policy selects examples\n    Then that candidate is excluded and the requested per-label count is either met or explicitly rejected\n```",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,13 +12,31 @@
     "roadmap"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "50665a7f-e728-4910-b280-79c6720c0297",
+      "author": "home",
+      "text": "Implemented by the Terra candidate-pool sub-agent and reviewed against the model-contract changes. Both selectors share trusted-source and exact canonical-label validation, exclude target IDs and normalized duplicate text, reject invalid budgets and insufficient per-label pools, and select deterministically independent of pool input order. Added regression coverage for Unicode duplicates, malformed text, and equivalent noncanonical labels. Context specs: 33 passed; combined make test: 52 passed. No network or keys used.",
+      "created_at": "2026-09-30T18:27:36.087842Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Flywheel Integration",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-09-30T18:08:06.983209Z",
-  "updated_at": "2026-09-30T18:08:06.983317Z",
-  "closed_at": null,
+  "updated_at": "2026-09-30T18:27:38.795218Z",
+  "closed_at": "2026-09-30T18:27:38.795058Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": {
     "platform": "codex",
     "model": "GPT-6",

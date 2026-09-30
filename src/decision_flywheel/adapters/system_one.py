@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from typing import Any, Sequence
 
-from ..models import DecisionResult, DecisionTask, Item, LabeledItem
+from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
 
 def _as_dict(value: Any) -> dict:
@@ -19,14 +19,21 @@ class SystemOneAdapter:
     """
     name = "system-one"
 
-    def __init__(self, client: Any, *, name: str = "system-one"):
+    def __init__(self, client: Any, *, name: str = "system-one",
+                 capabilities: ModelCapabilities | None = None):
         self.client, self.name = client, name
+        self.capabilities = capabilities or ModelCapabilities(
+            supports_labeled_context=True, supports_probability_distributions=True
+        )
 
     async def decide(self, task: DecisionTask, target: Item,
                      context: Sequence[LabeledItem]) -> DecisionResult:
-        text = target.values.get(task.input_field)
-        if not isinstance(text, str):
-            raise ValueError(f"target lacks string {task.input_field!r}")
+        self.capabilities.validate_context(context)
+        task.validate_target(target)
+        for example in context:
+            task.validate_target(example.item)
+            task.validate_label(example.label)
+        text = target.values[task.input_field]
         state = {"labeled_examples": [{"text": item.item.values[task.input_field], "label": item.label}
                                       for item in context], "target": {"text": text}}
         question = {"type": "choice", "instructions": task.instructions,
@@ -34,8 +41,8 @@ class SystemOneAdapter:
         started = time.perf_counter()
         response = await self.client.system_one(state=state, questions={task.name: question})
         answer = _as_dict(response.answers[task.name]); answer = answer.get("root", answer)
-        task.validate_label(answer["choice"])
         usage = _as_dict(response.usage) if getattr(response, "usage", None) else None
-        return DecisionResult(answer["choice"], answer.get("probabilities", {}),
-                              getattr(response, "model", None), usage,
-                              round((time.perf_counter() - started) * 1000, 2))
+        result = DecisionResult(answer["choice"], answer.get("probabilities"),
+                                getattr(response, "model", None), usage,
+                                round((time.perf_counter() - started) * 1000, 2))
+        return task.validate_result(result)

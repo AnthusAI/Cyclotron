@@ -5,12 +5,15 @@ import asyncio
 import time
 from typing import Any, Sequence
 
-from ..models import DecisionResult, DecisionTask, Item, LabeledItem
+from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
 
 class LayaAdapter:
     """Wrap a Laya-compatible local model exposing synchronous ``system_one``."""
     name = "laya"
+    capabilities = ModelCapabilities(
+        supports_labeled_context=False, supports_probability_distributions=False
+    )
 
     def __init__(self, model: Any, *, model_name: str = "laya"):
         self.model, self.model_name = model, model_name
@@ -36,5 +39,6 @@ class LayaAdapter:
         response = await asyncio.to_thread(self.model.system_one, state=text, questions={task.name: question})
         answers = response.get("answers", response); answer = answers[task.name]
         label = answer.get("choice", answer.get("value")); task.validate_label(label)
-        return DecisionResult(label, answer.get("probabilities", {}), self.model_name,
-                              response.get("usage"), response.get("latency_ms", round((time.perf_counter()-started)*1000, 2)))
+        result = DecisionResult(label, answer.get("probabilities"), self.model_name,
+                                response.get("usage"), response.get("latency_ms", round((time.perf_counter()-started)*1000, 2)))
+        return task.validate_result(result)

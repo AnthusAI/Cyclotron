@@ -3,7 +3,7 @@
   "title": "Validate decision tasks, outputs, and model capabilities",
   "description": "## Scope\n\nDefine label normalization, task identity, typed choice outputs, probability availability, usage, latency, and capability metadata. Reject duplicate/unknown labels, malformed distributions, and unsupported context before a provider call. Do not convert a single confidence into a fabricated full distribution.\n\n## Definition of done\n\nSentence-named specs cover valid and invalid inputs, missing probability/usage fields, stable fingerprints, and capability rejection; provider-specific response shapes remain in adapters.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Validate decision tasks, outputs, and model capabilities\n  Scenario: Required observable behavior\n    Given a model declares that it accepts zero-shot choices but no labeled context\n    When a caller supplies labeled demonstrations\n    Then the adapter rejects the request before making any provider call\n```",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,13 +12,31 @@
     "roadmap"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "3359ccd0-7d6d-45fc-b9b6-6bdeb55026d6",
+      "author": "home",
+      "text": "Implemented by the Terra contract sub-agent and reviewed in integration. Added canonical task/result validation, immutable ordered labels (unordered collections rejected), stable task fingerprints, optional probability metadata, capability preflight, conservative Laya context metadata, and adjacent fake-model specs. The cross-module offline decision flow passes for both random and lexical selectors. Specs were run before implementation; final make test: 54 passed. No live model calls. Missing distributions are None; provider rounding values are preserved within the documented tolerance.",
+      "created_at": "2026-09-30T18:27:29.632313Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Flywheel Integration",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-09-30T18:07:51.468864Z",
-  "updated_at": "2026-09-30T18:07:51.468970Z",
-  "closed_at": null,
+  "updated_at": "2026-09-30T18:29:09.323879Z",
+  "closed_at": "2026-09-30T18:27:33.377679Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": {
     "platform": "codex",
     "model": "GPT-6",

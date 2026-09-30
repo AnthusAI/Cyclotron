@@ -2,6 +2,6 @@
 
 __version__ = "0.1.0"
 
-from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
+from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
-__all__ = ["DecisionModel", "DecisionResult", "DecisionTask", "Item", "LabeledItem"]
+__all__ = ["DecisionModel", "DecisionResult", "DecisionTask", "Item", "LabeledItem", "ModelCapabilities"]

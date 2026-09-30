@@ -20,6 +20,8 @@ new unlabeled target ─────────────┘
 
 `DecisionModel` accepts a typed task, an item, and selected context; it returns a label, optional probabilities, model ID, usage, and latency. This scaffold includes a System One adapter for **Jev** and **Kev**-compatible clients. Laya support is a local adapter planned as an optional extra. Core tests use fake clients only.
 
+This first offline foundation makes context selection and a validated model decision reproducible without calling a live provider. `DecisionResult.probabilities` is `None` when a provider does not return a full distribution; a single confidence is never expanded into made-up probabilities. Automated policy search is forthcoming.
+
 ## Development
 
 ```bash
