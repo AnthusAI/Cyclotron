@@ -3,7 +3,7 @@
   "title": "Separate example selection, context size, and display order",
   "description": "## Scope\n\nRepresent count and token budgets separately, with deterministic token-accounting provenance and provider limits. Support nested balanced count ladders, explicit display-order seeds, and independent label-option order. Never silently truncate an oversized request.\n\n## Definition of done\n\nSpecs show identical selected sets across display permutations, nested selections across count ladders when supported, accurate budget diagnostics, and explicit infeasible conditions.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Separate example selection, context size, and display order\n  Scenario: Required observable behavior\n    Given a fixed set of labeled demonstrations and two display-order seeds\n    When contexts are constructed at the same budget\n    Then their example membership and task wording agree while only presentation order changes\n```",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -21,10 +21,25 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "1db12d25-873e-4fae-8b75-7d17fc0afba0",
+      "author": "home",
+      "text": "Terra implementation reviewed against the acceptance scenarios. Independent offline suite passed 144 specs. Coverage includes nested balanced random/prototype/retrieval selection, custom-policy membership and target-exclusion guards, complete request fingerprints, independent presentation order and token estimates, development-only optimization, provisional versus frozen winner, cumulative scoped call accounting, and cache-only replay. No live provider calls or dataset downloads.",
+      "created_at": "2026-09-30T19:02:19.190982Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Flywheel Integration",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-09-30T18:08:12.979264Z",
-  "updated_at": "2026-09-30T18:08:55.222213Z",
-  "closed_at": null,
+  "updated_at": "2026-09-30T19:02:22.789521Z",
+  "closed_at": "2026-09-30T19:02:22.789420Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

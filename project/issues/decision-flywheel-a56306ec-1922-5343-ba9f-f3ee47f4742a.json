@@ -3,7 +3,7 @@
   "title": "Verify and implement Laya labeled-context support",
   "description": "## Scope\n\nInvestigate the upstream Laya interface and Biased-Decisions integration before replacing the current NotImplementedError. Implement an explicit, documented context serialization if supported; otherwise retain zero-shot support and a declared few-shot exclusion.\n\n## Definition of done\n\nFake-model conformance specs cover zero-shot and the verified context path, or assert a precise unsupported-capability reason; default model loading and version provenance are documented.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Verify and implement Laya labeled-context support\n  Scenario: Required observable behavior\n    Given a Laya installation has a documented context capability\n    When the caller requests a few-shot decision\n    Then the adapter uses the supported serialization or returns the recorded exclusion reason\n```",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -17,10 +17,25 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "83d29c31-90fe-4932-80d3-2d1c3614dde7",
+      "author": "home",
+      "text": "Inspected installed upstream Laya 0.3.21 Agent and load signatures. Retained supported zero-shot path, version/revision provenance and tokenizer truncation guard. Labeled context has no documented upstream demonstration semantics and is explicitly excluded, as permitted by this story. Fake conformance covers exclusion before inference. Loading a pinned live checkpoint remains a separate approved pilot.",
+      "created_at": "2026-09-30T19:10:07.342487Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Flywheel Integration",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-09-30T18:08:01.141250Z",
-  "updated_at": "2026-09-30T18:08:47.545614Z",
-  "closed_at": null,
+  "updated_at": "2026-09-30T19:10:10.036136Z",
+  "closed_at": "2026-09-30T19:10:10.036035Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
