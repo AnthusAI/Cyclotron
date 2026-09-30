@@ -81,7 +81,8 @@ class KevAdapter:
             raise ValueError(f"Kev endpoint response is missing answer choice for {task.name!r}")
         result = DecisionResult(answer["choice"], answer.get("probabilities"),
                                 payload.get("model") if isinstance(payload.get("model"), str) else None,
-                                _numeric_usage(payload.get("usage")), _latency(payload.get("latency_ms")))
+                                _numeric_usage(payload.get("usage")), _latency(payload.get("latency_ms")),
+                                answer.get("confidence"))
         return task.validate_result(result)
 
     async def _post(self, body: dict[str, Any]) -> Any:

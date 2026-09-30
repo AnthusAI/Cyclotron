@@ -42,6 +42,20 @@ def test_a_laya_zero_shot_result_canonicalizes_labels_without_inventing_probabil
     assert adapter.capabilities.supports_probability_distributions is True
 
 
+def test_a_laya_adapter_preserves_an_explicit_confidence_when_upstream_exposes_one():
+    class ConfidenceLaya(FakeLayaModel):
+        def system_one(self, *, state, questions):
+            self.calls += 1
+            return {"answers": {"topic": {"choice": "YES!", "confidence": 0.23,
+                                            "probabilities": {"yes": 0.8, "no": 0.2}}}}
+
+    task = DecisionTask("topic", ("yes", "no"), "Classify only target.")
+    result = asyncio.run(LayaAdapter(ConfidenceLaya()).decide(task, Item("target", {"text": "target"}), []))
+
+    assert result.confidence == 0.23
+    assert result.confidence != max(result.probabilities.values())
+
+
 def test_a_laya_adapter_rejects_a_zero_shot_state_that_upstream_would_truncate():
     class Tokenizer:
         def __call__(self, text, *, add_special_tokens):

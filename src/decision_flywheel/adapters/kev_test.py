@@ -34,7 +34,7 @@ class FakeTransport:
 
 def test_a_kev_adapter_posts_the_source_verified_system_one_schema_through_an_injected_transport():
     transport = FakeTransport(Response(payload={
-        "model": "kev-4b@abc", "answers": {"topic": {"choice": "YES!", "probabilities": {"yes": .7, "no": .3}}},
+        "model": "kev-4b@abc", "answers": {"topic": {"choice": "YES!", "confidence": .4, "probabilities": {"yes": .7, "no": .3}}},
         "usage": {"input_tokens": 9},
     }))
     adapter = KevAdapter(transport=transport, configuration=KevConfiguration(model="kev-4b", timeout_seconds=4))
@@ -50,6 +50,7 @@ def test_a_kev_adapter_posts_the_source_verified_system_one_schema_through_an_in
     }
     assert result.label == "yes"
     assert result.probabilities == {"yes": .7, "no": .3}
+    assert result.confidence == .4
     assert result.model == "kev-4b@abc"
 
 

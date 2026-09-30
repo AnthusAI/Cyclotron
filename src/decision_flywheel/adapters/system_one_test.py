@@ -21,6 +21,13 @@ class ConfidenceOnlyClient:
         return SimpleNamespace(answers={"topic": answer}, model="fake", usage=None)
 
 
+class ConfidenceAndProbabilitiesClient:
+    async def system_one(self, *, state, questions):
+        answer = SimpleNamespace(model_dump=lambda: {"choice": "yes", "confidence": 0.41,
+                                                      "probabilities": {"yes": 0.8, "no": 0.2}})
+        return SimpleNamespace(answers={"topic": answer}, model="fake", usage=None)
+
+
 def test_a_system_one_adapter_keeps_target_and_context_separate():
     client = FakeClient(); task = DecisionTask("topic", ("yes", "no"), "Classify only target.")
     result = asyncio.run(SystemOneAdapter(client, name="jev").decide(task, Item("t", {"text": "target"}), [LabeledItem(Item("d", {"text": "demo"}), "yes")]))
@@ -35,6 +42,27 @@ def test_a_confidence_is_not_fabricated_into_a_probability_distribution():
     result = asyncio.run(SystemOneAdapter(client).decide(task, Item("t", {"text": "target"}), []))
 
     assert result.probabilities is None
+    assert result.confidence == 0.8
+
+
+def test_a_system_one_adapter_keeps_explicit_confidence_separate_from_probabilities():
+    task = DecisionTask("topic", ("yes", "no"), "Classify only target.")
+
+    result = asyncio.run(SystemOneAdapter(ConfidenceAndProbabilitiesClient()).decide(task, Item("t", {"text": "target"}), []))
+
+    assert result.probabilities == {"yes": 0.8, "no": 0.2}
+    assert result.confidence == 0.41
+
+
+def test_a_system_one_adapter_rejects_malformed_explicit_confidence():
+    class BadConfidenceClient:
+        async def system_one(self, *, state, questions):
+            answer = SimpleNamespace(model_dump=lambda: {"choice": "yes", "confidence": 1.1})
+            return SimpleNamespace(answers={"topic": answer}, model="fake", usage=None)
+
+    task = DecisionTask("topic", ("yes", "no"), "Classify only target.")
+    with pytest.raises(ValueError, match="confidence"):
+        asyncio.run(SystemOneAdapter(BadConfidenceClient()).decide(task, Item("t", {"text": "target"}), []))
 
 
 def test_a_model_that_rejects_labeled_context_never_calls_its_provider():

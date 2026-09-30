@@ -129,6 +129,7 @@ class DecisionResult:
     model: str | None = None
     usage: Mapping[str, Any] | None = None
     latency_ms: float | None = None
+    confidence: float | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.label, str) or not self.label.strip():
@@ -144,6 +145,13 @@ class DecisionResult:
             or self.latency_ms < 0
         ):
             raise ValueError("latency_ms must be a non-negative finite number when present")
+        if self.confidence is not None and (
+            isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, Real)
+            or not math.isfinite(self.confidence)
+            or not 0.0 <= self.confidence <= 1.0
+        ):
+            raise ValueError("confidence must be a finite number between zero and one when present")
 
 
 @dataclass(frozen=True)

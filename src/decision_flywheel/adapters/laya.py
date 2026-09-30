@@ -64,7 +64,8 @@ class LayaAdapter:
         answers = response.get("answers", response); answer = answers[task.name]
         label = answer.get("choice", answer.get("value")); task.validate_label(label)
         result = DecisionResult(label, answer.get("probabilities"), self.model_name,
-                                response.get("usage"), response.get("latency_ms", round((time.perf_counter()-started)*1000, 2)))
+                                response.get("usage"), response.get("latency_ms", round((time.perf_counter()-started)*1000, 2)),
+                                answer.get("confidence"))
         return task.validate_result(result)
 
     def _guard_against_source_truncation(self, text: str) -> None:

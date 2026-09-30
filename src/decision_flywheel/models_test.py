@@ -59,6 +59,20 @@ def test_a_result_can_omit_provider_metadata_and_probabilities():
     assert result.probabilities is None
     assert result.usage is None
     assert result.latency_ms is None
+    assert result.confidence is None
+
+
+def test_a_result_preserves_only_an_explicit_provider_confidence():
+    result = DecisionResult("yes", {"yes": 0.9, "no": 0.1}, confidence=0.37)
+
+    assert result.confidence == 0.37
+    assert result.confidence != max(result.probabilities.values())
+
+
+@pytest.mark.parametrize("confidence", [True, -0.01, 1.01, float("nan"), "certain"])
+def test_a_result_rejects_malformed_explicit_confidence(confidence):
+    with pytest.raises(ValueError, match="confidence"):
+        DecisionResult("yes", confidence=confidence)
 
 
 @pytest.mark.parametrize(

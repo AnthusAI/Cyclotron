@@ -44,5 +44,5 @@ class SystemOneAdapter:
         usage = _as_dict(response.usage) if getattr(response, "usage", None) else None
         result = DecisionResult(answer["choice"], answer.get("probabilities"),
                                 getattr(response, "model", None), usage,
-                                round((time.perf_counter() - started) * 1000, 2))
+                                round((time.perf_counter() - started) * 1000, 2), answer.get("confidence"))
         return task.validate_result(result)

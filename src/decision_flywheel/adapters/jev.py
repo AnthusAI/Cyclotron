@@ -92,6 +92,7 @@ class JevAdapter:
         result = DecisionResult(
             answer["choice"], answer.get("probabilities"), _string_or_none(getattr(response, "model", None)),
             _numeric_usage(getattr(response, "usage", None)), round((time.perf_counter() - started) * 1000, 2),
+            answer.get("confidence"),
         )
         return task.validate_result(result)
 

@@ -17,7 +17,7 @@ class FakeJevClient:
         self.calls = getattr(self, "calls", 0) + 1
         self.state, self.questions, self.kwargs = state, questions, kwargs
         return SimpleNamespace(
-            answers={"topic": {"choice": "YES!", "probabilities": {"yes": 0.8, "no": 0.2}}},
+            answers={"topic": {"choice": "YES!", "confidence": 0.31, "probabilities": {"yes": 0.8, "no": 0.2}}},
             model="jev-2026-09-30", usage={"input_tokens": 12, "output_tokens": 3},
         )
 
@@ -43,6 +43,7 @@ def test_a_jev_adapter_keeps_provider_probabilities_and_numeric_usage_without_ar
 
     assert result.label == "yes"
     assert result.probabilities == {"yes": 0.8, "no": 0.2}
+    assert result.confidence == 0.31
     assert result.model == "jev-2026-09-30"
     assert result.usage == {"input_tokens": 12, "output_tokens": 3}
 

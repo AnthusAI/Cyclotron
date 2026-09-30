@@ -1,0 +1,59 @@
+{
+  "id": "decision-flywheel-b895b6e3-65c1-4cca-ad24-8ca796739a8b",
+  "title": "Preserve provider-returned confidence across decision adapters",
+  "description": "Original evaluation provenance requires returned confidence as well as full probabilities. Add optional finite nonboolean confidence in [0,1] to the provider-neutral DecisionResult without positional API drift; preserve only explicit provider confidence in Jev, compatible System One/Kev, and Laya adapters. Never synthesize it from maximum probability or retain arbitrary raw payloads. Adjacent fake-client specs must prove exact retention, missing-as-None, malformed rejection, and no network/keys.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f8c73d05-122b-4acd-b364-e9bf989de6fb",
+      "author": "home",
+      "text": "Terra implemented an optional trailing DecisionResult.confidence field with finite [0,1] nonboolean validation. Jev, compatible System One, Kev and Laya forward only explicit provider confidence; absent values stay None, with no inference from probability maxima. Targeted adjacent specs: 40 passed. Root review confirms positional compatibility and safe validation. Full root suite is being verified before publishing; evaluation export integration follows against the exact pinned core commit.",
+      "created_at": "2026-09-30T21:27:28.080491Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Flywheel Implementation",
+        "settings": {}
+      }
+    },
+    {
+      "id": "781664a4-28a6-4667-b024-eb525cf57b1d",
+      "author": "home",
+      "text": "Root full offline verification completed: make test passed all 194 specs; git diff --check clean. No network or model calls. The core confidence-preservation acceptance criteria are met; live study collection and evaluation export are separate tasks.",
+      "created_at": "2026-09-30T21:27:45.457590Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Flywheel Implementation",
+        "settings": {}
+      }
+    }
+  ],
+  "created_at": "2026-09-30T21:25:45.625298Z",
+  "updated_at": "2026-09-30T21:27:48.506599Z",
+  "closed_at": "2026-09-30T21:27:48.506459Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Implementation",
+    "settings": {}
+  },
+  "agent_assignment": null
+}
