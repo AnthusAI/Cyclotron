@@ -13,6 +13,7 @@ license = {text = "MIT"}
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 tools = [
+    "build>=1.2",
     "kanbus==0.33.0",
     "python-semantic-release>=10,<11",
 ]
