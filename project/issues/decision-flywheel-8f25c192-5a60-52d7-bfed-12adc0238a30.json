@@ -1,0 +1,29 @@
+{
+  "id": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
+  "title": "Make the optimizer easy to use and integrate",
+  "description": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces; add a DSPy bridge only when it runs real automated optimization through the decision-model contract.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links; optional integrations have demonstrated optimization value.",
+  "type": "epic",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-09-30T18:08:33.870714Z",
+  "updated_at": "2026-09-30T18:08:33.870791Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

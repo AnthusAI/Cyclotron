@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "04c1f9ff-6320-401f-b0d2-58b425190056",
+  "issue_id": "decision-flywheel-91347c58-fd85-5e64-8b20-8179d723fa9f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:07:51.468Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Validate decision tasks, outputs, and model capabilities",
+    "description": "## Scope\n\nDefine label normalization, task identity, typed choice outputs, probability availability, usage, latency, and capability metadata. Reject duplicate/unknown labels, malformed distributions, and unsupported context before a provider call. Do not convert a single confidence into a fabricated full distribution.\n\n## Definition of done\n\nSentence-named specs cover valid and invalid inputs, missing probability/usage fields, stable fingerprints, and capability rejection; provider-specific response shapes remain in adapters.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Validate decision tasks, outputs, and model capabilities\n  Scenario: Required observable behavior\n    Given a model declares that it accepts zero-shot choices but no labeled context\n    When a caller supplies labeled demonstrations\n    Then the adapter rejects the request before making any provider call\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-2f4b891a-1749-5c87-af33-a3ab64c5bf57",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "decision-flywheel-731c3e14-b2bb-5b69-bdc4-3ab8bba7cca6",
+  "title": "Deliver the Decision Context Optimizer",
+  "description": "## Scope\n\nTurn labeled candidate data into reproducible fixed-global or target-conditioned context policies. Optimize on development labels and freeze the result before scoreboard evaluation.\n\n## Definition of done\n\nDeterministic baselines, selection guards, context budgets, development search, and reloadable policy artifacts operate through one provider-neutral API.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-a6df9a09-81b6-56aa-957e-1c0c1de218f7`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-09-30T18:08:04.114420Z",
+  "updated_at": "2026-09-30T18:08:04.114522Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

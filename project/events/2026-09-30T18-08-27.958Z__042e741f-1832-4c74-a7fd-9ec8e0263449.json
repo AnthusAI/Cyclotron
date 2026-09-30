@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "042e741f-1832-4c74-a7fd-9ec8e0263449",
+  "issue_id": "decision-flywheel-77186d93-0248-597b-ae8c-4ae3d1c393c1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:08:27.958Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Extract the learned head with trusted fitting and calibration guards",
+    "description": "## Scope\n\nPort the minimal reusable learned-head/refit path from Jev-Flywheel. Fit only trusted labels with full feature coverage and explicit selection propensities; use propensity weighting and out-of-fold predictions for calibration. Context optimization and learned-head fitting are separate versioned interventions.\n\n## Definition of done\n\nFailure specs reject untrusted labels, missing propensities, missing features, and in-sample calibration; a fake-engine fixture produces reproducible numbers.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Extract the learned head with trusted fitting and calibration guards\n  Scenario: Required observable behavior\n    Given feedback labels with incomplete feature coverage or missing propensity\n    When a learned-head fit is requested\n    Then the fit rejects or drops invalid rows according to an explicit policy rather than guessing values\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-18962dc7-b421-5a9e-b17e-70fd3567ca2d",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "3dea2a51-dd45-4be1-991e-b6e5b3225a74",
+  "issue_id": "decision-flywheel-0822f794-4e56-5a84-8a7d-8a17a16cd2d1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:08:15.929Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Search context policies using development labels and a call budget",
+    "description": "## Scope\n\nImplement automated selection without requiring DSPy: evaluate candidate global demonstration sets and target-conditioned policy parameters on development data, with a declared metric, deterministic tie breaking, repeated seeds where applicable, and a maximum-call budget. Keep global-set search and per-target retrieval distinct in the resulting artifact.\n\n## Definition of done\n\nA scripted decision model proves search chooses by development performance, never requests scoreboard labels, resumes without duplicate successful calls, reports objective/call history, and stops at the ceiling.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Search context policies using development labels and a call budget\n  Scenario: Required observable behavior\n    Given candidate policies, a labeled development split, a scripted model, and a call ceiling\n    When the optimizer searches\n    Then it freezes the development-selected policy without reading scoreboard labels or exceeding the ceiling\n```\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-4b01739f-08ac-54f6-9080-a5af9a79bf72`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-731c3e14-b2bb-5b69-bdc4-3ab8bba7cca6",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

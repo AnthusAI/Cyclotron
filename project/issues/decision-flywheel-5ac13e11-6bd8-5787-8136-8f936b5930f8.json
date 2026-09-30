@@ -1,0 +1,49 @@
+{
+  "id": "decision-flywheel-5ac13e11-6bd8-5787-8136-8f936b5930f8",
+  "title": "Provide an offline optimize-save-decide walkthrough",
+  "description": "## Scope\n\nAdd a compact example and CLI or script that takes candidate/development labels, searches with a fake model, saves a policy, and applies it to a new unlabeled item. Document adapter configuration and the separation between library features and studies.\n\n## Definition of done\n\nA fresh clone can run the complete offline example with no keys or network. The README explains inputs, outputs, model capabilities, and how to follow linked experimental notes.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-ce360969-5b44-554d-ba77-d4a38dbd7de1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-d556540e-71b5-55cc-9323-143d674bba3d",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-f64b3f0f-7440-53d9-81a8-d7e322c35a34",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-a56306ec-1922-5343-ba9f-f3ee47f4742a",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-09-30T18:08:36.674026Z",
+  "updated_at": "2026-09-30T18:09:24.182093Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

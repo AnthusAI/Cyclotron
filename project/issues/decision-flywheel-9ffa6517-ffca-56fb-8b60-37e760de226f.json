@@ -1,0 +1,41 @@
+{
+  "id": "decision-flywheel-9ffa6517-ffca-56fb-8b60-37e760de226f",
+  "title": "Demonstrate a DSPy bridge that performs automated optimization",
+  "description": "## Scope\n\nAfter native optimization works, assess an optional DSPy integration against its actual optimizer execution contract. Preserve typed decisions and development-only tuning; do not ship a wrapper whose only capability is model inference.\n\n## Definition of done\n\nA fake decision model runs an end-to-end automated DSPy optimization and reproduces the saved result, or a documented incompatibility closes the investigation without advertising unsupported optimization.",
+  "type": "task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-0822f794-4e56-5a84-8a7d-8a17a16cd2d1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-91347c58-fd85-5e64-8b20-8179d723fa9f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-09-30T18:08:39.576792Z",
+  "updated_at": "2026-09-30T18:09:29.326516Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

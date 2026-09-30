@@ -1,0 +1,37 @@
+{
+  "id": "decision-flywheel-d556540e-71b5-55cc-9323-143d674bba3d",
+  "title": "Finish the Jev adapter and injectable client configuration",
+  "description": "## Scope\n\nComplete the System One wrapper with an explicit model identifier, structured target and examples, fixed task wording, safe credential loading, and raw response metadata. Reuse the current injected-client path and verified Few-Shot-Jev request format.\n\n## Definition of done\n\nFake-client conformance specs assert identical questions across context sizes, isolated target fields, faithful probability parsing, and no credentials or article text in persisted metadata.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Finish the Jev adapter and injectable client configuration\n  Scenario: Required observable behavior\n    Given the same task and target are classified with empty and nonempty context\n    When the fake Jev client records both requests\n    Then only the examples field changes and the target is the only item classified\n```",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-2f4b891a-1749-5c87-af33-a3ab64c5bf57",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-91347c58-fd85-5e64-8b20-8179d723fa9f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-09-30T18:07:55.171685Z",
+  "updated_at": "2026-09-30T18:08:42.259090Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

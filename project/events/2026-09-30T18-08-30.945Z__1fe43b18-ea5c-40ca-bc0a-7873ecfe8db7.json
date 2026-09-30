@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "1fe43b18-ea5c-40ca-bc0a-7873ecfe8db7",
+  "issue_id": "decision-flywheel-b9a7cbbb-5dd6-58c4-aa01-fee61d0b5b49",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:08:30.945Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Apply human-reviewed steering edits with reproducible promotion",
+    "description": "## Scope\n\nGeneralize scorecard proposal and promotion while preserving the boundary: the agent proposes edits, code validates/applies them, and the fit sets weights and calibration. A scripted analyst must be installed before any agent is parsed; live agents remain explicit.\n\n## Definition of done\n\nNetwork-free specs prove no paid client is reached, no analyst can write weights or provenance, and rejected/accepted proposals preserve rollback and lineage. Selection/promotion reads development data, never the protected scoreboard.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Apply human-reviewed steering edits with reproducible promotion\n  Scenario: Required observable behavior\n    Given a scripted steering proposal is evaluated with a protected scoreboard\n    When code validates the proposal and a human accepts it\n    Then only allowed edits are promoted and the agent never sees scoreboard data or sets fitted numbers\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-18962dc7-b421-5a9e-b17e-70fd3567ca2d",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "decision-flywheel-ce360969-5b44-554d-ba77-d4a38dbd7de1",
+  "title": "Save, reload, and apply versioned context-policy artifacts",
+  "description": "## Scope\n\nPersist policy configuration, task/schema fingerprint, candidate-pool revision and hashes, seeds, budget, order, selection provenance, and development objective. Refer to candidate IDs rather than redistributing source text; validate the referenced data when loading.\n\n## Definition of done\n\nRound-trip specs reproduce selected IDs; changed task, pool, policy code/version, or ordering changes identity; incompatible data is rejected and no credential is serialized.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Save, reload, and apply versioned context-policy artifacts\n  Scenario: Required observable behavior\n    Given a frozen optimizer artifact and its original candidate pool\n    When the artifact is reloaded for an unlabeled target\n    Then the same demonstrations are selected and their provenance is available\n```",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-731c3e14-b2bb-5b69-bdc4-3ab8bba7cca6",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-0822f794-4e56-5a84-8a7d-8a17a16cd2d1",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-09-30T18:08:19.102903Z",
+  "updated_at": "2026-09-30T18:09:03.063198Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

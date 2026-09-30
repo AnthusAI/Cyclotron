@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "49b514a5-9d85-465f-8ad5-67f5a69e932b",
+  "issue_id": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "event_type": "field_updated",
+  "occurred_at": "2026-09-30T18:09:31.895Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Deliver a small, auditable toolkit that improves decision alignment from trusted labels. First deliver the Decision Context Optimizer: fixed global context selection and target-conditioned retrieval, compared at explicit example and token budgets. Support Jev, Kev, and Laya through declared capabilities, then extract reusable feedback and learned-head mechanics from Jev-Flywheel. Dataset preparation and empirical claims belong in https://github.com/AnthusAI/Decision-Flywheel-Evaluations; historical evidence remains in https://github.com/AnthusAI/Few-Shot-Jev. Completion requires reproducible optimizer artifacts, fake-client specs, a runnable offline example, and linked evaluation evidence. Creating this roadmap authorizes planning only; individual live studies retain their own preregistration and collection gates.",
+        "to": "Deliver a small, model-neutral toolkit that improves decision alignment from trusted labels. Start with the Decision Context Optimizer, explicit model capabilities, and reproducible policies. Then extract the existing trusted-feedback, learned-head, and human-reviewed steering mechanics from Jev-Flywheel. Dataset preparation and actual studies belong in the companion evaluations board.\n\nCompanion initiative: decision-flywheel-evaluations-049a2c8b-1798-5cf5-8a81-3cda98d0f924 in https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues.\n\nCompletion: Jev/Kev/Laya capability conformance, automated development-only selection, versioned artifacts, fake-client specs, a complete offline walkthrough, and linked experimental evidence. The optional DSPy bridge must demonstrate automated optimization, not inference alone."
+      }
+    }
+  }
+}

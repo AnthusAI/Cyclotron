@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "c0017427-70e3-4887-8d58-4ea93e9bb447",
+  "issue_id": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T17:59:29.094Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Build the model-neutral Decision Flywheel",
+    "description": "Deliver a small, auditable toolkit that improves decision alignment from trusted labels. First deliver the Decision Context Optimizer: fixed global context selection and target-conditioned retrieval, compared at explicit example and token budgets. Support Jev, Kev, and Laya through declared capabilities, then extract reusable feedback and learned-head mechanics from Jev-Flywheel. Dataset preparation and empirical claims belong in https://github.com/AnthusAI/Decision-Flywheel-Evaluations; historical evidence remains in https://github.com/AnthusAI/Few-Shot-Jev. Completion requires reproducible optimizer artifacts, fake-client specs, a runnable offline example, and linked evaluation evidence. Creating this roadmap authorizes planning only; individual live studies retain their own preregistration and collection gates.",
+    "issue_type": "initiative",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

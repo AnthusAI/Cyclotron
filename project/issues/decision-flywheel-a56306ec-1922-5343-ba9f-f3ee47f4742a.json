@@ -1,0 +1,37 @@
+{
+  "id": "decision-flywheel-a56306ec-1922-5343-ba9f-f3ee47f4742a",
+  "title": "Verify and implement Laya labeled-context support",
+  "description": "## Scope\n\nInvestigate the upstream Laya interface and Biased-Decisions integration before replacing the current NotImplementedError. Implement an explicit, documented context serialization if supported; otherwise retain zero-shot support and a declared few-shot exclusion.\n\n## Definition of done\n\nFake-model conformance specs cover zero-shot and the verified context path, or assert a precise unsupported-capability reason; default model loading and version provenance are documented.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Verify and implement Laya labeled-context support\n  Scenario: Required observable behavior\n    Given a Laya installation has a documented context capability\n    When the caller requests a few-shot decision\n    Then the adapter uses the supported serialization or returns the recorded exclusion reason\n```",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-2f4b891a-1749-5c87-af33-a3ab64c5bf57",
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-91347c58-fd85-5e64-8b20-8179d723fa9f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-09-30T18:08:01.141250Z",
+  "updated_at": "2026-09-30T18:08:47.545614Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

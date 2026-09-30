@@ -1,0 +1,32 @@
+{
+  "id": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "title": "Build the model-neutral Decision Flywheel",
+  "description": "Deliver a small, model-neutral toolkit that improves decision alignment from trusted labels. Start with the Decision Context Optimizer, explicit model capabilities, and reproducible policies. Then extract the existing trusted-feedback, learned-head, and human-reviewed steering mechanics from Jev-Flywheel. Dataset preparation and actual studies belong in the companion evaluations board.\n\nCompanion initiative: decision-flywheel-evaluations-049a2c8b-1798-5cf5-8a81-3cda98d0f924 in https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues.\n\nCompletion: Jev/Kev/Laya capability conformance, automated development-only selection, versioned artifacts, fake-client specs, a complete offline walkthrough, and linked experimental evidence. The optional DSPy bridge must demonstrate automated optimization, not inference alone.",
+  "type": "initiative",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [
+    "roadmap"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-09-30T17:59:29.094144Z",
+  "updated_at": "2026-09-30T18:09:31.895414Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "5cf89829-38b4-4803-888e-a3245f84649f",
+  "issue_id": "decision-flywheel-76376936-4214-5f11-8844-e3a7849f5977",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:08:25.077Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Port trusted feedback and scorecard lineage types",
+    "description": "## Scope\n\nUse Item, FeedbackItem, initial_answer_value, final_answer_value, edit_comment_value, label sources, score result, element, feature, decision, and scorecard consistently with Plexus. Preserve review provenance and selection propensity rather than guessing either.\n\n## Definition of done\n\nSpecs show feedback records become eligible trusted labels only through explicit normalization and review; changed scorecards and policies retain an audit lineage.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Port trusted feedback and scorecard lineage types\n  Scenario: Required observable behavior\n    Given a review corrects an initial model answer\n    When the feedback is recorded\n    Then the initial answer, final answer, comment, label source, and selection propensity remain distinguishable\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-18962dc7-b421-5a9e-b17e-70fd3567ca2d",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

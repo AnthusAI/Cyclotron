@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "06d322e1-4fbd-48d2-99ca-c7fa43ca8d44",
+  "issue_id": "decision-flywheel-f64b3f0f-7440-53d9-81a8-d7e322c35a34",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:07:58.120Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Finish the Kev adapter with versioned endpoint behavior",
+    "description": "## Scope\n\nVerify the actual Kev System One endpoint contract against the conventions used in Biased-Decisions. Add injected transport, model/version identity, timeout/error handling, and documented optional installation.\n\n## Definition of done\n\nNetwork-free fixture specs cover choices, structured context, malformed replies, and endpoint errors; no missing usage or model metadata is invented.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Finish the Kev adapter with versioned endpoint behavior\n  Scenario: Required observable behavior\n    Given a scripted Kev endpoint returns a labeled choice and model metadata\n    When the adapter normalizes the reply\n    Then the decision retains the correct label, available probabilities, and model version\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-2f4b891a-1749-5c87-af33-a3ab64c5bf57",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

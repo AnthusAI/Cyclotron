@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "c23b979f-5efc-4b3b-846c-3c6d8b0e5334",
+  "issue_id": "decision-flywheel-fe8852d3-4fd9-593a-a5f6-5d7cc0d84848",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:08:12.979Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Separate example selection, context size, and display order",
+    "description": "## Scope\n\nRepresent count and token budgets separately, with deterministic token-accounting provenance and provider limits. Support nested balanced count ladders, explicit display-order seeds, and independent label-option order. Never silently truncate an oversized request.\n\n## Definition of done\n\nSpecs show identical selected sets across display permutations, nested selections across count ladders when supported, accurate budget diagnostics, and explicit infeasible conditions.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Separate example selection, context size, and display order\n  Scenario: Required observable behavior\n    Given a fixed set of labeled demonstrations and two display-order seeds\n    When contexts are constructed at the same budget\n    Then their example membership and task wording agree while only presentation order changes\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-731c3e14-b2bb-5b69-bdc4-3ab8bba7cca6",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}

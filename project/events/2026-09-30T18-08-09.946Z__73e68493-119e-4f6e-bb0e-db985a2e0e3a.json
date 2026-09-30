@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "73e68493-119e-4f6e-bb0e-db985a2e0e3a",
+  "issue_id": "decision-flywheel-535d9cb6-747f-5976-a272-c4ca86911a73",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-30T18:08:09.946Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Implement reproducible random, prototype, and lexical policies",
+    "description": "## Scope\n\nHarden the current random-balanced and lexical-overlap policies; extract a transparent class-prototype policy from the experiment. Make seed behavior, tie breaking, class coverage, and fixed-global versus per-target selection explicit.\n\n## Definition of done\n\nSame inputs and versions produce the same IDs; lexical ranking and ties have meaningful specs; policy metadata makes selection assumptions auditable. More expensive semantic retrieval is a later candidate, not a prerequisite.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Implement reproducible random, prototype, and lexical policies\n  Scenario: Required observable behavior\n    Given a fixed candidate pool, target, task, and policy seed\n    When the policy is run twice\n    Then the same ordered demonstration IDs and policy fingerprint are returned\n```",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-731c3e14-b2bb-5b69-bdc4-3ab8bba7cca6",
+    "labels": [
+      "roadmap"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Flywheel Planning"
+    }
+  }
+}
