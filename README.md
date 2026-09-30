@@ -28,6 +28,13 @@ python3 -m venv .venv
 make test
 ```
 
+## Repository tooling
+
+This repository uses [Kanbus](https://github.com/AnthusAI/Kanbus) for Git-backed
+project tasks and `python-semantic-release` for conventional-commit GitHub
+releases. Install the local tools with `make install-tools`, then use
+`kanbus list` to inspect the board.
+
 The sibling [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations) repository holds preregistrations, manifests, live-response caches, and cross-model results.
 
 ## Data safety

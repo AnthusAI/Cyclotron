@@ -12,9 +12,24 @@ license = {text = "MIT"}
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+tools = [
+    "kanbus==0.33.0",
+    "python-semantic-release>=10,<11",
+]
 jev = ["typesafe-sdk"]
 laya = ["laya"]
 kev = ["httpx>=0.27"]
+
+[tool.semantic_release]
+branch = "main"
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/decision_flywheel/__init__.py:__version__"]
+build_command = "python -m build"
+upload_to_pypi = false
+upload_to_vcs_release = true
+allow_zero_version = true
+major_on_zero = false
+changelog_file = "CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
