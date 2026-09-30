@@ -3,7 +3,7 @@
   "title": "Generalize the existing feedback flywheel",
   "description": "## Scope\n\nExtract the reusable feedback, learned decision head, and human steering boundaries from Jev-Flywheel while keeping the new library small and readable.\n\n## Definition of done\n\nPlexus-compatible feedback vocabulary, trusted fitting, out-of-fold calibration, and versioned human-approved edits work with a fake provider-neutral model.",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -14,11 +14,14 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-09-30T18:08:22.261713Z",
-  "updated_at": "2026-09-30T18:08:22.261812Z",
-  "closed_at": null,
+  "updated_at": "2026-09-30T19:54:29.668774Z",
+  "closed_at": "2026-09-30T19:54:29.668669Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": {
     "platform": "codex",
     "model": "GPT-6",

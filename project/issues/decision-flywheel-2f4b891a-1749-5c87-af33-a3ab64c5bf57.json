@@ -3,7 +3,7 @@
   "title": "Complete the decision-model contract and initial adapters",
   "description": "## Scope\n\nMake the existing typed scaffold usable with Jev, Kev, and Laya while recording real provider capabilities and versions.\n\n## Definition of done\n\nShared adapter conformance specs pass with fake clients; each model declares zero-shot and context capabilities; unsupported conditions fail explicitly.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-f34776a6-baca-5c48-91a0-98613d83eb9f`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -14,11 +14,14 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-09-30T18:06:24.567591Z",
-  "updated_at": "2026-09-30T18:06:24.567675Z",
-  "closed_at": null,
+  "updated_at": "2026-09-30T19:54:23.931618Z",
+  "closed_at": "2026-09-30T19:54:23.931503Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": {
     "platform": "codex",
     "model": "GPT-6",

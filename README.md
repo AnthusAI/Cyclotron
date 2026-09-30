@@ -2,8 +2,8 @@
 
 Decision Flywheel is a small, model-neutral library for selecting labelled
 context for structured decisions. It keeps the policy, budget, display order,
-model identity, and development objective auditable. It does not train a model
-or write model weights.
+model identity, and development objective auditable. Its optional local head
+fits deterministic numerical weights only from trusted feedback labels.
 
 ## Run the offline walkthrough
 
@@ -53,6 +53,27 @@ optimizer loop.
 Context token accounting is a deterministic whitespace estimate over the full
 serialized request. It is not provider-reported usage and is not a substitute
 for an actual provider token limit.
+
+## Feedback, learned heads, and scripted steering
+
+`FeedbackItem` records a reviewed final label and its selection propensity.
+`HeadRow` combines that feedback with finite extracted features, and
+`fit_learned_head` accepts only complete declared feature coverage. It fits on
+trusted training rows, calibrates from out-of-fold predictions, and retains
+text-free task, split, policy, context-artifact, source-model, and selection
+provenance. Development and scoreboard IDs are supplied as firewall metadata;
+they are not training rows.
+
+`run_steering_round` is an offline, human-reviewed structural loop. An analyst
+factory receives a `ScriptedMockManager` only after the mock is installed, so
+tests can use recorded replies without constructing a provider client. The
+analyst may propose one allowlisted scorecard element or context policy; it
+cannot propose weights or calibration. The application-owned fitter receives
+the candidate scorecard, its exact policy, and all declared candidate features.
+The resulting core head must match that lineage before the application-owned
+development metric can promote it. Protected scoreboard IDs must be recorded in
+the fit provenance and cannot be used for fitting. This is a small provider-
+neutral API, not a Tactus integration or a live steering service.
 
 ## Adapters and evidence
 
