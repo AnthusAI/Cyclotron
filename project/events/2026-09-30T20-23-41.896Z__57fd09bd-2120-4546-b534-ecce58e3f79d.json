@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "57fd09bd-2120-4546-b534-ecce58e3f79d",
+  "issue_id": "decision-flywheel-9ffa6517-ffca-56fb-8b60-37e760de226f",
+  "event_type": "field_updated",
+  "occurred_at": "2026-09-30T20:23:41.896Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Demonstrate a DSPy bridge that performs automated optimization",
+        "to": "WITHDRAWN — unauthorized DSPy optimization task"
+      },
+      "description": {
+        "from": "## Scope\n\nAfter native optimization works, assess an optional DSPy integration against its actual optimizer execution contract. Preserve typed decisions and development-only tuning; do not ship a wrapper whose only capability is model inference.\n\n## Definition of done\n\nA fake decision model runs an end-to-end automated DSPy optimization and reproduces the saved result, or a documented incompatibility closes the investigation without advertising unsupported optimization.",
+        "to": "## WITHDRAWN\n\nThis assistant-authored task was unauthorized: the user explicitly excluded DSPy from this project. Preserve this closed record and its history; do not revive or implement DSPy integration.\n\nNative, provider-neutral Decision Flywheel optimization remains the applicable scope."
+      }
+    }
+  }
+}

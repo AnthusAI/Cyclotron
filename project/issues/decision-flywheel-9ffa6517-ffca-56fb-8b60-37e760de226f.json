@@ -1,9 +1,9 @@
 {
   "id": "decision-flywheel-9ffa6517-ffca-56fb-8b60-37e760de226f",
-  "title": "Demonstrate a DSPy bridge that performs automated optimization",
-  "description": "## Scope\n\nAfter native optimization works, assess an optional DSPy integration against its actual optimizer execution contract. Preserve typed decisions and development-only tuning; do not ship a wrapper whose only capability is model inference.\n\n## Definition of done\n\nA fake decision model runs an end-to-end automated DSPy optimization and reproduces the saved result, or a documented incompatibility closes the investigation without advertising unsupported optimization.",
+  "title": "WITHDRAWN — unauthorized DSPy optimization task",
+  "description": "## WITHDRAWN\n\nThis assistant-authored task was unauthorized: the user explicitly excluded DSPy from this project. Preserve this closed record and its history; do not revive or implement DSPy integration.\n\nNative, provider-neutral Decision Flywheel optimization remains the applicable scope.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 3,
   "assignee": null,
   "creator": null,
@@ -21,21 +21,27 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "52bca830-ef92-4acb-9c8a-0b9ca65552d3",
+      "author": "home",
+      "text": "WITHDRAWN, not implemented: the user explicitly confirmed that DSPy is not part of this project. The uncommitted DSPy bridge, dependency extra, and README section were removed. Continue with the native model-neutral decision context optimizer; do not restart this obsolete integration task.",
+      "created_at": "2026-09-30T20:13:48.316364Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-09-30T18:08:39.576792Z",
-  "updated_at": "2026-09-30T18:09:29.326516Z",
-  "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {
-    "source": "shared",
-    "project_label": "decision-flywheel"
-  },
+  "updated_at": "2026-09-30T20:23:41.896407Z",
+  "closed_at": "2026-09-30T20:13:50.845139Z",
   "agent": {
     "platform": "codex",
     "model": "GPT-6",
-    "name": "Flywheel Planning",
-    "settings": {}
+    "name": "Flywheel Planning"
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "4385e79b-49b5-46dd-b017-1aa551d586cb",
+  "issue_id": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
+  "event_type": "field_updated",
+  "occurred_at": "2026-09-30T20:24:47.578Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces around the native, provider-neutral Decision Flywheel optimizer. Do not add DSPy or another orchestration framework.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links for native optimization; no optional DSPy integration is in scope.",
+        "to": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces around the native, provider-neutral Decision Flywheel optimizer. Do not add DSPy dependencies, bridges, or optimization paths.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links for native optimization; no optional DSPy integration is in scope."
+      }
+    }
+  }
+}

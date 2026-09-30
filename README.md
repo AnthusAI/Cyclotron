@@ -5,6 +5,10 @@ context for structured decisions. It keeps the policy, budget, display order,
 model identity, and development objective auditable. Its optional local head
 fits deterministic numerical weights only from trusted feedback labels.
 
+Optimization remains native to Decision Flywheel and provider-neutral; DSPy is
+not part of this library's scope. This is an implementation boundary, not an
+experimental result.
+
 ## Run the offline walkthrough
 
 ```bash

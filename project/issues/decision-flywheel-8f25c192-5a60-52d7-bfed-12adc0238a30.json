@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
   "title": "Make the optimizer easy to use and integrate",
-  "description": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces; add a DSPy bridge only when it runs real automated optimization through the decision-model contract.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links; optional integrations have demonstrated optimization value.",
+  "description": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces around the native, provider-neutral Decision Flywheel optimizer. Do not add DSPy dependencies, bridges, or optimization paths.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links for native optimization; no optional DSPy integration is in scope.",
   "type": "epic",
   "status": "open",
   "priority": 2,
@@ -12,18 +12,27 @@
     "roadmap"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "715758a3-9aaa-455c-99ec-c27649ad82bb",
+      "author": "home",
+      "text": "Accountability: this was an assistant-authored scope error, not a stale external requirement. DSPy is explicitly excluded; the epic now covers only native, provider-neutral optimization.",
+      "created_at": "2026-09-30T20:23:41.957120Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-09-30T18:08:33.870714Z",
-  "updated_at": "2026-09-30T18:08:33.870791Z",
+  "updated_at": "2026-09-30T20:24:47.578148Z",
   "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {},
   "agent": {
     "platform": "codex",
     "model": "GPT-6",
-    "name": "Flywheel Planning",
-    "settings": {}
+    "name": "Flywheel Planning"
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }
