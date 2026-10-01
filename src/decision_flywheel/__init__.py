@@ -4,6 +4,7 @@ __version__ = "0.5.0"
 
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from .artifacts import DeployableArtifact, create_artifact, load_artifact
+from .bundle import ClassifierBundle, load_bundle
 from .budget import ContextBudget, ContextPlan, build_context_ladder, build_context_plan
 from .context import FixedExampleList, PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
 from .example_list import (ExampleListImprovement, example_list_from_policy, improve_example_list,
@@ -17,10 +18,10 @@ def run_demo(*args, **kwargs):
     return _run_demo(*args, **kwargs)
 
 __all__ = [
-    "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
+    "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
     "DeployableArtifact", "ExampleListImprovement", "FixedExampleList", "Item", "LabeledItem", "ModelCapabilities", "OptimizationResult",
     "PerLabelLexicalRetrieval", "PrototypeBalanced", "RandomBalanced", "TrialSpec",
-    "build_context_ladder", "build_context_plan", "create_artifact", "example_list_from_policy", "improve_example_list", "load_artifact",
+    "build_context_ladder", "build_context_plan", "create_artifact", "example_list_from_policy", "improve_example_list", "load_artifact", "load_bundle",
     "plan_example_list_round", "run_demo",
     "search_context_policies",
 ]
