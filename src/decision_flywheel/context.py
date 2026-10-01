@@ -264,3 +264,139 @@ class PerLabelLexicalRetrieval:
             # not depend on the caller's candidate sequence order.
             selected.extend(sorted(pools[label], key=lambda item: (-score(item), item.item.id))[:per_label])
         return selected
+
+
+def input_hash(task: DecisionTask, item: Item) -> str:
+    """SHA-256 of an item's normalized input text: a text-free identity for its content."""
+    return hashlib.sha256(_normalized_text(item, task).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class ExampleRef:
+    """A text-free reference to one trusted labeled example."""
+
+    id: str
+    label: str
+    input_hash: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {"id": self.id, "input_hash": self.input_hash, "label": self.label}
+
+
+@dataclass(frozen=True)
+class FixedExampleList:
+    """One fixed, ordered, label-balanced example list, plus one reserve per label.
+
+    The same examples are shown for every target. The only exception is the reserve
+    rule: when a target is itself one of the examples (by ID or normalized text), that
+    slot is filled by the reserve for the same label. The list therefore stays balanced
+    and a labeled item never sees itself, which gives honest leave-one-out answers.
+
+    The list stores IDs, labels and input hashes only; the texts come from the
+    candidates at selection time and must match the stored hashes.
+    """
+
+    examples: tuple[ExampleRef, ...]
+    reserves: tuple[ExampleRef, ...]
+    name: str = "fixed-example-list"
+
+    def __post_init__(self) -> None:
+        examples, reserves = tuple(self.examples), tuple(self.reserves)
+        object.__setattr__(self, "examples", examples)
+        object.__setattr__(self, "reserves", reserves)
+        for ref in examples + reserves:
+            if not isinstance(ref, ExampleRef) or not all(
+                    isinstance(value, str) and value for value in (ref.id, ref.label, ref.input_hash)):
+                raise ValueError("fixed list entries must be ExampleRef values with non-empty fields")
+        ids = [ref.id for ref in examples + reserves]
+        hashes = [ref.input_hash for ref in examples + reserves]
+        if len(set(ids)) != len(ids) or len(set(hashes)) != len(hashes):
+            raise ValueError("fixed list examples and reserves must be distinct by ID and text")
+        counts = Counter(ref.label for ref in examples)
+        if not counts or len(set(counts.values())) != 1:
+            raise ValueError("a fixed list must have the same number of examples for every label")
+        reserve_labels = [ref.label for ref in reserves]
+        if sorted(reserve_labels) != sorted(counts) or len(set(reserve_labels)) != len(reserve_labels):
+            raise ValueError("a fixed list needs exactly one reserve for each of its labels")
+
+    @classmethod
+    def from_items(cls, task: DecisionTask, examples: Sequence[LabeledItem],
+                   reserves: Sequence[LabeledItem]) -> "FixedExampleList":
+        def ref(row: LabeledItem) -> ExampleRef:
+            if row.source != "trusted":
+                raise ValueError("fixed list examples must have trusted label sources")
+            label = task.validate_label(row.label)
+            if label != row.label:
+                raise ValueError("fixed list examples must use canonical task labels")
+            return ExampleRef(row.item.id, label, input_hash(task, row.item))
+
+        return cls(tuple(ref(row) for row in examples), tuple(ref(row) for row in reserves))
+
+    @classmethod
+    def from_configuration(cls, configuration: Mapping[str, object]) -> "FixedExampleList":
+        def refs(key: str) -> tuple[ExampleRef, ...]:
+            rows = configuration[key]
+            if not isinstance(rows, (list, tuple)):
+                raise ValueError(f"{key} must be a list")
+            out = []
+            for row in rows:
+                if not isinstance(row, Mapping) or set(row) != {"id", "input_hash", "label"}:
+                    raise ValueError(f"{key} entries must have exactly id, input_hash and label")
+                out.append(ExampleRef(row["id"], row["label"], row["input_hash"]))
+            return tuple(out)
+
+        if set(configuration) != {"examples", "reserves"}:
+            raise ValueError("fixed list configuration must have exactly examples and reserves")
+        return cls(refs("examples"), refs("reserves"))
+
+    @property
+    def per_label(self) -> int:
+        return len(self.examples) // len(self.reserves)
+
+    @property
+    def example_ids(self) -> tuple[str, ...]:
+        return tuple(ref.id for ref in self.examples)
+
+    @property
+    def reserve_ids(self) -> tuple[str, ...]:
+        return tuple(ref.id for ref in self.reserves)
+
+    @property
+    def metadata(self) -> PolicyMetadata:
+        return PolicyMetadata(self.name, POLICY_VERSION, "fixed-global", {
+            "examples": [ref.as_dict() for ref in self.examples],
+            "reserves": [ref.as_dict() for ref in self.reserves],
+        })
+
+    @property
+    def fingerprint(self) -> str:
+        return self.metadata.fingerprint
+
+    def select(self, task, target, candidates, *, per_label):
+        if set(ref.label for ref in self.reserves) != set(task.labels):
+            raise ValueError("fixed list labels do not match the task labels")
+        if per_label != self.per_label:
+            raise ValueError(f"this fixed list has {self.per_label} examples per label, not {per_label}")
+        pools = _validated_candidate_pools(task, target, candidates, per_label=per_label)
+        available = {row.item.id: row for pool in pools.values() for row in pool}
+        known = {row.item.id: row for row in candidates}
+        reserves = {ref.label: ref for ref in self.reserves}
+
+        def resolve(ref: ExampleRef) -> LabeledItem | None:
+            row = known.get(ref.id)
+            if row is None:
+                raise ValueError(f"fixed list example {ref.id!r} is not among the candidates")
+            if row.label != ref.label or input_hash(task, row.item) != ref.input_hash:
+                raise ValueError(f"fixed list example {ref.id!r} does not match its stored label or text")
+            return available.get(ref.id)  # None only when the firewall excluded it as the target
+
+        selected = []
+        for label in task.labels:
+            for ref in (ref for ref in self.examples if ref.label == label):
+                row = resolve(ref)
+                if row is None:
+                    row = resolve(reserves[label])
+                    if row is None:
+                        raise ValueError("a target cannot be both a fixed example and its reserve")
+                selected.append(row)
+        return selected

@@ -280,3 +280,95 @@ def test_cumulative_accounting_rejects_a_different_search_scope():
             DEVELOPMENT, ScriptedModel(),
             (TrialSpec(MarkerPolicy("good"), 1),), max_model_calls=1, call_accounting=accounting,
         ))
+
+
+# ---- the Brier objective --------------------------------------------------------------------
+
+class ProbabilityModel:
+    """Confident and right with 'good' examples; unsure with 'bad' ones."""
+
+    name = "probability-model-v1"
+    fingerprint = "probability-model-config-v1"
+    capabilities = ModelCapabilities(supports_probability_distributions=True)
+
+    def __init__(self, *, omit_probabilities=False):
+        self.calls = []
+        self.omit_probabilities = omit_probabilities
+
+    async def decide(self, task, target, context):
+        self.calls.append(target.id)
+        right = "yes" if target.id == "dev-yes" else "no"
+        wrong = "no" if right == "yes" else "yes"
+        if self.omit_probabilities:
+            return DecisionResult(right)
+        p = 0.9 if all("good" in example.item.id for example in context) else 0.6
+        return DecisionResult(right, probabilities={right: p, wrong: 1 - p})
+
+
+def test_the_brier_objective_scores_probabilities_and_prefers_the_lower_score():
+    result = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(), max_model_calls=10, objective="brier"))
+
+    scores = {trial.trial_name: trial.objective for trial in result.trials}
+    assert scores["good"] == pytest.approx(0.01)   # label-averaged: (0.1^2 + 0.1^2) / 2 per item
+    assert scores["bad"] == pytest.approx(0.16)
+    assert result.winner.trial_name == "good"
+    assert result.winner.decisions[0].probabilities == {"yes": 0.9, "no": pytest.approx(0.1)}
+
+
+def test_brier_checkpoint_entries_carry_probabilities_and_replay_without_new_calls():
+    checkpoint = {}
+    first = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(), max_model_calls=10,
+        objective="brier", checkpoint=checkpoint))
+    assert all(set(entry) == {"label", "probabilities"} for entry in checkpoint.values())
+
+    replay_model = ProbabilityModel()
+    second = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, replay_model, _trials(), max_model_calls=10,
+        objective="brier", checkpoint=checkpoint))
+    assert replay_model.calls == []
+    assert [t.objective for t in second.trials] == [t.objective for t in first.trials]
+
+
+def test_accuracy_checkpoints_still_store_only_the_label():
+    checkpoint = {}
+    asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(), max_model_calls=10, checkpoint=checkpoint))
+    assert all(entry.keys() == {"label"} for entry in checkpoint.values())
+
+
+def test_a_label_only_checkpoint_entry_is_re_asked_under_the_brier_objective():
+    checkpoint = {}
+    asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(), max_model_calls=10, checkpoint=checkpoint))
+    model = ProbabilityModel()
+    result = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, model, _trials(), max_model_calls=10, objective="brier",
+        checkpoint=checkpoint))
+    assert len(model.calls) == 4 and result.winner.trial_name == "good"
+
+
+def test_a_brier_trial_without_probabilities_is_incomplete_and_cannot_win():
+    result = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(omit_probabilities=True), _trials(),
+        max_model_calls=10, objective="brier"))
+    assert {trial.status for trial in result.trials} == {"incomplete"}
+    assert result.trials[0].failure_reasons == ("missing-probabilities",)
+    assert result.winner is None
+
+
+@pytest.mark.parametrize("entry", [{"label": "yes", "probabilities": {"yes": 1.2, "no": -0.2}},
+                                   {"label": "yes", "probabilities": {"yes": 1.0}},
+                                   {"label": "yes", "extra": 1}])
+def test_a_malformed_checkpoint_entry_is_refused(entry):
+    checkpoint = {}
+    asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(), max_model_calls=10,
+        objective="brier", checkpoint=checkpoint))
+    key = next(iter(checkpoint))
+    checkpoint[key] = entry
+    with pytest.raises(ValueError):
+        asyncio.run(search_context_policies(
+            TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(), max_model_calls=10,
+            objective="brier", checkpoint=checkpoint))

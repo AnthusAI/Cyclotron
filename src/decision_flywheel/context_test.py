@@ -202,3 +202,84 @@ def test_an_insufficient_label_pool_is_rejected_after_target_exclusion(policy):
 
     with pytest.raises(ValueError, match="label 'a'.*requested 1.*found 0"):
         policy.select(TASK, target, candidates, per_label=1)
+
+
+# ---- FixedExampleList ---------------------------------------------------------------------
+
+from .context import ExampleRef, FixedExampleList  # noqa: E402
+
+LIST_POOL = [LabeledItem(Item(f"{label}-{number}", {"text": f"{label} example number {number}"}), label)
+             for label in TASK.labels for number in range(6)]
+BY_ID = {row.item.id: row for row in LIST_POOL}
+
+
+def _fixed(primary=("a-0", "a-1", "b-0", "b-1"), reserves=("a-5", "b-5")):
+    return FixedExampleList.from_items(TASK, [BY_ID[i] for i in primary], [BY_ID[i] for i in reserves])
+
+
+def test_a_fixed_list_returns_its_own_examples_in_order_for_an_unrelated_target():
+    chosen = _fixed().select(TASK, Item("target", {"text": "unrelated"}), LIST_POOL, per_label=2)
+    assert [row.item.id for row in chosen] == ["a-0", "a-1", "b-0", "b-1"]
+
+
+def test_a_fixed_list_swaps_in_its_reserve_when_the_target_is_one_of_its_examples():
+    chosen = _fixed().select(TASK, BY_ID["a-1"].item, LIST_POOL, per_label=2)
+    assert [row.item.id for row in chosen] == ["a-0", "a-5", "b-0", "b-1"]
+
+
+def test_a_fixed_list_swaps_in_its_reserve_for_a_target_text_duplicate_under_another_id():
+    duplicate = Item("other-id", {"text": "  B EXAMPLE number 0 "})
+    chosen = _fixed().select(TASK, duplicate, LIST_POOL, per_label=2)
+    assert [row.item.id for row in chosen] == ["a-0", "a-1", "b-5", "b-1"]
+
+
+def test_a_fixed_list_passes_the_shared_target_firewall_and_stays_label_balanced():
+    from .budget import ContextBudget, build_context_plan
+
+    for target in [row.item for row in LIST_POOL] + [Item("new", {"text": "new"})]:
+        plan = build_context_plan(TASK, target, LIST_POOL, _fixed(), budget=ContextBudget(per_label=2))
+        assert target.id not in plan.example_ids
+        assert [row.label for row in plan.examples].count("a") == 2
+        assert [row.label for row in plan.examples].count("b") == 2
+
+
+def test_a_fixed_list_refuses_an_example_missing_from_or_altered_in_the_candidates():
+    without = [row for row in LIST_POOL if row.item.id != "b-0"]
+    with pytest.raises(ValueError):
+        _fixed().select(TASK, Item("t", {"text": "t"}), without, per_label=2)
+    altered = [row if row.item.id != "a-0" else LabeledItem(Item("a-0", {"text": "edited"}), "a") for row in LIST_POOL]
+    with pytest.raises(ValueError):
+        _fixed().select(TASK, Item("t", {"text": "t"}), altered, per_label=2)
+
+
+def test_a_fixed_list_refuses_a_budget_that_differs_from_its_size_per_label():
+    with pytest.raises(ValueError):
+        _fixed().select(TASK, Item("t", {"text": "t"}), LIST_POOL, per_label=1)
+
+
+@pytest.mark.parametrize("primary,reserves", [
+    (("a-0", "a-1", "b-0"), ("a-5", "b-5")),          # unbalanced
+    (("a-0", "a-1", "b-0", "b-1"), ("a-5",)),         # a label without a reserve
+    (("a-0", "a-1", "b-0", "b-1"), ("a-5", "a-4")),   # two reserves for one label
+    (("a-0", "a-0", "b-0", "b-1"), ("a-5", "b-5")),   # duplicate example
+    (("a-0", "a-1", "b-0", "b-1"), ("a-1", "b-5")),   # reserve is also an example
+])
+def test_a_fixed_list_must_be_balanced_with_one_distinct_reserve_per_label(primary, reserves):
+    with pytest.raises(ValueError):
+        _fixed(primary, reserves)
+
+
+def test_a_fixed_list_fingerprint_is_deterministic_text_free_and_content_bound():
+    first, second = _fixed(), _fixed()
+    assert first.fingerprint == second.fingerprint
+    assert first.metadata.name == "fixed-example-list" and first.metadata.selection_mode == "fixed-global"
+    assert "example number" not in str(first.metadata.configuration)
+    assert _fixed(("a-1", "a-0", "b-0", "b-1")).fingerprint != first.fingerprint   # order matters
+    assert _fixed(reserves=("a-4", "b-5")).fingerprint != first.fingerprint
+    edited = LabeledItem(Item("a-0", {"text": "a different text"}), "a")
+    other = FixedExampleList.from_items(TASK, [edited, BY_ID["a-1"], BY_ID["b-0"], BY_ID["b-1"]],
+                                        [BY_ID["a-5"], BY_ID["b-5"]])
+    assert other.fingerprint != first.fingerprint
+    assert FixedExampleList.from_configuration(first.metadata.configuration) == first
+    assert first.example_ids == ("a-0", "a-1", "b-0", "b-1") and first.reserve_ids == ("a-5", "b-5")
+    assert isinstance(first.examples[0], ExampleRef)

@@ -197,3 +197,32 @@ def test_artifact_checksum_identity_changes_with_budget_seed_order_model_and_tas
     fingerprints.add(json.loads(create_artifact(other_task, POOL, "r1", other_result))["artifact_hash"])
 
     assert len(fingerprints) == 6
+
+
+def test_a_fixed_example_list_winner_scored_by_brier_round_trips_and_keeps_its_reserve_rule():
+    from .context import FixedExampleList
+
+    pool = POOL + [
+        LabeledItem(Item("yes-2", {"text": "yes reserve demonstration"}), "yes"),
+        LabeledItem(Item("no-2", {"text": "no reserve demonstration"}), "no"),
+    ]
+    fixed = FixedExampleList.from_items(TASK, pool[:2], pool[2:])
+
+    class ProbabilityModel(ScriptedModel):
+        capabilities = ModelCapabilities(supports_probability_distributions=True)
+
+        async def decide(self, task, target, context):
+            label = "yes" if target.id.endswith("yes") else "no"
+            return DecisionResult(label, probabilities={label: 0.8, ("no" if label == "yes" else "yes"): 0.2})
+
+    result = asyncio.run(search_context_policies(
+        TASK, pool, DEVELOPMENT, ProbabilityModel(), (TrialSpec(fixed, 1),),
+        max_model_calls=2, model_fingerprint="fake-model-v1", objective="brier"))
+    serialized = create_artifact(TASK, pool, "r1", result)
+    artifact = load_artifact(serialized, TASK, pool, "r1")
+
+    assert artifact.policy == fixed
+    assert json.loads(serialized)["development"]["objective_name"] == "brier"
+    assert artifact.context_for(Item("new", {"text": "new target"})).example_ids == ("no-1", "yes-1")
+    assert artifact.context_for(pool[0].item).example_ids == ("no-1", "yes-2")
+    assert "demonstration" not in serialized

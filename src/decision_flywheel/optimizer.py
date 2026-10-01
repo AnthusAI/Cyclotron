@@ -6,16 +6,17 @@ import json
 import unicodedata
 from collections.abc import MutableMapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 from .budget import ContextBudget, build_context_plan
 from .context import ContextPolicy, PolicyMetadata
-from .models import DecisionModel, DecisionTask, Item, LabeledItem
+from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
 
 
-Objective = Literal["accuracy", "macro-f1"]
+Objective = Literal["accuracy", "macro-f1", "brier"]
 TrialStatus = Literal["completed", "incomplete", "not-run"]
-FailureReason = Literal["context-infeasible", "model-failure", "call-budget-exhausted"]
+FailureReason = Literal["context-infeasible", "model-failure", "call-budget-exhausted",
+                        "missing-probabilities"]
 _CALL_ACCOUNTING_KEY = "model_calls_attempted"
 
 
@@ -53,6 +54,7 @@ class DecisionHistory:
     request_fingerprint: str
     prediction: str
     from_checkpoint: bool
+    probabilities: Mapping[str, float] | None = None  # recorded only for the Brier objective
 
 
 @dataclass(frozen=True)
@@ -122,8 +124,14 @@ async def search_context_policies(
     an interrupted search resumable without quietly starting its allowance over
     or attaching it to a different task, pool, development split, or trial set.
 
+    ``objective="brier"`` scores the provider's probability distributions (the
+    label-averaged multi-class Brier score, which for two labels is the familiar
+    binary Brier score); lower is better, so the winner is the lowest score.  A
+    trial whose model returns no distribution is incomplete and cannot win.
+
     ``checkpoint`` is caller-owned and serializable: each entry is a hash key
-    mapped to ``{"label": canonical_label}``.  Its key includes model identity,
+    mapped to ``{"label": canonical_label}``, plus ``"probabilities"`` when the
+    objective is Brier.  Under Brier a label-only entry is re-asked.  Its key includes model identity,
     the task contract, and the complete serialized request fingerprint, which
     includes the ordered context and target.  A checkpoint hit therefore reuses
     a response only for an identical effective request, never by policy name.
@@ -168,9 +176,14 @@ async def search_context_policies(
             key = _checkpoint_key(resolved_model_fingerprint, task, plan)
             cached = store.get(key)
             if cached is not None:
-                prediction = _checkpoint_label(task, cached)
-                decisions.append(DecisionHistory(development_item.item.id, key, prediction, True))
-                continue
+                prediction, probabilities = _checkpoint_entry(task, cached)
+                if objective != "brier":
+                    decisions.append(DecisionHistory(development_item.item.id, key, prediction, True))
+                    continue
+                if probabilities is not None:
+                    decisions.append(DecisionHistory(development_item.item.id, key, prediction, True,
+                                                     probabilities))
+                    continue
             if prior_attempted + attempted >= max_model_calls:
                 complete = False
                 reasons.append("call-budget-exhausted")
@@ -179,8 +192,8 @@ async def search_context_policies(
             attempted += 1
             _write_call_accounting(call_accounting, prior_attempted + attempted, search_fingerprint)
             try:
-                result = await model.decide(task, development_item.item, plan.examples)
-                prediction = task.validate_result(result).label
+                result = task.validate_result(await model.decide(task, development_item.item, plan.examples))
+                prediction = result.label
             except Exception:
                 # Calls that raise still consume the ceiling, but are never
                 # cached and never turn a partial trial into a winner.
@@ -189,8 +202,18 @@ async def search_context_policies(
                 reasons.append("model-failure")
                 break
             succeeded += 1
-            store[key] = {"label": prediction}
-            decisions.append(DecisionHistory(development_item.item.id, key, prediction, False))
+            if objective != "brier":
+                store[key] = {"label": prediction}
+                decisions.append(DecisionHistory(development_item.item.id, key, prediction, False))
+                continue
+            if result.probabilities is None:
+                complete = False
+                failures += 1
+                reasons.append("missing-probabilities")
+                break
+            probabilities = dict(result.probabilities)
+            store[key] = {"label": prediction, "probabilities": probabilities}
+            decisions.append(DecisionHistory(development_item.item.id, key, prediction, False, probabilities))
 
         score = _score(task, development, decisions, objective) if complete else None
         results.append(TrialResult(
@@ -210,7 +233,9 @@ async def search_context_policies(
         ))
 
     completed = [trial for trial in results if trial.status == "completed"]
-    provisional_best = max(completed, key=lambda trial: (trial.objective, trial.trial_name)) if completed else None
+    sign = -1 if objective == "brier" else 1
+    provisional_best = (max(completed, key=lambda trial: (sign * trial.objective, trial.trial_name))
+                        if completed else None)
     winner = provisional_best if len(completed) == len(results) else None
     return OptimizationResult(
         objective=objective,
@@ -242,8 +267,8 @@ def _validate_search_inputs(
 ) -> None:
     if isinstance(max_model_calls, bool) or not isinstance(max_model_calls, int) or max_model_calls < 0:
         raise ValueError("max_model_calls must be a non-negative integer")
-    if objective not in {"accuracy", "macro-f1"}:
-        raise ValueError("objective must be 'accuracy' or 'macro-f1'")
+    if objective not in {"accuracy", "macro-f1", "brier"}:
+        raise ValueError("objective must be 'accuracy', 'macro-f1' or 'brier'")
     if not trials:
         raise ValueError("trials must not be empty")
     names = [trial.trial_name for trial in trials]
@@ -318,9 +343,21 @@ def _checkpoint_key(model_fingerprint: str, task: DecisionTask, plan: Any) -> st
 
 
 def _checkpoint_label(task: DecisionTask, value: object) -> str:
-    if not isinstance(value, dict) or set(value) != {"label"}:
-        raise ValueError("checkpoint entry must contain only a label")
-    return task.validate_label(value["label"])
+    return _checkpoint_entry(task, value)[0]
+
+
+def _checkpoint_entry(task: DecisionTask, value: object) -> tuple[str, dict[str, float] | None]:
+    """A label, plus a validated probability distribution when the entry has one."""
+    if not isinstance(value, dict) or set(value) not in ({"label"}, {"label", "probabilities"}):
+        raise ValueError("checkpoint entry must contain a label and optionally probabilities")
+    label = task.validate_label(value["label"])
+    if "probabilities" not in value:
+        return label, None
+    probabilities = value["probabilities"]
+    if not isinstance(probabilities, dict):
+        raise ValueError("checkpoint probabilities must be a mapping")
+    validated = task.validate_result(DecisionResult(label, probabilities=probabilities))
+    return validated.label, dict(validated.probabilities)
 
 
 def _split_fingerprint(task: DecisionTask, rows: Sequence[LabeledItem]) -> str:
@@ -410,6 +447,9 @@ def _score(task: DecisionTask, development: Sequence[LabeledItem], decisions: Se
     if set(predictions) != {row.item.id for row in development}:
         raise ValueError("only complete development trials may be scored")
     actual = {row.item.id: row.label for row in development}
+    if objective == "brier":
+        distributions = {decision.target_id: decision.probabilities for decision in decisions}
+        return brier_score(task, actual, distributions)
     if objective == "accuracy":
         return sum(predictions[item_id] == label for item_id, label in actual.items()) / len(actual)
     f1s = []
@@ -440,3 +480,19 @@ def _not_run_result(spec: TrialSpec, display_order: str, order_seed: int,
     return TrialResult(spec.trial_name, spec.policy.metadata, spec.policy.fingerprint,
                        spec.per_label, spec.context_budget, display_order, order_seed,
                        presentation_label_order, "not-run", None, (), 0, ())
+
+
+def brier_score(task: DecisionTask, actual: Mapping[str, str],
+                distributions: Mapping[str, Mapping[str, float] | None]) -> float:
+    """Mean over items of the label-averaged squared error of a distribution.
+
+    For two labels this equals the binary Brier score of either label.
+    """
+    total = 0.0
+    for item_id, label in actual.items():
+        distribution = distributions.get(item_id)
+        if distribution is None:
+            raise ValueError("the Brier objective needs a probability distribution for every item")
+        total += sum((float(distribution[name]) - (1.0 if name == label else 0.0)) ** 2
+                     for name in task.labels) / len(task.labels)
+    return total / len(actual)

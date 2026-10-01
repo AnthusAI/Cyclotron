@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from .budget import ContextBudget, ContextPlan, build_context_plan
-from .context import (POLICY_VERSION, PerLabelLexicalRetrieval, PolicyMetadata,
+from .context import (POLICY_VERSION, FixedExampleList, PerLabelLexicalRetrieval, PolicyMetadata,
                       PrototypeBalanced, RandomBalanced)
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
 
@@ -182,11 +182,13 @@ def _policy_from_metadata(metadata: PolicyMetadata, fingerprint: str) -> Any:
         "random-balanced": lambda config: RandomBalanced(seed=config["seed"]),
         "prototype-balanced": lambda config: PrototypeBalanced(),
         "per-label-lexical-retrieval": lambda config: PerLabelLexicalRetrieval(),
+        "fixed-example-list": FixedExampleList.from_configuration,
     }
     constructor = configs.get(metadata.name)
     if constructor is None:
         raise ArtifactValidationError("policy type is not supported")
-    expected_config_keys = {"seed"} if metadata.name == "random-balanced" else set()
+    expected_config_keys = {"random-balanced": {"seed"},
+                            "fixed-example-list": {"examples", "reserves"}}.get(metadata.name, set())
     if not isinstance(metadata.configuration, dict) or set(metadata.configuration) != expected_config_keys:
         raise ArtifactValidationError("policy configuration is not supported")
     if (metadata.name == "random-balanced"
@@ -235,7 +237,7 @@ def _validate_document(value: Any) -> None:
             raise ArtifactValidationError("pool item is invalid")
     _require_exact_keys(value["development"], {"objective_name", "objective", "fingerprint"}, "development")
     if (not isinstance(value["development"]["objective_name"], str)
-            or value["development"]["objective_name"] not in {"accuracy", "macro-f1"}
+            or value["development"]["objective_name"] not in {"accuracy", "macro-f1", "brier"}
             or isinstance(value["development"]["objective"], bool)
             or not isinstance(value["development"]["objective"], (int, float))
             or not math.isfinite(value["development"]["objective"])):
