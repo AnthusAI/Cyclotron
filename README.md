@@ -79,6 +79,25 @@ development metric can promote it. Protected scoreboard IDs must be recorded in
 the fit provenance and cannot be used for fitting. This is a small provider-
 neutral API, not a Tactus integration or a live steering service.
 
+## Optional dynamic retrieval (off by default)
+
+The default product is one fixed, optimized example list. Per-item retrieval is
+a separate switch: `RetrievalConfig` (the `retrieval:` block) defaults to
+`enabled: false`, and `build_retrieval_policy` then returns `None`. When
+enabled it returns a `PerLabelRetrieval` context policy that works with
+`build_context_plan` like `PerLabelLexicalRetrieval`: `k` nearest examples per
+label, never the target or protected items.
+
+- `LexicalRetriever` (lexical v2): stop words on by default (negations kept),
+  Unicode tokens, and `binary-cosine`, `tfidf-cosine` or `bm25` weighting.
+  Lexical v1 is unchanged.
+- `EmbeddingRetriever`: an injected `embed(texts) -> vectors` function, a
+  text-free vector cache, and exact in-memory cosine search (`[retrieval]`
+  installs numpy for speed). `HashingEmbedder` is an offline fake;
+  `OpenAIEmbedder.from_environment()` (`[openai-embeddings]`) is live and paid.
+- `S3VectorsStore` and `DynamoDBVectorStore` are design-only stubs.
+- `neighbour_label_purity` compares retrievers at no cost.
+
 ## Adapters and evidence
 
 The core package is provider-neutral. Optional extras are explicit:
