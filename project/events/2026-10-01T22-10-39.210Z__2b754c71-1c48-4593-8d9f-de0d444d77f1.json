@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "2b754c71-1c48-4593-8d9f-de0d444d77f1",
+  "issue_id": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-01T22:10:39.210Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "e48f239b-beb0-4591-9322-71553f0a0f3b",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "phase3-retrieval"
+    }
+  }
+}

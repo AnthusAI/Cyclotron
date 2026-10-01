@@ -3,7 +3,7 @@
   "title": "Offer optional dynamic retrieval behind a configurable Retriever",
   "description": "## Purpose\n\nOffer dynamic per-item example retrieval as a **separate, optional feature, off by default**, with interchangeable retrievers behind one interface.\n\n## Scope\n\n- `Retriever` / `RetrievalIndex` / `VectorStore` protocols and a `retrieval:` config independent of the few-shot optimizer toggle.\n- Lexical v2 (stop words on by default, negations kept; v1 frozen).\n- In-memory embedding retriever (exact cosine), the simplest semantic option.\n- S3 Vectors and DynamoDB vector search: **design-only stubs** behind the same `VectorStore` interface; not built in this phase.\n- Owner phasing: Phase 3, after the fixed bundle. Native, provider-neutral, core stays dependency-free (numpy and embedding providers only as optional extras). No DSPy.\n\n## Definition of done\n\nChild stories closed with specs first and green; the evaluations retrieval proxy can plug each retriever in; with default config no retrieval request is ever made.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4, Appendix B.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-f06dcf08-6182-41ce-a9f5-31b37d08bf51`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -13,9 +13,22 @@
     "phase-3"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "e48f239b-beb0-4591-9322-71553f0a0f3b",
+      "author": "home",
+      "text": "Implemented on branch `phase3-retrieval` (worktree Decision-Flywheel-phase3), commits 0b15981 and fed787d; not merged or pushed. Offline only: specs use fake embedders, no network. `make test` equivalent: 289 passed (226 existing + 63 new).\n\nStatus: all four children implemented and specced; awaiting owner review and merge. Defaults unchanged: `RetrievalConfig().enabled is False` and `build_retrieval_policy` returns `None`, so no index is built and no embedding is requested. Modules: `retrieval.py` (protocols, `PerLabelRetrieval`, `neighbour_label_purity`), `lexical_retrieval.py`, `embedding_retrieval.py`, `vector_stores.py`, `retrieval_config.py`.\n\nNot done here: artifact rehydration of retrieval policies (artifacts.py only accepts version-1 policies), and no evaluations-harness wiring.\n",
+      "created_at": "2026-10-01T22:10:39.210708Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "claude-opus-5-5",
+        "name": "phase3-retrieval"
+      }
+    }
+  ],
   "created_at": "2026-10-01T19:57:01.426219Z",
-  "updated_at": "2026-10-01T20:05:36.955455Z",
+  "updated_at": "2026-10-01T22:10:39.210728Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",

@@ -3,7 +3,7 @@
   "title": "Design-only stub: S3 Vectors store adapter",
   "description": "## Purpose\n\nRecord a design-only stub for an Amazon S3 Vectors `VectorStore` adapter behind the same interface, so it can be built later without changing callers.\n\n## Scope (design only; not built in this phase)\n\n- One vector bucket and one index per pool revision; `dataType float32`, `distanceMetric cosine`; filterable metadata `label`, `pool_revision`, `input_hash`.\n- `PutVectors` in batches of ≤500; `QueryVectors(topK=k+1, filter={\"label\": L})`, then target exclusion client-side; design for 100 results per page.\n- IAM `s3vectors:*`; filters/metadata also need `s3vectors:GetVectors`. `boto3.client('s3vectors')`, minimum boto3 version not found.\n- Risks: approximate search (fingerprint records `approximate: true`), eventual consistency after writes (can break exact replay), account setup. At ~5k vectors in-memory search is strictly better.\n- **AWS facts checked on 2026-10-01** against official pages (design Appendix B): GA 2025-12-02; 31 Regions after 2026-03-31; limits and API as listed. Pricing came from a summarizing fetch, and `CreateVectorBucket` / GovCloud are UNVERIFIED: **re-check before building.**\n\n## Definition of done\n\nThe adapter design (mapping of `upsert`/`query` onto the API, config keys under `store.kind: s3vectors`, IAM list, risks, items to re-verify) is recorded in core docs or on this issue; no boto3 dependency, no AWS calls, no code path enabled. Cost: $0.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.1, §4.5, Appendix B (Amazon S3 Vectors).\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-f06dcf08-6182-41ce-a9f5-31b37d08bf51`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 3,
   "assignee": null,
   "creator": null,
@@ -19,9 +19,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "e2a07bdb-ace3-4788-9046-e8c1a97c015f",
+      "author": "home",
+      "text": "Implemented on branch `phase3-retrieval` (worktree Decision-Flywheel-phase3), commits 0b15981 and fed787d; not merged or pushed. Offline only: specs use fake embedders, no network. `make test` equivalent: 289 passed (226 existing + 63 new).\n\n`vector_stores.S3VectorsStore(vector_bucket, index_name, region)`: design-only stub; `approximate = True`; configuration kind `s3vectors`; `upsert`/`query` raise NotImplementedError. Docstring records the API mapping from Appendix B (CreateIndex float32/cosine, PutVectors <=500, QueryVectors topK=k+1 with label filter, 100 per page, distance-to-similarity conversion, IAM incl. GetVectors) and the unverified items. Selectable as `store: {kind: s3vectors, ...}` with the embedding backend only. No boto3 dependency, no AWS calls. Specs check the VectorStore contract and the errors.\n",
+      "created_at": "2026-10-01T22:10:39.399439Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "claude-opus-5-5",
+        "name": "phase3-retrieval"
+      }
+    }
+  ],
   "created_at": "2026-10-01T19:57:22.764843Z",
-  "updated_at": "2026-10-01T20:05:53.687972Z",
+  "updated_at": "2026-10-01T22:10:39.399463Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",

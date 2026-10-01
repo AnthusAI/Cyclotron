@@ -3,7 +3,7 @@
   "title": "In-memory embedding retriever with cached vectors",
   "description": "## Purpose\n\nProvide the simplest semantic retriever: an in-memory index of normalized embedding vectors with exact cosine search.\n\n## Scope\n\n- In-memory `VectorStore` (default `store.kind: memory`), exact cosine; numpy only as an optional extra.\n- Embedding providers as optional extras: `openai` (`text-embedding-3-small`, 512 dims, for the experiment), `local-onnx`, and a `fake` hashing embedder for specs.\n- Vector cache keyed by (provider, model, dimensions, normalized-text SHA-256); fingerprint includes model and revision. Embedding only in an explicit opt-in step; never on import or in specs.\n- Owner question Q5 (embedding default for customer data: API egress vs local ONNX) stays open; do not pick a customer default here. Phase 3.\n\n## Definition of done\n\nSpecs first with the `fake` embedder and no network: exact top-k by cosine, label filter, target exclusion, cache hit on re-run, fingerprint changes with model/dims. `make test` green. Cost: $0 in core.\n\n## Acceptance scenario\n\n```gherkin\nFeature: In-memory embedding retriever with cached vectors\n  Scenario: Exact nearest neighbours per label without the target\n    Given a labeled pool embedded with the fake embedder\n    When the target asks for the top 4 items of each label\n    Then the results are the exact cosine neighbours, exclude the target, and break ties by ID\n  Scenario: Cached vectors are reused\n    Given a vector cache written by an earlier run\n    When the same pool is indexed again\n    Then no embedding call is made\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.4, Appendix B (embedding prices), Appendix C.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-e38febde-68aa-425a-be55-bd86cfb6f70c`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -18,9 +18,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "3c15f1d0-0326-464d-8d02-aec93307ae3f",
+      "author": "home",
+      "text": "Implemented on branch `phase3-retrieval` (worktree Decision-Flywheel-phase3), commits 0b15981 and fed787d; not merged or pushed. Offline only: specs use fake embedders, no network. `make test` equivalent: 289 passed (226 existing + 63 new).\n\n- `EmbeddingRetriever(embed, embedder_identity, cache=None, new_store=InMemoryVectorStore, batch_size=256)` and `EmbeddingRetriever.from_embedder(embedder)`.\n- `VectorCache(path)`: append-only JSONL of {embedder, text_sha256, vector}; no text. Keyed by embedder identity (provider:model:dims) and SHA-256 of the embedded text (NFKC, whitespace collapsed, case kept).\n- `InMemoryVectorStore`: exact cosine, numpy if installed (`[retrieval]` extra), pure Python otherwise; scores rounded to 9 decimals then ties by ID. Checked offline that numpy and pure-Python paths give identical rankings.\n- `HashingEmbedder` fake for specs; `OpenAIEmbedder` reference (text-embedding-3-small, 512 dims) is lazy: no import or call until `OpenAIEmbedder.from_environment()`, which loads .env via python-dotenv if installed (`[openai-embeddings]` extra). Never called in specs; request shape checked with a fake client.\n- Q5 (customer-data default: API vs local ONNX) left open; no local-onnx provider built.\n",
+      "created_at": "2026-10-01T22:10:39.337195Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "claude-opus-5-5",
+        "name": "phase3-retrieval"
+      }
+    }
+  ],
   "created_at": "2026-10-01T19:57:18.304811Z",
-  "updated_at": "2026-10-01T20:05:49.005969Z",
+  "updated_at": "2026-10-01T22:10:39.337224Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
