@@ -6,7 +6,8 @@ from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledIt
 from .artifacts import DeployableArtifact, create_artifact, load_artifact
 from .budget import ContextBudget, ContextPlan, build_context_ladder, build_context_plan
 from .context import FixedExampleList, PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
-from .example_list import ExampleListImprovement, improve_example_list, plan_example_list_round
+from .example_list import (ExampleListImprovement, example_list_from_policy, improve_example_list,
+                           plan_example_list_round)
 from .optimizer import OptimizationResult, TrialSpec, search_context_policies
 
 
@@ -19,7 +20,7 @@ __all__ = [
     "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
     "DeployableArtifact", "ExampleListImprovement", "FixedExampleList", "Item", "LabeledItem", "ModelCapabilities", "OptimizationResult",
     "PerLabelLexicalRetrieval", "PrototypeBalanced", "RandomBalanced", "TrialSpec",
-    "build_context_ladder", "build_context_plan", "create_artifact", "improve_example_list", "load_artifact",
+    "build_context_ladder", "build_context_plan", "create_artifact", "example_list_from_policy", "improve_example_list", "load_artifact",
     "plan_example_list_round", "run_demo",
     "search_context_policies",
 ]

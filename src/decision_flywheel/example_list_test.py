@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from .context import FixedExampleList
-from .example_list import improve_example_list, plan_example_list_round
+from .example_list import example_list_from_policy, improve_example_list, plan_example_list_round
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
 TASK = DecisionTask("tone", ("pos", "neg"), "Choose the tone.")
@@ -116,3 +116,12 @@ def test_an_exhausted_budget_keeps_the_incumbent():
                                               hard_demo_ids=sorted(HELPFUL)))
     assert result.winner_trial == "incumbent" and result.promoted is False
     assert "incomplete" in result.reason
+
+
+def test_a_fixed_global_policy_pick_freezes_into_a_list_with_its_next_items_as_reserves():
+    from .context import RandomBalanced
+
+    fixed = example_list_from_policy(RandomBalanced(seed=2), TASK, LABELED, per_label=3)
+    pick = RandomBalanced(seed=2).select(TASK, Item("x", {"text": "x"}), LABELED, per_label=4)
+    assert fixed.example_ids == tuple(row.item.id for row in pick if row in pick[:3] or row in pick[4:7])
+    assert fixed.reserve_ids == (pick[3].item.id, pick[7].item.id)

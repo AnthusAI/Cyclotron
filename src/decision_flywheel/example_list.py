@@ -67,6 +67,13 @@ def _list_from_ranking(task: DecisionTask, ranking: dict[str, list[LabeledItem]]
                                        [ranking[label][k] for label in task.labels])
 
 
+def example_list_from_policy(policy, task: DecisionTask, labeled: Sequence[LabeledItem], *,
+                             per_label: int = 4) -> FixedExampleList:
+    """Freeze a fixed-global policy's pick (e.g. ``RandomBalanced``) as a list: its first
+    ``per_label`` items per label, and the next one per label as the reserve."""
+    return _list_from_ranking(task, _ranked(policy, task, labeled), per_label)
+
+
 def _hard_swap(task: DecisionTask, incumbent: FixedExampleList, by_id: dict[str, LabeledItem],
                hard_demo_ids: Sequence[str], prototype: dict[str, list[LabeledItem]]) -> FixedExampleList:
     k = incumbent.per_label
