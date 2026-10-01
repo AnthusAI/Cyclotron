@@ -159,7 +159,7 @@ ai:
   provider: litellm
   model: gpt-5.6-luna
 right_now:
-  enabled: true
+  enabled: false
   default_tree_expanded: false
   max_length: 120
   model: gpt-5.6-luna
