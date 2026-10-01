@@ -1,9 +1,9 @@
 {
   "id": "decision-flywheel-6d3f7611-cb20-480f-b44e-b0317754bb13",
   "title": "Ship the fixed classifier bundle: optimized example list, rubric, and head",
-  "description": "## Purpose\n\nGive the Decision Flywheel one frozen, reloadable default classifier: a native optimizer improves one fixed few-shot example list across feedback rounds, and the winner is saved with the discovered rubric questions and the trained head.\n\n## Product definition (owner, 2026-10-01)\n\n- **One flywheel, two optimizations:** feature discovery from labeled feedback and its explanations (Jev-Flywheel steering, consumed read-only) and iterative few-shot example-list optimization (this epic).\n- **Default end state:** a fixed `ClassifierBundle` = optimized fixed example list + rubric questions + trained head over Jev answers. Default cost: 2 Jev requests per item.\n- **Dynamic per-item retrieval is separate and optional**, off by default (sibling retrieval epic).\n- Native and provider-neutral. No DSPy dependency, bridge, or optimization path.\n\n## Scope\n\nThe core-owned pieces in design §1.3: `FixedExampleList` policy, Brier objective, `improve_example_list` driver, `ClassifierBundle`. Reuse `ContextPolicy`, `validate_selected_context`, `search_context_policies`, `call_accounting`, and the `artifacts.py` canonical-JSON pattern. Do not add a third copy of `Score`/`fit_head` (design §1.3; ownership question Q4 stays open).\n\n## Definition of done\n\nAll child stories closed, specs first and green (`make test`). The evaluations harness runs arms F / F-rand / A-c+F against these APIs offline (stop S0), and reloaded bundles give identical predictions to in-memory ones.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §1, §3, §6 steps 1, 2, 9.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-258cd418-2a73-447b-9c78-5073fbf42959`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8e2358d8-3585-427a-ad4d-70655d0cf9cd`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-86b6d78a-d49b-4006-b70a-168eeff4c358`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+  "description": "## Purpose\n\nGive the Decision Flywheel one frozen, reloadable default classifier: a native optimizer improves one fixed few-shot example list across feedback rounds, and the winner is saved with the discovered rubric questions and the trained head.\n\n## Product definition (owner, 2026-10-01)\n\n- **One flywheel, two optimizations:** feature discovery from labeled feedback and its explanations (Jev-Flywheel steering, consumed read-only) and iterative few-shot example-list optimization (this epic).\n- **Default end state:** a fixed `ClassifierBundle` = optimized fixed example list + rubric questions + trained head over Jev answers. Default cost: 1 Jev request per item (the example list in the state together with every rubric question; owner decision Q2, 2026-10-01).\n- **Dynamic per-item retrieval is separate and optional**, off by default (sibling retrieval epic).\n- Native and provider-neutral. No DSPy dependency, bridge, or optimization path.\n\n## Scope\n\nThe core-owned pieces in design §1.3: `FixedExampleList` policy, Brier objective, `improve_example_list` driver, `ClassifierBundle`. Reuse `ContextPolicy`, `validate_selected_context`, `search_context_policies`, `call_accounting`, and the `artifacts.py` canonical-JSON pattern. Do not add a third copy of `Score`/`fit_head` (design §1.3; ownership question Q4 stays open).\n\n## Definition of done\n\nAll child stories closed, specs first and green (`make test`). The evaluations harness runs arms F / F-rand / A-c+F against these APIs offline (stop S0), and reloaded bundles give identical predictions to in-memory ones.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §1, §3, §6 steps 1, 2, 9.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-258cd418-2a73-447b-9c78-5073fbf42959`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8e2358d8-3585-427a-ad4d-70655d0cf9cd`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-86b6d78a-d49b-4006-b70a-168eeff4c358`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -13,9 +13,22 @@
     "phase-1"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "2068fb4f-e2ea-437f-a531-7c2c7253dd79",
+      "author": "home",
+      "text": "Phase 1 core pieces landed: f7721c4 (FixedExampleList with per-label reserve and artifact support; objective='brier' with optional checkpoint probabilities; improve_example_list) and 6da5fd3 (example_list_from_policy). make test: 226 passed. The Evaluations harness runs F / F-rand / A-c+F against these APIs offline (S0 passed). Remaining: the Brier fallback question on its story and the ClassifierBundle story (Phase 2). Owner Q2: one Jev request per item; description updated.",
+      "created_at": "2026-10-01T21:48:27.414092Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "claude-opus-5-5",
+        "name": "phase1-subagent"
+      }
+    }
+  ],
   "created_at": "2026-10-01T19:56:22.143805Z",
-  "updated_at": "2026-10-01T20:05:13.118495Z",
+  "updated_at": "2026-10-01T21:48:27.414120Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",

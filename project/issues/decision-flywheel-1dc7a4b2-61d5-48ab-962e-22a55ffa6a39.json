@@ -3,7 +3,7 @@
   "title": "Improve a fixed example list across feedback rounds",
   "description": "## Purpose\n\nAdd a small, native, deterministic `improve_example_list()` driver that challenges the incumbent fixed list each feedback round and promotes only a clearly better one.\n\n## Scope (design §3.2)\n\n- List size k = 4 per label plus 1 reserve per label.\n- **Development split per round:** the round's newest labels minus every item in any trial's list, capped at 100. Candidates: all other labels. Scoreboard IDs (e.g. dev-100, paper-600) go in `protected_ids` and are refused.\n- **At most 3 trials per round:** (1) incumbent (zero-shot in round 1); (2) hard swap: replace ⌈k/2⌉ slots per label with the most confidently wrong out-of-fold labeled candidates (round 1: cached zero-shot errors), filling from `PrototypeBalanced`, dropping the most recently added slots first; (3) exploration `RandomBalanced(seed=round)` (round 1 also `PrototypeBalanced`).\n- All trials run through `search_context_policies` as `FixedExampleList` policies, scored by Brier.\n- **Promote** only if Brier improves by ≥ 0.005 and accuracy does not fall; ties go to the incumbent.\n- Enforce a per-round request budget (`max_requests_per_round`, default 800) through `call_accounting`.\n- Return search fingerprints, trials and objective for the bundle's `fewshot` audit. A frozen bundle never re-optimizes.\n- Record, do not fix, the known bias that development items later enter head training.\n\n## Definition of done\n\nFake-model specs first: incumbent keeps ties; protected IDs refused; promotion threshold honoured; deterministic for fixed seeds; budget ceiling stops the search; no network. `make test` green. Cost: $0 in core (live use happens in the evaluations harness).\n\n## Acceptance scenario\n\n```gherkin\nFeature: Improve a fixed example list across rounds\n  Scenario: The incumbent keeps a tie\n    Given an incumbent fixed list and a challenger with equal development Brier and accuracy\n    When improve_example_list runs a round\n    Then the incumbent is kept and every trial is recorded\n  Scenario: Protected items cannot be used\n    Given a protected scoreboard ID among the candidates\n    When improve_example_list runs a round\n    Then the round is refused before any model call\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §3 (all), §4.2 (`fewshot.optimizer` config), §6 step 2.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8ab379b4-fa00-48f5-aab7-58af51222c18`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-1a994dd9-cf5d-4374-9296-bdf1e17395e5`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,18 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "8a55b673-de1f-4b82-a31a-9532a95b8cfa",
+      "author": "home",
+      "text": "Done in f7721c4 (+6da5fd3). Specs: incumbent keeps ties; protected IDs refused; hard swap promoted when it helps; a gain under 0.005 keeps the incumbent; deterministic; an exhausted call budget keeps the incumbent; accuracy fallback for a model without probabilities. Owner-directed simplifications vs this description: (1) development defaults to every label so far outside the trial lists (development_ids/dev_max still allow 'newest batch, cap 100'); (2) with no incumbent, the PrototypeBalanced seed list is the incumbent, so a round is always at most 3 trials (zero-shot is not a trial); (3) the per-round cap is max_model_calls, and the harness's cumulative spend ledger is the real ceiling. plan_example_list_round exposes the trials so a caller can prefetch answers concurrently.",
+      "created_at": "2026-10-01T21:48:27.466447Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-01T19:56:53.538645Z",
-  "updated_at": "2026-10-01T20:05:25.908164Z",
-  "closed_at": null,
+  "updated_at": "2026-10-01T21:48:27.475451Z",
+  "closed_at": "2026-10-01T21:48:27.475414Z",
   "agent": {
     "platform": "claude_code",
     "model": "Claude Opus 5.5",
