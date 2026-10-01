@@ -19,29 +19,37 @@
       "text": "HANDOFF 2026-09-30: Human requested immediate stop due to exhausted weekly limit; persistent goal paused, not completed. Decision-Flywheel core checkout is clean at published 6137fa185a1a98afa84b5e6d5948d1780df5d56d, with 194 specs and successful CI 36779694166. Native/provider-neutral decision-context optimizer and fake-tested initial adapters are implemented; NO DSPy. Main remaining sequence is evaluations: initial Jev selection-by-size, then fixed-membership ordering, then eligible Kev/Laya comparisons. Laya labeled context unsupported upstream: retain explicit zero-only/exclusion, do not fabricate support. Full detailed local WIP handoff is in companion Decision-Flywheel-Evaluations Kanbus task decision-flywheel-evaluations-b7796fc5-0fd4-51f6-aa05-397e635cfff6. All current code edits are in that checkout; do not modify unrelated dirty Jev-Flywheel. No new paid model calls or results have occurred, and the proposed 42-attempt pilot still lacks explicit human approval. Resume with Terra subagents if authorized; do not mark the entire plan complete because infrastructure passes.",
       "created_at": "2026-09-30T23:20:07.354023Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation",
-        "settings": {}
+        "name": "Flywheel Implementation"
+      }
+    },
+    {
+      "id": "11e9dc8a-b566-48fe-988d-e2d2729758b6",
+      "author": "home",
+      "text": "**New product definition (owner, 2026-10-01).** Supersedes the handoff above as the plan of record; the large static Jev study it pointed to is complete (Decision-Flywheel-Evaluations `studies/INITIAL_JEV_RESULTS.md`), and demonstration-ordering and Jev/Kev/Laya comparisons are deferred.\n\n- **One flywheel, two optimizations** from labeled feedback, comments included: feature discovery (an analyst turns explanations and errors into rubric questions, as in Jev-Flywheel) and iterative optimization of one **fixed** few-shot example list.\n- **Default end state:** a fixed, reloadable `ClassifierBundle` = optimized fixed example list + discovered rubric questions + trained head over Jev answers (2 Jev requests per item).\n- **Dynamic per-item retrieval is separate and optional, off by default**, with configurable retrievers: lexical v2 (stop words on by default, negations kept, v1 frozen), in-memory embeddings, and design-only S3 Vectors / DynamoDB stubs behind one interface.\n- Native, provider-neutral optimization only. The DSPy sentence in this initiative's description is void (withdrawn earlier; see AGENTS.md).\n\nCore work is filed as two epics under this initiative:\n- `decision-flywheel-6d3f7611-cb20-480f-b44e-b0317754bb13` Ship the fixed classifier bundle (Phase 1-2): `FixedExampleList` with reserve, Brier objective, `improve_example_list`, `ClassifierBundle`.\n- `decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f` Optional dynamic retrieval (Phase 3): Retriever interface + config, lexical v2, in-memory embedding retriever, AWS store design stubs.\n\nCompanion initiative: `decision-flywheel-evaluations-258cd418-2a73-447b-9c78-5073fbf42959` in https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues. Design: https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md\n",
+      "created_at": "2026-10-01T20:11:28.684172Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Flywheel Planning"
       }
     }
   ],
   "created_at": "2026-09-30T17:59:29.094144Z",
-  "updated_at": "2026-09-30T23:20:07.354103Z",
+  "updated_at": "2026-10-01T20:11:28.684199Z",
   "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {
-    "source": "shared",
-    "project_label": "decision-flywheel"
-  },
   "agent": {
     "platform": "codex",
     "model": "GPT-6",
-    "name": "Flywheel Planning",
-    "settings": {}
+    "name": "Flywheel Planning"
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

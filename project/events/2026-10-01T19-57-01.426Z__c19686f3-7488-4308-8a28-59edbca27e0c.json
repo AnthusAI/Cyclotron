@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "c19686f3-7488-4308-8a28-59edbca27e0c",
+  "issue_id": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:57:01.426Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Offer optional dynamic retrieval behind a configurable Retriever",
+    "description": "## Purpose\n\nOffer dynamic per-item example retrieval as a **separate, optional feature, off by default**, with interchangeable retrievers behind one interface.\n\n## Scope\n\n- `Retriever` / `RetrievalIndex` / `VectorStore` protocols and a `retrieval:` config independent of the few-shot optimizer toggle.\n- Lexical v2 (stop words on by default, negations kept; v1 frozen).\n- In-memory embedding retriever (exact cosine), the simplest semantic option.\n- S3 Vectors and DynamoDB vector search: **design-only stubs** behind the same `VectorStore` interface; not built in this phase.\n- Owner phasing: Phase 3, after the fixed bundle. Native, provider-neutral, core stays dependency-free (numpy and embedding providers only as optional extras). No DSPy.\n\n## Definition of done\n\nChild stories closed with specs first and green; the evaluations retrieval proxy can plug each retriever in; with default config no retrieval request is ever made.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4, Appendix B.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+    "labels": [
+      "roadmap",
+      "phase-3"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

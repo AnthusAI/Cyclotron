@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "19f647e0-f4f8-4471-a6af-4b004d3b4700",
+  "issue_id": "decision-flywheel-1dc7a4b2-61d5-48ab-962e-22a55ffa6a39",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:56:53.538Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Improve a fixed example list across feedback rounds",
+    "description": "## Purpose\n\nAdd a small, native, deterministic `improve_example_list()` driver that challenges the incumbent fixed list each feedback round and promotes only a clearly better one.\n\n## Scope (design §3.2)\n\n- List size k = 4 per label plus 1 reserve per label.\n- **Development split per round:** the round's newest labels minus every item in any trial's list, capped at 100. Candidates: all other labels. Scoreboard IDs (e.g. dev-100, paper-600) go in `protected_ids` and are refused.\n- **At most 3 trials per round:** (1) incumbent (zero-shot in round 1); (2) hard swap: replace ⌈k/2⌉ slots per label with the most confidently wrong out-of-fold labeled candidates (round 1: cached zero-shot errors), filling from `PrototypeBalanced`, dropping the most recently added slots first; (3) exploration `RandomBalanced(seed=round)` (round 1 also `PrototypeBalanced`).\n- All trials run through `search_context_policies` as `FixedExampleList` policies, scored by Brier.\n- **Promote** only if Brier improves by ≥ 0.005 and accuracy does not fall; ties go to the incumbent.\n- Enforce a per-round request budget (`max_requests_per_round`, default 800) through `call_accounting`.\n- Return search fingerprints, trials and objective for the bundle's `fewshot` audit. A frozen bundle never re-optimizes.\n- Record, do not fix, the known bias that development items later enter head training.\n\n## Definition of done\n\nFake-model specs first: incumbent keeps ties; protected IDs refused; promotion threshold honoured; deterministic for fixed seeds; budget ceiling stops the search; no network. `make test` green. Cost: $0 in core (live use happens in the evaluations harness).\n\n## Acceptance scenario\n\n```gherkin\nFeature: Improve a fixed example list across rounds\n  Scenario: The incumbent keeps a tie\n    Given an incumbent fixed list and a challenger with equal development Brier and accuracy\n    When improve_example_list runs a round\n    Then the incumbent is kept and every trial is recorded\n  Scenario: Protected items cannot be used\n    Given a protected scoreboard ID among the candidates\n    When improve_example_list runs a round\n    Then the round is refused before any model call\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §3 (all), §4.2 (`fewshot.optimizer` config), §6 step 2.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-6d3f7611-cb20-480f-b44e-b0317754bb13",
+    "labels": [
+      "roadmap",
+      "phase-1"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

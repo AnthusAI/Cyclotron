@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "16d76ddd-9301-4a6b-a54e-485155f56b29",
+  "issue_id": "decision-flywheel-886c718d-c0f7-4384-81e9-7ad29677be98",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:56:45.013Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Select a fixed example list with a per-label reserve",
+    "description": "## Purpose\n\nAdd a `FixedExampleList` context policy so the default product shows the same balanced example list for every item.\n\n## Scope\n\n- New `ContextPolicy` `fixed-example-list`, version `1`: ordered primary IDs (`per_label`, default 4) plus **one reserve per label**, each with label and input hash; `display_order`; `presentation_label_order`; a fingerprint over all of it.\n- **Reserve rule:** if the target is in the list (by ID or normalized text), substitute that label's reserve. Keeps the list balanced and gives labeled items honest leave-one-out answers (today `_validated_candidate_pools` would otherwise fail).\n- The shared firewall (`validate_selected_context`) still validates the result.\n- `artifacts._policy_from_metadata` allowlists the new policy. Existing policies, versions and fingerprints are unchanged.\n- Offline, no new dependency. Phase 1, design build step 1.\n\n## Definition of done\n\nSpecs first, beside `context.py` / `artifacts.py`: firewall holds, reserve swap, balance preserved, fingerprint stable and sensitive to membership/order, artifact round trip. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Select a fixed example list with a per-label reserve\n  Scenario: A target that is in the list gets its label's reserve\n    Given a fixed example list with 4 examples and 1 reserve per label\n    When the target is one of the listed examples\n    Then the context uses that label's reserve, stays balanced, and never contains the target\n  Scenario: The list survives an artifact round trip\n    Given a saved artifact for a fixed example list\n    When it is reloaded with the example texts\n    Then the policy fingerprint and the selected context are identical\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §1.2 (`fewshot` block, reserve rule), §1.3, §6 step 1, Appendix A (`context.py`).",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-6d3f7611-cb20-480f-b44e-b0317754bb13",
+    "labels": [
+      "roadmap",
+      "phase-1"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

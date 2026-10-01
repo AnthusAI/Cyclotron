@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "e3c376e3-b828-43f9-a263-039d5f911cad",
+  "issue_id": "decision-flywheel-df19d04e-64e9-45f9-8b42-d29d5d4090ac",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:57:14.131Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Lexical retriever v2 with stop words on by default and v1 frozen",
+    "description": "## Purpose\n\nShip lexical retrieval v2 with stop words on by default, while keeping v1 byte-for-byte reproducible.\n\n## Scope\n\n- **v1 frozen:** `PerLabelLexicalRetrieval` keeps its name, version `1`, empty config and fingerprint (old artifacts and the cached answers behind arm B depend on it).\n- **v2:** vendored, versioned stop-word list `en-v1` that **keeps negations** (not/no/nor/never); `unicode-v1` tokenizer (casefold + NFKC + `\\w+`; `ascii-v1` = v1's `[a-z]+`); `weighting: binary-cosine` (default) or `bm25 {k1: 1.2, b: 0.75}` with IDF over the labeled pool only. Pure Python, no NLTK download.\n- Implements the `Retriever` interface. Phase 3.\n\n## Definition of done\n\nSpecs first: v1 fingerprint and selections unchanged; v2 drops stop words but keeps negations; digits/non-ASCII tokens survive; BM25 matches a hand-computed fixture; deterministic ties by ID. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Lexical retriever v2 with stop words on by default\n  Scenario: Negations survive stop-word removal\n    Given two labeled items that differ only by \"not\"\n    When lexical v2 tokenizes them with default settings\n    Then common stop words are dropped and \"not\" is kept\n  Scenario: Version 1 is unchanged\n    Given an artifact saved with lexical retrieval version 1\n    When it is reloaded\n    Then its fingerprint and selected examples are identical to before\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.2, §4.3, Appendix A.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+    "labels": [
+      "roadmap",
+      "phase-3"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

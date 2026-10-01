@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "2999d340-53f9-41cb-96a1-10d55ce4c9f4",
+  "issue_id": "decision-flywheel-1ed56f35-629d-48d5-84c1-f9e26d038d9e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:56:48.654Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Score context trials by Brier on returned probabilities",
+    "description": "## Purpose\n\nLet the context optimizer choose by calibrated quality (Brier on the model's returned probabilities), not only by accuracy or macro-F1.\n\n## Scope\n\n- Optional `probabilities` field in checkpoint entries (today entries must be exactly `{\"label\"}`).\n- `objective=\"brier\"` in `search_context_policies`; lower is better.\n- When a trial lacks probabilities, fall back to accuracy explicitly and record that in the result (no silent mixing).\n- Existing checkpoints, objectives and results are unchanged. Phase 1, design build step 2.\n\n## Definition of done\n\nSpecs first: exact multiclass Brier on a fixture; old `{\"label\"}` checkpoints still load; missing-probability fallback is recorded; accuracy and macro-F1 outputs unchanged. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Score context trials by Brier on returned probabilities\n  Scenario: Trials with probabilities are ranked by Brier\n    Given two context trials whose checkpoints carry label probabilities\n    When the optimizer searches with objective brier\n    Then the trial with the lower development Brier wins and the objective is recorded\n  Scenario: Old checkpoints keep working\n    Given a checkpoint whose entries contain only a label\n    When it is loaded\n    Then it is accepted and accuracy is reported as the fallback objective\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §3.1, §3.2 (Scoring and promotion), §6 step 2.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-6d3f7611-cb20-480f-b44e-b0317754bb13",
+    "labels": [
+      "roadmap",
+      "phase-1"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

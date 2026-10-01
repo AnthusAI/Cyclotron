@@ -1,0 +1,31 @@
+{
+  "id": "decision-flywheel-09ea97a1-4466-479c-b4dc-c463f2f6bc5d",
+  "title": "Define the Retriever interface and an independent retrieval config",
+  "description": "## Purpose\n\nDefine the `Retriever` interface and a retrieval config that is independent of the few-shot optimizer, so retrieval can be switched on or off and swapped without touching the default path.\n\n## Scope\n\n- Protocols from design §4.1: `Retriever.index(task, pool)` over trusted labeled items only; `RetrievalIndex.top_per_label(target, label, k, exclude_ids)`; `VectorStore.upsert(rows)` / `query(vector, top_k, label_filter)`.\n- `PerLabelRetrieval` ContextPolicy (name `per-label-retrieval`, version `2`): asks each label for k+1, drops the target by ID/text, ties by ID; the shared firewall still validates.\n- Config schema §4.2: `retrieval.enabled: false` by default, `per_label`, `combine: add-feature` (only mode), `backend: lexical | embedding`, `store.kind: memory | s3vectors | dynamodb`. Nothing in `fewshot:` reads `retrieval:` and vice versa.\n- Fingerprints: retriever config + version (+ embedding model/revision); index = retriever + pool fingerprint; approximate stores record `approximate: true`.\n\n## Definition of done\n\nSpecs first: default config makes no retrieval request; enabling retrieval with the optimizer disabled (and the reverse) both validate; unknown keys rejected; fingerprints change with config. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Retriever interface with an independent retrieval config\n  Scenario: Retrieval is off by default\n    Given a default flywheel configuration\n    When an item is classified with a fake engine\n    Then no retrieval index is built and only the default requests are made\n  Scenario: Retrieval and the optimizer switch independently\n    Given retrieval enabled and the few-shot optimizer disabled\n    When the configuration is validated\n    Then it is accepted and each fingerprint reflects only its own block\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.1, §4.2.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-e9cfcb6f-2fca-4f4b-b0b2-0a514067828a`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+  "labels": [
+    "roadmap",
+    "phase-3"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-01T19:57:10.985919Z",
+  "updated_at": "2026-10-01T20:05:39.760573Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "Flywheel Planning"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

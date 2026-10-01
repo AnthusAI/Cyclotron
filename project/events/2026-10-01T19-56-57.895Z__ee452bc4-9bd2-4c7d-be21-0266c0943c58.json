@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "ee452bc4-9bd2-4c7d-be21-0266c0943c58",
+  "issue_id": "decision-flywheel-7284b9aa-7c87-4bd4-b5d3-f7a67546cbdd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:56:57.895Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Save, load, and classify with a versioned ClassifierBundle",
+    "description": "## Purpose\n\nFreeze each flywheel version as a versioned, verifiable `ClassifierBundle` that can be reloaded to classify new items.\n\n## Scope (design §1.2)\n\n- A directory with `bundle.json` (canonical text-free JSON, SHA-256 integrity hash, strict keys, in the `artifacts.py` style), `examples.jsonl` (private example texts, never committed, each row verified against manifest hashes on load), and `scorecard.yaml` (rubric and head in Jev-Flywheel `Score` format, hashed).\n- `bundle.json` blocks: `task`, `engine` (adapter, configured and reported model, `model_identity`), `rubric`, `fewshot` (FixedExampleList + optimizer audit), `head`, `retrieval` (`null` by default), `lineage`.\n- `load_bundle(dir)` verifies every hash and the task fingerprint, compares configured vs stored engine model, and warns if the reported model differs.\n- `classify`: request 1 zero-shot (holistic question + every rubric element); request 2 few-shot with the fixed list; request 3 only when retrieval is enabled. Returns label, calibrated probability, top contributions.\n- Core wraps the Jev-Flywheel YAML; it does not copy `Score`/`fit_head` (Q4 open). Keep the core interface provider-neutral.\n- **Owner decision needed (Q2, request shape)** is tracked in the evaluations board; build the design's two-request shape unless the owner decides otherwise. Phase 2, design build step 9.\n\n## Definition of done\n\nSpecs first: a reloaded bundle gives identical predictions to the in-memory one on a fake engine; a tampered file or mismatched example text is rejected; a reported-model mismatch produces an observable warning; no credentials or texts in `bundle.json`. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Save, load, and classify with a versioned ClassifierBundle\n  Scenario: A reloaded bundle predicts exactly like the original\n    Given a classifier bundle built in memory with a fake engine\n    When it is saved, reloaded, and asked to classify the same items\n    Then the labels, probabilities, and contributions are identical\n  Scenario: Tampering is detected\n    Given a saved bundle whose examples file was edited\n    When it is loaded\n    Then loading fails with an integrity error before any model call\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §1.2, §1.3, §6 step 9, §7 Q2/Q4/Q6.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-6d3f7611-cb20-480f-b44e-b0317754bb13",
+    "labels": [
+      "roadmap",
+      "phase-2"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

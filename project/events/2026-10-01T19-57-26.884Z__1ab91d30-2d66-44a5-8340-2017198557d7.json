@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "event_id": "1ab91d30-2d66-44a5-8340-2017198557d7",
+  "issue_id": "decision-flywheel-95481b4d-ee96-468a-b57e-5885e91224d2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-01T19:57:26.884Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Design-only stub: DynamoDB vector search store adapter",
+    "description": "## Purpose\n\nRecord a design-only stub for a DynamoDB vector search `VectorStore` adapter behind the same interface.\n\n## Scope (design only; not built in this phase)\n\n- On-demand table with a vector index (`VectorAttribute`, `Dimensions`, `DistanceFunction=COSINE`) and `label` as an `INLINE_FILTER` in the `SearchSchema`.\n- `SearchVectors(TopK ≤ 100, SearchConditionExpression label = :L)`; separate search endpoint (`{acct}.search-ddb.{region}.amazonaws.com`); IAM `dynamodb:SearchVectors`. Results are eventually consistent; no pagination (16 MB max); no fine-grained access control.\n- Risks: approximate search (`approximate: true` in the fingerprint), eventual consistency right after writes, account setup.\n- **AWS facts checked on 2026-10-01** against official pages (design Appendix B): GA announced 2026-08-05; quotas 5 vector indexes/table, 4,096 dims, TopK ≤ 100, 18 inline filters. Pricing from a summarizing fetch and the minimum SDK version for `search_vectors` (not found): **re-check before building.**\n\n## Definition of done\n\nThe adapter design (mapping onto `CreateTable`/`UpdateTable` vector indexes and `SearchVectors`, config keys under `store.kind: dynamodb`, IAM, risks, items to re-verify) is recorded in core docs or on this issue; no dependency, no AWS calls, no code path enabled. Cost: $0.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.1, §4.5, Appendix B (DynamoDB vector search).",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 3,
+    "assignee": null,
+    "parent": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+    "labels": [
+      "roadmap",
+      "phase-3",
+      "design-only"
+    ],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Flywheel Planning"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "decision-flywheel-0e7d4b0b-34de-4b93-a7a2-64e4b4637e7d",
+  "title": "In-memory embedding retriever with cached vectors",
+  "description": "## Purpose\n\nProvide the simplest semantic retriever: an in-memory index of normalized embedding vectors with exact cosine search.\n\n## Scope\n\n- In-memory `VectorStore` (default `store.kind: memory`), exact cosine; numpy only as an optional extra.\n- Embedding providers as optional extras: `openai` (`text-embedding-3-small`, 512 dims, for the experiment), `local-onnx`, and a `fake` hashing embedder for specs.\n- Vector cache keyed by (provider, model, dimensions, normalized-text SHA-256); fingerprint includes model and revision. Embedding only in an explicit opt-in step; never on import or in specs.\n- Owner question Q5 (embedding default for customer data: API egress vs local ONNX) stays open; do not pick a customer default here. Phase 3.\n\n## Definition of done\n\nSpecs first with the `fake` embedder and no network: exact top-k by cosine, label filter, target exclusion, cache hit on re-run, fingerprint changes with model/dims. `make test` green. Cost: $0 in core.\n\n## Acceptance scenario\n\n```gherkin\nFeature: In-memory embedding retriever with cached vectors\n  Scenario: Exact nearest neighbours per label without the target\n    Given a labeled pool embedded with the fake embedder\n    When the target asks for the top 4 items of each label\n    Then the results are the exact cosine neighbours, exclude the target, and break ties by ID\n  Scenario: Cached vectors are reused\n    Given a vector cache written by an earlier run\n    When the same pool is indexed again\n    Then no embedding call is made\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.4, Appendix B (embedding prices), Appendix C.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-e38febde-68aa-425a-be55-bd86cfb6f70c`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+  "labels": [
+    "roadmap",
+    "phase-3"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-09ea97a1-4466-479c-b4dc-c463f2f6bc5d",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-01T19:57:18.304811Z",
+  "updated_at": "2026-10-01T20:05:49.005969Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "Flywheel Planning"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

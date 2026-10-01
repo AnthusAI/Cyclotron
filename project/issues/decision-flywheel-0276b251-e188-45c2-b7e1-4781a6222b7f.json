@@ -1,0 +1,31 @@
+{
+  "id": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
+  "title": "Offer optional dynamic retrieval behind a configurable Retriever",
+  "description": "## Purpose\n\nOffer dynamic per-item example retrieval as a **separate, optional feature, off by default**, with interchangeable retrievers behind one interface.\n\n## Scope\n\n- `Retriever` / `RetrievalIndex` / `VectorStore` protocols and a `retrieval:` config independent of the few-shot optimizer toggle.\n- Lexical v2 (stop words on by default, negations kept; v1 frozen).\n- In-memory embedding retriever (exact cosine), the simplest semantic option.\n- S3 Vectors and DynamoDB vector search: **design-only stubs** behind the same `VectorStore` interface; not built in this phase.\n- Owner phasing: Phase 3, after the fixed bundle. Native, provider-neutral, core stays dependency-free (numpy and embedding providers only as optional extras). No DSPy.\n\n## Definition of done\n\nChild stories closed with specs first and green; the evaluations retrieval proxy can plug each retriever in; with default config no retrieval request is ever made.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4, Appendix B.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-f06dcf08-6182-41ce-a9f5-31b37d08bf51`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+  "type": "epic",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "labels": [
+    "roadmap",
+    "phase-3"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-01T19:57:01.426219Z",
+  "updated_at": "2026-10-01T20:05:36.955455Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "Flywheel Planning"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
