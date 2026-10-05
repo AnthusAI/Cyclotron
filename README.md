@@ -37,6 +37,21 @@ synthetic target. Re-running produces the same artifact hash and context IDs.
 After installation, `decision-flywheel-demo --output FOLDER` runs the same flow.
 Use `make test` for all offline specifications.
 
+## Embed a flywheel in an application
+
+The library owns optimization, artifacts, and a restart-safe, text-free
+`JsonlRunLedger`; an application owns presentation. Each completed measured
+round becomes a typed `FlywheelRound`, containing only fingerprints, counts,
+trial outcomes, call accounting, and promotion status. On restart, any client
+can call `ledger.status(current_feedback_fingerprint)` and render one of three
+states: `never-run`, `current`, or `stale`.
+
+This is the UI boundary for a terminal, web application, or service. It does
+not expose prompts, source records, labels, or private model reasoning. A UI
+can show current policy and features from its frozen artifact, then show the
+ledger's measured candidate trials, outcomes, and refresh state. The local
+ArXiv reviewer below is one client of this interface, not a second flywheel.
+
 ## Try the local article reviewer
 
 The reviewer is a local Rich terminal application for collecting real human
@@ -95,8 +110,9 @@ make PYTHON=.venv/bin/python review-live   # serve the already-frozen policy
 The regular review screen displays the latest measured candidate outcomes. A
 live review session uses the selected frozen Jev artifact for each prediction;
 it has a per-session request ceiling and records the prediction shown before
-your vote. After collecting more feedback, run another flywheel round before
-serving a new live artifact.
+your vote. Its run ledger preserves measured rounds across restarts and marks
+the policy stale when new eligible feedback arrives. After collecting more
+feedback, run another flywheel round before serving a new live artifact.
 
 ## Safety and evaluation boundaries
 

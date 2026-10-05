@@ -23,6 +23,7 @@ from .example_list import plan_example_list_round
 from .reviewer_core import reviewer_item, reviewer_labeled_items, reviewer_task
 from .reviewer_predictor import LabeledArticle, ReviewerPrediction, predict_article
 from .reviewer_store import Article, PredictionMetrics, ReviewStore
+from .run_ledger import FlywheelStatus, JsonlRunLedger, feedback_fingerprint
 
 
 def load_articles_jsonl(path: str | Path) -> tuple[Article, ...]:
@@ -93,7 +94,8 @@ def _summary_table(summary: dict[str, int], metrics: PredictionMetrics) -> Table
     return table
 
 
-def _core_flywheel_status(report: dict[str, object] | None, *, current_training_labels: int) -> Panel:
+def _core_flywheel_status(report: dict[str, object] | None, *, current_training_labels: int,
+                           ledger_status: FlywheelStatus | None = None) -> Panel:
     """Render the measured core policy and whether new feedback has outgrown it."""
     if report is None:
         message = "No measured Jev flywheel run yet. Run `make run-flywheel` to evaluate the existing core on eligible feedback."
@@ -136,6 +138,14 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
                         and isinstance(cached, int)):
                     trial_lines.append(f"{name}: {status}, {decisions} decisions, {cached} cached")
         activity_line = f"Measured trials: {' · '.join(trial_lines)}." if trial_lines else ""
+        ledger_line = ""
+        if ledger_status is not None:
+            if ledger_status.phase == "current":
+                ledger_line = (f"Run ledger: {ledger_status.completed_rounds} measured round(s); "
+                               "the frozen policy matches current eligible feedback.")
+            elif ledger_status.phase == "stale":
+                ledger_line = (f"Run ledger: {ledger_status.completed_rounds} measured round(s); "
+                               "new feedback requires another measured round.")
         message = (f"Last measured Jev run — {report['reason']}\n"
                    f"Winner: {report['winner']} · {calls.get('attempted', 0)} new Jev requests. {formatted}\n"
                    f"Feedback used: {feedback.get('total', 0)} eligible labels, "
@@ -143,6 +153,7 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
                    f"{feedback.get('hard_jev_corrections', 0)} wrong-Jev corrections for hard-swap.\n"
                    + (f"{round_line}\n" if round_line else "")
                    + (f"{activity_line}\n" if activity_line else "")
+                   + (f"{ledger_line}\n" if ledger_line else "")
                    + freshness)
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
@@ -178,6 +189,7 @@ def _optional_comment(console: Console) -> str | None:
 
 def run_review_session(store: ReviewStore, console: Console | None = None,
                        flywheel_report: dict[str, object] | None = None,
+                       run_ledger: JsonlRunLedger | None = None,
                        predict: Callable[[Article], ReviewerPrediction] | None = None) -> None:
     """Run the review loop and preserve every prediction shown before a vote."""
     console = console or Console()
@@ -188,8 +200,12 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
         console.clear()
         summary = store.summary()
         metrics = store.prediction_metrics()
+        core_labels = reviewer_labeled_items(store.learning_feedback(), store.article)
+        ledger_status = (run_ledger.status(feedback_fingerprint(reviewer_task(), core_labels))
+                         if run_ledger is not None else None)
         console.print(_summary_table(summary, metrics))
-        console.print(_core_flywheel_status(flywheel_report, current_training_labels=summary["train_labels"]))
+        console.print(_core_flywheel_status(flywheel_report, current_training_labels=summary["train_labels"],
+                                             ledger_status=ledger_status))
         labels = tuple(LabeledArticle(store.article(label.article_id), label.label) for label in store.learning_labels())
         if article is None:
             console.print(Panel("There are no unreviewed articles in this batch.", border_style="green"))
@@ -230,6 +246,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--final-audit-rate", type=float, default=.1)
     parser.add_argument("--flywheel-report", type=Path,
                         help="text-free report from scripts/run_reviewer_flywheel.py")
+    parser.add_argument("--flywheel-ledger", type=Path,
+                        help="text-free reusable flywheel run ledger")
     parser.add_argument("--live-jev", action="store_true",
                         help="serve predictions through the selected, measured Jev artifact")
     parser.add_argument("--confirm-live", action="store_true",
@@ -246,6 +264,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("supply --articles for a new review database")
         report_path = args.flywheel_report or args.database.parent / "reviewer-flywheel.json"
         report = load_flywheel_report(report_path)
+        ledger_path = args.flywheel_ledger or args.database.parent / "reviewer-flywheel-runs.jsonl"
+        ledger = JsonlRunLedger(ledger_path)
         live_predict = None
         if args.live_jev:
             if not args.confirm_live:
@@ -280,7 +300,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                           f"jev:{report['winner']}", artifact.artifact_hash,
                                           len(core_labels))
 
-        run_review_session(store, flywheel_report=report, predict=live_predict)
+        run_review_session(store, flywheel_report=report, run_ledger=ledger, predict=live_predict)
     return 0
 
 

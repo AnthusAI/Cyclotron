@@ -16,6 +16,7 @@ from pathlib import Path
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.artifacts import ArtifactValidationError, create_artifact, load_compatible_fixed_incumbent
 from decision_flywheel.example_list import improve_example_list
+from decision_flywheel.run_ledger import FlywheelRound, JsonlRunLedger, TrialActivity, feedback_fingerprint
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
 
@@ -69,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", type=Path, default=Path("var/reviewer-flywheel.json"))
     parser.add_argument("--checkpoint", type=Path, default=Path("var/reviewer-flywheel-cache.json"))
     parser.add_argument("--artifact", type=Path, default=Path("var/reviewer-flywheel-artifact.json"))
+    parser.add_argument("--ledger", type=Path, default=Path("var/reviewer-flywheel-runs.jsonl"),
+                        help="append-only text-free measured-round ledger")
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--model", default="jev-latest")
     parser.add_argument("--confirm-live", action="store_true",
@@ -115,10 +118,28 @@ def main(argv: list[str] | None = None) -> int:
     artifact_hash = json.loads(artifact)["artifact_hash"]
     report = _report(improvement, labels, sum(row.comment is not None for row in feedback), len(hard_demo_ids),
                      artifact_path=args.artifact, pool_revision=pool_revision, artifact_hash=artifact_hash)
+    outcome = ("promoted" if improvement.promoted else "incomplete"
+               if improvement.optimization.winner is None else "incumbent-retained")
+    ledger_round = FlywheelRound(
+        task_fingerprint=reviewer_task().fingerprint,
+        input_fingerprint=feedback_fingerprint(reviewer_task(), labels),
+        active_policy_fingerprint=improvement.winner.fingerprint,
+        model_fingerprint=improvement.optimization.model_fingerprint,
+        feedback_count=len(labels), candidate_count=len(improvement.round.candidates),
+        development_count=len(improvement.round.development), objective_name=improvement.optimization.objective,
+        winner=improvement.winner_trial, promoted=improvement.promoted, outcome=outcome,
+        calls_attempted=improvement.optimization.model_calls_attempted,
+        calls_succeeded=improvement.optimization.model_calls_succeeded,
+        trials=tuple(TrialActivity(trial.trial_name, trial.status, len(trial.decisions),
+                                   sum(decision.from_checkpoint for decision in trial.decisions), trial.objective)
+                     for trial in improvement.optimization.trials),
+    )
+    recorded = JsonlRunLedger(args.ledger).append(ledger_round)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote measured Jev flywheel report to {args.report}")
     print(f"{report['reason']} ({report['calls']['attempted']} calls, {report['development']['count']} development items)")
+    print("Recorded a new measured round in the run ledger." if recorded else "Measured round already present in the run ledger.")
     return 0
 
 
