@@ -6,7 +6,7 @@ from .context import RandomBalanced
 from .feedback import Element, Feature, FeedbackItem, LABEL_SOURCE_FINAL, Scorecard
 from .head import HeadRow, fit_learned_head
 from .models import DecisionTask
-from .steering import ScriptedMockManager, run_steering_round
+from .steering import ScriptedMockManager, run_steering_round, steering_observations
 
 
 HASH = "a" * 64
@@ -75,6 +75,10 @@ def test_an_accepted_datetime_proposal_becomes_an_allowlisted_dynamic_scorecard_
     assert (element.key, element.question_type, element.feature_names) == (
         "current_datetime", "programmatic_datetime", ("current_datetime",)
     )
+    features, activity = steering_observations(outcome)
+    assert [feature.key for feature in features] == ["tone", "current_datetime"]
+    assert activity[0].feature_key == "current_datetime"
+    assert activity[0].status == "promoted"
 
 
 def test_rejected_or_disallowed_proposals_preserve_rollback_lineage_and_cannot_write_numbers():

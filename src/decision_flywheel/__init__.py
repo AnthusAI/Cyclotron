@@ -13,6 +13,7 @@ from .events import FlywheelEvent, JsonlEventStream
 from .optimizer import OptimizationResult, TrialSpec, search_context_policies
 from .run_ledger import (FeatureActivity, FeatureDefinition, FlywheelRound, FlywheelStatus,
                          JsonlRunLedger, TrialActivity, feedback_fingerprint)
+from .steering import steering_observations
 
 
 def run_demo(*args, **kwargs):
@@ -27,5 +28,5 @@ __all__ = [
     "PerLabelLexicalRetrieval", "PrototypeBalanced", "RandomBalanced", "TrialSpec",
     "build_context_ladder", "build_context_plan", "create_artifact", "example_list_from_policy", "improve_example_list", "load_artifact", "load_bundle",
     "plan_example_list_round", "run_demo",
-    "search_context_policies", "feedback_fingerprint",
+    "search_context_policies", "feedback_fingerprint", "steering_observations",
 ]

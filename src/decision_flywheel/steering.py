@@ -12,6 +12,7 @@ from .dynamic_elements import (CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTI
                                optimizer_dynamic_element_instruction)
 from .feedback import Element, Scorecard
 from .head import LearnedHead
+from .run_ledger import FeatureActivity, FeatureDefinition
 
 
 class Analyst(Protocol):
@@ -82,6 +83,7 @@ class SteeringOutcome:
     accepted: bool
     promoted: bool
     numerical_refit: LearnedHead | None
+    proposal: SteeringProposal
     history: tuple[SteeringHistory, ...]
 
 
@@ -125,7 +127,7 @@ def run_steering_round(
     if type(accepted) is not bool:
         raise ValueError("human review must return an exact boolean")
     if not accepted:
-        return _outcome(scorecard, policy, scorecard.fingerprint, False, False, None, proposal_fingerprint,
+        return _outcome(scorecard, policy, scorecard.fingerprint, False, False, None, proposal, proposal_fingerprint,
                         "rejected", None, None)
 
     candidate_policy = allowed_policies.get(proposal.context_policy_name, policy)
@@ -137,25 +139,40 @@ def run_steering_round(
     except Exception as error:
         # Do not serialize exception text: a failed dependency must not leak its
         # inputs into the steering audit trail.
-        return _outcome(scorecard, policy, scorecard.fingerprint, True, False, None, proposal_fingerprint,
+        return _outcome(scorecard, policy, scorecard.fingerprint, True, False, None, proposal, proposal_fingerprint,
                         "fit-failed", candidate.fingerprint, type(error).__name__)
 
     objective = _finite_objective(
         "candidate development objective", development_objective(candidate, candidate_policy, refit)
     )
     if objective <= incumbent:
-        return _outcome(scorecard, policy, scorecard.fingerprint, True, False, None, proposal_fingerprint,
+        return _outcome(scorecard, policy, scorecard.fingerprint, True, False, None, proposal, proposal_fingerprint,
                         "not-better-on-development", candidate.fingerprint, None)
-    return _outcome(candidate, candidate_policy, scorecard.fingerprint, True, True, refit, proposal_fingerprint,
+    return _outcome(candidate, candidate_policy, scorecard.fingerprint, True, True, refit, proposal, proposal_fingerprint,
                     "promoted", candidate.fingerprint, None)
 
 
 def _outcome(scorecard: Scorecard, policy: ContextPolicy, parent_scorecard_fingerprint: str, accepted: bool, promoted: bool,
-             refit: LearnedHead | None, proposal_fingerprint: str, decision: str,
+             refit: LearnedHead | None, proposal: SteeringProposal, proposal_fingerprint: str, decision: str,
              candidate_fingerprint: str | None, reason: str | None) -> SteeringOutcome:
-    return SteeringOutcome(scorecard, policy, accepted, promoted, refit,
+    return SteeringOutcome(scorecard, policy, accepted, promoted, refit, proposal,
                            (SteeringHistory(proposal_fingerprint, decision, parent_scorecard_fingerprint,
                                             candidate_fingerprint, reason),))
+
+
+def steering_observations(outcome: SteeringOutcome) -> tuple[tuple[FeatureDefinition, ...], tuple[FeatureActivity, ...]]:
+    """Adapt one real steering outcome to the reusable UI/ledger feature contract."""
+    features = tuple(FeatureDefinition(element.key, element.question_type, element.feature_names,
+                                       element.definition_fingerprint)
+                     for element in outcome.scorecard.elements)
+    proposal = outcome.proposal
+    feature_key = (proposal.add_element.key if proposal.add_element is not None
+                   else proposal.add_programmatic_element or proposal.context_policy_name or "context-policy")
+    decision = outcome.history[-1].decision
+    status = {"rejected": "rejected", "fit-failed": "fit-failed",
+              "not-better-on-development": "not-promoted", "promoted": "promoted"}[decision]
+    return features, (FeatureActivity(outcome.history[-1].proposal_fingerprint, feature_key, status,
+                                      outcome.history[-1].reason, None),)
 
 
 def _guard_initial_lineage(scorecard: Scorecard, policy: ContextPolicy) -> None:
