@@ -51,10 +51,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "a65c6126-d354-41c9-8dbc-9a9576a1748d",
+      "author": "home",
+      "text": "User-facing failure diagnosed from live local records: latest optimizer request has no response and its round is pending; no reviewer process currently exists. Prior UI silently retained older promotion. Historical displayed agreement is 45/82 (54.9%) across versions, with no current-version rolling-audit score. Implemented explicit round-interrupted event and paid-confirmed R retry of that round (failed decision requests still protected), request/reply counts, historical versus current-version audit labels, exact provider-neutral CLI flags decisions-provider/decisions-model, and renamed misleading model-refresh count to prediction versions seen. No paid calls or ratings changed for this diagnosis. Connected full-request provider support remains Jev only, explicitly documented; Kev/Laya are not silently claimed as wired.",
+      "created_at": "2026-10-05T22:47:54.107500Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.580145Z",
-  "updated_at": "2026-10-05T22:39:47.747349Z",
+  "updated_at": "2026-10-05T22:47:54.107529Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
