@@ -37,6 +37,32 @@ synthetic target. Re-running produces the same artifact hash and context IDs.
 After installation, `decision-flywheel-demo --output FOLDER` runs the same flow.
 Use `make test` for all offline specifications.
 
+## Try the local article reviewer
+
+The reviewer is a local Rich terminal application for collecting real human
+`include` / `exclude` decisions on title-and-abstract article records. It makes
+no model calls. Its SQLite event history preserves votes, comments, skips, and
+undo operations; its deterministic train, rolling-audit, and permanent-audit
+assignments are not displayed while you review.
+
+Install the optional UI dependencies, create a local batch from the pinned
+public arXiv metadata snapshot, then review it:
+
+```bash
+.venv/bin/pip install -e '.[reviewer]'
+make PYTHON=.venv/bin/python review-arxiv
+```
+
+The first run samples 50 recent CS abstracts into ignored `var/` files, records
+the precise source revision, then opens the reviewer. Later, resume the same
+review queue with `make PYTHON=.venv/bin/python review`.
+
+Use `I` to include, `E` to exclude, `S` to skip, `B` to undo the latest action,
+and `Q` to save and leave. Model recommendations are intentionally withheld
+until after a human vote. The optional source download records its exact Hub
+revision and selection parameters locally; article text and your review data
+are not committed.
+
 ## Safety and evaluation boundaries
 
 Candidates and development labels must be trusted, canonical, and disjoint by
