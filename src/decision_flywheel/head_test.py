@@ -25,6 +25,39 @@ def _rows():
                  for index in range(1, 13))
 
 
+def test_equal_class_training_weights_balance_total_influence_and_keep_selection_correction():
+    from .head import _training_weights
+    labels = ["red", "red", "red", "green", "blue"]
+    weights = _training_weights([.5, 1., 1., 1., 1.], labels, "equal_class")
+    totals = [sum(w for w, actual in zip(weights, labels) if actual == label)
+              for label in ("red", "green", "blue")]
+    assert totals == pytest.approx([5/3] * 3)
+    assert weights[0] == pytest.approx(2 * weights[1])
+    with pytest.raises(ValueError, match="weighting"):
+        _training_weights([1.], ["red"], "unsupported")
+
+
+def test_each_out_of_fold_fit_balances_its_own_classes_while_calibration_keeps_natural_weights(monkeypatch):
+    from . import head
+    rows = tuple(_row(i, "approve" if i < 3 else "reject", propensity=.5 if i == 0 else 1.)
+                 for i in range(12))
+    original_fit = head._fit
+    seen = []
+    def inspect(classes, names, matrix, labels, weights, **kwargs):
+        seen.append({label: sum(w for w, actual in zip(weights, labels) if actual == label) for label in classes})
+        return original_fit(classes, names, matrix, labels, weights, **kwargs)
+    monkeypatch.setattr(head, "_fit", inspect)
+    result = fit_learned_head(TASK, rows, declared_features=("signal",), development_ids=(), scoreboard_ids=(),
+                              scorecard_fingerprint=HASH, policy_fingerprint=HASH,
+                              context_artifact_fingerprint=HASH, source_model_provenance="fake",
+                              training_class_weighting="equal_class")
+    assert len(seen) == 4
+    assert all(totals["approve"] == pytest.approx(totals["reject"]) for totals in seen)
+    calibration_totals = {label: sum(w for w, actual in zip(result.out_of_fold.weights, result.out_of_fold.labels)
+                                   if actual == label) for label in TASK.labels}
+    assert calibration_totals["approve"] < calibration_totals["reject"]
+
+
 def test_a_learned_head_uses_only_trusted_full_coverage_rows_and_records_inverse_propensity_provenance():
     result = fit_learned_head(
         TASK, _rows(), declared_features=("signal",), development_ids=("dev-1",), scoreboard_ids=("score-1",),

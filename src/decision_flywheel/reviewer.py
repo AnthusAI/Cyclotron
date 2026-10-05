@@ -186,19 +186,34 @@ def _live_flywheel_status(client) -> Panel:
     status = client.status()
     latest = status["latest"] or {}
     head = "Fitted ML head" if status["fitted_head"] else "Jev main decision only — waiting for a fitted head"
+    balance = ", ".join(f"{count} {label}" for label, count in status["by_label"].items())
     lines = [f"Active version: {status['version'][:12]} · {head}",
-             f"Training: {status['training_count']} ({status['by_label'].get('include', 0)} include, "
-             f"{status['by_label'].get('exclude', 0)} exclude) · Development: {status['development_count']}",
+             f"Training: {status['training_count']} ({balance}) · Development: {status['development_count']}",
              f"Rubric: {status['rubric'] or '(not yet inferred)'}",
              f"Classification tasks: {', '.join(status['tasks']) or '(main decision only)'}",
              f"Fixed examples: {', '.join(status['example_ids']) or '(none)'}",
              f"ML features: {', '.join(status['features']) or '(head not fitted)'}",
              f"Latest activity: {latest.get('kind', 'not run')} — {latest.get('reason', '')}",
              f"Jev requests this session: {status['requests']}/{status['ceiling']}"]
+    lines.append(f"Evaluation weighting: {status.get('evaluation_weighting', 'not recorded')} · "
+                 f"Training weighting: {status.get('training_class_weighting', 'not recorded')}")
+    if latest.get("development_counts") is not None:
+        lines.append(f"Development counts: {latest['development_counts']} · "
+                     f"minimum per class: {latest.get('minimum_development_per_class')}")
+    if latest.get("promotion_metric"):
+        lines.append(f"Promotion metric: {latest['promotion_metric']}")
     for name in ("incumbent", "candidate"):
         if name in latest:
             score = latest[name]
             lines.append(f"{name}: {score['accuracy']:.1%} development agreement · {score['brier']:.4f} Brier")
+            if score.get("balanced_accuracy") is not None:
+                lines.append(f"{name}: {score['balanced_accuracy']:.1%} balanced accuracy · "
+                             f"{score['balanced_brier']:.4f} equal-class Brier")
+            for label, group in score.get("per_class", {}).items():
+                recall = f"{group['recall']:.1%}" if group['recall'] is not None else "not measured"
+                interval = group.get("recall_interval_95")
+                uncertainty = f" · Wilson 95% {interval[0]:.0%}–{interval[1]:.0%}" if interval else ""
+                lines.append(f"  {name}/{label}: n={group['count']} · recall {recall}{uncertainty}")
     lines.append(f"Recorded optimizer requests/replies: {status.get('optimizer_requests_recorded', 0)}/"
                  f"{status.get('optimizer_responses_recorded', 0)}")
     lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a round · R retry interrupted round")
@@ -401,6 +416,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev",
                         help="decision adapter; the connected reviewer currently supports Jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
+    parser.add_argument("--evaluation-weighting", choices=("natural", "equal_class"), default="equal_class")
+    parser.add_argument("--training-class-weighting", choices=("natural", "equal_class"), default="natural")
+    parser.add_argument("--min-evaluation-per-class", type=int, default=2)
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
     parser.add_argument("--optimize-every", type=int, default=10,
                         help="run a core round after this many additional votes; G requests one sooner")
@@ -411,7 +429,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.live_flywheel or args.live_jev:
         if not args.confirm_live:
             parser.error("refusing paid model calls without --confirm-live")
-        if args.max_live_requests < 1 or args.max_optimizer_calls < 1 or args.optimize_every < 1:
+        if min(args.max_live_requests, args.max_optimizer_calls, args.optimize_every, args.min_evaluation_per_class) < 1:
             parser.error("request ceilings and optimization interval must be positive")
     if args.live_flywheel and args.live_jev:
         parser.error("choose the integrated flywheel or legacy artifact serving, not both")
@@ -451,6 +469,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             runtime = DecisionFlywheel(args.runtime_database or args.database.parent / "reviewer-runtime.sqlite3",
                 ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport), observer=observe,
                 max_requests=args.max_live_requests,
+                evaluation_weighting=args.evaluation_weighting,
+                training_class_weighting=args.training_class_weighting,
+                min_evaluation_per_class=args.min_evaluation_per_class,
                 redact=tuple(os.environ.get(key, "") for key in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
             try:
                 run_review_session(store, console, flywheel=ReviewerFlywheel(store, runtime),

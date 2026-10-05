@@ -17,6 +17,7 @@ import sqlite3
 from typing import Protocol
 
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
+from .classification_metrics import classification_metrics
 from .context import _normalized_text
 from .feedback import Feature, FeedbackItem, LABEL_SOURCE_VETTED
 from .head import (Calibration, HeadProvenance, HeadRow, LearnedHead, OutOfFoldPredictions,
@@ -59,7 +60,11 @@ class FittedClassifier:
 
     @property
     def fingerprint(self):
-        return _hash({"config": self.config.fingerprint, "head": asdict(self.head) if self.head else None,
+        head = asdict(self.head) if self.head else None
+        if head and head["provenance"].get("training_class_weighting") == "natural":
+            # New optional metadata must not rename an unchanged legacy head.
+            head["provenance"].pop("training_class_weighting", None)
+        return _hash({"config": self.config.fingerprint, "head": head,
                       "training_evidence": self.training_evidence, "development_evidence": self.development_evidence})
 
 
@@ -97,7 +102,15 @@ class DecisionFlywheel:
     def __init__(self, database: str | Path, initial: ClassifierConfig, model: FeatureModel,
                  optimizer: OptimizerAgent, *, observer: Callable[[dict], None] | None = None,
                  max_requests: int = 100, max_request_bytes: int = 32000,
-                 redact: Sequence[str] = ()):
+                 redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
+                 training_class_weighting: str = "natural", min_evaluation_per_class: int = 1):
+        if evaluation_weighting not in ("natural", "equal_class") or training_class_weighting not in ("natural", "equal_class"):
+            raise ValueError("unknown evaluation or training class weighting")
+        if type(min_evaluation_per_class) is not int or min_evaluation_per_class < 1:
+            raise ValueError("minimum evaluation coverage must be positive")
+        self.evaluation_weighting = evaluation_weighting
+        self.training_class_weighting = training_class_weighting
+        self.min_evaluation_per_class = min_evaluation_per_class
         if type(max_requests) is not int or max_requests < 1:
             raise ValueError("max_requests must be positive")
         if type(max_request_bytes) is not int or max_request_bytes < 1:
@@ -270,7 +283,10 @@ class DecisionFlywheel:
         self._validate_partitions(training, development, protected, propensities)
         self.reconcile_feedback(training, development=development)
         round_key = _hash({"training": self._evidence(training), "development": self._evidence(development),
-                           "propensities": propensities, "protected": sorted(item.id for item in protected)})
+                           "propensities": propensities, "protected": sorted(item.id for item in protected),
+                           "evaluation_weighting": self.evaluation_weighting,
+                           "training_class_weighting": self.training_class_weighting,
+                           "min_evaluation_per_class": self.min_evaluation_per_class})
         saved = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (round_key,)).fetchone()
         if saved:
             if saved[0] == "complete":
@@ -288,8 +304,11 @@ class DecisionFlywheel:
                 self.db.execute("DELETE FROM runtime_rounds WHERE key=? AND status='pending'", (round_key,))
             self._emit({"kind": "round-retry-authorized", "round_fingerprint": round_key})
         counts = {label: sum(row.label == label for row in training) for label in self.initial.task.labels}
-        if min(counts.values()) < 3 or len(development) < 2:
-            result = {"promoted": False, "reason": "waiting for at least three training votes per label and two development votes"}
+        development_counts = {label: sum(row.label == label for row in development) for label in self.initial.task.labels}
+        if min(counts.values()) < 3 or min(development_counts.values()) < self.min_evaluation_per_class:
+            result = {"promoted": False, "reason": "waiting for training and development class coverage",
+                      "development_counts": development_counts,
+                      "minimum_training_per_class": 3, "minimum_development_per_class": self.min_evaluation_per_class}
             self._emit({"kind": "waiting-for-labels", "counts": counts, "development_count": len(development), **result})
             return result
         now = datetime.now(timezone.utc)
@@ -299,6 +318,8 @@ class DecisionFlywheel:
         try:
             briefing = FeedbackBriefing.build(self.initial.task, training,
                 current={**self.active.config.briefing_state(),
+                         "evaluation_weighting": self.evaluation_weighting,
+                         "training_class_weighting": self.training_class_weighting,
                          "request_budget_bytes": self.max_request_bytes,
                          "training_predictions": [event for event in self.history(1000)
                             if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}]},
@@ -321,15 +342,19 @@ class DecisionFlywheel:
             head = fit_learned_head(config.task, rows, declared_features=tuple(values),
                 development_ids=tuple(row.item.id for row in development), scoreboard_ids=tuple(item.id for item in protected),
                 scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
-                context_artifact_fingerprint=config.fingerprint, source_model_provenance=self.model.model_identity)
+                context_artifact_fingerprint=config.fingerprint, source_model_provenance=self.model.model_identity,
+                training_class_weighting=self.training_class_weighting)
             candidate = FittedClassifier(config, head, self._evidence(training), self._evidence(development))
             self._emit({"kind": "fit-completed", "features": list(head.feature_names),
                         "training_count": len(rows), "calibration": "out_of_fold"})
             incumbent_metrics = await self._score(self.active, development, training, now)
             candidate_metrics = await self._score(candidate, development, training, now)
-            promoted = candidate_metrics["brier"] < incumbent_metrics["brier"] - 1e-12
+            metric = "balanced_brier" if self.evaluation_weighting == "equal_class" else "brier"
+            promoted = candidate_metrics[metric] < incumbent_metrics[metric] - 1e-12
             result = {"promoted": promoted, "incumbent": incumbent_metrics, "candidate": candidate_metrics,
-                      "reason": "lower development Brier" if promoted else "development Brier did not improve"}
+                      "promotion_metric": metric, "evaluation_weighting": self.evaluation_weighting,
+                      "training_class_weighting": self.training_class_weighting,
+                      "reason": f"lower development {metric}" if promoted else f"development {metric} did not improve"}
             self._emit({"kind": "candidate-evaluated", **result})
             if promoted:
                 self._activate(candidate)
@@ -347,7 +372,7 @@ class DecisionFlywheel:
             return result
 
     async def _score(self, classifier, development, training, now):
-        correct, brier = 0, 0.0
+        predictions, distributions = [], []
         for row in development:
             batch = await self._answers(classifier.config, row.item, training, now)
             if classifier.head:
@@ -356,6 +381,7 @@ class DecisionFlywheel:
             else:
                 answer = batch.answers["decision"]
                 probabilities, label = answer.probabilities, answer.label
-            correct += label == row.label
-            brier += sum((probabilities[key] - (key == row.label)) ** 2 for key in classifier.config.task.labels)
-        return {"count": len(development), "accuracy": correct / len(development), "brier": brier / len(development)}
+            predictions.append(label)
+            distributions.append(probabilities)
+        return classification_metrics(classifier.config.task.labels, [row.label for row in development],
+                                      predictions, distributions)

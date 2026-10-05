@@ -17,6 +17,7 @@ from .steering import steering_observations
 from .classifier_config import ClassifierConfig
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
 from .flywheel import DecisionFlywheel, FittedClassifier
+from .classification_metrics import classification_metrics
 
 
 def run_demo(*args, **kwargs):
@@ -25,7 +26,7 @@ def run_demo(*args, **kwargs):
     return _run_demo(*args, **kwargs)
 
 __all__ = [
-    "ClassifierConfig", "DecisionFlywheel", "FittedClassifier", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply",
+    "ClassifierConfig", "DecisionFlywheel", "FittedClassifier", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply", "classification_metrics",
     "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
     "DeployableArtifact", "ExampleListImprovement", "FixedExampleList", "Item", "LabeledItem", "ModelCapabilities", "OptimizationResult",
     "FeatureActivity", "FeatureDefinition", "FlywheelEvent", "FlywheelRound", "FlywheelStatus", "JsonlEventStream", "JsonlRunLedger", "TrialActivity",

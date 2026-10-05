@@ -50,6 +50,23 @@ def test_live_status_shows_rubric_features_class_balance_and_measured_promotion(
     assert "promoted" in text
 
 
+def test_live_status_shows_balanced_scores_and_counts_for_arbitrary_classes():
+    from .reviewer import _live_flywheel_status
+    class Client:
+        def status(self):
+            return {"version": "a"*64, "rubric": "", "tasks": [], "example_ids": [], "fitted_head": True,
+                    "features": ["decision/red"], "training_count": 20, "development_count": 10,
+                    "by_label": {}, "requests": 0, "ceiling": 100,
+                    "evaluation_weighting": "equal_class", "training_class_weighting": "natural",
+                    "latest": {"kind": "promoted", "promotion_metric": "balanced_brier", "candidate": {
+                        "accuracy": .8, "brier": .4, "balanced_accuracy": 1/3, "balanced_brier": 4/3,
+                        "per_class": {"blue": {"count": 1, "recall": 0., "recall_interval_95": [0., .79]}}}}}
+    text = _live_flywheel_status(Client()).renderable.plain
+    assert "balanced accuracy" in text
+    assert "blue: n=1" in text
+    assert "balanced_brier" in text
+
+
 def test_optimizer_transcript_displays_actual_messages_replies_and_tool_calls_literally():
     from .reviewer import _optimizer_transcript
     events = ({"kind": "optimizer-request", "messages": [{"role": "user", "content": "[red]my feedback"}]},

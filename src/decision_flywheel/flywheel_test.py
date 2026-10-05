@@ -24,6 +24,58 @@ def test_development_assignment_is_fixed_before_labels_and_independent_of_arriva
         development_assignment("study", "a", rate=1.5)
 
 
+def test_promotion_waits_for_every_declared_development_class_before_paid_calls(tmp_path):
+    model = FakeModel()
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), model, agent([]),
+                             evaluation_weighting="equal_class")
+    result = asyncio.run(wheel.improve(TRAIN, DEV[:1], protected=(),
+                                      propensities={r.item.id: 1. for r in TRAIN}))
+    assert not result["promoted"]
+    assert result["development_counts"] == {"include": 0, "exclude": 1}
+    assert model.calls == 0
+    assert not any(e["kind"] == "optimizer-request" for e in wheel.history())
+    wheel.close()
+
+
+def test_equal_class_promotion_records_its_metric_policy_and_both_score_views(tmp_path):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]),
+                             evaluation_weighting="equal_class", training_class_weighting="equal_class")
+    result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(),
+                                      propensities={r.item.id: 1. for r in TRAIN}))
+    assert result["promotion_metric"] == "balanced_brier"
+    assert result["candidate"]["balanced_accuracy"] == 1.
+    assert result["candidate"]["per_class"]["include"]["count"] == 1
+    assert wheel.active.head.provenance.training_class_weighting == "equal_class"
+    wheel.close()
+
+
+@pytest.mark.parametrize("policy,promoted", [("equal_class", True), ("natural", False)])
+def test_promotion_uses_the_selected_score_even_when_the_two_views_disagree(tmp_path, policy, promoted):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]),
+                             evaluation_weighting=policy)
+    scores = iter([{"brier": .2, "balanced_brier": .7}, {"brier": .3, "balanced_brier": .4}])
+    async def score(*args):
+        return next(scores)
+    wheel._score = score
+    result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(),
+                                      propensities={r.item.id: 1. for r in TRAIN}))
+    assert result["promoted"] is promoted
+    wheel.close()
+
+
+def test_changing_evaluation_policy_does_not_reuse_an_old_promotion_decision(tmp_path):
+    path = tmp_path / "wheel.sqlite"
+    kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN})
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]), evaluation_weighting="natural")
+    assert asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))["promotion_metric"] == "brier"
+    wheel.close()
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]), evaluation_weighting="equal_class")
+    result = asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))
+    assert result["promotion_metric"] == "balanced_brier"
+    assert sum(event["kind"] == "optimizer-request" for event in wheel.history(1000)) == 2
+    wheel.close()
+
+
 def test_an_interrupted_optimizer_round_is_visible_and_requires_an_explicit_retry(tmp_path):
     path = tmp_path / "wheel.sqlite"
     def interrupt(_):

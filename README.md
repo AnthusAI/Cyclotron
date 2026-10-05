@@ -303,8 +303,8 @@ The defaults are `DECISIONS_PROVIDER=jev`, `DECISIONS_MODEL=jev-1.13.0`, and
 `make review-arxiv` reuses or downloads the batch and starts this same **paid live mode**.
 
 The initial rubric is empty. Jev supplies the warm-up prediction; no local replacement head is used.
-The first round waits for at least three training Include votes, three training Exclude votes,
-and two development votes. A permanent ID-hash rule assigns 25% of otherwise eligible records
+The first round waits for at least three training votes per declared class
+and two development votes per class. A permanent ID-hash rule assigns 25% of otherwise eligible records
 to development before their labels are known. Existing rolling and final audit roles remain protected.
 The demo reviews all displayed items; training review propensities are recorded as 1.0.
 Adaptive review-rate reduction remains deferred until there is a validated random-audit rule.
@@ -327,8 +327,29 @@ If a prediction fails or the paid ceiling is reached, feedback can still be save
 The display says prediction unavailable; it does not quietly substitute another classifier.
 
 The ML fitter uses trusted training labels with full feature coverage, propensity weighting,
-and out-of-fold calibration. Code promotes a candidate only when its multiclass development Brier
-score is lower. This repeated development score is selection evidence, not unbiased accuracy.
+and out-of-fold calibration. By default, promotion uses **equal-class development Brier**:
+compute multiclass Brier loss within each true class, then average those class means
+equally. No evaluation records are discarded or duplicated. The display also shows
+natural-distribution accuracy/Brier, balanced accuracy, per-class recall and counts,
+and descriptive Wilson 95% recall intervals. These intervals are not adjusted for
+repeated candidate selection. Two items per class is only a coverage floor, not
+evidence of precise performance. Missing classes have no fabricated balanced score.
+
+The reusable library accepts `evaluation_weighting="equal_class"` (default) or
+`"natural"`, independent of `training_class_weighting="natural"` (default) or
+`"equal_class"`. Equal-class training scales review-selection-corrected weights
+so every class has equal total influence. Each out-of-fold fit computes its weights
+from its own training fold; calibration still uses natural, review-selection-corrected
+out-of-fold weights. Class weighting can change probability calibration and is not
+a promise of improvement. Policy settings are included in round cache fingerprints;
+training weighting is recorded in fitted-head provenance.
+
+CLI controls are `--evaluation-weighting`, `--training-class-weighting`, and
+`--min-evaluation-per-class` (reviewer default: 2). No code depends on labels named
+Include or Exclude. This repeated development score is selection evidence, not unbiased accuracy.
+The make variables are `EVALUATION_WEIGHTING`, `TRAINING_CLASS_WEIGHTING`, and
+`MIN_EVALUATION_PER_CLASS`. To opt into training balance as well, use
+`make PYTHON=.venv/bin/python review TRAINING_CLASS_WEIGHTING=equal_class`.
 Displayed pre-vote agreement is also affected by showing recommendations to the reviewer.
 Do not use either number as the sealed holdout score.
 
