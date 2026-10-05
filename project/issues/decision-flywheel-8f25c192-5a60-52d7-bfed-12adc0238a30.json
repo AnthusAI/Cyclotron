@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
   "title": "Make the optimizer easy to use and integrate",
-  "description": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces around the native, provider-neutral Decision Flywheel optimizer. Do not add DSPy dependencies, bridges, or optimization paths.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links for native optimization; no optional DSPy integration is in scope.",
+  "description": "Native provider-neutral APIs, documented offline workflow and client integration; no DSPy. Completion includes usable prediction/feedback/optimization APIs, inspectable actual prompts/replies/tool calls and active classifier versions, verified via decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88. Do not equate an optimize-save-decide component walkthrough with a working feedback loop.",
   "type": "epic",
   "status": "open",
   "priority": 2,
@@ -22,7 +22,7 @@
     }
   ],
   "created_at": "2026-09-30T18:08:33.870714Z",
-  "updated_at": "2026-09-30T20:24:47.578148Z",
+  "updated_at": "2026-10-05T21:56:53.218191Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

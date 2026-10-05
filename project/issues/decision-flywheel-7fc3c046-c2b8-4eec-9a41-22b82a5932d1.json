@@ -1,0 +1,33 @@
+{
+  "id": "decision-flywheel-7fc3c046-c2b8-4eec-9a41-22b82a5932d1",
+  "title": "Resume optimization safely after restarts and corrected labels",
+  "description": "## Behavior and acceptance\nDurably version votes, comments, assignments, predictions made before voting, bundles, jobs and events. Undo/correct invalidates dependent candidates/features/fits as appropriate; preserve history and immutable historical prediction scores. Resume interrupted work idempotently with cached complete fingerprints and recorded usage, no duplicate paid calls. Handle stable source IDs/content revisions without overwriting labeled items.\nScenario: interruption and restart yields the same active bundle; corrected label cannot leave a dependent fit silently current.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-e3dc848a-8a87-4c91-b05d-63836444c814",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-05T21:56:01.731995Z",
+  "updated_at": "2026-10-05T21:56:02.348597Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

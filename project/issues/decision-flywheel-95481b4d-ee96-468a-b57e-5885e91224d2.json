@@ -3,7 +3,7 @@
   "title": "Design-only stub: DynamoDB vector search store adapter",
   "description": "## Purpose\n\nRecord a design-only stub for a DynamoDB vector search `VectorStore` adapter behind the same interface.\n\n## Scope (design only; not built in this phase)\n\n- On-demand table with a vector index (`VectorAttribute`, `Dimensions`, `DistanceFunction=COSINE`) and `label` as an `INLINE_FILTER` in the `SearchSchema`.\n- `SearchVectors(TopK ≤ 100, SearchConditionExpression label = :L)`; separate search endpoint (`{acct}.search-ddb.{region}.amazonaws.com`); IAM `dynamodb:SearchVectors`. Results are eventually consistent; no pagination (16 MB max); no fine-grained access control.\n- Risks: approximate search (`approximate: true` in the fingerprint), eventual consistency right after writes, account setup.\n- **AWS facts checked on 2026-10-01** against official pages (design Appendix B): GA announced 2026-08-05; quotas 5 vector indexes/table, 4,096 dims, TopK ≤ 100, 18 inline filters. Pricing from a summarizing fetch and the minimum SDK version for `search_vectors` (not found): **re-check before building.**\n\n## Definition of done\n\nThe adapter design (mapping onto `CreateTable`/`UpdateTable` vector indexes and `SearchVectors`, config keys under `store.kind: dynamodb`, IAM, risks, items to re-verify) is recorded in core docs or on this issue; no dependency, no AWS calls, no code path enabled. Cost: $0.\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.1, §4.5, Appendix B (DynamoDB vector search).\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-f06dcf08-6182-41ce-a9f5-31b37d08bf51`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "task",
-  "status": "in_progress",
+  "status": "backlog",
   "priority": 3,
   "assignee": null,
   "creator": null,
@@ -31,10 +31,22 @@
         "model": "claude-opus-5-5",
         "name": "phase3-retrieval"
       }
+    },
+    {
+      "id": "4fa045f1-d312-4499-b73c-26c7baf8412d",
+      "author": "home",
+      "text": "Deferred until core milestone decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88 passes. Preserve existing implementation; no active retrieval work before complete reusable flywheel integration.",
+      "created_at": "2026-10-05T21:56:54.453901Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Board Reconciliation"
+      }
     }
   ],
   "created_at": "2026-10-01T19:57:26.884251Z",
-  "updated_at": "2026-10-01T22:10:39.466073Z",
+  "updated_at": "2026-10-05T21:56:54.453929Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",

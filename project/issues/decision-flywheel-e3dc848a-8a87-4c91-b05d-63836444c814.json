@@ -1,0 +1,33 @@
+{
+  "id": "decision-flywheel-e3dc848a-8a87-4c91-b05d-63836444c814",
+  "title": "Regenerate features, fit the head and evaluate candidate promotion",
+  "description": "## Behavior and acceptance\nRun the main decision plus element tasks through the adapter; map real answer probabilities to named numerical features. On task changes regenerate missing/stale training and development features with complete fingerprints. Fit only trusted full-coverage labels with recorded propensity weighting; calibrate out of fold. Compare incumbent/candidate on the same development records with a preregistered rule, retain or promote a complete versioned bundle, and reload predictions identically. Never fit or select on audit/scoreboard.\nScenario: a changed task triggers feature regeneration and refitting; failed/incomplete candidate leaves incumbent active; optimizer cannot supply weights.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-67d2339e-07ed-4215-8582-0dfb0f30be68",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-05T21:56:01.403113Z",
+  "updated_at": "2026-10-05T21:56:02.105771Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

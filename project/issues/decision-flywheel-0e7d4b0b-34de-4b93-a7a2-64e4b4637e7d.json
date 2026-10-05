@@ -3,8 +3,8 @@
   "title": "In-memory embedding retriever with cached vectors",
   "description": "## Purpose\n\nProvide the simplest semantic retriever: an in-memory index of normalized embedding vectors with exact cosine search.\n\n## Scope\n\n- In-memory `VectorStore` (default `store.kind: memory`), exact cosine; numpy only as an optional extra.\n- Embedding providers as optional extras: `openai` (`text-embedding-3-small`, 512 dims, for the experiment), `local-onnx`, and a `fake` hashing embedder for specs.\n- Vector cache keyed by (provider, model, dimensions, normalized-text SHA-256); fingerprint includes model and revision. Embedding only in an explicit opt-in step; never on import or in specs.\n- Owner question Q5 (embedding default for customer data: API egress vs local ONNX) stays open; do not pick a customer default here. Phase 3.\n\n## Definition of done\n\nSpecs first with the `fake` embedder and no network: exact top-k by cosine, label filter, target exclusion, cache hit on re-run, fingerprint changes with model/dims. `make test` green. Cost: $0 in core.\n\n## Acceptance scenario\n\n```gherkin\nFeature: In-memory embedding retriever with cached vectors\n  Scenario: Exact nearest neighbours per label without the target\n    Given a labeled pool embedded with the fake embedder\n    When the target asks for the top 4 items of each label\n    Then the results are the exact cosine neighbours, exclude the target, and break ties by ID\n  Scenario: Cached vectors are reused\n    Given a vector cache written by an earlier run\n    When the same pool is indexed again\n    Then no embedding call is made\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §4.4, Appendix B (embedding prices), Appendix C.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-e38febde-68aa-425a-be55-bd86cfb6f70c`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "story",
-  "status": "in_progress",
-  "priority": 2,
+  "status": "backlog",
+  "priority": 3,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-0276b251-e188-45c2-b7e1-4781a6222b7f",
@@ -30,10 +30,22 @@
         "model": "claude-opus-5-5",
         "name": "phase3-retrieval"
       }
+    },
+    {
+      "id": "8be70426-f3a3-4c76-ae6e-f3033d824d46",
+      "author": "home",
+      "text": "Deferred until core milestone decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88 passes. Preserve existing implementation; no active retrieval work before complete reusable flywheel integration.",
+      "created_at": "2026-10-05T21:56:55.159081Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Board Reconciliation"
+      }
     }
   ],
   "created_at": "2026-10-01T19:57:18.304811Z",
-  "updated_at": "2026-10-01T22:10:39.337224Z",
+  "updated_at": "2026-10-05T21:56:55.159103Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
