@@ -35,6 +35,23 @@ def test_a_complete_classifier_request_asks_all_feature_questions_in_one_jev_cal
     assert all(answer.usage is None for answer in batch.answers.values())
 
 
+def test_inspection_records_the_exact_provider_bound_state_questions_and_answers():
+    from ..classifier_config import ClassifierConfig
+    events = []
+    class Client:
+        def system_one(self, *, state, questions):
+            self.state, self.questions = state, questions
+            return SimpleNamespace(answers={"decision": {"choice": "yes", "probabilities": {"yes": .7, "no": .3}}},
+                                   model="fake", usage={"input_tokens": 4})
+    client = Client()
+    asyncio.run(JevAdapter(client).classify(ClassifierConfig(TASK), TARGET, [], event_sink=events.append))
+    assert events[0]["kind"] == "decision-request"
+    assert events[0]["state"] == client.state
+    assert events[0]["questions"] == client.questions
+    assert events[1]["kind"] == "decision-response"
+    assert events[1]["answers"]["decision"]["probabilities"]["yes"] == .7
+
+
 class FakeJevClient:
     def system_one(self, *, state, questions, **kwargs):
         self.calls = getattr(self, "calls", 0) + 1

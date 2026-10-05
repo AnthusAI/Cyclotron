@@ -6,7 +6,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from numbers import Real
 import time
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from ..classifier_config import ClassifiedAnswers, ClassifierConfig
@@ -99,15 +99,23 @@ class JevAdapter:
         return task.validate_result(result)
 
     async def classify(self, config: ClassifierConfig, target: Item,
-                       training: Sequence[LabeledItem], *, now: datetime | None = None) -> ClassifiedAnswers:
+                       training: Sequence[LabeledItem], *, now: datetime | None = None,
+                       event_sink: Callable[[dict], None] | None = None) -> ClassifiedAnswers:
         """Ask the main decision and every discovered element in one SDK request."""
         request = config.request(target, training, now=now)
         questions = {name: {"type": detail["type"], "instructions": detail["instructions"],
                             "criteria": {label: None for label in detail["options"]}}
                      for name, detail in request["questions"].items()}
+        observe = event_sink or (lambda event: None)
+        observe({"kind": "decision-request", "target_id": target.id, "model": self.model_identity,
+                 "state": request["state"], "questions": questions})
         started = time.perf_counter()
         response = await asyncio.to_thread(self.client.system_one, state=request["state"], questions=questions)
         raw = _mapping(getattr(response, "answers", {}))
+        observe({"kind": "decision-response", "target_id": target.id,
+                 "answers": {name: _mapping(value) for name, value in raw.items()},
+                 "model": _string_or_none(getattr(response, "model", None)),
+                 "usage": _numeric_usage(getattr(response, "usage", None))})
         model = _string_or_none(getattr(response, "model", None))
         tasks = {"decision": config.task, **{task.name: task for task in config.tasks}}
         answers = {}

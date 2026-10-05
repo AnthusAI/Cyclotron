@@ -26,7 +26,8 @@ class ReviewerFlywheel:
         return training, development, protected
 
     def predict(self, article):
-        training, _, _ = self.partitions()
+        training, development, _ = self.partitions()
+        self.core.reconcile_feedback(training, development=development)
         result = asyncio.run(self.core.predict(reviewer_item(article), training))
         return ReviewerPrediction(result.label, result.confidence if result.confidence is not None else .5,
             "jev:flywheel-head" if self.core.active.head else "jev:flywheel-warmup",
@@ -40,7 +41,8 @@ class ReviewerFlywheel:
                                             propensities={row.item.id: 1.0 for row in training}))
 
     def reconcile(self):
-        self.core.reconcile_feedback(self.partitions()[0])
+        training, development, _ = self.partitions()
+        self.core.reconcile_feedback(training, development=development)
 
     def status(self):
         training, development, _ = self.partitions()

@@ -185,3 +185,17 @@ def test_prediction_metrics_score_only_predictions_that_were_shown_before_active
     assert metrics.model_refreshes == 2
     assert metrics.latest_training_label_count == 0
     store.close()
+
+
+def test_online_metrics_can_exclude_the_sealed_final_audit_and_select_a_classifier_version(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
+    articles = tuple(_article(i) for i in range(80))
+    store.import_articles(articles)
+    for article in articles:
+        shown = store.record_prediction(article.id, "include", .7, "jev:flywheel-head", "a"*64, 6)
+        store.record_vote(article.id, "include", presentation_id=shown.id)
+    included = sum(store.assignment_for(article.id) != "final_audit" for article in articles)
+    metrics = store.prediction_metrics(assignments=("train", "rolling_audit"), predictor_fingerprint="a"*64)
+    assert metrics.scored_votes == included < len(articles)
+    assert store.prediction_metrics(assignments=("rolling_audit",), predictor_fingerprint="b"*64).scored_votes == 0
+    store.close()

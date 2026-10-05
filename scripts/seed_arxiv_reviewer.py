@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Create a small, local review batch from a pinned Hugging Face arXiv snapshot.
+"""Create and then preserve a small local batch from the public arXiv snapshot.
 
 The snapshot is far too large to download as a first-review batch.  This script
 draws deterministic chunks through the Hub dataset-server, filters them to
 recent computer-science abstracts, and records the exact Hub revision and query
-parameters beside the local JSONL.  It does not commit or redistribute papers.
+parameters beside the local JSONL. The rows endpoint is not revision-pinned;
+the recorded Hub revision is observational provenance, not a replay guarantee.
+The saved batch is the immutable local source. It does not redistribute papers.
 """
 from __future__ import annotations
 
 import argparse
 from datetime import date
 import json
+import hashlib
 from pathlib import Path
 import random
 import time
@@ -85,9 +88,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--from-date", default="2025-01-01", help="inclusive ISO date")
     parser.add_argument("--seed", type=int, default=20261005)
     parser.add_argument("--max-chunks", type=int, default=200, help="bounded Hub dataset-server requests")
+    parser.add_argument("--refresh", action="store_true", help="explicitly replace an existing batch; prefer a new output path")
     args = parser.parse_args(argv)
     if args.limit < 1 or args.max_chunks < 1:
         parser.error("--limit and --max-chunks must be positive")
+    if args.output.exists() and not args.refresh:
+        from decision_flywheel.reviewer import load_articles_jsonl
+        count = len(load_articles_jsonl(args.output))
+        print(f"Reusing {count} saved article records; no dataset request or overwrite.")
+        return 0
     try:
         date.fromisoformat(args.from_date)
     except ValueError:
@@ -119,7 +128,9 @@ def main(argv: list[str] | None = None) -> int:
     args.output.write_text("".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
                                     for row in list(sorted(selected.values(), key=lambda row: row["id"]))[:args.limit]),
                            encoding="utf-8")
-    manifest = {"dataset": DATASET, "revision": info.sha, "split": "train", "source": "Hub dataset-server rows API",
+    manifest = {"dataset": DATASET, "observed_hub_revision": info.sha, "revision_pinned": False,
+                "batch_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
+                "split": "train", "source": "Hub dataset-server rows API",
                 "selection": {"limit": args.limit, "from_date": args.from_date, "seed": args.seed,
                               "chunk_length": 100, "offsets": offsets}, "output": args.output.name}
     args.output.with_suffix(args.output.suffix + ".manifest.json").write_text(

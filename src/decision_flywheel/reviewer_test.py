@@ -41,9 +41,71 @@ def test_optimizer_transcript_displays_actual_messages_replies_and_tool_calls_li
     assert "inspect" in text
 
 
+def test_an_unanswered_optimizer_request_does_not_display_an_older_reply_as_its_response():
+    from .reviewer import _optimizer_transcript
+    events = ({"kind": "optimizer-request", "briefing_fingerprint": "old",
+               "messages": [{"role": "user", "content": "old request"}]},
+              {"kind": "optimizer-response", "briefing_fingerprint": "old", "content": "old reply"},
+              {"kind": "optimizer-request", "briefing_fingerprint": "new",
+               "messages": [{"role": "user", "content": "new feedback"}]})
+    text = _optimizer_transcript(events).plain
+    assert "new feedback" in text
+    assert "old reply" not in text
+    assert "No response recorded for this request" in text
+
+
 def test_a_failed_prediction_is_not_replaced_by_an_unlabeled_local_classifier():
     panel = _article_panel(Article("one", "Title", "Abstract", "2026-10-05", ("cs.AI",)), None)
     assert "unavailable" in panel.renderable.plain
+
+
+def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_path, monkeypatch):
+    from io import StringIO
+    from rich.console import Console
+    from .reviewer import run_review_session
+    from .reviewer_predictor import ReviewerPrediction
+    from .reviewer_store import ReviewStore
+    class Client:
+        improves = 0
+        def improve(self):
+            self.improves += 1
+        def reconcile(self):
+            pass
+        def predict(self, article):
+            return ReviewerPrediction("include", .7, "jev:flywheel-head", "a"*64, 6)
+        def status(self):
+            return {"version": "a"*64, "rubric": "Practical", "tasks": ["practical"], "example_ids": [],
+                    "fitted_head": True, "features": ["practical/yes"], "training_count": 6,
+                    "development_count": 2, "by_label": {"include": 3, "exclude": 3},
+                    "requests": 0, "ceiling": 100, "latest": None}
+        def history(self):
+            return ({"kind": "optimizer-request", "messages": [{"role": "user", "content": "my evidence"}]},
+                    {"kind": "optimizer-response", "content": '{"rationale":"practical"}', "model": "fake"},
+                    {"kind": "decision-request", "target_id": "one", "state": {"rubric": "Practical"},
+                     "questions": {"decision": {"criteria": {"include": None}}}})
+    answers = iter(["o", "", "j", "", "i", "My critical explanation", "q"])
+    monkeypatch.setattr("decision_flywheel.reviewer.Prompt.ask", lambda *a, **k: next(answers))
+    output = StringIO()
+    client = Client()
+    with ReviewStore(tmp_path / "review.sqlite", study_seed="fixture") as store:
+        store.import_articles((Article("one", "One", "Abstract one", "2026-10-05", ("cs.AI",)),
+                               Article("two", "Two", "Abstract two", "2026-10-05", ("cs.AI",))))
+        run_review_session(store, Console(file=output, width=100), flywheel=client, optimize_every=1)
+        assert store.current_label("one") == "include"
+        assert store.events_for("one")[0].comment == "My critical explanation"
+        assert len(store.events_for("one")) == 1
+        assert client.improves >= 1
+    assert "my evidence" in output.getvalue()
+    assert "criteria" in output.getvalue()
+
+
+def test_live_flywheel_requires_confirmation_before_constructing_clients(monkeypatch):
+    from .reviewer import main
+    def forbidden(*args, **kwargs):
+        pytest.fail("live client constructed without approval")
+    monkeypatch.setattr("decision_flywheel.reviewer.JevAdapter.from_environment", forbidden)
+    with pytest.raises(SystemExit):
+        main(["--live-flywheel"])
 
 
 def test_jsonl_import_accepts_only_title_abstract_records_with_explicit_metadata(tmp_path):

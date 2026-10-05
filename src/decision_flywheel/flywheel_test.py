@@ -27,7 +27,7 @@ def test_development_assignment_is_fixed_before_labels_and_independent_of_arriva
 class FakeModel:
     model_identity = "fake-fixed"
     calls = 0
-    async def classify(self, config, target, training, *, now=None):
+    async def classify(self, config, target, training, *, now=None, event_sink=None):
         self.calls += 1
         p = .98 if target.values["text"].startswith("yes") else .02
         answers = {"decision": DecisionResult("exclude", {"include": .2, "exclude": .8})}
@@ -138,4 +138,26 @@ def test_transcript_events_redact_credentials_before_persistence_and_observation
     wheel._emit({"kind": "test", "content": "credential-value"})
     assert events[-1]["content"] == "[REDACTED]"
     assert "credential-value" not in str(wheel.history())
+    wheel.close()
+
+
+def test_correcting_a_development_label_invalidates_the_selected_version(tmp_path):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]), max_requests=30)
+    asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1 for r in TRAIN}))
+    corrected = (LabeledItem(DEV[0].item, "include"), DEV[1])
+    wheel.reconcile_feedback(TRAIN, development=corrected)
+    assert wheel.active.head is None
+    wheel.close()
+
+
+def test_reverting_a_correction_can_restore_the_original_valid_fit_without_paid_calls(tmp_path):
+    model = FakeModel()
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), model, agent([]), max_requests=30)
+    asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1 for r in TRAIN}))
+    original = wheel.active.fingerprint
+    wheel.reconcile_feedback((LabeledItem(TRAIN[0].item, "include"), *TRAIN[1:]))
+    calls = model.calls
+    asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1 for r in TRAIN}))
+    assert wheel.active.fingerprint == original
+    assert model.calls == calls
     wheel.close()

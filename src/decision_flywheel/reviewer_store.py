@@ -421,18 +421,25 @@ class ReviewStore:
                 hard.append((float(presentation["confidence"]), article_id))
         return tuple(article_id for _confidence, article_id in sorted(hard, key=lambda row: (-row[0], row[1])))
 
-    def prediction_metrics(self) -> PredictionMetrics:
+    def prediction_metrics(self, *, assignments: tuple[str, ...] = _ASSIGNMENTS,
+                           predictor_fingerprint: str | None = None) -> PredictionMetrics:
         """Measure pre-vote prediction agreement without treating skips as labels."""
+        if any(role not in _ASSIGNMENTS for role in assignments):
+            raise ValueError("unknown evaluation assignment")
         active = self._active_actions()
         scored = 0
         correct = 0
         for event in active.values():
             if event.action != "vote" or event.presentation_id is None:
                 continue
+            if self.assignment_for(event.article_id) not in assignments:
+                continue
             row = self._connection.execute(
-                "SELECT predicted_label FROM presentations WHERE id = ?", (event.presentation_id,)
+                "SELECT predicted_label, predictor_fingerprint FROM presentations WHERE id = ?", (event.presentation_id,)
             ).fetchone()
             if row is None:  # Defensive: old or externally edited local databases cannot count as a score.
+                continue
+            if predictor_fingerprint is not None and row["predictor_fingerprint"] != predictor_fingerprint:
                 continue
             scored += 1
             correct += row["predicted_label"] == event.label

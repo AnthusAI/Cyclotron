@@ -74,6 +74,9 @@ classification questions whose probabilities become features for a numerical
 ML head). Each task has name, instructions, and labels. Explain your proposed
 changes in rationale. Return one JSON object with rationale and any of rubric,
 example_ids, tasks, dynamic_elements. To retain a control, omit its field.
+The current configuration includes a complete-request byte safety budget.
+Keep rubric, question definitions and selected example texts together within
+that budget; use a small informative list instead of copying every training item.
 The allowlisted dynamic element current_datetime passes request-time UTC into
 state.current_datetime; propose dynamic_elements:["current_datetime"] when time
 context may help. Do not emit executable code, weights, calibration, provenance

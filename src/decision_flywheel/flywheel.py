@@ -46,7 +46,8 @@ def development_assignment(seed: str, item_id: str, *, rate: float = .25) -> boo
 class FeatureModel(Protocol):
     model_identity: str
     async def classify(self, config: ClassifierConfig, target: Item,
-                       training: Sequence[LabeledItem], *, now: datetime | None = None) -> ClassifiedAnswers: ...
+                       training: Sequence[LabeledItem], *, now: datetime | None = None,
+                       event_sink: Callable[[dict], None] | None = None) -> ClassifiedAnswers: ...
 
 
 @dataclass(frozen=True)
@@ -54,11 +55,12 @@ class FittedClassifier:
     config: ClassifierConfig
     head: LearnedHead | None = None
     training_evidence: Mapping[str, str] | None = None
+    development_evidence: Mapping[str, str] | None = None
 
     @property
     def fingerprint(self):
         return _hash({"config": self.config.fingerprint, "head": asdict(self.head) if self.head else None,
-                      "training_evidence": self.training_evidence})
+                      "training_evidence": self.training_evidence, "development_evidence": self.development_evidence})
 
 
 def _restore(raw):
@@ -80,7 +82,7 @@ def _restore(raw):
                            {name: tuple(value) for name, value in head["feature_normalizers"].items()},
                            Calibration(**head["calibration"]), OutOfFoldPredictions(**oof),
                            HeadProvenance(**provenance), head["refitted_scorecard_fingerprint"])
-    return FittedClassifier(config, head, raw["training_evidence"])
+    return FittedClassifier(config, head, raw["training_evidence"], raw.get("development_evidence"))
 
 
 class DecisionFlywheel:
@@ -160,16 +162,18 @@ class DecisionFlywheel:
         return {row.item.id: _hash({"values": dict(row.item.values), "label": row.label,
                                   "context": dict(row.context)}) for row in training}
 
-    def reconcile_feedback(self, training: Sequence[LabeledItem]):
+    def reconcile_feedback(self, training: Sequence[LabeledItem], *, development: Sequence[LabeledItem] | None = None):
         """Retain valid fits when new votes arrive; invalidate on undo/correction."""
         current = self._evidence(training)
         original = self.active.training_evidence or {}
-        if any(current.get(key) != value for key, value in original.items()):
+        development_changed = (development is not None and any(
+            self._evidence(development).get(key) != value for key, value in (self.active.development_evidence or {}).items()))
+        if any(current.get(key) != value for key, value in original.items()) or development_changed:
             before = self.active.fingerprint
             # Rubric and tasks were inferred from invalidated feedback too.
             self._activate(FittedClassifier(self.initial))
             self._emit({"kind": "classifier-invalidated", "previous_version": before,
-                        "reason": "training feedback was removed or corrected"})
+                        "reason": "training or development feedback was removed or corrected"})
 
     async def _answers(self, config, target, training, now):
         request = config.request(target, training, now=now)
@@ -193,7 +197,7 @@ class DecisionFlywheel:
         self._emit({"kind": "features-requested", "target_id": target.id, "request_fingerprint": key,
                     "requests": self.requests, "ceiling": self.max_requests})
         try:
-            batch = await self.model.classify(config, target, training, now=now)
+            batch = await self.model.classify(config, target, training, now=now, event_sink=self._emit)
             # Validate full coverage before committing a reusable cache entry.
             self._features(config, batch)
         except Exception as error:
@@ -263,13 +267,16 @@ class DecisionFlywheel:
     async def improve(self, training: Sequence[LabeledItem], development: Sequence[LabeledItem], *,
                       protected: Sequence[Item], propensities: Mapping[str, float]) -> dict:
         self._validate_partitions(training, development, protected, propensities)
-        self.reconcile_feedback(training)
+        self.reconcile_feedback(training, development=development)
         round_key = _hash({"training": self._evidence(training), "development": self._evidence(development),
                            "propensities": propensities, "protected": sorted(item.id for item in protected)})
         saved = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (round_key,)).fetchone()
         if saved:
             if saved[0] == "complete":
-                return json.loads(saved[1])
+                cached = json.loads(saved[1])
+                if "active" in cached:
+                    self._activate(_restore(cached["active"]))
+                return cached.get("result", cached)
             return {"promoted": False, "reason": "interrupted round requires explicit retry authorization"}
         counts = {label: sum(row.label == label for row in training) for label in self.initial.task.labels}
         if min(counts.values()) < 3 or len(development) < 2:
@@ -283,6 +290,7 @@ class DecisionFlywheel:
         try:
             briefing = FeedbackBriefing.build(self.initial.task, training,
                 current={**self.active.config.briefing_state(),
+                         "request_budget_bytes": self.max_request_bytes,
                          "training_predictions": [event for event in self.history(1000)
                             if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}]},
                 protected=tuple(row.item for row in development) + tuple(protected))
@@ -305,7 +313,7 @@ class DecisionFlywheel:
                 development_ids=tuple(row.item.id for row in development), scoreboard_ids=tuple(item.id for item in protected),
                 scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
                 context_artifact_fingerprint=config.fingerprint, source_model_provenance=self.model.model_identity)
-            candidate = FittedClassifier(config, head, self._evidence(training))
+            candidate = FittedClassifier(config, head, self._evidence(training), self._evidence(development))
             self._emit({"kind": "fit-completed", "features": list(head.feature_names),
                         "training_count": len(rows), "calibration": "out_of_fold"})
             incumbent_metrics = await self._score(self.active, development, training, now)
@@ -318,13 +326,15 @@ class DecisionFlywheel:
                 self._activate(candidate)
             self._emit({"kind": "promoted" if promoted else "candidate-rejected", "version": self.active.fingerprint, **result})
             with self.db:
-                self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?", (_json(result), round_key))
+                self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
+                                (_json({"result": result, "active": asdict(self.active)}), round_key))
             return result
         except Exception as error:
             result = {"promoted": False, "reason": "round failed", "error_type": type(error).__name__}
             self._emit({"kind": "round-failed", **result})
             with self.db:
-                self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?", (_json(result), round_key))
+                self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
+                                (_json({"result": result, "active": asdict(self.active)}), round_key))
             return result
 
     async def _score(self, classifier, development, training, now):
