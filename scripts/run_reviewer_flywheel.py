@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Run the reusable Decision Flywheel against eligible article-review feedback.
+
+This is the sole paid entry point for the reviewer integration.  It requires a
+human ``--confirm-live`` flag, uses the existing generic example-list optimizer,
+and writes a text-free report the reviewer can display.
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+
+from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
+from decision_flywheel.artifacts import create_artifact
+from decision_flywheel.example_list import improve_example_list
+from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
+from decision_flywheel.reviewer_store import ReviewStore
+
+
+def _report(improvement, labels, comments: int, *, artifact_path: Path, pool_revision: str,
+            artifact_hash: str) -> dict[str, object]:
+    optimization = improvement.optimization
+    return {
+        "version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "model": optimization.model_fingerprint,
+        "training_feedback": {"total": len(labels), "comments": comments,
+                              "by_label": {label: sum(row.label == label for row in labels)
+                                           for label in ("include", "exclude")}},
+        "development": {"count": len(improvement.round.development),
+                        "ids": [row.item.id for row in improvement.round.development]},
+        "calls": {"attempted": optimization.model_calls_attempted,
+                  "succeeded": optimization.model_calls_succeeded,
+                  "ceiling": optimization.max_model_calls,
+                  "checkpoint_entries": optimization.checkpoint_entries},
+        "objective": optimization.objective,
+        "trials": [
+            {"name": trial.trial_name, "status": trial.status, "objective": trial.objective,
+             "failure_reasons": list(trial.failure_reasons),
+             "decision_count": len(trial.decisions),
+             "from_cache": sum(decision.from_checkpoint for decision in trial.decisions)}
+            for trial in optimization.trials
+        ],
+        "winner": improvement.winner_trial,
+        "promoted": improvement.promoted,
+        "reason": improvement.reason,
+        "scores": improvement.scores,
+        "artifact": {"path": str(artifact_path), "pool_revision": pool_revision, "hash": artifact_hash},
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run one measured Jev Decision Flywheel round for article review")
+    parser.add_argument("--database", type=Path, default=Path("var/reviewer.sqlite3"))
+    parser.add_argument("--report", type=Path, default=Path("var/reviewer-flywheel.json"))
+    parser.add_argument("--checkpoint", type=Path, default=Path("var/reviewer-flywheel-cache.json"))
+    parser.add_argument("--artifact", type=Path, default=Path("var/reviewer-flywheel-artifact.json"))
+    parser.add_argument("--max-requests", type=int, default=24)
+    parser.add_argument("--model", default="jev-latest")
+    parser.add_argument("--confirm-live", action="store_true",
+                        help="required: authorizes this bounded paid Jev optimization round")
+    args = parser.parse_args(argv)
+    if not args.confirm_live:
+        parser.error("refusing a paid run without --confirm-live")
+    if args.max_requests < 1:
+        parser.error("--max-requests must be positive")
+    with ReviewStore(args.database, study_seed="arxiv-review-v1") as store:
+        feedback = store.learning_feedback()
+        labels = reviewer_labeled_items(feedback, store.article)
+    counts = {label: sum(row.label == label for row in labels) for label in ("include", "exclude")}
+    if min(counts.values()) < 3:
+        parser.error("need at least three eligible Include and three eligible Exclude labels before optimization")
+    try:
+        checkpoint = json.loads(args.checkpoint.read_text(encoding="utf-8")) if args.checkpoint.exists() else {}
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("optimizer checkpoint is unreadable") from error
+    if not isinstance(checkpoint, dict):
+        raise ValueError("optimizer checkpoint must be a JSON object")
+    adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.model))
+    improvement = asyncio.run(improve_example_list(
+        reviewer_task(), labels, adapter, max_model_calls=args.max_requests, per_label=2, dev_max=6,
+        checkpoint=checkpoint, model_fingerprint=adapter.model_identity,
+    ))
+    args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    args.checkpoint.write_text(json.dumps(checkpoint, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    if improvement.optimization.winner is None:
+        raise RuntimeError("an incomplete search cannot produce a live artifact")
+    pool_revision = f"reviewer-{improvement.optimization.candidate_pool_fingerprint[:16]}"
+    artifact = create_artifact(reviewer_task(), improvement.round.candidates, pool_revision, improvement.optimization)
+    args.artifact.parent.mkdir(parents=True, exist_ok=True)
+    args.artifact.write_text(artifact + "\n", encoding="utf-8")
+    artifact_hash = json.loads(artifact)["artifact_hash"]
+    report = _report(improvement, labels, sum(row.comment is not None for row in feedback),
+                     artifact_path=args.artifact, pool_revision=pool_revision, artifact_hash=artifact_hash)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote measured Jev flywheel report to {args.report}")
+    print(f"{report['reason']} ({report['calls']['attempted']} calls, {report['development']['count']} development items)")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

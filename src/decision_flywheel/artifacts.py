@@ -151,13 +151,15 @@ def _pool_document(task: DecisionTask, pool: Sequence[LabeledItem]) -> list[dict
         if normalized in texts:
             raise ArtifactValidationError("artifact pool has duplicate normalized text")
         texts.add(normalized)
-        records.append({"id": row.item.id, "input_hash": _sha(normalized), "label": row.label})
+        context = json.dumps(dict(row.context), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        records.append({"id": row.item.id, "input_hash": _sha(normalized), "label": row.label,
+                        "context_hash": _sha(context)})
     return sorted(records, key=lambda record: record["id"])
 
 
 def _pool_fingerprint(task: DecisionTask, pool: Sequence[LabeledItem]) -> str:
     records = _pool_document(task, pool)
-    return _sha(_canonical(sorted((record["id"], record["label"], record["input_hash"])
+    return _sha(_canonical(sorted((record["id"], record["label"], record["input_hash"], record["context_hash"])
                                   for record in records)))
 
 
@@ -232,7 +234,7 @@ def _validate_document(value: Any) -> None:
             or not isinstance(value["pool"]["items"], list)):
         raise ArtifactValidationError("pool is invalid")
     for item in value["pool"]["items"]:
-        _require_exact_keys(item, {"id", "input_hash", "label"}, "pool item")
+        _require_exact_keys(item, {"id", "input_hash", "label", "context_hash"}, "pool item")
         if not all(isinstance(item[key], str) and item[key] for key in item):
             raise ArtifactValidationError("pool item is invalid")
     _require_exact_keys(value["development"], {"objective_name", "objective", "fingerprint"}, "development")

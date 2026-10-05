@@ -115,6 +115,20 @@ def test_a_final_audit_label_is_never_eligible_for_learning(tmp_path):
     store.close()
 
 
+def test_learning_feedback_exposes_only_train_votes_and_their_human_comments(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
+                        final_audit_rate=0)
+    store.import_articles((_article(),))
+    store.record_vote("arxiv-1", "include", comment="Useful implementation detail.")
+
+    feedback = store.learning_feedback()
+
+    assert [(row.article_id, row.label, row.comment) for row in feedback] == [
+        ("arxiv-1", "include", "Useful implementation detail.")
+    ]
+    store.close()
+
+
 def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(),))

@@ -45,8 +45,10 @@ def test_a_frozen_winner_round_trips_without_text_and_reproduces_context_ids_for
 
     assert plan.example_ids == ("no-1", "yes-1")
     assert document["pool"]["items"] == [
-        {"id": "no-1", "input_hash": document["pool"]["items"][0]["input_hash"], "label": "no"},
-        {"id": "yes-1", "input_hash": document["pool"]["items"][1]["input_hash"], "label": "yes"},
+        {"id": "no-1", "input_hash": document["pool"]["items"][0]["input_hash"],
+         "context_hash": document["pool"]["items"][0]["context_hash"], "label": "no"},
+        {"id": "yes-1", "input_hash": document["pool"]["items"][1]["input_hash"],
+         "context_hash": document["pool"]["items"][1]["context_hash"], "label": "yes"},
     ]
     assert "demonstration" not in serialized
     assert "never-persist" not in serialized

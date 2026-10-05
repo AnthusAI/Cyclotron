@@ -66,3 +66,16 @@ def test_a_jev_adapter_rejects_bad_context_before_calling_the_client():
         asyncio.run(JevAdapter(client).decide(TASK, TARGET, bad))
 
     assert not hasattr(client, "calls")
+
+
+def test_a_jev_adapter_sends_generic_demo_context_only_with_labeled_examples():
+    client = FakeJevClient()
+    contextual = [LabeledItem(Item("demo", {"text": "demo text"}), "yes",
+                               context={"human_feedback": "This is useful."})]
+
+    asyncio.run(JevAdapter(client).decide(TASK, TARGET, contextual))
+
+    assert client.state["labeled_examples"] == [
+        {"text": "demo text", "label": "yes", "human_feedback": "This is useful."}
+    ]
+    assert client.state["target"] == {"text": "target text"}

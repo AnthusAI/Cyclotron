@@ -5,7 +5,9 @@ import json
 
 import pytest
 
-from .reviewer import load_articles_jsonl
+from .reviewer import _article_panel, load_articles_jsonl, load_flywheel_report
+from .reviewer_predictor import ReviewerPrediction
+from .reviewer_store import Article
 
 
 def test_jsonl_import_accepts_only_title_abstract_records_with_explicit_metadata(tmp_path):
@@ -28,3 +30,23 @@ def test_jsonl_import_rejects_source_records_without_the_full_reviewer_payload(t
 
     with pytest.raises(ValueError, match="line 1"):
         load_articles_jsonl(path)
+
+
+def test_flywheel_report_loader_accepts_only_the_text_free_summary_shape(tmp_path):
+    path = tmp_path / "flywheel.json"
+    path.write_text(json.dumps({"version": 1, "model": "jev:jev-latest", "winner": "incumbent",
+                                "promoted": False, "reason": "kept incumbent",
+                                "calls": {"attempted": 12, "succeeded": 12},
+                                "scores": {"incumbent": {"accuracy": .67, "brier": .33}}}), encoding="utf-8")
+
+    report = load_flywheel_report(path)
+
+    assert report["winner"] == "incumbent"
+
+
+def test_article_panel_identifies_a_jev_prediction_as_the_measured_policy():
+    article = Article("arxiv-1", "A title", "An abstract", "2026-10-05", ("cs.AI",))
+
+    panel = _article_panel(article, ReviewerPrediction("include", .8, "jev:incumbent", "a" * 64, 12))
+
+    assert "Measured Jev policy (incumbent)" in panel.renderable.plain

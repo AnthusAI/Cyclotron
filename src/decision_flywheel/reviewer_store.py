@@ -97,6 +97,15 @@ class LearningLabel:
     assignment: str
 
 
+@dataclass(frozen=True)
+class LearningFeedback:
+    """An eligible human label plus the optional explanation attached to that vote."""
+
+    article_id: str
+    label: str
+    comment: str | None
+
+
 class ReviewStore:
     """SQLite event store with deterministic train/audit partition assignment."""
 
@@ -388,6 +397,14 @@ class ReviewStore:
         for article_id, event in self._active_actions().items():
             if event.action == "vote" and self.assignment_for(article_id) == "train":
                 labels.append(LearningLabel(article_id, event.label, "train"))
+        return tuple(sorted(labels, key=lambda item: item.article_id))
+
+    def learning_feedback(self) -> tuple[LearningFeedback, ...]:
+        """Return the only reviewed records a live context optimizer may consume."""
+        labels = []
+        for article_id, event in self._active_actions().items():
+            if event.action == "vote" and self.assignment_for(article_id) == "train":
+                labels.append(LearningFeedback(article_id, event.label, event.comment))
         return tuple(sorted(labels, key=lambda item: item.article_id))
 
     def prediction_metrics(self) -> PredictionMetrics:

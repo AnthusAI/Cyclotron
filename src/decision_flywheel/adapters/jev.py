@@ -77,7 +77,7 @@ class JevAdapter:
             task.validate_label(example.label)
         state = {
             "labeled_examples": [
-                {"text": example.item.values[task.input_field], "label": example.label}
+                {"text": example.item.values[task.input_field], "label": example.label, **dict(example.context)}
                 for example in context
             ],
             "target": {"text": target.values[task.input_field]},

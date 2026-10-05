@@ -66,11 +66,32 @@ and leave. Before each vote it shows a transparent local prediction: a 50/50
 cold-start prior initially, then a lexical baseline trained only on eligible
 human labels. The exact displayed prediction is linked to your vote for later
 alignment analysis. The screen also reports prediction agreement, eligible
-human labels, and baseline-refresh count after every decision. At 20 eligible
-labels containing both choices, it also runs and displays a leave-one-out
-comparison of content-only versus content-plus-metadata input. The optional source download records its exact Hub
+human labels, and baseline-refresh count after every decision. The optional source download records its exact Hub
 revision and selection parameters locally; article text and your review data
 are not committed.
+
+## Measured Jev flywheel
+
+The reviewer is only the feedback surface. The reusable core performs the
+actual flywheel round: it converts only train-assigned human votes (including
+optional comments as demonstration-only context) into trusted core items,
+evaluates the core's incumbent, hard-swap, and random-control example policies
+on a sealed development subset, and writes a text-free report plus a frozen
+artifact. Rolling and final audit labels are never candidates, examples, or
+development targets.
+
+This is paid work and therefore always requires an explicit command:
+
+```bash
+make PYTHON=.venv/bin/python run-flywheel
+make PYTHON=.venv/bin/python review-live
+```
+
+The regular review screen displays the latest measured candidate outcomes. A
+live review session uses the selected frozen Jev artifact for each prediction;
+it has a per-session request ceiling and records the prediction shown before
+your vote. After collecting more feedback, run another flywheel round before
+serving a new live artifact.
 
 ## Safety and evaluation boundaries
 

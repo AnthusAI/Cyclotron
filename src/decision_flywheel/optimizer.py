@@ -363,10 +363,17 @@ def _checkpoint_entry(task: DecisionTask, value: object) -> tuple[str, dict[str,
 def _split_fingerprint(task: DecisionTask, rows: Sequence[LabeledItem]) -> str:
     """Hash an order-independent split manifest without retaining source text."""
     manifest = sorted(
-        (row.item.id, task.validate_label(row.label), _text_hash(task, row.item))
+        (row.item.id, task.validate_label(row.label), _text_hash(task, row.item),
+         _context_hash(row.context))
         for row in rows
     )
     return _fingerprint(manifest)
+
+
+def _context_hash(context: Mapping[str, str]) -> str:
+    """Bind cache and split provenance to demo-only context without retaining it."""
+    encoded = json.dumps(dict(context), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _search_fingerprint(

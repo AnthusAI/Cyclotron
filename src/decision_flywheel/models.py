@@ -5,7 +5,7 @@ import hashlib
 import json
 import math
 from collections.abc import Sequence as SequenceABC
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from numbers import Real
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
@@ -39,6 +39,14 @@ class LabeledItem:
     item: Item
     label: str
     source: str = "trusted"
+    context: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.context, Mapping):
+            raise ValueError("labeled item context must be a mapping")
+        for name, value in self.context.items():
+            if not isinstance(name, str) or not name.strip() or not isinstance(value, str) or not value.strip():
+                raise ValueError("labeled item context must have non-empty string keys and values")
 
 
 @dataclass(frozen=True)
