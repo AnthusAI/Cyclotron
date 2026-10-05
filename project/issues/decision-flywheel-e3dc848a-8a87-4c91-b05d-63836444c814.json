@@ -27,10 +27,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "24aafc82-6c67-47ee-91df-804bcb736bdb",
+      "author": "home",
+      "text": "Implemented label-independent balanced evaluation: per-class recall/count/Brier and descriptive Wilson recall intervals; natural and equal-class summaries on identical fixed dev records; promotion defaults to balanced Brier. Missing/under-minimum class coverage waits before paid optimizer calls (reviewer floor two dev examples per class). Optional equal-class training combines inverse review propensities with equal total class influence; recomputed independently per OOF fit, natural OOF calibration weights retained. Policies included in round cache keys and training provenance. CLI and make expose separate evaluation/training policies. Synthetic multi-class/imbalance/missing-class/OOF/UI/cache specs cover the new behavior; no new live calls or rating mutations.",
+      "created_at": "2026-10-05T23:17:55.960410Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.403113Z",
-  "updated_at": "2026-10-05T22:14:14.835769Z",
+  "updated_at": "2026-10-05T23:17:55.960445Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
