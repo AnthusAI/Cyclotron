@@ -61,3 +61,26 @@ def test_core_status_exposes_how_many_eligible_labels_have_arrived_since_the_fro
     panel = _core_flywheel_status(report, current_training_labels=37)
 
     assert "3 new eligible labels" in str(panel.renderable)
+
+
+def test_core_status_exposes_the_real_trials_and_the_held_aside_development_slice():
+    report = {"version": 1, "model": "jev:jev-latest", "winner": "hard-swap", "promoted": True,
+              "reason": "promoted hard-swap: brier gain 0.120000", "calls": {"attempted": 12},
+              "scores": {"incumbent": {"accuracy": .50, "brier": .42},
+                         "hard-swap": {"accuracy": .67, "brier": .30}},
+              "training_feedback": {"total": 20, "comments": 3, "hard_jev_corrections": 4},
+              "round": {"incumbent_source": "prototype-seed", "candidate_count": 14,
+                        "development_count": 6},
+              "trials": [{"name": "incumbent", "status": "completed", "decision_count": 6,
+                          "from_cache": 0, "example_count": 4, "reserve_count": 2,
+                          "failure_reasons": [], "objective": .42},
+                         {"name": "hard-swap", "status": "completed", "decision_count": 6,
+                          "from_cache": 1, "example_count": 4, "reserve_count": 2,
+                          "failure_reasons": [], "objective": .30}]}
+
+    panel = _core_flywheel_status(report, current_training_labels=20)
+
+    rendered = str(panel.renderable)
+    assert "14 candidate labels and 6 held-aside development labels" in rendered
+    assert "incumbent: completed, 6 decisions, 0 cached" in rendered
+    assert "hard-swap: completed, 6 decisions, 1 cached" in rendered

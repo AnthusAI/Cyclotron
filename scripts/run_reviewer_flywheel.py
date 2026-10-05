@@ -23,6 +23,7 @@ from decision_flywheel.reviewer_store import ReviewStore
 def _report(improvement, labels, comments: int, hard_examples: int, *, artifact_path: Path, pool_revision: str,
             artifact_hash: str) -> dict[str, object]:
     optimization = improvement.optimization
+    planned_trials = dict(improvement.round.trials)
     return {
         "version": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -33,6 +34,9 @@ def _report(improvement, labels, comments: int, hard_examples: int, *, artifact_
                                            for label in ("include", "exclude")}},
         "development": {"count": len(improvement.round.development),
                         "ids": [row.item.id for row in improvement.round.development]},
+        "round": {"incumbent_source": improvement.round.incumbent_source,
+                  "candidate_count": len(improvement.round.candidates),
+                  "development_count": len(improvement.round.development)},
         "calls": {"attempted": optimization.model_calls_attempted,
                   "succeeded": optimization.model_calls_succeeded,
                   "ceiling": optimization.max_model_calls,
@@ -42,7 +46,13 @@ def _report(improvement, labels, comments: int, hard_examples: int, *, artifact_
             {"name": trial.trial_name, "status": trial.status, "objective": trial.objective,
              "failure_reasons": list(trial.failure_reasons),
              "decision_count": len(trial.decisions),
-             "from_cache": sum(decision.from_checkpoint for decision in trial.decisions)}
+             "from_cache": sum(decision.from_checkpoint for decision in trial.decisions),
+             # IDs and counts make the optimizer's actual work inspectable while
+             # retaining the report's no-article-text contract.
+             "example_ids": list(planned_trials[trial.trial_name].example_ids),
+             "reserve_ids": list(planned_trials[trial.trial_name].reserve_ids),
+             "example_count": len(planned_trials[trial.trial_name].example_ids),
+             "reserve_count": len(planned_trials[trial.trial_name].reserve_ids)}
             for trial in optimization.trials
         ],
         "winner": improvement.winner_trial,

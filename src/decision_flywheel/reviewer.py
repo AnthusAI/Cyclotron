@@ -113,12 +113,37 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
         freshness = ("Policy is current for eligible labels."
                      if new_labels == 0 else
                      f"Policy is stale: {new_labels} new eligible labels await the next measured core round.")
+        round_info = report.get("round", {})
+        if isinstance(round_info, dict):
+            candidate_count = round_info.get("candidate_count")
+            development_count = round_info.get("development_count")
+            source = round_info.get("incumbent_source")
+            round_line = (f"Round design: {candidate_count} candidate labels and {development_count} held-aside "
+                          f"development labels; incumbent source: {source}."
+                          if isinstance(candidate_count, int) and isinstance(development_count, int)
+                          and isinstance(source, str) else "")
+        else:
+            round_line = ""
+        trial_lines = []
+        trials = report.get("trials", [])
+        if isinstance(trials, list):
+            for trial in trials:
+                if not isinstance(trial, dict):
+                    continue
+                name, status = trial.get("name"), trial.get("status")
+                decisions, cached = trial.get("decision_count"), trial.get("from_cache")
+                if (isinstance(name, str) and isinstance(status, str) and isinstance(decisions, int)
+                        and isinstance(cached, int)):
+                    trial_lines.append(f"{name}: {status}, {decisions} decisions, {cached} cached")
+        activity_line = f"Measured trials: {' · '.join(trial_lines)}." if trial_lines else ""
         message = (f"Last measured Jev run — {report['reason']}\n"
                    f"Winner: {report['winner']} · {calls.get('attempted', 0)} new Jev requests. {formatted}\n"
                    f"Feedback used: {feedback.get('total', 0)} eligible labels, "
                    f"{feedback.get('comments', 0)} comments, "
                    f"{feedback.get('hard_jev_corrections', 0)} wrong-Jev corrections for hard-swap.\n"
-                   f"{freshness}")
+                   + (f"{round_line}\n" if round_line else "")
+                   + (f"{activity_line}\n" if activity_line else "")
+                   + freshness)
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
 
