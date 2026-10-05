@@ -13,6 +13,8 @@ def _article(number: int = 1) -> Article:
         abstract=f"Abstract {number}",
         submitted_at="2026-10-05",
         categories=("cs.AI",),
+        authors="Ada Lovelace, Grace Hopper",
+        journal_ref="Journal of Careful Decisions (2026)",
     )
 
 
@@ -45,6 +47,30 @@ def test_a_vote_is_an_immutable_event_and_undo_restores_the_article_to_the_queue
     store.close()
 
 
+def test_an_article_keeps_the_provenance_fields_a_reviewer_needs_to_see(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
+    source = _article()
+    store.import_articles((source,))
+
+    restored = store.article("arxiv-1")
+
+    assert restored.authors == "Ada Lovelace, Grace Hopper"
+    assert restored.journal_ref == "Journal of Careful Decisions (2026)"
+    store.close()
+
+
+def test_an_unreviewed_legacy_article_can_be_enriched_with_new_source_metadata(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
+    legacy = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",))
+    enriched = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",),
+                       "Ada Lovelace", "Journal of Decisions (2026)")
+    store.import_articles((legacy,))
+
+    assert store.import_articles((enriched,)) == 0
+    assert store.article("arxiv-1") == enriched
+    store.close()
+
+
 def test_a_skip_is_recorded_but_does_not_create_a_training_label(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(),))
@@ -74,4 +100,16 @@ def test_a_final_audit_label_is_never_eligible_for_learning(tmp_path):
 
     assert store.assignment_for("arxiv-1") == "final_audit"
     assert store.learning_labels() == ()
+    store.close()
+
+
+def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
+    store.import_articles((_article(),))
+    shown = store.record_prediction("arxiv-1", "include", .72, "lexical_naive_bayes", "a" * 64, 4)
+
+    vote = store.record_vote("arxiv-1", "exclude", presentation_id=shown.id)
+
+    assert vote.presentation_id == shown.id
+    assert store.presentations_for("arxiv-1") == (shown,)
     store.close()

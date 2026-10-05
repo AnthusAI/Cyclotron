@@ -11,12 +11,15 @@ from .reviewer import load_articles_jsonl
 def test_jsonl_import_accepts_only_title_abstract_records_with_explicit_metadata(tmp_path):
     path = tmp_path / "articles.jsonl"
     path.write_text(json.dumps({"id": "arxiv-1", "title": "A title", "abstract": "An abstract",
-                                "submitted_at": "2026-10-05", "categories": ["cs.AI"]}) + "\n",
+                                "submitted_at": "2026-10-05", "categories": ["cs.AI"],
+                                "authors": "Ada Lovelace", "journal_ref": "Journal of Decisions (2026)"}) + "\n",
                     encoding="utf-8")
 
     articles = load_articles_jsonl(path)
 
-    assert [(article.id, article.categories) for article in articles] == [("arxiv-1", ("cs.AI",))]
+    assert [(article.id, article.categories, article.authors, article.journal_ref) for article in articles] == [
+        ("arxiv-1", ("cs.AI",), "Ada Lovelace", "Journal of Decisions (2026)")
+    ]
 
 
 def test_jsonl_import_rejects_source_records_without_the_full_reviewer_payload(tmp_path):

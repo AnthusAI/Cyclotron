@@ -41,7 +41,9 @@ def _created(row: dict[str, Any]) -> str | None:
 
 
 def _article(row: dict[str, Any], earliest: str) -> dict[str, Any] | None:
-    identifier, title, abstract, categories = (row.get(name) for name in ("id", "title", "abstract", "categories"))
+    identifier, title, abstract, categories, authors, journal_ref = (
+        row.get(name) for name in ("id", "title", "abstract", "categories", "authors", "journal-ref")
+    )
     submitted = _created(row)
     if (not all(isinstance(value, str) and value.strip() for value in (identifier, title, abstract, categories))
             or submitted is None or submitted < earliest):
@@ -50,7 +52,9 @@ def _article(row: dict[str, Any], earliest: str) -> dict[str, Any] | None:
     if not cs_categories:
         return None
     return {"id": f"arxiv:{identifier}", "title": " ".join(title.split()),
-            "abstract": " ".join(abstract.split()), "submitted_at": submitted, "categories": cs_categories}
+            "abstract": " ".join(abstract.split()), "submitted_at": submitted, "categories": cs_categories,
+            "authors": " ".join(authors.split()) if isinstance(authors, str) and authors.strip() else "Not provided",
+            "journal_ref": " ".join(journal_ref.split()) if isinstance(journal_ref, str) and journal_ref.strip() else None}
 
 
 def main(argv: list[str] | None = None) -> int:

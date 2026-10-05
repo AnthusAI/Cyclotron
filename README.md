@@ -40,10 +40,13 @@ Use `make test` for all offline specifications.
 ## Try the local article reviewer
 
 The reviewer is a local Rich terminal application for collecting real human
-`include` / `exclude` decisions on title-and-abstract article records. It makes
-no model calls. Its SQLite event history preserves votes, comments, skips, and
-undo operations; its deterministic train, rolling-audit, and permanent-audit
-assignments are not displayed while you review.
+`include` / `exclude` decisions on article records. It shows the title,
+abstract, submission date, arXiv categories, author line, and—when arXiv has
+it—the free-form publication citation. It makes no provider model calls. Its
+SQLite event history preserves votes, comments, skips, undo operations, and
+the exact prediction shown before each vote; its deterministic train,
+rolling-audit, and permanent-audit assignments are not displayed while you
+review.
 
 Install the optional UI dependencies, create a local batch from the pinned
 public arXiv metadata snapshot, then review it:
@@ -59,8 +62,10 @@ review queue with `make PYTHON=.venv/bin/python review`.
 
 Use `I` to include or `E` to exclude; each immediately offers an optional
 comment field. Use `S` to skip, `B` to undo the latest action, and `Q` to save
-and leave. Model recommendations are intentionally withheld until after a human
-vote. The optional source download records its exact Hub
+and leave. Before each vote it shows a transparent local prediction: a 50/50
+cold-start prior initially, then a lexical baseline trained only on eligible
+human labels. The exact displayed prediction is linked to your vote for later
+alignment analysis. The optional source download records its exact Hub
 revision and selection parameters locally; article text and your review data
 are not committed.
 
@@ -105,6 +110,13 @@ The resulting core head must match that lineage before the application-owned
 development metric can promote it. Protected scoreboard IDs must be recorded in
 the fit provenance and cannot be used for fitting. This is a small provider-
 neutral API, not a Tactus integration or a live steering service.
+
+The steering briefing also names one safe, programmatic dynamic element:
+`current_datetime`. An analyst may propose it with
+`{"add_programmatic_element":{"kind":"current_datetime"}}`. Once normally
+accepted and promoted, request construction can pass a recorded,
+timezone-aware UTC value as `state.current_datetime`. It is never silently
+injected, and it is context—not a learned weight, calibration value, or label.
 
 ## Optional dynamic retrieval (off by default)
 

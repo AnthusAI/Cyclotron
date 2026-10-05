@@ -8,6 +8,8 @@ from numbers import Real
 from typing import Callable, Mapping, Protocol, Sequence
 
 from .context import ContextPolicy
+from .dynamic_elements import (CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE,
+                               optimizer_dynamic_element_instruction)
 from .feedback import Element, Scorecard
 from .head import LearnedHead
 
@@ -54,12 +56,14 @@ class AnalystBriefing:
     developer_hashes: tuple[str, ...]
     scorecard_fingerprint: str
     policy_fingerprint: str
+    dynamic_element_instruction: str = optimizer_dynamic_element_instruction()
 
 
 @dataclass(frozen=True)
 class SteeringProposal:
     add_element: Element | None = None
     context_policy_name: str | None = None
+    add_programmatic_element: str | None = None
 
 
 @dataclass(frozen=True)
@@ -173,7 +177,7 @@ def _guard_protected(developer_ids, developer_hashes, protected_ids, protected_h
 def _parse_proposal(raw: Mapping[str, object], allowed_policies: Mapping[str, ContextPolicy]) -> SteeringProposal:
     if not isinstance(raw, Mapping):
         raise ValueError("analyst proposal must be an object")
-    allowed = {"add_element", "context_policy"}
+    allowed = {"add_element", "add_programmatic_element", "context_policy"}
     unknown = set(raw) - allowed
     if unknown:
         raise ValueError("analyst proposal edit is not allowed")
@@ -184,6 +188,13 @@ def _parse_proposal(raw: Mapping[str, object], allowed_policies: Mapping[str, Co
         if not isinstance(name, str) or name not in allowed_policies:
             raise ValueError("context policy proposal is not in the code allowlist")
         return SteeringProposal(context_policy_name=name)
+    if "add_programmatic_element" in raw:
+        detail = raw["add_programmatic_element"]
+        if not isinstance(detail, Mapping) or set(detail) != {"kind"}:
+            raise ValueError("add_programmatic_element must provide only kind")
+        if detail["kind"] != CURRENT_DATETIME_ELEMENT:
+            raise ValueError("programmatic element is not in the code allowlist")
+        return SteeringProposal(add_programmatic_element=CURRENT_DATETIME_ELEMENT)
     detail = raw["add_element"]
     if not isinstance(detail, Mapping) or set(detail) != {"key", "question_type", "features"}:
         raise ValueError("add_element must provide only key, question_type, and features")
@@ -194,13 +205,19 @@ def _parse_proposal(raw: Mapping[str, object], allowed_policies: Mapping[str, Co
     question_type = detail["question_type"]
     if not isinstance(key, str) or not key or not isinstance(question_type, str) or not question_type:
         raise ValueError("add_element key and question_type must be non-empty strings")
+    if key == CURRENT_DATETIME_ELEMENT:
+        raise ValueError("current_datetime must use add_programmatic_element")
     return SteeringProposal(Element(key, question_type, tuple(features), _proposal_fingerprint(detail)))
 
 
 def _apply(scorecard: Scorecard, proposal: SteeringProposal, candidate_policy: ContextPolicy) -> Scorecard:
-    if proposal.add_element is not None and proposal.add_element.key in {element.key for element in scorecard.elements}:
+    element = proposal.add_element
+    if proposal.add_programmatic_element == CURRENT_DATETIME_ELEMENT:
+        element = Element(CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE,
+                          (CURRENT_DATETIME_ELEMENT,), _proposal_fingerprint({"kind": CURRENT_DATETIME_ELEMENT}))
+    if element is not None and element.key in {element.key for element in scorecard.elements}:
         raise ValueError("proposal cannot duplicate its element")
-    elements = scorecard.elements if proposal.context_policy_name is not None else scorecard.elements + (proposal.add_element,)
+    elements = scorecard.elements if proposal.context_policy_name is not None else scorecard.elements + (element,)
     if any(element is None for element in elements):
         raise ValueError("proposal must contain an allowed scorecard edit")
     return Scorecard(scorecard.name, scorecard.version + 1, elements, candidate_policy.fingerprint, scorecard.fingerprint)

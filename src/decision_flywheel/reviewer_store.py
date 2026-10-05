@@ -29,6 +29,8 @@ class Article:
     abstract: str
     submitted_at: str
     categories: tuple[str, ...]
+    authors: str = "Not provided"
+    journal_ref: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id.strip():
@@ -41,6 +43,10 @@ class Article:
             raise ValueError("article submitted_at must be a non-empty string")
         if not self.categories or any(not isinstance(value, str) or not value.strip() for value in self.categories):
             raise ValueError("article categories must contain non-empty strings")
+        if not isinstance(self.authors, str) or not self.authors.strip():
+            raise ValueError("article authors must be a non-empty string")
+        if self.journal_ref is not None and (not isinstance(self.journal_ref, str) or not self.journal_ref.strip()):
+            raise ValueError("article journal_ref must be omitted or a non-empty string")
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,21 @@ class ReviewEvent:
     comment: str | None
     created_at: str
     undoes_event_id: str | None
+    presentation_id: str | None
+
+
+@dataclass(frozen=True)
+class Presentation:
+    """The prediction displayed before a particular human review action."""
+
+    id: str
+    article_id: str
+    predicted_label: str
+    confidence: float
+    predictor_kind: str
+    predictor_fingerprint: str
+    training_label_count: int
+    shown_at: str
 
 
 @dataclass(frozen=True)
@@ -111,7 +132,19 @@ class ReviewStore:
                 abstract TEXT NOT NULL,
                 submitted_at TEXT NOT NULL,
                 categories_json TEXT NOT NULL,
+                authors TEXT NOT NULL DEFAULT 'Not provided',
+                journal_ref TEXT,
                 assignment TEXT NOT NULL CHECK (assignment IN ('train', 'rolling_audit', 'final_audit'))
+            );
+            CREATE TABLE IF NOT EXISTS presentations (
+                id TEXT PRIMARY KEY,
+                article_id TEXT NOT NULL REFERENCES articles(id),
+                predicted_label TEXT NOT NULL CHECK (predicted_label IN ('include', 'exclude')),
+                confidence REAL NOT NULL,
+                predictor_kind TEXT NOT NULL,
+                predictor_fingerprint TEXT NOT NULL,
+                training_label_count INTEGER NOT NULL,
+                shown_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS review_events (
                 id TEXT PRIMARY KEY,
@@ -120,12 +153,21 @@ class ReviewStore:
                 label TEXT CHECK (label IN ('include', 'exclude')),
                 comment TEXT,
                 created_at TEXT NOT NULL,
-                undoes_event_id TEXT REFERENCES review_events(id)
+                undoes_event_id TEXT REFERENCES review_events(id),
+                presentation_id TEXT REFERENCES presentations(id)
             );
             CREATE INDEX IF NOT EXISTS review_events_article_created
                 ON review_events(article_id, created_at);
             """
         )
+        article_columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(articles)")}
+        if "authors" not in article_columns:
+            self._connection.execute("ALTER TABLE articles ADD COLUMN authors TEXT NOT NULL DEFAULT 'Not provided'")
+        if "journal_ref" not in article_columns:
+            self._connection.execute("ALTER TABLE articles ADD COLUMN journal_ref TEXT")
+        event_columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(review_events)")}
+        if "presentation_id" not in event_columns:
+            self._connection.execute("ALTER TABLE review_events ADD COLUMN presentation_id TEXT REFERENCES presentations(id)")
         self._connection.commit()
 
     def _set_or_check_study(self, key: str, value: str) -> None:
@@ -153,30 +195,46 @@ class ReviewStore:
                 if not isinstance(article, Article):
                     raise ValueError("articles must be Article instances")
                 existing = self._connection.execute(
-                    "SELECT title, abstract, submitted_at, categories_json FROM articles WHERE id = ?", (article.id,)
+                    "SELECT title, abstract, submitted_at, categories_json, authors, journal_ref FROM articles WHERE id = ?", (article.id,)
                 ).fetchone()
                 categories = json.dumps(article.categories, ensure_ascii=False, separators=(",", ":"))
                 if existing is not None:
-                    if tuple(existing) != (article.title, article.abstract, article.submitted_at, categories):
+                    current = tuple(existing)
+                    supplied = (article.title, article.abstract, article.submitted_at, categories,
+                                article.authors, article.journal_ref)
+                    if current == supplied:
+                        continue
+                    source_content_matches = current[:4] == supplied[:4]
+                    legacy_metadata = current[4:] == ("Not provided", None)
+                    reviewed = self._connection.execute(
+                        "SELECT 1 FROM review_events WHERE article_id = ? LIMIT 1", (article.id,)
+                    ).fetchone() is not None
+                    if source_content_matches and legacy_metadata and not reviewed:
+                        self._connection.execute(
+                            "UPDATE articles SET authors = ?, journal_ref = ? WHERE id = ?",
+                            (article.authors, article.journal_ref, article.id),
+                        )
+                        continue
+                    else:
                         raise ValueError("an imported article ID already has different content")
-                    continue
                 self._connection.execute(
-                    "INSERT INTO articles(id, title, abstract, submitted_at, categories_json, assignment) VALUES (?, ?, ?, ?, ?, ?)",
-                    (article.id, article.title, article.abstract, article.submitted_at, categories, self._assignment(article.id)),
+                    "INSERT INTO articles(id, title, abstract, submitted_at, categories_json, authors, journal_ref, assignment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (article.id, article.title, article.abstract, article.submitted_at, categories, article.authors,
+                     article.journal_ref, self._assignment(article.id)),
                 )
                 imported += 1
         return imported
 
     def articles(self) -> tuple[Article, ...]:
         rows = self._connection.execute(
-            "SELECT id, title, abstract, submitted_at, categories_json FROM articles ORDER BY id"
+            "SELECT id, title, abstract, submitted_at, categories_json, authors, journal_ref FROM articles ORDER BY id"
         ).fetchall()
         return tuple(self._article(row) for row in rows)
 
     @staticmethod
     def _article(row: sqlite3.Row) -> Article:
         return Article(row["id"], row["title"], row["abstract"], row["submitted_at"],
-                       tuple(json.loads(row["categories_json"])))
+                       tuple(json.loads(row["categories_json"])), row["authors"], row["journal_ref"])
 
     def assignment_for(self, article_id: str) -> str:
         row = self._connection.execute("SELECT assignment FROM articles WHERE id = ?", (article_id,)).fetchone()
@@ -186,7 +244,7 @@ class ReviewStore:
 
     def _active_actions(self) -> dict[str, ReviewEvent]:
         rows = self._connection.execute(
-            "SELECT id, article_id, action, label, comment, created_at, undoes_event_id FROM review_events ORDER BY created_at, rowid"
+            "SELECT id, article_id, action, label, comment, created_at, undoes_event_id, presentation_id FROM review_events ORDER BY created_at, rowid"
         ).fetchall()
         undone = {row["undoes_event_id"] for row in rows if row["action"] == "undo"}
         active: dict[str, ReviewEvent] = {}
@@ -198,24 +256,64 @@ class ReviewStore:
     def next_unreviewed(self) -> Article | None:
         active = self._active_actions()
         rows = self._connection.execute(
-            "SELECT id, title, abstract, submitted_at, categories_json FROM articles ORDER BY id"
+            "SELECT id, title, abstract, submitted_at, categories_json, authors, journal_ref FROM articles ORDER BY id"
         ).fetchall()
         for row in rows:
             if row["id"] not in active:
                 return self._article(row)
         return None
 
-    def record_vote(self, article_id: str, label: str, *, comment: str | None = None) -> ReviewEvent:
+    def record_prediction(self, article_id: str, predicted_label: str, confidence: float, predictor_kind: str,
+                          predictor_fingerprint: str, training_label_count: int) -> Presentation:
+        """Save the exact prediction visible to a reviewer before their choice."""
+        if self._connection.execute("SELECT 1 FROM articles WHERE id = ?", (article_id,)).fetchone() is None:
+            raise KeyError(article_id)
+        if predicted_label not in ("include", "exclude"):
+            raise ValueError("a prediction must be include or exclude")
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
+            raise ValueError("prediction confidence must be a probability")
+        if not isinstance(predictor_kind, str) or not predictor_kind.strip():
+            raise ValueError("predictor kind must be a non-empty string")
+        if (not isinstance(predictor_fingerprint, str) or len(predictor_fingerprint) != 64
+                or any(character not in "0123456789abcdef" for character in predictor_fingerprint.lower())):
+            raise ValueError("predictor fingerprint must be a SHA-256 hex digest")
+        if isinstance(training_label_count, bool) or not isinstance(training_label_count, int) or training_label_count < 0:
+            raise ValueError("training label count must be a non-negative integer")
+        shown = Presentation(str(uuid.uuid4()), article_id, predicted_label, float(confidence), predictor_kind,
+                             predictor_fingerprint, training_label_count, datetime.now(timezone.utc).isoformat())
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO presentations(id, article_id, predicted_label, confidence, predictor_kind, predictor_fingerprint, training_label_count, shown_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                tuple(shown.__dict__.values()),
+            )
+        return shown
+
+    def presentations_for(self, article_id: str) -> tuple[Presentation, ...]:
+        rows = self._connection.execute(
+            "SELECT id, article_id, predicted_label, confidence, predictor_kind, predictor_fingerprint, training_label_count, shown_at FROM presentations WHERE article_id = ? ORDER BY shown_at, rowid",
+            (article_id,),
+        ).fetchall()
+        return tuple(Presentation(*tuple(row)) for row in rows)
+
+    def record_vote(self, article_id: str, label: str, *, comment: str | None = None,
+                    presentation_id: str | None = None) -> ReviewEvent:
         if label not in ("include", "exclude"):
             raise ValueError("a human vote must be include or exclude")
         if comment is not None and (not isinstance(comment, str) or not comment.strip()):
             raise ValueError("a comment must be omitted or non-empty")
-        return self._record_action(article_id, "vote", label, comment)
+        if presentation_id is not None:
+            presentation = self._connection.execute(
+                "SELECT article_id FROM presentations WHERE id = ?", (presentation_id,)
+            ).fetchone()
+            if presentation is None or presentation["article_id"] != article_id:
+                raise ValueError("a linked prediction must belong to the reviewed article")
+        return self._record_action(article_id, "vote", label, comment, presentation_id)
 
     def record_skip(self, article_id: str) -> ReviewEvent:
-        return self._record_action(article_id, "skip", None, None)
+        return self._record_action(article_id, "skip", None, None, None)
 
-    def _record_action(self, article_id: str, action: str, label: str | None, comment: str | None) -> ReviewEvent:
+    def _record_action(self, article_id: str, action: str, label: str | None, comment: str | None,
+                       presentation_id: str | None) -> ReviewEvent:
         if action not in ("vote", "skip"):
             raise ValueError("only a vote or skip may be recorded")
         if self._connection.execute("SELECT 1 FROM articles WHERE id = ?", (article_id,)).fetchone() is None:
@@ -223,10 +321,10 @@ class ReviewStore:
         if article_id in self._active_actions():
             raise ValueError("undo the current review action before recording another one")
         event = ReviewEvent(str(uuid.uuid4()), article_id, action, label, comment,
-                            datetime.now(timezone.utc).isoformat(), None)
+                            datetime.now(timezone.utc).isoformat(), None, presentation_id)
         with self._connection:
             self._connection.execute(
-                "INSERT INTO review_events(id, article_id, action, label, comment, created_at, undoes_event_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO review_events(id, article_id, action, label, comment, created_at, undoes_event_id, presentation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 tuple(event.__dict__.values()),
             )
         return event
@@ -237,17 +335,17 @@ class ReviewStore:
             return None
         event = max(active.values(), key=lambda item: item.created_at)
         undo = ReviewEvent(str(uuid.uuid4()), event.article_id, "undo", None, None,
-                           datetime.now(timezone.utc).isoformat(), event.id)
+                           datetime.now(timezone.utc).isoformat(), event.id, None)
         with self._connection:
             self._connection.execute(
-                "INSERT INTO review_events(id, article_id, action, label, comment, created_at, undoes_event_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO review_events(id, article_id, action, label, comment, created_at, undoes_event_id, presentation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 tuple(undo.__dict__.values()),
             )
         return self.article(event.article_id)
 
     def article(self, article_id: str) -> Article:
         row = self._connection.execute(
-            "SELECT id, title, abstract, submitted_at, categories_json FROM articles WHERE id = ?", (article_id,)
+            "SELECT id, title, abstract, submitted_at, categories_json, authors, journal_ref FROM articles WHERE id = ?", (article_id,)
         ).fetchone()
         if row is None:
             raise KeyError(article_id)
@@ -255,7 +353,7 @@ class ReviewStore:
 
     def events_for(self, article_id: str) -> tuple[ReviewEvent, ...]:
         rows = self._connection.execute(
-            "SELECT id, article_id, action, label, comment, created_at, undoes_event_id FROM review_events WHERE article_id = ? ORDER BY created_at, rowid",
+            "SELECT id, article_id, action, label, comment, created_at, undoes_event_id, presentation_id FROM review_events WHERE article_id = ? ORDER BY created_at, rowid",
             (article_id,),
         ).fetchall()
         return tuple(self._event(row) for row in rows)
@@ -263,7 +361,7 @@ class ReviewStore:
     @staticmethod
     def _event(row: sqlite3.Row) -> ReviewEvent:
         return ReviewEvent(row["id"], row["article_id"], row["action"], row["label"], row["comment"],
-                           row["created_at"], row["undoes_event_id"])
+                           row["created_at"], row["undoes_event_id"], row["presentation_id"])
 
     def current_label(self, article_id: str) -> str | None:
         action = self._active_actions().get(article_id)

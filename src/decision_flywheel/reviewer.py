@@ -16,6 +16,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
+from .reviewer_predictor import LabeledArticle, ReviewerPrediction, predict_article
 from .reviewer_store import Article, ReviewStore
 
 
@@ -32,12 +33,15 @@ def load_articles_jsonl(path: str | Path) -> tuple[Article, ...]:
             continue
         try:
             value = json.loads(line)
-            if not isinstance(value, dict) or set(value) != {"id", "title", "abstract", "submitted_at", "categories"}:
-                raise ValueError("needs exactly id, title, abstract, submitted_at, and categories")
+            required = {"id", "title", "abstract", "submitted_at", "categories"}
+            optional = {"authors", "journal_ref"}
+            if not isinstance(value, dict) or not required <= set(value) or not set(value) <= required | optional:
+                raise ValueError("needs title, abstract, date, categories, and optional authors or journal_ref")
             categories = value["categories"]
             if not isinstance(categories, list):
                 raise ValueError("categories must be a JSON array")
-            article = Article(value["id"], value["title"], value["abstract"], value["submitted_at"], tuple(categories))
+            article = Article(value["id"], value["title"], value["abstract"], value["submitted_at"],
+                              tuple(categories), value.get("authors", "Not provided"), value.get("journal_ref"))
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             raise ValueError(f"article JSONL line {number} is invalid: {error}") from error
         if article.id in seen:
@@ -59,10 +63,21 @@ def _summary_table(summary: dict[str, int]) -> Table:
     return table
 
 
-def _article_panel(article: Article, summary: dict[str, int]) -> Panel:
+def _article_panel(article: Article, prediction: ReviewerPrediction) -> Panel:
     header = Text(article.title, style="bold white")
-    metadata = Text(f"{article.submitted_at}  •  {' · '.join(article.categories)}", style="cyan")
-    body = Text.assemble(header, "\n", metadata, "\n\n", article.abstract)
+    metadata = Text(f"Submitted {article.submitted_at}  •  {' · '.join(article.categories)}", style="cyan")
+    authors = Text(f"Authors: {article.authors}", style="cyan")
+    publication = Text(f"Published as: {article.journal_ref}\n", style="cyan") if article.journal_ref else Text()
+    label = "INCLUDE" if prediction.label == "include" else "EXCLUDE"
+    prediction_text = Text.assemble(
+        "Current system prediction: ",
+        (label, "bold green" if prediction.label == "include" else "bold red"),
+        f" — {prediction.confidence:.0%} confidence\n",
+        ("Cold-start prior" if prediction.kind == "cold_start_prior" else "Local learning baseline"),
+        f" · {prediction.training_label_count} eligible human label(s)",
+    )
+    body = Text.assemble(header, "\n", metadata, "\n", authors, "\n", publication, "\n", prediction_text,
+                         "\n\n", article.abstract)
     return Panel(body, title="Article review",
                  subtitle="I include + optional comment · E exclude + optional comment · S skip · B undo · Q quit",
                  border_style="blue", padding=(1, 2))
@@ -74,10 +89,10 @@ def _optional_comment(console: Console) -> str | None:
 
 
 def run_review_session(store: ReviewStore, console: Console | None = None) -> None:
-    """Run the one-key-at-a-time review loop; model output is never displayed."""
+    """Run the review loop and preserve every prediction shown before a vote."""
     console = console or Console()
     console.print("[bold]Knowledge-base article reviewer[/bold]")
-    console.print("Your choices are logged locally. Model recommendations are intentionally hidden before voting.\n")
+    console.print("Your choices and each displayed prediction are logged locally.\n")
     while True:
         article = store.next_unreviewed()
         console.clear()
@@ -85,7 +100,11 @@ def run_review_session(store: ReviewStore, console: Console | None = None) -> No
         if article is None:
             console.print(Panel("There are no unreviewed articles in this batch.", border_style="green"))
             return
-        console.print(_article_panel(article, store.summary()))
+        labels = tuple(LabeledArticle(store.article(label.article_id), label.label) for label in store.learning_labels())
+        prediction = predict_article(article, labels)
+        shown = store.record_prediction(article.id, prediction.label, prediction.confidence, prediction.kind,
+                                        prediction.fingerprint, prediction.training_label_count)
+        console.print(_article_panel(article, prediction))
         action = Prompt.ask("Action", choices=("i", "e", "s", "b", "q", "I", "E", "S", "B", "Q"),
                             show_choices=False).lower()
         if action == "q":
@@ -105,7 +124,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None) -> No
             continue
         label = "include" if action == "i" else "exclude"
         comment = _optional_comment(console)
-        store.record_vote(article.id, label, comment=comment)
+        store.record_vote(article.id, label, comment=comment, presentation_id=shown.id)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
