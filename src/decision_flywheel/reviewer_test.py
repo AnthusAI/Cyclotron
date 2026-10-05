@@ -12,6 +12,40 @@ from .events import FlywheelEvent
 from .run_ledger import FlywheelRound, FlywheelStatus
 
 
+def test_live_status_shows_rubric_features_class_balance_and_measured_promotion():
+    from .reviewer import _live_flywheel_status
+    class Client:
+        def status(self):
+            return {"version": "a" * 64, "rubric": "Recent practical work", "tasks": ["practical"],
+                    "example_ids": ["one", "two"], "fitted_head": True,
+                    "features": ["decision/include", "practical/yes"], "training_count": 12,
+                    "development_count": 4, "by_label": {"include": 5, "exclude": 7},
+                    "requests": 20, "ceiling": 100, "latest": {"kind": "promoted", "reason": "lower Brier",
+                    "candidate": {"accuracy": 1, "brier": .1}, "incumbent": {"accuracy": .5, "brier": .5}}}
+    panel = _live_flywheel_status(Client())
+    text = panel.renderable.plain
+    assert "Recent practical work" in text
+    assert "practical/yes" in text
+    assert "5 include" in text
+    assert "promoted" in text
+
+
+def test_optimizer_transcript_displays_actual_messages_replies_and_tool_calls_literally():
+    from .reviewer import _optimizer_transcript
+    events = ({"kind": "optimizer-request", "messages": [{"role": "user", "content": "[red]my feedback"}]},
+              {"kind": "optimizer-response", "content": '{"rationale":"time matters"}',
+               "tool_calls": [{"name": "inspect"}], "model": "fake", "usage": {"total_tokens": 9}})
+    text = _optimizer_transcript(events).plain
+    assert "[red]my feedback" in text
+    assert "time matters" in text
+    assert "inspect" in text
+
+
+def test_a_failed_prediction_is_not_replaced_by_an_unlabeled_local_classifier():
+    panel = _article_panel(Article("one", "Title", "Abstract", "2026-10-05", ("cs.AI",)), None)
+    assert "unavailable" in panel.renderable.plain
+
+
 def test_jsonl_import_accepts_only_title_abstract_records_with_explicit_metadata(tmp_path):
     path = tmp_path / "articles.jsonl"
     path.write_text(json.dumps({"id": "arxiv-1", "title": "A title", "abstract": "An abstract",

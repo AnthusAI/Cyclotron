@@ -18,6 +18,7 @@ tools = [
     "python-semantic-release>=10,<11",
 ]
 jev = ["typesafe-sdk>=0.7,<0.8", "python-dotenv>=1,<2"]
+optimizer = ["openai>=1.40,<3", "python-dotenv>=1,<2"]
 laya = ["laya"]
 kev = ["httpx>=0.27"]
 retrieval = ["numpy>=1.26"]

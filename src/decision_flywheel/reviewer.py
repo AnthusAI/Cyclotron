@@ -177,11 +177,53 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
 
-def _article_panel(article: Article, prediction: ReviewerPrediction) -> Panel:
+def _live_flywheel_status(client) -> Panel:
+    status = client.status()
+    latest = status["latest"] or {}
+    head = "Fitted ML head" if status["fitted_head"] else "Jev main decision only — waiting for a fitted head"
+    lines = [f"Active version: {status['version'][:12]} · {head}",
+             f"Training: {status['training_count']} ({status['by_label'].get('include', 0)} include, "
+             f"{status['by_label'].get('exclude', 0)} exclude) · Development: {status['development_count']}",
+             f"Rubric: {status['rubric'] or '(not yet inferred)'}",
+             f"Classification tasks: {', '.join(status['tasks']) or '(main decision only)'}",
+             f"Fixed examples: {', '.join(status['example_ids']) or '(none)'}",
+             f"ML features: {', '.join(status['features']) or '(head not fitted)'}",
+             f"Latest activity: {latest.get('kind', 'not run')} — {latest.get('reason', '')}",
+             f"Jev requests this session: {status['requests']}/{status['ceiling']}"]
+    for name in ("incumbent", "candidate"):
+        if name in latest:
+            score = latest[name]
+            lines.append(f"{name}: {score['accuracy']:.1%} development agreement · {score['brier']:.4f} Brier")
+    lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a feedback round now")
+    return Panel(Text("\n".join(lines)), title="Live Decision Flywheel", border_style="green")
+
+
+def _optimizer_transcript(events) -> Text:
+    request = next((event for event in reversed(events) if event['kind'] == 'optimizer-request'), None)
+    response = next((event for event in reversed(events) if event['kind'] == 'optimizer-response'), None)
+    lines = ["Latest actual optimizer transcript (private local record)"]
+    if request:
+        for message in request["messages"]:
+            lines.extend([f"\n{message['role'].upper()}:", message["content"]])
+    else:
+        lines.append("No optimizer request yet; collect enough eligible labels first.")
+    if response:
+        lines.extend(["\nRESPONSE:", response["content"], "\nTOOL CALLS:",
+                      json.dumps(response.get("tool_calls", []), indent=2),
+                      f"Model: {response.get('model')} · Usage: {response.get('usage')}"])
+    return Text("\n".join(lines))
+
+
+def _article_panel(article: Article, prediction: ReviewerPrediction | None) -> Panel:
     header = Text(article.title, style="bold white")
     metadata = Text(f"Submitted {article.submitted_at}  •  {' · '.join(article.categories)}", style="cyan")
     authors = Text(f"Authors: {article.authors}", style="cyan")
     publication = Text(f"Published as: {article.journal_ref}\n", style="cyan") if article.journal_ref else Text()
+    if prediction is None:
+        body = Text.assemble(header, "\n", metadata, "\n", authors, "\n", publication,
+                             "\nCurrent system prediction unavailable. No substitute classifier is being shown.\n\n",
+                             article.abstract)
+        return Panel(body, title="Article review", border_style="yellow", padding=(1, 2))
     label = "INCLUDE" if prediction.label == "include" else "EXCLUDE"
     source = (f"Measured Jev policy ({prediction.kind.removeprefix('jev:')})"
               if prediction.kind.startswith("jev:") else
