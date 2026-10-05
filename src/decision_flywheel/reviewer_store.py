@@ -78,6 +78,17 @@ class Presentation:
 
 
 @dataclass(frozen=True)
+class PredictionMetrics:
+    """Online agreement for predictions displayed before a human vote."""
+
+    scored_votes: int
+    correct_votes: int
+    accuracy: float | None
+    model_refreshes: int
+    latest_training_label_count: int
+
+
+@dataclass(frozen=True)
 class LearningLabel:
     """A current, explicitly eligible human vote for a later learning phase."""
 
@@ -374,6 +385,28 @@ class ReviewStore:
             if event.action == "vote" and self.assignment_for(article_id) == "train":
                 labels.append(LearningLabel(article_id, event.label, "train"))
         return tuple(sorted(labels, key=lambda item: item.article_id))
+
+    def prediction_metrics(self) -> PredictionMetrics:
+        """Measure pre-vote prediction agreement without treating skips as labels."""
+        active = self._active_actions()
+        scored = 0
+        correct = 0
+        for event in active.values():
+            if event.action != "vote" or event.presentation_id is None:
+                continue
+            row = self._connection.execute(
+                "SELECT predicted_label FROM presentations WHERE id = ?", (event.presentation_id,)
+            ).fetchone()
+            if row is None:  # Defensive: old or externally edited local databases cannot count as a score.
+                continue
+            scored += 1
+            correct += row["predicted_label"] == event.label
+        rows = self._connection.execute(
+            "SELECT predictor_kind, predictor_fingerprint, training_label_count FROM presentations ORDER BY shown_at, rowid"
+        ).fetchall()
+        refreshes = len({(row["predictor_kind"], row["predictor_fingerprint"]) for row in rows})
+        latest_count = int(rows[-1]["training_label_count"]) if rows else 0
+        return PredictionMetrics(scored, correct, correct / scored if scored else None, refreshes, latest_count)
 
     def summary(self) -> dict[str, int]:
         active = self._active_actions()

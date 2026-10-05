@@ -1,7 +1,7 @@
 PYTHON ?= python
 REVIEWER_BATCH ?= var/arxiv-review.jsonl
 REVIEWER_DATABASE ?= var/reviewer.sqlite3
-REVIEWER_LIMIT ?= 50
+REVIEWER_LIMIT ?= 250
 
 .PHONY: test demo review review-arxiv install-tools release
 

@@ -25,7 +25,7 @@ def test_the_local_predictor_learns_only_from_the_explicitly_supplied_human_labe
 
     assert prediction.label == "include"
     assert prediction.confidence > .5
-    assert prediction.kind == "lexical_naive_bayes"
+    assert prediction.kind == "lexical_naive_bayes_metadata"
 
 
 def test_the_predictor_fingerprint_changes_when_the_human_training_labels_change():

@@ -40,21 +40,25 @@ class ReviewerPrediction:
     training_label_count: int
 
 
-def _tokens(article: Article) -> tuple[str, ...]:
-    source = " ".join((article.title, article.abstract, article.submitted_at, " ".join(article.categories),
-                        article.authors, article.journal_ref or ""))
+def _tokens(article: Article, *, include_metadata: bool) -> tuple[str, ...]:
+    source = f"{article.title} {article.abstract}"
+    if include_metadata:
+        source = " ".join((source, article.submitted_at, " ".join(article.categories), article.authors,
+                           article.journal_ref or ""))
     return tuple(token.lower() for token in _TOKENS.findall(source))
 
 
-def _fingerprint(labels: Iterable[LabeledArticle]) -> str:
-    payload = [{"id": row.article.id, "label": row.label} for row in sorted(labels, key=lambda row: row.article.id)]
+def _fingerprint(labels: Iterable[LabeledArticle], *, include_metadata: bool) -> str:
+    payload = {"include_metadata": include_metadata,
+               "labels": [{"id": row.article.id, "label": row.label}
+                          for row in sorted(labels, key=lambda row: row.article.id)]}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def predict_article(article: Article, labels: Iterable[LabeledArticle]) -> ReviewerPrediction:
+def predict_article(article: Article, labels: Iterable[LabeledArticle], *, include_metadata: bool = True) -> ReviewerPrediction:
     """Return a smoothed multinomial naïve-Bayes prediction over human labels."""
     rows = tuple(labels)
-    fingerprint = _fingerprint(rows)
+    fingerprint = _fingerprint(rows, include_metadata=include_metadata)
     if not rows:
         return ReviewerPrediction("include", .5, "cold_start_prior", fingerprint, 0)
     documents = Counter(row.label for row in rows)
@@ -62,11 +66,11 @@ def predict_article(article: Article, labels: Iterable[LabeledArticle]) -> Revie
     totals = Counter()
     vocabulary = set()
     for row in rows:
-        tokens = _tokens(row.article)
+        tokens = _tokens(row.article, include_metadata=include_metadata)
         counts[row.label].update(tokens)
         totals[row.label] += len(tokens)
         vocabulary.update(tokens)
-    target = _tokens(article)
+    target = _tokens(article, include_metadata=include_metadata)
     vocabulary_size = max(len(vocabulary), 1)
     total_documents = len(rows)
     scores = {}
@@ -82,4 +86,5 @@ def predict_article(article: Article, labels: Iterable[LabeledArticle]) -> Revie
     probability_include = normalized["include"] / sum(normalized.values())
     label = "include" if probability_include >= .5 else "exclude"
     confidence = probability_include if label == "include" else 1 - probability_include
-    return ReviewerPrediction(label, confidence, "lexical_naive_bayes", fingerprint, len(rows))
+    kind = "lexical_naive_bayes_metadata" if include_metadata else "lexical_naive_bayes_content_only"
+    return ReviewerPrediction(label, confidence, kind, fingerprint, len(rows))

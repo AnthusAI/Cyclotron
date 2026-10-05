@@ -17,7 +17,8 @@ from rich.table import Table
 from rich.text import Text
 
 from .reviewer_predictor import LabeledArticle, ReviewerPrediction, predict_article
-from .reviewer_store import Article, ReviewStore
+from .reviewer_optimizer import ReviewerOptimization, optimize_reviewer_context
+from .reviewer_store import Article, PredictionMetrics, ReviewStore
 
 
 def load_articles_jsonl(path: str | Path) -> tuple[Article, ...]:
@@ -53,14 +54,33 @@ def load_articles_jsonl(path: str | Path) -> tuple[Article, ...]:
     return tuple(articles)
 
 
-def _summary_table(summary: dict[str, int]) -> Table:
+def _summary_table(summary: dict[str, int], metrics: PredictionMetrics) -> Table:
     table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_column(style="bold cyan")
     table.add_column(justify="right")
     for label, key in (("Articles", "articles"), ("Include", "include"), ("Exclude", "exclude"),
                        ("Skipped", "skip"), ("Remaining", "unreviewed")):
         table.add_row(label, str(summary[key]))
+    agreement = "—" if metrics.accuracy is None else f"{metrics.correct_votes}/{metrics.scored_votes} ({metrics.accuracy:.0%})"
+    table.add_row("Prediction agreement", agreement)
+    table.add_row("Eligible labels", str(summary["train_labels"]))
+    table.add_row("Model refreshes", str(metrics.model_refreshes))
     return table
+
+
+def _flywheel_status(optimization: ReviewerOptimization) -> Panel:
+    if not optimization.attempted:
+        readiness = f"Context optimizer: {optimization.reason}."
+    else:
+        candidates = " · ".join(f"{name}: {accuracy:.0%}" for name, accuracy in optimization.candidates.items())
+        readiness = (f"Context optimizer: selected {optimization.selected.name} "
+                     f"({optimization.selected_accuracy:.0%} leave-one-out accuracy). {candidates}")
+    return Panel(
+        f"{readiness}\n"
+        "The agreement score compares only the prediction shown before each active Include/Exclude vote with your vote. "
+        "Audit partitions remain excluded from baseline training.",
+        title="Flywheel status", border_style="magenta", padding=(0, 1),
+    )
 
 
 def _article_panel(article: Article, prediction: ReviewerPrediction) -> Panel:
@@ -96,12 +116,16 @@ def run_review_session(store: ReviewStore, console: Console | None = None) -> No
     while True:
         article = store.next_unreviewed()
         console.clear()
-        console.print(_summary_table(store.summary()))
+        summary = store.summary()
+        metrics = store.prediction_metrics()
+        console.print(_summary_table(summary, metrics))
+        labels = tuple(LabeledArticle(store.article(label.article_id), label.label) for label in store.learning_labels())
+        optimization = optimize_reviewer_context(labels)
+        console.print(_flywheel_status(optimization))
         if article is None:
             console.print(Panel("There are no unreviewed articles in this batch.", border_style="green"))
             return
-        labels = tuple(LabeledArticle(store.article(label.article_id), label.label) for label in store.learning_labels())
-        prediction = predict_article(article, labels)
+        prediction = predict_article(article, labels, include_metadata=optimization.selected.include_metadata)
         shown = store.record_prediction(article.id, prediction.label, prediction.confidence, prediction.kind,
                                         prediction.fingerprint, prediction.training_label_count)
         console.print(_article_panel(article, prediction))

@@ -113,3 +113,21 @@ def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_
     assert vote.presentation_id == shown.id
     assert store.presentations_for("arxiv-1") == (shown,)
     store.close()
+
+
+def test_prediction_metrics_score_only_predictions_that_were_shown_before_active_votes(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
+    store.import_articles((_article(1), _article(2)))
+    first = store.record_prediction("arxiv-1", "include", .75, "lexical_naive_bayes", "a" * 64, 3)
+    second = store.record_prediction("arxiv-2", "include", .50, "cold_start_prior", "b" * 64, 0)
+    store.record_vote("arxiv-1", "include", presentation_id=first.id)
+    store.record_vote("arxiv-2", "exclude", presentation_id=second.id)
+
+    metrics = store.prediction_metrics()
+
+    assert metrics.scored_votes == 2
+    assert metrics.correct_votes == 1
+    assert metrics.accuracy == .5
+    assert metrics.model_refreshes == 2
+    assert metrics.latest_training_label_count == 0
+    store.close()

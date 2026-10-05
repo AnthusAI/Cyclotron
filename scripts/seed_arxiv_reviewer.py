@@ -13,6 +13,7 @@ from datetime import date
 import json
 from pathlib import Path
 import random
+import time
 from typing import Any
 
 import requests
@@ -21,6 +22,26 @@ from huggingface_hub import HfApi
 
 DATASET = "librarian-bots/arxiv-metadata-snapshot"
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
+
+
+def _rows(offset: int) -> list[dict[str, Any]]:
+    """Fetch one bounded chunk, tolerating a brief dataset-server interruption."""
+    last_error: requests.RequestException | None = None
+    for attempt in range(3):
+        try:
+            response = requests.get(ROWS_URL, params={"dataset": DATASET, "config": "default", "split": "train",
+                                                       "offset": offset, "length": 100}, timeout=60)
+            response.raise_for_status()
+            payload = response.json()
+            rows = payload.get("rows", [])
+            if not isinstance(rows, list):
+                raise RuntimeError("the Hub dataset-server returned an invalid rows payload")
+            return rows
+        except requests.RequestException as error:
+            last_error = error
+            if attempt < 2:
+                time.sleep(.5 * (attempt + 1))
+    raise RuntimeError("the Hub dataset-server was unavailable after three bounded attempts") from last_error
 
 
 def _created(row: dict[str, Any]) -> str | None:
@@ -60,7 +81,7 @@ def _article(row: dict[str, Any], earliest: str) -> dict[str, Any] | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="sample recent CS abstracts from the public Hugging Face arXiv snapshot")
     parser.add_argument("--output", type=Path, required=True, help="local JSONL review batch")
-    parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument("--limit", type=int, default=250)
     parser.add_argument("--from-date", default="2025-01-01", help="inclusive ISO date")
     parser.add_argument("--seed", type=int, default=20261005)
     parser.add_argument("--max-chunks", type=int, default=200, help="bounded Hub dataset-server requests")
@@ -85,11 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             break
         offset = randomizer.randrange(0, total - 100)
         offsets.append(offset)
-        response = requests.get(ROWS_URL, params={"dataset": DATASET, "config": "default", "split": "train",
-                                                   "offset": offset, "length": 100}, timeout=60)
-        response.raise_for_status()
-        payload = response.json()
-        for wrapped in payload.get("rows", []):
+        for wrapped in _rows(offset):
             if isinstance(wrapped, dict) and isinstance(wrapped.get("row"), dict):
                 article = _article(wrapped["row"], args.from_date)
                 if article is not None:

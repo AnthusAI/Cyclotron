@@ -56,7 +56,7 @@ public arXiv metadata snapshot, then review it:
 make PYTHON=.venv/bin/python review-arxiv
 ```
 
-The first run samples 50 recent CS abstracts into ignored `var/` files, records
+The first run samples 250 recent CS abstracts into ignored `var/` files, records
 the precise source revision, then opens the reviewer. Later, resume the same
 review queue with `make PYTHON=.venv/bin/python review`.
 
@@ -65,7 +65,10 @@ comment field. Use `S` to skip, `B` to undo the latest action, and `Q` to save
 and leave. Before each vote it shows a transparent local prediction: a 50/50
 cold-start prior initially, then a lexical baseline trained only on eligible
 human labels. The exact displayed prediction is linked to your vote for later
-alignment analysis. The optional source download records its exact Hub
+alignment analysis. The screen also reports prediction agreement, eligible
+human labels, and baseline-refresh count after every decision. At 20 eligible
+labels containing both choices, it also runs and displays a leave-one-out
+comparison of content-only versus content-plus-metadata input. The optional source download records its exact Hub
 revision and selection parameters locally; article text and your review data
 are not committed.
 
