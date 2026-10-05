@@ -8,6 +8,7 @@ import pytest
 from .reviewer import _article_panel, _core_flywheel_status, load_articles_jsonl, load_flywheel_report
 from .reviewer_predictor import ReviewerPrediction
 from .reviewer_store import Article
+from .events import FlywheelEvent
 from .run_ledger import FlywheelRound, FlywheelStatus
 
 
@@ -101,3 +102,15 @@ def test_core_status_exposes_the_active_feature_names_from_the_generic_run_ledge
                                   ledger_status=FlywheelStatus("current", round_, 1))
 
     assert "Active decision elements: none; this policy currently uses context only." in str(panel.renderable)
+
+
+def test_core_status_exposes_recent_text_free_optimizer_activity():
+    report = {"version": 1, "model": "jev:example", "winner": "incumbent", "promoted": False,
+              "reason": "kept incumbent", "calls": {}, "scores": {}}
+    events = (FlywheelEvent("trial-started", "incumbent", None, 0, 0),
+              FlywheelEvent("decision-reused", "incumbent", "a" * 64, 0, 0),
+              FlywheelEvent("trial-completed", "incumbent", None, 0, 0))
+
+    panel = _core_flywheel_status(report, current_training_labels=12, events=events)
+
+    assert "Recent optimizer activity: incumbent trial-started → incumbent decision-reused" in str(panel.renderable)

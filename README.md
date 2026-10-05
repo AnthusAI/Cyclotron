@@ -50,7 +50,10 @@ states: `never-run`, `current`, or `stale`.
 This is the UI boundary for a terminal, web application, or service. It does
 not expose prompts, source records, labels, or private model reasoning. A UI
 can show current policy and features from its frozen artifact, then show the
-ledger's measured candidate trials, outcomes, and refresh state. The local
+ledger's measured candidate trials, outcomes, and refresh state. During a
+round, `JsonlEventStream` receives text-free `FlywheelEvent` records for trial
+starts, cache reuse, requests, completions, failures, and round completion;
+clients can render them live or after restart. The local
 ArXiv reviewer below is one client of this interface, not a second flywheel.
 
 ## Try the local article reviewer

@@ -20,6 +20,7 @@ from rich.text import Text
 from .adapters.jev import JevAdapter, JevConfiguration
 from .artifacts import load_artifact
 from .example_list import plan_example_list_round
+from .events import FlywheelEvent, JsonlEventStream
 from .reviewer_core import reviewer_item, reviewer_labeled_items, reviewer_task
 from .reviewer_predictor import LabeledArticle, ReviewerPrediction, predict_article
 from .reviewer_store import Article, PredictionMetrics, ReviewStore
@@ -95,7 +96,8 @@ def _summary_table(summary: dict[str, int], metrics: PredictionMetrics) -> Table
 
 
 def _core_flywheel_status(report: dict[str, object] | None, *, current_training_labels: int,
-                           ledger_status: FlywheelStatus | None = None) -> Panel:
+                           ledger_status: FlywheelStatus | None = None,
+                           events: tuple[FlywheelEvent, ...] = ()) -> Panel:
     """Render the measured core policy and whether new feedback has outgrown it."""
     if report is None:
         message = "No measured Jev flywheel run yet. Run `make run-flywheel` to evaluate the existing core on eligible feedback."
@@ -155,6 +157,12 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
                 feature_line = ""
         else:
             feature_line = ""
+        event_line = ""
+        if events:
+            recent = events[-5:]
+            event_line = "Recent optimizer activity: " + " → ".join(
+                f"{event.trial_name or 'round'} {event.event_type}" for event in recent
+            ) + "."
         message = (f"Last measured Jev run — {report['reason']}\n"
                    f"Winner: {report['winner']} · {calls.get('attempted', 0)} new Jev requests. {formatted}\n"
                    f"Feedback used: {feedback.get('total', 0)} eligible labels, "
@@ -164,6 +172,7 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
                    + (f"{activity_line}\n" if activity_line else "")
                    + (f"{ledger_line}\n" if ledger_line else "")
                    + (f"{feature_line}\n" if feature_line else "")
+                   + (f"{event_line}\n" if event_line else "")
                    + freshness)
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
@@ -200,6 +209,7 @@ def _optional_comment(console: Console) -> str | None:
 def run_review_session(store: ReviewStore, console: Console | None = None,
                        flywheel_report: dict[str, object] | None = None,
                        run_ledger: JsonlRunLedger | None = None,
+                       event_stream: JsonlEventStream | None = None,
                        predict: Callable[[Article], ReviewerPrediction] | None = None) -> None:
     """Run the review loop and preserve every prediction shown before a vote."""
     console = console or Console()
@@ -215,7 +225,8 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                          if run_ledger is not None else None)
         console.print(_summary_table(summary, metrics))
         console.print(_core_flywheel_status(flywheel_report, current_training_labels=summary["train_labels"],
-                                             ledger_status=ledger_status))
+                                             ledger_status=ledger_status,
+                                             events=event_stream.history() if event_stream is not None else ()))
         labels = tuple(LabeledArticle(store.article(label.article_id), label.label) for label in store.learning_labels())
         if article is None:
             console.print(Panel("There are no unreviewed articles in this batch.", border_style="green"))
@@ -258,6 +269,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="text-free report from scripts/run_reviewer_flywheel.py")
     parser.add_argument("--flywheel-ledger", type=Path,
                         help="text-free reusable flywheel run ledger")
+    parser.add_argument("--flywheel-events", type=Path,
+                        help="text-free live optimizer event stream")
     parser.add_argument("--live-jev", action="store_true",
                         help="serve predictions through the selected, measured Jev artifact")
     parser.add_argument("--confirm-live", action="store_true",
@@ -276,6 +289,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = load_flywheel_report(report_path)
         ledger_path = args.flywheel_ledger or args.database.parent / "reviewer-flywheel-runs.jsonl"
         ledger = JsonlRunLedger(ledger_path)
+        event_path = args.flywheel_events or args.database.parent / "reviewer-flywheel-events.jsonl"
+        event_stream = JsonlEventStream(event_path)
         live_predict = None
         if args.live_jev:
             if not args.confirm_live:
@@ -310,7 +325,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                           f"jev:{report['winner']}", artifact.artifact_hash,
                                           len(core_labels))
 
-        run_review_session(store, flywheel_report=report, run_ledger=ledger, predict=live_predict)
+        run_review_session(store, flywheel_report=report, run_ledger=ledger, event_stream=event_stream,
+                           predict=live_predict)
     return 0
 
 

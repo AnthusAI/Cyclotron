@@ -16,6 +16,7 @@ from pathlib import Path
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.artifacts import ArtifactValidationError, create_artifact, load_compatible_fixed_incumbent
 from decision_flywheel.example_list import improve_example_list
+from decision_flywheel.events import JsonlEventStream
 from decision_flywheel.run_ledger import FlywheelRound, JsonlRunLedger, TrialActivity, feedback_fingerprint
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
@@ -72,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifact", type=Path, default=Path("var/reviewer-flywheel-artifact.json"))
     parser.add_argument("--ledger", type=Path, default=Path("var/reviewer-flywheel-runs.jsonl"),
                         help="append-only text-free measured-round ledger")
+    parser.add_argument("--events", type=Path, default=Path("var/reviewer-flywheel-events.jsonl"),
+                        help="append-only text-free live optimizer events")
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--model", default="jev-latest")
     parser.add_argument("--confirm-live", action="store_true",
@@ -95,6 +98,15 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(checkpoint, dict):
         raise ValueError("optimizer checkpoint must be a JSON object")
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.model))
+    event_stream = JsonlEventStream(args.events)
+
+    def observe(event) -> None:
+        event_stream.append(event)
+        if event.event_type in {"trial-started", "trial-completed", "trial-incomplete", "round-completed"}:
+            scope = event.trial_name or "round"
+            print(f"[{scope}] {event.event_type}: {event.calls_attempted} attempted, "
+                  f"{event.calls_succeeded} succeeded")
+
     incumbent = None
     if args.artifact.exists():
         try:
@@ -105,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     improvement = asyncio.run(improve_example_list(
         reviewer_task(), labels, adapter, max_model_calls=args.max_requests, per_label=2, dev_max=6,
         incumbent=incumbent, hard_demo_ids=hard_demo_ids, checkpoint=checkpoint,
-        model_fingerprint=adapter.model_identity,
+        model_fingerprint=adapter.model_identity, event_sink=observe,
     ))
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
     args.checkpoint.write_text(json.dumps(checkpoint, sort_keys=True, indent=2) + "\n", encoding="utf-8")
