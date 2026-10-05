@@ -42,3 +42,17 @@ def test_reviewer_predictions_identify_the_core_version_without_a_local_replacem
     assert reviewer.history()[-1]["kind"] == "prediction"
     core.close()
     store.close()
+
+
+def test_active_configuration_inspection_shows_the_exact_question_not_just_its_name(tmp_path):
+    from .models import DecisionTask
+    config = ClassifierConfig(reviewer_task(), tasks=(DecisionTask(
+        "about_knowledge_bases", ("yes", "no"), "Is this paper about knowledge bases?"),))
+    with ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture") as store:
+        core = DecisionFlywheel(tmp_path / "wheel.sqlite", config, FakeModel(), agent([]))
+        status = ReviewerFlywheel(store, core).status()
+        definition = status["task_definitions"][0]
+        assert definition["instructions"] == "Is this paper about knowledge bases?"
+        assert definition["labels"] == ["yes", "no"]
+        assert status["main_decision"]["instructions"] == reviewer_task().instructions
+        core.close()
