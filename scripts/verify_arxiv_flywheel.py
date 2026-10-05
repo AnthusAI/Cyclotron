@@ -25,7 +25,7 @@ def main(argv=None):
     parser.add_argument("--max-requests", type=int, default=60)
     parser.add_argument("--max-optimizer-calls", type=int, default=2)
     parser.add_argument("--development-limit", type=int, default=6)
-    parser.add_argument("--optimizer-model", default="gpt-4.1-mini")
+    parser.add_argument("--optimizer-model", default="gpt-6-luna")
     parser.add_argument("--jev-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
     args = parser.parse_args(argv)

@@ -297,7 +297,7 @@ make PYTHON=.venv/bin/python review
 ```
 
 This command authorizes at most 500 Jev requests and 10 optimizer requests per session.
-The defaults are `jev-1.13.0` and `gpt-4.1-mini`. Override `JEV_MODEL`, `OPTIMIZER_MODEL`,
+The defaults are `jev-1.13.0` and `gpt-6-luna`. Override `JEV_MODEL`, `OPTIMIZER_MODEL`,
 `REVIEWER_REQUESTS`, `OPTIMIZER_CALLS`, or `OPTIMIZE_EVERY` in the make command.
 `make review-arxiv` reuses or downloads the batch and starts this same **paid live mode**.
 

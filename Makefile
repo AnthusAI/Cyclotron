@@ -5,7 +5,7 @@ REVIEWER_LIMIT ?= 250
 REVIEWER_REQUESTS ?= 500
 OPTIMIZER_CALLS ?= 10
 OPTIMIZE_EVERY ?= 10
-OPTIMIZER_MODEL ?= gpt-4.1-mini
+OPTIMIZER_MODEL ?= gpt-6-luna
 JEV_MODEL ?= jev-1.13.0
 
 .PHONY: test demo review review-local review-arxiv run-flywheel review-live install-tools release

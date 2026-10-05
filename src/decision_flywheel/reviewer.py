@@ -381,7 +381,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="predict and optimize through the reusable feedback/rubric/features/head loop")
     parser.add_argument("--runtime-database", type=Path,
                         help="private persistent flywheel state and actual request/reply transcripts")
-    parser.add_argument("--optimizer-model", default="gpt-4.1-mini")
+    parser.add_argument("--optimizer-model", default="gpt-6-luna")
     parser.add_argument("--jev-model", default="jev-1.13.0")
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
     parser.add_argument("--optimize-every", type=int, default=10,
