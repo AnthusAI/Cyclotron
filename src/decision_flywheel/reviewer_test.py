@@ -5,7 +5,6 @@ import json
 
 import pytest
 
-from . import reviewer
 from .reviewer import load_articles_jsonl
 
 
@@ -26,16 +25,3 @@ def test_jsonl_import_rejects_source_records_without_the_full_reviewer_payload(t
 
     with pytest.raises(ValueError, match="line 1"):
         load_articles_jsonl(path)
-
-
-def test_the_explicit_explanation_action_requires_a_nonempty_rationale(monkeypatch):
-    replies = iter(("i", "why this belongs"))
-    monkeypatch.setattr(reviewer.Prompt, "ask", lambda *_args, **_kwargs: next(replies))
-
-    assert reviewer._explained_vote(reviewer.Console()) == ("include", "why this belongs")
-
-
-def test_the_explicit_explanation_action_records_nothing_when_cancelled(monkeypatch):
-    monkeypatch.setattr(reviewer.Prompt, "ask", lambda *_args, **_kwargs: "cancel")
-
-    assert reviewer._explained_vote(reviewer.Console()) is None

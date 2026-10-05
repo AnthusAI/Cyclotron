@@ -57,10 +57,10 @@ The first run samples 50 recent CS abstracts into ignored `var/` files, records
 the precise source revision, then opens the reviewer. Later, resume the same
 review queue with `make PYTHON=.venv/bin/python review`.
 
-Use `I` to include, `E` to exclude, `C` to make a decision with a required
-explanation, `S` to skip, `B` to undo the latest action, and `Q` to save and
-leave. Model recommendations are intentionally withheld until after a human vote.
-The optional source download records its exact Hub
+Use `I` to include or `E` to exclude; each immediately offers an optional
+comment field. Use `S` to skip, `B` to undo the latest action, and `Q` to save
+and leave. Model recommendations are intentionally withheld until after a human
+vote. The optional source download records its exact Hub
 revision and selection parameters locally; article text and your review data
 are not committed.
 
