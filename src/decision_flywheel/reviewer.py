@@ -63,13 +63,27 @@ def _article_panel(article: Article, summary: dict[str, int]) -> Panel:
     header = Text(article.title, style="bold white")
     metadata = Text(f"{article.submitted_at}  •  {' · '.join(article.categories)}", style="cyan")
     body = Text.assemble(header, "\n", metadata, "\n\n", article.abstract)
-    return Panel(body, title="Article review", subtitle="I include · E exclude · S skip · B undo · Q quit",
+    return Panel(body, title="Article review",
+                 subtitle="I include · E exclude · C decide + explain · S skip · B undo · Q quit",
                  border_style="blue", padding=(1, 2))
 
 
 def _optional_comment(console: Console) -> str | None:
     value = Prompt.ask("Optional comment", default="").strip()
     return value or None
+
+
+def _explained_vote(console: Console) -> tuple[str, str] | None:
+    """Collect a deliberate decision-and-rationale pair, or let the reviewer cancel."""
+    choice = Prompt.ask("Decision", choices=("i", "e", "I", "E", "cancel"), default="cancel").lower()
+    if choice == "cancel":
+        return None
+    explanation = Prompt.ask("What mattered?", default="").strip()
+    if not explanation:
+        console.print("No explanation entered; nothing was recorded.")
+        Prompt.ask("Press Enter to continue", default="")
+        return None
+    return ("include" if choice == "i" else "exclude", explanation)
 
 
 def run_review_session(store: ReviewStore, console: Console | None = None) -> None:
@@ -85,7 +99,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None) -> No
             console.print(Panel("There are no unreviewed articles in this batch.", border_style="green"))
             return
         console.print(_article_panel(article, store.summary()))
-        action = Prompt.ask("Action", choices=("i", "e", "s", "b", "q", "I", "E", "S", "B", "Q"),
+        action = Prompt.ask("Action", choices=("i", "e", "c", "s", "b", "q", "I", "E", "C", "S", "B", "Q"),
                             show_choices=False).lower()
         if action == "q":
             console.print("Review session saved locally.")
@@ -101,6 +115,12 @@ def run_review_session(store: ReviewStore, console: Console | None = None) -> No
             continue
         if action == "s":
             store.record_skip(article.id)
+            continue
+        if action == "c":
+            explained = _explained_vote(console)
+            if explained is not None:
+                label, comment = explained
+                store.record_vote(article.id, label, comment=comment)
             continue
         label = "include" if action == "i" else "exclude"
         comment = _optional_comment(console)
