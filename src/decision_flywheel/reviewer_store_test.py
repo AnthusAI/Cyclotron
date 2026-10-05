@@ -71,6 +71,18 @@ def test_an_unreviewed_legacy_article_can_be_enriched_with_new_source_metadata(t
     store.close()
 
 
+def test_a_reviewed_article_keeps_the_metadata_that_the_reviewer_saw_when_source_metadata_changes(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
+    legacy = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",))
+    enriched = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",), "Ada Lovelace")
+    store.import_articles((legacy,))
+    store.record_vote("arxiv-1", "include")
+
+    assert store.import_articles((enriched,)) == 0
+    assert store.article("arxiv-1") == legacy
+    store.close()
+
+
 def test_a_skip_is_recorded_but_does_not_create_a_training_label(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(),))

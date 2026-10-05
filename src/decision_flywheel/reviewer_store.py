@@ -226,8 +226,12 @@ class ReviewStore:
                             (article.authors, article.journal_ref, article.id),
                         )
                         continue
-                    else:
-                        raise ValueError("an imported article ID already has different content")
+                    if source_content_matches:
+                        # A human may already have reviewed the older record.
+                        # Preserve exactly the metadata they saw while accepting
+                        # the overlapping source batch.
+                        continue
+                    raise ValueError("an imported article ID already has different content")
                 self._connection.execute(
                     "INSERT INTO articles(id, title, abstract, submitted_at, categories_json, authors, journal_ref, assignment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (article.id, article.title, article.abstract, article.submitted_at, categories, article.authors,
