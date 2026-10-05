@@ -8,6 +8,7 @@ import pytest
 from .reviewer import _article_panel, _core_flywheel_status, load_articles_jsonl, load_flywheel_report
 from .reviewer_predictor import ReviewerPrediction
 from .reviewer_store import Article
+from .run_ledger import FlywheelRound, FlywheelStatus
 
 
 def test_jsonl_import_accepts_only_title_abstract_records_with_explicit_metadata(tmp_path):
@@ -84,3 +85,19 @@ def test_core_status_exposes_the_real_trials_and_the_held_aside_development_slic
     assert "14 candidate labels and 6 held-aside development labels" in rendered
     assert "incumbent: completed, 6 decisions, 0 cached" in rendered
     assert "hard-swap: completed, 6 decisions, 1 cached" in rendered
+
+
+def test_core_status_exposes_the_active_feature_names_from_the_generic_run_ledger():
+    round_ = FlywheelRound(
+        task_fingerprint="a" * 64, input_fingerprint="b" * 64, active_policy_fingerprint="c" * 64,
+        model_fingerprint="jev:example", feedback_count=12, candidate_count=8, development_count=4,
+        objective_name="brier", winner="incumbent", promoted=False, outcome="incumbent-retained",
+        calls_attempted=8, calls_succeeded=8, trials=(),
+    )
+    report = {"version": 1, "model": "jev:example", "winner": "incumbent", "promoted": False,
+              "reason": "kept incumbent", "calls": {}, "scores": {}}
+
+    panel = _core_flywheel_status(report, current_training_labels=12,
+                                  ledger_status=FlywheelStatus("current", round_, 1))
+
+    assert "Active decision elements: none; this policy currently uses context only." in str(panel.renderable)

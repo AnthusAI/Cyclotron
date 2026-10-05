@@ -42,7 +42,8 @@ Use `make test` for all offline specifications.
 The library owns optimization, artifacts, and a restart-safe, text-free
 `JsonlRunLedger`; an application owns presentation. Each completed measured
 round becomes a typed `FlywheelRound`, containing only fingerprints, counts,
-trial outcomes, call accounting, and promotion status. On restart, any client
+trial outcomes, call accounting, promotion status, active decision-element
+definitions, and structured feature-proposal lifecycle records. On restart, any client
 can call `ledger.status(current_feedback_fingerprint)` and render one of three
 states: `never-run`, `current`, or `stale`.
 

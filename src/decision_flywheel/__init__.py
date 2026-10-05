@@ -10,6 +10,8 @@ from .context import FixedExampleList, PerLabelLexicalRetrieval, PrototypeBalanc
 from .example_list import (ExampleListImprovement, example_list_from_policy, improve_example_list,
                            plan_example_list_round)
 from .optimizer import OptimizationResult, TrialSpec, search_context_policies
+from .run_ledger import (FeatureActivity, FeatureDefinition, FlywheelRound, FlywheelStatus,
+                         JsonlRunLedger, TrialActivity, feedback_fingerprint)
 
 
 def run_demo(*args, **kwargs):
@@ -20,8 +22,9 @@ def run_demo(*args, **kwargs):
 __all__ = [
     "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
     "DeployableArtifact", "ExampleListImprovement", "FixedExampleList", "Item", "LabeledItem", "ModelCapabilities", "OptimizationResult",
+    "FeatureActivity", "FeatureDefinition", "FlywheelRound", "FlywheelStatus", "JsonlRunLedger", "TrialActivity",
     "PerLabelLexicalRetrieval", "PrototypeBalanced", "RandomBalanced", "TrialSpec",
     "build_context_ladder", "build_context_plan", "create_artifact", "example_list_from_policy", "improve_example_list", "load_artifact", "load_bundle",
     "plan_example_list_round", "run_demo",
-    "search_context_policies",
+    "search_context_policies", "feedback_fingerprint",
 ]

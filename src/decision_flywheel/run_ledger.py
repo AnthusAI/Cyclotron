@@ -22,6 +22,8 @@ from .models import DecisionTask, LabeledItem
 _OUTCOMES = frozenset({"promoted", "incumbent-retained", "incomplete"})
 _TRIAL_STATUSES = frozenset({"completed", "incomplete", "not-run"})
 _OBJECTIVES = frozenset({"accuracy", "macro-f1", "brier"})
+_FEATURE_ACTIVITY_STATUSES = frozenset({"proposed", "awaiting-review", "rejected", "evaluated", "promoted",
+                                        "not-promoted", "fit-failed", "guard-rejected"})
 
 
 def _fingerprint(value: object) -> str:
@@ -77,6 +79,56 @@ class TrialActivity:
 
 
 @dataclass(frozen=True)
+class FeatureDefinition:
+    """A currently active decision element, without its source records or prompt text."""
+
+    key: str
+    question_type: str
+    feature_names: tuple[str, ...]
+    definition_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.key, str) or not self.key:
+            raise ValueError("feature key must be non-empty")
+        if not isinstance(self.question_type, str) or not self.question_type:
+            raise ValueError("feature question type must be non-empty")
+        if (not isinstance(self.feature_names, tuple) or not self.feature_names
+                or any(not isinstance(name, str) or not name for name in self.feature_names)
+                or len(set(self.feature_names)) != len(self.feature_names)):
+            raise ValueError("feature names must be unique non-empty strings")
+        _digest("feature definition fingerprint", self.definition_fingerprint)
+
+
+@dataclass(frozen=True)
+class FeatureActivity:
+    """A structured optimizer action concerning one decision element.
+
+    ``reason_code`` is deliberately a short code owned by the application; an
+    optimizer's unbounded prose rationale is not a safe substitute for measured
+    evidence and does not enter the reusable ledger.
+    """
+
+    proposal_fingerprint: str
+    feature_key: str
+    status: str
+    reason_code: str | None
+    objective_delta: float | None
+
+    def __post_init__(self) -> None:
+        _digest("feature proposal fingerprint", self.proposal_fingerprint)
+        if not isinstance(self.feature_key, str) or not self.feature_key:
+            raise ValueError("feature activity key must be non-empty")
+        if self.status not in _FEATURE_ACTIVITY_STATUSES:
+            raise ValueError("feature activity status is not recognized")
+        if self.reason_code is not None and (not isinstance(self.reason_code, str) or not self.reason_code):
+            raise ValueError("feature activity reason code must be non-empty or omitted")
+        if self.objective_delta is not None and (isinstance(self.objective_delta, bool)
+                                                 or not isinstance(self.objective_delta, (float, int))
+                                                 or not math.isfinite(self.objective_delta)):
+            raise ValueError("feature activity objective delta must be finite or omitted")
+
+
+@dataclass(frozen=True)
 class FlywheelRound:
     """A complete, UI-consumable observation of one measured flywheel round."""
 
@@ -94,6 +146,8 @@ class FlywheelRound:
     calls_attempted: int
     calls_succeeded: int
     trials: tuple[TrialActivity, ...]
+    active_features: tuple[FeatureDefinition, ...] = ()
+    feature_activity: tuple[FeatureActivity, ...] = ()
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def __post_init__(self) -> None:
@@ -121,6 +175,13 @@ class FlywheelRound:
             raise ValueError("trials must be TrialActivity values")
         if len({trial.name for trial in self.trials}) != len(self.trials):
             raise ValueError("trial names must be unique")
+        if (not isinstance(self.active_features, tuple)
+                or any(not isinstance(feature, FeatureDefinition) for feature in self.active_features)
+                or len({feature.key for feature in self.active_features}) != len(self.active_features)):
+            raise ValueError("active features must have unique keys")
+        if (not isinstance(self.feature_activity, tuple)
+                or any(not isinstance(activity, FeatureActivity) for activity in self.feature_activity)):
+            raise ValueError("feature activity must contain FeatureActivity values")
 
     @property
     def fingerprint(self) -> str:
@@ -132,6 +193,10 @@ class FlywheelRound:
         value = asdict(self)
         if not include_created_at:
             value.pop("created_at")
+            if not value["active_features"]:
+                value.pop("active_features")
+            if not value["feature_activity"]:
+                value.pop("feature_activity")
         return value
 
     @classmethod
@@ -141,11 +206,23 @@ class FlywheelRound:
         expected = {"task_fingerprint", "input_fingerprint", "active_policy_fingerprint", "model_fingerprint",
                     "feedback_count", "candidate_count", "development_count", "objective_name", "winner",
                     "promoted", "outcome", "calls_attempted", "calls_succeeded", "trials", "created_at"}
-        if set(value) != expected or not isinstance(value["trials"], list):
+        optional = {"active_features", "feature_activity"}
+        expected |= optional
+        if ((set(value) != expected and set(value) != expected - optional) or not isinstance(value["trials"], list)
+                or ("active_features" in value and not isinstance(value["active_features"], list))
+                or ("feature_activity" in value and not isinstance(value["feature_activity"], list))):
             raise ValueError("run ledger entry has unexpected fields")
         try:
             trials = tuple(TrialActivity(**trial) for trial in value["trials"])
-            return cls(**{key: value[key] for key in expected if key != "trials"}, trials=trials)
+            active_features = tuple(FeatureDefinition(
+                feature["key"], feature["question_type"], tuple(feature["feature_names"]),
+                feature["definition_fingerprint"]
+            ) for feature in value.get("active_features", []))
+            feature_activity = tuple(FeatureActivity(**activity) for activity in value.get("feature_activity", []))
+            return cls(**{key: value[key] for key in expected if key not in {
+                "trials", "active_features", "feature_activity"
+            } and key in value
+            }, trials=trials, active_features=active_features, feature_activity=feature_activity)
         except (TypeError, ValueError) as error:
             raise ValueError("run ledger entry is invalid") from error
 

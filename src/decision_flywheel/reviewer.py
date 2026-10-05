@@ -146,6 +146,15 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
             elif ledger_status.phase == "stale":
                 ledger_line = (f"Run ledger: {ledger_status.completed_rounds} measured round(s); "
                                "new feedback requires another measured round.")
+            if ledger_status.latest is not None:
+                features = ledger_status.latest.active_features
+                feature_line = ("Active decision elements: "
+                                + (", ".join(feature.key for feature in features)
+                                   if features else "none; this policy currently uses context only.") )
+            else:
+                feature_line = ""
+        else:
+            feature_line = ""
         message = (f"Last measured Jev run — {report['reason']}\n"
                    f"Winner: {report['winner']} · {calls.get('attempted', 0)} new Jev requests. {formatted}\n"
                    f"Feedback used: {feedback.get('total', 0)} eligible labels, "
@@ -154,6 +163,7 @@ def _core_flywheel_status(report: dict[str, object] | None, *, current_training_
                    + (f"{round_line}\n" if round_line else "")
                    + (f"{activity_line}\n" if activity_line else "")
                    + (f"{ledger_line}\n" if ledger_line else "")
+                   + (f"{feature_line}\n" if feature_line else "")
                    + freshness)
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
