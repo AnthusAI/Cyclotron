@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "62975730-0a36-4060-abc7-ecb28833d17c",
+  "issue_id": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-05T21:56:52.744Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Deliver a small, model-neutral toolkit that improves decision alignment from trusted labels. Start with the Decision Context Optimizer, explicit model capabilities, and reproducible policies. Then extract the existing trusted-feedback, learned-head, and human-reviewed steering mechanics from Jev-Flywheel. Dataset preparation and actual studies belong in the companion evaluations board.\n\nCompanion initiative: decision-flywheel-evaluations-049a2c8b-1798-5cf5-8a81-3cda98d0f924 in https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues.\n\nCompletion: Jev/Kev/Laya capability conformance, automated development-only selection, versioned artifacts, fake-client specs, a complete offline walkthrough, and linked experimental evidence. The optional DSPy bridge must demonstrate automated optimization, not inference alone.",
+        "to": "## Current product definition (2026-10-05)\nOne reusable, provider-neutral Python Decision Flywheel. A live LLM optimizer interprets trusted labels and explanations and proposes edits to three independent request parts: the main decision rubric in state, a fixed few-shot example collection, and decision-element classification tasks/questions/options. Main and element probabilities form features for a custom fitted ML head. Code validates edits; fitting owns numerical parameters. Prefer one decision-model request per item containing all questions and state where supported. No DSPy dependency, bridge or optimization path.\n\n## First milestone\ndecision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88: complete, observable arXiv feedback-to-classifier integration, including restart and correction. Core owns orchestration, optimizer interfaces, fitting, versioning and events. Companion decision-flywheel-evaluations-9f4e5e77-958d-4c64-a60d-d9e2f41a255b in Decision-Flywheel-Evaluations owns source/protocol, reviewer integration and study reports. Closed component stories are not evidence the live reviewer completes the loop.\n\n## Completion\nEnd-to-end fake-client specs and explicitly approved bounded live verification prove feedback -> proposal -> request/features -> fit -> development evaluation -> promotion/rejection -> served version and visible client events. Protected audit/scoreboard never guide proposals/fits/selection. Dynamic retrieval, input-filter optimization and cross-model studies remain later work. This description supersedes conflicting historical comments, including two requests per item and DSPy."
+      }
+    }
+  }
+}
