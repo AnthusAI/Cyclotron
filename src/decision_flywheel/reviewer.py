@@ -93,22 +93,32 @@ def _summary_table(summary: dict[str, int], metrics: PredictionMetrics) -> Table
     return table
 
 
-def _core_flywheel_status(report: dict[str, object] | None) -> Panel:
+def _core_flywheel_status(report: dict[str, object] | None, *, current_training_labels: int) -> Panel:
+    """Render the measured core policy and whether new feedback has outgrown it."""
     if report is None:
         message = "No measured Jev flywheel run yet. Run `make run-flywheel` to evaluate the existing core on eligible feedback."
     else:
         calls = report["calls"]
         scores = report["scores"]
-        feedback = report.get("training_feedback", {})
+        feedback_value = report.get("training_feedback", {})
+        feedback = feedback_value if isinstance(feedback_value, dict) else {}
         formatted = " · ".join(
             f"{name}: {values.get('accuracy', 0):.0%} accuracy / {values.get('brier', 0):.3f} Brier"
             for name, values in sorted(scores.items()) if isinstance(values, dict)
         )
+        used_labels = feedback.get("total", 0)
+        if not isinstance(used_labels, int) or isinstance(used_labels, bool):
+            used_labels = 0
+        new_labels = max(0, current_training_labels - used_labels)
+        freshness = ("Policy is current for eligible labels."
+                     if new_labels == 0 else
+                     f"Policy is stale: {new_labels} new eligible labels await the next measured core round.")
         message = (f"Last measured Jev run — {report['reason']}\n"
                    f"Winner: {report['winner']} · {calls.get('attempted', 0)} new Jev requests. {formatted}\n"
                    f"Feedback used: {feedback.get('total', 0)} eligible labels, "
                    f"{feedback.get('comments', 0)} comments, "
-                   f"{feedback.get('hard_jev_corrections', 0)} wrong-Jev corrections for hard-swap.")
+                   f"{feedback.get('hard_jev_corrections', 0)} wrong-Jev corrections for hard-swap.\n"
+                   f"{freshness}")
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
 
@@ -154,7 +164,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
         summary = store.summary()
         metrics = store.prediction_metrics()
         console.print(_summary_table(summary, metrics))
-        console.print(_core_flywheel_status(flywheel_report))
+        console.print(_core_flywheel_status(flywheel_report, current_training_labels=summary["train_labels"]))
         labels = tuple(LabeledArticle(store.article(label.article_id), label.label) for label in store.learning_labels())
         if article is None:
             console.print(Panel("There are no unreviewed articles in this batch.", border_style="green"))

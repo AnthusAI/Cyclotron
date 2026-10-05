@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from .reviewer import _article_panel, load_articles_jsonl, load_flywheel_report
+from .reviewer import _article_panel, _core_flywheel_status, load_articles_jsonl, load_flywheel_report
 from .reviewer_predictor import ReviewerPrediction
 from .reviewer_store import Article
 
@@ -50,3 +50,14 @@ def test_article_panel_identifies_a_jev_prediction_as_the_measured_policy():
     panel = _article_panel(article, ReviewerPrediction("include", .8, "jev:incumbent", "a" * 64, 12))
 
     assert "Measured Jev policy (incumbent)" in panel.renderable.plain
+
+
+def test_core_status_exposes_how_many_eligible_labels_have_arrived_since_the_frozen_run():
+    report = {"version": 1, "model": "jev:jev-latest", "winner": "incumbent", "promoted": False,
+              "reason": "kept incumbent", "calls": {"attempted": 12},
+              "scores": {"incumbent": {"accuracy": .67, "brier": .33}},
+              "training_feedback": {"total": 34, "comments": 2, "hard_jev_corrections": 0}}
+
+    panel = _core_flywheel_status(report, current_training_labels=37)
+
+    assert "3 new eligible labels" in str(panel.renderable)
