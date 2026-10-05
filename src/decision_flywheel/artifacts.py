@@ -10,7 +10,7 @@ from typing import Any, Sequence
 
 from .budget import ContextBudget, ContextPlan, build_context_plan
 from .context import (POLICY_VERSION, FixedExampleList, PerLabelLexicalRetrieval, PolicyMetadata,
-                      PrototypeBalanced, RandomBalanced)
+                      PrototypeBalanced, RandomBalanced, input_hash)
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
 
 
@@ -127,6 +127,41 @@ def load_artifact(serialized: str, task: DecisionTask, pool: Sequence[LabeledIte
         document["development"]["fingerprint"], document["search"]["fingerprint"],
         document["search"]["trial_name"], supplied_hash,
     )
+
+
+def load_compatible_fixed_incumbent(serialized: str, task: DecisionTask,
+                                    current_labels: Sequence[LabeledItem]) -> FixedExampleList:
+    """Rehydrate a prior fixed policy for the next optimization round.
+
+    A frozen artifact is intentionally exact about the pool it serves, so it
+    cannot itself be loaded against a pool that has grown with new human
+    labels.  The incumbent policy is different: it remains valid precisely
+    when every prior example and reserve is still an unchanged trusted label.
+    This function verifies the artifact's schema and checksum before making
+    that narrower compatibility check.  It never silently falls back to a
+    fresh seed when the prior policy is no longer reproducible.
+    """
+    try:
+        document = json.loads(serialized, object_pairs_hook=_unique_object)
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ArtifactValidationError("artifact must be valid JSON") from error
+    _validate_document(document)
+    supplied_hash = document["artifact_hash"]
+    without_hash = {key: value for key, value in document.items() if key != "artifact_hash"}
+    if supplied_hash != _hash(without_hash):
+        raise ArtifactValidationError("artifact hash does not match content")
+    if document["task_fingerprint"] != task.fingerprint:
+        raise ArtifactValidationError("task fingerprint does not match artifact")
+    policy = _policy_from_document(document["policy"])
+    if not isinstance(policy, FixedExampleList):
+        raise ArtifactValidationError("only a fixed-example-list artifact can be a reusable incumbent")
+    by_id = {row.item.id: row for row in current_labels}
+    for ref in policy.examples + policy.reserves:
+        row = by_id.get(ref.id)
+        if row is None or row.source != "trusted" or row.label != ref.label or input_hash(task, row.item) != ref.input_hash:
+            raise ArtifactValidationError(
+                f"prior fixed example {ref.id!r} no longer matches a current trusted label")
+    return policy
 
 
 def _pool_document(task: DecisionTask, pool: Sequence[LabeledItem]) -> list[dict[str, str]]:

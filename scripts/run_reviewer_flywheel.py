@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
-from decision_flywheel.artifacts import create_artifact
+from decision_flywheel.artifacts import ArtifactValidationError, create_artifact, load_compatible_fixed_incumbent
 from decision_flywheel.example_list import improve_example_list
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
@@ -92,9 +92,17 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(checkpoint, dict):
         raise ValueError("optimizer checkpoint must be a JSON object")
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.model))
+    incumbent = None
+    if args.artifact.exists():
+        try:
+            incumbent = load_compatible_fixed_incumbent(
+                args.artifact.read_text(encoding="utf-8"), reviewer_task(), labels)
+        except (OSError, ArtifactValidationError) as error:
+            parser.error(f"cannot reuse the previous frozen policy as this round's incumbent: {error}")
     improvement = asyncio.run(improve_example_list(
         reviewer_task(), labels, adapter, max_model_calls=args.max_requests, per_label=2, dev_max=6,
-        hard_demo_ids=hard_demo_ids, checkpoint=checkpoint, model_fingerprint=adapter.model_identity,
+        incumbent=incumbent, hard_demo_ids=hard_demo_ids, checkpoint=checkpoint,
+        model_fingerprint=adapter.model_identity,
     ))
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
     args.checkpoint.write_text(json.dumps(checkpoint, sort_keys=True, indent=2) + "\n", encoding="utf-8")
