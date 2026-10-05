@@ -142,6 +142,21 @@ def test_hard_learning_examples_are_only_wrong_jev_predictions_with_eligible_hum
     store.close()
 
 
+def test_hard_learning_examples_prioritize_the_most_confident_wrong_jev_predictions(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
+                        final_audit_rate=0)
+    store.import_articles((_article(1), _article(2), _article(3)))
+    low = store.record_prediction("arxiv-1", "exclude", .55, "jev:incumbent", "a" * 64, 4)
+    high = store.record_prediction("arxiv-2", "exclude", .95, "jev:incumbent", "a" * 64, 4)
+    right = store.record_prediction("arxiv-3", "include", .99, "jev:incumbent", "a" * 64, 4)
+    store.record_vote("arxiv-1", "include", presentation_id=low.id)
+    store.record_vote("arxiv-2", "include", presentation_id=high.id)
+    store.record_vote("arxiv-3", "include", presentation_id=right.id)
+
+    assert store.hard_learning_example_ids() == ("arxiv-2", "arxiv-1")
+    store.close()
+
+
 def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(),))
