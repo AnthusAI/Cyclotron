@@ -12,6 +12,26 @@ from .events import FlywheelEvent
 from .run_ledger import FlywheelRound, FlywheelStatus
 
 
+def test_cli_exposes_provider_neutral_decision_selection(capsys):
+    from .reviewer import main
+    with pytest.raises(SystemExit) as error:
+        main(["--help"])
+    assert error.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "--decisions-provider" in help_text
+    assert "--decisions-model" in help_text
+    assert "--jev-model" not in help_text
+
+
+def test_historical_prediction_agreement_is_not_presented_as_current_model_accuracy():
+    from .reviewer import _summary_table
+    from .reviewer_store import PredictionMetrics
+    table = _summary_table(dict(articles=10, include=2, exclude=3, skip=0, unreviewed=5, train_labels=4),
+                           PredictionMetrics(5, 3, .6, 2, 4))
+    assert "Historical prediction agreement" in table.columns[0]._cells
+    assert "Model refreshes" not in table.columns[0]._cells
+
+
 def test_live_status_shows_rubric_features_class_balance_and_measured_promotion():
     from .reviewer import _live_flywheel_status
     class Client:
@@ -67,8 +87,11 @@ def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_pat
     from .reviewer_store import ReviewStore
     class Client:
         improves = 0
-        def improve(self):
+        retries = []
+        def improve(self, *, retry_interrupted=False):
             self.improves += 1
+            if retry_interrupted:
+                self.retries.append(True)
         def reconcile(self):
             pass
         def predict(self, article):
@@ -83,7 +106,7 @@ def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_pat
                     {"kind": "optimizer-response", "content": '{"rationale":"practical"}', "model": "fake"},
                     {"kind": "decision-request", "target_id": "one", "state": {"rubric": "Practical"},
                      "questions": {"decision": {"criteria": {"include": None}}}})
-    answers = iter(["o", "", "j", "", "i", "My critical explanation", "q"])
+    answers = iter(["r", "no", "r", "yes", "o", "", "j", "", "i", "My critical explanation", "q"])
     monkeypatch.setattr("decision_flywheel.reviewer.Prompt.ask", lambda *a, **k: next(answers))
     output = StringIO()
     client = Client()
@@ -95,7 +118,9 @@ def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_pat
         assert store.events_for("one")[0].comment == "My critical explanation"
         assert len(store.events_for("one")) == 1
         assert client.improves >= 1
+        assert client.retries == [True]
     assert "my evidence" in output.getvalue()
+    assert "Current version rolling-audit agreement: not measured yet" in output.getvalue()
     assert "criteria" in output.getvalue()
 
 

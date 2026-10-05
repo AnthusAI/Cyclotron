@@ -24,6 +24,23 @@ def test_development_assignment_is_fixed_before_labels_and_independent_of_arriva
         development_assignment("study", "a", rate=1.5)
 
 
+def test_an_interrupted_optimizer_round_is_visible_and_requires_an_explicit_retry(tmp_path):
+    path = tmp_path / "wheel.sqlite"
+    def interrupt(_):
+        raise KeyboardInterrupt
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), OptimizerAgent(interrupt))
+    kwargs = dict(protected=(), propensities={row.item.id: 1.0 for row in TRAIN})
+    with pytest.raises(KeyboardInterrupt):
+        asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))
+    wheel.close()
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]))
+    result = asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))
+    assert "retry" in result["reason"]
+    assert wheel.history()[-1]["kind"] == "round-interrupted"
+    assert asyncio.run(wheel.improve(TRAIN, DEV, retry_interrupted=True, **kwargs))["promoted"]
+    wheel.close()
+
+
 class FakeModel:
     model_identity = "fake-fixed"
     calls = 0

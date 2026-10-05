@@ -94,9 +94,9 @@ def _summary_table(summary: dict[str, int], metrics: PredictionMetrics) -> Table
                        ("Skipped", "skip"), ("Remaining", "unreviewed")):
         table.add_row(label, str(summary[key]))
     agreement = "—" if metrics.accuracy is None else f"{metrics.correct_votes}/{metrics.scored_votes} ({metrics.accuracy:.0%})"
-    table.add_row("Prediction agreement", agreement)
+    table.add_row("Historical prediction agreement", agreement)
     table.add_row("Eligible labels", str(summary["train_labels"]))
-    table.add_row("Model refreshes", str(metrics.model_refreshes))
+    table.add_row("Prediction versions seen", str(metrics.model_refreshes))
     return table
 
 
@@ -199,7 +199,9 @@ def _live_flywheel_status(client) -> Panel:
         if name in latest:
             score = latest[name]
             lines.append(f"{name}: {score['accuracy']:.1%} development agreement · {score['brier']:.4f} Brier")
-    lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a feedback round now")
+    lines.append(f"Recorded optimizer requests/replies: {status.get('optimizer_requests_recorded', 0)}/"
+                 f"{status.get('optimizer_responses_recorded', 0)}")
+    lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a round · R retry interrupted round")
     return Panel(Text("\n".join(lines)), title="Live Decision Flywheel", border_style="green")
 
 
@@ -297,6 +299,12 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                          if run_ledger is not None else None)
         console.print(_summary_table(summary, metrics))
         if flywheel:
+            current_metrics = store.prediction_metrics(assignments=("rolling_audit",),
+                                                       predictor_fingerprint=flywheel.status()["version"])
+            current_score = (f"{current_metrics.correct_votes}/{current_metrics.scored_votes} "
+                             f"({current_metrics.accuracy:.0%})" if current_metrics.accuracy is not None else
+                             "not measured yet — no reviewed rolling-audit predictions for this version")
+            console.print(Text("Current version rolling-audit agreement: " + current_score))
             console.print(_live_flywheel_status(flywheel))
         else:
             console.print(_core_flywheel_status(flywheel_report, current_training_labels=summary["train_labels"],
@@ -319,7 +327,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
             console.print(Text(f"Prediction unavailable ({type(error).__name__}); feedback can still be saved."))
         console.print(_article_panel(article, prediction))
         while True:
-            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g") if flywheel else ("i", "e", "s", "b", "q")
+            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r") if flywheel else ("i", "e", "s", "b", "q")
             action = Prompt.ask("Action", choices=choices + tuple(key.upper() for key in choices),
                                 show_choices=False).lower()
             if flywheel and action in ("o", "f", "j"):
@@ -331,6 +339,14 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 continue
             if flywheel and action == "g":
                 flywheel.improve()
+                console.print(_live_flywheel_status(flywheel))
+                continue
+            if flywheel and action == "r":
+                answer = Prompt.ask("Retry the interrupted optimizer round within this session's paid ceilings? "
+                                    "Only do this when no other reviewer session is running",
+                                    choices=("yes", "no"), default="no")
+                if answer == "yes":
+                    flywheel.improve(retry_interrupted=True)
                 console.print(_live_flywheel_status(flywheel))
                 continue
             break
@@ -382,7 +398,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--runtime-database", type=Path,
                         help="private persistent flywheel state and actual request/reply transcripts")
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
-    parser.add_argument("--jev-model", default="jev-1.13.0")
+    parser.add_argument("--decisions-provider", choices=("jev",), default="jev",
+                        help="decision adapter; the connected reviewer currently supports Jev")
+    parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
     parser.add_argument("--optimize-every", type=int, default=10,
                         help="run a core round after this many additional votes; G requests one sooner")
@@ -407,12 +425,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("supply --articles for a new review database")
         if args.live_flywheel:
             from .adapters.openai_optimizer import OpenAIOptimizer
-            adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.jev_model))
+            adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
             transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
             console = Console()
             console.print(Text(f"Paid live mode: at most {args.max_live_requests} Jev requests and "
                                f"{args.max_optimizer_calls} optimizer requests in this session. "
-                               f"Models: {args.jev_model}, {args.optimizer_model}."))
+                               f"Decisions: {args.decisions_provider}/{args.decisions_model}. "
+                               f"Optimizer: {args.optimizer_model}."))
             def observe(event):
                 kind = event["kind"]
                 if kind == "decision-request":
@@ -425,7 +444,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     console.print(Panel(Text(str(rationale)), title="Optimizer's stated rationale"))
                 elif kind in {"optimizer-request", "fit-started", "fit-completed", "candidate-evaluated",
                               "promoted", "candidate-rejected", "round-failed", "waiting-for-labels",
-                              "classifier-invalidated"}:
+                              "classifier-invalidated", "round-interrupted", "round-retry-authorized"}:
                     console.print(Text(f"Flywheel: {kind} · " + json.dumps(
                         {key: value for key, value in event.items() if key not in {"messages", "created_at", "kind"}},
                         ensure_ascii=False)))
@@ -462,7 +481,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             round_plan = plan_example_list_round(reviewer_task(), core_labels, per_label=2, dev_max=6)
             artifact = load_artifact(artifact_path.read_text(encoding="utf-8"), reviewer_task(),
                                      round_plan.candidates, pool_revision)
-            adapter = JevAdapter.from_environment(configuration=JevConfiguration(model="jev-latest"))
+            adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
             request_count = 0
 
             def live_predict(article: Article) -> ReviewerPrediction:

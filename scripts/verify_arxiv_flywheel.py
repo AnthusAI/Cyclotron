@@ -26,7 +26,8 @@ def main(argv=None):
     parser.add_argument("--max-optimizer-calls", type=int, default=2)
     parser.add_argument("--development-limit", type=int, default=6)
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
-    parser.add_argument("--jev-model", default="jev-1.13.0")
+    parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
+    parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
     args = parser.parse_args(argv)
     if not args.confirm_live:
@@ -35,7 +36,7 @@ def main(argv=None):
         parser.error("ceilings and development limit must be positive")
     if not args.database.is_file():
         parser.error("existing rated database required")
-    adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.jev_model))
+    adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
     transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
     def observe(event):
         if event["kind"] in {"optimizer-request", "optimizer-response", "fit-started", "fit-completed",

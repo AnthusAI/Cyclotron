@@ -33,12 +33,13 @@ class ReviewerFlywheel:
             "jev:flywheel-head" if self.core.active.head else "jev:flywheel-warmup",
             self.core.active.fingerprint, len(training))
 
-    def improve(self):
+    def improve(self, *, retry_interrupted: bool = False):
         training, development, protected = self.partitions()
         # This demo reviews every displayed item. A future sampled reviewer must
         # pass its actual recorded review propensities instead of this full-review policy.
         return asyncio.run(self.core.improve(training, development, protected=protected,
-                                            propensities={row.item.id: 1.0 for row in training}))
+                                            propensities={row.item.id: 1.0 for row in training},
+                                            retry_interrupted=retry_interrupted))
 
     def reconcile(self):
         training, development, _ = self.partitions()
@@ -49,7 +50,7 @@ class ReviewerFlywheel:
         active = self.core.active
         events = self.history()
         outcome = next((event for event in reversed(events) if event["kind"] in
-                       {"promoted", "candidate-rejected", "round-failed", "waiting-for-labels",
+                       {"promoted", "candidate-rejected", "round-failed", "round-interrupted", "waiting-for-labels",
                         "classifier-invalidated"}), None)
         def definition(task):
             return {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
@@ -58,6 +59,8 @@ class ReviewerFlywheel:
                 "main_decision": definition(active.config.task),
                 "task_definitions": [definition(task) for task in active.config.tasks],
                 "dynamic_elements": list(active.config.dynamic_elements),
+                "optimizer_requests_recorded": sum(event["kind"] == "optimizer-request" for event in events),
+                "optimizer_responses_recorded": sum(event["kind"] == "optimizer-response" for event in events),
                 "example_ids": list(active.config.example_ids), "fitted_head": active.head is not None,
                 "features": list(active.head.feature_names) if active.head else [],
                 "training_count": len(training), "development_count": len(development),

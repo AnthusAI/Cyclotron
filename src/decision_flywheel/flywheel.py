@@ -265,7 +265,8 @@ class DecisionFlywheel:
                 raise ValueError("each training label requires a recorded selection propensity")
 
     async def improve(self, training: Sequence[LabeledItem], development: Sequence[LabeledItem], *,
-                      protected: Sequence[Item], propensities: Mapping[str, float]) -> dict:
+                      protected: Sequence[Item], propensities: Mapping[str, float],
+                      retry_interrupted: bool = False) -> dict:
         self._validate_partitions(training, development, protected, propensities)
         self.reconcile_feedback(training, development=development)
         round_key = _hash({"training": self._evidence(training), "development": self._evidence(development),
@@ -277,7 +278,15 @@ class DecisionFlywheel:
                 if "active" in cached:
                     self._activate(_restore(cached["active"]))
                 return cached.get("result", cached)
-            return {"promoted": False, "reason": "interrupted round requires explicit retry authorization"}
+            if not retry_interrupted:
+                result = {"promoted": False, "reason": "interrupted round requires explicit retry authorization"}
+                self._emit({"kind": "round-interrupted", **result})
+                return result
+            # Only this round is authorized again. Failed/pending decision
+            # requests retain their separate no-silent-repayment guard.
+            with self.db:
+                self.db.execute("DELETE FROM runtime_rounds WHERE key=? AND status='pending'", (round_key,))
+            self._emit({"kind": "round-retry-authorized", "round_fingerprint": round_key})
         counts = {label: sum(row.label == label for row in training) for label in self.initial.task.labels}
         if min(counts.values()) < 3 or len(development) < 2:
             result = {"promoted": False, "reason": "waiting for at least three training votes per label and two development votes"}

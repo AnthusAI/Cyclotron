@@ -297,7 +297,8 @@ make PYTHON=.venv/bin/python review
 ```
 
 This command authorizes at most 500 Jev requests and 10 optimizer requests per session.
-The defaults are `jev-1.13.0` and `gpt-6-luna`. Override `JEV_MODEL`, `OPTIMIZER_MODEL`,
+The defaults are `DECISIONS_PROVIDER=jev`, `DECISIONS_MODEL=jev-1.13.0`, and
+`OPTIMIZER_MODEL=gpt-6-luna`. Override `DECISIONS_PROVIDER`, `DECISIONS_MODEL`, `OPTIMIZER_MODEL`,
 `REVIEWER_REQUESTS`, `OPTIMIZER_CALLS`, or `OPTIMIZE_EVERY` in the make command.
 `make review-arxiv` reuses or downloads the batch and starts this same **paid live mode**.
 
@@ -312,6 +313,16 @@ After each 10 new votes, the core attempts another measured round. Use `G` to re
 The display reports class counts, active rubric/questions/features, fitting and promotion events.
 Use `O` for the actual optimizer prompt, response and tool calls; `J` for the actual Jev request and answer;
 and `F` for active classifier details. These inspection commands do not add votes.
+The connected reviewer currently supports the Jev adapter. The provider-neutral
+flags are `--decisions-provider` and `--decisions-model`; other adapters are not
+yet connected to this full classifier-request path.
+Historical prediction agreement combines the predictions you saw from different
+versions. It is not current-model accuracy. Current-version rolling-audit agreement
+is displayed separately, with its reviewed sample count (or explicitly not measured).
+An interrupted optimizer round is shown as interrupted, not as a successful older
+promotion. Use `R` and confirm to retry that round within the session's paid ceilings,
+only when no other reviewer session is running. This does not silently retry failed
+decision-model requests.
 If a prediction fails or the paid ceiling is reached, feedback can still be saved.
 The display says prediction unavailable; it does not quietly substitute another classifier.
 
