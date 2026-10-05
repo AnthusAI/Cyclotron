@@ -20,7 +20,7 @@ from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_tas
 from decision_flywheel.reviewer_store import ReviewStore
 
 
-def _report(improvement, labels, comments: int, *, artifact_path: Path, pool_revision: str,
+def _report(improvement, labels, comments: int, hard_examples: int, *, artifact_path: Path, pool_revision: str,
             artifact_hash: str) -> dict[str, object]:
     optimization = improvement.optimization
     return {
@@ -28,6 +28,7 @@ def _report(improvement, labels, comments: int, *, artifact_path: Path, pool_rev
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model": optimization.model_fingerprint,
         "training_feedback": {"total": len(labels), "comments": comments,
+                              "hard_jev_corrections": hard_examples,
                               "by_label": {label: sum(row.label == label for row in labels)
                                            for label in ("include", "exclude")}},
         "development": {"count": len(improvement.round.development),
@@ -70,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     with ReviewStore(args.database, study_seed="arxiv-review-v1") as store:
         feedback = store.learning_feedback()
         labels = reviewer_labeled_items(feedback, store.article)
+        hard_demo_ids = store.hard_learning_example_ids()
     counts = {label: sum(row.label == label for row in labels) for label in ("include", "exclude")}
     if min(counts.values()) < 3:
         parser.error("need at least three eligible Include and three eligible Exclude labels before optimization")
@@ -82,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.model))
     improvement = asyncio.run(improve_example_list(
         reviewer_task(), labels, adapter, max_model_calls=args.max_requests, per_label=2, dev_max=6,
-        checkpoint=checkpoint, model_fingerprint=adapter.model_identity,
+        hard_demo_ids=hard_demo_ids, checkpoint=checkpoint, model_fingerprint=adapter.model_identity,
     ))
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
     args.checkpoint.write_text(json.dumps(checkpoint, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -93,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     args.artifact.parent.mkdir(parents=True, exist_ok=True)
     args.artifact.write_text(artifact + "\n", encoding="utf-8")
     artifact_hash = json.loads(artifact)["artifact_hash"]
-    report = _report(improvement, labels, sum(row.comment is not None for row in feedback),
+    report = _report(improvement, labels, sum(row.comment is not None for row in feedback), len(hard_demo_ids),
                      artifact_path=args.artifact, pool_revision=pool_revision, artifact_hash=artifact_hash)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")

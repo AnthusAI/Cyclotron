@@ -99,12 +99,16 @@ def _core_flywheel_status(report: dict[str, object] | None) -> Panel:
     else:
         calls = report["calls"]
         scores = report["scores"]
+        feedback = report.get("training_feedback", {})
         formatted = " · ".join(
             f"{name}: {values.get('accuracy', 0):.0%} accuracy / {values.get('brier', 0):.3f} Brier"
             for name, values in sorted(scores.items()) if isinstance(values, dict)
         )
         message = (f"Last measured Jev run — {report['reason']}\n"
-                   f"Winner: {report['winner']} · {calls.get('attempted', 0)} Jev requests. {formatted}")
+                   f"Winner: {report['winner']} · {calls.get('attempted', 0)} new Jev requests. {formatted}\n"
+                   f"Feedback used: {feedback.get('total', 0)} eligible labels, "
+                   f"{feedback.get('comments', 0)} comments, "
+                   f"{feedback.get('hard_jev_corrections', 0)} wrong-Jev corrections for hard-swap.")
     return Panel(message, title="Measured Decision Flywheel", border_style="green", padding=(0, 1))
 
 

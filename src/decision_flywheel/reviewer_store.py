@@ -407,6 +407,20 @@ class ReviewStore:
                 labels.append(LearningFeedback(article_id, event.label, event.comment))
         return tuple(sorted(labels, key=lambda item: item.article_id))
 
+    def hard_learning_example_ids(self) -> tuple[str, ...]:
+        """Eligible human corrections of a displayed Jev policy, for core hard-swap trials."""
+        hard = []
+        for article_id, event in self._active_actions().items():
+            if event.action != "vote" or event.presentation_id is None or self.assignment_for(article_id) != "train":
+                continue
+            presentation = self._connection.execute(
+                "SELECT predicted_label, predictor_kind FROM presentations WHERE id = ?", (event.presentation_id,)
+            ).fetchone()
+            if (presentation is not None and str(presentation["predictor_kind"]).startswith("jev:")
+                    and presentation["predicted_label"] != event.label):
+                hard.append(article_id)
+        return tuple(sorted(hard))
+
     def prediction_metrics(self) -> PredictionMetrics:
         """Measure pre-vote prediction agreement without treating skips as labels."""
         active = self._active_actions()

@@ -129,6 +129,19 @@ def test_learning_feedback_exposes_only_train_votes_and_their_human_comments(tmp
     store.close()
 
 
+def test_hard_learning_examples_are_only_wrong_jev_predictions_with_eligible_human_labels(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
+                        final_audit_rate=0)
+    store.import_articles((_article(1), _article(2)))
+    wrong = store.record_prediction("arxiv-1", "exclude", .8, "jev:incumbent", "a" * 64, 4)
+    local = store.record_prediction("arxiv-2", "exclude", .8, "lexical_naive_bayes", "b" * 64, 4)
+    store.record_vote("arxiv-1", "include", presentation_id=wrong.id)
+    store.record_vote("arxiv-2", "include", presentation_id=local.id)
+
+    assert store.hard_learning_example_ids() == ("arxiv-1",)
+    store.close()
+
+
 def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(),))
