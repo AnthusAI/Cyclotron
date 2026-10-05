@@ -57,8 +57,12 @@ make PYTHON=.venv/bin/python review-arxiv
 ```
 
 The first run samples 250 recent CS abstracts into ignored `var/` files, records
-the precise source revision, then opens the reviewer. Later, resume the same
-review queue with `make PYTHON=.venv/bin/python review`.
+the precise source revision, then opens the reviewer. Use this local collection
+mode until there are at least three Include and three Exclude training votes.
+After that, resume the same queue with `make PYTHON=.venv/bin/python review`:
+it runs one bounded, measured Jev core round and serves the selected frozen
+policy. `make PYTHON=.venv/bin/python review-local` is the explicit no-provider
+fallback.
 
 Use `I` to include or `E` to exclude; each immediately offers an optional
 comment field. Use `S` to skip, `B` to undo the latest action, and `Q` to save
@@ -80,11 +84,12 @@ on a sealed development subset, and writes a text-free report plus a frozen
 artifact. Rolling and final audit labels are never candidates, examples, or
 development targets.
 
-This is paid work and therefore always requires an explicit command:
+This is paid work and therefore always requires the explicit `make review` or
+`make run-flywheel` command:
 
 ```bash
-make PYTHON=.venv/bin/python run-flywheel
-make PYTHON=.venv/bin/python review-live
+make PYTHON=.venv/bin/python run-flywheel  # evaluate and freeze a policy
+make PYTHON=.venv/bin/python review-live   # serve the already-frozen policy
 ```
 
 The regular review screen displays the latest measured candidate outcomes. A
