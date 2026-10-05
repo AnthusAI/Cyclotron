@@ -1,0 +1,44 @@
+direction: down
+
+assignment: "Assign each item before its human label\nSave the assignment across restarts\nPrevent duplicate text across partitions"
+
+partitions: "LABELED DATA PARTITIONS" {
+  direction: right
+  training: "Training\nItems, labels, comments"
+  development: "Development\nItems and labels"
+  audit: "Ongoing audit\nItems and labels"
+  holdout: "Permanent holdout\nItems and labels"
+}
+assignment -> partitions
+
+learning: "LEARN AND SELECT A CANDIDATE" {
+  direction: down
+  optimizer: "LLM optimizer and example selector\nInfer rubric and propose classification tasks\nSelect few-shot examples from training records"
+  fitter: "Custom ML fitter\nUse complete training features and labels\nFit weights and calibration"
+  compare: "Development comparison\nScore candidate and active versions\nChoose changes with the declared rule"
+  optimizer -> fitter: "Validated candidate definition"
+  fitter -> compare: "Candidate classifier"
+}
+partitions.training -> learning.optimizer: "Training feedback only"
+partitions.training -> learning.fitter: "Training labels and feature rows"
+partitions.development -> learning.compare: "Comparison labels only"
+
+frozen: "Active classifier version\nSave rubric, examples, tasks, features, and ML model\nFreeze before independent evaluation"
+learning.compare -> frozen: "Promote only if the rule passes"
+
+measurement: "MEASURE ALIGNMENT" {
+  direction: right
+  ongoing: "Ongoing audit score\nSave prediction before the human vote\nAccuracy, per-class recall, and uncertainty\nReport recent results and sample size"
+  final: "Final holdout score\nTest a frozen version\nDo not use the score to select changes"
+}
+frozen -> measurement.ongoing: "Saved-version predictions"
+frozen -> measurement.final: "Frozen-version predictions"
+partitions.audit -> measurement.ongoing: "Audit labels only"
+partitions.holdout -> measurement.final: "Holdout labels only"
+
+review: "Review-rate control\nStart with full review\nReduce review only with sufficient audit evidence\nKeep a random audit sample"
+measurement.ongoing -> review: "Measured accuracy and uncertainty"
+
+rules: "DATA RULES\nAudit and holdout labels or comments never enter optimization or fitting.\nDevelopment labels never enter optimizer prompts, examples, or ML training.\nRepeated development searches can make selection scores optimistic.\nUncertain items alone do not give an unbiased accuracy estimate." {
+  shape: text
+}

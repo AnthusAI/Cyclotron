@@ -1,0 +1,47 @@
+direction: down
+
+feedback: "Human training feedback\nLabels and explanations"
+optimizer: "LLM optimizer\nPropose rubric, example-list, and task edits"
+feedback -> optimizer
+
+request: "ACTUAL DECISION-MODEL REQUEST\nstate + questions" {
+  direction: right
+  state: "state" {
+    target: "target\nThe new item's text and metadata"
+    rubric: "rubric [adjustable]\nCriteria for Include or Exclude\nStarts with a simple question"
+    examples: "examples [adjustable]\nSelected labeled items\nInclude / Exclude + optional explanations"
+  }
+  questions: "questions" {
+    main: "Main decision [rubric adjustable]\nShould this item be included?\nApply state.rubric to state.target\nUse state.examples\nOptions: Include / Exclude"
+    elements: "Element classifications [adjustable]\nOptimizer-defined questions and criteria\nExample: practical / theoretical / none\nExample: evaluation / other\nEach task applies to state.target"
+  }
+}
+
+optimizer -> request.state.rubric: "1. Revise rubric"
+optimizer -> request.state.examples: "2. Improve example collection"
+optimizer -> request.questions.elements: "3. Add, edit, or remove tasks"
+
+model: "Decision model\nJev (or another provider adapter)\nOne Jev request carries state and all questions"
+request -> model: "Send the complete request"
+
+answers: "Structured response" {
+  direction: right
+  main: "Main answer\nInclude / Exclude probabilities"
+  elements: "Element answers\nClassification probabilities or scores\nOne answer per task"
+}
+model -> answers: "Return all task answers"
+features: "Feature conversion\nMain answer + element answers\nBecome named numerical ML inputs"
+answers -> features
+head: "Custom trained ML model\nCombine features with fitted weights\nApply fitted confidence calibration"
+features -> head
+result: "Final classification\nInclude or Exclude + confidence"
+head -> result
+
+training: "ML fitter\nFit from complete feature rows\nand trusted human training labels"
+feedback -> training: "Training labels"
+features -> training: "Training-item features"
+training -> head: "Fitted weights and calibration"
+
+note: "Proposed edits must pass validation and evaluation before use.\nFixed optimized example collection first; per-item retrieval is a later exploration." {
+  shape: text
+}

@@ -17,6 +17,22 @@ def test_the_initial_classifier_has_no_invented_rubric_or_examples():
     assert list(request["questions"]) == ["decision"]
 
 
+def test_a_papers_knowledge_base_subject_is_a_valid_feature_separate_from_its_inclusion_decision():
+    parent = ClassifierConfig(TASK)
+    proposal = {"rationale": "The human accepted papers about knowledge bases.",
+                "rubric": "Prefer research about knowledge bases.",
+                "tasks": [{"name": "about_knowledge_bases",
+                           "instructions": "Is this paper about knowledge bases?",
+                           "labels": ["yes", "no"]}]}
+    child = parent.apply(proposal, POOL)
+    request = child.request(Item("new", {"text": "A paper about knowledge bases"}), POOL)
+    assert request["questions"]["decision"]["options"] == ["include", "exclude"]
+    feature = request["questions"]["about_knowledge_bases"]
+    assert feature["instructions"].startswith("Is this paper about knowledge bases?")
+    assert feature["options"] == ["yes", "no"]
+    assert parent.tasks == ()
+
+
 def test_a_proposal_changes_all_three_parts_and_preserves_the_parent_version():
     parent = ClassifierConfig(TASK)
     child = parent.apply({"rationale": "Practical recent work", "rubric": "Practical work",

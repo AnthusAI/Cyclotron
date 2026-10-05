@@ -1,218 +1,392 @@
 # Decision Flywheel
 
-Decision Flywheel is a small, model-neutral library for selecting labelled
-context for structured decisions. It keeps the policy, budget, display order,
-model identity, and development objective auditable. Its optional local head
-fits deterministic numerical weights only from trusted feedback labels.
+Decision Flywheel is a reusable Python library for decisions that improve with human feedback.
+The human supplies labels and optional explanations.
+An LLM optimizer uses this feedback to propose changes to the decision rubric.
+The decision model answers the rubric questions.
+A fitted ML model uses those answers to predict the final label.
+Code measures each change before it replaces the active version.
 
-Optimization remains native to Decision Flywheel and provider-neutral; DSPy is
-not part of this library's scope. This is an implementation boundary, not an
-experimental result.
+The flywheel improves two parts of the classifier.
+The LLM optimizer adjusts the rubric and defines the classification tasks for the decision model.
+It sets each task's question, answer options, and criteria. It also selects labeled examples.
+The ML fitter learns how to combine the answers from the decision model.
+Human feedback supplies the evidence for both changes.
 
-## Run the offline walkthrough
+## Design and implementation status
+
+The diagrams below show the intended complete system.
+They define the work that the library must support.
+They do not prove that the current reviewer runs all these steps.
+
+The live reviewer now calls the reusable `DecisionFlywheel` core.
+The core analyzes eligible votes and comments, validates proposals, collects Jev features,
+fits and calibrates the ML head, compares development results, and promotes or rejects a version.
+Private SQLite records preserve the active version, request cache, and actual transcripts.
+Offline tests cover this connected path. A successful paid live demonstration is a separate verification step;
+passing tests does not establish live-model quality or improvement.
+
+| Part | Current state |
+| --- | --- |
+| Human votes, comments, skip, and undo | Available in the reviewer |
+| Fixed example selection | Optimizer proposes a list; code validates it and measures the candidate |
+| LLM analysis of feedback | Injected optimizer interface; opt-in OpenAI transport |
+| Rubric and classification-task changes | Validated structured proposals, applied to the actual request |
+| Feature conversion and ML fit | Connected to the core; trusted fitting and out-of-fold calibration |
+| Candidate evaluation and promotion | Same-development Brier comparison; incumbent retained on failure |
+| Optimizer and Jev inspection | Actual local prompts, replies, tool calls, request state/questions and answers |
+| Live performance | Must be measured; no guaranteed improvement |
+
+## Terms
+
+Use these terms with the same meaning throughout the system.
+
+| Term | Meaning |
+| --- | --- |
+| Item | One article or other record to classify |
+| Label | The human's final decision for an item |
+| Feedback | A label, an optional comment, and the prediction shown before the vote |
+| Rubric | The criteria that explain which label an item should receive |
+| Decision element | One question or programmatic input in the scorecard |
+| Scorecard | The saved set of decision elements and their definitions |
+| Decision model | A model, such as Jev, that answers the scorecard questions |
+| Feature | A numerical input derived from a decision-element answer |
+| ML model | The fitted decision head that maps features to a final prediction |
+| LLM optimizer | The agent that analyzes feedback and proposes structural changes |
+| Candidate | A proposed version that has not passed its evaluation |
+| Active version | The saved version used for current predictions |
+| Development set | Labeled items used to compare candidates |
+| Audit set | Labeled items used to measure alignment outside the optimization loop |
+
+## The classifier at the center of the flywheel
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/classifier-dark.png">
+  <img src="docs/diagrams/classifier-light.png" alt="The LLM optimizer adjusts the rubric, few-shot example collection, and element classification tasks in the decision-model request. The returned main and element answers become features for the custom ML model.">
+</picture>
+
+[Editable D2 source](docs/diagrams/classifier.d2)
+
+The request contains the new item in `state.target`.
+It contains three adjustable parts:
+
+- `state.rubric`: criteria for the main Include or Exclude decision.
+- `state.examples`: the selected collection of labeled few-shot examples.
+- `questions`: the main decision and optimizer-defined element classification tasks.
+
+The main question starts as “Should this item be included?”
+Its instructions can refer to the evolving rubric in `state.rubric`.
+The optimizer experiments with the example collection and the element tasks.
+Each element task defines its question, answer options, and criteria.
+The main answer and element answers become features for the custom ML model.
+Per-item example retrieval is a later exploration.
+
+This classifier generalizes the mechanism demonstrated in Jev Flywheel.
+The LLM optimizer controls two definitions: the final-label rubric and the decision model's classification tasks.
+The rubric describes what the human wants included or excluded.
+Each classification task asks the decision model to identify an attribute of the item.
+The optimizer can add, remove, or change tasks and their answer options and criteria.
+These task answers supply the features for our custom ML model.
+They are intermediate classifications. The custom ML model produces the final Include or Exclude label.
+
+For example, the rubric can favor recent papers with practical evaluation methods.
+One task can classify the method as practical or theoretical.
+Another task can classify the paper's age against the supplied current date.
+The fitter learns how these answers relate to the human's labels.
+
+The scorecard defines a holistic question and additional decision-element questions.
+Jev answers these questions for the same item in one request.
+The feature converter derives named numbers from the answers and their probabilities.
+The trained decision head combines these features to predict the final label.
+Calibration adjusts the head's confidence.
+
+The holistic Jev answer can be one input to the decision head.
+It does not replace the head's final classification.
+Additional questions supply evidence that the holistic question can miss.
+Human labels determine how the fitted head uses that evidence.
+
+The active version is the saved classifier definition.
+It contains the questions, examples, feature rules, fitted weights, and calibration.
+It is configuration for the prediction path.
+Human review is a separate step after classification.
+
+The proof-of-concept mechanism is visible in
+[Jev Flywheel scoring](https://github.com/AnthusAI/Jev-Flywheel/blob/main/jev_flywheel/scoring.py)
+and [feature conversion](https://github.com/AnthusAI/Jev-Flywheel/blob/main/jev_flywheel/features.py).
+The generalized library must preserve this mechanism through provider adapters.
+
+## Collect human feedback
+
+1. Load the active version.
+2. Send the item, rubric questions, and selected examples to the decision model.
+3. Convert the answers to numerical features.
+4. Apply the fitted ML model to the features.
+5. Show the item and its predicted label to the human.
+6. Save the prediction before the human supplies a label.
+7. Save the label and optional explanation.
+
+For the article study, the labels are `include` and `exclude`.
+The interface shows the title, abstract, date, categories, authors, and publication citation when available.
+The human can skip an item or undo a vote.
+An undo must invalidate dependent candidates and training records when necessary.
+
+The active version contains the scorecard, example policy, feature rules, fitted weights, and calibration.
+It also identifies the source model and training data.
+These parts must remain together during save, load, and restart operations.
+
+At the start, the system has few labels and no known personal rubric.
+It must identify its initial prediction as a baseline.
+Initial accuracy is unknown. It is not necessarily poor.
+The system needs examples of both labels before it can learn their difference.
+
+## Analyze feedback and improve the system
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/improvement-dark.png">
+  <img src="docs/diagrams/improvement-light.png" alt="Human feedback guides the LLM optimizer to revise the rubric, few-shot example collection, and element classification tasks. Code validates the changes, collects features, retrains the custom ML model, and evaluates promotion. Prompts, responses, and measured results are recorded.">
+</picture>
+
+[Editable D2 source](docs/diagrams/improvement.d2)
+
+The optimizer receives training items, human labels, comments, prediction errors, and the current scorecard.
+It searches for criteria that explain the human's decisions.
+It states a possible rule and identifies the training feedback that supports it.
+The rule is a hypothesis until evaluation supports it.
+
+For example, a human can prefer recent papers about practical evaluation methods.
+The optimizer can propose a question about practical evaluation.
+It can also propose a `current_datetime` element if the feedback suggests a time-dependent criterion.
+This example illustrates a possible change. It is not a finding from the current study.
+
+The optimizer controls three parts of the decision-model request:
+
+- Select better labeled examples for the decision model.
+- Revise the main decision's rubric.
+- Add, change, or remove element classification tasks and their options and criteria.
+
+Code retrains the custom ML model from the resulting features and trusted labels.
+
+Code validates each proposal against the schema, data rules, feature limits, and request budget.
+Code collects missing answers for the candidate questions.
+An unchanged request can reuse a saved answer.
+A changed question requires a new answer and a new feature identity.
+
+The fitter uses trusted training labels and complete feature rows.
+It derives numerical weights from the data.
+It accounts for the probability that each training item was selected for review.
+It calibrates confidence from out-of-fold predictions.
+The optimizer cannot supply weights or calibration values.
+
+Code compares the candidate and active version on the same development items.
+It promotes the candidate only if the declared improvement rule passes.
+Otherwise, it keeps the active version and records the result.
+A promoted version supplies predictions for subsequent items.
+Their human feedback starts the next round.
+
+The first article study uses titles and abstracts.
+Each request still needs a context-size check that includes its questions and examples.
+Optimization of extraction rules for longer articles is deferred.
+
+## Separate learning from evaluation
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/evaluation-dark.png">
+  <img src="docs/diagrams/evaluation-light.png" alt="Training records feed rubric analysis, example selection, and ML fitting. Development labels compare candidates. Ongoing audit and permanent holdout labels independently score saved classifier versions and never enter learning.">
+</picture>
+
+[Editable D2 source](docs/diagrams/evaluation.d2)
+
+Assign each item to its data partition before the human supplies a label.
+Save the assignment so a restart cannot change it.
+Keep partitions disjoint by item identity and normalized text.
+An item must not appear among its own examples.
+
+Training records can enter the optimizer prompt, example selection, and ML fit.
+Development labels can score candidates. They must not enter the optimizer's feedback briefing or ML fit.
+Repeated candidate searches can make development scores optimistic.
+Use independent audit data to measure the active version.
+Keep permanent holdout labels outside all optimization steps.
+Use the permanent holdout for a final test after the version is frozen.
+
+Start with full human review.
+Reduce the review rate only when sufficient audit evidence supports the change.
+Keep a random audit sample as the review rate decreases.
+Errors on uncertain items alone do not give an unbiased accuracy estimate.
+Record review-selection probabilities and report the sample size.
+Increase review if recent alignment falls or the human's criteria change.
+
+The report must show accuracy, per-class recall, probability quality, and uncertainty.
+It must show recent results as well as results across the full study.
+It must track votes required, active elements, example counts, training rounds, model requests, latency, and token use.
+Report each result with its version and measurement partition.
+
+## Show the optimizer's work
+
+The application must show the latest optimizer exchange and its measured result.
+The user must be able to inspect:
+
+- The exact prompt and training feedback supplied to the optimizer.
+- The returned response and structured tool calls.
+- The proposed rubric rule and question changes.
+- The current questions and feature definitions.
+- The example list selected for each candidate.
+- The ML training status, training counts, and fitted model version.
+- The evaluation results and promotion decision.
+
+Show the optimizer's stated explanation. Do not claim access to private model reasoning.
+Store transcripts locally because they can contain article text and human comments.
+Never put credentials in a prompt, transcript, event record, or committed artifact.
+
+The reusable library emits events that an application can display.
+The application does not own a separate optimization loop.
+The saved state must preserve progress across restarts.
+It must distinguish a completed step, a failed step, and a step that has not run.
+It must also show when new feedback makes the active version stale.
+
+## Try the current implementation
+
+The offline commands make no paid calls. The live commands explicitly authorize bounded paid collection.
+
+Create the environment and install the offline dependencies:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-source .venv/bin/activate
-make demo
+make PYTHON=.venv/bin/python test
+make PYTHON=.venv/bin/python demo
 ```
 
-Alternatively, without activation: `make PYTHON=.venv/bin/python demo`. The
-activation above is only for the local virtual environment; this project never
-asks users to source a `.env` file.
+The offline demo uses synthetic labels and a fake decision model.
+It makes no network calls.
+It saves an example-selection artifact and a summary in `demo-output/`.
+Its results describe the synthetic fixture, not live-model performance.
 
-This makes `demo-output/artifact.json` and `demo-output/summary.json`. The demo
-uses only tiny synthetic trusted labels and a scripted fake model: it makes no
-network calls, uses no credentials or downloads, and is not a live benchmark.
-It compares zero-, one-, and two-example-per-label policies: random seeds, a
-lexical prototype, and target-conditioned lexical retrieval. The scripted rule
-deliberately rewards a compact matching context, so the selected lexical
-size-one winner is a property of this synthetic fixture, not a performance
-claim.
-
-The walkthrough selects on development labels, freezes a winner only after all
-declared trials complete, saves it, reloads it, and decides a new unlabeled
-synthetic target. Re-running produces the same artifact hash and context IDs.
-After installation, `decision-flywheel-demo --output FOLDER` runs the same flow.
-Use `make test` for all offline specifications.
-
-## Embed a flywheel in an application
-
-The library owns optimization, artifacts, and a restart-safe, text-free
-`JsonlRunLedger`; an application owns presentation. Each completed measured
-round becomes a typed `FlywheelRound`, containing only fingerprints, counts,
-trial outcomes, call accounting, promotion status, active decision-element
-definitions, and structured feature-proposal lifecycle records. On restart, any client
-can call `ledger.status(current_feedback_fingerprint)` and render one of three
-states: `never-run`, `current`, or `stale`.
-
-This is the UI boundary for a terminal, web application, or service. It does
-not expose prompts, source records, labels, or private model reasoning. A UI
-can show current policy and features from its frozen artifact, then show the
-ledger's measured candidate trials, outcomes, and refresh state. During a
-round, `JsonlEventStream` receives text-free `FlywheelEvent` records for trial
-starts, cache reuse, requests, completions, failures, and round completion;
-clients can render them live or after restart. The local
-ArXiv reviewer below is one client of this interface, not a second flywheel.
-
-## Try the local article reviewer
-
-The reviewer is a local Rich terminal application for collecting real human
-`include` / `exclude` decisions on article records. It shows the title,
-abstract, submission date, arXiv categories, author line, and—when arXiv has
-it—the free-form publication citation. It makes no provider model calls. Its
-SQLite event history preserves votes, comments, skips, undo operations, and
-the exact prediction shown before each vote; its deterministic train,
-rolling-audit, and permanent-audit assignments are not displayed while you
-review.
-
-Install the optional UI dependencies, create a local batch from the pinned
-public arXiv metadata snapshot, then review it:
+Install the reviewer and Jev dependencies:
 
 ```bash
-.venv/bin/pip install -e '.[reviewer]'
-make PYTHON=.venv/bin/python review-arxiv
+.venv/bin/pip install -e '.[reviewer,jev,optimizer]'
 ```
 
-The first run samples 250 recent CS abstracts into ignored `var/` files, records
-the precise source revision, then opens the reviewer. Use this local collection
-mode until there are at least three Include and three Exclude training votes.
-After that, resume the same queue with `make PYTHON=.venv/bin/python review`:
-it runs one bounded, measured Jev core round and serves the selected frozen
-policy. `make PYTHON=.venv/bin/python review-local` is the explicit no-provider
-fallback.
-
-Use `I` to include or `E` to exclude; each immediately offers an optional
-comment field. Use `S` to skip, `B` to undo the latest action, and `Q` to save
-and leave. Before each vote it shows a transparent local prediction: a 50/50
-cold-start prior initially, then a lexical baseline trained only on eligible
-human labels. The exact displayed prediction is linked to your vote for later
-alignment analysis. The screen also reports prediction agreement, eligible
-human labels, and baseline-refresh count after every decision. The optional source download records its exact Hub
-revision and selection parameters locally; article text and your review data
-are not committed.
-
-## Measured Jev flywheel
-
-The reviewer is only the feedback surface. The reusable core performs the
-actual flywheel round: it converts only train-assigned human votes (including
-optional comments as demonstration-only context) into trusted core items,
-evaluates the core's incumbent, hard-swap, and random-control example policies
-on a sealed development subset, and writes a text-free report plus a frozen
-artifact. Rolling and final audit labels are never candidates, examples, or
-development targets.
-
-This is paid work and therefore always requires the explicit `make review` or
-`make run-flywheel` command:
+For a new study, download the article batch and collect votes without paid models:
 
 ```bash
-make PYTHON=.venv/bin/python run-flywheel  # evaluate and freeze a policy
-make PYTHON=.venv/bin/python review-live   # serve the already-frozen policy
+.venv/bin/python scripts/seed_arxiv_reviewer.py --output var/arxiv-review.jsonl --limit 250
+.venv/bin/python -m decision_flywheel.reviewer --database var/reviewer.sqlite3 --articles var/arxiv-review.jsonl
 ```
 
-The regular review screen displays the latest measured candidate outcomes. A
-live review session uses the selected frozen Jev artifact for each prediction;
-it has a per-session request ceiling and records the prediction shown before
-your vote. Its run ledger preserves measured rounds across restarts and marks
-the policy stale when new eligible feedback arrives. After collecting more
-feedback, run another flywheel round before serving a new live artifact.
+The download uses the public arXiv metadata snapshot. It records the observed Hub revision,
+selection parameters and local batch hash. The dataset-server rows endpoint is not revision-pinned.
+The saved local batch is reused on later runs, without downloads or overwrites.
+Article text, votes and comments remain in ignored `var/` files. Do not publish them.
 
-## Safety and evaluation boundaries
+For an existing study, resume the same queue:
 
-Candidates and development labels must be trusted, canonical, and disjoint by
-ID and normalized text. Context policies cannot return forged, duplicate, or
-unbalanced examples. The optimizer accepts protected IDs and normalized-text
-hashes so a fresh held-out scoreboard can remain entirely outside the search.
-Freeze a policy with development data before opening that scoreboard; never pass
-scoreboard labels to the optimizer.
+```bash
+make PYTHON=.venv/bin/python review-local
+```
 
-`max_model_calls` counts attempted logical model decisions, including failures.
-With caller-supplied cumulative call accounting, a search fingerprint prevents
-resume against a changed task, pool, split, trial set, or ordering. Identical
-complete requests may replay from a caller-owned checkpoint, so physical calls
-can be fewer than trial-by-target evaluations. Jev and Kev adapters disable
-hidden retries; callers should keep any retry policy outside the counted
-optimizer loop.
+Use `I` for Include or `E` for Exclude.
+Enter an optional comment after the vote.
+Use `S` to skip, `B` to undo, and `Q` to quit.
+Local mode uses a baseline predictor.
 
-Context token accounting is a deterministic whitespace estimate over the full
-serialized request. It is not provider-reported usage and is not a substitute
-for an actual provider token limit.
+For the connected live labeling demo, start or resume with:
 
-## Feedback, learned heads, and scripted steering
+```bash
+make PYTHON=.venv/bin/python review
+```
 
-`FeedbackItem` records a reviewed final label and its selection propensity.
-`HeadRow` combines that feedback with finite extracted features, and
-`fit_learned_head` accepts only complete declared feature coverage. It fits on
-trusted training rows, calibrates from out-of-fold predictions, and retains
-text-free task, split, policy, context-artifact, source-model, and selection
-provenance. Development and scoreboard IDs are supplied as firewall metadata;
-they are not training rows.
+This command authorizes at most 500 Jev requests and 10 optimizer requests per session.
+The defaults are `jev-1.13.0` and `gpt-4.1-mini`. Override `JEV_MODEL`, `OPTIMIZER_MODEL`,
+`REVIEWER_REQUESTS`, `OPTIMIZER_CALLS`, or `OPTIMIZE_EVERY` in the make command.
+`make review-arxiv` reuses or downloads the batch and starts this same **paid live mode**.
 
-`run_steering_round` is an offline, human-reviewed structural loop. An analyst
-factory receives a `ScriptedMockManager` only after the mock is installed, so
-tests can use recorded replies without constructing a provider client. The
-analyst may propose one allowlisted scorecard element or context policy; it
-cannot propose weights or calibration. The application-owned fitter receives
-the candidate scorecard, its exact policy, and all declared candidate features.
-The resulting core head must match that lineage before the application-owned
-development metric can promote it. Protected scoreboard IDs must be recorded in
-the fit provenance and cannot be used for fitting. This is a small provider-
-neutral API, not a Tactus integration or a live steering service.
+The initial rubric is empty. Jev supplies the warm-up prediction; no local replacement head is used.
+The first round waits for at least three training Include votes, three training Exclude votes,
+and two development votes. A permanent ID-hash rule assigns 25% of otherwise eligible records
+to development before their labels are known. Existing rolling and final audit roles remain protected.
+The demo reviews all displayed items; training review propensities are recorded as 1.0.
+Adaptive review-rate reduction remains deferred until there is a validated random-audit rule.
 
-The steering briefing also names one safe, programmatic dynamic element:
-`current_datetime`. An analyst may propose it with
-`{"add_programmatic_element":{"kind":"current_datetime"}}`. Once normally
-accepted and promoted, request construction can pass a recorded,
-timezone-aware UTC value as `state.current_datetime`. It is never silently
-injected, and it is context—not a learned weight, calibration value, or label.
+After each 10 new votes, the core attempts another measured round. Use `G` to request one sooner.
+The display reports class counts, active rubric/questions/features, fitting and promotion events.
+Use `O` for the actual optimizer prompt, response and tool calls; `J` for the actual Jev request and answer;
+and `F` for active classifier details. These inspection commands do not add votes.
+If a prediction fails or the paid ceiling is reached, feedback can still be saved.
+The display says prediction unavailable; it does not quietly substitute another classifier.
 
-## Optional dynamic retrieval (off by default)
+The ML fitter uses trusted training labels with full feature coverage, propensity weighting,
+and out-of-fold calibration. Code promotes a candidate only when its multiclass development Brier
+score is lower. This repeated development score is selection evidence, not unbiased accuracy.
+Displayed pre-vote agreement is also affected by showing recommendations to the reviewer.
+Do not use either number as the sealed holdout score.
 
-The default product is one fixed, optimized example list. Per-item retrieval is
-a separate switch: `RetrievalConfig` (the `retrieval:` block) defaults to
-`enabled: false`, and `build_retrieval_policy` then returns `None`. When
-enabled it returns a `PerLabelRetrieval` context policy that works with
-`build_context_plan` like `PerLabelLexicalRetrieval`: `k` nearest examples per
-label, never the target or protected items.
+Restart reloads the active classifier and private transcripts. A completed round is not repeated
+for identical feedback. Interrupted requests require explicit retry authorization; they are not silently repaid.
+Undo or corrected training feedback invalidates dependent inferred configuration and fitted state.
 
-- `LexicalRetriever` (lexical v2): stop words on by default (negations kept),
-  Unicode tokens, and `binary-cosine`, `tfidf-cosine` or `bm25` weighting.
-  Lexical v1 is unchanged.
-- `EmbeddingRetriever`: an injected `embed(texts) -> vectors` function, a
-  text-free vector cache, and exact in-memory cosine search (`[retrieval]`
-  installs numpy for speed). `HashingEmbedder` is an offline fake;
-  `OpenAIEmbedder.from_environment()` (`[openai-embeddings]`) is live and paid.
-- `S3VectorsStore` and `DynamoDBVectorStore` are design-only stubs.
-- `neighbour_label_purity` compares retrievers at no cost.
+The following older commands perform context-only search and legacy artifact serving.
+They do not run the connected rubric/features/head loop:
 
-## Adapters and evidence
+```bash
+make PYTHON=.venv/bin/python run-flywheel
+make PYTHON=.venv/bin/python review-live
+```
 
-The core package is provider-neutral. Optional extras are explicit:
+Load credentials from the environment or a gitignored `.env` file.
+Do not source `.env` in the shell.
 
-- `decision-flywheel[jev]` pins `typesafe-sdk>=0.7,<0.8` and `python-dotenv>=1,<2`.
-- `decision-flywheel[kev]` pins `httpx>=0.27` for the documented local endpoint.
-- `decision-flywheel[laya]` supports zero-shot local use through
-  `LayaAdapter.from_default(configuration=LayaConfiguration(revision="..."))`.
-  Laya has no documented labelled-demonstration semantics, so few-shot context
-  is explicitly excluded even when a revision is pinned.
+## Library interfaces and provider adapters
 
-Adapters are tested with injected fakes. The walkthrough does not validate a
-live adapter or claim live-model performance. Experimental notes, manifests, and
-cross-model evaluation material live in
+`DecisionTask`, `Item`, and `LabeledItem` define the decision task and its trusted data.
+`ClassifierConfig` owns the rubric, fixed example IDs, classification tasks and allowlisted dynamic inputs.
+`OptimizerAgent` accepts an injected completion callable and reports actual messages.
+`DecisionFlywheel` owns `predict`, `improve`, `reconcile_feedback`, `history` and `close`.
+`ReviewerFlywheel` is a thin article-record adapter; the terminal has no fitting or promotion logic.
+`improve_example_list` and `search_context_policies` compare example policies.
+Frozen artifacts preserve the selected policy and its provenance.
+`JsonlRunLedger` records measured rounds.
+`JsonlEventStream` records request and trial activity.
+These older text-free records are separate from the core's private SQLite transcript history.
+
+`fit_learned_head` fits the optional ML head.
+`run_steering_round` tests structural changes with a scripted analyst and an application-supplied fitter.
+The connected path uses these core fitting guards without importing the Jev-Flywheel proof of concept.
+
+The complete-request byte ceiling is a conservative local safety check, not returned token usage.
+The Jev demo pins a version instead of relying on an alias that can move.
+See [TypeSafe's model limits and alias policy](https://docs.typesafe.ai/models).
+
+Jev, Kev, and Laya have separate adapters.
+Provider-specific behavior belongs in an adapter.
+Use `[jev]`, `[kev]`, or `[laya]` to install the corresponding optional dependencies.
+The Laya adapter does not claim support for labeled context examples.
+Request counters include attempted calls and failures.
+Returned token use is different from an estimated context size.
+
+Study methods and cross-model results belong in
 [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations).
-The earlier [Few-Shot-Jev experiment](https://github.com/AnthusAI/Few-Shot-Jev)
-contains experimental findings about its own dataset and budgets; it is research
-context, not a claim that a selector always beats every context size or model.
+The earlier [Few-Shot-Jev study](https://github.com/AnthusAI/Few-Shot-Jev) provides experimental background.
 
-## Repository tooling
+## Documentation and project tools
 
-This repository uses [Kanbus](https://github.com/AnthusAI/Kanbus) for Git-backed
-project tasks and `python-semantic-release` for conventional-commit releases.
-Install the local tooling with `make install-tools`, then use `kanbus list` to
-inspect the board.
+The explanations use short sentences, active verbs, and the technical names defined above.
+They follow the writing approach in [ASD-STE100](https://www.asd-ste100.org/STE_faq.html).
+A full dictionary conformity review has not been completed.
+
+Archify generates the diagrams from saved JSON specifications.
+The HTML files support interactive inspection and export.
+The SVG files provide static images for this README.
+The editable D2 sources are linked below each diagram. Render each source with
+`d2 --layout elk --theme 0 --pad 30 --scale 2` for light mode, or use theme `200`
+for dark mode. The PNGs above are the README display artifacts.
+
+Kanbus stores project tasks in Git.
+Semantic Release uses conventional commits to produce releases.
+Install these tools with `make install-tools`.
+Inspect the task board with `kanbus list`.
 
 ## License
 
-MIT for this repository's code. Downloaded datasets and model weights retain
-their upstream terms.
+The repository code has an MIT license.
+Downloaded datasets and model weights retain their upstream terms.

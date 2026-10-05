@@ -1,0 +1,51 @@
+direction: down
+
+feedback: "New human training feedback\nLabels, explanations, and prediction errors"
+active: "Current classifier definition\nRubric, examples, tasks, and fitted ML model"
+optimizer: "LLM optimizer\nAnalyze feedback and propose an experiment"
+feedback -> optimizer
+active -> optimizer
+
+candidate: "CANDIDATE REQUEST DEFINITION" {
+  direction: right
+  rubric: "Main decision rubric\nRevise criteria for Include or Exclude"
+  examples: "Few-shot example collection\nSelect or replace labeled examples"
+  tasks: "Element classification tasks\nAdd, edit, or remove questions\nSet answer options and criteria"
+}
+optimizer -> candidate.rubric: "Adjust rubric"
+optimizer -> candidate.examples: "Improve example selection"
+optimizer -> candidate.tasks: "Experiment with features"
+
+validate: "Validate proposed changes\nCheck schema, limits, and data separation"
+candidate -> validate
+collect: "Collect candidate decision-model answers\nApply rubric, examples, and tasks to each item\nReuse only matching saved requests"
+validate -> collect: "Valid candidate"
+features: "Convert answers to numerical features\nComplete training and development feature rows"
+collect -> features
+fit: "Retrain custom ML model\nFit weights from trusted training labels\nCalibrate from out-of-fold predictions"
+features -> fit: "Training feature rows"
+feedback -> fit: "Training labels"
+
+evaluate: "Evaluate candidate against active classifier\nSame development items and labels\nApply the declared promotion rule"
+fit -> evaluate: "Candidate model"
+features -> evaluate: "Development feature rows"
+development: "Development labels\nUsed for comparison, not optimizer input or training"
+development -> evaluate
+
+promote: "Save improved classifier version\nRubric + examples + tasks + features + ML model"
+retain: "Keep current classifier\nRecord failure or insufficient improvement"
+evaluate -> promote: "Pass"
+evaluate -> retain: "Fail or incomplete"
+validate -> retain: "Invalid proposal"
+
+next: "Classify more items and collect human feedback\nStart the next improvement round"
+promote -> next
+retain -> next
+
+transcript: "Visible optimization record\nExact prompts, responses, and tool calls\nProposal diff, training status, scores, and outcome"
+optimizer -> transcript: "Save exchange"
+evaluate -> transcript: "Save measured result"
+
+note: "Intended complete loop; current demo integration is incomplete.\nAudit and permanent holdout labels remain outside optimization.\nPer-item example retrieval is a later exploration." {
+  shape: text
+}
