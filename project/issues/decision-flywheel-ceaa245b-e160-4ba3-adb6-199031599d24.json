@@ -27,10 +27,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "6a042b78-50b9-4018-929c-7a70f0f1c5fd",
+      "author": "home",
+      "text": "Implemented the connected Rich reviewer with O optimizer messages/replies/tools, J exact provider-bound Jev state/questions/answers, F active rubric/examples/tasks/features, and G a measured round. Added regression preventing a pending new optimizer prompt from being paired with an older reply. Live display excludes sealed final-audit scoring. Removed uncommitted optimizer restrictions introduced from a disputed interpretation of the knowledge-base factor; historical proposal remains untouched. Paid smoke evidence remains 60 Jev attempts and one optimizer attempt, with a fitted promoted head; no additional paid calls or human-rating edits during this follow-up.",
+      "created_at": "2026-10-05T22:36:35.786052Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.580145Z",
-  "updated_at": "2026-10-05T22:14:14.817171Z",
+  "updated_at": "2026-10-05T22:36:35.786082Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
