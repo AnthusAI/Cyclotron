@@ -14,6 +14,8 @@ from .optimizer import OptimizationResult, TrialSpec, search_context_policies
 from .run_ledger import (FeatureActivity, FeatureDefinition, FlywheelRound, FlywheelStatus,
                          JsonlRunLedger, TrialActivity, feedback_fingerprint)
 from .steering import steering_observations
+from .classifier_config import ClassifierConfig
+from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
 
 
 def run_demo(*args, **kwargs):
@@ -22,6 +24,7 @@ def run_demo(*args, **kwargs):
     return _run_demo(*args, **kwargs)
 
 __all__ = [
+    "ClassifierConfig", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply",
     "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
     "DeployableArtifact", "ExampleListImprovement", "FixedExampleList", "Item", "LabeledItem", "ModelCapabilities", "OptimizationResult",
     "FeatureActivity", "FeatureDefinition", "FlywheelEvent", "FlywheelRound", "FlywheelStatus", "JsonlEventStream", "JsonlRunLedger", "TrialActivity",

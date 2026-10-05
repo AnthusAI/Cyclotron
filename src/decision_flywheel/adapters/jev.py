@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from dataclasses import dataclass
 from numbers import Real
 import time
 from typing import Any, Sequence
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
+from ..classifier_config import ClassifiedAnswers, ClassifierConfig
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,27 @@ class JevAdapter:
             answer.get("confidence"),
         )
         return task.validate_result(result)
+
+    async def classify(self, config: ClassifierConfig, target: Item,
+                       training: Sequence[LabeledItem], *, now: datetime | None = None) -> ClassifiedAnswers:
+        """Ask the main decision and every discovered element in one SDK request."""
+        request = config.request(target, training, now=now)
+        questions = {name: {"type": detail["type"], "instructions": detail["instructions"],
+                            "criteria": {label: None for label in detail["options"]}}
+                     for name, detail in request["questions"].items()}
+        started = time.perf_counter()
+        response = await asyncio.to_thread(self.client.system_one, state=request["state"], questions=questions)
+        raw = _mapping(getattr(response, "answers", {}))
+        model = _string_or_none(getattr(response, "model", None))
+        tasks = {"decision": config.task, **{task.name: task for task in config.tasks}}
+        answers = {}
+        for name, task in tasks.items():
+            answer = _mapping(raw.get(name))
+            answers[name] = task.validate_result(DecisionResult(
+                answer["choice"], answer.get("probabilities"), model=model,
+                confidence=answer.get("confidence")))
+        return ClassifiedAnswers(answers, model, _numeric_usage(getattr(response, "usage", None)),
+                                 round((time.perf_counter() - started) * 1000, 2))
 
 
 def _mapping(value: Any) -> dict[str, Any]:

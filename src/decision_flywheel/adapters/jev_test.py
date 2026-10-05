@@ -12,6 +12,29 @@ TARGET = Item("target", {"text": "target text"})
 CONTEXT = [LabeledItem(Item("demo", {"text": "demo text"}), "yes")]
 
 
+def test_a_complete_classifier_request_asks_all_feature_questions_in_one_jev_call():
+    from ..classifier_config import ClassifierConfig
+    class Client:
+        calls = 0
+        def system_one(self, *, state, questions):
+            self.calls += 1
+            self.state, self.questions = state, questions
+            return SimpleNamespace(answers={key: {"choice": "yes", "probabilities": {"yes": .8, "no": .2}}
+                                            for key in questions}, model="fake", usage={"input_tokens": 42})
+    client = Client()
+    config = ClassifierConfig(TASK, rubric="Practical work", example_ids=("demo",),
+                              tasks=(DecisionTask("practical", ("yes", "no"), "Is this practical?"),))
+    batch = asyncio.run(JevAdapter(client).classify(config, TARGET, CONTEXT))
+    assert client.calls == 1
+    assert client.state["rubric"] == "Practical work"
+    assert set(client.questions) == {"decision", "practical"}
+    assert client.questions["practical"]["criteria"] == {"yes": None, "no": None}
+    assert "options" not in client.questions["practical"]
+    assert batch.answers["decision"].probabilities == {"yes": .8, "no": .2}
+    assert batch.usage == {"input_tokens": 42}
+    assert all(answer.usage is None for answer in batch.answers.values())
+
+
 class FakeJevClient:
     def system_one(self, *, state, questions, **kwargs):
         self.calls = getattr(self, "calls", 0) + 1
