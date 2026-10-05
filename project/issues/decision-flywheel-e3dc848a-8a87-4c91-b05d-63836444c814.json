@@ -3,7 +3,7 @@
   "title": "Regenerate features, fit the head and evaluate candidate promotion",
   "description": "## Behavior and acceptance\nRun the main decision plus element tasks through the adapter; map real answer probabilities to named numerical features. On task changes regenerate missing/stale training and development features with complete fingerprints. Fit only trusted full-coverage labels with recorded propensity weighting; calibrate out of fold. Compare incumbent/candidate on the same development records with a preregistered rule, retain or promote a complete versioned bundle, and reload predictions identically. Never fit or select on audit/scoreboard.\nScenario: a changed task triggers feature regeneration and refitting; failed/incomplete candidate leaves incumbent active; optimizer cannot supply weights.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,9 +15,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "9286c99d-7050-4b96-acc9-bc3c75cf4add",
+      "author": "home",
+      "text": "Core integration now implemented in flywheel.py: validated structural proposals -> full probability features -> existing trusted propensity-weighted fit_learned_head with OOF calibration -> same-development Brier comparison -> durable promotion/rejection. SQLite persists active config/head, private events, complete-answer caches, and completed/pending round guards. Fake-client specs cover promotion, restored serving, corrected-label invalidation, protected splits and missing propensity refusal. This is offline evidence, not live demo completion. Reviewer client/CLI wiring and bounded live verification remain.",
+      "created_at": "2026-10-05T22:14:14.835748Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    }
+  ],
   "created_at": "2026-10-05T21:56:01.403113Z",
-  "updated_at": "2026-10-05T21:56:02.105771Z",
+  "updated_at": "2026-10-05T22:14:14.835769Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
