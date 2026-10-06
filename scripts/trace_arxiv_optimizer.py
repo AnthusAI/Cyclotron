@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import sqlite3
+import os
 from pathlib import Path
 
 from decision_flywheel import ClassifierConfig, DecisionFlywheel, OptimizerAgent
@@ -11,12 +12,18 @@ from decision_flywheel.reviewer_core import reviewer_task
 from decision_flywheel.reviewer_flywheel import ReviewerFlywheel
 from decision_flywheel.reviewer_store import ReviewStore
 from measure_arxiv_questions import backup
+from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
+from decision_flywheel.trace_artifact import render_trace
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--confirm-live', action='store_true')
+    parser.add_argument('--max-requests', type=int, default=0)
+    parser.add_argument('--min-development-per-class', type=int, default=20,
+                        help='lower values are exploratory only, on this private copy')
+    parser.add_argument('--decisions-model', default='jev-1.13.0')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     reviews, runtime = args.output / 'reviews.sqlite3', args.output / 'runtime.sqlite3'
@@ -39,7 +46,10 @@ def main():
                      rolling_audit_rate=float(metadata['rolling_audit_rate']),
                      final_audit_rate=float(metadata['final_audit_rate'])) as store:
         optimizer = OpenAIOptimizer.from_environment(model='gpt-6-luna', max_calls=1) if args.confirm_live else forbidden
-        wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), CachedOnlyModel(), OptimizerAgent(optimizer))
+        model = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model)) if args.confirm_live and args.max_requests else CachedOnlyModel()
+        wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), model, OptimizerAgent(optimizer),
+            max_requests=max(1,args.max_requests),
+            redact=tuple(os.environ.get(key,'') for key in ('OPENAI_API_KEY','TYPESAFE_API_KEY')))
         try:
             reviewer = ReviewerFlywheel(store, wheel)
             reviewer.sync_optimizer_context()
@@ -52,16 +62,19 @@ def main():
             cursor = wheel.db.execute('SELECT COALESCE(MAX(id),0) FROM runtime_events').fetchone()[0]
             if args.confirm_live:
                 result = asyncio.run(wheel.step('rubric', training, development, protected=protected,
-                    propensities={r.item.id: 1. for r in training}, request_budget=0,
-                    trigger='inspect-human-explanations'))
+                    propensities={r.item.id: 1. for r in training}, request_budget=args.max_requests,
+                    min_development_per_class=args.min_development_per_class,
+                    trigger='fresh-private-exploratory-trace' if args.min_development_per_class < 20 else 'inspect-human-explanations'))
                 events = wheel.trace_events(after_event_id=cursor, limit=1000)['events']
                 (args.output / 'trace.json').write_text(json.dumps(events, indent=2)+'\n')
                 (args.output / 'result.json').write_text(json.dumps(result, indent=2)+'\n')
+                (args.output / 'playback.html').write_text(render_trace(events))
                 response = next((e for e in events if e['kind'] == 'optimizer-response'), None)
                 print(json.dumps({'status': result['status'], 'optimizer_calls': optimizer.calls,
                     'decision_calls': wheel.requests, 'active_unchanged': wheel.active.fingerprint == before,
                     'proposal': json.loads(response['content']) if response else None,
                     'usage': response.get('usage') if response else None}, indent=2))
+                print(json.dumps({'evaluation': result.get('result')}, indent=2))
             else:
                 print(json.dumps({'preview_only': True, 'context': wheel.optimizer_context,
                                   'training_count': len(training), 'development_count': len(development)}, indent=2))

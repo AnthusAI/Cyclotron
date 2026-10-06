@@ -118,7 +118,7 @@ const el=id=>document.getElementById(id);let position=0,timer=null;
 const pretty=value=>JSON.stringify(value,null,2);
 const snapshots=[];let config=null;
 events.forEach((event,index)=>{
- if(event.kind==='step-started'||event.kind==='round-started')config=null;
+ if(event.kind==='step-started'||(event.kind==='round-started'&&!event.step_id))config=null;
  if(event.classifier_snapshot) config=event.classifier_snapshot;
  else if(presentation[index]) config=presentation[index];
  else if(event.kind==='step-started' && event.configuration) config={configuration:event.configuration,classifier_version:event.classifier_version,head:'Not captured in this older event'};
