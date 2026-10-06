@@ -225,6 +225,7 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
                    'previous':{'rubric':''},'candidate':{'rubric':'prefer curated knowledge'}})
     events.extend([{'event_id':13+i,'kind':'trigger-evaluated','stage':'rubric','due':due,'created_at':f'2026-10-06T12:01:{12+i}Z'} for i,due in enumerate((False,True))])
     events.append({'event_id':15,'kind':'cycle-metrics','created_at':'2026-10-06T12:01:14Z','metrics':{'accuracy':.5,'count':2}})
+    events.append({'event_id':16,'kind':'cycle-metrics','created_at':'2026-10-06T12:01:15Z','metrics':{'accuracy':.75,'count':4}})
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
               'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
     history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
@@ -244,8 +245,9 @@ Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelecto
 CODE
 assert.equal(timelineItems.find(item=>item.event_index===12).iconName,'circle');
 assert.equal(timelineItems.find(item=>item.event_index===13).iconName,'circle-play');
-assert.ok(trendItems.some(item=>item.id==='metric:accuracy:14'));
-handlers.select({items:['metric:accuracy:14']});assert.equal(position,14);
+assert.ok(trendItems.every(item=>item.className.startsWith('metric-line')));
+assert.ok(trendItems.some(item=>item.id==='metric-line:accuracy:15'));
+handlers.select({items:['metric-line:accuracy:15']});assert.equal(position,15);
 assert.ok(elements['event-content'].textContent.includes('accuracy'));
 select({items:[1]});
 assert.equal(elements['optimizer-exchange'].hidden,false);

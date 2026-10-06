@@ -125,9 +125,6 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .cycle-cell-events button {border:1px solid var(--border);background:var(--muted);color:var(--foreground);border-radius:6px;padding:6px 8px;font-size:11px;cursor:pointer}
 .vis-item.trigger-fired {color:var(--foreground)}
 .vis-item.vis-box svg {width:var(--timeline-marker-size,20px);height:var(--timeline-marker-size,20px);display:block}
-.vis-item.metric-point {height:66px;border:0;background:transparent;color:var(--primary);z-index:3}
-.vis-item.metric-point .vis-item-content {padding:0!important}
-.vis-item.metric-point svg {height:66px;width:20px}
 .vis-item.vis-range.metric-line {height:66px;border:0!important;background:transparent!important;color:var(--primary);border-radius:0;z-index:2;pointer-events:auto}
 .vis-item.metric-line .vis-item-content {padding:0!important;width:100%;height:66px}
 .vis-item.metric-line svg {width:100%;height:66px;display:block}

@@ -252,10 +252,7 @@ for(const metric of ['accuracy','precision','recall']){
   const value=point[metric],x=stepPositions.get(String(point.event_index));
   if(value===null||value===undefined||x===undefined){previous=null;continue;}
   const y=58-50*Math.max(0,Math.min(1,value));
-  const content=document.createElement('span');
-  content.innerHTML=`<svg viewBox="0 0 20 66" width="20" height="66" aria-hidden="true"><circle cx="10" cy="${y}" r="3" fill="currentColor"/></svg>`;
   const title=`${metric}: ${Math.round(value*1000)/10}% · Cycle ${point.cycle_number??'unrecorded'} · ${point.count} reviewed items · ${point.scope||'recorded running performance'}${metric==='accuracy'?'':' · positive: '+point.positive_labels.join(', ')}`;
-  trendItems.push({id:`metric:${metric}:${point.event_index}`,event_index:point.event_index,group:'metric-'+metric,start:new Date(x),type:'box',className:'metric-point metric-'+metric,content,title});
   if(previous){
    const line=document.createElement('span');line.innerHTML=`<svg viewBox="0 0 100 66" width="100%" height="66" preserveAspectRatio="none" aria-hidden="true"><path d="M0 ${previous.y} L100 ${y}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
    trendItems.push({id:`metric-line:${metric}:${point.event_index}`,event_index:point.event_index,group:'metric-'+metric,start:new Date(previous.x),end:new Date(x),type:'range',className:'metric-line metric-'+metric,content:line,title});
