@@ -1,6 +1,19 @@
 from .trace_timeline import timeline_data
 
 
+def test_configuration_count_markers_show_active_questions_not_unpromoted_proposals():
+    events = [
+        {'kind':'cycle-started','classifier_snapshot':{'config':{'tasks':[]}}},
+        {'kind':'optimizer-response','content':'proposal only'},
+        {'kind':'classifier-activated','classifier_snapshot':{'config':{'tasks':[{'name':'a'},{'name':'b'}]}}},
+        {'kind':'cycle-started','classifier_snapshot':{'config':{'tasks':[{'name':'a'},{'name':'b'}]}}},
+    ]
+    data=timeline_data([{**event,'created_at':'2026-10-06T12:00:00Z'} for event in events])
+    counts=[item for item in data['items'] if item['group']=='configuration-count']
+    assert [item['content'] for item in counts]==['1','3','3']
+    assert [item['event_index'] for item in counts]==[0,2,3]
+
+
 def test_optimizer_exchanges_are_individual_clickable_points_on_their_stage_lane():
     data = timeline_data([{'kind': kind, 'created_at': '2026-10-06T12:00:00Z',
         'step_stage': 'rubric'} for kind in ('optimizer-request', 'optimizer-response', 'proposal-validated')])

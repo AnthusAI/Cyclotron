@@ -24,7 +24,8 @@ def render_trace(events, reviewer_history=(), *, class_config=None):
     viewer = Path(__file__).parent / 'vendor' / 'trace-ui'
     javascript = (vendor / 'standalone/umd/vis-timeline-graph2d.min.js').read_text()
     css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
-    projected = step_projection(events, reviewer_history, timeline_data(events)['items'])
+    projected = step_projection(events, reviewer_history,
+                                [item for item in timeline_data(events)['items'] if item['group']!='configuration-count'])
     labels = []
     for event in events:
         labels.extend(event.get('classifier_snapshot',{}).get('config',{}).get('task',{}).get('labels',[]))
@@ -182,7 +183,7 @@ function markerIcon(item,name){
  if(svg)item.content.append(svg);else item.content.textContent=name==='circle-plus'?'+':name==='circle-minus'?'−':'○';
 }
 for(const item of timelineItems){
- item.title=item.content.textContent;item.start=new Date(stepPositions.get(String(item.id)));
+ item.title=item.content.textContent;item.start=new Date(stepPositions.get(String(item.event_index??item.id)));
  const source=item.source_index!==undefined?reviewHistory[item.source_index]:null,event=events[item.event_index];
  const label=source?(source.record.label||source.record.predicted_label):(event?.label||event?.feedback?.final_answer_value);
  item.className=source?(source.source_table==='presentations'?'marker-prediction':'marker-human'):
@@ -193,6 +194,10 @@ for(const item of timelineItems){
  item.type='box';
  item.content=document.createElement('span');item.content.textContent=event?.kind==='trigger-evaluated'?(event.due?'⚑':'○'):item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
  item.content.setAttribute('aria-label',item.title);
+ if(item.group==='configuration-count'){
+  item.content.textContent=item.title;item.className='marker-classification-count';
+  item.title+= ' active classifications (main decision plus supporting questions)';
+ }
  if(label&&(item.className==='marker-prediction'||item.className==='marker-human')){
   item.agreement=agreement(item);item.className+=' agreement-'+item.agreement;
   const role=classConfig.find(row=>row.label===label)?.role;
@@ -231,7 +236,9 @@ timelineData.groups=[...classGroups,
  {id:'optimization',content:'Optimization',nestedGroups:optimizationIds,showNested:true},...optimizationLanes,
  {id:'classifier-attempts',content:'Proposals / trials'},{id:'fit',content:'Fitting'},
  {id:'optimization-outcomes',content:'Optimization outcomes'},
- ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&!['cycles','evaluation','fit'].includes(group.id)),
+ ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&!['cycles','evaluation','fit','configuration','configuration-count'].includes(group.id)),
+ {id:'configuration-group',content:'Configuration',nestedGroups:['configuration','configuration-count'],showNested:true},
+ {id:'configuration',content:'Changes'},{id:'configuration-count',content:'Classifications'},
  {id:'evaluation-trends',content:'Evaluation',nestedGroups:['metric-accuracy','metric-precision','metric-recall'],showNested:true},
  ...['accuracy','precision','recall'].map(metric=>({id:'metric-'+metric,content:metric[0].toUpperCase()+metric.slice(1)+' · 0–100%'}))].map((group,order)=>({...group,order}));
 const metricSeries=JSON.parse(el('metric-series').textContent),trendItems=[];
@@ -361,7 +368,17 @@ function applyFilters(){
    &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));})]);
 }
 for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
-timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];if(String(id).startsWith('metric:')||String(id).startsWith('metric-line:'))id=String(id).split(':').at(-1);else if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
+timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];const countMarker=String(id).startsWith('configuration-count:');if(countMarker||String(id).startsWith('metric:')||String(id).startsWith('metric-line:'))id=String(id).split(':').at(-1);else if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));if(countMarker||['classifier-activated','classifier-invalidated'].includes(events[Number(id)]?.kind)){showConfiguration(Number(id));}}});
+function showConfiguration(index){
+ const snapshot=snapshots[index],config=snapshot?.config||snapshot?.configuration;
+ el('event-title').textContent='Active configuration';
+ el('event-content').textContent=config?readable({classification_count:1+(config.tasks||[]).length,
+  main_decision:config.task,supporting_questions:config.tasks||[],rubric:config.rubric,
+  example_ids:config.example_ids||[],dynamic_elements:config.dynamic_elements||[],
+  learned_head_present:!!snapshot.head,learned_features:snapshot.head?.feature_names||[],
+  validation_status:snapshot.validation_status}):'No recorded configuration at this point';
+ el('content-title').textContent='Recorded configuration';el('content-box').open=true;el('cycle-states').hidden=true;
+}
 timeline.on('doubleClick',properties=>{
  const id=properties.item;if(id===undefined||id===null)return;
  const key=String(id);

@@ -47,6 +47,12 @@ events[4].feedback.item_id='another paper';assert.equal(agreement({event_index:3
 const savedVote=events[4];events[4]={kind:'nothing'};assert.equal(agreement({event_index:3}),'unreviewed');events[4]=savedVote;
 assert.ok(!timelineData.groups.some(group=>group.id==='cycles'));
 assert.ok(!timelineData.groups.some(group=>group.id==='flywheel-cycles'));
+assert.deepEqual(timelineData.groups.find(group=>group.id==='configuration-group').nestedGroups,['configuration','configuration-count']);
+handlers.select({items:['configuration-count:0']});
+assert.equal(position,0);
+assert.equal(elements['event-title'].textContent,'Active configuration');
+assert.ok(elements['event-content'].textContent.includes('classification_count'));
+assert.ok(elements['event-content'].textContent.includes('before rubric'));
 handlers.select({items:['cycle-band:0']});
 assert.equal(elements['cycle-states'].hidden,false);
 assert.ok(elements['cycle-before'].textContent.includes('before rubric'));

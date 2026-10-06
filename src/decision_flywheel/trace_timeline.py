@@ -4,7 +4,7 @@ from datetime import datetime
 GROUPS = [('feedback', 'Human labels'), ('decisions', 'Decisions'), ('rubric', 'Rubric'), ('examples', 'Few-shot examples'),
           ('questions', 'Classifier questions'), ('classifier', 'ML optimization'),
           ('fit', 'ML fitting'), ('evaluation', 'Evaluation / outcome'), ('optimizer', 'Optimizer (unscoped)'),
-          ('configuration', 'Configuration changes'), ('triggers','Trigger checks'), ('cycles','Cycle boundaries')]
+          ('configuration', 'Changes'), ('configuration-count','Classifications'), ('triggers','Trigger checks'), ('cycles','Cycle boundaries')]
 
 
 def timeline_data(events):
@@ -19,6 +19,11 @@ def timeline_data(events):
             undated += 1
             continue
         kind = event.get('kind')
+        snapshot=event.get('classifier_snapshot',{}).get('config')
+        if snapshot is not None and kind in {'cycle-started','classifier-activated','classifier-invalidated'}:
+            items.append({'id':f'configuration-count:{index}','event_index':index,
+                          'group':'configuration-count','content':str(1+len(snapshot.get('tasks',[]))),
+                          'start':date,'type':'point'})
         group, label = None, None
         if kind in {'cycle-started','cycle-completed','cycle-failed'}:
             group,label='cycles',kind.replace('-',' ')
