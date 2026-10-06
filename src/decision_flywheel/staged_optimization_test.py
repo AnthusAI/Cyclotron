@@ -9,6 +9,31 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
 
 
+def test_an_optimizer_that_cannot_infer_a_cold_start_rubric_defers_without_stopping_feedback(tmp_path):
+    replies=iter(['','Later working rubric'])
+    optimizer=OptimizerAgent(lambda _:OptimizerReply(json.dumps({'rubric':next(replies),'rationale':'Insufficient early evidence'}),'fake'))
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK),FakeModel(),optimizer)
+    kwargs=dict(protected=(),propensities={r.item.id:1. for r in TRAIN})
+    first=asyncio.run(optimize_stage(wheel,'rubric',TRAIN[:1],(),**kwargs))
+    assert not first['activated'] and not first['promoted']
+    assert first['validation_status']=='insufficient-evidence'
+    assert wheel.active.config.rubric==''
+    second=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,**kwargs))
+    assert second['activated']
+    assert wheel.active.config.rubric=='Later working rubric'
+    wheel.close()
+
+
+def test_an_empty_optimizer_rubric_never_erases_a_working_rubric(tmp_path):
+    optimizer=OptimizerAgent(lambda _:OptimizerReply('{"rubric":" "}','fake'))
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK,rubric='Working criteria'),FakeModel(),optimizer)
+    result=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,
+        protected=(),propensities={r.item.id:1. for r in TRAIN}))
+    assert not result['activated'] and result['validation_status']=='invalid-proposal'
+    assert wheel.active.config.rubric=='Working criteria'
+    wheel.close()
+
+
 def test_question_stage_backfills_all_available_training_labels_without_a_development_gate(tmp_path):
     calls = []
     def complete(messages):

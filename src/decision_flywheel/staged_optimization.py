@@ -104,7 +104,15 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         raise ValueError("stage proposal must change only its assigned control")
     config=wheel.active.config.apply(proposal, training)
     if stage=='rubric' and not config.rubric.strip():
-        raise ValueError('rubric optimization must produce a nonempty rubric')
+        result={'stage':stage,'proposal':proposal,'activated':False,'promoted':False,
+                'validation_status':'insufficient-evidence' if not wheel.active.config.rubric.strip() else 'invalid-proposal',
+                'reason':'no usable rubric proposed; active configuration retained and future feedback may trigger another attempt',
+                'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
+                'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
+        with wheel.db:
+            wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?",(_json(result),key))
+        wheel._emit({'kind':'optimization-stage-completed',**result})
+        return result
     with wheel.db:
         wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?", (_json({"proposal": proposal}), key))
     if stage == "questions":

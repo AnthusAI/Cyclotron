@@ -746,7 +746,10 @@ statistical significance or generalization.
 
 Pending proposals that lack development coverage are retained and reevaluated
 with new labels without paying for another discovery call. Removed or corrected
-source labels invalidate that reuse. Empty/whitespace rubric proposals are rejected.
+source labels invalidate that reuse. Empty/whitespace rubric proposals never clear
+an active rubric. At cold start an optimizer can decline to infer a rubric from
+insufficient evidence: the stage records no activation and continues collecting
+feedback rather than aborting the run. A later trigger can try again.
 Trace events distinguish provisional initialization/refinement from measured
 promotion and carry the actual active configuration and model exchanges.
 
@@ -760,6 +763,31 @@ feedback, preserves progress across restarts, excludes retracted votes, and
 records the transition count and previous/current labels in each trigger check.
 Few-shot, question-discovery, and retraining cadences remain separate. Existing
 recordings retain their original schedules; this changes future runs, not history.
+
+### October 6: transition-triggered operational replay
+
+A fresh replay of the same frozen 87-label history made seven rubric requests,
+at cycles 6, 15, 22, 25, 33, 41, and 61. The optimizer incorporated the human's
+knowledge-handling explanation at cycle 22. Six few-shot examples became active
+at cycle 40, four supporting questions became active at cycle 60, and the example
+list grew to seven at cycle 80. Subsequent request payloads contained the rubric,
+the actual labeled examples, and five classifications, not only their IDs.
+
+Cumulative predictions **before each revealed vote** agreed on 77/87 items
+(88.5%). Include recall was 4/8 (50%), precision was 4/10 (40%), and balanced
+accuracy was 71.2%. Always predicting Exclude would achieve 79/87 (90.8%) natural
+accuracy but zero Include recall and 50% balanced accuracy. The flywheel therefore
+recovered some positives at the cost of false positives; high overall accuracy
+alone is not the success criterion. Eight positive labels leave substantial
+uncertainty. These are retrospective prequential results, not final-model held-out
+accuracy or a controlled estimate of the effect of the scheduling change.
+
+The completed run used 370 decision-model requests and 11 optimizer requests.
+A preceding attempt used six decision requests and one optimizer request before
+an early blank proposal exposed a lifecycle bug. A no-change/insufficient-evidence
+proposal now records deferral rather than aborting feedback collection, and never
+clears a working rubric. Both private traces remain available; no article text or
+human-feedback database is redistributed with these aggregate notes.
 
 Recent evaluation selects the newest available audit items per class, up to five
 per class. It walks backward to find scarce-class votes and drops older surplus
