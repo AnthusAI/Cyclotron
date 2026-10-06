@@ -175,10 +175,25 @@ for(const item of timelineItems){
  if(label)item.style=`--marker-color:${classColor(label)}`;
  item.className=source?(source.source_table==='presentations'?'marker-prediction':'marker-human'):
   event?.kind==='human-feedback'?'marker-human':event?.kind==='prediction'?'marker-prediction':`marker-${event?.kind||'event'}`;
+ if(label&&item.className==='marker-prediction')item.group='prediction-class-'+classes.indexOf(label);
+ else if(label&&item.className==='marker-human')item.group='label-class-'+classes.indexOf(label);
+ else if(item.group==='decisions')item.group='decision-api';
  item.type='box';
  item.content=document.createElement('span');item.content.textContent=item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
  item.content.setAttribute('aria-label',item.title);
 }
+const classGroups=[];
+for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Model decisions'],['human-labels','label-class-','Human labels']]){
+ const children=[];
+ classes.forEach((label,index)=>{const id=prefix+index;if(!timelineItems.some(item=>item.group===id))return;
+  const heading=document.createElement('span');heading.textContent=label;heading.style.color=classColor(label);
+  children.push({id,content:heading});});
+ if(children.length)classGroups.push({id:parent,content:title,nestedGroups:children.map(g=>g.id),showNested:true},...children);
+}
+const occupied=new Set(timelineItems.map(i=>i.group));
+const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions'].includes(g.id));
+if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Decision API requests/responses'});
+timelineData.groups=[...classGroups,...otherGroups];
 const maximum=Math.max(1000,(ordered.length-1)*1000);
 const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,horizontalScroll:false,moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
 el('zoom-in').onclick=()=>timeline.zoomIn(.5);
