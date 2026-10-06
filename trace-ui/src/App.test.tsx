@@ -11,6 +11,8 @@ test('the explorer exposes accessible timeline controls without a redundant lege
   expect(screen.getByRole('button',{name:'Reset zoom'})).toBeVisible()
   expect(screen.getByRole('button',{name:'Zoom in'})).toHaveAttribute('title','Zoom in')
   expect(screen.getByRole('button',{name:'Close details'})).toBeVisible()
+  expect(screen.getByRole('button',{name:'Enter fullscreen'})).toBeVisible()
+  expect(screen.getByText('Horizontal scroll: pan · vertical scroll: rows')).toBeVisible()
   expect(screen.getByText('135')).not.toBeVisible()
   expect(document.getElementById('label-legend')).toBeNull()
   expect(document.getElementById('timeline')).toBeInTheDocument()

@@ -98,16 +98,18 @@ class coverage is recorded as waiting, never as a successful optimization.
 
 Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
-Close details to expand the timeline to full width. Horizontal trackpad
-scrolling pans without changing scale;
-vertical scrolling zooms at the pointer. A gesture keeps its initial direction
+The explorer fills the viewport without document scrolling. Close details to
+expand the timeline to full width. Horizontal trackpad scrolling pans without
+changing scale; vertical scrolling moves through timeline rows. Enter fullscreen
+to use vertical scrolling for zoom at the pointer. Exit fullscreen (or press
+Escape) to return to row scrolling. The inspector scrolls independently.
+A gesture keeps its initial direction
 so diagonal drift does not switch between pan and zoom. Reset zoom returns to
 a four-cycle view near the current location; Recorded cycles shows the entire run.
 Zoom-out controls remain effective at the minimum scale.
 Select a marker to reopen the adjacent inspector, or use Show details to restore
-the last selection. Non-stacking lanes
-grow to fit all rows without internal vertical scrolling. Drag the background to pan,
-use ordinary scroll over the timeline or Zoom buttons to zoom without modifier keys,
+the last selection. Non-stacking lanes remain inside the timeline's scroll area.
+Drag the background to pan, use Zoom buttons in either mode,
 and drag the native playback pointer to
 inspect a step. Previous/Next moves chronologically across labels, predictions and
 optimization records; the window follows an off-screen pointer without changing

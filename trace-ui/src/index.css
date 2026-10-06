@@ -55,11 +55,25 @@
 }
 
 html {color-scheme:light dark;font-size:14px}
+html,body,#root {height:100%;overflow:hidden}
 body {margin:0;min-width:360px;-webkit-font-smoothing:antialiased}
-.workspace {display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:20px;align-items:start}
+.app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.app-shell > header {flex-shrink:0}
+.explorer-main {display:flex;flex-direction:column;flex:1;min-height:0}
+.explorer-main > :not(.workspace) {flex-shrink:0}
+.run-statistics {max-height:160px;overflow:auto}
+.workspace {position:relative;display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:16px;align-items:stretch}
+.workspace.is-fullscreen,.workspace:fullscreen {position:fixed;inset:0;z-index:50;padding:12px;background:var(--background);height:100dvh}
+.timeline-pane {min-height:0;min-width:0;display:flex;flex-direction:column}
+.timeline-pane > :not(.timeline-viewport) {flex-shrink:0}
+.timeline-viewport {flex:1;min-height:0;overflow:hidden}
+#timeline {height:100%;overscroll-behavior:contain}
+.recording-details {max-height:130px;overflow:auto}
 .workspace.inspector-closed {grid-template-columns:minmax(0,1fr)}
-#inspector {position:sticky;top:20px;min-width:0;max-height:calc(100vh - 40px);overflow:hidden}
-.inspector-body {overflow:auto;scrollbar-width:thin}
+#inspector {min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+#inspector[hidden] {display:none}
+#inspector > :first-child {flex-shrink:0}
+.inspector-body {flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #event-fields {display:grid;gap:8px}
 #event-fields dt {font-size:11px;letter-spacing:.04em;font-weight:600;text-transform:uppercase;color:var(--muted-foreground);margin-top:12px}
 #event-fields dd {margin:0;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -94,7 +108,7 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-item.vis-range.cycle-label {background:var(--secondary)!important;color:var(--secondary-foreground)!important;border:1px solid var(--border)!important;cursor:pointer}
 .cycle-label .vis-item-content {padding:8px 12px!important;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:1000px){.workspace {grid-template-columns:minmax(0,1fr) 280px}}
-@media(max-width:700px){.workspace {grid-template-columns:minmax(0,1fr)}#inspector {position:static;max-height:none}}
+@media(max-width:700px){.workspace {grid-template-columns:minmax(0,1fr)}#inspector {position:absolute;inset:0 0 0 auto;width:min(360px,100%);z-index:10;box-shadow:-8px 0 24px #0002}.explorer-main {padding:8px}.app-shell > header {padding:8px 16px}.explorer-main h1 {font-size:18px}.explorer-main > :first-child p {display:none}}
 
 :root {
     --background: oklch(1 0 0);
