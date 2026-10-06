@@ -43,6 +43,18 @@ explicit expand controls. Nothing from another event is displayed as the selecte
 event's exchange. Label-value, partition and comment filters change only the
 timeline view, never the recording. Returned tool calls do not by themselves
 prove tool execution.
+Response markers link directly to their matching optimizer request, which opens
+the exact full messages. Selected demonstrations in that request are resolved
+against its recorded feedback context and displayed with labels and content.
+Decision request markers display actual expanded examples; decision response
+markers show the classifications. Zoom stays within recorded history; start/end
+times and run/history view buttons distinguish the optimization window.
+
+Pass `--reviews var/reviewer.sqlite3` to include the original human actions and
+pre-vote prediction presentations as a separate source-history layer. It reads
+the database without writes; source records retain their original timestamps and
+provenance, never masquerading as new replay events. A run with no few-shot or
+question optimization has no such lane; the UI does not invent those experiments.
 Only timestamped recorded events are plotted: absent historical labels are not
 invented. The dependency is bundled under MIT with its license notices, without
 CDN calls. Previous/Next and the event slider step through

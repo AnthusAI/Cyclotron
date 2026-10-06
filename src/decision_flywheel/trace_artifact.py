@@ -14,7 +14,7 @@ def read_trace(database):
                 for number, payload in db.execute('SELECT id,payload FROM runtime_events ORDER BY id')]
 
 
-def render_trace(events):
+def render_trace(events, reviewer_history=()):
     def encode(value):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
         return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
@@ -23,7 +23,7 @@ def render_trace(events):
     css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
-        '__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
+        '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
         '__TIMELINE_DATA__', encode(timeline_data(events))).replace(
         '__TIMELINE_JS__', javascript.replace('</script', '<\\/script')).replace('__TIMELINE_CSS__', css).replace(
         '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text()))
@@ -77,6 +77,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--database', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--reviews', type=Path, help='optional original reviewer source history, read-only')
     args = parser.parse_args(argv)
     if args.output.exists():
         parser.error('choose a new output path; recorded artifacts are not overwritten')
@@ -84,7 +85,8 @@ def main(argv=None):
         parser.error('output must be an HTML file')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open('x') as stream:
-        stream.write(render_trace(read_trace(args.database)))
+        from .trace_review_history import read_review_history
+        stream.write(render_trace(read_trace(args.database), read_review_history(args.reviews) if args.reviews else ()))
     print(f'Private offline trace: {args.output.resolve()}')
 
 
@@ -107,6 +109,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <h1>Decision Flywheel — recorded trace</h1>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
 <h2>Feedback and optimization timeline</h2><div id="timeline"></div><p id="timeline-note"></p>
+<p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
 <div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
 <label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
 <label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
@@ -117,6 +120,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <label for="seek">Recorded event position</label><input id="seek" type="range" min="0" value="0">
 <p id="status" aria-live="polite"></p>
 <section><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
+<button id="paired-request" hidden>Inspect matching optimizer request</button>
 <details id="content-box"><summary id="content-title">Inspect event content</summary><pre id="event-content"></pre></details>
 <details><summary>Configuration at this point</summary><pre id="configuration"></pre></details>
 <details><summary>Exact raw event</summary><pre id="raw-event"></pre></details></section>
@@ -125,6 +129,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
 <script id="round-data" type="application/json">__ROUNDS__</script>
 <script id="timeline-data" type="application/json">__TIMELINE_DATA__</script>
+<script id="review-history" type="application/json">__REVIEW_HISTORY__</script>
 <details><summary>Bundled vis-timeline MIT license</summary><pre id="vendor-license"></pre></details>
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
 <script>
@@ -132,24 +137,41 @@ const events=JSON.parse(document.getElementById('recording').textContent);
 const presentation=JSON.parse(document.getElementById('presentation').textContent);
 const exchanges=JSON.parse(document.getElementById('exchanges').textContent);
 const roundData=JSON.parse(document.getElementById('round-data').textContent);
+const reviewHistory=JSON.parse(document.getElementById('review-history').textContent);
 const el=id=>document.getElementById(id);let position=0,timer=null;
 el('vendor-license').textContent=JSON.parse(el('vendor-license-data').textContent);
 const timelineData=JSON.parse(el('timeline-data').textContent);
 const timelineItems=timelineData.items.map(item=>({...item,content:(()=>{const label=document.createElement('span');label.textContent=item.content;return label;})()}));
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:true,orientation:'top'});
-for(const [id,values] of [['label-filter',events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled'))],
- ['role-filter',events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned')]]){
+for(const [index,source] of reviewHistory.entries()){
+ const row=source.record,isVote=source.source_table==='review_events';
+ const label=isVote?`${row.action}: ${row.label||'—'}${row.comment?' · comment':''}`:`Predicted ${row.predicted_label} (${Math.round(row.confidence*100)}%)`;
+ const span=document.createElement('span');span.textContent=label;
+ timelineItems.push({id:'source:'+index,source_index:index,group:isVote?'feedback':'decisions',start:row.shown_at||row.created_at,type:'point',content:span});
+}
+for(const group of [{id:'feedback',content:'Human labels'},{id:'decisions',content:'Decisions'}])if(timelineItems.some(i=>i.group===group.id)&&!timelineData.groups.some(g=>g.id===group.id))timelineData.groups.push(group);
+const times=timelineItems.map(i=>Date.parse(i.start)).filter(Number.isFinite),runTimes=events.map(e=>Date.parse(e.created_at)).filter(Number.isFinite);
+const minimum=times.length?Math.min(...times):Date.now(),maximum=times.length?Math.max(...times):minimum+1000,padding=Math.max(1000,(maximum-minimum)*.03);
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:true,orientation:'top',min:minimum-padding,max:maximum+padding,zoomMin:1000,zoomMax:Math.max(2000,maximum-minimum+2*padding)});
+function showRun(){if(runTimes.length)timeline.setWindow(Math.min(...runTimes)-1000,Math.max(...runTimes)+1000);}
+el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.fit();
+showRun();
+el('run-bounds').textContent=runTimes.length?`Optimization run: ${new Date(Math.min(...runTimes)).toLocaleString()} → ${new Date(Math.max(...runTimes)).toLocaleString()}. Review history is original source data, not a replay of this run.`:'No timestamped run';
+for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
+ ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
 }
 function applyFilters(){
- timeline.setItems(timelineItems.filter(item=>{const e=events[item.event_index];if(e.kind!=='human-feedback')return true;
+ timeline.setItems(timelineItems.filter(item=>{
+ if(item.source_index!==undefined){const source=reviewHistory[item.source_index];if(source.source_table!=='review_events')return true;
+  return (!el('label-filter').value||source.record.label===el('label-filter').value)&&(!el('role-filter').value||source.article.assignment===el('role-filter').value)&&(!el('comment-filter').checked||Boolean(source.record.comment));}
+ const e=events[item.event_index];if(e.kind!=='human-feedback')return true;
   return (!el('label-filter').value||String(e.feedback?.final_answer_value??'unlabeled')===el('label-filter').value)
    &&(!el('role-filter').value||(e.assignment||'unassigned')===el('role-filter').value)
    &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));}));
 }
 for(const id of ['label-filter','role-filter','comment-filter'])el(id).onchange=applyFilters;
-timeline.on('select',properties=>{if(properties.items.length)move(Number(properties.items[0]));});
-el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} recorded label events. Pan/zoom and click individual request, response, evaluation or label markers. ${timelineData.undated_count} events lack valid timestamps. Missing historical labels are not reconstructed. vis-timeline 8.5.4 (MIT).`;
+timeline.on('select',properties=>{if(properties.items.length){const id=properties.items[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
+el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} flywheel feedback events; ${reviewHistory.filter(s=>s.source_table==='review_events').length} original human actions and ${reviewHistory.filter(s=>s.source_table==='presentations').length} original pre-vote predictions. Pan/zoom and click individual markers. ${timelineData.undated_count} events lack valid timestamps. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
 // Display-only decoding: raw events below are kept byte-for-byte semantically intact.
@@ -207,6 +229,7 @@ function draw(){
 function inspectEvent(event){
  el('event-fields').replaceChildren();
  el('content-box').open=false;
+ el('paired-request').hidden=true;
  if(!event){el('event-title').textContent='No recorded events';return;}
  el('event-title').textContent=event.kind.replaceAll('-',' ');
  el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||'unscoped'}`;
@@ -217,8 +240,11 @@ function inspectEvent(event){
   field('Explanation',event.feedback?.edit_comment_value);field('Item',event.feedback?.item_id);
  }else if(event.kind==='optimizer-request'){
   field('Model',event.requested_model);field('Messages',event.messages?.length);
-  try{const briefing=JSON.parse(event.messages.at(-1).content);field('Feedback items',briefing.feedback?.length);field('Human explanations',briefing.human_explanations);field('Control being optimized',briefing.current?.control_under_test);}catch(error){}
+  try{const briefing=JSON.parse(event.messages.at(-1).content);field('Feedback items',briefing.feedback?.length);field('Human explanations',briefing.human_explanations);field('Control being optimized',briefing.current?.control_under_test);
+   for(const id of briefing.current?.example_ids||[]){const example=briefing.feedback?.find(row=>row.id===id);field('Selected example '+id,example?{label:example.label,content:example.values,explanation:example.comment}:'Not present in this recorded context');}
+  }catch(error){}
   payload=event.messages;title='Read exact optimizer messages';
+  el('content-box').open=true;
  }else if(event.kind==='optimizer-response'){
   field('Model',event.model);let proposal;
   try{proposal=JSON.parse(event.content);}catch(error){}
@@ -227,16 +253,30 @@ function inspectEvent(event){
   if(proposal)for(const key of ['rubric','example_ids','tasks','dynamic_elements'])if(key in proposal){field('Before: '+key,config[key]??'Unavailable');field('Proposed: '+key,proposal[key]);}
   field('Tool calls returned',event.tool_calls?.length||0);field('Status','Proposal only — not an active configuration change');
   payload={content:proposal||event.content,tool_calls:event.tool_calls||[],usage:event.usage};title='Read optimizer response and returned tool calls';
+  const owner=roundData.owners[String(position)],round=roundData.rounds[String(owner)];
+  const request=round?.optimizer_requests.filter(i=>i<position&&(!event.briefing_fingerprint||events[i].briefing_fingerprint===event.briefing_fingerprint)).at(-1);
+  if(request!==undefined){el('paired-request').hidden=false;el('paired-request').onclick=()=>move(request);}
  }else if(event.kind==='candidate-evaluated'){
   for(const key of ['accuracy','balanced_accuracy','balanced_brier']){field('Incumbent '+key,event.incumbent?.[key]);field('Candidate '+key,event.candidate?.[key]);}
   field('Reason',event.reason);field('Independent evaluation',event.evaluation_independent_of_optimizer_context);
  }else if(event.kind==='decision-request'){
   field('Model',event.model);field('Target',event.target_id);field('Examples',event.state?.examples?.length);field('Questions',Object.keys(event.questions||{}).join(', '));title='Inspect actual expanded decision request';
+  for(const [index,example] of (event.state?.examples||[]).entries())field('Example '+(index+1),example);
+ }else if(event.kind==='decision-response'){
+  for(const [name,answer] of Object.entries(event.answers||{}))field(name,answer);
  }else{
   field('Reason',event.reason||event.result?.reason);field('Status',event.status);field('Training items',event.training_count);field('Feature count',event.features?.length);
   field('Promoted',event.promoted??event.result?.promoted);
  }
  el('content-title').textContent=title;el('event-content').textContent=readable(payload);
+}
+function inspectSource(index){
+ const source=reviewHistory[index],row=source.record;
+ el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;
+ el('event-title').textContent=source.source_table==='presentations'?`Predicted ${row.predicted_label} · ${Math.round(row.confidence*100)}%`:`Human ${row.action}: ${row.label||'—'}`;
+ el('event-summary').textContent=`Original reviewer record · ${row.shown_at||row.created_at} · ${source.article.assignment}. Not generated by this optimization run.`;
+ for(const [label,value] of Object.entries({Title:source.article.title,Abstract:source.article.abstract,Explanation:row.comment,'Prediction shown before vote':source.presentation?`${source.presentation.predicted_label} (${Math.round(source.presentation.confidence*100)}%)`:undefined}))if(value){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;el('event-fields').append(dt,dd);}
+ el('event-content').textContent=readable(source);el('raw-event').textContent=pretty(row);el('configuration').textContent='Historical source record: configuration not reconstructed from later optimization state.';
 }
 function move(index){stop();position=Math.max(0,Math.min(events.length-1,index));draw();}
 el('back').onclick=()=>move(position-1);el('next').onclick=()=>move(position+1);

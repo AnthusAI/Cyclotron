@@ -18,9 +18,11 @@ def test_labels_keep_values_roles_and_retractions_and_rounds_use_distinct_lanes(
     assert data['items'][0]['content'] == 'accept · development · submitted · comment'
     span = data['items'][1]
     assert span['group'] == 'questions'
-    assert span['end'] == events[2]['created_at']
+    assert 'end' not in span
     assert span['event_index'] == 1
-    assert 'waiting' in span['content']
+    assert span['type'] == 'point'
+    assert 'started' in span['content']
+    assert 'optimizer' not in {g['id'] for g in data['groups']}
 
 
 def test_missing_dates_are_not_invented_and_incomplete_rounds_are_points():

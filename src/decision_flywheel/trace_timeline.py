@@ -1,7 +1,7 @@
 """Presentation-only projection of recorded events onto timeline lanes."""
 from datetime import datetime
 
-GROUPS = [('feedback', 'Human labels'), ('rubric', 'Rubric'), ('examples', 'Few-shot examples'),
+GROUPS = [('feedback', 'Human labels'), ('decisions', 'Decisions'), ('rubric', 'Rubric'), ('examples', 'Few-shot examples'),
           ('questions', 'Classifier questions'), ('classifier', 'ML optimization'),
           ('fit', 'ML fitting'), ('evaluation', 'Evaluation / outcome'), ('optimizer', 'Optimizer (unscoped)'),
           ('configuration', 'Configuration changes')]
@@ -33,10 +33,10 @@ def timeline_data(events):
                 continue
             label = group + ' · started'
         elif kind in {'step-completed', 'step-paused', 'step-failed'}:
-            item = starts.get(event.get('step_id'))
-            if item:
-                item.update(end=date, type='range', content=item['group'] + ' · ' + event.get('status', kind.removeprefix('step-')))
             group, label = 'evaluation', event.get('status', kind.removeprefix('step-'))
+        elif kind in {'prediction','decision-request','decision-response'}:
+            group='decisions'
+            label=(str(event.get('label')) if kind=='prediction' else kind.replace('decision-','Decision '))
         elif kind in {'fit-started', 'fit-completed'}:
             group, label = 'fit', kind
         elif kind in {'optimizer-request', 'optimizer-response', 'proposal-validated'}:
@@ -53,5 +53,6 @@ def timeline_data(events):
             items.append(item)
             if kind == 'step-started' and event.get('step_id'):
                 starts[event['step_id']] = item
-    return {'groups': [{'id': key, 'content': title} for key, title in GROUPS],
+    used={item['group'] for item in items}
+    return {'groups': [{'id': key, 'content': title} for key, title in GROUPS if key in used],
             'items': items, 'undated_count': undated}
