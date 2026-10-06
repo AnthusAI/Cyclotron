@@ -282,20 +282,22 @@ function cycleCells(items){
   if(!buckets.has(key))buckets.set(key,{cycle,items:[]});
   buckets.get(key).items.push(item);
  }
- return [...passthrough,...[...buckets].map(([id,bucket])=>{
+ return [...passthrough,...[...buckets].flatMap(([id,bucket])=>{
   const members=bucket.items,cycle=bucket.cycle;
   const first=members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
+  const trigger=first.group==='triggers';
+  if(trigger&&!members.some(member=>member.className.includes('trigger-fired')))return [];
   const decision=first.className.includes('marker-prediction')||first.className.includes('marker-human');
   const content=document.createElement('span');
-  if(!decision){
+  if(!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
    if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
-  return {...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
-   className:first.className+(decision?' cycle-decision-cell':' cycle-event-cell'),
-   title:members.map(m=>m.title).join('\n')};
+  return [{...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
+   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell'),
+   title:members.map(m=>m.title).join('\n')}];
  })];
 }
 plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));
