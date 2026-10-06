@@ -307,6 +307,8 @@ function mlActivity(cycleId,lane,recording=events){
  const activations=rows.filter(event=>event.kind==='classifier-activated'&&event.classifier_snapshot?.head);
  const accepted=lane==='fit'?activations.length>0:optimizationActivity(cycleId,'classifier',recording).accepted;
  const provisional=activations.some(event=>event.classifier_snapshot.validation_status==='provisional');
+ const raw=rows.some(event=>event.kind==='classifier-training-completed'&&event.promoted&&event.selected?.feature_set==='raw_decision');
+ if(lane!=='fit'&&raw)return {accepted,label:'Raw decision model selected; no learned head'};
  return {accepted,label:accepted?(provisional?'Head activated provisionally; improvement not established':'ML head selected / activated'):'No ML candidate accepted; incumbent retained'};
 }
 function cycleCells(items){
@@ -651,6 +653,11 @@ function inspectEvent(event){
  if(cycle)field('Cycle',cycle.title);
  if(event.kind==='trigger-evaluated'){field('Stage',event.stage);field('Run',event.due);field('Reason',event.reason);field('Trigger inputs',event.details);}
  if(event.trigger_event_id)field('Caused by trigger event',event.trigger_event_id);
+ if(event.selection_policy)field('Selection policy',event.selection_policy);
+ if(event.selection&&typeof event.selection==='object'){field('Selection policy',event.selection.policy);
+  field('Incumbent objective scores',event.selection.incumbent_scores);
+  field('Candidate objective scores',event.selection.candidate_scores);
+  field('Selection result',event.selection.reason);}
  if(event.cycle_id&&((event.step_stage||event.stage)==='classifier'||['fit-started','fit-completed'].includes(event.kind))){
   field('ML outcome',mlActivity(event.cycle_id,['fit-started','fit-completed'].includes(event.kind)?'fit':'classifier-attempts').label);
  }
@@ -659,6 +666,7 @@ function inspectEvent(event){
   field('Selected feature set',event.selected?.feature_set);
   field('Candidate comparison',(event.trials||[]).map(trial=>({feature_set:trial.feature_set,
    training_class_weighting:trial.training_class_weighting,
+   selection:trial.selection,
    balanced_brier:trial.candidate?.balanced_brier,accuracy:trial.candidate?.accuracy,
    per_class:trial.candidate?.per_class,recall_safeguard_passed:trial.recall_safeguard_passed})));
  }

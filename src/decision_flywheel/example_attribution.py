@@ -65,7 +65,9 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
     key=_hash({'baseline':baseline.fingerprint,'model':wheel.model.model_identity,
         'training':wheel._evidence(training),'development':wheel._evidence(rows),
         'samples':[row.item.id for row in rows],'swaps':[(s['slot'],s['added_id']) for s in swaps],
-        'cache_options':asdict(wheel.cache_options)})
+        'cache_options':asdict(wheel.cache_options),
+        'evaluation_weighting':wheel.evaluation_weighting,
+        'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None})
     wheel.db.execute('CREATE TABLE IF NOT EXISTS example_measurements (id TEXT PRIMARY KEY,status TEXT,payload TEXT)')
     saved=wheel.db.execute('SELECT status,payload FROM example_measurements WHERE id=?',(key,)).fetchone()
     if saved and saved[0]=='complete' and wheel.cache_options.policy!='refresh':return json.loads(saved[1])
@@ -101,6 +103,7 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
             'explanation':examples[key].context.get('human_feedback')}
             for role,key in (('removed',swap['removed_id']),('added',swap['added_id']))}
         entry.update(candidate=metrics,example_ids=list(candidate.config.example_ids),
+            selection=wheel.selection_policy.compare(base_metrics,metrics) if wheel.selection_policy else None,
             decision_metrics=_metrics(replace(candidate,head=None),rows,batches),
             brier_gain=base_metrics[metric]-metrics[metric],accuracy_change=metrics['accuracy']-base_metrics['accuracy'],
             question_effects=effects,question_means=means,
@@ -108,8 +111,12 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
         rankings.append(entry)
         wheel._emit({'kind':'candidate-evaluated','stage':'examples','experiment':'single-example-swap',
             'measurement_fingerprint':key,'incumbent':base_metrics,**entry,'promoted':False})
-    rankings.sort(key=lambda r:(-r['brier_gain'],-r['accuracy_change'],r['slot'],r['added_id']))
-    winners=[r for r in rankings if r['brier_gain']>0 and r['recall_safeguards_pass']]
+    if wheel.selection_policy:
+        rankings.sort(key=lambda r:wheel.selection_policy.rank(r['candidate']),reverse=True)
+        winners=[r for r in rankings if r['selection']['improved']]
+    else:
+        rankings.sort(key=lambda r:(-r['brier_gain'],-r['accuracy_change'],r['slot'],r['added_id']))
+        winners=[r for r in rankings if r['brier_gain']>0 and r['recall_safeguards_pass']]
     report={'stage':'examples','measurement_fingerprint':key,'scope':'matched development selection; not held-out validation',
         'effect_scope':'conditional on fixed rubric, questions, remaining examples, order and learned head; not an intrinsic example score',
         'supporting_question_scope':'probability shifts grouped by final human label; not correctness labels for supporting questions',

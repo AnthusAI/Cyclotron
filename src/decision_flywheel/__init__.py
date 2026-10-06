@@ -18,6 +18,7 @@ from .classifier_config import ClassifierConfig
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
 from .flywheel import DecisionFlywheel, FittedClassifier
 from .evaluation_policy import EvaluationPolicy
+from .selection_policy import SelectionPolicy
 from .feedback_trigger import LabelTransitionTrigger
 from .classification_metrics import classification_metrics
 from .replay import ReplayPlan, plan_replay, recent_balanced, run_replay
@@ -34,6 +35,7 @@ def run_demo(*args, **kwargs):
 
 __all__ = [
     "EvaluationPolicy",
+    "SelectionPolicy",
     "LabelTransitionTrigger",
     "FeatureBank", "probability_diagnostics",
     "measure_questions", "rank_question", "select_window",

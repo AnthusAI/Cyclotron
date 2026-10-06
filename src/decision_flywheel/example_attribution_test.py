@@ -18,6 +18,35 @@ class SignalModel:
         return ClassifiedAnswers({'decision':DecisionResult(label,{key:p if key==label else 1-p for key in TASK.labels})},self.model_identity,{},0.)
 
 
+def test_probability_only_gain_does_not_win_when_example_selection_optimizes_f1(tmp_path):
+    from .selection_policy import SelectionPolicy
+    wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK, example_ids=('t0','t1')),
+        SignalModel(), agent([]), max_requests=50, selection_policy=SelectionPolicy('f1', positive_class='include'))
+    report = asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, protected=(), propensities={r.item.id:1. for r in TRAIN}))
+    assert report['recommended_proposal'] is None
+    assert report['rankings'][0]['selection']['policy']['primary'] == 'f1'
+    wheel.close()
+
+
+def test_changed_objective_recomputes_selection_without_repaying_unchanged_requests(tmp_path):
+    from .selection_policy import SelectionPolicy
+    model = SignalModel()
+    path = tmp_path / 'runtime.sqlite'
+    config = ClassifierConfig(TASK, example_ids=('t0','t1'))
+    kwargs = dict(protected=(), propensities={r.item.id:1. for r in TRAIN})
+    wheel = DecisionFlywheel(path, config, model, agent([]), max_requests=50)
+    first = asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, **kwargs))
+    calls = len(model.calls)
+    wheel.close()
+    wheel = DecisionFlywheel(path, config, model, agent([]), max_requests=50,
+        selection_policy=SelectionPolicy('f1', positive_class='include'))
+    second = asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, **kwargs))
+    assert first['measurement_fingerprint'] != second['measurement_fingerprint']
+    assert first['recommended_proposal'] and second['recommended_proposal'] is None
+    assert len(model.calls) == calls
+    wheel.close()
+
+
 def test_each_swap_changes_one_same_class_example_and_keeps_its_display_slot():
     config=ClassifierConfig(TASK,rubric='Keep useful papers',example_ids=('t0','t1'))
     swaps=plan_swaps(config,TRAIN,preferred_ids=('t3',),max_trials=3)

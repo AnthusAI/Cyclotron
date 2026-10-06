@@ -1,5 +1,6 @@
 """Separately scheduled controls with persistent discovery and measurement."""
 import json
+from dataclasses import asdict
 from datetime import datetime,timezone
 
 from .flywheel import _hash, _json
@@ -31,6 +32,7 @@ def stage_briefing(wheel, stage, training, development, protected):
     measurements=_example_experiments(wheel,training,development) if stage=='examples' else []
     return FeedbackBriefing.build(wheel.initial.task, training,
         current={**wheel.active.config.briefing_state(), "control_under_test": control,
+                 "selection_policy":asdict(wheel.selection_policy) if wheel.selection_policy else None,
                  "stage": stage, "request_budget_bytes": wheel.max_request_bytes,
                  **({'example_experiments':measurements} if stage=='examples' else {})},
         protected=tuple(row.item for row in development)+tuple(protected),
@@ -70,6 +72,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     key_data['context_validation_floor']=wheel.context_validation_floor
     key_data['head_fitting']={'refit_on_context_activation':True,'minimum_training_per_class':3}
     from dataclasses import asdict
+    key_data['selection_policy']=asdict(wheel.selection_policy) if wheel.selection_policy else None
     key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
     key_data["train_after_questions"] = train_after_questions
@@ -196,10 +199,15 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             allowance=wheel.evaluation_policy.recency_allowance(counts)
             accepted=(not measurements or measurements['candidate']['balanced_brier'] <=
                       measurements['incumbent']['balanced_brier'] + allowance)
+            selection = None
+            if measurements and wheel.selection_policy:
+                selection = wheel.selection_policy.compare(measurements['incumbent'], measurements['candidate'],
+                    primary_allowance=allowance if wheel.selection_policy.primary in ('brier','balanced_brier') else allowance / 2)
+                accepted = selection['provisional_eligible']
             if accepted:
                 wheel._activate(candidate)
             result={'promoted':False,'activated':accepted,'validation_status':'provisional','proposal':proposal,
-                    'pending_evaluation':not accepted, 'recency_allowance':allowance,
+                    'pending_evaluation':not accepted, 'recency_allowance':allowance, 'selection':selection,
                     'reason':('working rubric refined with a decaying recency preference; evaluation remains exploratory'
                               if accepted else 'proposal retained; measured regression exceeds current recency allowance'),
                     'development_counts':counts,'context_validation_floor':wheel.context_validation_floor,**measurements}
@@ -215,6 +223,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             result = await wheel.improve(training, development, protected=protected, propensities=propensities,
                 candidate_proposal=proposal, retry_interrupted=retry_interrupted, require_recall_safeguards=True)
     result = {**result, "stage": stage, 'proposal':proposal,
+              'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
               'basis_context_version':key_data['context'], 'proposal_training_evidence':key_data['training'],
               "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"]}
     with wheel.db:

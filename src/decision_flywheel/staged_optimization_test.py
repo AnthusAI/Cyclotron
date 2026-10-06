@@ -10,6 +10,26 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
 
 
+def test_provisional_rubric_recency_cannot_override_a_secondary_accuracy_guard(tmp_path):
+    from .selection_policy import SelectionPolicy
+    from .flywheel import FittedClassifier
+    optimizer = OptimizerAgent(lambda _: OptimizerReply('{"rubric":"Newer criteria"}', 'fake'))
+    wheel = DecisionFlywheel(tmp_path / 'wheel.sqlite', ClassifierConfig(TASK, rubric='Working criteria'),
+        FakeModel(), optimizer, selection_policy=SelectionPolicy('recall', 'accuracy', positive_class='include'))
+    wheel._activate(FittedClassifier(wheel.active.config, validation_status='provisional'))
+    async def score(classifier, *args):
+        newer = classifier.config.rubric == 'Newer criteria'
+        return {'balanced_brier': .1, 'accuracy': .2 if newer else .9,
+                'per_class': {label: {'precision':.5, 'recall':1. if newer else .5} for label in TASK.labels}}
+    wheel._score = score
+    result = asyncio.run(optimize_stage(wheel, 'rubric', TRAIN, DEV, protected=(),
+        propensities={r.item.id:1. for r in TRAIN}, min_development_per_class=1))
+    assert not result['activated']
+    assert result['selection']['reason'] == 'secondary objective regression exceeds allowance'
+    assert wheel.active.config.rubric == 'Working criteria'
+    wheel.close()
+
+
 def test_a_failed_context_refit_never_replaces_the_active_configuration_or_head(tmp_path):
     from .candidate_fitting import fit_candidate
     model=FakeModel()

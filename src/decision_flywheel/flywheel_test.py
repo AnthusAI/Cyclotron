@@ -17,6 +17,45 @@ DEV = tuple(LabeledItem(Item(f"d{i}", {"text": f"{'yes' if i % 2 else 'no'} dev 
                         "include" if i % 2 else "exclude") for i in range(2))
 
 
+def test_configured_f1_is_recorded_and_used_instead_of_the_default_brier(tmp_path):
+    from .selection_policy import SelectionPolicy
+    wheel = DecisionFlywheel(tmp_path / 'wheel.sqlite', ClassifierConfig(TASK), FakeModel(), agent([]),
+                             selection_policy=SelectionPolicy('f1', positive_class='include'))
+    result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1. for r in TRAIN}))
+    assert result['promotion_metric'] == 'f1'
+    assert result['selection']['policy']['positive_class'] == 'include'
+    assert result['selection']['candidate_scores']['f1'] == 1.
+    wheel.close()
+
+
+def test_selection_configuration_survives_restart_without_a_model_call(tmp_path):
+    from .selection_policy import SelectionPolicy
+    path = tmp_path / 'wheel.sqlite'
+    policy = SelectionPolicy('recall', 'accuracy', positive_class='include')
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]), selection_policy=policy)
+    wheel.close()
+    model = FakeModel()
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), model, agent([]))
+    assert wheel.selection_policy == policy
+    assert model.calls == 0
+    wheel.close()
+
+
+def test_an_old_qualified_trial_cannot_be_promoted_after_the_objective_changes(tmp_path):
+    from .selection_policy import SelectionPolicy
+    path = tmp_path / 'wheel.sqlite'
+    kwargs = dict(protected=(), propensities={r.item.id:1. for r in TRAIN})
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]))
+    result = asyncio.run(wheel.improve(TRAIN, DEV, apply_promotion=False, **kwargs))
+    assert result['improved']
+    wheel.close()
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]),
+        selection_policy=SelectionPolicy('f1', positive_class='include'))
+    with pytest.raises(ValueError, match='selection policy changed'):
+        wheel.promote_trial(result['trial_fingerprint'], TRAIN, DEV)
+    wheel.close()
+
+
 def test_development_assignment_is_fixed_before_labels_and_independent_of_arrival_order():
     first = {key: development_assignment("study", key) for key in ("a", "b", "c")}
     assert first == {key: development_assignment("study", key) for key in ("c", "b", "a")}

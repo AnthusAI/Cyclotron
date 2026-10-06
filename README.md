@@ -319,6 +319,66 @@ The [context-compatible head replay](docs/experiments/ml-head-lifecycle-20261006
 documents the lifecycle repair and its audit: higher overall accuracy did not
 translate into better include recall.
 
+### Choose the optimization objective
+
+The reusable runtime accepts a `SelectionPolicy`. Set the primary objective to
+accuracy, precision, recall, or F1. Brier and balanced scores are also available.
+Precision, recall, and F1 use an explicit positive class, or macro averaging for
+a multiclass task. No class is positive merely because it is first in a list.
+
+```python
+from decision_flywheel import SelectionPolicy
+
+policy = SelectionPolicy(
+    primary="recall",
+    secondary="accuracy",
+    positive_class="include",
+    minimum_secondary=0.80,
+)
+# Supply selection_policy=policy when constructing DecisionFlywheel.
+```
+
+The primary objective ranks candidates. The secondary objective must not regress
+by default, and breaks ties in the primary score. In this example, a recall gain
+cannot win by reducing accuracy. The accuracy floor is also mandatory. Set
+`max_secondary_regression` explicitly if a small trade-off is acceptable.
+Exact ties keep the incumbent. Alternatively, use
+`SelectionPolicy("f1", positive_class="include")` to balance precision and recall
+in one score. Undefined precision from no positive predictions counts as zero
+for selection; reports still show that it is undefined.
+
+The reviewer and replay script accept the same options:
+
+```text
+--selection-primary recall --selection-secondary accuracy
+--selection-positive-class include --selection-minimum-secondary 0.80
+```
+
+For F1, use `--selection-primary f1 --selection-positive-class include`.
+For macro F1, use `--selection-primary f1 --selection-aggregation macro`.
+These flags do not authorize live calls; the usual confirmation and ceilings
+still apply. A saved runtime restores its selection policy on restart. An
+explicit new policy replaces it and records the change.
+
+Rubric, few-shot, question-deployment, and numerical classifier selection use
+this policy. Classifier selection also considers raw main-decision output when
+a learned head is active. It can select no head if that candidate wins. Candidate
+scores use the same bounded development labels, never the protected audit.
+Question discovery retains diagnostic evidence separately from deployment.
+Cold-start rubric initialization remains provisional. Later provisional rubric
+refinements retain the decaying recency allowance for the primary score, but
+cannot bypass secondary guardrails. Rate objectives use half the allowance in
+Brier units, since their range is zero to one rather than zero to two.
+
+Selection traces record the policy, both candidates' objective scores, and the
+reason. The event inspector displays these fields. Policy changes invalidate
+selection-result caches, not identical decision-request caches. Changing the
+objective does not require paying again for unchanged decision answers.
+
+New runtimes without an explicit policy keep the previous balanced-Brier and
+stage-specific recall safeguards. Earlier recorded studies used that rule;
+their results have not been recomputed with the new objectives.
+
 The holistic Jev answer can be one input to the decision head.
 It does not replace the head's final classification.
 Additional questions supply evidence that the holistic question can miss.

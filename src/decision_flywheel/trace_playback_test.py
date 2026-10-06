@@ -9,6 +9,22 @@ import pytest
 from .trace_artifact import render_trace
 
 
+def test_selection_details_expose_priorities_and_raw_selection_is_not_called_a_head_activation():
+    html = render_trace([])
+    assert "field('Candidate objective scores'" in html
+    assert "field('Incumbent objective scores'" in html
+    if not shutil.which('node'):
+        pytest.skip('Node is needed for viewer interaction spec')
+    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
+    helpers = code[code.index('function optimizationActivity('):code.index('function cycleCells(')]
+    result = subprocess.run(['node', '-e', helpers + """
+const assert=require('node:assert/strict');
+const rows=[{cycle_id:'c',stage:'classifier',kind:'classifier-training-completed',promoted:true,selected:{feature_set:'raw_decision'}}];
+assert.equal(mlActivity('c','classifier-attempts',rows).label,'Raw decision model selected; no learned head');
+"""], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_a_long_run_opens_with_every_cycle_visible():
     if not shutil.which('node'):
         pytest.skip('Node is needed for viewer interaction spec')

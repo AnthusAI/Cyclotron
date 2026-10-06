@@ -482,6 +482,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="decision adapter; the connected reviewer currently supports Jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--evaluation-weighting", choices=("natural", "equal_class"), default="equal_class")
+    from .selection_policy import add_selection_arguments, selection_from_arguments
+    add_selection_arguments(parser)
     parser.add_argument("--training-class-weighting", choices=("natural", "equal_class"), default="natural")
     parser.add_argument("--min-evaluation-per-class", type=int, default=2)
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
@@ -496,6 +498,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="required for live modes: authorizes the explicit Jev and optimizer ceilings")
     parser.add_argument("--max-live-requests", type=int, default=50)
     args = parser.parse_args(argv)
+    try:
+        selection_policy = selection_from_arguments(args)
+    except ValueError as error:
+        parser.error(str(error))
     if args.live_flywheel or args.live_jev:
         if not args.confirm_live:
             parser.error("refusing paid model calls without --confirm-live")
@@ -564,6 +570,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport), observer=observe,
                 max_requests=args.max_live_requests,
                 evaluation_weighting=args.evaluation_weighting,
+                selection_policy=selection_policy,
                 training_class_weighting=args.training_class_weighting,
                 min_evaluation_per_class=args.min_evaluation_per_class,
                 redact=tuple(os.environ.get(key, "") for key in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))

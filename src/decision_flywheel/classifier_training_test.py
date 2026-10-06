@@ -12,6 +12,61 @@ def forbidden(_):
     raise AssertionError("fitting must not invoke the optimizer")
 
 
+def test_classifier_selection_uses_configured_f1_even_when_brier_and_other_class_recall_regress(tmp_path):
+    from .selection_policy import SelectionPolicy
+    wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden),
+                             selection_policy=SelectionPolicy('f1', positive_class='include'))
+    async def score(classifier, *args):
+        candidate = classifier.head is not None
+        return {'balanced_brier': .9 if candidate else .1, 'balanced_accuracy': .5,
+                'per_class': {'include': {'precision': .8, 'recall': .8 if candidate else .2},
+                              'exclude': {'precision': .8, 'recall': .2 if candidate else .8}}}
+    wheel._score = score
+    result = asyncio.run(train_classifier(wheel, TRAIN, DEV, protected=(),
+        propensities={r.item.id: 1. for r in TRAIN}, min_development_per_class=1))
+    assert result['promoted']
+    assert result['selected']['selection']['policy']['primary'] == 'f1'
+    wheel.close()
+
+
+def test_raw_decision_model_can_replace_a_head_using_the_same_configured_objective(tmp_path):
+    from .selection_policy import SelectionPolicy
+    wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden),
+                             selection_policy=SelectionPolicy('f1', positive_class='include'))
+    kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN}, min_development_per_class=1)
+    assert asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs))['promoted']
+    async def score(classifier, *args):
+        value = .4 if classifier.head else .9
+        return {'balanced_brier': .2, 'balanced_accuracy': value,
+                'per_class': {label: {'precision':value, 'recall':value} for label in TASK.labels}}
+    wheel._score = score
+    wheel.set_optimizer_context(['More labels justify a new comparison'])
+    result = asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs))
+    assert result['promoted'] and result['selected']['feature_set'] == 'raw_decision'
+    assert wheel.active.head is None
+    assert result['selected']['selection']['candidate_scores']['f1'] == .9
+    event = next(e for e in wheel.history() if e['kind'] == 'promoted')
+    assert event['selection']['policy']['primary'] == 'f1'
+    wheel.close()
+
+
+def test_raw_candidate_can_also_win_under_the_legacy_brier_policy(tmp_path):
+    from .feature_bank import FeatureBank
+    wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden))
+    FeatureBank(wheel.db).register({'name':'practical','instructions':'Practical?', 'labels':['yes','no']},
+                                 rationale='Feedback', evidence='training-only')
+    kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN}, min_development_per_class=1)
+    assert asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs))['promoted']
+    async def score(classifier, *args):
+        return {'balanced_brier':.8 if classifier.head else .2, 'balanced_accuracy':1.,
+                'per_class':{label:{'recall':1.} for label in TASK.labels}}
+    wheel._score = score
+    wheel.set_optimizer_context(['Recompare the current context'])
+    result = asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs))
+    assert result['promoted'] and wheel.active.head is None
+    wheel.close()
+
+
 def test_training_waits_for_development_coverage_without_paid_calls(tmp_path):
     model = FakeModel()
     wheel = DecisionFlywheel(tmp_path / "runtime.sqlite", ClassifierConfig(TASK), model, OptimizerAgent(forbidden))

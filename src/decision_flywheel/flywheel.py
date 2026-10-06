@@ -106,7 +106,13 @@ class DecisionFlywheel:
                  max_requests: int = 100, max_request_bytes: int = 32000,
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
                  training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
-                 cache_options=None, context_validation_floor: int = 20, evaluation_policy=None):
+                 cache_options=None, context_validation_floor: int = 20, evaluation_policy=None, selection_policy=None):
+        from .selection_policy import SelectionPolicy
+        if selection_policy is not None and not isinstance(selection_policy, SelectionPolicy):
+            raise ValueError('selection_policy must be SelectionPolicy')
+        if selection_policy is not None and selection_policy.positive_class is not None and selection_policy.positive_class not in initial.task.labels:
+            raise ValueError('selection positive class must be a task label')
+        self.selection_policy = selection_policy
         from .evaluation_policy import EvaluationPolicy
         self.evaluation_policy = evaluation_policy or EvaluationPolicy(recency_decay_per_class=context_validation_floor)
         if not isinstance(self.evaluation_policy, EvaluationPolicy):
@@ -163,6 +169,16 @@ class DecisionFlywheel:
         # The library persists actual optimizer messages before the UI callback.
         self.optimizer_observer = prior_observer
         optimizer.observer = observe
+        saved_policy = self.db.execute("SELECT value FROM runtime_state WHERE key='selection_policy'").fetchone()
+        if self.selection_policy is None and saved_policy:
+            self.selection_policy = SelectionPolicy(**json.loads(saved_policy[0]))
+        if self.selection_policy is not None:
+            encoded = _json(asdict(self.selection_policy))
+            if not saved_policy or saved_policy[0] != encoded:
+                with self.db:
+                    self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('selection_policy', ?)", (encoded,))
+                self._emit({'kind':'selection-policy-configured', 'selection_policy':asdict(self.selection_policy),
+                            'previous':json.loads(saved_policy[0]) if saved_policy else None})
 
     def close(self):
         self.optimizer.observer = self.optimizer_observer
@@ -451,6 +467,7 @@ class DecisionFlywheel:
                            "training_class_weighting": self.training_class_weighting,
                            "min_evaluation_per_class": self.min_evaluation_per_class,
                            "evaluation_policy": asdict(self.evaluation_policy),
+                           "selection_policy": asdict(self.selection_policy) if self.selection_policy else None,
                            "context_validation_floor": self.context_validation_floor,
                            "require_recall_safeguards": require_recall_safeguards,
                            "optimizer_context": self.optimizer_context,
@@ -491,6 +508,7 @@ class DecisionFlywheel:
             briefing = FeedbackBriefing.build(self.initial.task, training,
                 current={**self.active.config.briefing_state(),
                          "evaluation_weighting": self.evaluation_weighting,
+                         "selection_policy": asdict(self.selection_policy) if self.selection_policy else None,
                          "training_class_weighting": self.training_class_weighting,
                          "prior_hypotheses": self.hypotheses(),
                          "request_budget_bytes": self.max_request_bytes,
@@ -519,16 +537,19 @@ class DecisionFlywheel:
             recall_safe = (candidate_metrics["balanced_accuracy"] >= incumbent_metrics["balanced_accuracy"] and
                 all(candidate_metrics["per_class"][label]["recall"] >= incumbent_metrics["per_class"][label]["recall"]
                     for label in self.initial.task.labels)) if require_recall_safeguards else True
-            improved = brier_improved and recall_safe
+            selection = self.selection_policy.compare(incumbent_metrics, candidate_metrics) if self.selection_policy else None
+            improved = selection['improved'] if selection else brier_improved and recall_safe
             promoted = improved and apply_promotion
             result = {"promoted": promoted, "incumbent": incumbent_metrics, "candidate": candidate_metrics,
                       "improved": improved, "trial_fingerprint": round_key,
                       "brier_improved": brier_improved, "recall_safeguards_passed": recall_safe,
-                      "promotion_metric": metric, "evaluation_weighting": self.evaluation_weighting,
+                      "selection": selection,
+                      "selection_policy": asdict(self.selection_policy) if self.selection_policy else None,
+                      "promotion_metric": self.selection_policy.primary if selection else metric, "evaluation_weighting": self.evaluation_weighting,
                       "training_class_weighting": self.training_class_weighting,
                       "feature_diagnostics": diagnostics,
                       "evaluation_independent_of_optimizer_context": not self.optimizer_context["evaluation_context_exposed"],
-                      "reason": (f"lower development {metric}" if improved else
+                      "reason": selection['reason'] if selection else (f"lower development {metric}" if improved else
                                  "candidate failed per-class recall safeguards" if not recall_safe else
                                  f"development {metric} did not improve")}
             self._emit({"kind": "candidate-evaluated", **result})
@@ -562,13 +583,17 @@ class DecisionFlywheel:
         if not row or row[0] != "complete":
             raise ValueError("trial is not complete")
         saved = json.loads(row[1])
+        selection = saved['result'].get('selection')
+        previous_policy = saved['result'].get('selection_policy', selection.get('policy') if isinstance(selection, dict) else None)
+        if previous_policy != (asdict(self.selection_policy) if self.selection_policy else None):
+            raise ValueError('selection policy changed; reevaluate the trial')
         if not saved["result"].get("improved") or saved.get("baseline_version") != self.active.fingerprint:
             raise ValueError("trial did not improve this incumbent")
         if saved.get("training_evidence") != self._evidence(training) or saved.get("development_evidence") != self._evidence(development):
             raise ValueError("trial feedback changed; refit and reevaluate")
         self._activate(_restore(saved["fitted_candidate"]))
         self._emit({"kind": "promoted", **saved["result"], "promoted": True,
-                    "version": self.active.fingerprint, "selection": "best isolated control trial"})
+                    "version": self.active.fingerprint})
 
     async def _score(self, classifier, development, training, now):
         available_count = len(development)

@@ -1,8 +1,10 @@
 """Fit and evaluate retained question features separately from context discovery."""
 import json
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 
 from .flywheel import _hash, _json
+from .selection_policy import SelectionPolicy
 
 
 async def train_classifier(wheel, training, development, *, protected, propensities,
@@ -35,7 +37,8 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                 "optimizer_context": wheel.optimizer_context,
                 "development": wheel._evidence(development), "protected": sorted(i.id for i in protected),
                 "propensities": propensities, "bank": [e["id"] for e in wheel.feature_bank()], "floor": min_development_per_class,
-                "apply_promotion": apply_promotion, "policy": "balanced-brier-no-recall-regression-v1"}
+                "apply_promotion": apply_promotion, "policy": "balanced-brier-no-recall-regression-v1",
+                "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None}
     key = _hash(evidence)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS classifier_training (id TEXT PRIMARY KEY, status TEXT, payload TEXT)")
     saved = wheel.db.execute("SELECT status,payload FROM classifier_training WHERE id=?", (key,)).fetchone()
@@ -52,6 +55,30 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     trials = []
     try:
         wheel.evaluation_weighting = "equal_class"
+        if wheel.active.head is not None:
+            raw = replace(wheel.active, head=None, training_evidence=wheel._evidence(training),
+                          development_evidence=wheel._evidence(development))
+            baseline = await wheel._score(wheel.active, development, training, now)
+            metrics = await wheel._score(raw, development, training, now)
+            policy = wheel.selection_policy or SelectionPolicy()
+            selection = policy.compare(baseline, metrics)
+            safe = metrics['balanced_accuracy'] >= baseline['balanced_accuracy'] and all(
+                metrics['per_class'][label]['recall'] >= baseline['per_class'][label]['recall']
+                for label in wheel.initial.task.labels)
+            improved = selection['improved'] and (wheel.selection_policy is not None or safe)
+            trial_key = _hash({'classifier_training':key,'candidate':'raw_decision'})
+            trial = {'feature_set':'raw_decision','improved':bool(improved),'promoted':False,
+                     'trial_fingerprint':trial_key,'incumbent':baseline,'candidate':metrics,
+                     'selection':selection,'promotion_metric':policy.primary,
+                     'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
+                     'recall_safeguard_passed':safe,'reason':selection['reason'] if improved else 'raw decision candidate did not pass selection'}
+            with wheel.db:
+                wheel.db.execute("INSERT OR REPLACE INTO runtime_rounds VALUES (?, 'complete', ?)",
+                    (trial_key,_json({'result':trial,'fitted_candidate':asdict(raw),
+                        'baseline_version':wheel.active.fingerprint,'training_evidence':wheel._evidence(training),
+                        'development_evidence':wheel._evidence(development)})))
+            wheel._emit({'kind':'candidate-evaluated',**trial})
+            trials.append(trial)
         for name, definitions in configs:
             for weighting in ("natural", "equal_class"):
                 wheel.training_class_weighting = weighting
@@ -63,14 +90,16 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                     and all(candidate["per_class"][label]["recall"] >= baseline["per_class"][label]["recall"]
                             for label in wheel.initial.task.labels))
                 trials.append({**trial, "feature_set": name, "recall_safeguard_passed": safe})
-        qualified = [t for t in trials if t.get("improved") and t["recall_safeguard_passed"]]
-        best = min(qualified, key=lambda t: t["candidate"]["balanced_brier"]) if qualified else None
+        qualified = [t for t in trials if t.get("improved") and (wheel.selection_policy or t["recall_safeguard_passed"])]
+        best = (max(qualified, key=lambda t: wheel.selection_policy.rank(t['candidate'])) if wheel.selection_policy
+                else min(qualified, key=lambda t: t["candidate"]["balanced_brier"])) if qualified else None
         if best and apply_promotion:
             wheel.promote_trial(best["trial_fingerprint"], training, development)
         result = {"stage": "classifier", "promoted": bool(best and apply_promotion), "trials": trials,
                   "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
                   "selected": best, "development_counts": counts,
-                  "reason": "lower balanced Brier with no per-class recall regression" if best else "no candidate passed promotion safeguards"}
+                  "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
+                  "reason": (best['reason'] if wheel.selection_policy else "lower balanced Brier with no per-class recall regression") if best else "no candidate passed promotion safeguards"}
         with wheel.db:
             wheel.db.execute("UPDATE classifier_training SET status='complete',payload=? WHERE id=?", (_json(result), key))
             if result["promoted"]:

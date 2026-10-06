@@ -17,10 +17,12 @@ from decision_flywheel.cycle_replay import run_cycle_replay
 from decision_flywheel.trace_artifact import read_trace, render_trace
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
+from decision_flywheel.selection_policy import add_selection_arguments, selection_from_arguments
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    add_selection_arguments(parser)
     parser.add_argument("--database", type=Path, default=Path("var/reviewer.sqlite3"))
     parser.add_argument("--output", type=Path, default=Path("var/arxiv-replay-v1"))
     parser.add_argument("--batch-size", type=int, default=20)
@@ -41,6 +43,7 @@ def main(argv=None):
     from dataclasses import asdict
     from decision_flywheel import EvaluationPolicy
     try:
+        selection_policy=selection_from_arguments(args)
         evaluation_policy=EvaluationPolicy(args.evaluation_samples,args.rubric_recency_allowance,
                                            args.rubric_recency_decay_per_class)
     except ValueError as error:
@@ -76,6 +79,7 @@ def main(argv=None):
         'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
         'context_validation_floor':args.context_validation_floor,'cold_start_policy':'provisional-working-rubric',
         'evaluation_policy':asdict(evaluation_policy),
+        'selection_policy':asdict(selection_policy) if selection_policy else None,
         'rubric_trigger':{'policy':'label-transitions','every':args.rubric_changes_every},
     }
     path = args.output / "manifest.json"
@@ -120,6 +124,7 @@ def main(argv=None):
                              min_evaluation_per_class=2, observer=observe,
                              context_validation_floor=args.context_validation_floor,
                              evaluation_policy=evaluation_policy,
+                             selection_policy=selection_policy,
                              redact=tuple(os.environ.get(k, "") for k in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
     def checkpoint(report):
         (args.output / "results.json").write_text(json.dumps(report, indent=2)+"\n")
