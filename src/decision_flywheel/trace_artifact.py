@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import sqlite3
+from .trace_timeline import timeline_data
 
 
 def read_trace(database):
@@ -16,9 +17,15 @@ def render_trace(events):
     def encode(value):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
         return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    vendor = Path(__file__).parent / 'vendor' / 'vis-timeline'
+    javascript = (vendor / 'standalone/umd/vis-timeline-graph2d.min.js').read_text()
+    css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
-        '__EXCHANGES__', encode(exchange_indices(events)))
+        '__EXCHANGES__', encode(exchange_indices(events))).replace(
+        '__TIMELINE_DATA__', encode(timeline_data(events))).replace(
+        '__TIMELINE_JS__', javascript.replace('</script', '<\\/script')).replace('__TIMELINE_CSS__', css).replace(
+        '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text()))
 
 
 def exchange_indices(events):
@@ -84,6 +91,8 @@ TEMPLATE = '''<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'">
 <title>Decision Flywheel — recorded trace</title>
+<style>__TIMELINE_CSS__</style>
+<script>__TIMELINE_JS__</script>
 <style>
 :root{color-scheme:light dark;font-family:system-ui,sans-serif;background:Canvas;color:CanvasText}
 body{max-width:1100px;margin:24px auto;padding:0 20px}h1{font-size:1.5rem}h2{font-size:1.1rem}
@@ -91,9 +100,12 @@ body{max-width:1100px;margin:24px auto;padding:0 20px}h1{font-size:1.5rem}h2{fon
 button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{width:6em}
 #seek{width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid GrayText}
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.panels{grid-template-columns:1fr}}
+.vis-timeline,.vis-panel,.vis-labelset .vis-label,.vis-time-axis .vis-text{color:CanvasText;border-color:GrayText}
+.vis-item{background:ButtonFace;color:ButtonText;border-color:GrayText}.vis-item.vis-selected{background:Highlight;color:HighlightText}
 </style>
 <h1>Decision Flywheel — recorded trace</h1>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
+<h2>Feedback and optimization timeline</h2><div id="timeline"></div><p id="timeline-note"></p>
 <div class="controls"><button id="back">Previous</button><button id="next">Next</button><button id="play">Play</button>
 <label>From event <input id="start" type="number" min="1" value="1"></label>
 <label>Through event <input id="end" type="number" min="1"></label>
@@ -110,11 +122,21 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <script id="recording" type="application/json">__RECORDING__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
+<script id="timeline-data" type="application/json">__TIMELINE_DATA__</script>
+<details><summary>Bundled vis-timeline MIT license</summary><pre id="vendor-license"></pre></details>
+<script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
 <script>
 const events=JSON.parse(document.getElementById('recording').textContent);
 const presentation=JSON.parse(document.getElementById('presentation').textContent);
 const exchanges=JSON.parse(document.getElementById('exchanges').textContent);
 const el=id=>document.getElementById(id);let position=0,timer=null;
+el('vendor-license').textContent=JSON.parse(el('vendor-license-data').textContent);
+const timelineData=JSON.parse(el('timeline-data').textContent);
+const timelineItems=timelineData.items.map(item=>({...item,content:(()=>{const label=document.createElement('span');label.textContent=item.content;return label;})()}));
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:true,orientation:'top'});
+timeline.on('select',properties=>{if(properties.items.length)move(Number(properties.items[0]));});
+el('timeline-note').textContent=`Recorded times; pan/zoom and click a marker to inspect. ${timelineData.undated_count} events lack valid timestamps. Labels absent from the recording are not reconstructed. vis-timeline 8.5.4 (MIT).`;
+let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
 const snapshots=[];let config=null;
 events.forEach((event,index)=>{
@@ -144,6 +166,10 @@ function draw(){
  const event=events[position];
  el('status').textContent=event?`Event ${position+1}/${events.length} · ID ${event.event_id} · ${event.kind} · ${event.step_stage||'legacy/unscoped'} · ${event.status||event.reason||''}`:'No recorded events';
  el('seek').value=position;
+ if(event?.created_at&&!Number.isNaN(Date.parse(event.created_at))){
+  if(!cursorAdded){timeline.addCustomTime(event.created_at,'playback');cursorAdded=true;}
+  else timeline.setCustomTime(event.created_at,'playback');
+ }
  el('configuration').textContent=pretty(snapshots[position]||'Configuration not captured at this point');
  el('metrics').textContent=event?comparison(event):'No measured comparison at this event';
  el('detail').textContent=event?pretty(event):'No recorded events';

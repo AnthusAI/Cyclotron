@@ -1,0 +1,24 @@
+from .trace_timeline import timeline_data
+
+
+def test_labels_keep_values_roles_and_retractions_and_rounds_use_distinct_lanes():
+    events = [
+        {'kind': 'human-feedback', 'created_at': '2026-10-06T12:00:00Z', 'assignment': 'development', 'action': 'submitted', 'feedback': {'final_answer_value': 'accept', 'edit_comment_value': 'reason'}},
+        {'kind': 'step-started', 'created_at': '2026-10-06T12:01:00Z', 'step_id': 's', 'step_stage': 'questions'},
+        {'kind': 'step-completed', 'created_at': '2026-10-06T12:02:00Z', 'step_id': 's', 'status': 'waiting'},
+    ]
+    data = timeline_data(events)
+    assert data['items'][0]['content'] == 'accept · development · submitted · comment'
+    span = data['items'][1]
+    assert span['group'] == 'questions'
+    assert span['end'] == events[2]['created_at']
+    assert span['event_index'] == 1
+    assert 'waiting' in span['content']
+
+
+def test_missing_dates_are_not_invented_and_incomplete_rounds_are_points():
+    data = timeline_data([{'kind': 'human-feedback'}, {'kind': 'step-started',
+        'created_at': '2026-10-06T12:01:00Z', 'step_stage': 'rubric', 'step_id': 's'}])
+    assert data['undated_count'] == 1
+    assert data['items'][0]['type'] == 'point'
+    assert 'end' not in data['items'][0]

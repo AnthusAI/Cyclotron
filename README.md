@@ -31,6 +31,13 @@ python -m decision_flywheel.trace_artifact --database var/reviewer-runtime.sqlit
 ```
 
 Open the recording in a browser. Previous/Next and the timeline step through
+events. The bundled vis-timeline 8.5.4 view separates human feedback, rubric,
+few-shot examples, classifier questions, ML optimization, fitting, and evaluation.
+Feedback markers retain arbitrary label values, partition roles, comments, and
+retractions. Click markers to inspect events; pan/zoom to compare recorded rounds.
+Only timestamped recorded events are plotted: absent historical labels are not
+invented. The dependency is bundled under MIT with its license notices, without
+CDN calls. Previous/Next and the event slider step through
 events; Play/Pause replays a selected range; the round selector jumps to a recorded
 optimization step. Each event exposes its exact prompt, response or other payload.
 Measured comparisons show incumbent/candidate metrics and accuracy differences;

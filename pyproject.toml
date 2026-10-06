@@ -43,6 +43,9 @@ changelog_file = "CHANGELOG.md"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+decision_flywheel = ["vendor/vis-timeline/*.txt", "vendor/vis-timeline/*.md", "vendor/vis-timeline/styles/*.css", "vendor/vis-timeline/standalone/umd/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["src", "tests"]
 python_files = ["*_test.py"]
