@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "40980899-c8f9-42c2-a48b-c26f1871a713",
+  "issue_id": "decision-flywheel-1baadb68-9f35-432c-a900-8e2d9f8e7d44",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T00:06:48.486Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Engineer and test individual decision features before classifier promotion",
+    "description": "Agreed plan (2026-10-05): separate feature admission from fitted-classifier promotion. Current three-control scheduler bundles supporting questions; a losing bundle does not disprove individual concepts. Implement in order: (1) persistent individual feature bank with stable identity, wording revisions, intended concept, options, training evidence references, rationale, lineage, coverage and trial history; proposed/measured/deferred/deployed states, no permanent deletion on failure; (2) descriptive class-conditional probability/missingness diagnostics with counts, not held-out performance claims; (3) one-question additions against one frozen incumbent rubric/example list/model/partitions/weighting/fit, cached full requests and explicit budgets; (4) bounded pairs/groups and leave-one-question-out ablations for incremental value, redundancy and interactions; (5) wording refinement using training feedback only and fair retry as evidence grows; (6) reusable lifecycle events and Rich inspection of feature bank, trial diffs, actual optimizer exchanges, Jev requests, fits and deployment. Keep measured Brier promotion gate: any strict improvement currently qualifies, so do not merely lower a nonexistent large threshold. Development/audit labels must never enter optimizer briefing or demonstrations; sealed scoreboard must not steer search. Specs first with fake clients for isolation, deterministic budgets, revisions/retries, restart safety and failed-trial incumbent preservation. First milestone: auditable single-feature addition through decision answers, numerical fit and visible development result. Combination experiments follow after verification. Evaluations go in the separate evaluations repository; no DSPy, retrieval or input filtering. This is planned work, not implemented capability.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-5",
+      "name": "Flywheel Implementation"
+    }
+  }
+}
