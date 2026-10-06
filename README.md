@@ -99,7 +99,10 @@ class coverage is recorded as waiting, never as a successful optimization.
 Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
 The collapsible Optimization group contains Triggers, Rubric, Few-shot examples,
-Classifier questions, and ML optimization, in that order. Internal steps do not
+Classifier questions, ML optimization, and Optimization outcomes, in that order.
+ML optimization contains Proposals / trials and Fitting: fitting is the training
+work inside an optimization attempt, not an unrelated top-level phase.
+Internal steps do not
 have a separate timeline row; cycle bands provide the item context.
 Select a cycle background to inspect its recorded before/after classifier snapshots. Cycle
 boundaries do not have a separate row; missing snapshots are explicitly marked.
@@ -123,6 +126,16 @@ green, disagreements red, and unpaired records grey. Colors compare recorded
 feedback for the same cycle and item; they do not assert that a label was known
 when the prediction was made. Skipped trigger checks use a muted circle; fired
 checks use circle-play in the foreground color.
+
+The collapsible Evaluation group plots three running trends on the same cycle
+axis: Accuracy, Precision, and Recall. These are cumulative prequential scores
+from predictions made before each reviewed vote, not held-out final-classifier
+scores or candidate-trial scores. Precision and recall use the configured positive
+classes. Click any point or connecting segment to inspect its recorded measurement,
+scope, and reviewed-item count. All three lanes share a 0–100% vertical scale;
+undefined measurements create gaps, never fabricated zeros. Candidate trial
+comparisons remain separate under Optimization outcomes. The plots are computed
+from existing records; opening the explorer does not call models or train anything.
 Selecting a classification shows its exact decision-model request and response,
 including expanded state, examples, and questions; API exchanges do not have a
 separate timeline lane. Optimization events (including proposal validation and

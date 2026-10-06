@@ -6,7 +6,7 @@ import sqlite3
 from .trace_timeline import timeline_data
 from .trace_rounds import round_details
 from .trace_step_projection import step_projection
-from .trace_classification import class_configuration, positive_metrics
+from .trace_classification import class_configuration, positive_metrics, running_metric_series
 
 
 def read_trace(database):
@@ -41,7 +41,7 @@ def render_trace(events, reviewer_history=(), *, class_config=None):
         if isinstance(result,dict) and ('incumbent' in result or 'candidate' in result):
             metric_view[str(index)]={key:positive_metrics(result.get(key) or {},classes) for key in ('incumbent','candidate')}
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
-        '__CLASS_CONFIG__',encode(classes)).replace('__METRIC_VIEW__',encode(metric_view)).replace(
+        '__CLASS_CONFIG__',encode(classes)).replace('__METRIC_VIEW__',encode(metric_view)).replace('__METRIC_SERIES__',encode(running_metric_series(events,classes))).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
         '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
         '__TIMELINE_DATA__', encode(timeline_data(events))).replace('__STEP_PROJECTION__', encode(projected)).replace(
@@ -138,6 +138,7 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
 <script id="class-config" type="application/json">__CLASS_CONFIG__</script>
 <script id="metric-view" type="application/json">__METRIC_VIEW__</script>
+<script id="metric-series" type="application/json">__METRIC_SERIES__</script>
 <script>__VIEWER_JS__</script>
 <script>
 const events=JSON.parse(document.getElementById('recording').textContent);
@@ -218,16 +219,42 @@ for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Mode
 const occupied=new Set(timelineItems.map(i=>i.group));
 const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions'].includes(g.id));
 // API exchanges belong in the classification inspector, not a separate lane.
-const plottedItems=timelineItems.filter(item=>!['decision-api','cycles'].includes(item.group));
+const plottedItems=timelineItems.filter(item=>!['decision-api','cycles'].includes(item.group)&&events[item.event_index]?.kind!=='cycle-metrics');
+for(const item of plottedItems){if(item.group==='classifier')item.group='classifier-attempts';if(item.group==='evaluation')item.group='optimization-outcomes';}
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 const optimizationLanes=[['triggers','Triggers'],['rubric','Rubric'],['examples','Few-shot examples'],['questions','Classifier questions'],['classifier','ML optimization']].map(([id,content])=>({id,content}));
 const optimizationIds=optimizationLanes.map(group=>group.id);
+optimizationLanes.find(group=>group.id==='classifier').nestedGroups=['classifier-attempts','fit'];
+optimizationLanes.find(group=>group.id==='classifier').showNested=true;
+optimizationIds.push('optimization-outcomes');
 timelineData.groups=[...classGroups,
+ {id:'evaluation-trends',content:'Evaluation',nestedGroups:['metric-accuracy','metric-precision','metric-recall'],showNested:true},
+ ...['accuracy','precision','recall'].map(metric=>({id:'metric-'+metric,content:metric[0].toUpperCase()+metric.slice(1)+' · 0–100%'})),
  {id:'optimization',content:'Optimization',nestedGroups:optimizationIds,showNested:true},...optimizationLanes,
- ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&group.id!=='cycles')].map((group,order)=>({...group,order}));
+ {id:'classifier-attempts',content:'Proposals / trials'},{id:'fit',content:'Fitting'},
+ {id:'optimization-outcomes',content:'Optimization outcomes'},
+ ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&!['cycles','evaluation','fit'].includes(group.id))].map((group,order)=>({...group,order}));
+const metricSeries=JSON.parse(el('metric-series').textContent),trendItems=[];
+for(const metric of ['accuracy','precision','recall']){
+ let previous=null;
+ for(const point of metricSeries){
+  const value=point[metric],x=stepPositions.get(String(point.event_index));
+  if(value===null||value===undefined||x===undefined){previous=null;continue;}
+  const y=58-50*Math.max(0,Math.min(1,value));
+  const content=document.createElement('span');
+  content.innerHTML=`<svg viewBox="0 0 20 66" width="20" height="66" aria-hidden="true"><circle cx="10" cy="${y}" r="3" fill="currentColor"/></svg>`;
+  const title=`${metric}: ${Math.round(value*1000)/10}% · Cycle ${point.cycle_number??'unrecorded'} · ${point.count} reviewed items · ${point.scope||'recorded running performance'}${metric==='accuracy'?'':' · positive: '+point.positive_labels.join(', ')}`;
+  trendItems.push({id:`metric:${metric}:${point.event_index}`,event_index:point.event_index,group:'metric-'+metric,start:new Date(x),type:'box',className:'metric-point metric-'+metric,content,title});
+  if(previous){
+   const line=document.createElement('span');line.innerHTML=`<svg viewBox="0 0 100 66" width="100%" height="66" preserveAspectRatio="none" aria-hidden="true"><path d="M0 ${previous.y} L100 ${y}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+   trendItems.push({id:`metric-line:${metric}:${point.event_index}`,event_index:point.event_index,group:'metric-'+metric,start:new Date(previous.x),end:new Date(x),type:'range',className:'metric-line metric-'+metric,content:line,title});
+  }
+  previous={x,y};
+ }
+}
 // Internal step positions remain available for seeking and playback, but do
 // not need their own display lane. Cycle bands retain the item context.
-const stepItems=[];
+const stepItems=trendItems;
 const cycleItems=projection.cycles.flatMap((cycle,index)=>{
  return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''}];
 });
@@ -331,7 +358,7 @@ function applyFilters(){
    &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));})]);
 }
 for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
-timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
+timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];if(String(id).startsWith('metric:')||String(id).startsWith('metric-line:'))id=String(id).split(':').at(-1);else if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
 timeline.on('doubleClick',properties=>{
  const id=properties.item;if(id===undefined||id===null)return;
  const key=String(id);
@@ -494,7 +521,14 @@ function inspectEvent(event){
  if(cycle)field('Cycle',cycle.title);
  if(event.kind==='trigger-evaluated'){field('Stage',event.stage);field('Run',event.due);field('Reason',event.reason);field('Trigger inputs',event.details);}
  if(event.trigger_event_id)field('Caused by trigger event',event.trigger_event_id);
- if(event.kind==='cycle-metrics'){field('Measured scope',event.metric_scope);field('Metrics',event.metrics);}
+ if(event.kind==='cycle-metrics'){
+  field('Measured scope',event.metric_scope);field('Reviewed items',event.metrics?.count);
+  const point=metricSeries.find(point=>point.event_index===position);
+  if(point){field('Running accuracy',point.accuracy===null?'Unavailable':`${Math.round(point.accuracy*1000)/10}%`);
+   field('Positive classes',point.positive_labels.join(', ')||'Not configured');
+   field('Running precision',point.precision===null?'Undefined / unavailable':`${Math.round(point.precision*1000)/10}%`);
+   field('Running recall',point.recall===null?'Undefined / unavailable':`${Math.round(point.recall*1000)/10}%`);}
+ }
  let payload=event,title='Full event content';
  if(event.kind==='human-feedback'){
   field('Label',event.feedback?.final_answer_value);field('Partition',event.assignment);field('Action',event.action);

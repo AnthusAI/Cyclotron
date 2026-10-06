@@ -141,6 +141,7 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
     events.append({'event_id':11,'kind':'internal-cache-check','created_at':'2026-10-06T12:01:10Z'})
     events.append({'event_id':12,'kind':'proposal-validated','step_id':'a','step_stage':'rubric','created_at':'2026-10-06T12:01:11Z'})
     events.extend([{'event_id':13+i,'kind':'trigger-evaluated','stage':'rubric','due':due,'created_at':f'2026-10-06T12:01:{12+i}Z'} for i,due in enumerate((False,True))])
+    events.append({'event_id':15,'kind':'cycle-metrics','created_at':'2026-10-06T12:01:14Z','metrics':{'accuracy':.5,'count':2}})
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
               'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
     history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
@@ -158,6 +159,9 @@ global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on
 CODE
 assert.equal(timelineItems.find(item=>item.event_index===12).iconName,'circle');
 assert.equal(timelineItems.find(item=>item.event_index===13).iconName,'circle-play');
+assert.ok(trendItems.some(item=>item.id==='metric:accuracy:14'));
+handlers.select({items:['metric:accuracy:14']});assert.equal(position,14);
+assert.ok(elements['event-content'].textContent.includes('accuracy'));
 select({items:[1]});
 assert.equal(elements['optimizer-exchange'].hidden,false);
 assert.ok(elements['optimizer-request-content'].textContent.includes('prompt-a'));
@@ -236,15 +240,17 @@ assert.equal(elements.inspector.hidden,false);
 assert.equal(elements.workspace.className,'workspace');
 assert.equal(elements['show-inspector'].hidden,true);
 elements['disagreement-filter'].checked=true;applyFilters();
-assert.equal(timeline.items.filter(i=>i.type==='box').length,1);
-assert.equal(timeline.items.find(i=>i.type==='box').source_index,0);
+assert.equal(timeline.items.filter(i=>i.type==='box'&&!String(i.id).startsWith('metric:')).length,1);
+assert.equal(timeline.items.find(i=>i.source_index===0).source_index,0);
 assert.ok(timeline.items.some(i=>i.type==='background'&&String(i.id).startsWith('cycle-band:')));
 assert.ok(!timeline.items.some(i=>i.group==='step-items'));
 assert.ok(!timeline.groups.some(g=>g.id==='step-items'));
 const optimization=timeline.groups.find(g=>g.id==='optimization');
 assert.equal(optimization.content,'Optimization');
 assert.equal(optimization.showNested,true);
-assert.deepEqual(optimization.nestedGroups,['triggers','rubric','examples','questions','classifier']);
+assert.deepEqual(optimization.nestedGroups,['triggers','rubric','examples','questions','classifier','optimization-outcomes']);
+assert.deepEqual(timeline.groups.find(g=>g.id==='classifier').nestedGroups,['classifier-attempts','fit']);
+assert.deepEqual(timeline.groups.find(g=>g.id==='evaluation-trends').nestedGroups,['metric-accuracy','metric-precision','metric-recall']);
 select({items:['source:0']});
 assert.ok(elements['event-title'].textContent.includes('accept'));
 assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);

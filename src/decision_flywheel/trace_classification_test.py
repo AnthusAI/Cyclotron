@@ -1,6 +1,6 @@
 """Specs for explicit ordered class roles and positive-class measurements."""
 import pytest
-from .trace_classification import class_configuration, positive_metrics
+from .trace_classification import class_configuration, positive_metrics, running_metric_series
 from .classification_metrics import classification_metrics
 
 
@@ -36,3 +36,17 @@ def test_multiple_positive_classes_are_measured_as_positive_versus_rest():
     metrics=classification_metrics(['a','b','c'],['a','b','c'],['b','b','a'],[{'a':1/3,'b':1/3,'c':1/3}]*3)
     assert positive_metrics(metrics,config)['precision']==pytest.approx(2/3)
     assert positive_metrics(metrics,config)['recall']==1
+
+
+def test_running_trends_use_only_recorded_prequential_measurements_and_keep_gaps():
+    config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]
+    events=[{'kind':'cycle-metrics','cycle_number':1,'metric_scope':'pre-vote','metrics':{
+        'accuracy':0,'count':1,'per_class':{'include':{'count':1,'correct':0},'exclude':{'count':0,'correct':0}}}},
+        {'kind':'candidate-evaluated','candidate':{'accuracy':1}},
+        {'kind':'cycle-metrics','cycle_number':2,'metric_scope':'pre-vote','metrics':{
+        'accuracy':.5,'count':2,'per_class':{'include':{'count':1,'correct':0},'exclude':{'count':1,'correct':1}}}}]
+    series=running_metric_series(events,config)
+    assert [point['accuracy'] for point in series]==[0,.5]
+    assert [point['precision'] for point in series]==[None,None]
+    assert [point['event_index'] for point in series]==[0,2]
+    assert all(point['recall']==0 for point in series)

@@ -40,3 +40,18 @@ def positive_metrics(metrics, config):
     result.update(precision=tp/predicted if predicted else None, recall=tp/actual if actual else None,
                   predicted_positive_count=predicted, actual_positive_count=actual)
     return result
+
+
+def running_metric_series(events, config):
+    """Recorded cumulative prequential measurements, never candidate scores."""
+    points=[]
+    for index,event in enumerate(events):
+        if event.get('kind')!='cycle-metrics' or not isinstance(event.get('metrics'),dict):
+            continue
+        metrics=event['metrics']
+        positive=positive_metrics(metrics,config)
+        points.append({'event_index':index,'cycle_number':event.get('cycle_number'),
+                       'count':metrics.get('count'),'scope':event.get('metric_scope'),
+                       'accuracy':metrics.get('accuracy'),'precision':positive['precision'],
+                       'recall':positive['recall'],'positive_labels':positive['positive_labels']})
+    return points
