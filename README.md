@@ -35,6 +35,13 @@ events. The bundled vis-timeline 8.5.4 view separates human feedback, rubric,
 few-shot examples, classifier questions, ML optimization, fitting, and evaluation.
 Feedback markers retain arbitrary label values, partition roles, comments, and
 retractions. Click markers to inspect events; pan/zoom to compare recorded rounds.
+Selecting an optimization marker or round opens a complete round-scoped inspector:
+exact optimizer requests/responses and returned tool calls, validated proposals,
+configuration snapshots before/after, evaluations, outcomes, fits and expanded
+decision-model exchanges. This inspector includes later recorded events from the
+selected round; ordinary playback panels remain point-in-time. Step IDs isolate
+rounds, and missing exchanges are never borrowed from another round. Returned tool
+calls do not by themselves prove tool execution.
 Only timestamped recorded events are plotted: absent historical labels are not
 invented. The dependency is bundled under MIT with its license notices, without
 CDN calls. Previous/Next and the event slider step through

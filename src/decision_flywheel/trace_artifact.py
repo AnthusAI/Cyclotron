@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sqlite3
 from .trace_timeline import timeline_data
+from .trace_rounds import round_details
 
 
 def read_trace(database):
@@ -22,7 +23,7 @@ def render_trace(events):
     css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
-        '__EXCHANGES__', encode(exchange_indices(events))).replace(
+        '__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
         '__TIMELINE_DATA__', encode(timeline_data(events))).replace(
         '__TIMELINE_JS__', javascript.replace('</script', '<\\/script')).replace('__TIMELINE_CSS__', css).replace(
         '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text()))
@@ -112,6 +113,13 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <label>Round <select id="round"><option value="">Select a recorded step</option></select></label></div>
 <label for="seek">Recorded event position</label><input id="seek" type="range" min="0" value="0">
 <p id="status" aria-live="polite"></p>
+<section><h2>Selected optimization round — complete recorded details</h2>
+<p id="round-status" aria-live="polite"></p>
+<h3>Luna requests — exact messages</h3><pre id="round-requests"></pre>
+<h3>Luna responses — content and returned tool calls</h3><pre id="round-responses"></pre>
+<h3>Proposals and configuration before / after</h3><pre id="round-proposals"></pre>
+<h3>Evaluation and outcome</h3><pre id="round-outcome"></pre>
+<details><summary>ML fits and all expanded decision-model exchanges in this round</summary><pre id="round-exchanges"></pre></details></section>
 <div class="panels"><section><h2>Active configuration at this point</h2><pre id="configuration"></pre></section>
 <section><h2>Measured comparison at this event</h2><pre id="metrics"></pre></section></div>
 <section><h2>Latest optimizer request at this point — exact system/user messages</h2><pre id="optimizer_request"></pre></section>
@@ -122,6 +130,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <script id="recording" type="application/json">__RECORDING__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
+<script id="round-data" type="application/json">__ROUNDS__</script>
 <script id="timeline-data" type="application/json">__TIMELINE_DATA__</script>
 <details><summary>Bundled vis-timeline MIT license</summary><pre id="vendor-license"></pre></details>
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
@@ -129,6 +138,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 const events=JSON.parse(document.getElementById('recording').textContent);
 const presentation=JSON.parse(document.getElementById('presentation').textContent);
 const exchanges=JSON.parse(document.getElementById('exchanges').textContent);
+const roundData=JSON.parse(document.getElementById('round-data').textContent);
 const el=id=>document.getElementById(id);let position=0,timer=null;
 el('vendor-license').textContent=JSON.parse(el('vendor-license-data').textContent);
 const timelineData=JSON.parse(el('timeline-data').textContent);
@@ -173,6 +183,15 @@ function draw(){
  el('configuration').textContent=pretty(snapshots[position]||'Configuration not captured at this point');
  el('metrics').textContent=event?comparison(event):'No measured comparison at this event';
  el('detail').textContent=event?pretty(event):'No recorded events';
+ const owner=roundData.owners[String(position)],round=roundData.rounds[String(owner)];
+ const records=indexes=>(indexes||[]).map(index=>events[index]);
+ el('round-status').textContent=round?`Round starts at event ID ${events[round.start].event_id}. Complete recorded round shown independently of playback position; missing records are not borrowed from other rounds.`:'No optimization round owns this event';
+ el('round-requests').textContent=round&&round.optimizer_requests.length?pretty(records(round.optimizer_requests)):'No optimizer request recorded in this round (may be cached or numerical-only).';
+ el('round-responses').textContent=round&&round.optimizer_responses.length?pretty(records(round.optimizer_responses)):'No optimizer response recorded in this round. Returned tool calls are not evidence of execution.';
+ el('round-proposals').textContent=round?pretty({configuration_before:events[round.start].classifier_snapshot||events[round.start].configuration||null,
+  proposals:records(round.proposals),configuration_after:round.end!==null?events[round.end].classifier_snapshot||null:null}):'No round selected';
+ el('round-outcome').textContent=round?pretty({evaluations:records(round.evaluations),outcomes:records(round.outcomes)}):'No round selected';
+ el('round-exchanges').textContent=round?pretty({fits:records(round.fits),requests:records(round.decision_requests),responses:records(round.decision_responses)}):'No round selected';
  for(const name of ['optimizer_request','optimizer_response','decision_request','decision_response']){
   const index=exchanges[position]?.[name];
   el(name).textContent=index!==null&&index!==undefined?pretty(events[index]):'No matching exchange recorded by this point';
