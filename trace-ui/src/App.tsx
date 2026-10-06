@@ -1,4 +1,4 @@
-import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, CircleHelp, FileText, Moon, PanelRight, Play, ShieldCheck, Sun, Workflow, X, ZoomIn, ZoomOut} from 'lucide-react'
+import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, CircleHelp, FileText, PanelRight, Play, ShieldCheck, Workflow, X, ZoomIn, ZoomOut} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Badge} from '@/components/ui/badge'
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card'
@@ -16,13 +16,16 @@ export function App({counts}:{counts:Counts}) {
     <div className="app-shell">
       <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Workflow className="size-5" /></div><div><p className="text-sm font-semibold">Decision Flywheel</p><p className="text-xs text-muted-foreground">Experiment workspace</p></div></div>
-        <div className="flex items-center gap-3"><Badge variant="outline"><ShieldCheck className="size-3" /> Private · offline</Badge><Button variant="ghost" size="icon" aria-label="Toggle color theme" onClick={()=>document.documentElement.classList.toggle('dark')}><Sun className="size-4 dark:block hidden" /><Moon className="size-4 dark:hidden" /></Button></div>
+        <Badge variant="outline"><ShieldCheck className="size-3" /> Private · offline</Badge>
       </header>
       <main className="mx-auto max-w-[1800px] space-y-5 p-6">
         <div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <details className="text-muted-foreground">
+          <summary className="cursor-pointer text-xs font-medium">Run statistics</summary>
+          <div className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-4">
           {([['Model predictions',counts.predictions,'Before human review'],['Human feedback',counts.labels,'Votes, comments & revisions'],['Optimizer requests',counts.optimizations,'Recorded LLM exchanges'],['Runtime events',counts.events,'Immutable source recording']] as const).map(([title,value,description])=><Card key={title} className="gap-2 py-4"><CardHeader className="px-4 pb-0"><p className="text-xs text-muted-foreground">{title}</p></CardHeader><CardContent className="px-4"><p className="font-mono text-2xl font-medium tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{description}</p></CardContent></Card>)}
-        </div>
+          </div>
+        </details>
         <div id="workspace" className="workspace">
           <Card className="timeline-pane gap-0 overflow-hidden py-0">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-5 py-4"><div><CardTitle className="text-base">Decision timeline</CardTitle><p className="mt-1 text-xs text-muted-foreground">Scroll to zoom · drag to pan · select a marker to inspect</p></div><div className="flex items-center gap-1">

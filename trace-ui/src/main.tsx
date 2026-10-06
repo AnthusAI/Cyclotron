@@ -11,6 +11,5 @@ const counts={
   optimizations:events.filter(e=>e.kind==='optimizer-request').length,
   events:events.length,
 }
-document.documentElement.classList.add('dark')
 // The DOM adapter initializes after this synchronous shell mount, exactly once.
 flushSync(()=>createRoot(document.getElementById('root')!).render(<App counts={counts} />))

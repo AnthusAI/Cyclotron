@@ -35,7 +35,8 @@ Open `http://127.0.0.1:8780` in a browser. The server binds only to loopback,
 serves only the selected HTML file, disables caching, and makes no model calls.
 It never exposes neighboring databases or credentials. Stop it with Ctrl+C.
 The explorer uses CLI-generated shadcn/Radix controls, Geist fonts, and semantic
-light/dark themes. Its React shell and fonts are bundled locally; no CDN or Node
+light/dark themes that follow system appearance automatically, with no theme
+control. Run statistics are collapsed by default. Its React shell and fonts are bundled locally; no CDN or Node
 installation is needed for playback. UI contributors can run `make build-trace-ui`
 and `make test-trace-ui` after installing the locked dependencies in `trace-ui`.
 Previous/Next and the timeline step through

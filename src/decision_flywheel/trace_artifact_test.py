@@ -11,6 +11,8 @@ def test_the_shadcn_shell_is_bundled_offline_with_no_external_script_or_font_req
     assert '__VIEWER_JS__' not in html
     assert '<script src=' not in html
     assert 'SIL OPEN FONT LICENSE' in html
+    assert '<html lang="en" class="dark">' not in html
+    assert 'prefers-color-scheme:dark' in html
 
 
 def test_latest_transcripts_are_visible_without_selecting_their_raw_events():

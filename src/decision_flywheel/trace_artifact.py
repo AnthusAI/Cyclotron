@@ -95,7 +95,7 @@ def main(argv=None):
 
 
 TEMPLATE = r'''<!doctype html>
-<html lang="en" class="dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; connect-src 'none'">
 <title>Decision Flywheel — run explorer</title>
 <script>
