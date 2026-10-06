@@ -74,6 +74,9 @@ classification questions whose probabilities become features for a numerical
 ML head). Each task has name, instructions, and labels. Explain your proposed
 changes in rationale. Return one JSON object with rationale and any of rubric,
 example_ids, tasks, dynamic_elements. To retain a control, omit its field.
+Prior hypotheses and their development outcomes may be supplied in current.
+A rejected fit does not disprove its underlying idea. With more feedback, you
+may propose the same structure again, or revise its examples and questions.
 The current configuration includes a complete-request byte safety budget.
 Keep rubric, question definitions and selected example texts together within
 that budget; use a small informative list instead of copying every training item.
@@ -95,7 +98,17 @@ class OptimizerAgent:
         self.observer = observer or (lambda event: None)
 
     def propose(self, briefing: FeedbackBriefing) -> dict:
-        messages = [{"role": "system", "content": SYSTEM_PROMPT},
+        control = briefing.payload.get("current", {}).get("control_under_test")
+        instructions = SYSTEM_PROMPT
+        if control is not None:
+            if control not in {"rubric", "example_ids", "tasks"}:
+                raise ValueError("unknown optimizer control")
+            instructions += (f"\nThis discovery call explores only {control}. Return rationale and {control}, "
+                             "and no other controls. Other controls stay fixed. For tasks, propose observable "
+                             "supporting classification questions inferred from the feedback, not another final decision. "
+                             "If you have no useful idea, return the existing value and explain why. "
+                             "Prior rejected ideas may be reconsidered with more evidence.")
+        messages = [{"role": "system", "content": instructions},
                     {"role": "user", "content": briefing.encoded}]
         base = {"briefing_fingerprint": briefing.fingerprint}
         self.observer({**base, "kind": "optimizer-request", "messages": messages})

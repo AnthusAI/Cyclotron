@@ -217,6 +217,7 @@ def _live_flywheel_status(client) -> Panel:
     lines.append(f"Recorded optimizer requests/replies: {status.get('optimizer_requests_recorded', 0)}/"
                  f"{status.get('optimizer_responses_recorded', 0)}")
     lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a round · R retry interrupted round")
+    lines.append("H retained hypotheses · T re-fit a retained hypothesis with current feedback")
     return Panel(Text("\n".join(lines)), title="Live Decision Flywheel", border_style="green")
 
 
@@ -342,7 +343,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
             console.print(Text(f"Prediction unavailable ({type(error).__name__}); feedback can still be saved."))
         console.print(_article_panel(article, prediction))
         while True:
-            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r") if flywheel else ("i", "e", "s", "b", "q")
+            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r", "h", "t") if flywheel else ("i", "e", "s", "b", "q")
             action = Prompt.ask("Action", choices=choices + tuple(key.upper() for key in choices),
                                 show_choices=False).lower()
             if flywheel and action in ("o", "f", "j"):
@@ -363,6 +364,21 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 if answer == "yes":
                     flywheel.improve(retry_interrupted=True)
                 console.print(_live_flywheel_status(flywheel))
+                continue
+            if flywheel and action in ("h", "t"):
+                hypotheses = flywheel.hypotheses()
+                console.print(Text(json.dumps(hypotheses, indent=2, ensure_ascii=False)))
+                if action == "t" and hypotheses:
+                    hypothesis_id = Prompt.ask("Retained hypothesis ID (blank cancels)", default="").strip()
+                    if hypothesis_id in {row["id"] for row in hypotheses}:
+                        answer = Prompt.ask("Re-fit and evaluate this hypothesis with current feedback, "
+                                            "within this session's paid ceiling?", choices=("yes", "no"), default="no")
+                        if answer == "yes":
+                            flywheel.retry_hypothesis(hypothesis_id)
+                            console.print(_live_flywheel_status(flywheel))
+                    elif hypothesis_id:
+                        console.print("Unknown hypothesis ID; nothing was run.")
+                Prompt.ask("Press Enter to return to this article", default="")
                 continue
             break
         if action == "q":
@@ -462,7 +478,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     console.print(Panel(Text(str(rationale)), title="Optimizer's stated rationale"))
                 elif kind in {"optimizer-request", "fit-started", "fit-completed", "candidate-evaluated",
                               "promoted", "candidate-rejected", "round-failed", "waiting-for-labels",
-                              "classifier-invalidated", "round-interrupted", "round-retry-authorized"}:
+                              "classifier-invalidated", "round-interrupted", "round-retry-authorized", "hypothesis-retry",
+                              "hypothesis-discovered", "discovery-no-change", "control-trial-started",
+                              "control-trial-completed", "control-trial-deferred", "control-cycle-completed"}:
                     console.print(Text(f"Flywheel: {kind} · " + json.dumps(
                         {key: value for key, value in event.items() if key not in {"messages", "created_at", "kind"}},
                         ensure_ascii=False)))

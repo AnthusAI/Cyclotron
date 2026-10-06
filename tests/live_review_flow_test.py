@@ -24,6 +24,8 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         proposal = {"rationale": "The human prefers practical papers", "rubric": "Practical papers",
                     "example_ids": [row["id"] for row in briefing["feedback"][:2]],
                     "tasks": [{"name": "practical", "instructions": "Is this practical?", "labels": ["yes", "no"]}]}
+        control = briefing["current"]["control_under_test"]
+        proposal = {"rationale": proposal["rationale"], control: proposal[control]}
         message = SimpleNamespace(content=json.dumps(proposal), tool_calls=None)
         return SimpleNamespace(model="fake-optimizer", usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 15}),
                                choices=[SimpleNamespace(message=message)])
@@ -47,7 +49,7 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         for i, article in enumerate(articles[:-2]):
             store.record_vote(article.id, "include" if i % 2 else "exclude", comment="Practical" if i % 2 else "Not useful")
         wheel = DecisionFlywheel(path, ClassifierConfig(reviewer_task()), JevAdapter(Jev()),
-            OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=2)), max_requests=150)
+            OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         output = StringIO()
         client = ReviewerFlywheel(store, wheel)
         run_review_session(store, Console(file=output, width=120), flywheel=client)
@@ -62,14 +64,14 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         assert "practical/yes" in transcript
         events = wheel.history(10000)
         assert {e["kind"] for e in events} >= {"fit-started", "fit-completed", "promoted", "decision-request", "decision-response"}
-        assert len(optimizer_calls) == 1
+        assert len(optimizer_calls) == 3
         protected_ids = {item.id for item in client.partitions()[2]}
         briefing_ids = {row["id"] for row in json.loads(optimizer_calls[0]["messages"][1]["content"])["feedback"]}
         assert not briefing_ids & protected_ids
         version = wheel.active.fingerprint
         wheel.close()
         wheel = DecisionFlywheel(path, ClassifierConfig(reviewer_task()), JevAdapter(Jev()),
-            OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=2)), max_requests=150)
+            OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         assert wheel.active.fingerprint == version
         assert wheel.active.head is not None
         assert any(event["kind"] == "optimizer-response" for event in wheel.history(10000))

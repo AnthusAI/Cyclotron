@@ -164,6 +164,44 @@ class DecisionFlywheel:
         rows = self.db.execute("SELECT payload FROM runtime_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return tuple(json.loads(row[0]) for row in reversed(rows))
 
+    def hypotheses(self) -> tuple[dict, ...]:
+        """Retain proposed structures and outcomes, including older saved rounds."""
+        rows = self.db.execute("""SELECT payload FROM runtime_events
+            WHERE json_extract(payload, '$.kind') IN
+            ('round-started','proposal-validated','promoted','candidate-qualified','candidate-rejected','round-failed') ORDER BY id""").fetchall()
+        found, current = {}, None
+        for row in rows:
+            event = json.loads(row[0])
+            if event["kind"] == "round-started":
+                current = None
+            elif event["kind"] == "proposal-validated":
+                config = event["candidate"]
+                proposal = {"rubric": config["rubric"], "example_ids": config["example_ids"],
+                            "dynamic_elements": config["dynamic_elements"],
+                            "tasks": [{key: task[key] for key in ("name", "instructions", "labels")}
+                                      for task in config["tasks"]]}
+                current = _hash(proposal)
+                found.setdefault(current, {"id": current, "proposal": proposal,
+                                           "rationale": event["proposal"].get("rationale", ""), "attempts": []})
+            elif current:
+                found[current]["attempts"].append({"outcome": event["kind"],
+                    "created_at": event["created_at"], "reason": event.get("reason"),
+                    "candidate": event.get("candidate"), "incumbent": event.get("incumbent")})
+                current = None
+        return tuple(found.values())
+
+    async def retry_hypothesis(self, hypothesis_id: str, training, development, *, protected, propensities):
+        hypothesis = next((row for row in self.hypotheses() if row["id"] == hypothesis_id), None)
+        if hypothesis is None:
+            raise ValueError("unknown retained hypothesis")
+        return await self.improve(training, development, protected=protected, propensities=propensities,
+                                  candidate_proposal=hypothesis["proposal"])
+
+    async def improve_controls(self, training, development, *, protected, propensities, retry_interrupted=False):
+        from .control_scheduler import ControlScheduler
+        return await ControlScheduler(self).run(training, development, protected=protected,
+            propensities=propensities, retry_interrupted=retry_interrupted)
+
     def _activate(self, classifier):
         payload = _json(asdict(classifier))
         with self.db:
@@ -279,19 +317,22 @@ class DecisionFlywheel:
 
     async def improve(self, training: Sequence[LabeledItem], development: Sequence[LabeledItem], *,
                       protected: Sequence[Item], propensities: Mapping[str, float],
-                      retry_interrupted: bool = False) -> dict:
+                      retry_interrupted: bool = False, candidate_proposal: Mapping | None = None,
+                      apply_promotion: bool = True) -> dict:
         self._validate_partitions(training, development, protected, propensities)
         self.reconcile_feedback(training, development=development)
         round_key = _hash({"training": self._evidence(training), "development": self._evidence(development),
                            "propensities": propensities, "protected": sorted(item.id for item in protected),
                            "evaluation_weighting": self.evaluation_weighting,
                            "training_class_weighting": self.training_class_weighting,
-                           "min_evaluation_per_class": self.min_evaluation_per_class})
+                           "min_evaluation_per_class": self.min_evaluation_per_class,
+                           **({"apply_promotion": False} if not apply_promotion else {}),
+                           **({"candidate_proposal": candidate_proposal} if candidate_proposal is not None else {})})
         saved = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (round_key,)).fetchone()
         if saved:
             if saved[0] == "complete":
                 cached = json.loads(saved[1])
-                if "active" in cached:
+                if "active" in cached and apply_promotion:
                     self._activate(_restore(cached["active"]))
                 return cached.get("result", cached)
             if not retry_interrupted:
@@ -320,11 +361,17 @@ class DecisionFlywheel:
                 current={**self.active.config.briefing_state(),
                          "evaluation_weighting": self.evaluation_weighting,
                          "training_class_weighting": self.training_class_weighting,
+                         "prior_hypotheses": self.hypotheses(),
                          "request_budget_bytes": self.max_request_bytes,
                          "training_predictions": [event for event in self.history(1000)
                             if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}]},
                 protected=tuple(row.item for row in development) + tuple(protected))
-            proposal = self.optimizer.propose(briefing)
+            if candidate_proposal is None:
+                proposal = self.optimizer.propose(briefing)
+            else:
+                proposal = dict(candidate_proposal)
+                self._emit({"kind": "hypothesis-retry", "hypothesis_id": _hash(proposal),
+                            "training_count": len(training), "development_count": len(development)})
             config = self.active.config.apply(proposal, training)
             self._emit({"kind": "proposal-validated", "proposal": proposal,
                         "previous": self.active.config.briefing_state(), "candidate": config.briefing_state()})
@@ -350,19 +397,27 @@ class DecisionFlywheel:
             incumbent_metrics = await self._score(self.active, development, training, now)
             candidate_metrics = await self._score(candidate, development, training, now)
             metric = "balanced_brier" if self.evaluation_weighting == "equal_class" else "brier"
-            promoted = candidate_metrics[metric] < incumbent_metrics[metric] - 1e-12
+            improved = candidate_metrics[metric] < incumbent_metrics[metric] - 1e-12
+            promoted = improved and apply_promotion
             result = {"promoted": promoted, "incumbent": incumbent_metrics, "candidate": candidate_metrics,
+                      "improved": improved, "trial_fingerprint": round_key,
                       "promotion_metric": metric, "evaluation_weighting": self.evaluation_weighting,
                       "training_class_weighting": self.training_class_weighting,
-                      "reason": f"lower development {metric}" if promoted else f"development {metric} did not improve"}
+                      "reason": f"lower development {metric}" if improved else f"development {metric} did not improve"}
             self._emit({"kind": "candidate-evaluated", **result})
+            baseline_version = self.active.fingerprint
             if promoted:
                 self._activate(candidate)
-            self._emit({"kind": "promoted" if promoted else "candidate-rejected", "version": self.active.fingerprint, **result})
+            self._emit({"kind": "promoted" if promoted else "candidate-qualified" if improved else "candidate-rejected",
+                        "version": self.active.fingerprint, **result})
             with self.db:
                 self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
-                                (_json({"result": result, "active": asdict(self.active)}), round_key))
+                                (_json({"result": result, "active": asdict(self.active),
+                                        "fitted_candidate": asdict(candidate), "baseline_version": baseline_version,
+                                        "training_evidence": self._evidence(training),
+                                        "development_evidence": self._evidence(development)}), round_key))
             return result
+
         except Exception as error:
             result = {"promoted": False, "reason": "round failed", "error_type": type(error).__name__}
             self._emit({"kind": "round-failed", **result})
@@ -370,6 +425,19 @@ class DecisionFlywheel:
                 self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
                                 (_json({"result": result, "active": asdict(self.active)}), round_key))
             return result
+
+    def promote_trial(self, trial_fingerprint, training, development):
+        row = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (trial_fingerprint,)).fetchone()
+        if not row or row[0] != "complete":
+            raise ValueError("trial is not complete")
+        saved = json.loads(row[1])
+        if not saved["result"].get("improved") or saved.get("baseline_version") != self.active.fingerprint:
+            raise ValueError("trial did not improve this incumbent")
+        if saved.get("training_evidence") != self._evidence(training) or saved.get("development_evidence") != self._evidence(development):
+            raise ValueError("trial feedback changed; refit and reevaluate")
+        self._activate(_restore(saved["fitted_candidate"]))
+        self._emit({"kind": "promoted", **saved["result"], "promoted": True,
+                    "version": self.active.fingerprint, "selection": "best isolated control trial"})
 
     async def _score(self, classifier, development, training, now):
         predictions, distributions = [], []

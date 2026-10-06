@@ -37,7 +37,7 @@ class ReviewerFlywheel:
         training, development, protected = self.partitions()
         # This demo reviews every displayed item. A future sampled reviewer must
         # pass its actual recorded review propensities instead of this full-review policy.
-        return asyncio.run(self.core.improve(training, development, protected=protected,
+        return asyncio.run(self.core.improve_controls(training, development, protected=protected,
                                             propensities={row.item.id: 1.0 for row in training},
                                             retry_interrupted=retry_interrupted))
 
@@ -45,13 +45,21 @@ class ReviewerFlywheel:
         training, development, _ = self.partitions()
         self.core.reconcile_feedback(training, development=development)
 
+    def hypotheses(self):
+        return self.core.hypotheses()
+
+    def retry_hypothesis(self, hypothesis_id):
+        training, development, protected = self.partitions()
+        return asyncio.run(self.core.retry_hypothesis(hypothesis_id, training, development,
+                          protected=protected, propensities={row.item.id: 1. for row in training}))
+
     def status(self):
         training, development, _ = self.partitions()
         active = self.core.active
         events = self.history()
         outcome = next((event for event in reversed(events) if event["kind"] in
                        {"promoted", "candidate-rejected", "round-failed", "round-interrupted", "waiting-for-labels",
-                        "classifier-invalidated"}), None)
+                        "classifier-invalidated", "control-cycle-completed"}), None)
         def definition(task):
             return {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
         return {"version": active.fingerprint, "rubric": active.config.rubric,

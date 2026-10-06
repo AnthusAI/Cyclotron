@@ -310,9 +310,23 @@ The demo reviews all displayed items; training review propensities are recorded 
 Adaptive review-rate reduction remains deferred until there is a validated random-audit rule.
 
 After each 10 new votes, the core attempts another measured round. Use `G` to request one sooner.
+Each round can make three optimizer calls: one for the rubric, one for the
+example collection, and one for supporting classification questions. Each trial
+changes only its assigned control. All trials use the same incumbent; the best
+qualifying trial is promoted only after the comparisons finish.
+The persistent idea registry keeps unsuccessful ideas and their measured outcomes.
+New feedback permits a new trial. Untested ideas get priority, but ideas that have
+waited three cycles get a retry opportunity even when new ideas keep arriving.
+Combination trials are not implemented yet.
 The display reports class counts, active rubric/questions/features, fitting and promotion events.
 Use `O` for the actual optimizer prompt, response and tool calls; `J` for the actual Jev request and answer;
 and `F` for active classifier details. These inspection commands do not add votes.
+Use `H` to inspect retained hypotheses and past outcomes. Use `T` to select one
+and explicitly authorize a new fit/comparison using current feedback. Rejection
+does not erase the rubric/questions/examples or declare the idea false forever.
+New labels produce a new trial. Retrying a retained structure skips rediscovery
+by the optimizer; it still validates examples, collects needed features, fits
+numerical weights, and requires measured improvement before promotion.
 The connected reviewer currently supports the Jev adapter. The provider-neutral
 flags are `--decisions-provider` and `--decisions-model`; other adapters are not
 yet connected to this full classifier-request path.
@@ -356,6 +370,87 @@ Do not use either number as the sealed holdout score.
 Restart reloads the active classifier and private transcripts. A completed round is not repeated
 for identical feedback. Interrupted requests require explicit retry authorization; they are not silently repaid.
 Undo or corrected training feedback invalidates dependent inferred configuration and fitted state.
+
+### Replay existing human feedback from scratch
+
+This diagnostic replay uses the earlier single-proposal round. The connected
+reviewer and the isolated-control experiment below use the three-control scheduler.
+
+Freeze a private snapshot and print the request budget without contacting models:
+
+```bash
+.venv/bin/python scripts/replay_arxiv_feedback.py --output var/arxiv-replay-v1
+```
+
+Then authorize a bounded real replay with `--confirm-live --max-requests 500
+--max-optimizer-calls 5`. Use the same output directory as its preflight.
+The source database is opened read-only and is never changed. Existing original
+audit labels remain excluded; this retrospective experiment reserves new disjoint
+training, development, and audit roles from training-eligible historical votes.
+It starts without a rubric, examples, supporting questions, or fitted head.
+Votes and comments are revealed in recorded arrival order, in batches of 20.
+Development feedback is delayed too; insufficient class coverage postpones a round.
+
+Recent evaluation selects the newest available audit items per class, up to five
+per class. It walks backward to find scarce-class votes and drops older surplus
+majority-class votes. An absent class produces no balanced score. No previously
+learned item moves into evaluation. A separate, fixed balanced audit curve uses
+the final audit selection at every checkpoint for like-for-like comparisons;
+this retrospective curve can use labels not yet available to the simulated user,
+but those labels never reach learning. Small per-class counts are shown explicitly.
+
+Private `results.json` contains each active rubric, question definitions, examples,
+round outcome, and both evaluation views. The separate runtime database contains
+actual optimizer/decision exchanges and fitted-head evidence. Paid runs are not
+mock optimization; offline specs use fake transports only. A previously started
+live output directory is refused rather than silently replayed and repaid.
+These historical labels may reflect recommendations shown during live review,
+and they informed prior experiments. This is a retrospective diagnostic, not an
+independent prospective performance claim. A fresh future audit is still needed.
+
+### Compare the three controls on frozen feedback
+
+After freezing a feedback snapshot with replay preflight, inspect the separate
+experiment without contacting models:
+
+```bash
+.venv/bin/python scripts/experiment_arxiv_controls.py --snapshot var/arxiv-replay-v2/reviews.sqlite3 --output var/arxiv-controls-v1
+```
+
+Add `--confirm-live --max-requests 227 --max-optimizer-calls 3` to authorize
+collection for this 87-vote snapshot. Other snapshots can require different
+ceilings; read their preflight first. Use a new output directory for each experiment.
+This experiment fixes equal-class training weighting for all three trials.
+Its development comparison uses equal-class Brier loss, and its separate balanced
+audit does not enter discovery, fitting, or candidate selection.
+
+The first real isolated-control experiment used 65 training labels (4 Include,
+61 Exclude), four development labels (two per class), and four independent audit
+labels (two per class). All trials began with the same empty rubric and no
+examples, supporting questions, or fitted head.
+
+| Isolated change | Development agreement | Development Brier loss | Outcome |
+| --- | --- | --- | --- |
+| Incumbent | 2/4 | 0.5795 | Shared baseline |
+| Rubric only | 2/4 | 0.9327 | Retained, not promoted |
+| Examples only | 3/4 | 0.3920 | Promoted in experiment runtime |
+| Supporting questions only | 2/4 | 0.9169 | Retained, not promoted |
+
+The optimizer selected eight examples. It also proposed three supporting questions:
+knowledge extraction and curation, memory or data systems, and research assessment
+or interactive refinement. These questions were actually sent to Jev; their answers
+became features for a separately fitted ML head. Their failure to win this trial
+does not establish that the ideas are false or cannot help with more labels.
+
+On the separate audit, the selected examples-only classifier agreed with 4/4 labels,
+versus 2/4 for the incumbent. Four papers cannot establish general accuracy or a
+reliable effect size. This is retrospective evidence from existing human feedback,
+not a prospective study. Training weighting also differs from the earlier replay,
+so differences between those two experiments do not isolate the scheduler's effect.
+Collection used 219 Jev requests and three GPT-6 Luna requests. Full exchanges and
+human feedback remain in ignored private runtime files. This experiment does not
+replace the live reviewer's active classifier. Restart the reviewer to load the new
+scheduler; future rounds use that reviewer's own persisted feedback and active version.
 
 The following older commands perform context-only search and legacy artifact serving.
 They do not run the connected rubric/features/head loop:

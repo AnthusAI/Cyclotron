@@ -49,6 +49,20 @@ def test_equal_class_promotion_records_its_metric_policy_and_both_score_views(tm
     wheel.close()
 
 
+def test_an_isolated_trial_can_be_measured_without_changing_the_shared_incumbent(tmp_path):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]))
+    before = wheel.active.fingerprint
+    result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1. for r in TRAIN},
+                                      apply_promotion=False))
+    assert result["improved"]
+    assert not result["promoted"]
+    assert wheel.active.fingerprint == before
+    wheel.promote_trial(result["trial_fingerprint"], TRAIN, DEV)
+    assert wheel.active.fingerprint != before
+    assert wheel.active.head is not None
+    wheel.close()
+
+
 @pytest.mark.parametrize("policy,promoted", [("equal_class", True), ("natural", False)])
 def test_promotion_uses_the_selected_score_even_when_the_two_views_disagree(tmp_path, policy, promoted):
     wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]),
@@ -128,6 +142,39 @@ def test_feedback_proposals_become_features_a_fitted_head_and_a_promoted_classif
     assert {e["kind"] for e in events} >= {"optimizer-request", "optimizer-response", "proposal-validated",
                                            "fit-started", "fit-completed", "candidate-evaluated", "promoted"}
     assert wheel.history()[-1]["kind"] == "prediction"
+    wheel.close()
+
+
+def test_a_rejected_hypothesis_survives_restart_and_can_be_refitted_without_another_optimizer_call(tmp_path):
+    path = tmp_path / "wheel.sqlite"
+    model = FakeModel()
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), model, agent([]))
+    original_score = wheel._score
+    async def reject(*args):
+        score = await original_score(*args)
+        score["balanced_brier"] = .5
+        return score
+    wheel._score = reject
+    kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN})
+    assert not asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))["promoted"]
+    hypothesis = wheel.hypotheses()[0]
+    assert hypothesis["attempts"][-1]["outcome"] == "candidate-rejected"
+    wheel.close()
+    def forbidden(_):
+        raise AssertionError("retrying a retained hypothesis must not rediscover it through the optimizer")
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), model, OptimizerAgent(forbidden))
+    extra = LabeledItem(Item("later", {"text": "yes later"}), "include")
+    training = (*TRAIN, extra)
+    result = asyncio.run(wheel.retry_hypothesis(hypothesis["id"], training, DEV, protected=(),
+                                              propensities={row.item.id: 1. for row in training}))
+    assert result["promoted"]
+    assert len(wheel.hypotheses()[0]["attempts"]) == 2
+    assert sum(e["kind"] == "optimizer-request" for e in wheel.history(1000)) == 1
+    calls = model.calls
+    asyncio.run(wheel.retry_hypothesis(hypothesis["id"], training, DEV, protected=(),
+                                      propensities={row.item.id: 1. for row in training}))
+    assert model.calls == calls
+    assert len(wheel.hypotheses()[0]["attempts"]) == 2
     wheel.close()
 
 
