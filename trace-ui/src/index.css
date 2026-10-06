@@ -79,6 +79,15 @@ body {margin:0;min-width:360px;-webkit-font-smoothing:antialiased}
 #event-fields dd {margin:0;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
 .disclosure {border:1px solid var(--border);border-radius:var(--radius)}
 .disclosure summary {padding:12px;font-size:12px;font-weight:500;cursor:pointer}
+.metric-row {margin:14px 0;font-size:12px}
+.metric-label {font-weight:600;margin-bottom:6px}
+.metric-series {display:grid;grid-template-columns:64px 1fr 44px;gap:8px;align-items:center;margin:6px 0;color:var(--muted-foreground);font-size:11px}
+.metric-track {height:8px;background:var(--muted);border-radius:4px;overflow:hidden}
+.metric-fill {height:100%;background:var(--muted-foreground);border-radius:4px}
+.metric-fill.candidate {background:var(--primary)}
+.outcome-glyph {display:inline-flex;height:20px;gap:3px;align-items:flex-end;vertical-align:middle}
+.outcome-glyph span {width:5px;background:var(--muted-foreground);border-radius:2px}
+.outcome-glyph span:last-child {background:var(--primary)}
 pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variable',monospace;font-size:11px;line-height:1.65;padding:14px;background:var(--muted);border-radius:var(--radius);max-height:65vh;overflow:auto}
 [hidden] {display:none!important}
 .vis-timeline {border:0!important;color:var(--foreground);font-family:'Geist Variable',sans-serif}

@@ -47,7 +47,19 @@ export function App({counts}:{counts:Counts}) {
           </Card>
           <Card id="inspector" className="inspector-card gap-0 py-0">
             <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border px-5 py-3"><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="size-4" /> Event inspector</p><Button id="close-inspector" variant="ghost" size="icon" aria-label="Close details"><X /></Button></CardHeader>
-            <CardContent className="inspector-body space-y-4 px-5 py-5"><div><h2 id="event-title" className="text-lg font-semibold capitalize tracking-tight">Select a timeline event</h2><p id="event-summary" className="mt-2 text-xs leading-relaxed text-muted-foreground" /></div><dl id="event-fields" /><Button id="paired-request" variant="outline" size="sm" className="w-full" hidden>Inspect matching optimizer request</Button>
+            <CardContent className="inspector-body space-y-4 px-5 py-5"><div><h2 id="event-title" className="text-lg font-semibold capitalize tracking-tight">Select a timeline event</h2><p id="event-summary" className="mt-2 text-xs leading-relaxed text-muted-foreground" /></div><Button id="paired-request" variant="outline" size="sm" className="w-full" hidden>Inspect matching optimizer request</Button>
+              <section id="evaluation-visual" className="disclosure p-3 space-y-3" hidden aria-label="Evaluation metric comparison">
+                <h3 className="text-sm font-semibold">Evaluation outcome</h3><p id="evaluation-summary" className="text-xs text-muted-foreground" /><div id="evaluation-bars" />
+              </section>
+              <section id="optimizer-exchange" className="space-y-3" hidden aria-label="Optimizer LLM exchange">
+                <details id="optimizer-request-box" className="disclosure"><summary>Optimizer LLM request · full context</summary><pre id="optimizer-request-content" /></details>
+                <details id="optimizer-response-box" className="disclosure"><summary>Optimizer LLM responses · tool calls</summary><pre id="optimizer-response-content" /></details>
+              </section>
+              <section id="decision-exchange" className="space-y-3" hidden aria-label="Decision model exchange">
+                <details id="decision-request-box" className="disclosure"><summary>Exact decision-model request</summary><pre id="decision-request-content" /></details>
+                <details id="decision-response-box" className="disclosure"><summary>Exact decision-model response</summary><pre id="decision-response-content" /></details>
+              </section>
+              <dl id="event-fields" />
               <details id="content-box" className="disclosure"><summary id="content-title">Inspect event content</summary><pre id="event-content" /></details>
               <details className="disclosure"><summary>Configuration at this point</summary><pre id="configuration" /></details>
               <details className="disclosure"><summary>Exact raw event</summary><pre id="raw-event" /></details>

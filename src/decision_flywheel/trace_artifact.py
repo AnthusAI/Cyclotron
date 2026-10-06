@@ -155,6 +155,12 @@ for(const item of timelineItems){
  item.type='box';
  item.content=document.createElement('span');item.content.textContent=event?.kind==='trigger-evaluated'?(event.due?'⚑':'○'):item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
  item.content.setAttribute('aria-label',item.title);
+ const metrics=evaluationMetrics(event);
+ if(metrics&&metrics.rows[0].candidate!==null){
+  item.content.textContent='';const glyph=document.createElement('span');glyph.className='outcome-glyph';
+  for(const value of [metrics.rows[0].incumbent,metrics.rows[0].candidate]){const bar=document.createElement('span');bar.style.height=`${Math.max(2,20*(value??0))}px`;glyph.append(bar);}
+  item.content.append(glyph);item.title+=` · accuracy ${metrics.rows[0].incumbent===null?'unavailable':Math.round(metrics.rows[0].incumbent*100)+'%'} → ${Math.round(metrics.rows[0].candidate*100)}%`;
+ }
 }
 const classGroups=[];
 for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Model decisions'],['human-labels','label-class-','Human labels']]){
@@ -166,7 +172,8 @@ for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Mode
 }
 const occupied=new Set(timelineItems.map(i=>i.group));
 const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions'].includes(g.id));
-if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Decision API requests/responses'});
+// API exchanges belong in the classification inspector, not a separate lane.
+const plottedItems=timelineItems.filter(item=>item.group!=='decision-api');
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},{id:'step-items',content:'Step / item'},...classGroups,...otherGroups];
 const stepItems=projection.steps.flatMap((step,index)=>{
@@ -183,7 +190,7 @@ const cycleItems=projection.cycles.flatMap((cycle,index)=>{
 const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
 const minimumWindow=projection.axis==='cycle'?4:100;
 let initialWindowSet=false;
-const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...timelineItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},height:'100%',editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:minimumWindow,zoomMax:maximum,verticalScroll:true,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
+const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...plottedItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},height:'100%',editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:minimumWindow,zoomMax:maximum,verticalScroll:true,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
 function setView(start,width){
  width=Math.min(maximum,Math.max(minimumWindow,Math.ceil(width)));
  start=Math.round(Math.max(0,Math.min(maximum-width,start)));
@@ -260,7 +267,7 @@ for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-f
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
 }
 function applyFilters(){
- timeline.setItems([...cycleItems,...stepItems,...timelineItems.filter(item=>{
+ timeline.setItems([...cycleItems,...stepItems,...plottedItems.filter(item=>{
  if(el('disagreement-filter').checked){
   if(item.source_index===undefined){
    const event=events[item.event_index];
@@ -348,12 +355,82 @@ function draw(){
  inspectEvent(event);
  el('back').disabled=!ordered.length||currentStep===0;el('next').disabled=!ordered.length||currentStep===ordered.length-1;el('play').disabled=!events.length;
 }
+// Pair recorded exchanges by target and execution scope, not by item alone:
+// the same article can be rescored repeatedly with different candidate contexts.
+function decisionExchange(index){
+ const selected=events[index],scope=event=>JSON.stringify([event.cycle_id,event.step_id,event.target_id]);
+ if(!selected?.target_id)return {request:null,response:null};
+ let pending=null;
+ for(let i=0;i<events.length;i++){
+  const event=events[i];if(scope(event)!==scope(selected))continue;
+  if(event.kind==='decision-request')pending=i;
+  else if(event.kind==='decision-response'){
+   if(i===index||pending===index)return {request:pending===null?null:events[pending],response:event};
+   pending=null;
+  }
+ }
+ return {request:selected.kind==='decision-request'?selected:null,response:null};
+}
+function showDecisionExchange(exchange){
+ el('decision-exchange').hidden=false;
+ el('decision-request-box').open=true;el('decision-response-box').open=true;
+ el('decision-request-content').textContent=exchange.request?readable({model:exchange.request.model,state:exchange.request.state,questions:exchange.request.questions}):'No matching request was recorded. It has not been reconstructed from a later configuration.';
+ el('decision-response-content').textContent=exchange.response?readable(exchange.response):'No matching response was recorded.';
+}
+function showOptimizerExchange(index){
+ const owner=roundData.owners[String(index)],round=roundData.rounds[String(owner)];
+ el('optimizer-exchange').hidden=true;
+ if(!round||(!round.optimizer_requests.length&&!round.optimizer_responses.length))return;
+ el('optimizer-exchange').hidden=false;
+ el('optimizer-request-box').open=true;el('optimizer-response-box').open=true;
+ el('optimizer-request-content').textContent=round.optimizer_requests.length?readable(round.optimizer_requests.map(i=>{
+  const e=events[i];return {event_id:e.event_id,model:e.requested_model,messages:e.messages};
+ })):'No optimizer request was recorded for this attempt.';
+ el('optimizer-response-content').textContent=round.optimizer_responses.length?readable(round.optimizer_responses.map(i=>{
+  const e=events[i];return {event_id:e.event_id,model:e.model,content:e.content,tool_calls:e.tool_calls||[],usage:e.usage};
+ })):'No optimizer response was recorded for this attempt.';
+}
+function evaluationMetrics(event){
+ if(!event)return null;
+ const result=event.result||event,incumbent=result.incumbent||{},candidate=result.candidate||{};
+ if(!result.incumbent&&!result.candidate)return null;
+ const score=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
+ const rows=[{label:'Accuracy',incumbent:score(incumbent.accuracy),candidate:score(candidate.accuracy)},
+  {label:'Balanced accuracy',incumbent:score(incumbent.balanced_accuracy),candidate:score(candidate.balanced_accuracy)},
+  {label:'Precision',incumbent:score(incumbent.macro_precision??incumbent.precision),candidate:score(candidate.macro_precision??candidate.precision)}];
+ for(const label of new Set([...Object.keys(incumbent.per_class||{}),...Object.keys(candidate.per_class||{})])){
+  for(const metric of ['recall','precision'])rows.push({label:`${metric==='recall'?'Recall':'Precision'} · ${label}`,incumbent:score(incumbent.per_class?.[label]?.[metric]),candidate:score(candidate.per_class?.[label]?.[metric])});
+ }
+ return {rows,count:candidate.count??incumbent.count,reason:result.reason,promoted:result.promoted};
+}
+function showEvaluation(event){
+ const metrics=evaluationMetrics(event);el('evaluation-visual').hidden=!metrics;
+ el('evaluation-bars').replaceChildren();if(!metrics)return;
+ el('evaluation-summary').textContent=`${metrics.count??'Unknown number of'} evaluation items · ${metrics.promoted===true?'Promoted':metrics.promoted===false?'Not promoted':'Promotion not recorded'}${metrics.reason?' · '+metrics.reason:''}. Gray: incumbent. Solid: candidate. Missing metrics are not estimated.`;
+ for(const row of metrics.rows){
+  const group=document.createElement('div');group.className='metric-row';
+  const title=document.createElement('div');title.className='metric-label';title.textContent=row.label;group.append(title);
+  for(const key of ['incumbent','candidate']){
+   const series=document.createElement('div');series.className='metric-series';
+   const name=document.createElement('span');name.textContent=key==='incumbent'?'Incumbent':'Candidate';
+   const track=document.createElement('div');track.className='metric-track';
+   const fill=document.createElement('div');fill.className='metric-fill '+key;fill.style.width=`${Math.max(0,Math.min(1,row[key]??0))*100}%`;track.append(fill);
+   const value=document.createElement('span');value.textContent=row[key]===null?'Not recorded':`${Math.round(row[key]*1000)/10}%`;
+   series.append(name,track,value);group.append(series);
+  }
+  el('evaluation-bars').append(group);
+ }
+}
 function inspectEvent(event){
  el('inspector').scrollTop=0;
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  el('event-fields').replaceChildren();
  el('content-box').open=false;
  el('paired-request').hidden=true;
+ el('decision-exchange').hidden=true;
+ el('content-box').hidden=false;
+ showOptimizerExchange(position);
+ showEvaluation(event);
  if(!event){el('event-title').textContent='No recorded events';return;}
  el('event-title').textContent=event.kind.replaceAll('-',' ');
  el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||(event.cycle_id?'item processing':'unscoped')}`;
@@ -380,6 +457,8 @@ function inspectEvent(event){
   field('Decision request events',requests.map(e=>e.event_id));
   field('Decision response events',responses.map(e=>e.event_id));
   payload={prediction:event,requests,responses,cached};title='Exact decision exchange';
+  const actualRequest=events.findLastIndex((e,index)=>index<position&&e.kind==='decision-request'&&e.cycle_id===event.cycle_id&&e.step_id===event.step_id&&e.target_id===event.target_id);
+  if(actualRequest>=0){showDecisionExchange(decisionExchange(actualRequest));el('content-box').hidden=true;}
   if(requests.length){el('paired-request').hidden=false;el('paired-request').textContent='Open actual decision request';el('paired-request').onclick=()=>move(events.indexOf(requests[0]));}
  }else if(event.kind==='cycle-started'){
   field('Article',event.item?.values);field('Reason',event.reason);
@@ -404,11 +483,16 @@ function inspectEvent(event){
  }else if(event.kind==='candidate-evaluated'){
   for(const key of ['accuracy','balanced_accuracy','balanced_brier']){field('Incumbent '+key,event.incumbent?.[key]);field('Candidate '+key,event.candidate?.[key]);}
   field('Reason',event.reason);field('Independent evaluation',event.evaluation_independent_of_optimizer_context);
- }else if(event.kind==='decision-request'){
-  field('Model',event.model);field('Target',event.target_id);field('Examples',event.state?.examples?.length);field('Questions',Object.keys(event.questions||{}).join(', '));title='Inspect actual expanded decision request';
-  for(const [index,example] of (event.state?.examples||[]).entries())field('Example '+(index+1),example);
- }else if(event.kind==='decision-response'){
-  for(const [name,answer] of Object.entries(event.answers||{}))field(name,answer);
+ }else if(event.kind==='decision-request'||event.kind==='decision-response'){
+  const exchange=decisionExchange(position),request=exchange.request;
+  showDecisionExchange(exchange);el('content-box').hidden=true;
+  field('Model',request?.model||event.model);field('Target',event.target_id);
+  field('Examples',request?.state?.examples?.length);field('Questions',Object.keys(request?.questions||{}).join(', '));
+  field('Request event',request?.event_id);field('Response event',exchange.response?.event_id);
+  if(request&&event.kind==='decision-response'){
+   el('paired-request').hidden=false;el('paired-request').textContent='Go to matching decision request';
+   el('paired-request').onclick=()=>move(events.indexOf(request));
+  }
  }else{
   field('Reason',event.reason||event.result?.reason);field('Status',event.status);field('Training items',event.training_count);field('Feature count',event.features?.length);
   field('Promoted',event.promoted??event.result?.promoted);
@@ -425,7 +509,7 @@ function inspectSource(index,pause=true){
  revealPointer(point);
  el('status').textContent=`Step ${Math.floor(point.valueOf()/1000)+1}/${projection.steps.length} · original reviewer record`;
  el('back').disabled=currentStep===0;el('next').disabled=currentStep===ordered.length-1;
- el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;
+ el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;el('content-box').hidden=false;el('decision-exchange').hidden=true;el('optimizer-exchange').hidden=true;el('evaluation-visual').hidden=true;
  el('event-title').textContent=source.source_table==='presentations'?`Predicted ${row.predicted_label} · ${Math.round(row.confidence*100)}%`:`Human ${row.action}: ${row.label||'—'}`;
  el('event-summary').textContent=`Original reviewer record · ${row.shown_at||row.created_at} · ${source.article.assignment}. Not generated by this optimization run.`;
  for(const [label,value] of Object.entries({Title:source.article.title,Abstract:source.article.abstract,Explanation:row.comment,'Prediction shown before vote':source.presentation?`${source.presentation.predicted_label} (${Math.round(source.presentation.confidence*100)}%)`:undefined}))if(value){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;el('event-fields').append(dt,dd);}

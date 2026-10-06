@@ -45,10 +45,34 @@ elements.next.onclick();assert.equal(position,2);
 elements.back.onclick();assert.equal(position,1);
 handlers.select({items:[3]});
 assert.equal(elements['paired-request'].hidden,false);
+assert.equal(elements['decision-exchange'].hidden,false);
 elements['paired-request'].onclick();assert.equal(position,1);
 assert.ok(elements['event-content'].textContent.includes('examples'));
+handlers.select({items:[2]});
+assert.equal(elements['decision-exchange'].hidden,false);
+assert.ok(elements['decision-request-content'].textContent.includes('examples'));
+assert.ok(elements['decision-response-content'].textContent.includes('reject'));
+assert.equal(elements['paired-request'].hidden,false);
+elements['paired-request'].onclick();assert.equal(position,1);
+assert.ok(elements['decision-response-content'].textContent.includes('reject'));
+handlers.select({items:[4]});assert.equal(elements['decision-exchange'].hidden,true);
+events.push({kind:'decision-request',target_id:'paper',cycle_id:'one',step_id:'retry',state:{examples:[{text:'different context',label:'accept'}]},questions:{}});
+events.push({kind:'decision-response',target_id:'paper',cycle_id:'one',step_id:'retry',answers:{decision:{choice:'accept'}}});
+assert.equal(decisionExchange(2).request,events[1]);
+assert.equal(decisionExchange(7).request,events[6]);
+assert.equal(decisionExchange(6).response,events[7]);
+assert.equal(decisionExchange(1).response,events[2]);
+events.pop();events.pop();
+const metricFixture={kind:'candidate-evaluated',incumbent:{accuracy:.5,count:4,per_class:{accept:{recall:.5},reject:{recall:.5}}},candidate:{accuracy:.75,count:4,per_class:{accept:{recall:1},reject:{recall:.5}}},promoted:false};
+const visualMetrics=evaluationMetrics(metricFixture);
+assert.equal(visualMetrics.rows.find(row=>row.label==='Accuracy').candidate,.75);
+assert.equal(visualMetrics.rows.find(row=>row.label==='Recall · accept').candidate,1);
+assert.equal(visualMetrics.rows.find(row=>row.label==='Precision').candidate,null);
+assert.equal(evaluationMetrics({kind:'prediction'}),null);
 assert.equal(timeline.options.zoomMin,4);
 assert.equal(elements['show-history'].hidden,true);
+assert.ok(!timelineData.groups.some(group=>group.id==='decision-api'));
+applyFilters();assert.ok(!timeline.items.some(item=>item.group==='decision-api'));
 handlers.doubleClick({item:3});
 assert.ok(timeline.window[1]-timeline.window[0]<1000);
 elements['show-run'].onclick();assert.deepEqual(timeline.window,[0,1000]);
@@ -98,6 +122,7 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
             'created_at': '2026-10-06T12:01:00Z', 'assignment': 'development',
             'feedback': {'final_answer_value': label, 'edit_comment_value': 'reason' if label=='accept' else ''}})
     events.append({'event_id':11,'kind':'internal-cache-check','created_at':'2026-10-06T12:01:10Z'})
+    events.append({'event_id':12,'kind':'proposal-validated','step_id':'a','step_stage':'rubric','created_at':'2026-10-06T12:01:11Z'})
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
               'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
     history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
@@ -114,6 +139,9 @@ let select;const handlers={};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
 CODE
 select({items:[1]});
+assert.equal(elements['optimizer-exchange'].hidden,false);
+assert.ok(elements['optimizer-request-content'].textContent.includes('prompt-a'));
+assert.ok(elements['optimizer-response-content'].textContent.includes('reply-a'));
 assert.equal(position,1);
 assert.ok(elements['event-content'].textContent.includes('prompt-a'));
 assert.ok(!elements['event-content'].textContent.includes('reply-a'));
@@ -122,6 +150,13 @@ select({items:[2]});
 assert.ok(elements['event-content'].textContent.includes('reply-a'));
 assert.ok(elements['event-content'].textContent.includes('tool-a'));
 assert.ok(!elements['event-content'].textContent.includes('reply-b'));
+select({items:[11]});
+assert.equal(elements['optimizer-exchange'].hidden,false);
+assert.ok(elements['optimizer-request-content'].textContent.includes('prompt-a'));
+assert.ok(elements['optimizer-response-content'].textContent.includes('reply-a'));
+assert.ok(elements['optimizer-response-content'].textContent.includes('tool-a'));
+assert.ok(!elements['optimizer-request-content'].textContent.includes('prompt-b'));
+select({items:[2]});
 assert.equal(elements['paired-request'].hidden,false);
 elements['paired-request'].onclick();assert.equal(position,1);
 select({items:[2]});

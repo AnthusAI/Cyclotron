@@ -98,6 +98,14 @@ class coverage is recorded as waiting, never as a successful optimization.
 
 Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
+Selecting a classification shows its exact decision-model request and response,
+including expanded state, examples, and questions; API exchanges do not have a
+separate timeline lane. Optimization events (including proposal validation and
+outcomes) show the full recorded optimizer messages, responses, and tool calls
+for that attempt. Evaluation markers compare accuracy with paired miniature
+bars. Their inspector compares incumbent and candidate accuracy and per-class
+recall, with the evaluation sample count and promotion outcome. Precision is
+shown when recorded; missing metrics are explicitly unavailable, never inferred.
 The explorer fills the viewport without document scrolling. Close details to
 expand the timeline to full width. Horizontal trackpad scrolling pans without
 changing scale; vertical scrolling moves through timeline rows. Enter fullscreen
