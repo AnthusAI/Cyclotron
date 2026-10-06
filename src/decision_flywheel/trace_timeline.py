@@ -33,6 +33,8 @@ def timeline_data(events):
             group,label='examples',kind.replace('-',' ')
         elif kind == 'cycle-metrics':
             group,label='evaluation','Running prediction agreement'
+        elif kind == 'classifier-training-completed':
+            group,label='classifier','ML candidate selection'
         elif kind == 'human-feedback':
             feedback = event.get('feedback', {})
             group = 'feedback'

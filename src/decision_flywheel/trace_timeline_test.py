@@ -1,6 +1,13 @@
 from .trace_timeline import timeline_data
 
 
+def test_the_classifier_selection_outcome_is_clickable_in_the_ml_lane():
+    data=timeline_data([{'kind':'classifier-training-completed','stage':'classifier',
+        'promoted':True,'created_at':'2026-10-06T12:00:00Z'}])
+    assert data['items'][0]['group']=='classifier'
+    assert data['items'][0]['event_index']==0
+
+
 def test_configuration_count_markers_show_active_questions_not_unpromoted_proposals():
     events = [
         {'kind':'cycle-started','classifier_snapshot':{'config':{'tasks':[]}}},

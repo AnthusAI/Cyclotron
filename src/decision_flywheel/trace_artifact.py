@@ -302,6 +302,13 @@ function configurationCountChange(cycleId,stage,recording=events){
  const change=configurationControlChange(cycleId,stage,recording);
  return change?.countChanged?change.count:null;
 }
+function mlActivity(cycleId,lane,recording=events){
+ const rows=recording.filter(event=>event.cycle_id===cycleId);
+ const activations=rows.filter(event=>event.kind==='classifier-activated'&&event.classifier_snapshot?.head);
+ const accepted=lane==='fit'?activations.length>0:optimizationActivity(cycleId,'classifier',recording).accepted;
+ const provisional=activations.some(event=>event.classifier_snapshot.validation_status==='provisional');
+ return {accepted,label:accepted?(provisional?'Head activated provisionally; improvement not established':'ML head selected / activated'):'No ML candidate accepted; incumbent retained'};
+}
 function cycleCells(items){
  if(projection.axis!=='cycle')return items;
  const buckets=new Map(),passthrough=[];
@@ -318,11 +325,13 @@ function cycleCells(items){
   const questions=members[0].group==='questions';
   const examples=members[0].group==='examples';
   const contextControl=questions||examples;
-  const first=rubric||questions?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
+  const ml=['classifier-attempts','fit'].includes(members[0].group);
+  const first=ml?(members.findLast(m=>events[m.event_index]?.kind==='classifier-training-completed')||members.findLast(m=>events[m.event_index]?.kind==='fit-completed')||members[0]):rubric||questions?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
   const activity=rubric?rubricActivity(cycle.key):null;
   const controlStage=questions?'questions':'examples';
   const controlActivity=contextControl?optimizationActivity(cycle.key,controlStage):null;
   if(contextControl&&configurationControlChange(cycle.key,controlStage)?.changed)controlActivity.accepted=true;
+  const mlOutcome=ml?mlActivity(cycle.key,members[0].group):null;
   if(rubric&&!activity.ran)return [];
   const trigger=first.group==='triggers';
   if(trigger&&!members.some(member=>member.className.includes('trigger-fired')))return [];
@@ -331,15 +340,15 @@ function cycleCells(items){
   if(contextControl){
    const changedCount=configurationCountChange(cycle.key,controlStage);
    if(changedCount!==null)content.textContent=String(changedCount);
-  }else if(!rubric&&!decision&&!trigger){
+  }else if(!rubric&&!ml&&!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
    if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
   return [{...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
-   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):'')+(contextControl?' '+(controlActivity.accepted?'optimization-accepted':'optimization-not-accepted'):''),
-   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:contextControl?`${questions?'Classifier question':'Few-shot example'} optimization: ${controlActivity.accepted?'Accepted':'Not accepted'}${content.textContent?' · active count after cycle: '+content.textContent:''}`:members.map(m=>m.title).join('\n')}];
+   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):'')+(contextControl?' '+(controlActivity.accepted?'optimization-accepted':'optimization-not-accepted'):'')+(ml?' '+(mlOutcome.accepted?'optimization-accepted':'optimization-not-accepted'):''),
+   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:ml?mlOutcome.label:contextControl?`${questions?'Classifier question':'Few-shot example'} optimization: ${controlActivity.accepted?'Accepted':'Not accepted'}${content.textContent?' · active count after cycle: '+content.textContent:''}`:members.map(m=>m.title).join('\n')}];
  })];
 }
 plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));
@@ -642,6 +651,17 @@ function inspectEvent(event){
  if(cycle)field('Cycle',cycle.title);
  if(event.kind==='trigger-evaluated'){field('Stage',event.stage);field('Run',event.due);field('Reason',event.reason);field('Trigger inputs',event.details);}
  if(event.trigger_event_id)field('Caused by trigger event',event.trigger_event_id);
+ if(event.cycle_id&&((event.step_stage||event.stage)==='classifier'||['fit-started','fit-completed'].includes(event.kind))){
+  field('ML outcome',mlActivity(event.cycle_id,['fit-started','fit-completed'].includes(event.kind)?'fit':'classifier-attempts').label);
+ }
+ if(event.kind==='classifier-training-completed'){
+  field('Accepted',event.promoted);field('Selection reason',event.reason);
+  field('Selected feature set',event.selected?.feature_set);
+  field('Candidate comparison',(event.trials||[]).map(trial=>({feature_set:trial.feature_set,
+   training_class_weighting:trial.training_class_weighting,
+   balanced_brier:trial.candidate?.balanced_brier,accuracy:trial.candidate?.accuracy,
+   per_class:trial.candidate?.per_class,recall_safeguard_passed:trial.recall_safeguard_passed})));
+ }
  if(event.kind==='cycle-metrics'){
   field('Measured scope',event.metric_scope);field('Reviewed items',event.metrics?.count);
   const point=metricSeries.find(point=>point.event_index===position);
