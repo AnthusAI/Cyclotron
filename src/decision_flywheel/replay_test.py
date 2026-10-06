@@ -25,12 +25,13 @@ def test_replay_splits_are_disjoint_fixed_and_reveal_feedback_in_original_order(
     assert plan.checkpoints[-1] == 36
 
 
-def test_evaluation_selection_and_development_have_equal_counts_for_every_class():
+def test_development_retains_majority_items_and_balances_by_scoring_not_discarding():
     plan = plan_replay(TASK, rows(), seed="replay", batch_size=10)
-    for group in (plan.evaluation(len(plan.ordered), TASK.labels), plan.development):
-        counts = [sum(row.label == label for row in group) for label in TASK.labels]
-        assert len(set(counts)) == 1
-        assert min(counts) >= 2
+    counts = {label:sum(row.label==label for row in plan.development) for label in TASK.labels}
+    assert counts == {'include':5,'exclude':3}
+    assert plan.evaluation(len(plan.ordered),TASK.labels)==plan.scoreboard
+    assert len(plan.scoreboard)==8
+    assert plan.manifest(TASK)['development_policy']['weighting']=='equal_class'
 
 
 def test_balancing_walks_back_to_older_minority_labels_but_keeps_only_recent_majority_labels():

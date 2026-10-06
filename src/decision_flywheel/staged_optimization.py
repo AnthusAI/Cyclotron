@@ -1,7 +1,8 @@
 """Separately scheduled controls with persistent discovery and measurement."""
 import json
+from datetime import datetime,timezone
 
-from .flywheel import _hash, _json
+from .flywheel import _hash, _json, FittedClassifier
 from .optimizer_agent import FeedbackBriefing
 from .question_measurement import measure_questions
 
@@ -43,6 +44,9 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                  "protected": sorted(item.id for item in protected), "propensities": propensities,
                  "limit": limit, "evaluation_floor": min_development_per_class,
                  "evaluation_weighting": wheel.evaluation_weighting, "training_class_weighting": wheel.training_class_weighting}
+    key_data['context_validation_floor']=wheel.context_validation_floor
+    from dataclasses import asdict
+    key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
     key_data["train_after_questions"] = train_after_questions
     key = _hash(key_data)
@@ -59,6 +63,18 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     if saved and not retry_interrupted:
         return {"stage": stage, "promoted": False, "reason": "interrupted stage requires explicit retry"}
     proposal = json.loads(saved[1]).get("proposal") if saved and saved[1] else None
+    pending_key=None
+    if proposal is None and not saved:
+        for old_key,payload in wheel.db.execute("SELECT id,payload FROM optimization_stages WHERE status='complete' ORDER BY rowid DESC"):
+            previous=json.loads(payload)
+            evidence=previous.get('proposal_training_evidence',{})
+            if (previous.get('stage')==stage and previous.get('pending_evaluation') and
+                previous.get('basis_context_version')==wheel.active.config.fingerprint and
+                evidence and all(wheel._evidence(training).get(k)==v for k,v in evidence.items())):
+                proposal=previous['proposal'];pending_key=old_key
+                wheel._emit({'kind':'pending-proposal-reused','stage':stage,'source_stage_key':old_key,
+                             'proposal':proposal,'reason':'reevaluate retained proposal with current development coverage'})
+                break
     control = controls[stage]
     with wheel.db:
         wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'pending', ?)",
@@ -86,7 +102,9 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         proposal = {**proposal, "tasks": tasks}
     if set(proposal)-{"rationale", control} or control not in proposal:
         raise ValueError("stage proposal must change only its assigned control")
-    wheel.active.config.apply(proposal, training)
+    config=wheel.active.config.apply(proposal, training)
+    if stage=='rubric' and not config.rubric.strip():
+        raise ValueError('rubric optimization must produce a nonempty rubric')
     with wheel.db:
         wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?", (_json({"proposal": proposal}), key))
     if stage == "questions":
@@ -100,18 +118,54 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
     else:
         counts = {label: sum(row.label == label for row in development) for label in wheel.initial.task.labels}
-        if min(counts.values()) < min_development_per_class:
+        if stage=='rubric' and not wheel.active.config.rubric.strip() and wheel.active.head is None:
+            previous=wheel.active.config.briefing_state()
+            wheel._emit({'kind':'proposal-validated','proposal':proposal,'previous':previous,'candidate':config.briefing_state()})
+            wheel._activate(FittedClassifier(config,training_evidence=wheel._evidence(training),validation_status='provisional'))
+            result={'promoted':False,'activated':True,'validation_status':'provisional','proposal':proposal,
+                    'reason':'first nonempty rubric initialized provisionally; improvement has not been established',
+                    'development_counts':counts,'minimum_development_per_class':min_development_per_class}
+            wheel._emit({'kind':'context-initialized',**result,'configuration':config.briefing_state(),'previous':previous})
+        elif stage=='rubric' and wheel.active.validation_status=='provisional' and wheel.evaluation_policy.recency_allowance(counts)>0:
+            candidate=FittedClassifier(config,training_evidence=wheel._evidence(training),validation_status='provisional')
+            measurements={}
+            if min(counts.values())>0:
+                now=datetime.now(timezone.utc)
+                measurements={'incumbent':await wheel._score(wheel.active,development,training,now),
+                              'candidate':await wheel._score(candidate,development,training,now)}
+            previous=wheel.active.config.briefing_state()
+            wheel._emit({'kind':'proposal-validated','proposal':proposal,'previous':previous,'candidate':config.briefing_state()})
+            allowance=wheel.evaluation_policy.recency_allowance(counts)
+            accepted=(not measurements or measurements['candidate']['balanced_brier'] <=
+                      measurements['incumbent']['balanced_brier'] + allowance)
+            if accepted:
+                wheel._activate(candidate)
+            result={'promoted':False,'activated':accepted,'validation_status':'provisional','proposal':proposal,
+                    'pending_evaluation':not accepted, 'recency_allowance':allowance,
+                    'reason':('working rubric refined with a decaying recency preference; evaluation remains exploratory'
+                              if accepted else 'proposal retained; measured regression exceeds current recency allowance'),
+                    'development_counts':counts,'context_validation_floor':wheel.context_validation_floor,**measurements}
+            wheel._emit({'kind':'context-refined' if accepted else 'candidate-rejected',**result,
+                         'configuration':wheel.active.config.briefing_state(),'previous':previous})
+        elif min(counts.values()) < min_development_per_class:
             result = {"promoted": False, "proposal": proposal,
+                      'validation_status':'insufficient-evidence',
+                      'pending_evaluation':True,
                       "reason": "proposal retained; waiting for adequate development class coverage",
                       "development_counts": counts, "minimum_development_per_class": min_development_per_class}
         else:
             result = await wheel.improve(training, development, protected=protected, propensities=propensities,
                 candidate_proposal=proposal, retry_interrupted=retry_interrupted, require_recall_safeguards=True)
-    result = {**result, "stage": stage,
+    result = {**result, "stage": stage, 'proposal':proposal,
+              'basis_context_version':key_data['context'], 'proposal_training_evidence':key_data['training'],
               "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"]}
     with wheel.db:
+        if pending_key and not result.get('pending_evaluation') and result.get('reason')!='round failed':
+            old=json.loads(wheel.db.execute('SELECT payload FROM optimization_stages WHERE id=?',(pending_key,)).fetchone()[0])
+            old['pending_evaluation']=False
+            wheel.db.execute('UPDATE optimization_stages SET payload=? WHERE id=?',(_json(old),pending_key))
         wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?", (_json(result), key))
-        if result.get("promoted") or result.get("classifier_training", {}).get("promoted"):
+        if result.get('activated') or result.get("promoted") or result.get("classifier_training", {}).get("promoted"):
             # Restart after this stage's own promotion must not rediscover the
             # same feedback merely because this stage changed the active context.
             wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'complete', ?)",

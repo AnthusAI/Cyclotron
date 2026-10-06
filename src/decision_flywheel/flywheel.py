@@ -58,6 +58,7 @@ class FittedClassifier:
     head: LearnedHead | None = None
     training_evidence: Mapping[str, str] | None = None
     development_evidence: Mapping[str, str] | None = None
+    validation_status: str | None = None
 
     @property
     def fingerprint(self):
@@ -66,7 +67,8 @@ class FittedClassifier:
             # New optional metadata must not rename an unchanged legacy head.
             head["provenance"].pop("training_class_weighting", None)
         return _hash({"config": self.config.fingerprint, "head": head,
-                      "training_evidence": self.training_evidence, "development_evidence": self.development_evidence})
+                      "training_evidence": self.training_evidence, "development_evidence": self.development_evidence,
+                      **({"validation_status":self.validation_status} if self.validation_status is not None else {})})
 
 
 def _restore(raw):
@@ -88,7 +90,7 @@ def _restore(raw):
                            {name: tuple(value) for name, value in head["feature_normalizers"].items()},
                            Calibration(**head["calibration"]), OutOfFoldPredictions(**oof),
                            HeadProvenance(**provenance), head["refitted_scorecard_fingerprint"])
-    return FittedClassifier(config, head, raw["training_evidence"], raw.get("development_evidence"))
+    return FittedClassifier(config, head, raw["training_evidence"], raw.get("development_evidence"),raw.get('validation_status'))
 
 
 class DecisionFlywheel:
@@ -105,7 +107,11 @@ class DecisionFlywheel:
                  max_requests: int = 100, max_request_bytes: int = 32000,
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
                  training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
-                 cache_options=None):
+                 cache_options=None, context_validation_floor: int = 20, evaluation_policy=None):
+        from .evaluation_policy import EvaluationPolicy
+        self.evaluation_policy = evaluation_policy or EvaluationPolicy(recency_decay_per_class=context_validation_floor)
+        if not isinstance(self.evaluation_policy, EvaluationPolicy):
+            raise ValueError('evaluation_policy must be EvaluationPolicy')
         from .decision_cache import CacheOptions
         self.cache_options = cache_options if cache_options is not None else CacheOptions()
         if not isinstance(self.cache_options, CacheOptions):
@@ -117,6 +123,9 @@ class DecisionFlywheel:
         self.evaluation_weighting = evaluation_weighting
         self.training_class_weighting = training_class_weighting
         self.min_evaluation_per_class = min_evaluation_per_class
+        if type(context_validation_floor) is not int or context_validation_floor<1:
+            raise ValueError('context validation floor must be positive')
+        self.context_validation_floor=context_validation_floor
         if type(max_requests) is not int or max_requests < 1:
             raise ValueError("max_requests must be positive")
         if type(max_request_bytes) is not int or max_request_bytes < 1:
@@ -394,6 +403,7 @@ class DecisionFlywheel:
         self._emit({"kind": "prediction", "target_id": target.id, "label": result.label,
                     "version": self.active.fingerprint, "fitted_head": self.active.head is not None,
                     "probabilities": result.probabilities, "confidence": result.confidence,
+                    "validation_status": self.active.validation_status,
                     "model": result.model, "usage": result.usage, "latency_ms": result.latency_ms})
         return result
 
@@ -434,6 +444,8 @@ class DecisionFlywheel:
                            "evaluation_weighting": self.evaluation_weighting,
                            "training_class_weighting": self.training_class_weighting,
                            "min_evaluation_per_class": self.min_evaluation_per_class,
+                           "evaluation_policy": asdict(self.evaluation_policy),
+                           "context_validation_floor": self.context_validation_floor,
                            "require_recall_safeguards": require_recall_safeguards,
                            "optimizer_context": self.optimizer_context,
                            **({"evaluation_time": evaluation_time.isoformat()}
@@ -517,7 +529,9 @@ class DecisionFlywheel:
                 scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
                 context_artifact_fingerprint=config.fingerprint, source_model_provenance=self.model.model_identity,
                 training_class_weighting=self.training_class_weighting)
-            candidate = FittedClassifier(config, head, self._evidence(training), self._evidence(development))
+            status=('provisional' if self.active.validation_status=='provisional' and
+                    min(development_counts.values())<self.context_validation_floor else 'evaluated')
+            candidate = FittedClassifier(config, head, self._evidence(training), self._evidence(development),status)
             self._emit({"kind": "fit-completed", "features": list(head.feature_names),
                         "head": asdict(head),
                         "training_count": len(rows), "calibration": "out_of_fold"})
@@ -580,6 +594,8 @@ class DecisionFlywheel:
                     "version": self.active.fingerprint, "selection": "best isolated control trial"})
 
     async def _score(self, classifier, development, training, now):
+        available_count = len(development)
+        development = self.evaluation_policy.select(development, classifier.config.task.labels)
         predictions, distributions = [], []
         for row in development:
             batch = await self._answers(classifier.config, row.item, training, now)
@@ -594,4 +610,10 @@ class DecisionFlywheel:
         metrics = classification_metrics(classifier.config.task.labels, [row.label for row in development],
                                          predictions, distributions)
         metrics["evaluation_independent_of_optimizer_context"] = not self.optimizer_context["evaluation_context_exposed"]
+        metrics['available_count'] = available_count
+        metrics['sample_limit'] = self.evaluation_policy.max_samples
+        metrics['sample_ids'] = [row.item.id for row in development]
+        metrics['context_validation_floor']=self.context_validation_floor
+        metrics['evidence_status']=('exploratory' if any(g['count']<self.context_validation_floor for g in metrics['per_class'].values())
+                                    else 'development-validation; not an independent final scoreboard')
         return metrics

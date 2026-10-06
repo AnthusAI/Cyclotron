@@ -25,7 +25,7 @@ def test_question_stage_backfills_all_available_training_labels_without_a_develo
     wheel.close()
 
 
-def test_rubric_stage_can_propose_without_promoting_on_four_development_items(tmp_path):
+def test_the_first_nonempty_rubric_is_used_provisionally_and_survives_restart_without_claiming_validation(tmp_path):
     calls = []
     def complete(messages):
         calls.append(json.loads(messages[-1]["content"])["current"]["control_under_test"])
@@ -37,7 +37,60 @@ def test_rubric_stage_can_propose_without_promoting_on_four_development_items(tm
     assert report["proposal"]["rubric"] == "Practical"
     assert report["minimum_development_per_class"] == 20
     assert model.calls == 0
-    assert wheel.active.config.rubric == ""
+    assert wheel.active.config.rubric == "Practical"
+    assert report['activated'] and not report['promoted']
+    assert report['validation_status'] == 'provisional'
+    assert wheel.active.validation_status == 'provisional'
+    assert wheel.active.head is None
+    assert any(e['kind']=='context-initialized' and e['configuration']['rubric']=='Practical' for e in wheel.history())
+    wheel.close()
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), model, OptimizerAgent(complete))
+    assert wheel.active.config.rubric == 'Practical'
+    assert wheel.active.validation_status == 'provisional'
+    asyncio.run(wheel.predict(TRAIN[0].item, TRAIN))
+    assert wheel.active.config.rubric == 'Practical'
+    wheel.close()
+
+
+def test_insufficient_evidence_for_a_replacement_does_not_clear_the_working_rubric(tmp_path):
+    optimizer=OptimizerAgent(lambda _:OptimizerReply('{"rubric":"Replacement"}','fake'))
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK,rubric='Working'),FakeModel(),optimizer)
+    report=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,protected=(),propensities={r.item.id:1. for r in TRAIN}))
+    assert not report['promoted']
+    assert report['validation_status']=='insufficient-evidence'
+    assert wheel.active.config.rubric=='Working'
+    wheel.close()
+
+
+def test_a_pending_rubric_is_retested_when_more_development_labels_arrive_without_rediscovery(tmp_path):
+    calls=[]
+    def complete(messages):
+        calls.append(messages)
+        return OptimizerReply('{"rubric":"Replacement"}','fake')
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK,rubric='Working'),FakeModel(),OptimizerAgent(complete))
+    kwargs=dict(protected=(),propensities={r.item.id:1. for r in TRAIN},min_development_per_class=1)
+    first=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV[:1],**kwargs))
+    assert first['validation_status']=='insufficient-evidence'
+    second=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,**kwargs))
+    assert len(calls)==1
+    assert second.get('candidate',{}).get('count')==len(DEV)
+    assert any(e['kind']=='pending-proposal-reused' for e in wheel.history())
+    wheel.close()
+
+
+def test_provisional_rubric_refinement_does_not_need_a_tiny_holdout_win_or_retain_a_stale_head(tmp_path):
+    replies=iter(['Early rubric','Refined rubric'])
+    optimizer=OptimizerAgent(lambda _:OptimizerReply(json.dumps({'rubric':next(replies)}),'fake'))
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK),FakeModel(),optimizer)
+    kwargs=dict(protected=(),propensities={r.item.id:1. for r in TRAIN},min_development_per_class=1)
+    asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV[:1],**kwargs))
+    result=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,**kwargs))
+    assert wheel.active.config.rubric=='Refined rubric'
+    assert wheel.active.validation_status=='provisional'
+    assert wheel.active.head is None
+    assert result['activated'] and not result['promoted']
+    assert result['candidate']['count']==len(DEV)
+    assert any(e['kind']=='context-refined' for e in wheel.history())
     wheel.close()
 
 
@@ -46,7 +99,7 @@ def test_a_stages_own_promotion_does_not_repeat_discovery_on_unchanged_feedback(
     def complete(messages):
         calls.append(messages)
         return OptimizerReply('{"rationale":"Practical","rubric":"Practical"}', "fake")
-    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), OptimizerAgent(complete))
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK,rubric='Existing'), FakeModel(), OptimizerAgent(complete))
     score = wheel._score
     async def configured(classifier, *args):
         result = await score(classifier, *args)

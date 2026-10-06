@@ -10,6 +10,7 @@ def round_details(events):
         'fit-started': 'fits', 'fit-completed': 'fits',
         'step-completed': 'outcomes', 'step-paused': 'outcomes', 'step-failed': 'outcomes',
         'candidate-rejected': 'outcomes', 'promoted': 'outcomes', 'candidate-qualified': 'outcomes',
+        'context-initialized':'outcomes','context-refined':'outcomes',
         'decision-request': 'decision_requests', 'decision-response': 'decision_responses',
     }
     for index, event in enumerate(events):

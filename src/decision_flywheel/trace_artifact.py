@@ -475,7 +475,7 @@ function showOptimizerExchange(index){
   }
   el('optimizer-proposal-content').textContent=readable(changes);
   const terminal=round.outcomes.map(i=>events[i]).findLast(e=>typeof (e.result||e).promoted==='boolean'),result=terminal?.result||terminal;
-  el('optimizer-proposal-status').textContent=`Validation is a proposal check, not activation. ${result?`${result.promoted?'Promoted into the active classifier':'Not promoted; active configuration unchanged'} · ${result.reason||'No reason recorded'}${result.candidate?.count!==undefined?' · '+result.candidate.count+' development items':''}`:'No promotion outcome was recorded.'}`;
+  el('optimizer-proposal-status').textContent=`Validation is a proposal check, not activation. ${result?`${result.activated?'Activated provisionally — improvement not established':result.promoted?'Promoted into the active classifier':'Not promoted; active configuration unchanged'} · ${result.reason||'No reason recorded'}${result.candidate?.count!==undefined?' · '+result.candidate.count+' development items':''}`:'No promotion outcome was recorded.'}`;
  }
 }
 function evaluationMetrics(event){

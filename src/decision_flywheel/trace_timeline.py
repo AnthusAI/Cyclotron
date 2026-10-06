@@ -45,10 +45,10 @@ def timeline_data(events):
             label=(str(event.get('label')) if kind=='prediction' else kind.replace('decision-','Decision '))
         elif kind in {'fit-started', 'fit-completed'}:
             group, label = 'fit', kind
-        elif kind in {'optimizer-request', 'optimizer-response', 'proposal-validated'}:
+        elif kind in {'optimizer-request', 'optimizer-response', 'proposal-validated','context-initialized','context-refined'}:
             group = event.get('step_stage') or 'optimizer'
             label = {'optimizer-request': 'Optimizer request', 'optimizer-response': 'Optimizer response',
-                     'proposal-validated': 'Proposal validated'}[kind]
+                     'proposal-validated': 'Proposal validated','context-initialized':'Provisional rubric activated','context-refined':'Provisional rubric refined'}[kind]
         elif kind in {'classifier-activated', 'classifier-invalidated'}:
             group, label = 'configuration', kind
         elif kind in {'candidate-evaluated', 'candidate-rejected', 'promoted', 'candidate-qualified'}:

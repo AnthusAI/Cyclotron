@@ -721,13 +721,49 @@ It starts without a rubric, examples, supporting questions, or fitted head.
 Votes and comments are revealed in recorded arrival order, in batches of 20.
 Development feedback is delayed too; insufficient class coverage postpones a round.
 
+The first nonempty rubric initializes a **provisional working classifier**. It is
+used in subsequent decision requests and persists across restart; this is not a
+claim that it improves accuracy. While class support is below the configurable
+`context_validation_floor` (default 20 development labels per class), later
+rubric proposals can refine this working context. `EvaluationPolicy` exposes
+`max_samples=200`, `initial_recency_allowance=2.0`, and
+`recency_decay_per_class=20`. The allowance is a deterministic prior in
+equal-class multiclass Brier units, not an accuracy estimate. It declines linearly
+with the scarcest class's development count and reaches zero at the configured
+coverage. Early on it favors the latest nonempty rubric; later it tolerates less
+measured regression. Set the initial allowance to zero to disable that preference.
+Each incumbent or candidate comparison uses at most 200 samples by default,
+selected recent-first with class quotas and older scarce-class records. An
+incumbent/candidate pair can therefore require up to 400 decision requests before
+cache reuse; fitting and question backfills are separate operations with their own
+budgets. This cap bounds cost; it does not guarantee statistical precision.
+Their development scores are
+exploratory, not winner-certification. A rubric change discards the stale learned
+head; a separate classifier stage refits it. Numerical fits on sparse data retain
+the provisional status. Once support reaches the configured floor, replacements
+use measured promotion safeguards. The floor is a coverage policy, not proof of
+statistical significance or generalization.
+
+Pending proposals that lack development coverage are retained and reevaluated
+with new labels without paying for another discovery call. Removed or corrected
+source labels invalidate that reuse. Empty/whitespace rubric proposals are rejected.
+Trace events distinguish provisional initialization/refinement from measured
+promotion and carry the actual active configuration and model exchanges.
+
 Recent evaluation selects the newest available audit items per class, up to five
 per class. It walks backward to find scarce-class votes and drops older surplus
 majority-class votes. An absent class produces no balanced score. No previously
-learned item moves into evaluation. A separate, fixed balanced audit curve uses
-the final audit selection at every checkpoint for like-for-like comparisons;
+learned item moves into evaluation. A separate, fixed class-weighted audit curve uses
+the complete final audit pool at every checkpoint for like-for-like comparisons;
 this retrospective curve can use labels not yet available to the simulated user,
 but those labels never reach learning. Small per-class counts are shown explicitly.
+Development allocation now reserves 20% of **each** class (minimum two), rather
+than sizing every class from the smallest class. It keeps majority examples and
+balances their influence with equal-class Brier loss and balanced accuracy.
+The full protected audit pool is the main scoreboard; the small recent balanced
+subset remains only a secondary diagnostic. Natural accuracy, precision/recall,
+class counts, and per-class intervals remain visible so majority accuracy cannot
+hide poor Include recall. Previously published runs and manifests are unchanged.
 
 Private `results.json` contains each active rubric, question definitions, examples,
 round outcome, and both evaluation views. The separate runtime database contains

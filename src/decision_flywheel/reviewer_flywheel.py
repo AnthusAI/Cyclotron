@@ -89,10 +89,10 @@ class ReviewerFlywheel:
                                             trigger="reviewer-retry" if retry_interrupted else trigger)
                 result = traced.get("result", {"stage": selected_stage, "promoted": False,
                                                "reason": traced.get("reason"), "status": traced["status"]})
-                if selected_stage == "questions" and traced["status"] == "completed":
+                if (selected_stage == "questions" or result.get('activated')) and traced["status"] == "completed":
                     fitted = await self.core.step("classifier", training, development, protected=protected,
                         propensities={row.item.id: 1. for row in training}, retry_interrupted=retry_interrupted,
-                        min_development_per_class=self.min_stage_evaluation_per_class, trigger="reviewer-question-handoff",
+                        min_development_per_class=self.min_stage_evaluation_per_class, trigger="reviewer-context-handoff",
                         parent_step_id=traced["step_id"])
                     result["classifier_training"] = fitted.get("result", {"status": fitted["status"], "reason": fitted.get("reason")})
                 return result
@@ -161,6 +161,8 @@ class ReviewerFlywheel:
         def definition(task):
             return {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
         return {"version": active.fingerprint, "rubric": active.config.rubric,
+                'validation_status':active.validation_status or 'not recorded',
+                'context_validation_floor':self.core.context_validation_floor,
                 "optimizer_context": self.core.optimizer_context,
                 "optimization_stage": self.stage, "retrospective_limit": self.retrospective_limit,
                 "stage_evaluation_floor": self.min_stage_evaluation_per_class,

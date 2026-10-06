@@ -28,12 +28,23 @@ def main(argv=None):
     parser.add_argument("--max-requests", type=int, default=500)
     parser.add_argument("--max-optimizer-calls", type=int, default=5)
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
+    parser.add_argument('--context-validation-floor',type=int,default=20)
+    parser.add_argument('--evaluation-samples',type=int,default=200)
+    parser.add_argument('--rubric-recency-allowance',type=float,default=2.)
+    parser.add_argument('--rubric-recency-decay-per-class',type=int,default=20)
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
     parser.add_argument('--operational',action='store_true',help='predict before each vote, trace item cycles and separate triggered stages')
     args = parser.parse_args(argv)
-    if min(args.batch_size, args.max_requests, args.max_optimizer_calls) < 1:
+    from dataclasses import asdict
+    from decision_flywheel import EvaluationPolicy
+    try:
+        evaluation_policy=EvaluationPolicy(args.evaluation_samples,args.rubric_recency_allowance,
+                                           args.rubric_recency_decay_per_class)
+    except ValueError as error:
+        parser.error(str(error))
+    if min(args.batch_size, args.max_requests, args.max_optimizer_calls,args.context_validation_floor) < 1:
         parser.error("batch size and request ceilings must be positive")
     if not args.database.is_file():
         parser.error("existing rated database required")
@@ -62,6 +73,8 @@ def main(argv=None):
         'stages': ['rubric', 'questions', 'examples'],
         'decisions_model': args.decisions_model, 'optimizer_model': args.optimizer_model,
         'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
+        'context_validation_floor':args.context_validation_floor,'cold_start_policy':'provisional-working-rubric',
+        'evaluation_policy':asdict(evaluation_policy),
     }
     path = args.output / "manifest.json"
     encoded = json.dumps(manifest, indent=2)
@@ -73,7 +86,7 @@ def main(argv=None):
     optimizer_bound = len(plan.ordered)//args.batch_size if args.operational else len(plan.checkpoints)
     print(json.dumps({"operational_cycles":args.operational,"eligible_labels": len(plan.ordered), "training": counts(plan.training),
                       "development": counts(plan.development), "protected_audit_pool": counts(plan.scoreboard),
-                      "final_recent_balanced_evaluation": counts(plan.evaluation(len(plan.ordered), reviewer_task().labels)),
+                      "final_full_audit_evaluation": counts(plan.evaluation(len(plan.ordered), reviewer_task().labels)),
                       "checkpoints": plan.checkpoints, "jev_uncached_upper_bound": requests_bound,
                       "optimizer_upper_bound": optimizer_bound, "output": str(args.output)}), flush=True)
     if not args.confirm_live:
@@ -99,6 +112,8 @@ def main(argv=None):
     wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport),
                              max_requests=args.max_requests, evaluation_weighting="equal_class",
                              min_evaluation_per_class=2, observer=observe,
+                             context_validation_floor=args.context_validation_floor,
+                             evaluation_policy=evaluation_policy,
                              redact=tuple(os.environ.get(k, "") for k in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
     def checkpoint(report):
         (args.output / "results.json").write_text(json.dumps(report, indent=2)+"\n")
@@ -129,7 +144,7 @@ def main(argv=None):
         if args.operational:
             events = read_trace(runtime)
             (args.output/'trace.json').write_text(json.dumps(events, indent=2)+'\n')
-            (args.output/'playback.html').write_text(render_trace(events))
+            (args.output/'playback.html').write_text(render_trace(events,class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]))
         wheel.close()
 
 

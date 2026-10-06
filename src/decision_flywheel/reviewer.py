@@ -190,6 +190,7 @@ def _live_flywheel_status(client) -> Panel:
     lines = [f"Active version: {status['version'][:12]} · {head}",
              f"Training: {status['training_count']} ({balance}) · Development: {status['development_count']}",
              f"Rubric: {status['rubric'] or '(not yet inferred)'}",
+             f"Validation: {status.get('validation_status','not recorded')}",
              f"Classification tasks: {', '.join(status['tasks']) or '(main decision only)'}",
              f"Fixed examples: {', '.join(status['example_ids']) or '(none)'}",
              f"ML features: {', '.join(status['features']) or '(head not fitted)'}",

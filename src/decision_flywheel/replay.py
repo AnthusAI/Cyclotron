@@ -44,13 +44,15 @@ class ReplayPlan:
 
     def evaluation(self, count, classes):
         available = {row.item.id for row in self.ordered[:count]}
-        return recent_balanced((row for row in self.scoreboard if row.item.id in available), classes)
+        return tuple(row for row in self.scoreboard if row.item.id in available)
 
     def manifest(self, task):
         roles = {row.item.id: role for role, rows in (("training", self.training),
                  ("development", self.development), ("scoreboard", self.scoreboard)) for row in rows}
         return {"seed": self.seed, "checkpoints": self.checkpoints, "task": task.fingerprint,
-                "evaluation_policy": "newest available audit items per class, walk backward; limit five per class",
+                "evaluation_policy": "all revealed protected audit items; report natural and equal-class metrics",
+                "development_policy": {"fraction_per_class":.2,"minimum_per_class":2,"weighting":"equal_class",
+                                       "selection":"fixed stratified hash; no majority-class downsampling"},
                 "records": [{"id": row.item.id, "label": row.label, "role": roles[row.item.id],
                              "text_hash": hashlib.sha256(_normalized_text(row.item, task).encode()).hexdigest(),
                              "comment_hash": hashlib.sha256(str(row.context.get("human_feedback", "")).encode()).hexdigest()}
@@ -76,14 +78,13 @@ def plan_replay(task, ordered, *, seed="arxiv-feedback-replay-v1", batch_size=20
         ids.add(row.item.id)
         texts.add(text)
     roles = {}
-    smallest_class = min(sum(row.label == label for row in ordered) for label in task.labels)
-    held = max(2, math.ceil(smallest_class*.2))
     for label in task.labels:
         group = [row for row in ordered if row.label == label]
         if len(group) < 7:
             raise ValueError("replay needs seven eligible votes per class: at least three train, two dev, two scoreboard")
         group.sort(key=lambda row: hashlib.sha256(f"{seed}:{row.item.id}".encode()).hexdigest())
         audit_count = max(2, math.ceil(len(group)*.2))
+        held = max(2, math.ceil(len(group)*.2))
         for i, row in enumerate(group):
             roles[row.item.id] = "scoreboard" if i < audit_count else "development" if i < audit_count+held else "training"
     partition = lambda role: tuple(row for row in ordered if roles[row.item.id] == role)
@@ -105,7 +106,7 @@ async def run_replay(wheel, plan, *, on_checkpoint=None):
             protected = tuple(row.item for row in plan.ordered if row.item.id not in revealed)
             round_result = await wheel.improve(train, dev, protected=protected,
                                                propensities={row.item.id: 1. for row in train})
-        recent = plan.evaluation(count, wheel.initial.task.labels)
+        recent = recent_balanced(plan.evaluation(count, wheel.initial.task.labels),wheel.initial.task.labels)
         pool = {row.item.id: row for row in (*fixed, *recent)}
         predictions = {key: await wheel.predict(row.item, train) for key, row in pool.items()}
         def score(rows):
