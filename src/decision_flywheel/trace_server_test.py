@@ -1,4 +1,14 @@
-from .trace_server import viewer_response
+import pytest
+
+from .trace_server import viewer_response, bind_address
+
+
+def test_the_viewer_defaults_to_loopback_and_allows_an_explicit_local_network_address():
+    assert bind_address() == '127.0.0.1'
+    assert bind_address('192.168.0.199') == '192.168.0.199'
+    for host in ['0.0.0.0', '8.8.8.8', 'example.com']:
+        with pytest.raises(ValueError):
+            bind_address(host)
 
 
 def test_only_the_selected_viewer_is_served_not_neighboring_private_files(tmp_path):

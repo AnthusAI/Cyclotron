@@ -34,6 +34,11 @@ python -m decision_flywheel.trace_server --viewer var/reviewer-trace.html
 Open `http://127.0.0.1:8780` in a browser. The server binds only to loopback,
 serves only the selected HTML file, disables caching, and makes no model calls.
 It never exposes neighboring databases or credentials. Stop it with Ctrl+C.
+For an iPad on the same trusted network, explicitly bind to the Mac's private
+IPv4 address with `--host <LAN-IP> --port 8781`, then open
+`http://<LAN-IP>:8781/`. This exposes the selected recording (including its private
+feedback) to that network without authentication. Do not use port forwarding.
+The default remains loopback-only; wildcard and public bind addresses are refused.
 The explorer uses CLI-generated shadcn/Radix controls, Geist fonts, and semantic
 light/dark themes that follow system appearance automatically, with no theme
 control. Run statistics are collapsed by default. Its React shell and fonts are bundled locally; no CDN or Node

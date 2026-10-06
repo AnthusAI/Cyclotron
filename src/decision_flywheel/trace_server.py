@@ -1,8 +1,16 @@
-"""Serve one private trace viewer on loopback, never its neighboring files."""
+"""Serve one trace viewer on loopback or an explicit LAN address, never neighboring files."""
 import argparse
+from ipaddress import IPv4Address
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+
+
+def bind_address(host='127.0.0.1'):
+    address = IPv4Address(host)
+    if not (address.is_loopback or address.is_private) or address.is_unspecified or address.is_reserved:
+        raise ValueError('use a loopback or specific private LAN IPv4 address')
+    return str(address)
 
 
 def viewer_response(viewer, url):
@@ -15,7 +23,12 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--viewer',type=Path,required=True)
     parser.add_argument('--port',type=int,default=8780)
+    parser.add_argument('--host',default='127.0.0.1',help='explicit private LAN IPv4 address for local-network access')
     args=parser.parse_args()
+    try:
+        host = bind_address(args.host)
+    except ValueError as error:
+        parser.error(str(error))
     if not args.viewer.is_file():
         parser.error('viewer must be an existing HTML file')
 
@@ -33,8 +46,8 @@ def main():
         def log_message(self,*args):
             pass
 
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    print(f'Private viewer: http://127.0.0.1:{args.port}',flush=True)
+    server=ThreadingHTTPServer((host,args.port),Handler)
+    print(f'Viewer: http://{host}:{args.port}',flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
