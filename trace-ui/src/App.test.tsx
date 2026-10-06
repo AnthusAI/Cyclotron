@@ -15,6 +15,7 @@ test('the explorer exposes accessible timeline controls without a redundant lege
   expect(screen.getByText('Horizontal scroll: pan · vertical scroll: rows')).toBeVisible()
   expect(screen.getByText('135')).not.toBeVisible()
   expect(document.getElementById('label-legend')).toBeNull()
+  expect(screen.queryByText('Cycles → steps → events')).toBeNull()
   expect(document.getElementById('timeline')).toBeInTheDocument()
 })
 

@@ -1,4 +1,4 @@
-import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, CircleHelp, FileText, Maximize, PanelRight, Play, ShieldCheck, Workflow, X, ZoomIn, ZoomOut} from 'lucide-react'
+import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, FileText, Maximize, PanelRight, Play, ShieldCheck, Workflow, X, ZoomIn, ZoomOut} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Badge} from '@/components/ui/badge'
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card'
@@ -34,7 +34,7 @@ export function App({counts}:{counts:Counts}) {
               <Button id="fit-all" variant="outline" size="sm" title="Return to a four-cycle view"><ChevronsLeftRight /> Reset zoom</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
             </div></CardHeader>
             <Separator />
-            <div className="flex flex-wrap items-center gap-2 px-5 py-3"><Button id="show-history" variant="secondary" size="sm">Recorded review history</Button><Button id="show-run" variant="outline" size="sm">This optimization run</Button><span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground"><CircleHelp className="size-3" /> Cycles → steps → events</span></div>
+            <div className="flex flex-wrap items-center gap-2 px-5 py-3"><Button id="show-history" variant="secondary" size="sm">Recorded review history</Button><Button id="show-run" variant="outline" size="sm">This optimization run</Button></div>
             <div className="flex flex-wrap items-center gap-4 border-y border-border bg-muted/30 px-5 py-3">
               <div className="flex items-center gap-2"><Label htmlFor="label-filter" className="text-xs text-muted-foreground">Class</Label><NativeSelect id="label-filter" aria-label="Label" size="sm"><NativeSelectOption value="">All labels</NativeSelectOption></NativeSelect></div>
               <div className="flex items-center gap-2"><Label htmlFor="role-filter" className="text-xs text-muted-foreground">Partition</Label><NativeSelect id="role-filter" aria-label="Partition" size="sm"><NativeSelectOption value="">All partitions</NativeSelectOption></NativeSelect></div>
