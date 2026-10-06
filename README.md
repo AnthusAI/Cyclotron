@@ -303,38 +303,47 @@ The defaults are `DECISIONS_PROVIDER=jev`, `DECISIONS_MODEL=jev-1.13.0`, and
 `make review-arxiv` reuses or downloads the batch and starts this same **paid live mode**.
 
 The initial rubric is empty. Jev supplies the warm-up prediction; no local replacement head is used.
-The first round waits for at least three training votes per declared class
-and two development votes per class. A permanent ID-hash rule assigns 25% of otherwise eligible records
+Fitted-classifier promotion waits for at least three training votes per declared class
+and, in the staged reviewer, 20 development votes per class by default. Question
+discovery/backfill does not wait for this promotion gate. A permanent ID-hash rule assigns 25% of otherwise eligible records
 to development before their labels are known. Existing rolling and final audit roles remain protected.
 The demo reviews all displayed items; training review propensities are recorded as 1.0.
 Adaptive review-rate reduction remains deferred until there is a validated random-audit rule.
 
-After each 10 new votes, the core attempts another measured round. Use `G` to request one sooner.
-Each round can make three optimizer calls: one for the rubric, one for the
-example collection, and one for supporting classification questions. Each trial
-changes only its assigned control. Supporting questions are admitted individually
-to a persistent feature bank. Up to three single-question additions or wording
-revisions are fitted per cycle; each preserves the other deployed questions.
-There can therefore be up to five fits per cycle, within the session request ceiling.
-All trials use the same incumbent and frozen request-time datetime; the best
-qualifying trial is promoted only after the comparisons finish.
-The persistent idea registry keeps unsuccessful ideas and their measured outcomes.
-New feedback permits a new trial. Untested ideas get priority, but ideas that have
-waited three cycles get a retry opportunity even when new ideas keep arriving.
-Combination trials are not implemented yet.
+After each 10 new votes, the core runs only the configured stage, **rubric** by
+default. Use `G` to request that stage sooner. `N` runs question discovery/backfill;
+`X` runs a separate example-selection experiment. A stage makes at most one
+optimizer discovery call; it never automatically runs the other stages.
+Rubric/example proposals are retained without deployment when development class
+coverage is insufficient. The default floor of 20 per class is configurable and
+is not itself a guarantee of statistical precision.
+Question discovery freezes the current rubric and examples, adds the proposed
+questions alongside existing questions, and scores a recent matched window of
+eligible training feedback, up to 200 items by default. It preserves protected
+roles and never deploys a classifier merely because a feature ranked well.
+Returned probabilities feed stratified out-of-fold answer-to-final-label mappings
+with inverse-review-propensity/equal-class fit weights and fixed Laplace smoothing
+of one. This evaluates a conditional mapping under a reused context, not the
+entire discovery process on unseen data. It supports inverse and multiclass
+relationships. Reports show natural and balanced alignment, majority baseline,
+per-class counts, coverage, and descriptive uncertainty.
+The feature bank retains definitions, revisions, signal and ranking history.
+Combination/ablation search and a separate feature-set promotion stage remain
+future work. The older combined-control scheduler is retained as a legacy API,
+not the reviewer's default workflow.
 The display reports class counts, active rubric/questions/features, fitting and promotion events.
 Use `O` for the actual optimizer prompt, response and tool calls; `J` for the actual Jev request and answer;
 and `F` for active classifier details. These inspection commands do not add votes.
-Use `H` to inspect retained hypotheses and past outcomes. Use `T` to select one
-and explicitly authorize a new fit/comparison using current feedback. Rejection
-does not erase the rubric/questions/examples or declare the idea false forever.
-New labels produce a new trial. Retrying a retained structure skips rediscovery
-by the optimizer; it still validates examples, collects needed features, fits
-numerical weights, and requires measured improvement before promotion.
+Use `H` to inspect retained hypotheses and past outcomes. Legacy bundled retries
+are no longer exposed by `T` in the reviewer. Rejection does not erase ideas or
+declare them false forever. New feedback or context versions permit new measurements.
 `H` also shows each feature-bank question, wording lineage, discovery evidence
 fingerprints, deployment state, trial results, and class-conditional training
 probabilities. Signal diagnostics appear before each fit and are not reported as
 held-out accuracy. Feature admission does not imply deployment.
+`OPTIMIZATION_STAGE`, `RETROSPECTIVE_LIMIT`, and `STAGE_MIN_EVALUATION_PER_CLASS`
+are make overrides. The corresponding CLI flags are `--optimization-stage`,
+`--retrospective-limit`, and `--stage-min-evaluation-per-class`.
 The connected reviewer currently supports the Jev adapter. The provider-neutral
 flags are `--decisions-provider` and `--decisions-model`; other adapters are not
 yet connected to this full classifier-request path.
@@ -418,9 +427,11 @@ independent prospective performance claim. A fresh future audit is still needed.
 
 ### Replacement plan: separate optimization stages and retrospective feature ranking
 
-This plan supersedes the combined-cycle schedule and the four-item development
-comparison as the mechanism for judging newly discovered factors. It is not
-implemented yet; the current runtime behavior above remains the existing code.
+This design supersedes the combined-cycle schedule and the four-item development
+comparison as the mechanism for judging newly discovered factors. Separate stages,
+bounded cached backfill, and matched-window feature ranking are implemented and
+have completed a real 60-item run under the live reviewer's frozen current context.
+Feature-set deployment and combinations/ablations are not claimed complete.
 
 Use three separately scheduled, separately budgeted stages:
 
@@ -483,6 +494,21 @@ backfill, ranking and lifecycle events. The Rich reviewer must display the stage
 window progress, current context versions, actual optimizer exchanges and decision
 requests, feature rankings, fit activity, and actual sample counts. It does not
 implement another flywheel. No paid calls are authorized by recording this plan.
+
+The core entry point is `await wheel.optimize_stage("questions", training,
+development, protected=..., propensities=..., limit=200)`. Use `"rubric"` or
+`"examples"` for the other stages. `measure_questions` provides measurement without
+LLM discovery. A copied-current-state experiment starts with a network-free freeze:
+
+```bash
+.venv/bin/python scripts/measure_arxiv_questions.py --output var/arxiv-staged-backfill-new
+```
+
+Read its actual window and request ceiling before adding `--confirm-live
+--max-requests N --max-optimizer-calls 1`. `--resume` explicitly reuses an already
+recorded reply and complete request cache; it makes no new optimizer call. Failed
+or pending decision-model requests still have their separate no-silent-repayment
+guard. Full article text and feedback stay in ignored private snapshots.
 
 ### Previous milestone: individual questions against a fixed incumbent
 

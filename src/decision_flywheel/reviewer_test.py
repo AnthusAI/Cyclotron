@@ -67,6 +67,18 @@ def test_live_status_shows_balanced_scores_and_counts_for_arbitrary_classes():
     assert "balanced_brier" in text
 
 
+def test_question_ranking_summary_shows_actual_counts_not_the_full_fold_id_matrix():
+    from .reviewer import _question_rankings_text
+    report = {"count": 60, "by_class": {"include": 6, "exclude": 54}, "rankings": [
+        {"question": {"name": "scope"}, "cross_validated": {"accuracy": .8, "balanced_accuracy": .7, "count": 60},
+         "fold_evidence": [{"fit_ids": ["do-not-dump-this-list"]}]}]}
+    text = _question_rankings_text(report).plain
+    assert "60" in text and "include" in text and "54" in text
+    assert "scope" in text and "70.0%" in text
+    assert "not deployed accuracy" in text
+    assert "do-not-dump-this-list" not in text
+
+
 def test_optimizer_transcript_displays_actual_messages_replies_and_tool_calls_literally():
     from .reviewer import _optimizer_transcript
     events = ({"kind": "optimizer-request", "messages": [{"role": "user", "content": "[red]my feedback"}]},

@@ -56,3 +56,17 @@ def test_active_configuration_inspection_shows_the_exact_question_not_just_its_n
         assert definition["labels"] == ["yes", "no"]
         assert status["main_decision"]["instructions"] == reviewer_task().instructions
         core.close()
+
+
+def test_a_stage_failure_is_visible_without_crashing_the_reviewer_or_echoing_exception_secrets(tmp_path):
+    with ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture") as store:
+        core = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), agent([]))
+        async def fail(*args, **kwargs):
+            raise ValueError("private-provider-secret")
+        core.optimize_stage = fail
+        result = ReviewerFlywheel(store, core).improve(stage="questions")
+        assert result["stage"] == "questions"
+        assert result["error_type"] == "ValueError"
+        assert "private-provider-secret" not in str(core.history())
+        assert core.history()[-1]["kind"] == "optimization-stage-failed"
+        core.close()

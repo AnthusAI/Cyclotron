@@ -10,11 +10,16 @@ from .reviewer_store import ReviewStore
 
 
 class ReviewerFlywheel:
-    def __init__(self, store: ReviewStore, core: DecisionFlywheel):
+    def __init__(self, store: ReviewStore, core: DecisionFlywheel, *, stage="rubric", retrospective_limit=200,
+                 min_stage_evaluation_per_class=20):
         self.store, self.core = store, core
+        self.stage, self.retrospective_limit = stage, retrospective_limit
+        self.min_stage_evaluation_per_class = min_stage_evaluation_per_class
 
     def partitions(self):
         eligible = reviewer_labeled_items(self.store.learning_feedback(), self.store.article)
+        votes = self.store._active_actions()
+        eligible = tuple(sorted(eligible, key=lambda row: (votes[row.item.id].created_at, row.item.id)))
         development = tuple(row for row in eligible if development_assignment(self.store.study_seed, row.item.id))
         training = tuple(row for row in eligible if not development_assignment(self.store.study_seed, row.item.id))
         training_ids = {row.item.id for row in training}
@@ -33,13 +38,24 @@ class ReviewerFlywheel:
             "jev:flywheel-head" if self.core.active.head else "jev:flywheel-warmup",
             self.core.active.fingerprint, len(training))
 
-    def improve(self, *, retry_interrupted: bool = False):
+    def improve(self, *, retry_interrupted: bool = False, stage=None):
         training, development, protected = self.partitions()
+        selected_stage = stage or self.stage
+        if retry_interrupted and stage is None:
+            selected_stage = next((event["stage"] for event in reversed(self.history())
+                                   if event["kind"] in {"optimization-stage-started", "optimization-stage-failed"}), self.stage)
         # This demo reviews every displayed item. A future sampled reviewer must
         # pass its actual recorded review propensities instead of this full-review policy.
-        return asyncio.run(self.core.improve_controls(training, development, protected=protected,
+        try:
+            return asyncio.run(self.core.optimize_stage(selected_stage, training, development, protected=protected,
                                             propensities={row.item.id: 1.0 for row in training},
-                                            retry_interrupted=retry_interrupted))
+                                            retry_interrupted=retry_interrupted, limit=self.retrospective_limit,
+                                            min_development_per_class=self.min_stage_evaluation_per_class))
+        except Exception as error:
+            result = {"stage": selected_stage, "promoted": False, "error_type": type(error).__name__,
+                      "reason": "stage failed; saved state retained, explicit retry required"}
+            self.core._emit({"kind": "optimization-stage-failed", **result})
+            return result
 
     def reconcile(self):
         training, development, _ = self.partitions()
@@ -62,10 +78,13 @@ class ReviewerFlywheel:
         events = self.history()
         outcome = next((event for event in reversed(events) if event["kind"] in
                        {"promoted", "candidate-rejected", "round-failed", "round-interrupted", "waiting-for-labels",
-                        "classifier-invalidated", "control-cycle-completed"}), None)
+                        "classifier-invalidated", "control-cycle-completed", "optimization-stage-completed",
+                        "question-ranking-completed", "optimization-stage-failed"}), None)
         def definition(task):
             return {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
         return {"version": active.fingerprint, "rubric": active.config.rubric,
+                "optimization_stage": self.stage, "retrospective_limit": self.retrospective_limit,
+                "stage_evaluation_floor": self.min_stage_evaluation_per_class,
                 "tasks": [task.name for task in active.config.tasks],
                 "main_decision": definition(active.config.task),
                 "task_definitions": [definition(task) for task in active.config.tasks],

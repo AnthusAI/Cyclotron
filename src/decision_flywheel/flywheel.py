@@ -204,6 +204,10 @@ class DecisionFlywheel:
                   for t in self.active.config.tasks]
         return FeatureBank(self.db).entries(active_tasks=active)
 
+    async def optimize_stage(self, stage, training, development, **kwargs):
+        from .staged_optimization import optimize_stage
+        return await optimize_stage(self, stage, training, development, **kwargs)
+
     async def improve_controls(self, training, development, *, protected, propensities, retry_interrupted=False,
                                max_feature_trials=3):
         from .control_scheduler import ControlScheduler

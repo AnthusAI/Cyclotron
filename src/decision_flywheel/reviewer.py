@@ -218,10 +218,31 @@ def _live_flywheel_status(client) -> Panel:
                  f"{status.get('optimizer_responses_recorded', 0)}")
     lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a round · R retry interrupted round")
     bank = status.get("feature_bank", ())
+    lines.append(f"Scheduled stage: {status.get('optimization_stage', 'legacy')} · "
+                 f"question backfill limit: {status.get('retrospective_limit', 200)}")
+    if latest.get("rankings") is not None:
+        lines.append(f"Matched human-feedback window: {latest.get('count', 0)} · {latest.get('by_class', {})}")
+        for rank in latest["rankings"]:
+            metric = rank.get("cross_validated")
+            lines.append(f"  {rank['question']['name']}: " +
+                         (f"OOF agreement {metric['accuracy']:.1%}, balanced {metric['balanced_accuracy']:.1%}, n={metric['count']}"
+                          if metric else "insufficient per-class coverage for OOF mapping"))
     lines.append(f"Feature bank: {len(bank)} questions · "
                  f"{sum(entry['state'] == 'deployed' for entry in bank)} deployed · H for definitions and trial signal")
-    lines.append("H feature bank and retained hypotheses · T re-fit a retained hypothesis with current feedback")
+    lines.append("H feature bank and historical hypotheses (inspection only)")
+    lines.append("N discover/backfill questions · X run example-selection stage")
     return Panel(Text("\n".join(lines)), title="Live Decision Flywheel", border_style="green")
+
+
+def _question_rankings_text(report) -> Text:
+    lines = ["Retrospective OOF feature ranking — not deployed accuracy",
+             f"Matched window: {report.get('count', 0)} human labels · {report.get('by_class', {})}"]
+    for rank in report.get("rankings", ()):
+        metric = rank.get("cross_validated")
+        lines.append(rank["question"]["name"] + ": " +
+                     (f"agreement {metric['accuracy']:.1%} · balanced {metric['balanced_accuracy']:.1%} · n={metric['count']}"
+                      if metric else "insufficient class coverage for OOF mapping"))
+    return Text("\n".join(lines))
 
 
 def _optimizer_transcript(events) -> Text:
@@ -346,7 +367,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
             console.print(Text(f"Prediction unavailable ({type(error).__name__}); feedback can still be saved."))
         console.print(_article_panel(article, prediction))
         while True:
-            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r", "h", "t") if flywheel else ("i", "e", "s", "b", "q")
+            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r", "h", "n", "x") if flywheel else ("i", "e", "s", "b", "q")
             action = Prompt.ask("Action", choices=choices + tuple(key.upper() for key in choices),
                                 show_choices=False).lower()
             if flywheel and action in ("o", "f", "j"):
@@ -360,6 +381,10 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 flywheel.improve()
                 console.print(_live_flywheel_status(flywheel))
                 continue
+            if flywheel and action in ("n", "x"):
+                flywheel.improve(stage="questions" if action == "n" else "examples")
+                console.print(_live_flywheel_status(flywheel))
+                continue
             if flywheel and action == "r":
                 answer = Prompt.ask("Retry the interrupted optimizer round within this session's paid ceilings? "
                                     "Only do this when no other reviewer session is running",
@@ -368,22 +393,12 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                     flywheel.improve(retry_interrupted=True)
                 console.print(_live_flywheel_status(flywheel))
                 continue
-            if flywheel and action in ("h", "t"):
+            if flywheel and action == "h":
                 hypotheses = flywheel.hypotheses()
                 if action == "h":
                     console.print(Panel(Text(json.dumps(flywheel.feature_bank(), indent=2, ensure_ascii=False)),
                                         title="Feature bank: exploration is not deployment"))
                 console.print(Text(json.dumps(hypotheses, indent=2, ensure_ascii=False)))
-                if action == "t" and hypotheses:
-                    hypothesis_id = Prompt.ask("Retained hypothesis ID (blank cancels)", default="").strip()
-                    if hypothesis_id in {row["id"] for row in hypotheses}:
-                        answer = Prompt.ask("Re-fit and evaluate this hypothesis with current feedback, "
-                                            "within this session's paid ceiling?", choices=("yes", "no"), default="no")
-                        if answer == "yes":
-                            flywheel.retry_hypothesis(hypothesis_id)
-                            console.print(_live_flywheel_status(flywheel))
-                    elif hypothesis_id:
-                        console.print("Unknown hypothesis ID; nothing was run.")
                 Prompt.ask("Press Enter to return to this article", default="")
                 continue
             break
@@ -442,6 +457,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--training-class-weighting", choices=("natural", "equal_class"), default="natural")
     parser.add_argument("--min-evaluation-per-class", type=int, default=2)
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
+    parser.add_argument("--optimization-stage", choices=("rubric", "examples", "questions"), default="rubric")
+    parser.add_argument("--retrospective-limit", type=int, default=200)
+    parser.add_argument("--stage-min-evaluation-per-class", type=int, default=20)
     parser.add_argument("--optimize-every", type=int, default=10,
                         help="run a core round after this many additional votes; G requests one sooner")
     parser.add_argument("--confirm-live", action="store_true",
@@ -451,7 +469,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.live_flywheel or args.live_jev:
         if not args.confirm_live:
             parser.error("refusing paid model calls without --confirm-live")
-        if min(args.max_live_requests, args.max_optimizer_calls, args.optimize_every, args.min_evaluation_per_class) < 1:
+        if min(args.max_live_requests, args.max_optimizer_calls, args.optimize_every, args.min_evaluation_per_class,
+               args.retrospective_limit, args.stage_min_evaluation_per_class) < 1:
             parser.error("request ceilings and optimization interval must be positive")
     if args.live_flywheel and args.live_jev:
         parser.error("choose the integrated flywheel or legacy artifact serving, not both")
@@ -476,6 +495,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 kind = event["kind"]
                 if kind == "decision-request":
                     console.print(Text(f"Jev request: {event['target_id']} · {len(event['questions'])} question(s)"))
+                elif kind == "question-backfill-progress":
+                    if event["completed"] % 10 == 0 or event["completed"] == event["total"]:
+                        console.print(Text(f"Question backfill: {event['completed']}/{event['total']}"))
+                elif kind == "question-ranking-completed":
+                    console.print(Panel(_question_rankings_text(event), title="Question alignment"))
+                elif kind == "optimization-stage-completed" and "rankings" in event:
+                    pass  # The preceding ranking event already displayed this result.
                 elif kind == "optimizer-response":
                     try:
                         rationale = json.loads(event["content"]).get("rationale", "(no stated rationale)")
@@ -487,7 +513,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "classifier-invalidated", "round-interrupted", "round-retry-authorized", "hypothesis-retry",
                               "hypothesis-discovered", "discovery-no-change", "control-trial-started",
                               "control-trial-completed", "control-trial-deferred", "control-cycle-completed",
-                              "feature-discovered", "feature-diagnostics"}:
+                              "feature-discovered", "feature-diagnostics", "optimization-stage-started",
+                              "optimization-stage-completed", "optimization-stage-failed", "question-backfill-started", "question-backfill-progress",
+                              "question-ranking-completed"}:
                     console.print(Text(f"Flywheel: {kind} · " + json.dumps(
                         {key: value for key, value in event.items() if key not in {"messages", "created_at", "kind"}},
                         ensure_ascii=False)))
@@ -499,7 +527,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 min_evaluation_per_class=args.min_evaluation_per_class,
                 redact=tuple(os.environ.get(key, "") for key in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
             try:
-                run_review_session(store, console, flywheel=ReviewerFlywheel(store, runtime),
+                run_review_session(store, console, flywheel=ReviewerFlywheel(store, runtime,
+                                   stage=args.optimization_stage, retrospective_limit=args.retrospective_limit,
+                                   min_stage_evaluation_per_class=args.stage_min_evaluation_per_class),
                                    optimize_every=args.optimize_every)
             finally:
                 runtime.close()

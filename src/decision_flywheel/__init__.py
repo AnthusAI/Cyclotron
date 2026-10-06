@@ -20,6 +20,7 @@ from .flywheel import DecisionFlywheel, FittedClassifier
 from .classification_metrics import classification_metrics
 from .replay import ReplayPlan, plan_replay, recent_balanced, run_replay
 from .feature_bank import FeatureBank, probability_diagnostics
+from .question_measurement import measure_questions, rank_question, select_window
 
 
 def run_demo(*args, **kwargs):
@@ -29,6 +30,7 @@ def run_demo(*args, **kwargs):
 
 __all__ = [
     "FeatureBank", "probability_diagnostics",
+    "measure_questions", "rank_question", "select_window",
     "ClassifierConfig", "DecisionFlywheel", "FittedClassifier", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply", "classification_metrics",
     "ReplayPlan", "plan_replay", "recent_balanced", "run_replay",
     "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",

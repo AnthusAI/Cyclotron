@@ -35,6 +35,9 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
             jev_calls.append({"state": state, "questions": questions})
             positive = "Title: yes" in state["target"]["text"]
             answers = {"decision": {"choice": "exclude", "probabilities": {"include": .2, "exclude": .8}}}
+            if state["rubric"]:
+                p = .99 if positive else .01
+                answers["decision"] = {"choice": "include" if positive else "exclude", "probabilities": {"include": p, "exclude": 1-p}}
             if "practical" in questions:
                 p = .99 if positive else .01
                 answers["practical"] = {"choice": "yes" if positive else "no", "probabilities": {"yes": p, "no": 1-p}}
@@ -51,11 +54,9 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         wheel = DecisionFlywheel(path, ClassifierConfig(reviewer_task()), JevAdapter(Jev()),
             OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         output = StringIO()
-        client = ReviewerFlywheel(store, wheel)
+        client = ReviewerFlywheel(store, wheel, min_stage_evaluation_per_class=2)
         run_review_session(store, Console(file=output, width=120), flywheel=client)
         assert wheel.active.head is not None
-        assert client.feature_bank()[0]["state"] == "deployed"
-        assert client.feature_bank()[0]["attempts"][0]["diagnostics"]["by_class"]["include"]["answered"] > 0
         assert store.current_label(articles[-2].id) == "include"
         shown = store.presentations_for(articles[-2].id)[-1]
         assert shown.predictor_kind == "jev:flywheel-head"
@@ -63,10 +64,10 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         transcript = output.getvalue()
         assert "The human prefers practical papers" in transcript
         assert '"criteria"' in transcript
-        assert "practical/yes" in transcript
+        assert "decision/include" in transcript
         events = wheel.history(10000)
         assert {e["kind"] for e in events} >= {"fit-started", "fit-completed", "promoted", "decision-request", "decision-response"}
-        assert len(optimizer_calls) == 3
+        assert len(optimizer_calls) == 1
         protected_ids = {item.id for item in client.partitions()[2]}
         briefing_ids = {row["id"] for row in json.loads(optimizer_calls[0]["messages"][1]["content"])["feedback"]}
         assert not briefing_ids & protected_ids
@@ -76,6 +77,5 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
             OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         assert wheel.active.fingerprint == version
         assert wheel.active.head is not None
-        assert ReviewerFlywheel(store, wheel).feature_bank()[0]["state"] == "deployed"
         assert any(event["kind"] == "optimizer-response" for event in wheel.history(10000))
         wheel.close()
