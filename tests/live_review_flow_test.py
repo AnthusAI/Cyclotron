@@ -54,6 +54,8 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         client = ReviewerFlywheel(store, wheel)
         run_review_session(store, Console(file=output, width=120), flywheel=client)
         assert wheel.active.head is not None
+        assert client.feature_bank()[0]["state"] == "deployed"
+        assert client.feature_bank()[0]["attempts"][0]["diagnostics"]["by_class"]["include"]["answered"] > 0
         assert store.current_label(articles[-2].id) == "include"
         shown = store.presentations_for(articles[-2].id)[-1]
         assert shown.predictor_kind == "jev:flywheel-head"
@@ -74,5 +76,6 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
             OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         assert wheel.active.fingerprint == version
         assert wheel.active.head is not None
+        assert ReviewerFlywheel(store, wheel).feature_bank()[0]["state"] == "deployed"
         assert any(event["kind"] == "optimizer-response" for event in wheel.history(10000))
         wheel.close()

@@ -217,7 +217,10 @@ def _live_flywheel_status(client) -> Panel:
     lines.append(f"Recorded optimizer requests/replies: {status.get('optimizer_requests_recorded', 0)}/"
                  f"{status.get('optimizer_responses_recorded', 0)}")
     lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a round · R retry interrupted round")
-    lines.append("H retained hypotheses · T re-fit a retained hypothesis with current feedback")
+    bank = status.get("feature_bank", ())
+    lines.append(f"Feature bank: {len(bank)} questions · "
+                 f"{sum(entry['state'] == 'deployed' for entry in bank)} deployed · H for definitions and trial signal")
+    lines.append("H feature bank and retained hypotheses · T re-fit a retained hypothesis with current feedback")
     return Panel(Text("\n".join(lines)), title="Live Decision Flywheel", border_style="green")
 
 
@@ -367,6 +370,9 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 continue
             if flywheel and action in ("h", "t"):
                 hypotheses = flywheel.hypotheses()
+                if action == "h":
+                    console.print(Panel(Text(json.dumps(flywheel.feature_bank(), indent=2, ensure_ascii=False)),
+                                        title="Feature bank: exploration is not deployment"))
                 console.print(Text(json.dumps(hypotheses, indent=2, ensure_ascii=False)))
                 if action == "t" and hypotheses:
                     hypothesis_id = Prompt.ask("Retained hypothesis ID (blank cancels)", default="").strip()
@@ -480,7 +486,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "promoted", "candidate-rejected", "round-failed", "waiting-for-labels",
                               "classifier-invalidated", "round-interrupted", "round-retry-authorized", "hypothesis-retry",
                               "hypothesis-discovered", "discovery-no-change", "control-trial-started",
-                              "control-trial-completed", "control-trial-deferred", "control-cycle-completed"}:
+                              "control-trial-completed", "control-trial-deferred", "control-cycle-completed",
+                              "feature-discovered", "feature-diagnostics"}:
                     console.print(Text(f"Flywheel: {kind} · " + json.dumps(
                         {key: value for key, value in event.items() if key not in {"messages", "created_at", "kind"}},
                         ensure_ascii=False)))

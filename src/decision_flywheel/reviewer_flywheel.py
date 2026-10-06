@@ -48,6 +48,9 @@ class ReviewerFlywheel:
     def hypotheses(self):
         return self.core.hypotheses()
 
+    def feature_bank(self):
+        return self.core.feature_bank()
+
     def retry_hypothesis(self, hypothesis_id):
         training, development, protected = self.partitions()
         return asyncio.run(self.core.retry_hypothesis(hypothesis_id, training, development,
@@ -74,6 +77,7 @@ class ReviewerFlywheel:
                 "optimizer_responses_recorded": sum(event["kind"] == "optimizer-response" for event in events),
                 "example_ids": list(active.config.example_ids), "fitted_head": active.head is not None,
                 "features": list(active.head.feature_names) if active.head else [],
+                "feature_bank": self.feature_bank(),
                 "training_count": len(training), "development_count": len(development),
                 "by_label": {label: sum(row.label == label for row in training)
                              for label in active.config.task.labels},

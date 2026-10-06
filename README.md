@@ -312,7 +312,11 @@ Adaptive review-rate reduction remains deferred until there is a validated rando
 After each 10 new votes, the core attempts another measured round. Use `G` to request one sooner.
 Each round can make three optimizer calls: one for the rubric, one for the
 example collection, and one for supporting classification questions. Each trial
-changes only its assigned control. All trials use the same incumbent; the best
+changes only its assigned control. Supporting questions are admitted individually
+to a persistent feature bank. Up to three single-question additions or wording
+revisions are fitted per cycle; each preserves the other deployed questions.
+There can therefore be up to five fits per cycle, within the session request ceiling.
+All trials use the same incumbent and frozen request-time datetime; the best
 qualifying trial is promoted only after the comparisons finish.
 The persistent idea registry keeps unsuccessful ideas and their measured outcomes.
 New feedback permits a new trial. Untested ideas get priority, but ideas that have
@@ -327,6 +331,10 @@ does not erase the rubric/questions/examples or declare the idea false forever.
 New labels produce a new trial. Retrying a retained structure skips rediscovery
 by the optimizer; it still validates examples, collects needed features, fits
 numerical weights, and requires measured improvement before promotion.
+`H` also shows each feature-bank question, wording lineage, discovery evidence
+fingerprints, deployment state, trial results, and class-conditional training
+probabilities. Signal diagnostics appear before each fit and are not reported as
+held-out accuracy. Feature admission does not imply deployment.
 The connected reviewer currently supports the Jev adapter. The provider-neutral
 flags are `--decisions-provider` and `--decisions-model`; other adapters are not
 yet connected to this full classifier-request path.
@@ -410,10 +418,11 @@ independent prospective performance claim. A fresh future audit is still needed.
 
 ### Agreed next milestone: feature engineering, not permanent feature rejection
 
-This is a plan, not a claim that these capabilities are implemented. The existing
-scheduler isolates rubric, examples, and supporting questions, but its questions
-trial still adds a group of questions together. A losing fitted classifier does
-not establish that each proposed question is useless.
+This is a staged roadmap. The first milestone is now implemented: a persistent
+individual feature bank, training-signal diagnostics, isolated single-question
+trials, retained ideas, and reviewer inspection. Combination and ablation search
+remain planned, not implemented. A losing fitted classifier does not establish
+that each proposed question is useless.
 
 Separate two decisions: **admit a plausible feature for exploration** and
 **promote a fitted classifier for deployment**. Admit structurally valid,
@@ -478,17 +487,28 @@ feature bank through real Jev answers, ML fitting, and a visible development res
 Combination search follows after that path is verified. No DSPy, retrieval, or
 long-document input-filter optimization is added by this plan.
 
+The reusable interface is `await wheel.improve_controls(..., max_feature_trials=3)`
+and `wheel.feature_bank()` for model-free inspection. The ceiling bounds attempted
+individual questions, not discoveries: untried questions remain available for later
+feedback. Same-name question revisions retain prior definitions as lineage; code
+does not claim to infer semantic equivalence between differently named questions.
+The path is verified offline with fake providers; the new individual-question
+design has not yet produced a new live result. The historical results below used
+the previous grouped-questions trial.
+
 ### Compare the three controls on frozen feedback
 
 After freezing a feedback snapshot with replay preflight, inspect the separate
 experiment without contacting models:
 
 ```bash
-.venv/bin/python scripts/experiment_arxiv_controls.py --snapshot var/arxiv-replay-v2/reviews.sqlite3 --output var/arxiv-controls-v1
+.venv/bin/python scripts/experiment_arxiv_controls.py --snapshot var/arxiv-replay-v2/reviews.sqlite3 --output var/arxiv-features-v1 --max-feature-trials 3
 ```
 
-Add `--confirm-live --max-requests 227 --max-optimizer-calls 3` to authorize
-collection for this 87-vote snapshot. Other snapshots can require different
+Add `--confirm-live --max-requests 373 --max-optimizer-calls 3` to authorize
+up to five isolated trials for this 87-vote snapshot. Setting `--max-feature-trials 1`
+limits the experiment to three trials and a 227-request ceiling. The earlier
+grouped-question experiment also used a 227-request ceiling. Other snapshots can require different
 ceilings; read their preflight first. Use a new output directory for each experiment.
 This experiment fixes equal-class training weighting for all three trials.
 Its development comparison uses equal-class Brier loss, and its separate balanced

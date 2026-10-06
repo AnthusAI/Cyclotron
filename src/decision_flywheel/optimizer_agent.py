@@ -108,6 +108,11 @@ class OptimizerAgent:
                              "supporting classification questions inferred from the feedback, not another final decision. "
                              "If you have no useful idea, return the existing value and explain why. "
                              "Prior rejected ideas may be reconsidered with more evidence.")
+            if control == "tasks":
+                instructions += ("\nEach proposed question enters an individual feature bank. Code tests one question at a time "
+                                 "against the same incumbent, preserving its other questions, rubric and examples. "
+                                 "Use the same name when refining the wording of an existing measurement so its lineage is retained. "
+                                 "A losing classifier does not invalidate a feature concept; consider alternative measurements.")
         messages = [{"role": "system", "content": instructions},
                     {"role": "user", "content": briefing.encoded}]
         base = {"briefing_fingerprint": briefing.fingerprint}

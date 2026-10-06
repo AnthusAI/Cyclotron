@@ -197,10 +197,18 @@ class DecisionFlywheel:
         return await self.improve(training, development, protected=protected, propensities=propensities,
                                   candidate_proposal=hypothesis["proposal"])
 
-    async def improve_controls(self, training, development, *, protected, propensities, retry_interrupted=False):
+    def feature_bank(self):
+        """Inspect proposed/measured/deployed questions without running models."""
+        from .feature_bank import FeatureBank
+        active = [{"name": t.name, "instructions": t.instructions, "labels": list(t.labels)}
+                  for t in self.active.config.tasks]
+        return FeatureBank(self.db).entries(active_tasks=active)
+
+    async def improve_controls(self, training, development, *, protected, propensities, retry_interrupted=False,
+                               max_feature_trials=3):
         from .control_scheduler import ControlScheduler
         return await ControlScheduler(self).run(training, development, protected=protected,
-            propensities=propensities, retry_interrupted=retry_interrupted)
+            propensities=propensities, retry_interrupted=retry_interrupted, max_feature_trials=max_feature_trials)
 
     def _activate(self, classifier):
         payload = _json(asdict(classifier))
@@ -318,7 +326,9 @@ class DecisionFlywheel:
     async def improve(self, training: Sequence[LabeledItem], development: Sequence[LabeledItem], *,
                       protected: Sequence[Item], propensities: Mapping[str, float],
                       retry_interrupted: bool = False, candidate_proposal: Mapping | None = None,
-                      apply_promotion: bool = True) -> dict:
+                      apply_promotion: bool = True, evaluation_time: datetime | None = None) -> dict:
+        if evaluation_time is not None and (evaluation_time.tzinfo is None or evaluation_time.utcoffset() is None):
+            raise ValueError("evaluation time must be timezone aware")
         self._validate_partitions(training, development, protected, propensities)
         self.reconcile_feedback(training, development=development)
         round_key = _hash({"training": self._evidence(training), "development": self._evidence(development),
@@ -326,7 +336,10 @@ class DecisionFlywheel:
                            "evaluation_weighting": self.evaluation_weighting,
                            "training_class_weighting": self.training_class_weighting,
                            "min_evaluation_per_class": self.min_evaluation_per_class,
-                           **({"apply_promotion": False} if not apply_promotion else {}),
+                           **({"evaluation_time": evaluation_time.isoformat()}
+                              if evaluation_time is not None and "current_datetime" in self.active.config.dynamic_elements else {}),
+                           **({"apply_promotion": False, "baseline_version": self.active.fingerprint}
+                              if not apply_promotion else {}),
                            **({"candidate_proposal": candidate_proposal} if candidate_proposal is not None else {})})
         saved = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (round_key,)).fetchone()
         if saved:
@@ -352,7 +365,7 @@ class DecisionFlywheel:
                       "minimum_training_per_class": 3, "minimum_development_per_class": self.min_evaluation_per_class}
             self._emit({"kind": "waiting-for-labels", "counts": counts, "development_count": len(development), **result})
             return result
-        now = datetime.now(timezone.utc)
+        now = evaluation_time or datetime.now(timezone.utc)
         with self.db:
             self.db.execute("INSERT INTO runtime_rounds VALUES (?, 'pending', NULL)", (round_key,))
         self._emit({"kind": "round-started", "training_count": len(training), "development_count": len(development)})
@@ -376,8 +389,11 @@ class DecisionFlywheel:
             self._emit({"kind": "proposal-validated", "proposal": proposal,
                         "previous": self.active.config.briefing_state(), "candidate": config.briefing_state()})
             rows = []
+            feature_observations = {task.name: [] for task in config.tasks}
             for row in training:
                 batch = await self._answers(config, row.item, training, now)
+                for task in config.tasks:
+                    feature_observations[task.name].append((row.label, batch.answers[task.name].probabilities))
                 values = self._features(config, batch)
                 feedback = FeedbackItem("review-" + row.item.id, row.item.id, config.task.name,
                     final_answer_value=row.label, edit_comment_value=row.context.get("human_feedback"),
@@ -385,6 +401,12 @@ class DecisionFlywheel:
                     review_provenance="human-reviewed")
                 rows.append(HeadRow(row.item.id, feedback, tuple(Feature(key, value, key.split("/", 1)[0])
                                                                 for key, value in values.items())))
+            from .feature_bank import probability_diagnostics
+            diagnostics = {task.name: probability_diagnostics(config.task.labels, task.labels,
+                           feature_observations[task.name]) for task in config.tasks}
+            if diagnostics:
+                self._emit({"kind": "feature-diagnostics", "diagnostics": diagnostics,
+                            "training_count": len(rows), "scope": "training only"})
             self._emit({"kind": "fit-started", "training_count": len(rows), "features": list(values)})
             head = fit_learned_head(config.task, rows, declared_features=tuple(values),
                 development_ids=tuple(row.item.id for row in development), scoreboard_ids=tuple(item.id for item in protected),
@@ -403,6 +425,7 @@ class DecisionFlywheel:
                       "improved": improved, "trial_fingerprint": round_key,
                       "promotion_metric": metric, "evaluation_weighting": self.evaluation_weighting,
                       "training_class_weighting": self.training_class_weighting,
+                      "feature_diagnostics": diagnostics,
                       "reason": f"lower development {metric}" if improved else f"development {metric} did not improve"}
             self._emit({"kind": "candidate-evaluated", **result})
             baseline_version = self.active.fingerprint

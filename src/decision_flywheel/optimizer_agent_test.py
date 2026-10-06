@@ -28,6 +28,17 @@ def test_the_optimizer_receives_actual_labels_comments_and_the_current_configura
     assert payload["current"]["rubric"] == ""
 
 
+def test_task_discovery_is_told_that_questions_are_individual_measurements_not_a_bundle():
+    sent = []
+    def complete(messages):
+        sent.extend(messages)
+        return OptimizerReply('{"rationale":"No new evidence","tasks":[]}', "fake")
+    current = {"rubric": "", "tasks": [], "example_ids": [], "control_under_test": "tasks"}
+    OptimizerAgent(complete).propose(FeedbackBriefing.build(TASK, [example()], current=current, protected=()))
+    assert "one question at a time" in sent[0]["content"]
+    assert "same name" in sent[0]["content"]
+
+
 @pytest.mark.parametrize("protected", [Item("train", {"text": "different"}),
                                     Item("audit", {"text": " RECENT   research "})])
 def test_protected_ids_and_normalized_text_cannot_reach_the_optimizer(protected):
