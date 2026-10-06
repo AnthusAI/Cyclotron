@@ -97,7 +97,8 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-item.vis-box .vis-item-content {padding:4px;font-size:19px;line-height:24px}
 .vis-item.vis-selected {background:var(--accent)!important;border-color:var(--ring)!important;outline:2px solid var(--ring);border-radius:6px}
 .vis-tooltip {background:var(--popover)!important;color:var(--popover-foreground)!important;border:1px solid var(--border)!important;border-radius:var(--radius)!important;font:12px 'Geist Variable',sans-serif!important;padding:8px!important}
-.vis-custom-time {background:var(--primary)!important;width:1px!important}
+.vis-custom-time {background:var(--primary)!important;width:2px!important;z-index:8!important}
+.vis-custom-time::before {content:'';position:absolute;top:0;left:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--primary);pointer-events:none}
 .vis-item.vis-background.step-band-odd {background:color-mix(in oklch,var(--foreground) 4%,transparent)!important;border-right:1px solid var(--border)}
 .vis-item.vis-background.step-band-even {background:transparent!important;border-right:1px solid var(--border)}
 .vis-item.vis-range.step-item-label {background:transparent!important;border:0!important;color:var(--foreground)!important;border-radius:0;cursor:pointer}

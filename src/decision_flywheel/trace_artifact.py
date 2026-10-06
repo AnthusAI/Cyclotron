@@ -244,10 +244,10 @@ function setInspectorOpen(open){
 el('close-inspector').onclick=()=>setInspectorOpen(false);
 el('show-inspector').onclick=()=>setInspectorOpen(true);
 timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(ordered.reduce((best,record,index)=>Math.abs(stepPositions.get(record.key)-properties.time.valueOf())<Math.abs(stepPositions.get(ordered[best].key)-properties.time.valueOf())?index:best,0));});
-function goStep(step){
- stop();const bounded=Math.max(0,Math.min(ordered.length-1,step)),key=ordered[bounded]?.key;
+function goStep(step,pause=true){
+ if(pause)stop();const bounded=Math.max(0,Math.min(ordered.length-1,step)),key=ordered[bounded]?.key;
  if(key===undefined)return;
- if(key.startsWith('source:'))inspectSource(Number(key.split(':')[1]));else move(Number(key));
+ if(key.startsWith('source:'))inspectSource(Number(key.split(':')[1]),pause);else move(Number(key),pause);
 }
 function showRun(){timeline.setWindow(0,maximum,{animation:false});}
 el('show-history').hidden=!reviewHistory.length;
@@ -315,7 +315,7 @@ events.forEach((event,index)=>{
  if(event.kind==='step-started'||event.kind==='round-started') {const option=document.createElement('option');option.value=index;option.textContent=`${event.event_id}: ${event.step_stage||'optimization'} · ${event.trigger||'recorded round'}`;el('round').append(option);}
 });
 const latestStep=events.map(e=>e.kind).lastIndexOf('step-started');
-position=0;el('start').value=Math.max(0,latestStep)+1;
+position=0;el('start').value=1;
 el('round').value=String(Math.max(0,latestStep));
 el('end').value=events.length;
 function stop(){if(timer!==null)clearInterval(timer);timer=null;el('play').textContent='Play';}
@@ -415,8 +415,8 @@ function inspectEvent(event){
  }
  el('content-title').textContent=title;el('event-content').textContent=readable(payload);
 }
-function inspectSource(index){
- stop();
+function inspectSource(index,pause=true){
+ if(pause)stop();
  el('inspector').scrollTop=0;
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  const source=reviewHistory[index],row=source.record;
@@ -431,20 +431,39 @@ function inspectSource(index){
  for(const [label,value] of Object.entries({Title:source.article.title,Abstract:source.article.abstract,Explanation:row.comment,'Prediction shown before vote':source.presentation?`${source.presentation.predicted_label} (${Math.round(source.presentation.confidence*100)}%)`:undefined}))if(value){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;el('event-fields').append(dt,dd);}
  el('event-content').textContent=readable(source);el('raw-event').textContent=pretty(row);el('configuration').textContent='Historical source record: configuration not reconstructed from later optimization state.';
 }
-function move(index){stop();position=Math.max(0,Math.min(events.length-1,index));draw();}
+function move(index,pause=true){if(pause)stop();position=Math.max(0,Math.min(events.length-1,index));draw();}
 el('back').onclick=()=>goStep(currentStep-1);el('next').onclick=()=>goStep(currentStep+1);
 el('round').onchange=()=>{if(el('round').value!=='')move(Number(el('round').value));};
 el('play').onclick=()=>{
  if(timer!==null){stop();return;}
  const first=Number(el('start').value)-1,last=Number(el('end').value)-1;
  if(!Number.isInteger(first)||!Number.isInteger(last)||first<0||last>=events.length||first>last){el('status').textContent='Choose a valid event range';return;}
- if(position<first||position>=last)position=first;draw();el('play').textContent='Pause';
- timer=setInterval(()=>{if(position>=last){stop();return;}position++;draw();},1000);
+ // Playback follows the same visible event order as Previous/Next. Never jump
+ // to a later optimizer round or spend ticks on unplotted internal records.
+ el('play').textContent='Pause';
+ timer=setInterval(()=>{
+  const next=currentStep+1,record=ordered[next];
+  if(!record||(!record.key.startsWith('source:')&&Number(record.key)>last)){stop();return;}
+  goStep(next,false);
+  if(currentStep===ordered.length-1)stop();
+ },1000);
 };
 if(reviewHistory.length)inspectSource(Number(ordered.find(record=>record.key.startsWith('source:')).key.split(':')[1]));else draw();
 el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: 0.`;
 let interactionCount=0;
-for(const name of ['click','rangechanged'])timeline.on(name,()=>{interactionCount++;el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: ${interactionCount}.`;});
+function recordInteraction(){interactionCount++;el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: ${interactionCount}.`;}
+timeline.on('rangechanged',recordInteraction);
+timeline.on('click',properties=>{
+ recordInteraction();
+ // Marker selection is handled by select; empty plot/axis clicks seek to the
+ // exact clicked moment and anchor transport controls to the preceding event.
+ if(properties.item!==null&&properties.item!==undefined)return;
+ if(!properties.time||!ordered.length)return;
+ const point=new Date(Math.max(0,Math.min(maximum,+properties.time)));
+ const preceding=ordered.reduce((best,record,index)=>stepPositions.get(record.key)<=+point?index:best,0);
+ goStep(preceding);
+ timeline.setCustomTime(point,'playback');
+});
 </script></html>'''
 
 

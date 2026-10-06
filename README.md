@@ -111,7 +111,9 @@ Select a marker to reopen the adjacent inspector, or use Show details to restore
 the last selection. Non-stacking lanes remain inside the timeline's scroll area.
 Drag the background to pan, use Zoom buttons in either mode,
 and drag the native playback pointer to
-inspect a step. Previous/Next moves chronologically across labels, predictions and
+inspect a step. Click empty timeline space to seek to that moment; select an event
+to seek and inspect it. Play continues from the selected position through visible
+events, with the pointer advancing each second. Previous/Next moves chronologically across labels, predictions and
 optimization records; the window follows an off-screen pointer without changing
 its zoom. Zoom stays between one step and recorded history; run/history buttons
 distinguish the optimization window. Original timestamps remain in source records.
