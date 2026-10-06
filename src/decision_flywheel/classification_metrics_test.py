@@ -29,3 +29,10 @@ def test_missing_classes_do_not_get_a_fabricated_balanced_score():
 def test_malformed_evaluation_records_are_rejected_instead_of_silently_zipped():
     with pytest.raises(ValueError):
         classification_metrics(("one", "two"), ["one"], [], [])
+
+
+def test_each_class_records_precision_and_the_full_confusion_matrix():
+    result = classification_metrics(('a','b'), ['a','a','b'], ['a','b','b'], [{'a':.5,'b':.5}]*3)
+    assert result['per_class']['a']['precision'] == 1
+    assert result['per_class']['b']['precision'] == .5
+    assert result['confusion_matrix'] == {'a':{'a':1,'b':1},'b':{'a':0,'b':1}}

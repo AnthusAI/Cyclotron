@@ -6,6 +6,7 @@ import sqlite3
 from .trace_timeline import timeline_data
 from .trace_rounds import round_details
 from .trace_step_projection import step_projection
+from .trace_classification import class_configuration, positive_metrics
 
 
 def read_trace(database):
@@ -15,7 +16,7 @@ def read_trace(database):
                 for number, payload in db.execute('SELECT id,payload FROM runtime_events ORDER BY id')]
 
 
-def render_trace(events, reviewer_history=()):
+def render_trace(events, reviewer_history=(), *, class_config=None):
     def encode(value):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
         return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
@@ -24,7 +25,23 @@ def render_trace(events, reviewer_history=()):
     javascript = (vendor / 'standalone/umd/vis-timeline-graph2d.min.js').read_text()
     css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
     projected = step_projection(events, reviewer_history, timeline_data(events)['items'])
+    labels = []
+    for event in events:
+        labels.extend(event.get('classifier_snapshot',{}).get('config',{}).get('task',{}).get('labels',[]))
+        if event.get('kind')=='prediction': labels.append(event['label'])
+        if event.get('kind')=='human-feedback' and event.get('feedback',{}).get('final_answer_value') is not None:
+            labels.append(event['feedback']['final_answer_value'])
+    for source in reviewer_history:
+        label=source['record'].get('label') or source['record'].get('predicted_label')
+        if label is not None: labels.append(label)
+    classes=class_configuration(labels,class_config)
+    metric_view={}
+    for index,event in enumerate(events):
+        result=event.get('result') or event
+        if isinstance(result,dict) and ('incumbent' in result or 'candidate' in result):
+            metric_view[str(index)]={key:positive_metrics(result.get(key) or {},classes) for key in ('incumbent','candidate')}
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
+        '__CLASS_CONFIG__',encode(classes)).replace('__METRIC_VIEW__',encode(metric_view)).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
         '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
         '__TIMELINE_DATA__', encode(timeline_data(events))).replace('__STEP_PROJECTION__', encode(projected)).replace(
@@ -84,6 +101,7 @@ def main(argv=None):
     parser.add_argument('--database', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--reviews', type=Path, help='optional original reviewer source history, read-only')
+    parser.add_argument('--class-config', type=Path, help='JSON ordered class labels and positive/negative/neutral roles')
     args = parser.parse_args(argv)
     if args.output.exists():
         parser.error('choose a new output path; recorded artifacts are not overwritten')
@@ -92,7 +110,8 @@ def main(argv=None):
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open('x') as stream:
         from .trace_review_history import read_review_history
-        stream.write(render_trace(read_trace(args.database), read_review_history(args.reviews) if args.reviews else ()))
+        stream.write(render_trace(read_trace(args.database), read_review_history(args.reviews) if args.reviews else (),
+            class_config=json.loads(args.class_config.read_text()) if args.class_config else None))
     print(f'Private offline trace: {args.output.resolve()}')
 
 
@@ -117,6 +136,8 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 <script id="step-projection" type="application/json">__STEP_PROJECTION__</script>
 <script id="review-history" type="application/json">__REVIEW_HISTORY__</script>
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
+<script id="class-config" type="application/json">__CLASS_CONFIG__</script>
+<script id="metric-view" type="application/json">__METRIC_VIEW__</script>
 <script>__VIEWER_JS__</script>
 <script>
 const events=JSON.parse(document.getElementById('recording').textContent);
@@ -139,14 +160,30 @@ for(const group of [{id:'feedback',content:'Human labels'},{id:'decisions',conte
 const projection=JSON.parse(el('step-projection').textContent);
 const ordered=projection.order.map(key=>({key}));
 const stepPositions=new Map(Object.entries(projection.positions));
-const classes=[...new Set([...reviewHistory.map(s=>s.record.label||s.record.predicted_label),...events.filter(e=>e.kind==='human-feedback'||e.kind==='prediction').map(e=>e.label||e.feedback?.final_answer_value)].filter(Boolean))].sort();
-const classMark=label=>String.fromCharCode(65+classes.indexOf(label));
-const classColor=label=>`hsl(${(classes.indexOf(label)*137+205)%360} 65% 45%)`;
+const classConfig=JSON.parse(el('class-config').textContent),metricView=JSON.parse(el('metric-view').textContent);
+const classes=classConfig.map(row=>row.label);
+function agreement(item){
+ if(item.source_index!==undefined){
+  const source=reviewHistory[item.source_index],row=source.record;
+  if(source.source_table==='review_events')return row.label&&source.presentation?row.label===source.presentation.predicted_label?'match':'mismatch':'unreviewed';
+  const vote=reviewHistory.findLast(s=>s.source_table==='review_events'&&row.id!==undefined&&s.record.presentation_id===row.id&&s.record.action==='vote'&&s.record.label);
+  return vote?vote.record.label===row.predicted_label?'match':'mismatch':'unreviewed';
+ }
+ const event=events[item.event_index];if(!event?.cycle_id)return 'unreviewed';
+ const target=event.target_id||event.feedback?.item_id;
+ const vote=events.findLast(e=>e.kind==='human-feedback'&&e.cycle_id===event.cycle_id&&e.feedback?.item_id===target);
+ const prediction=events.find(e=>e.kind==='prediction'&&e.cycle_id===event.cycle_id&&e.target_id===target);
+ return vote&&prediction?(vote.feedback.final_answer_value===prediction.label?'match':'mismatch'):'unreviewed';
+}
+function markerIcon(item,name){
+ item.iconName=name;item.content.textContent='';
+ const svg=el('icon-'+name)?.firstElementChild?.cloneNode(true);
+ if(svg)item.content.append(svg);else item.content.textContent=name==='circle-plus'?'+':name==='circle-minus'?'−':'○';
+}
 for(const item of timelineItems){
  item.title=item.content.textContent;item.start=new Date(stepPositions.get(String(item.id)));
  const source=item.source_index!==undefined?reviewHistory[item.source_index]:null,event=events[item.event_index];
  const label=source?(source.record.label||source.record.predicted_label):(event?.label||event?.feedback?.final_answer_value);
- if(label)item.style=`--marker-color:${classColor(label)}`;
  item.className=source?(source.source_table==='presentations'?'marker-prediction':'marker-human'):
   event?.kind==='human-feedback'?'marker-human':event?.kind==='prediction'?'marker-prediction':`marker-${event?.kind||'event'}`;
  if(label&&item.className==='marker-prediction')item.group='prediction-class-'+classes.indexOf(label);
@@ -155,6 +192,14 @@ for(const item of timelineItems){
  item.type='box';
  item.content=document.createElement('span');item.content.textContent=event?.kind==='trigger-evaluated'?(event.due?'⚑':'○'):item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
  item.content.setAttribute('aria-label',item.title);
+ if(label&&(item.className==='marker-prediction'||item.className==='marker-human')){
+  item.agreement=agreement(item);item.className+=' agreement-'+item.agreement;
+  const role=classConfig.find(row=>row.label===label)?.role;
+  markerIcon(item,role==='positive'?'circle-plus':role==='negative'?'circle-minus':'circle');
+  item.title+=` · ${item.agreement==='match'?'Matches human label':item.agreement==='mismatch'?'Prediction and human label disagree':'No paired prediction/human label'}`;
+ }else if(event?.kind==='trigger-evaluated'){
+  item.className+=event.due?' trigger-fired':' trigger-idle';markerIcon(item,event.due?'circle-play':'circle');
+ }
  const metrics=evaluationMetrics(event);
  if(metrics&&metrics.rows[0].candidate!==null){
   item.content.textContent='';const glyph=document.createElement('span');glyph.className='outcome-glyph';
@@ -166,7 +211,7 @@ const classGroups=[];
 for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Model decisions'],['human-labels','label-class-','Human labels']]){
  const children=[];
  classes.forEach((label,index)=>{const id=prefix+index;if(!timelineItems.some(item=>item.group===id))return;
-  const heading=document.createElement('span');heading.textContent=label;heading.style.color=classColor(label);
+  const heading=document.createElement('span');heading.textContent=label;
   children.push({id,content:heading});});
  if(children.length)classGroups.push({id:parent,content:title,nestedGroups:children.map(g=>g.id),showNested:true},...children);
 }
@@ -177,21 +222,19 @@ const plottedItems=timelineItems.filter(item=>!['decision-api','cycles'].include
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 const optimizationLanes=[['triggers','Triggers'],['rubric','Rubric'],['examples','Few-shot examples'],['questions','Classifier questions'],['classifier','ML optimization']].map(([id,content])=>({id,content}));
 const optimizationIds=optimizationLanes.map(group=>group.id);
-timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},...classGroups,
+timelineData.groups=[...classGroups,
  {id:'optimization',content:'Optimization',nestedGroups:optimizationIds,showNested:true},...optimizationLanes,
  ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&group.id!=='cycles')].map((group,order)=>({...group,order}));
 // Internal step positions remain available for seeking and playback, but do
 // not need their own display lane. Cycle bands retain the item context.
 const stepItems=[];
 const cycleItems=projection.cycles.flatMap((cycle,index)=>{
- const label=document.createElement('span');label.textContent=cycle.recorded?`Cycle ${events[Number(cycle.keys[0])]?.cycle_number??index+1}`:cycle.title;
- return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''},
-  {id:'cycle-label:'+index,group:'flywheel-cycles',start:new Date(cycle.start),end:new Date(cycle.end),type:'range',className:'cycle-label',content:label}];
+ return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''}];
 });
 const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
 const minimumWindow=projection.axis==='cycle'?4:100;
 let initialWindowSet=false;
-const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...plottedItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},height:'100%',editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:minimumWindow,zoomMax:maximum,verticalScroll:true,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
+const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...plottedItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},height:'100%',editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:minimumWindow,zoomMax:maximum,verticalScroll:true,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>projection.axis==='cycle'&&date.valueOf()%1000!==0?'':`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
 function setView(start,width){
  width=Math.min(maximum,Math.max(minimumWindow,Math.ceil(width)));
  start=Math.round(Math.max(0,Math.min(maximum-width,start)));
@@ -265,7 +308,7 @@ const sourceSteps=ordered.filter(record=>record.key.startsWith('source:')).map(r
 el('run-bounds').textContent=`${projection.cycles.filter(c=>c.recorded).length} operational cycles · ${projection.steps.length} internal steps · ${ordered.length} event markers. Each cycle processes an item, optionally receives feedback and evaluates triggers. Optimization/backfill requests stay inside the cycle that caused them. Circle: trigger not due; flag: triggered work. Older records without operational cycle IDs are not presented as cycles. Vertical scroll moves through rows; in fullscreen it zooms. Horizontal scroll or drag pans. Click headings or markers for details.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
- for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
+ for(const value of id==='label-filter'?classes:[...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
 }
 function applyFilters(){
  timeline.setItems([...cycleItems,...stepItems,...plottedItems.filter(item=>{
@@ -399,7 +442,15 @@ function evaluationMetrics(event){
  const rows=[{label:'Accuracy',incumbent:score(incumbent.accuracy),candidate:score(candidate.accuracy)},
   {label:'Balanced accuracy',incumbent:score(incumbent.balanced_accuracy),candidate:score(candidate.balanced_accuracy)},
   {label:'Precision',incumbent:score(incumbent.macro_precision??incumbent.precision),candidate:score(candidate.macro_precision??candidate.precision)}];
- for(const label of new Set([...Object.keys(incumbent.per_class||{}),...Object.keys(candidate.per_class||{})])){
+ const view=metricView[String(events.indexOf(event))];
+ if(view?.candidate.positive_labels.length){
+  const positive=view.candidate.positive_labels.join(', ');
+  rows[2]={label:`Precision · positive (${positive})`,incumbent:view.incumbent.precision,candidate:view.candidate.precision,
+   incumbentUnavailable:view.incumbent.predicted_positive_count===0?'Undefined':'Unavailable',candidateUnavailable:view.candidate.predicted_positive_count===0?'Undefined':'Unavailable'};
+  rows.push({label:`Recall · positive (${positive})`,incumbent:view.incumbent.recall,candidate:view.candidate.recall,
+   incumbentUnavailable:view.incumbent.actual_positive_count===0?'Undefined':'Unavailable',candidateUnavailable:view.candidate.actual_positive_count===0?'Undefined':'Unavailable'});
+ }
+ for(const label of classes.filter(label=>label in (incumbent.per_class||{})||label in (candidate.per_class||{}))){
   for(const metric of ['recall','precision'])rows.push({label:`${metric==='recall'?'Recall':'Precision'} · ${label}`,incumbent:score(incumbent.per_class?.[label]?.[metric]),candidate:score(candidate.per_class?.[label]?.[metric])});
  }
  return {rows,count:candidate.count??incumbent.count,reason:result.reason,promoted:result.promoted};
@@ -416,7 +467,7 @@ function showEvaluation(event){
    const name=document.createElement('span');name.textContent=key==='incumbent'?'Incumbent':'Candidate';
    const track=document.createElement('div');track.className='metric-track';
    const fill=document.createElement('div');fill.className='metric-fill '+key;fill.style.width=`${Math.max(0,Math.min(1,row[key]??0))*100}%`;track.append(fill);
-   const value=document.createElement('span');value.textContent=row[key]===null?'Not recorded':`${Math.round(row[key]*1000)/10}%`;
+   const value=document.createElement('span');value.textContent=row[key]===null?(row[key+'Unavailable']||'Not recorded'):`${Math.round(row[key]*1000)/10}%`;
    series.append(name,track,value);group.append(series);
   }
   el('evaluation-bars').append(group);
@@ -548,6 +599,7 @@ function recordInteraction(){interactionCount++;el('runtime-health').textContent
 timeline.on('rangechanged',recordInteraction);
 timeline.on('click',properties=>{
  recordInteraction();
+ if(String(properties.item).startsWith('cycle-band:')){setInspectorOpen(true);const cycle=projection.cycles[Number(String(properties.item).split(':')[1])];goStep(ordered.findIndex(record=>record.key===cycle.keys[0]));return;}
  // Marker selection is handled by select; empty plot/axis clicks seek to the
  // exact clicked moment and anchor transport controls to the preceding event.
  if(properties.item!==null&&properties.item!==undefined)return;

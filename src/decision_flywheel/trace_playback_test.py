@@ -24,7 +24,7 @@ def test_operational_prediction_details_link_the_actual_request_and_disagreement
                'created_at': f'2026-10-06T12:00:0{i}Z'} for i, e in enumerate(events)]
     events[0]['classifier_snapshot'] = {'config': {'rubric': 'before rubric'}, 'head': None}
     events[-1]['classifier_snapshot'] = {'config': {'rubric': 'after rubric'}, 'head': {'weights': [1]}}
-    html = render_trace(events)
+    html = render_trace(events, class_config=[{'label':'accept','role':'positive'},{'label':'reject','role':'negative'}])
     data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
     code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
     harness = r'''
@@ -34,9 +34,18 @@ global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
 let tick;global.setInterval=fn=>{tick=fn;return 1;};global.clearInterval=()=>{tick=null;};
 CODE
+assert.deepEqual(classes,['accept','reject']);
+assert.equal(timelineItems.find(item=>item.event_index===3).iconName,'circle-minus');
+assert.equal(timelineItems.find(item=>item.event_index===4).iconName,'circle-plus');
+assert.equal(timelineItems.find(item=>item.event_index===3).agreement,'mismatch');
+assert.equal(timelineItems.find(item=>item.event_index===4).agreement,'mismatch');
+events[4].feedback.final_answer_value='reject';assert.equal(agreement({event_index:3}),'match');
+events[4].feedback.final_answer_value='accept';
+events[4].feedback.item_id='another paper';assert.equal(agreement({event_index:3}),'unreviewed');events[4].feedback.item_id='paper';
+const savedVote=events[4];events[4]={kind:'nothing'};assert.equal(agreement({event_index:3}),'unreviewed');events[4]=savedVote;
 assert.ok(!timelineData.groups.some(group=>group.id==='cycles'));
-assert.equal(cycleItems.find(item=>item.group==='flywheel-cycles').content.textContent,'Cycle 1');
-handlers.select({items:['cycle-label:0']});
+assert.ok(!timelineData.groups.some(group=>group.id==='flywheel-cycles'));
+handlers.select({items:['cycle-band:0']});
 assert.equal(elements['cycle-states'].hidden,false);
 assert.ok(elements['cycle-before'].textContent.includes('before rubric'));
 assert.ok(elements['cycle-after'].textContent.includes('after rubric'));
@@ -107,8 +116,8 @@ timeline.setWindow(100,101);elements['zoom-out'].onclick();assert.ok(timeline.wi
 elements['zoom-out'].onclick();assert.ok(timeline.window[1]-timeline.window[0]>=8);
 timeline.setWindow(0,4);elements['fit-all'].onclick();assert.deepEqual(timeline.window,[0,1000]);
 elements['disagreement-filter'].checked=true;applyFilters();
-assert.ok(timeline.items.some(i=>i.className==='marker-prediction'));
-assert.ok(timeline.items.some(i=>i.className==='marker-human'));
+assert.ok(timeline.items.some(i=>i.className.startsWith('marker-prediction')));
+assert.ok(timeline.items.some(i=>i.className.startsWith('marker-human')));
 '''.replace('DATA', json.dumps(data)).replace('CODE', code)
     result = subprocess.run(['node'], input=harness, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -131,6 +140,7 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
             'feedback': {'final_answer_value': label, 'edit_comment_value': 'reason' if label=='accept' else ''}})
     events.append({'event_id':11,'kind':'internal-cache-check','created_at':'2026-10-06T12:01:10Z'})
     events.append({'event_id':12,'kind':'proposal-validated','step_id':'a','step_stage':'rubric','created_at':'2026-10-06T12:01:11Z'})
+    events.extend([{'event_id':13+i,'kind':'trigger-evaluated','stage':'rubric','due':due,'created_at':f'2026-10-06T12:01:{12+i}Z'} for i,due in enumerate((False,True))])
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
               'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
     history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
@@ -146,6 +156,8 @@ global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',
 let select;const handlers={};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
 CODE
+assert.equal(timelineItems.find(item=>item.event_index===12).iconName,'circle');
+assert.equal(timelineItems.find(item=>item.event_index===13).iconName,'circle-play');
 select({items:[1]});
 assert.equal(elements['optimizer-exchange'].hidden,false);
 assert.ok(elements['optimizer-request-content'].textContent.includes('prompt-a'));
@@ -207,8 +219,8 @@ elements['next'].onclick();assert.equal(position,2);assert.equal(currentStep,ord
 assert.ok(timeline.options.format.minorLabels(new Date(1000)).includes('2'));
 assert.ok(timelineItems.every(i=>i.content.textContent.length===1));
 assert.ok(timelineItems.every(i=>i.type==='box'));
-assert.equal(timelineItems.find(i=>i.source_index===0).className,'marker-human');
-assert.equal(timelineItems.find(i=>i.source_index===1).className,'marker-prediction');
+assert.ok(timelineItems.find(i=>i.source_index===0).className.startsWith('marker-human'));
+assert.ok(timelineItems.find(i=>i.source_index===1).className.startsWith('marker-prediction'));
 assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-request'));
 assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-response'));
 assert.equal(ordered.length,timelineItems.length);

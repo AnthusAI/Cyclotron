@@ -101,8 +101,28 @@ and labeled class rows, with confidence and content in drill-down details.
 The collapsible Optimization group contains Triggers, Rubric, Few-shot examples,
 Classifier questions, and ML optimization, in that order. Internal steps do not
 have a separate timeline row; cycle bands provide the item context.
-Select a cycle to inspect its recorded before/after classifier snapshots. Cycle
+Select a cycle background to inspect its recorded before/after classifier snapshots. Cycle
 boundaries do not have a separate row; missing snapshots are explicitly marked.
+The top axis identifies cycles; there is no separate cycle-title row.
+
+Class order and polarity are explicit trace configuration. Pass
+`--class-config examples/arxiv-trace-classes.json` to the artifact exporter (or
+`class_config=[{"label": "include", "role": "positive"}, {"label": "exclude", "role": "negative"}]`
+to `render_trace`). List order controls both classification lane groups. Roles
+are `positive`, `negative`, or `neutral`; generic traces never guess polarity
+from class names. This demo puts Include first and marks it positive.
+Precision and recall labeled “positive” measure the configured positive class(es)
+versus the rest, not a macro average. New evaluations record confusion matrices
+and per-class precision. Binary historical count/correct pairs can determine the
+same four confusion cells exactly; incomplete data and zero denominators remain
+unavailable. Display roles do not change scoring requests or promotion criteria.
+
+Predictions and human labels use thick-stroke [Lucide](https://lucide.dev/icons/circle-plus)
+circle-plus/circle-minus icons for positive/negative classes. Matching pairs are
+green, disagreements red, and unpaired records grey. Colors compare recorded
+feedback for the same cycle and item; they do not assert that a label was known
+when the prediction was made. Skipped trigger checks use a muted circle; fired
+checks use circle-play in the foreground color.
 Selecting a classification shows its exact decision-model request and response,
 including expanded state, examples, and questions; API exchanges do not have a
 separate timeline lane. Optimization events (including proposal validation and
@@ -110,7 +130,8 @@ outcomes) show the full recorded optimizer messages, responses, and tool calls
 for that attempt. Evaluation markers compare accuracy with paired miniature
 bars. Their inspector compares incumbent and candidate accuracy and per-class
 recall, with the evaluation sample count and promotion outcome. Precision is
-shown when recorded; missing metrics are explicitly unavailable, never inferred.
+shown when recorded or exactly determined from recorded binary counts; missing
+metrics are explicitly unavailable, never guessed.
 The explorer fills the viewport without document scrolling. Close details to
 expand the timeline to full width. Horizontal trackpad scrolling pans without
 changing scale; vertical scrolling moves through timeline rows. Enter fullscreen

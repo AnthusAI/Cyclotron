@@ -103,6 +103,11 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-panel.vis-background,.vis-axis {pointer-events:none}
 .vis-item.vis-line,.vis-item.vis-dot {display:none}
 .vis-item.vis-box {min-width:14px;border:0;background:transparent;color:var(--marker-color,var(--foreground));cursor:pointer;text-align:center}
+.vis-item.agreement-match {color:light-dark(#15803d,#4ade80)}
+.vis-item.agreement-mismatch {color:light-dark(#dc2626,#fb7185)}
+.vis-item.agreement-unreviewed,.vis-item.trigger-idle {color:var(--muted-foreground)}
+.vis-item.trigger-fired {color:var(--foreground)}
+.vis-item.vis-box svg {width:20px;height:20px;display:block}
 .vis-item.vis-box .vis-item-content {padding:4px;font-size:19px;line-height:24px}
 .vis-item.vis-selected {background:var(--accent)!important;border-color:var(--ring)!important;outline:2px solid var(--ring);border-radius:6px}
 .vis-tooltip {background:var(--popover)!important;color:var(--popover-foreground)!important;border:1px solid var(--border)!important;border-radius:var(--radius)!important;font:12px 'Geist Variable',sans-serif!important;padding:8px!important}

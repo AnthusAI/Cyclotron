@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import {flushSync} from 'react-dom'
 import './index.css'
 import {App} from './App.tsx'
+import {Circle, CirclePlus, CircleMinus, CirclePlay} from 'lucide-react'
 
 const read=(id:string):Record<string,unknown>[]=>JSON.parse(document.getElementById(id)?.textContent||'[]')
 const events=read('recording'),history=read('review-history')
@@ -13,3 +14,10 @@ const counts={
 }
 // The DOM adapter initializes after this synchronous shell mount, exactly once.
 flushSync(()=>createRoot(document.getElementById('root')!).render(<App counts={counts} />))
+const iconHost=document.createElement('div');iconHost.hidden=true;document.body.append(iconHost)
+flushSync(()=>createRoot(iconHost).render(<>
+  <span id="icon-circle"><Circle strokeWidth={3} /></span>
+  <span id="icon-circle-plus"><CirclePlus strokeWidth={3} /></span>
+  <span id="icon-circle-minus"><CircleMinus strokeWidth={3} /></span>
+  <span id="icon-circle-play"><CirclePlay strokeWidth={3} /></span>
+</>))
