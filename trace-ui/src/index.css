@@ -118,6 +118,8 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-item.cycle-event-cell svg {width:16px;height:16px}
 .vis-item.vis-range.rubric-status-cell.rubric-accepted {background:light-dark(#bbf7d0,#14532d)!important}
 .vis-item.vis-range.rubric-status-cell.rubric-not-accepted {background:light-dark(#a1a1aa,#71717a)!important}
+.vis-item.vis-range.optimization-accepted {background:light-dark(#bbf7d0,#14532d)!important}
+.vis-item.vis-range.optimization-not-accepted {background:light-dark(#a1a1aa,#71717a)!important}
 .vis-item.cycle-decision-cell.vis-selected {outline-offset:-2px;border-radius:0}
 .cycle-cell-events {display:flex;flex-wrap:wrap;gap:6px}
 .cycle-cell-events button {border:1px solid var(--border);background:var(--muted);color:var(--foreground);border-radius:6px;padding:6px 8px;font-size:11px;cursor:pointer}

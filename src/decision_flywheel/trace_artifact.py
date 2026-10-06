@@ -272,13 +272,18 @@ const cycleItems=projection.cycles.flatMap((cycle,index)=>{
 const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
 const cellDetails=new Map();
 const cycleByEvent=new Map(projection.cycles.flatMap(c=>c.keys.map(key=>[key,c])));
-function rubricActivity(cycleId,recording=events){
+function optimizationActivity(cycleId,stage,recording=events){
  const rows=recording.filter(event=>event.cycle_id===cycleId);
- const work=rows.filter(event=>(event.step_stage||event.stage)==='rubric');
+ const work=rows.filter(event=>(event.step_stage||event.stage)===stage);
  const ran=work.some(event=>event.kind==='optimizer-request');
  const completed=work.some(event=>event.kind==='optimizer-response');
  const failed=work.some(event=>['optimizer-failed','step-failed'].includes(event.kind));
  const accepted=work.some(event=>(event.result||event).activated===true||(event.result||event).promoted===true||event.kind==='classifier-activated');
+ return {ran,completed,failed,accepted};
+}
+function rubricActivity(cycleId,recording=events){
+ const rows=recording.filter(event=>event.cycle_id===cycleId);
+ const {ran,completed,failed,accepted}=optimizationActivity(cycleId,'rubric',recording);
  const before=rows.find(event=>event.kind==='cycle-started')?.classifier_snapshot?.config?.rubric;
  const after=rows.findLast(event=>['cycle-completed','cycle-failed','classifier-activated'].includes(event.kind))?.classifier_snapshot?.config?.rubric;
  const changed=typeof before==='string'&&typeof after==='string'?before!==after:null;
@@ -299,22 +304,24 @@ function cycleCells(items){
  return [...passthrough,...[...buckets].flatMap(([id,bucket])=>{
   const members=bucket.items,cycle=bucket.cycle;
   const rubric=members[0].group==='rubric';
-  const first=rubric?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
+  const questions=members[0].group==='questions';
+  const first=rubric||questions?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
   const activity=rubric?rubricActivity(cycle.key):null;
+  const questionActivity=questions?optimizationActivity(cycle.key,'questions'):null;
   if(rubric&&!activity.ran)return [];
   const trigger=first.group==='triggers';
   if(trigger&&!members.some(member=>member.className.includes('trigger-fired')))return [];
   const decision=first.className.includes('marker-prediction')||first.className.includes('marker-human');
   const content=document.createElement('span');
-  if(!rubric&&!decision&&!trigger){
+  if(!rubric&&!questions&&!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
    if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
   return [{...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
-   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):''),
-   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:members.map(m=>m.title).join('\n')}];
+   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):'')+(questions?' '+(questionActivity.accepted?'optimization-accepted':'optimization-not-accepted'):''),
+   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:questions?`Classifier question optimization: ${questionActivity.accepted?'Accepted':'Not accepted'}`:members.map(m=>m.title).join('\n')}];
  })];
 }
 plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));
