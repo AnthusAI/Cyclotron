@@ -98,6 +98,9 @@ class coverage is recorded as waiting, never as a successful optimization.
 
 Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
+The collapsible Optimization group contains Triggers, Rubric, Few-shot examples,
+Classifier questions, and ML optimization, in that order. Internal steps do not
+have a separate timeline row; cycle bands provide the item context.
 Selecting a classification shows its exact decision-model request and response,
 including expanded state, examples, and questions; API exchanges do not have a
 separate timeline lane. Optimization events (including proposal validation and

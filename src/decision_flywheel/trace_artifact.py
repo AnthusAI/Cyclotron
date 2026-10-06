@@ -175,13 +175,14 @@ const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions
 // API exchanges belong in the classification inspector, not a separate lane.
 const plottedItems=timelineItems.filter(item=>item.group!=='decision-api');
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
-timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},{id:'step-items',content:'Step / item'},...classGroups,...otherGroups];
-const stepItems=projection.steps.flatMap((step,index)=>{
- const label=document.createElement('span');label.textContent=`${step.cycle_step||step.number} · ${step.title}`;
- const title=document.createElement('span');title.textContent=`Step ${step.number}: ${step.title}${step.item_id?' · '+step.item_id:''}`;
- return [{id:'step-band:'+index,group:'step-items',start:new Date(step.start),end:new Date(step.end),type:'background',className:index%2?'step-band-even':'step-band-odd',content:''},
-  {id:'step-label:'+index,group:'step-items',start:new Date(step.start),end:new Date(step.end),type:'range',className:'step-item-label',content:label,title}];
-});
+const optimizationLanes=[['triggers','Triggers'],['rubric','Rubric'],['examples','Few-shot examples'],['questions','Classifier questions'],['classifier','ML optimization']].map(([id,content])=>({id,content}));
+const optimizationIds=optimizationLanes.map(group=>group.id);
+timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},...classGroups,
+ {id:'optimization',content:'Optimization',nestedGroups:optimizationIds,showNested:true},...optimizationLanes,
+ ...otherGroups.filter(group=>!optimizationIds.includes(group.id))].map((group,order)=>({...group,order}));
+// Internal step positions remain available for seeking and playback, but do
+// not need their own display lane. Cycle bands retain the item context.
+const stepItems=[];
 const cycleItems=projection.cycles.flatMap((cycle,index)=>{
  const label=document.createElement('span');label.textContent=`${cycle.title} · steps ${cycle.step_start}–${cycle.step_end}`;
  return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''},
