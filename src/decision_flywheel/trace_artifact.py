@@ -184,7 +184,7 @@ timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},...classGr
 // not need their own display lane. Cycle bands retain the item context.
 const stepItems=[];
 const cycleItems=projection.cycles.flatMap((cycle,index)=>{
- const label=document.createElement('span');label.textContent=`${cycle.title} · steps ${cycle.step_start}–${cycle.step_end}`;
+ const label=document.createElement('span');label.textContent=cycle.recorded?`Cycle ${events[Number(cycle.keys[0])]?.cycle_number??index+1}`:cycle.title;
  return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''},
   {id:'cycle-label:'+index,group:'flywheel-cycles',start:new Date(cycle.start),end:new Date(cycle.end),type:'range',className:'cycle-label',content:label}];
 });

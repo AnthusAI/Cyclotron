@@ -35,6 +35,7 @@ global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,
 let tick;global.setInterval=fn=>{tick=fn;return 1;};global.clearInterval=()=>{tick=null;};
 CODE
 assert.ok(!timelineData.groups.some(group=>group.id==='cycles'));
+assert.equal(cycleItems.find(item=>item.group==='flywheel-cycles').content.textContent,'Cycle 1');
 handlers.select({items:['cycle-label:0']});
 assert.equal(elements['cycle-states'].hidden,false);
 assert.ok(elements['cycle-before'].textContent.includes('before rubric'));
