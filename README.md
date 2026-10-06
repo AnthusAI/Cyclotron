@@ -56,9 +56,9 @@ not a calendar axis. Prediction and human-label lanes share compact class symbol
 and labeled class rows, with confidence and content in drill-down details.
 Close details to expand the timeline to full width; select a marker to reopen
 the adjacent inspector, or use Show details to restore the last selection. Non-stacking lanes
-and a bounded-height viewport prevent vertical piles. Drag the background to pan,
+grow to fit all rows without internal vertical scrolling. Drag the background to pan,
 use ordinary scroll over the timeline or Zoom buttons to zoom without modifier keys,
-drag the background to pan, use the lane scrollbar to move vertically,
+drag the background to pan,
 and drag the native playback pointer to
 inspect a step. Previous/Next moves chronologically across labels, predictions and
 optimization records; the window follows an off-screen pointer without changing
