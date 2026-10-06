@@ -291,6 +291,20 @@ function rubricActivity(cycleId,recording=events){
  return {ran,completed,failed,before,after,changed,accepted,
   label:failed?'Failed':ran&&!completed?'Running':`${ran?'Ran':'No LLM call'} · ${changeLabel}`};
 }
+function configurationControlChange(cycleId,stage,recording=events){
+ const rows=recording.filter(event=>event.cycle_id===cycleId);
+ const before=rows.find(event=>event.kind==='cycle-started')?.classifier_snapshot?.config;
+ const after=rows.findLast(event=>['cycle-completed','cycle-failed'].includes(event.kind))?.classifier_snapshot?.config;
+ const key=stage==='questions'?'tasks':'example_ids';
+ if(!Array.isArray(before?.[key])||!Array.isArray(after?.[key]))return null;
+ const count=after[key].length+(stage==='questions'?1:0);
+ return {changed:JSON.stringify(before[key])!==JSON.stringify(after[key]),count,
+  countChanged:before[key].length!==after[key].length};
+}
+function configurationCountChange(cycleId,stage,recording=events){
+ const change=configurationControlChange(cycleId,stage,recording);
+ return change?.countChanged?change.count:null;
+}
 function cycleCells(items){
  if(projection.axis!=='cycle')return items;
  const buckets=new Map(),passthrough=[];
@@ -305,23 +319,30 @@ function cycleCells(items){
   const members=bucket.items,cycle=bucket.cycle;
   const rubric=members[0].group==='rubric';
   const questions=members[0].group==='questions';
+  const examples=members[0].group==='examples';
+  const contextControl=questions||examples;
   const first=rubric||questions?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
   const activity=rubric?rubricActivity(cycle.key):null;
-  const questionActivity=questions?optimizationActivity(cycle.key,'questions'):null;
+  const controlStage=questions?'questions':'examples';
+  const controlActivity=contextControl?optimizationActivity(cycle.key,controlStage):null;
+  if(contextControl&&configurationControlChange(cycle.key,controlStage)?.changed)controlActivity.accepted=true;
   if(rubric&&!activity.ran)return [];
   const trigger=first.group==='triggers';
   if(trigger&&!members.some(member=>member.className.includes('trigger-fired')))return [];
   const decision=first.className.includes('marker-prediction')||first.className.includes('marker-human');
   const content=document.createElement('span');
-  if(!rubric&&!questions&&!decision&&!trigger){
+  if(contextControl){
+   const changedCount=configurationCountChange(cycle.key,controlStage);
+   if(changedCount!==null)content.textContent=String(changedCount);
+  }else if(!rubric&&!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
    if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
   return [{...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
-   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):'')+(questions?' '+(questionActivity.accepted?'optimization-accepted':'optimization-not-accepted'):''),
-   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:questions?`Classifier question optimization: ${questionActivity.accepted?'Accepted':'Not accepted'}`:members.map(m=>m.title).join('\n')}];
+   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):'')+(contextControl?' '+(controlActivity.accepted?'optimization-accepted':'optimization-not-accepted'):''),
+   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:contextControl?`${questions?'Classifier question':'Few-shot example'} optimization: ${controlActivity.accepted?'Accepted':'Not accepted'}${content.textContent?' · active count after cycle: '+content.textContent:''}`:members.map(m=>m.title).join('\n')}];
  })];
 }
 plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));

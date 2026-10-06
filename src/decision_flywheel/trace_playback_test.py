@@ -74,6 +74,15 @@ const rubricFixture=[
  {kind:'cycle-completed',cycle_id:'rubric-test',classifier_snapshot:{config:{rubric:'old'}}}
 ];
 assert.equal(rubricActivity('rubric-test',rubricFixture).label,'Ran · Unchanged');
+assert.equal(configurationCountChange('rubric-test','questions',rubricFixture),null);
+rubricFixture[0].classifier_snapshot.config.tasks=[];
+rubricFixture[4].classifier_snapshot.config.tasks=[{name:'support'}];
+rubricFixture[0].classifier_snapshot.config.example_ids=[];
+rubricFixture[4].classifier_snapshot.config.example_ids=['a','b'];
+assert.equal(configurationCountChange('rubric-test','questions',rubricFixture),2);
+assert.equal(configurationCountChange('rubric-test','examples',rubricFixture),2);
+rubricFixture[0].classifier_snapshot.config.tasks=[{name:'other'}];
+assert.equal(configurationCountChange('rubric-test','questions',rubricFixture),null);
 assert.equal(rubricActivity('rubric-test',rubricFixture).accepted,false);
 rubricFixture.push({kind:'step-completed',cycle_id:'rubric-test',step_stage:'rubric',result:{activated:true,promoted:false}});
 assert.equal(rubricActivity('rubric-test',rubricFixture).accepted,true);
