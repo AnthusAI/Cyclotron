@@ -18,6 +18,7 @@ from decision_flywheel.trace_artifact import read_trace, render_trace
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.selection_policy import add_selection_arguments, selection_from_arguments
+from decision_flywheel.api_event_sink import GraphQLTraceSink
 
 
 def main(argv=None):
@@ -39,7 +40,11 @@ def main(argv=None):
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
     parser.add_argument('--operational',action='store_true',help='predict before each vote, trace item cycles and separate triggered stages')
+    parser.add_argument('--trace-api-url',help='GraphQL endpoint for acknowledged trace logging')
+    parser.add_argument('--trace-api-run-id',help='existing web workspace run ID')
     args = parser.parse_args(argv)
+    if bool(args.trace_api_url) != bool(args.trace_api_run_id):
+        parser.error('trace API URL and run ID must be specified together')
     from dataclasses import asdict
     from decision_flywheel import EvaluationPolicy
     try:
@@ -109,7 +114,10 @@ def main(argv=None):
         parser.error("a live replay already exists; use a new output directory rather than silently restart it")
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
     transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+    sink = GraphQLTraceSink(args.trace_api_url,args.trace_api_run_id,token=os.environ.get('FLYWHEEL_WEB_TOKEN')) if args.trace_api_url else None
     def observe(event):
+        if sink:
+            sink(event)
         kind = event["kind"]
         if kind == "optimizer-response":
             proposal = json.loads(event["content"])
@@ -152,7 +160,7 @@ def main(argv=None):
                           "optimizer_attempts": transport.calls}), flush=True)
         return int(failed)
     finally:
-        if args.operational:
+        if args.operational and not sink:
             events = read_trace(runtime)
             (args.output/'trace.json').write_text(json.dumps(events, indent=2)+'\n')
             (args.output/'playback.html').write_text(render_trace(events,class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]))

@@ -1131,6 +1131,40 @@ make PYTHON=.venv/bin/python review-live
 Load credentials from the environment or a gitignored `.env` file.
 Do not source `.env` in the shell.
 
+## Local web workspace
+
+Install the web demo dependencies with `pip install -e '.[web,jev,optimizer,reviewer]'`.
+Use `make web` to inspect recorded runs without paid calls.
+Use `make web-live` to enable the labeling application at
+[localhost:8782](http://127.0.0.1:8782/). Starting the server does not call a model.
+Create a run in the app, choose its objective and request ceilings, and confirm
+paid collection before preparing an article. Each run keeps its own history.
+
+The labeling screen shows the article metadata and current prediction. It accepts
+Include, Exclude, Skip, an explanation, and Undo. A serialized worker runs the
+existing library. The API stores commands and trace events in SQLite. Subscriptions
+show committed events as they arrive. Select an exchange to inspect its complete
+request and response. The timeline reads the same API-owned history; use its
+reload control to load new events into the timeline.
+
+`GraphQLTraceSink` connects the library's observer to `/graphql`. The worker sends
+optimizer exchanges, decision exchanges, feedback, triggers, configuration, fits,
+and metrics through that API. Failed ingestion stops the operation; it does not
+silently fall back to a trace file. Stable event IDs make resubmission idempotent.
+The engine still needs private SQLite state and request caching. These are not the
+web app's history source. Failed or interrupted jobs need explicit operator action.
+
+Existing recordings can be imported with
+`python -m decision_flywheel.web_server import-recording --database PATH --name NAME`.
+The app identifies these as recorded runs, not new live experiments. Replay and
+endpoint-audit scripts accept `--trace-api-url` and `--trace-api-run-id` to record
+their new events through the API. Offline exports remain available separately.
+
+This first workspace supports one reviewer at a time. It has no user accounts.
+LAN access requires `FLYWHEEL_WEB_TOKEN` and a private bind address. Provider keys
+stay on the server. The local database contains private article text and feedback;
+do not publish it with the repository.
+
 ## Library interfaces and provider adapters
 
 `DecisionTask`, `Item`, and `LabeledItem` define the decision task and its trusted data.

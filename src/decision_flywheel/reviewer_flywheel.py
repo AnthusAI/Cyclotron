@@ -12,11 +12,12 @@ from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
 
 class ReviewerFlywheel:
     def __init__(self, store: ReviewStore, core: DecisionFlywheel, *, stage="rubric", retrospective_limit=200,
-                 min_stage_evaluation_per_class=20, rubric_changes_every=2):
+                 min_stage_evaluation_per_class=20, rubric_changes_every=2, include_protected_guidance=True):
         self.store, self.core = store, core
         self.stage, self.retrospective_limit = stage, retrospective_limit
         self.min_stage_evaluation_per_class = min_stage_evaluation_per_class
         self.current_cycle = None
+        self.include_protected_guidance = include_protected_guidance
         from .feedback_trigger import LabelTransitionTrigger
         self.rubric_trigger = LabelTransitionTrigger(rubric_changes_every) if rubric_changes_every is not None else None
 
@@ -121,7 +122,8 @@ class ReviewerFlywheel:
         training, _, _ = self.partitions()
         training_ids = {row.item.id for row in training}
         comments = [(item_id, event.comment) for item_id, event in self.store._active_actions().items()
-                    if event.action == "vote" and event.comment and event.comment.strip()]
+                    if event.action == "vote" and event.comment and event.comment.strip()
+                    and (self.include_protected_guidance or item_id in training_ids)]
         self.core.set_optimizer_context(tuple(comment for _, comment in comments),
             evaluation_context_exposed=any(item_id not in training_ids for item_id, _ in comments))
         return self.core.optimizer_context

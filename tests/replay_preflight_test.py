@@ -20,6 +20,8 @@ def test_preflight_is_network_free_and_leaves_the_source_review_database_unchang
         raise AssertionError("preflight must not construct a live model client")
     monkeypatch.setattr(module.JevAdapter, "from_environment", forbidden)
     monkeypatch.setattr(module.OpenAIOptimizer, "from_environment", forbidden)
-    assert module.main(["--database", str(path), "--output", str(tmp_path / "replay")]) == 0
+    monkeypatch.setattr(module, "GraphQLTraceSink", forbidden)
+    assert module.main(["--database", str(path), "--output", str(tmp_path / "replay"),
+        "--trace-api-url", "http://localhost/graphql", "--trace-api-run-id", "test"]) == 0
     assert path.read_bytes() == original
     assert (tmp_path / "replay/manifest.json").exists()

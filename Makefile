@@ -14,6 +14,15 @@ MIN_EVALUATION_PER_CLASS ?= 2
 OPTIMIZATION_STAGE ?= rubric
 RETROSPECTIVE_LIMIT ?= 200
 STAGE_MIN_EVALUATION_PER_CLASS ?= 20
+WEB_PORT ?= 8782
+WEB_DATABASE ?= var/web/workspace.sqlite3
+
+.PHONY: web web-live
+web:
+	$(PYTHON) -m decision_flywheel.web_server serve --database "$(WEB_DATABASE)" --articles "$(REVIEWER_BATCH)" --port "$(WEB_PORT)"
+
+web-live:
+	$(PYTHON) -m decision_flywheel.web_server serve --database "$(WEB_DATABASE)" --articles "$(REVIEWER_BATCH)" --port "$(WEB_PORT)" --allow-live
 
 .PHONY: test demo review review-local review-arxiv run-flywheel review-live install-tools release
 
