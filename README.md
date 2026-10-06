@@ -750,6 +750,17 @@ source labels invalidate that reuse. Empty/whitespace rubric proposals are rejec
 Trace events distinguish provisional initialization/refinement from measured
 promotion and carry the actual active configuration and model exchanges.
 
+Rubric optimization in the reviewer and operational replay now triggers on
+every second **human-label transition**, not every N votes. For example,
+`exclude, exclude, exclude, include, exclude` triggers at the final vote: the
+first transition does not fire and the second does. Either direction counts;
+repeated labels and skips do not. `--rubric-changes-every` configures the threshold
+(default 2). The reusable `LabelTransitionTrigger` derives its count from durable
+feedback, preserves progress across restarts, excludes retracted votes, and
+records the transition count and previous/current labels in each trigger check.
+Few-shot, question-discovery, and retraining cadences remain separate. Existing
+recordings retain their original schedules; this changes future runs, not history.
+
 Recent evaluation selects the newest available audit items per class, up to five
 per class. It walks backward to find scarce-class votes and drops older surplus
 majority-class votes. An absent class produces no balanced score. No previously

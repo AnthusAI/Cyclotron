@@ -32,6 +32,7 @@ def main(argv=None):
     parser.add_argument('--evaluation-samples',type=int,default=200)
     parser.add_argument('--rubric-recency-allowance',type=float,default=2.)
     parser.add_argument('--rubric-recency-decay-per-class',type=int,default=20)
+    parser.add_argument('--rubric-changes-every',type=int,default=2)
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
@@ -44,7 +45,7 @@ def main(argv=None):
                                            args.rubric_recency_decay_per_class)
     except ValueError as error:
         parser.error(str(error))
-    if min(args.batch_size, args.max_requests, args.max_optimizer_calls,args.context_validation_floor) < 1:
+    if min(args.batch_size, args.max_requests, args.max_optimizer_calls,args.context_validation_floor,args.rubric_changes_every) < 1:
         parser.error("batch size and request ceilings must be positive")
     if not args.database.is_file():
         parser.error("existing rated database required")
@@ -75,6 +76,7 @@ def main(argv=None):
         'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
         'context_validation_floor':args.context_validation_floor,'cold_start_policy':'provisional-working-rubric',
         'evaluation_policy':asdict(evaluation_policy),
+        'rubric_trigger':{'policy':'label-transitions','every':args.rubric_changes_every},
     }
     path = args.output / "manifest.json"
     encoded = json.dumps(manifest, indent=2)
@@ -82,8 +84,12 @@ def main(argv=None):
         parser.error("frozen replay plan differs; choose a new output directory")
     path.write_text(encoded+"\n")
     counts = lambda rows: {label: sum(row.label == label for row in rows) for label in reviewer_task().labels}
-    requests_bound = len(plan.ordered) * (1+6*(len(plan.ordered)//args.batch_size)) if args.operational else plan.request_upper_bound
-    optimizer_bound = len(plan.ordered)//args.batch_size if args.operational else len(plan.checkpoints)
+    transition_count=sum(left.label != right.label for left,right in zip(plan.ordered,plan.ordered[1:]))
+    rubric_rounds=transition_count//args.rubric_changes_every
+    cadence_rounds=len(plan.ordered)//args.batch_size
+    # Rubric transitions and the other context stages are independently scheduled.
+    optimizer_bound = rubric_rounds+cadence_rounds if args.operational else len(plan.checkpoints)
+    requests_bound = len(plan.ordered) * (1+6*optimizer_bound) if args.operational else plan.request_upper_bound
     print(json.dumps({"operational_cycles":args.operational,"eligible_labels": len(plan.ordered), "training": counts(plan.training),
                       "development": counts(plan.development), "protected_audit_pool": counts(plan.scoreboard),
                       "final_full_audit_evaluation": counts(plan.evaluation(len(plan.ordered), reviewer_task().labels)),
@@ -130,7 +136,7 @@ def main(argv=None):
     try:
         if args.operational:
             report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=args.batch_size,
-                retrain_every=args.batch_size,on_cycle=checkpoint))
+                retrain_every=args.batch_size,on_cycle=checkpoint,rubric_changes_every=args.rubric_changes_every))
             print(json.dumps({'complete':'stopped_reason' not in report,'cycles':len(report['cycles']),
                               'jev_attempts':wheel.requests,'optimizer_attempts':transport.calls}),flush=True)
             return int('stopped_reason' in report)

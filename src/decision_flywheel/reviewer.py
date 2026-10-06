@@ -453,7 +453,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
         if flywheel:
             flywheel.record_review_event(vote)
             if flywheel.feedback_trigger(optimize_every):
-                flywheel.improve(trigger="feedback-cadence")
+                flywheel.improve(trigger="label-transitions" if getattr(flywheel,'rubric_trigger',None) and flywheel.stage=='rubric' else "feedback-cadence")
             flywheel.finish_cycle()
 
 
@@ -486,10 +486,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--min-evaluation-per-class", type=int, default=2)
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
     parser.add_argument("--optimization-stage", choices=("rubric", "examples", "questions", "classifier"), default="rubric")
+    parser.add_argument('--rubric-changes-every',type=int,default=2,
+                        help='optimize rubric after this many human-label transitions')
     parser.add_argument("--retrospective-limit", type=int, default=200)
     parser.add_argument("--stage-min-evaluation-per-class", type=int, default=20)
     parser.add_argument("--optimize-every", type=int, default=10,
-                        help="run a core round after this many additional votes; G requests one sooner")
+                        help="vote cadence for non-rubric stages; rubric uses --rubric-changes-every; G requests a round sooner")
     parser.add_argument("--confirm-live", action="store_true",
                         help="required for live modes: authorizes the explicit Jev and optimizer ceilings")
     parser.add_argument("--max-live-requests", type=int, default=50)
@@ -498,7 +500,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args.confirm_live:
             parser.error("refusing paid model calls without --confirm-live")
         if min(args.max_live_requests, args.max_optimizer_calls, args.optimize_every, args.min_evaluation_per_class,
-               args.retrospective_limit, args.stage_min_evaluation_per_class) < 1:
+               args.retrospective_limit, args.stage_min_evaluation_per_class,args.rubric_changes_every) < 1:
             parser.error("request ceilings and optimization interval must be positive")
     if args.live_flywheel and args.live_jev:
         parser.error("choose the integrated flywheel or legacy artifact serving, not both")
@@ -568,7 +570,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             try:
                 run_review_session(store, console, flywheel=ReviewerFlywheel(store, runtime,
                                    stage=args.optimization_stage, retrospective_limit=args.retrospective_limit,
-                                   min_stage_evaluation_per_class=args.stage_min_evaluation_per_class),
+                                   min_stage_evaluation_per_class=args.stage_min_evaluation_per_class,
+                                   rubric_changes_every=args.rubric_changes_every),
                                    optimize_every=args.optimize_every)
             finally:
                 runtime.close()

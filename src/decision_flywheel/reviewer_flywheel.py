@@ -12,11 +12,13 @@ from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
 
 class ReviewerFlywheel:
     def __init__(self, store: ReviewStore, core: DecisionFlywheel, *, stage="rubric", retrospective_limit=200,
-                 min_stage_evaluation_per_class=20):
+                 min_stage_evaluation_per_class=20, rubric_changes_every=2):
         self.store, self.core = store, core
         self.stage, self.retrospective_limit = stage, retrospective_limit
         self.min_stage_evaluation_per_class = min_stage_evaluation_per_class
         self.current_cycle = None
+        from .feedback_trigger import LabelTransitionTrigger
+        self.rubric_trigger = LabelTransitionTrigger(rubric_changes_every) if rubric_changes_every is not None else None
 
     def partitions(self):
         eligible = reviewer_labeled_items(self.store.learning_feedback(), self.store.article)
@@ -49,6 +51,13 @@ class ReviewerFlywheel:
             self.current_cycle = None
 
     def feedback_trigger(self, every):
+        if self.stage == 'rubric' and self.rubric_trigger:
+            import json
+            events = (json.loads(row[0]) for row in self.core.db.execute('SELECT payload FROM runtime_events ORDER BY id'))
+            check = self.rubric_trigger.check(events)
+            if self.current_cycle:
+                self.current_cycle.check_trigger('rubric', **check)
+            return check['due']
         count = self.core.db.execute("SELECT COUNT(*) FROM runtime_events WHERE json_extract(payload,'$.kind')='human-feedback' AND json_extract(payload,'$.action')='submitted' AND json_extract(payload,'$.cycle_id') IS NOT NULL").fetchone()[0]
         due = count > 0 and count % every == 0
         if self.current_cycle:
@@ -68,7 +77,7 @@ class ReviewerFlywheel:
                 self.current_cycle = None
 
     def _improve(self, *, retry_interrupted: bool = False, stage=None, trigger="manual"):
-        if self.current_cycle and trigger != 'feedback-cadence':
+        if self.current_cycle and trigger not in {'feedback-cadence','label-transitions'}:
             self.current_cycle.check_trigger(stage or self.stage,due=True,reason=trigger)
         self.sync_optimizer_context()
         training, development, protected = self.partitions()
@@ -165,6 +174,7 @@ class ReviewerFlywheel:
                 'context_validation_floor':self.core.context_validation_floor,
                 "optimizer_context": self.core.optimizer_context,
                 "optimization_stage": self.stage, "retrospective_limit": self.retrospective_limit,
+                'rubric_trigger': {'policy':'label-transitions','every':self.rubric_trigger.every} if self.rubric_trigger else {'policy':'feedback-cadence'},
                 "stage_evaluation_floor": self.min_stage_evaluation_per_class,
                 "tasks": [task.name for task in active.config.tasks],
                 "main_decision": definition(active.config.task),

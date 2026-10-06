@@ -55,7 +55,8 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         wheel = DecisionFlywheel(path, ClassifierConfig(reviewer_task()), JevAdapter(Jev()),
             OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         output = StringIO()
-        client = ReviewerFlywheel(store, wheel, min_stage_evaluation_per_class=2)
+        # This flow spec deliberately exercises immediate vote-cadence optimization.
+        client = ReviewerFlywheel(store, wheel, min_stage_evaluation_per_class=2, rubric_changes_every=None)
         run_review_session(store, Console(file=output, width=120), flywheel=client, optimize_every=1)
         assert wheel.active.head is not None
         assert store.current_label(articles[-2].id) == "include"

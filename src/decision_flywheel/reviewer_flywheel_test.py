@@ -9,6 +9,32 @@ from .reviewer_flywheel import ReviewerFlywheel
 from .reviewer_store import Article, ReviewStore
 
 
+def test_reviewer_transition_trigger_survives_restart_and_records_its_cause(tmp_path):
+    path=tmp_path/'runtime.sqlite'
+    with ReviewStore(tmp_path/'reviews.sqlite',study_seed='transitions') as store:
+        articles=tuple(Article(str(i),'Paper',f'Text {i}','2026-10-06',('cs.AI',)) for i in range(3))
+        store.import_articles(articles)
+        core=DecisionFlywheel(path,ClassifierConfig(reviewer_task()),FakeModel(),agent([]))
+        reviewer=ReviewerFlywheel(store,core)
+        for article,label in zip(articles[:2],('exclude','include')):
+            reviewer.predict(article)
+            reviewer.record_review_event(store.record_vote(article.id,label))
+            assert not reviewer.feedback_trigger(10)
+            reviewer.finish_cycle()
+        core.close()
+        core=DecisionFlywheel(path,ClassifierConfig(reviewer_task()),FakeModel(),agent([]))
+        reviewer=ReviewerFlywheel(store,core)
+        reviewer.predict(articles[2])
+        reviewer.record_review_event(store.record_vote(articles[2].id,'exclude'))
+        assert reviewer.feedback_trigger(10)
+        check=core.history()[-1]
+        assert check['kind']=='trigger-evaluated' and check['stage']=='rubric'
+        assert check['details']['transition_count']==2
+        assert not reviewer.feedback_trigger(10)
+        reviewer.finish_cycle()
+        core.close()
+
+
 def test_reviewer_feedback_is_partitioned_without_exposing_audit_votes(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
     articles = tuple(Article(str(i), f"Paper {i}", f"Text {i}", "2026-10-05", ("cs.AI",)) for i in range(40))
