@@ -147,9 +147,9 @@ shown when recorded or exactly determined from recorded binary counts; missing
 metrics are explicitly unavailable, never guessed.
 The explorer fills the viewport without document scrolling. Close details to
 expand the timeline to full width. Horizontal trackpad scrolling pans without
-changing scale; vertical scrolling moves through timeline rows. Enter fullscreen
-to use vertical scrolling for zoom at the pointer. Exit fullscreen (or press
-Escape) to return to row scrolling. The inspector scrolls independently.
+changing scale; vertical scrolling moves through timeline rows in both normal
+and fullscreen modes. Pinch to zoom at the pointer, or use the zoom buttons
+with a mouse. The inspector scrolls independently.
 A gesture keeps its initial direction
 so diagonal drift does not switch between pan and zoom. Reset zoom returns to
 a four-cycle view near the current location; Recorded cycles shows the entire run.

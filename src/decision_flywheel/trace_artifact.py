@@ -276,14 +276,14 @@ el('zoom-in').onclick=()=>zoomView(.5);
 el('zoom-out').onclick=()=>zoomView(2);
 el('fit-all').onclick=()=>{const window=timeline.getWindow(),width=Math.min(maximum,4000);setView((+window.start+ +window.end-width)/2,width);};
 // Capture before vis-timeline: its default wheel path treats diagonal/horizontal
-// trackpad gestures as zoom. Keep horizontal pan and vertical zoom independent.
+// trackpad gestures as zoom. Ordinary scrolling navigates; only pinch zooms.
 let wheelAxis=null,lastWheelAt=-Infinity,fullscreen=false;
 function updateFullscreen(active){
  fullscreen=active;wheelAxis=null;lastWheelAt=-Infinity;
  el('workspace').classList?.toggle('is-fullscreen',active);
  const button=el('fullscreen-toggle'),label=active?'Exit fullscreen':'Enter fullscreen';
  button.setAttribute?.('aria-label',label);button.title=label;
- el('navigation-hint').textContent=active?'Horizontal scroll: pan · vertical scroll: zoom':'Horizontal scroll: pan · vertical scroll: rows';
+ el('navigation-hint').textContent='Horizontal scroll: pan · vertical scroll: rows · pinch: zoom';
  timeline.redraw();
 }
 el('fullscreen-toggle').onclick=async()=>{
@@ -297,20 +297,23 @@ el('timeline').addEventListener('wheel',event=>{
  const scale=event.deltaMode===1?16:event.deltaMode===2?rect.width:1;
  const dx=event.deltaX*scale,dy=event.deltaY*scale;
  if(!dx&&!dy)return;
+ // Browsers expose trackpad pinch as a control-modified wheel gesture.
+ if(event.ctrlKey){
+  event.preventDefault();event.stopImmediatePropagation();
+  const anchor=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
+  zoomView(Math.exp(Math.max(-120,Math.min(120,dy))*.004),anchor);
+  return;
+ }
  const stamped=Number.isFinite(event.timeStamp);
  if(!stamped||!wheelAxis||event.timeStamp-lastWheelAt>180||event.shiftKey)
-  wheelAxis=event.shiftKey||Math.abs(dx)>Math.abs(dy)?'pan':'zoom';
+  wheelAxis=event.shiftKey||Math.abs(dx)>Math.abs(dy)?'pan':'rows';
  lastWheelAt=stamped?event.timeStamp:-Infinity;
- // In the workspace, let vis-timeline scroll its rows. Only fullscreen
- // consumes vertical wheel gestures for zoom; horizontal gestures always pan.
- if(wheelAxis==='zoom'&&!fullscreen&&!event.ctrlKey)return;
+ // Vertical wheel gestures scroll rows, including in fullscreen.
+ if(wheelAxis==='rows')return;
  event.preventDefault();event.stopImmediatePropagation();
  if(wheelAxis==='pan'){
   const window=timeline.getWindow(),width=+window.end- +window.start;
   setView(+window.start+(event.shiftKey&&Math.abs(dy)>Math.abs(dx)?dy:dx)*width/Math.max(1,rect.width),width);
- }else{
-  const anchor=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
-  zoomView(Math.exp(Math.max(-120,Math.min(120,dy))*.004),anchor);
  }
 },{capture:true,passive:false});
 function setInspectorOpen(open){
@@ -332,7 +335,7 @@ el('show-history').hidden=!reviewHistory.length;
 el('show-run').textContent='Recorded cycles';
 el('show-run').onclick=showRun;el('show-history').onclick=()=>{const cycle=projection.cycles.find(c=>c.key==='source-history');timeline.setWindow(cycle?.start||0,cycle?.end||maximum,{animation:false});};
 const sourceSteps=ordered.filter(record=>record.key.startsWith('source:')).map(record=>Math.floor(stepPositions.get(record.key)/1000)+1);
-el('run-bounds').textContent=`${projection.cycles.filter(c=>c.recorded).length} operational cycles · ${projection.steps.length} internal steps · ${ordered.length} event markers. Each cycle processes an item, optionally receives feedback and evaluates triggers. Optimization/backfill requests stay inside the cycle that caused them. Circle: trigger not due; flag: triggered work. Older records without operational cycle IDs are not presented as cycles. Vertical scroll moves through rows; in fullscreen it zooms. Horizontal scroll or drag pans. Click headings or markers for details.`;
+el('run-bounds').textContent=`${projection.cycles.filter(c=>c.recorded).length} operational cycles · ${projection.steps.length} internal steps · ${ordered.length} event markers. Each cycle processes an item, optionally receives feedback and evaluates triggers. Optimization/backfill requests stay inside the cycle that caused them. Circle: trigger not due; flag: triggered work. Older records without operational cycle IDs are not presented as cycles. Vertical scroll moves through rows in both modes. Pinch or zoom buttons change scale. Horizontal scroll or drag pans. Click headings or markers for details.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of id==='label-filter'?classes:[...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
