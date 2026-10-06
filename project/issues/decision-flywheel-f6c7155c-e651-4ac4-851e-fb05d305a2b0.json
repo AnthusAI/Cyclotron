@@ -1,0 +1,44 @@
+{
+  "id": "decision-flywheel-f6c7155c-e651-4ac4-851e-fb05d305a2b0",
+  "title": "Keep a fitted compatible ML head active through context optimization and trace its confidence",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "10368bfb-1367-4eab-befd-5e3a1bf0b705",
+      "author": "home",
+      "text": "Implemented shared candidate fitter used by normal improvements and provisional rubric activation/refinement. Fit regenerates complete context-specific probability features; activation is atomic and rejects mismatched head provenance. Below three training labels per class, fitting is explicitly deferred. Prediction traces include Jev probabilities, ML features, raw ML probabilities, calibrated probabilities and temperature. Added same-request protected head ablation. Fresh 87-vote replay is running in var/head-lifecycle-replay-20261006-v1; original run preserved. Next: complete replay, protected endpoint/head comparison, regenerate served trace, verify browser, report outcomes and limitations.",
+      "created_at": "2026-10-06T19:29:45.732441Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "5e329ca0-4d32-42aa-b8c2-96639921382e",
+      "author": "home",
+      "text": "Completed replay: 87 cycles, 528 Jev requests, 11 optimizer calls. ML head used continuously cycles 34-87 (54 predictions); fitted at 33/40/41/60/61/80. Final head has 9 probability features from 5 classifications. Matched protected audit: Jev-only accuracy 72.2%, include recall 50%, balanced accuracy 62.5%; same-request head accuracy 83.3%, include recall 0%, balanced accuracy 46.9%. Lifecycle fixed, but learned-head alignment improvement NOT established; only 2 positive audit items. 36 audit requests, no optimizer calls. No tuning against audit labels. Notes: docs/experiments/ml-head-lifecycle-20261006.md. Served UI refreshed and browser verified ML features, raw/calibrated probabilities and confidence. Tests: 530 Python, 7 UI. Original recordings preserved.",
+      "created_at": "2026-10-06T19:33:39.160802Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T19:27:03.109145Z",
+  "updated_at": "2026-10-06T19:33:39.976640Z",
+  "closed_at": "2026-10-06T19:33:39.976517Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
