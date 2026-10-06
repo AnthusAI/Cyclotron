@@ -105,11 +105,16 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.panels{grid-template-columns:1fr}}
 .vis-timeline,.vis-panel,.vis-labelset .vis-label,.vis-time-axis .vis-text{color:CanvasText;border-color:GrayText}
 .vis-item{background:ButtonFace;color:ButtonText;border-color:GrayText}.vis-item.vis-selected{background:Highlight;color:HighlightText}
+.vis-item.vis-point .vis-dot{border-color:var(--marker-color,GrayText)}
+.vis-item.vis-point .vis-item-content{color:var(--marker-color,CanvasText);padding:2px 4px;font-weight:600}
+.vis-labelset .vis-label{min-height:36px}.vis-group{min-height:36px}
+#label-legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
 </style>
 <h1>Decision Flywheel — recorded trace</h1>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
-<h2>Feedback and optimization timeline</h2><div id="timeline"></div><p id="timeline-note"></p>
+<h2>Feedback and optimization timeline</h2><div id="timeline"></div><div id="label-legend"></div><p id="timeline-note"></p>
 <p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
+<label for="view-seek">Move timeline window through steps</label><input id="view-seek" type="range" min="0" value="0" style="width:100%">
 <div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
 <label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
 <label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
@@ -149,13 +154,29 @@ for(const [index,source] of reviewHistory.entries()){
  timelineItems.push({id:'source:'+index,source_index:index,group:isVote?'feedback':'decisions',start:row.shown_at||row.created_at,type:'point',content:span});
 }
 for(const group of [{id:'feedback',content:'Human labels'},{id:'decisions',content:'Decisions'}])if(timelineItems.some(i=>i.group===group.id)&&!timelineData.groups.some(g=>g.id===group.id))timelineData.groups.push(group);
-const times=timelineItems.map(i=>Date.parse(i.start)).filter(Number.isFinite),runTimes=events.map(e=>Date.parse(e.created_at)).filter(Number.isFinite);
-const minimum=times.length?Math.min(...times):Date.now(),maximum=times.length?Math.max(...times):minimum+1000,padding=Math.max(1000,(maximum-minimum)*.03);
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:true,orientation:'top',min:minimum-padding,max:maximum+padding,zoomMin:1000,zoomMax:Math.max(2000,maximum-minimum+2*padding)});
-function showRun(){if(runTimes.length)timeline.setWindow(Math.min(...runTimes)-1000,Math.max(...runTimes)+1000);}
-el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.fit();
-showRun();
-el('run-bounds').textContent=runTimes.length?`Optimization run: ${new Date(Math.min(...runTimes)).toLocaleString()} → ${new Date(Math.max(...runTimes)).toLocaleString()}. Review history is original source data, not a replay of this run.`:'No timestamped run';
+// Ordinal positions are a view projection. Original event timestamps stay unchanged.
+const ordered=[...events.map((e,index)=>({key:String(index),date:Date.parse(e.created_at)})),...reviewHistory.map((s,index)=>({key:'source:'+index,date:Date.parse(s.record.shown_at||s.record.created_at)}))].sort((a,b)=>(a.date-b.date));
+const stepPositions=new Map(ordered.map((record,index)=>[record.key,index*1000]));
+const classes=[...new Set([...reviewHistory.map(s=>s.record.label||s.record.predicted_label),...events.filter(e=>e.kind==='human-feedback'||e.kind==='prediction').map(e=>e.label||e.feedback?.final_answer_value)].filter(Boolean))].sort();
+const classMark=label=>String.fromCharCode(65+classes.indexOf(label));
+const classColor=label=>`hsl(${(classes.indexOf(label)*137+205)%360} 65% 45%)`;
+classes.forEach(label=>{const entry=document.createElement('span');entry.textContent=`${classMark(label)} — ${label}`;entry.style.color=classColor(label);el('label-legend').append(entry);});
+for(const item of timelineItems){
+ item.title=item.content.textContent;item.start=new Date(stepPositions.get(String(item.id)));
+ const source=item.source_index!==undefined?reviewHistory[item.source_index]:null,event=events[item.event_index];
+ const label=source?(source.record.label||source.record.predicted_label):(event?.label||event?.feedback?.final_answer_value);
+ let text;
+ if(label){text=classMark(label);item.style=`--marker-color:${classColor(label)}`;}
+ else{text=({'optimizer-request':'Req','optimizer-response':'Res','decision-request':'Req','decision-response':'Res','proposal-validated':'Prop','step-started':'Start','fit-started':'Fit','fit-completed':'Fit✓','candidate-evaluated':'Eval','candidate-rejected':'No','step-completed':'End','step-paused':'Pause','step-failed':'Fail','promoted':'Yes'})[event?.kind]||'•';}
+ item.content=document.createElement('span');item.content.textContent=text;
+}
+const maximum=Math.max(1000,(ordered.length-1)*1000);
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:5000,zoomMax:maximum+2000,maxHeight:420,horizontalScroll:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
+el('view-seek').max=Math.max(0,ordered.length-1);el('view-seek').oninput=()=>{const first=Number(el('view-seek').value)*1000;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));};
+function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));}
+el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,60000));
+if(reviewHistory.length)el('show-history').onclick();else showRun();
+el('run-bounds').textContent=`${ordered.length} chronological steps. Optimization test: steps ${(stepPositions.get('0')||0)/1000+1}–${(stepPositions.get(String(events.length-1))||0)/1000+1}. Drag left/right or zoom to inspect. A/B/etc identify label classes consistently in prediction and human-label lanes; timestamps are in event details only.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
@@ -217,9 +238,10 @@ function draw(){
  const event=events[position];
  el('status').textContent=event?`Event ${position+1}/${events.length} · ID ${event.event_id} · ${event.kind} · ${event.step_stage||'legacy/unscoped'} · ${event.status||event.reason||''}`:'No recorded events';
  el('seek').value=position;
- if(event?.created_at&&!Number.isNaN(Date.parse(event.created_at))){
-  if(!cursorAdded){timeline.addCustomTime(event.created_at,'playback');cursorAdded=true;}
-  else timeline.setCustomTime(event.created_at,'playback');
+ if(event&&stepPositions.has(String(position))){
+  const point=new Date(stepPositions.get(String(position)));
+  if(!cursorAdded){timeline.addCustomTime(point,'playback');cursorAdded=true;}
+  else timeline.setCustomTime(point,'playback');
  }
  el('configuration').textContent=readable(snapshots[position]||'Configuration not captured at this point');
  el('raw-event').textContent=event?pretty(event):'No recorded events';
@@ -271,7 +293,9 @@ function inspectEvent(event){
  el('content-title').textContent=title;el('event-content').textContent=readable(payload);
 }
 function inspectSource(index){
+ stop();
  const source=reviewHistory[index],row=source.record;
+ const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
  el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;
  el('event-title').textContent=source.source_table==='presentations'?`Predicted ${row.predicted_label} · ${Math.round(row.confidence*100)}%`:`Human ${row.action}: ${row.label||'—'}`;
  el('event-summary').textContent=`Original reviewer record · ${row.shown_at||row.created_at} · ${source.article.assignment}. Not generated by this optimization run.`;

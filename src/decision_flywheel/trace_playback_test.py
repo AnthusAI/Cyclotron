@@ -33,9 +33,9 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
 const assert=require('node:assert/strict');
 const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
-global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',append(){}})};
+global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){}})};
 let select;
-global.vis={Timeline:class{on(name,fn){select=fn}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(){}fit(){}}};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;}on(name,fn){select=fn}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(){}fit(){}}};
 CODE
 select({items:[1]});
 assert.equal(position,1);
@@ -53,7 +53,7 @@ assert.equal(elements['raw-event'].textContent,JSON.stringify(events[2],null,2))
 const old=JSON.stringify(events);applyFilters();assert.equal(JSON.stringify(events),old);
 elements['label-filter'].value='accept';applyFilters();
 assert.equal(timeline.items.filter(i=>i.group==='feedback').length,2);
-assert.ok(timeline.items.filter(i=>i.group==='feedback')[0].content.textContent.includes('accept'));
+assert.ok(timeline.items.filter(i=>i.group==='feedback')[0].title.includes('accept'));
 elements['label-filter'].value='';elements['comment-filter'].checked=true;applyFilters();
 assert.equal(timeline.items.filter(i=>i.group==='feedback').length,2);
 assert.equal(elements['content-box'].open,false);
@@ -61,6 +61,11 @@ select({items:['source:0']});
 assert.ok(elements['event-title'].textContent.includes('accept'));
 assert.ok(elements['event-content'].textContent.includes('Source abstract'));
 assert.ok(elements['event-content'].textContent.includes('reject'));
+assert.equal(timeline.options.stack,false);
+assert.ok(timeline.options.maxHeight<=420);
+assert.ok(timeline.options.format.minorLabels(new Date(1000)).includes('2'));
+assert.ok(timelineItems.every(i=>i.content.textContent.length<=5));
+assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);
 assert.equal(readable({messages:[{role:'user',content:JSON.stringify({human_explanations:['knowledge bases'],feedback:[{text:'Title\\nAbstract'}]})}]}).includes('Title\\n'),true);
 assert.ok(!readable({content:'line one\\nline two'}).includes('\\\\n'));
 assert.ok(readable({content:'<script>untrusted</script>'}).includes('<script>untrusted</script>'));

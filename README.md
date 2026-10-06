@@ -47,8 +47,12 @@ Response markers link directly to their matching optimizer request, which opens
 the exact full messages. Selected demonstrations in that request are resolved
 against its recorded feedback context and displayed with labels and content.
 Decision request markers display actual expanded examples; decision response
-markers show the classifications. Zoom stays within recorded history; start/end
-times and run/history view buttons distinguish the optimization window.
+markers show the classifications. The timeline uses chronological ordinal steps,
+not a calendar axis. Prediction and human-label lanes share compact class symbols
+and a legend, with confidence and content in drill-down details. Non-stacking lanes
+and a bounded-height viewport prevent vertical piles; a window slider provides
+horizontal navigation. Zoom stays within recorded history; run/history buttons
+distinguish the optimization window. Original timestamps remain in source records.
 
 Pass `--reviews var/reviewer.sqlite3` to include the original human actions and
 pre-vote prediction presentations as a separate source-history layer. It reads
