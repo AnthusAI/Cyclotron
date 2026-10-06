@@ -84,6 +84,15 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-item.vis-selected {background:var(--accent)!important;border-color:var(--ring)!important;outline:2px solid var(--ring);border-radius:6px}
 .vis-tooltip {background:var(--popover)!important;color:var(--popover-foreground)!important;border:1px solid var(--border)!important;border-radius:var(--radius)!important;font:12px 'Geist Variable',sans-serif!important;padding:8px!important}
 .vis-custom-time {background:var(--primary)!important;width:1px!important}
+.vis-item.vis-background.step-band-odd {background:color-mix(in oklch,var(--foreground) 4%,transparent)!important;border-right:1px solid var(--border)}
+.vis-item.vis-background.step-band-even {background:transparent!important;border-right:1px solid var(--border)}
+.vis-item.vis-range.step-item-label {background:transparent!important;border:0!important;color:var(--foreground)!important;border-radius:0;cursor:pointer}
+.step-item-label .vis-item-content {padding:8px 12px!important;font-size:12px;font-weight:500;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vis-item.vis-background.cycle-band-even {background:color-mix(in oklch,var(--primary) 7%,transparent)!important;border-left:2px solid var(--ring)}
+.vis-item.vis-background.cycle-band-odd {background:color-mix(in oklch,var(--primary) 3%,transparent)!important;border-left:2px solid var(--ring)}
+.vis-item.vis-background.cycle-band-history {background:color-mix(in oklch,var(--muted) 25%,transparent)!important;border-left:2px dashed var(--border)}
+.vis-item.vis-range.cycle-label {background:var(--secondary)!important;color:var(--secondary-foreground)!important;border:1px solid var(--border)!important;cursor:pointer}
+.cycle-label .vis-item-content {padding:8px 12px!important;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:1000px){.workspace {grid-template-columns:minmax(0,1fr) 280px}}
 @media(max-width:700px){.workspace {grid-template-columns:minmax(0,1fr)}#inspector {position:static;max-height:none}}
 

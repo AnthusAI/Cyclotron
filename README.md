@@ -57,7 +57,14 @@ the exact full messages. Selected demonstrations in that request are resolved
 against its recorded feedback context and displayed with labels and content.
 Decision request markers display actual expanded examples; decision response
 markers show the classifications. The timeline uses chronological ordinal steps,
-not a calendar axis. Prediction and human-label lanes share compact class symbols
+not a calendar axis. Wide native background bands show recorded flywheel cycles;
+smaller item/activity steps sit within them. A Step / item row identifies paper
+titles as you zoom in. Linked predictions and votes, or decision requests and
+responses, share a step; each event remains individually selectable. Cycle
+membership follows recorded round IDs and parent IDs. Imported review history
+without captured cycle boundaries is explicitly separate, never invented as
+earlier cycles. Click cycle or item headings to inspect their recorded events.
+Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
 Close details to expand the timeline to full width; select a marker to reopen
 the adjacent inspector, or use Show details to restore the last selection. Non-stacking lanes

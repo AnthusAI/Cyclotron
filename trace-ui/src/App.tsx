@@ -6,13 +6,12 @@ import {Input} from '@/components/ui/input'
 import {NativeSelect, NativeSelectOption} from '@/components/ui/native-select'
 import {Label} from '@/components/ui/label'
 import {Separator} from '@/components/ui/separator'
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from '@/components/ui/tooltip'
 import {FilterCheckbox} from './FilterCheckbox'
 
 export type Counts={predictions:number;labels:number;optimizations:number;events:number}
 
 export function App({counts}:{counts:Counts}) {
-  return <TooltipProvider>
+  return <>
     <div className="app-shell">
       <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Workflow className="size-5" /></div><div><p className="text-sm font-semibold">Decision Flywheel</p><p className="text-xs text-muted-foreground">Experiment workspace</p></div></div>
@@ -29,12 +28,12 @@ export function App({counts}:{counts:Counts}) {
         <div id="workspace" className="workspace">
           <Card className="timeline-pane gap-0 overflow-hidden py-0">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-5 py-4"><div><CardTitle className="text-base">Decision timeline</CardTitle><p className="mt-1 text-xs text-muted-foreground">Scroll to zoom · drag to pan · select a marker to inspect</p></div><div className="flex items-center gap-1">
-              <Tooltip><TooltipTrigger asChild><Button id="zoom-in" variant="outline" size="icon" aria-label="Zoom in"><ZoomIn /></Button></TooltipTrigger><TooltipContent>Zoom in</TooltipContent></Tooltip>
-              <Tooltip><TooltipTrigger asChild><Button id="zoom-out" variant="outline" size="icon" aria-label="Zoom out"><ZoomOut /></Button></TooltipTrigger><TooltipContent>Zoom out</TooltipContent></Tooltip>
+              <Button id="zoom-in" variant="outline" size="icon" aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
+              <Button id="zoom-out" variant="outline" size="icon" aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
               <Button id="fit-all" variant="outline" size="sm"><ChevronsLeftRight /> Entire history</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
             </div></CardHeader>
             <Separator />
-            <div className="flex flex-wrap items-center gap-2 px-5 py-3"><Button id="show-history" variant="secondary" size="sm">Recorded review history</Button><Button id="show-run" variant="outline" size="sm">This optimization run</Button><span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground"><CircleHelp className="size-3" /> Steps, not wall-clock time</span></div>
+            <div className="flex flex-wrap items-center gap-2 px-5 py-3"><Button id="show-history" variant="secondary" size="sm">Recorded review history</Button><Button id="show-run" variant="outline" size="sm">This optimization run</Button><span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground"><CircleHelp className="size-3" /> Cycles → steps → events</span></div>
             <div className="flex flex-wrap items-center gap-4 border-y border-border bg-muted/30 px-5 py-3">
               <div className="flex items-center gap-2"><Label htmlFor="label-filter" className="text-xs text-muted-foreground">Class</Label><NativeSelect id="label-filter" aria-label="Label" size="sm"><NativeSelectOption value="">All labels</NativeSelectOption></NativeSelect></div>
               <div className="flex items-center gap-2"><Label htmlFor="role-filter" className="text-xs text-muted-foreground">Partition</Label><NativeSelect id="role-filter" aria-label="Partition" size="sm"><NativeSelectOption value="">All partitions</NativeSelectOption></NativeSelect></div>
@@ -57,5 +56,5 @@ export function App({counts}:{counts:Counts}) {
         <p className="text-xs text-muted-foreground">Read-only playback. No model calls, no changes to labels, no data sent outside this machine.</p>
       </main>
     </div>
-  </TooltipProvider>
+  </>
 }

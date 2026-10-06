@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 from .trace_timeline import timeline_data
 from .trace_rounds import round_details
+from .trace_step_projection import step_projection
 
 
 def read_trace(database):
@@ -22,10 +23,11 @@ def render_trace(events, reviewer_history=()):
     viewer = Path(__file__).parent / 'vendor' / 'trace-ui'
     javascript = (vendor / 'standalone/umd/vis-timeline-graph2d.min.js').read_text()
     css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
+    projected = step_projection(events, reviewer_history, timeline_data(events)['items'])
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
         '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
-        '__TIMELINE_DATA__', encode(timeline_data(events))).replace(
+        '__TIMELINE_DATA__', encode(timeline_data(events))).replace('__STEP_PROJECTION__', encode(projected)).replace(
         '__TIMELINE_JS__', javascript.replace('</script', '<\\/script')).replace('__TIMELINE_CSS__', css).replace(
         '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text() + '\n\n' +
         (viewer / 'THIRD_PARTY_NOTICES.txt').read_text())).replace(
@@ -112,6 +114,7 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
 <script id="round-data" type="application/json">__ROUNDS__</script>
 <script id="timeline-data" type="application/json">__TIMELINE_DATA__</script>
+<script id="step-projection" type="application/json">__STEP_PROJECTION__</script>
 <script id="review-history" type="application/json">__REVIEW_HISTORY__</script>
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
 <script>__VIEWER_JS__</script>
@@ -133,8 +136,9 @@ for(const [index,source] of reviewHistory.entries()){
 }
 for(const group of [{id:'feedback',content:'Human labels'},{id:'decisions',content:'Decisions'}])if(timelineItems.some(i=>i.group===group.id)&&!timelineData.groups.some(g=>g.id===group.id))timelineData.groups.push(group);
 // Ordinal positions are a view projection. Original event timestamps stay unchanged.
-const ordered=timelineItems.map(item=>({key:String(item.id),date:Date.parse(item.start)})).sort((a,b)=>(a.date-b.date));
-const stepPositions=new Map(ordered.map((record,index)=>[record.key,index*1000]));
+const projection=JSON.parse(el('step-projection').textContent);
+const ordered=projection.order.map(key=>({key}));
+const stepPositions=new Map(Object.entries(projection.positions));
 const classes=[...new Set([...reviewHistory.map(s=>s.record.label||s.record.predicted_label),...events.filter(e=>e.kind==='human-feedback'||e.kind==='prediction').map(e=>e.label||e.feedback?.final_answer_value)].filter(Boolean))].sort();
 const classMark=label=>String.fromCharCode(65+classes.indexOf(label));
 const classColor=label=>`hsl(${(classes.indexOf(label)*137+205)%360} 65% 45%)`;
@@ -164,12 +168,24 @@ const occupied=new Set(timelineItems.map(i=>i.group));
 const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions'].includes(g.id));
 if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Decision API requests/responses'});
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
-timelineData.groups=[...classGroups,...otherGroups];
-const maximum=Math.max(1000,(ordered.length-1)*1000);
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{onInitialDrawComplete:()=>{if(reviewHistory.length)el('show-history').onclick();else showRun();},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,verticalScroll:false,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
+timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},{id:'step-items',content:'Step / item'},...classGroups,...otherGroups];
+const stepItems=projection.steps.flatMap((step,index)=>{
+ const label=document.createElement('span');label.textContent=`${step.number} · ${step.title}`;
+ const title=document.createElement('span');title.textContent=`Step ${step.number}: ${step.title}${step.item_id?' · '+step.item_id:''}`;
+ return [{id:'step-band:'+index,group:'step-items',start:new Date(index*1000),end:new Date((index+1)*1000),type:'background',className:index%2?'step-band-even':'step-band-odd',content:''},
+  {id:'step-label:'+index,group:'step-items',start:new Date(index*1000),end:new Date((index+1)*1000),type:'range',className:'step-item-label',content:label,title}];
+});
+const cycleItems=projection.cycles.flatMap((cycle,index)=>{
+ const label=document.createElement('span');label.textContent=`${cycle.title} · steps ${cycle.step_start}–${cycle.step_end}`;
+ return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''},
+  {id:'cycle-label:'+index,group:'flywheel-cycles',start:new Date(cycle.start),end:new Date(cycle.end),type:'range',className:'cycle-label',content:label}];
+});
+const maximum=Math.max(1000,projection.steps.length*1000);
+let initialWindowSet=false;
+const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...timelineItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,maximum,{animation:false});}},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:100,zoomMax:maximum,verticalScroll:false,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.floor(date.valueOf()/1000)+1}`}});
 el('zoom-in').onclick=()=>timeline.zoomIn(.5,{animation:false});
 el('zoom-out').onclick=()=>timeline.zoomOut(.5,{animation:false});
-el('fit-all').onclick=()=>timeline.setWindow(-1000,maximum+1000,{animation:false});
+el('fit-all').onclick=()=>timeline.setWindow(0,maximum,{animation:false});
 function setInspectorOpen(open){
  el('inspector').hidden=!open;
  el('show-inspector').hidden=open;
@@ -178,22 +194,22 @@ function setInspectorOpen(open){
 }
 el('close-inspector').onclick=()=>setInspectorOpen(false);
 el('show-inspector').onclick=()=>setInspectorOpen(true);
-timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(Math.round(properties.time.valueOf()/1000));});
+timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(ordered.reduce((best,record,index)=>Math.abs(stepPositions.get(record.key)-properties.time.valueOf())<Math.abs(stepPositions.get(ordered[best].key)-properties.time.valueOf())?index:best,0));});
 function goStep(step){
  stop();const bounded=Math.max(0,Math.min(ordered.length-1,step)),key=ordered[bounded]?.key;
  if(key===undefined)return;
  if(key.startsWith('source:'))inspectSource(Number(key.split(':')[1]));else move(Number(key));
 }
-function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+20000),{animation:false});}
-el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,20000),{animation:false});
-const sourceSteps=ordered.map((record,index)=>record.key.startsWith('source:')?index+1:0).filter(Boolean);
-el('run-bounds').textContent=`${ordered.length} visible steps. ${sourceSteps.length?`Human review: steps ${Math.min(...sourceSteps)}–${Math.max(...sourceSteps)}. Later retrospective optimization: starts at step ${(stepPositions.get('0')||0)/1000+1}; it re-scores existing items and collects no new human votes.`:''} Internal events do not add empty steps. All timeline rows are shown without internal vertical scrolling. Scroll over the timeline to zoom (no modifier key); drag to pan. Click a marker for details in the adjacent inspector.`;
+function showRun(){const cycle=projection.cycles.find(c=>c.recorded);timeline.setWindow(cycle?.start||0,cycle?.end||maximum,{animation:false});}
+el('show-run').onclick=showRun;el('show-history').onclick=()=>{const cycle=projection.cycles.find(c=>c.key==='source-history');timeline.setWindow(cycle?.start||0,cycle?.end||maximum,{animation:false});};
+const sourceSteps=ordered.filter(record=>record.key.startsWith('source:')).map(record=>Math.floor(stepPositions.get(record.key)/1000)+1);
+el('run-bounds').textContent=`${projection.cycles.filter(c=>c.recorded).length} recorded cycle(s) · ${projection.steps.length} smaller steps · ${ordered.length} event markers. Wide background bands show flywheel cycles; zoom in for individual steps and paper titles. Imported review history has no captured cycle boundaries and is not counted as a cycle. ${sourceSteps.length?'The later retrospective optimization re-scores existing items; no new human votes arrived during it.':''} Scroll to zoom; drag to pan; click any heading or marker to inspect.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
 }
 function applyFilters(){
- timeline.setItems(timelineItems.filter(item=>{
+ timeline.setItems([...cycleItems,...stepItems,...timelineItems.filter(item=>{
  if(el('disagreement-filter').checked){
   if(item.source_index===undefined)return false;
   const source=reviewHistory[item.source_index],vote=source.source_table==='review_events'?source:reviewHistory.find(s=>s.source_table==='review_events'&&source.record.id!==undefined&&s.record.presentation_id===source.record.id&&s.record.action==='vote');
@@ -204,10 +220,10 @@ function applyFilters(){
  const e=events[item.event_index];if(e.kind!=='human-feedback')return true;
   return (!el('label-filter').value||String(e.feedback?.final_answer_value??'unlabeled')===el('label-filter').value)
    &&(!el('role-filter').value||(e.assignment||'unassigned')===el('role-filter').value)
-   &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));}));
+   &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));})]);
 }
 for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
-timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);const id=properties.items[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
+timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
 el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} flywheel feedback events; ${reviewHistory.filter(s=>s.source_table==='review_events').length} original human actions and ${reviewHistory.filter(s=>s.source_table==='presentations').length} original pre-vote predictions. Pan/zoom and click individual markers. ${timelineData.undated_count} events lack valid timestamps. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
@@ -259,7 +275,7 @@ function draw(){
  el('status').textContent=event?`Event ${position+1}/${events.length} · ID ${event.event_id} · ${event.kind} · ${event.step_stage||'legacy/unscoped'} · ${event.status||event.reason||''}`:'No recorded events';
  if(event&&stepPositions.has(String(position))){
   const point=new Date(stepPositions.get(String(position)));
-  currentStep=point.valueOf()/1000;
+  currentStep=ordered.findIndex(record=>record.key===String(position));
   if(!cursorAdded){timeline.addCustomTime(point,'playback');cursorAdded=true;}
   else timeline.setCustomTime(point,'playback');
   revealPointer(point);
@@ -279,6 +295,10 @@ function inspectEvent(event){
  el('event-title').textContent=event.kind.replaceAll('-',' ');
  el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||'unscoped'}`;
  const field=(label,value)=>{if(value===undefined||value===null)return;const term=document.createElement('dt'),description=document.createElement('dd');term.textContent=label;description.textContent=typeof value==='object'?readable(value):String(value);el('event-fields').append(term,description);};
+ const itemStep=projection.steps.find(step=>step.keys.includes(String(position)));
+ if(itemStep?.item_id)field('Item',itemStep.title);
+ const cycle=projection.cycles.find(c=>c.keys.includes(String(position)));
+ if(cycle)field('Cycle',cycle.title);
  let payload=event,title='Full event content';
  if(event.kind==='human-feedback'){
   field('Label',event.feedback?.final_answer_value);field('Partition',event.assignment);field('Action',event.action);
@@ -321,9 +341,9 @@ function inspectSource(index){
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  const source=reviewHistory[index],row=source.record;
  const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
- currentStep=point.valueOf()/1000;
+ currentStep=ordered.findIndex(record=>record.key==='source:'+index);
  revealPointer(point);
- el('status').textContent=`Step ${currentStep+1}/${ordered.length} · original reviewer record`;
+ el('status').textContent=`Step ${Math.floor(point.valueOf()/1000)+1}/${projection.steps.length} · original reviewer record`;
  el('back').disabled=currentStep===0;el('next').disabled=currentStep===ordered.length-1;
  el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;
  el('event-title').textContent=source.source_table==='presentations'?`Predicted ${row.predicted_label} · ${Math.round(row.confidence*100)}%`:`Human ${row.action}: ${row.label||'—'}`;
