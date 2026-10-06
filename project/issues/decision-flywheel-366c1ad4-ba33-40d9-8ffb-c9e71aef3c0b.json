@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-366c1ad4-ba33-40d9-8ffb-c9e71aef3c0b",
+  "title": "Trigger rubric optimization on every second human-label transition",
+  "description": "Default rubric trigger counts class-to-class changes in either direction. First transition does not fire; second does. Repeated labels and skips do not count. Derive state from durable feedback for restart safety and omit retracted votes. Trace count, threshold, previous/current labels and causal linkage. Keep other optimization and fitting schedules separate; update operational replay preflight ceilings. Verify fake-client operational replay and unit specs; preserve old recordings.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "236bc76e-bba0-4da5-8583-7186eb804636",
+      "author": "home",
+      "text": "Implemented reusable LabelTransitionTrigger and default every-two transition scheduling in the Rich reviewer and operational replay. Durable trigger checks include count and both labels; repeated checks do not refire, retractions are excluded, and restarts retain progress. Other stages and fitting keep independent vote cadences. Offline suite: 509 passed. Existing-label preflight: 87 items, 7 rubric rounds plus 4 separately scheduled context rounds; conservative ceilings 5829 decision requests and 11 optimizer calls. No new paid replay; prior browser recording unchanged.",
+      "created_at": "2026-10-06T18:20:43.819528Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T18:19:45.455566Z",
+  "updated_at": "2026-10-06T18:20:44.196314Z",
+  "closed_at": "2026-10-06T18:20:44.196240Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
