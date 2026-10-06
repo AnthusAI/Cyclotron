@@ -75,10 +75,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "4933fe93-3088-4934-8867-364c306f0ff3",
+      "author": "home",
+      "text": "Ran actual GPT-6-Luna rubric discovery on a private snapshot with zero new decision calls. Verified sent messages exactly match preview: 60 trusted training feedback rows plus all five separate human explanations. Actual response explicitly references knowledge-base management, curation, structured extraction, retrieval and memory systems, while still inferring additional interests from examples. Proposal retained, not promoted: development coverage Include 2, Exclude 25 versus normal floor20/class. Source reviewer unchanged; no accuracy improvement claimed; exposed guidance marks evaluation independence false. Usage: 20621 prompt tokens, 1035 completion tokens. Reproducible opt-in trace script added; private full prompts/replies remain gitignored.",
+      "created_at": "2026-10-06T12:20:27.226692Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.580145Z",
-  "updated_at": "2026-10-06T11:46:01.397556Z",
+  "updated_at": "2026-10-06T12:20:27.226725Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
