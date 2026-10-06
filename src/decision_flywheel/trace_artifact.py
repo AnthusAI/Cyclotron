@@ -17,7 +17,26 @@ def render_trace(events):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
         return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
-        '__PRESENTATION__', encode(recover_configurations(events)))
+        '__PRESENTATION__', encode(recover_configurations(events))).replace(
+        '__EXCHANGES__', encode(exchange_indices(events)))
+
+
+def exchange_indices(events):
+    latest = dict.fromkeys(('optimizer_request', 'optimizer_response', 'decision_request', 'decision_response'))
+    positions = []
+    for index, event in enumerate(events):
+        name = event.get('kind', '').replace('-', '_')
+        if name in latest:
+            latest[name] = index
+            if name.endswith('_request'):
+                latest[name.replace('_request', '_response')] = None
+        positions.append(dict(latest))
+    return positions
+
+
+def exchanges_at(events, position):
+    return {name: events[index] if index is not None else None
+            for name, index in exchange_indices(events)[position].items()}
 
 
 def recover_configurations(events):
@@ -83,12 +102,18 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <p id="status" aria-live="polite"></p>
 <div class="panels"><section><h2>Active configuration at this point</h2><pre id="configuration"></pre></section>
 <section><h2>Measured comparison at this event</h2><pre id="metrics"></pre></section></div>
+<section><h2>Latest optimizer request at this point — exact system/user messages</h2><pre id="optimizer_request"></pre></section>
+<section><h2>Latest optimizer response — actual content and tool calls</h2><pre id="optimizer_response"></pre></section>
+<section><h2>Latest decision-model request — actual expanded state and questions</h2><pre id="decision_request"></pre></section>
+<section><h2>Latest decision-model response</h2><pre id="decision_response"></pre></section>
 <section><h2>Exact recorded event: prompts, responses, requests, fits and results</h2><pre id="detail"></pre></section>
 <script id="recording" type="application/json">__RECORDING__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
+<script id="exchanges" type="application/json">__EXCHANGES__</script>
 <script>
 const events=JSON.parse(document.getElementById('recording').textContent);
 const presentation=JSON.parse(document.getElementById('presentation').textContent);
+const exchanges=JSON.parse(document.getElementById('exchanges').textContent);
 const el=id=>document.getElementById(id);let position=0,timer=null;
 const pretty=value=>JSON.stringify(value,null,2);
 const snapshots=[];let config=null;
@@ -101,8 +126,8 @@ events.forEach((event,index)=>{
  if(event.kind==='step-started'||event.kind==='round-started') {const option=document.createElement('option');option.value=index;option.textContent=`${event.event_id}: ${event.step_stage||'optimization'} · ${event.trigger||'recorded round'}`;el('round').append(option);}
 });
 const latestStep=events.map(e=>e.kind).lastIndexOf('step-started');
-position=Math.max(0,latestStep);el('start').value=position+1;
-el('round').value=String(position);
+position=Math.max(0,events.length-1);el('start').value=Math.max(0,latestStep)+1;
+el('round').value=String(Math.max(0,latestStep));
 el('seek').max=Math.max(0,events.length-1);el('end').value=events.length;
 function stop(){if(timer!==null)clearInterval(timer);timer=null;el('play').textContent='Play';}
 function comparison(event){
@@ -122,6 +147,10 @@ function draw(){
  el('configuration').textContent=pretty(snapshots[position]||'Configuration not captured at this point');
  el('metrics').textContent=event?comparison(event):'No measured comparison at this event';
  el('detail').textContent=event?pretty(event):'No recorded events';
+ for(const name of ['optimizer_request','optimizer_response','decision_request','decision_response']){
+  const index=exchanges[position]?.[name];
+  el(name).textContent=index!==null&&index!==undefined?pretty(events[index]):'No matching exchange recorded by this point';
+ }
  el('back').disabled=!events.length||position===0;el('next').disabled=!events.length||position===events.length-1;el('play').disabled=!events.length;
 }
 function move(index){stop();position=Math.max(0,Math.min(events.length-1,index));draw();}

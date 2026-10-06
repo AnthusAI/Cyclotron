@@ -1,7 +1,23 @@
 import sqlite3
 import json
 
-from .trace_artifact import read_trace, render_trace, recover_configurations
+from .trace_artifact import read_trace, render_trace, recover_configurations, exchanges_at
+
+
+def test_latest_transcripts_are_visible_without_selecting_their_raw_events():
+    events = [{'event_id': 1, 'kind': 'optimizer-request', 'messages': [{'content': 'exact prompt'}]},
+              {'event_id': 2, 'kind': 'optimizer-response', 'content': 'exact reply'},
+              {'event_id': 3, 'kind': 'decision-request', 'state': {'examples': [{'text': 'actual example'}]}, 'questions': {}},
+              {'event_id': 4, 'kind': 'step-completed'}]
+    assert exchanges_at(events, 3)['optimizer_request'] == events[0]
+    assert exchanges_at(events, 3)['optimizer_response'] == events[1]
+    assert exchanges_at(events, 3)['decision_request']['state']['examples'][0]['text'] == 'actual example'
+    assert exchanges_at(events, 0)['optimizer_response'] is None
+
+
+def test_a_new_request_does_not_display_an_old_response_as_its_answer():
+    events = [{'kind': 'optimizer-request'}, {'kind': 'optimizer-response'}, {'kind': 'optimizer-request'}]
+    assert exchanges_at(events, 2)['optimizer_response'] is None
 
 
 def test_round_configuration_is_recovered_from_its_actual_optimizer_input_not_a_later_round():
