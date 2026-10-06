@@ -87,10 +87,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "55a38226-9778-4c9f-aa46-8be6fdee40a0",
+      "author": "home",
+      "text": "Added reusable offline trace artifact exporter with event stepping, round jumps and play/pause over a chosen range. Self-contained private HTML exposes exact recorded prompts/replies/decision requests/fits, measured incumbent/candidate comparisons and accuracy deltas. New step/activation events capture complete classifier configuration and learned head; missing older snapshots and unmeasured steps are explicitly labeled. Export reads SQLite read-only and never invokes models. 465 offline specs pass including 1200-event export and script-injection escaping. Exported actual saved rubric trace privately. Desktop browser blocks local file URLs, so visual browser verification was not completed; no workaround attempted.",
+      "created_at": "2026-10-06T12:38:34.706005Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.580145Z",
-  "updated_at": "2026-10-06T12:20:27.226725Z",
+  "updated_at": "2026-10-06T12:38:34.706036Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
