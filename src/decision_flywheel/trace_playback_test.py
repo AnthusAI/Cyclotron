@@ -23,7 +23,7 @@ def test_clicking_round_start_shows_its_future_response_and_never_another_rounds
     html = render_trace(events)
     data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
     code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
-    harness = '''
+    harness = r'''
 const assert=require('node:assert/strict');
 const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
@@ -40,6 +40,9 @@ assert.ok(elements['round-requests'].textContent.includes('prompt-a'));
 assert.ok(elements['round-outcome'].textContent.includes('outcome-a'));
 elements['round'].value='4';elements['round'].onchange();
 assert.ok(elements['round-responses'].textContent.includes('reply-b'));
+assert.equal(readable({messages:[{role:'user',content:JSON.stringify({human_explanations:['knowledge bases'],feedback:[{text:'Title\\nAbstract'}]})}]}).includes('Title\\n'),true);
+assert.ok(!readable({content:'line one\\nline two'}).includes('\\\\n'));
+assert.ok(readable({content:'<script>untrusted</script>'}).includes('<script>untrusted</script>'));
 '''.replace('DATA', json.dumps(data)).replace('CODE', code)
     completed = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr

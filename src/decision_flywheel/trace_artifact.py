@@ -88,7 +88,7 @@ def main(argv=None):
     print(f'Private offline trace: {args.output.resolve()}')
 
 
-TEMPLATE = '''<!doctype html>
+TEMPLATE = r'''<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'">
 <title>Decision Flywheel — recorded trace</title>
@@ -148,6 +148,21 @@ timeline.on('select',properties=>{if(properties.items.length)move(Number(propert
 el('timeline-note').textContent=`Recorded times; pan/zoom and click a marker to inspect. ${timelineData.undated_count} events lack valid timestamps. Labels absent from the recording are not reconstructed. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
+// Display-only decoding: raw events below are kept byte-for-byte semantically intact.
+function readable(value,depth=0){
+ const pad='  '.repeat(depth);
+ if(typeof value==='string'){
+  const trimmed=value.trim();
+  if(trimmed.startsWith('{')||trimmed.startsWith('[')){
+   try{return readable(JSON.parse(value),depth);}catch(error){}
+  }
+  return value;
+ }
+ if(value===null||typeof value!=='object')return String(value);
+ const entries=Array.isArray(value)?value.map((v,i)=>[`[${i+1}]`,v]):Object.entries(value);
+ if(!entries.length)return Array.isArray(value)?'[]':'{}';
+ return entries.map(([key,child])=>`${pad}${key}:\n${readable(child,depth+1).split('\n').map(line=>'  '+line).join('\n')}`).join('\n\n');
+}
 const snapshots=[];let config=null;
 events.forEach((event,index)=>{
  if(event.kind==='step-started'||(event.kind==='round-started'&&!event.step_id))config=null;
@@ -180,21 +195,21 @@ function draw(){
   if(!cursorAdded){timeline.addCustomTime(event.created_at,'playback');cursorAdded=true;}
   else timeline.setCustomTime(event.created_at,'playback');
  }
- el('configuration').textContent=pretty(snapshots[position]||'Configuration not captured at this point');
+ el('configuration').textContent=readable(snapshots[position]||'Configuration not captured at this point');
  el('metrics').textContent=event?comparison(event):'No measured comparison at this event';
  el('detail').textContent=event?pretty(event):'No recorded events';
  const owner=roundData.owners[String(position)],round=roundData.rounds[String(owner)];
  const records=indexes=>(indexes||[]).map(index=>events[index]);
  el('round-status').textContent=round?`Round starts at event ID ${events[round.start].event_id}. Complete recorded round shown independently of playback position; missing records are not borrowed from other rounds.`:'No optimization round owns this event';
- el('round-requests').textContent=round&&round.optimizer_requests.length?pretty(records(round.optimizer_requests)):'No optimizer request recorded in this round (may be cached or numerical-only).';
- el('round-responses').textContent=round&&round.optimizer_responses.length?pretty(records(round.optimizer_responses)):'No optimizer response recorded in this round. Returned tool calls are not evidence of execution.';
- el('round-proposals').textContent=round?pretty({configuration_before:events[round.start].classifier_snapshot||events[round.start].configuration||null,
+ el('round-requests').textContent=round&&round.optimizer_requests.length?readable(records(round.optimizer_requests)):'No optimizer request recorded in this round (may be cached or numerical-only).';
+ el('round-responses').textContent=round&&round.optimizer_responses.length?readable(records(round.optimizer_responses)):'No optimizer response recorded in this round. Returned tool calls are not evidence of execution.';
+ el('round-proposals').textContent=round?readable({configuration_before:events[round.start].classifier_snapshot||events[round.start].configuration||null,
   proposals:records(round.proposals),configuration_after:round.end!==null?events[round.end].classifier_snapshot||null:null}):'No round selected';
  el('round-outcome').textContent=round?pretty({evaluations:records(round.evaluations),outcomes:records(round.outcomes)}):'No round selected';
- el('round-exchanges').textContent=round?pretty({fits:records(round.fits),requests:records(round.decision_requests),responses:records(round.decision_responses)}):'No round selected';
+ el('round-exchanges').textContent=round?readable({fits:records(round.fits),requests:records(round.decision_requests),responses:records(round.decision_responses)}):'No round selected';
  for(const name of ['optimizer_request','optimizer_response','decision_request','decision_response']){
   const index=exchanges[position]?.[name];
-  el(name).textContent=index!==null&&index!==undefined?pretty(events[index]):'No matching exchange recorded by this point';
+  el(name).textContent=index!==null&&index!==undefined?readable(events[index]):'No matching exchange recorded by this point';
  }
  el('back').disabled=!events.length||position===0;el('next').disabled=!events.length||position===events.length-1;el('play').disabled=!events.length;
 }
