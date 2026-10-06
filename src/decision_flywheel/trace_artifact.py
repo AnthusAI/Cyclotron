@@ -102,7 +102,11 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 <script>__TIMELINE_JS__</script>
 <style>
 :root{color-scheme:light dark;font-family:system-ui,sans-serif;background:Canvas;color:CanvasText}
-body{max-width:1100px;margin:24px auto;padding:0 20px}h1{font-size:1.5rem}h2{font-size:1.1rem}
+body{max-width:1600px;margin:24px auto;padding:0 20px}h1{font-size:1.5rem}h2{font-size:1.1rem}
+.workspace{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:20px;align-items:start}
+#inspector{position:sticky;top:12px;max-height:85vh;overflow:auto;border:1px solid GrayText;padding:14px;min-width:0}
+@media(max-width:900px){.workspace{grid-template-columns:minmax(0,1fr) 260px}}
+@media(max-width:700px){.workspace{grid-template-columns:1fr}#inspector{position:static;max-height:none}}
 .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0}
 button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{width:6em}
 #seek{width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid GrayText}
@@ -118,29 +122,36 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 .vis-item.vis-box{background:Canvas;border:1px solid var(--marker-color,GrayText);color:var(--marker-color,CanvasText);min-width:18px;text-align:center}
 .vis-item.vis-box .vis-item-content{padding:1px 3px}
 .vis-item.vis-line{border-color:var(--marker-color,GrayText)}
-.vis-labelset .vis-label{min-height:36px}.vis-group{min-height:36px}
+.vis-item.vis-line,.vis-item.vis-dot{display:none}
+.vis-item.vis-box{min-width:14px;border:0;background:transparent;cursor:pointer}
+.vis-item.vis-box .vis-item-content{padding:2px;font-size:20px;line-height:24px}
+.vis-item.vis-selected{outline:2px solid Highlight;border-radius:4px}
+.vis-labelset .vis-label{min-height:36px}.vis-foreground .vis-group{min-height:36px}
+.vis-panel.vis-background,.vis-axis{pointer-events:none}
 #label-legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
 </style>
 <h1>Decision Flywheel — recorded trace</h1>
 <p id="runtime-health" role="status">Build: visible-steps-v2. Waiting for interactive viewer startup. If this stays visible, JavaScript did not start.</p>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
-<h2>Feedback and optimization timeline</h2><div id="timeline"></div><div id="label-legend"></div><p id="timeline-note"></p>
+<div class="workspace"><div class="timeline-pane">
+<h2>Feedback and optimization timeline</h2>
+<div class="controls"><button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button><button id="fit-all">Entire history</button></div>
+<div id="timeline"></div><div id="label-legend"></div><p id="timeline-note"></p>
 <p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
 <div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
 <label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
 <label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
 <label><input type="checkbox" id="disagreement-filter"> Only prediction/label disagreements</label>
 <div class="controls"><button id="back">Previous</button><button id="next">Next</button><button id="play">Play</button>
-<button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button>
 <label>From event <input id="start" type="number" min="1" value="1"></label>
 <label>Through event <input id="end" type="number" min="1"></label>
 <label>Round <select id="round"><option value="">Select a recorded step</option></select></label></div>
 <p id="status" aria-live="polite"></p>
-<section><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
+</div><section id="inspector"><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
 <button id="paired-request" hidden>Inspect matching optimizer request</button>
 <details id="content-box"><summary id="content-title">Inspect event content</summary><pre id="event-content"></pre></details>
 <details><summary>Configuration at this point</summary><pre id="configuration"></pre></details>
-<details><summary>Exact raw event</summary><pre id="raw-event"></pre></details></section>
+<details><summary>Exact raw event</summary><pre id="raw-event"></pre></details></section></div>
 <script id="recording" type="application/json">__RECORDING__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
@@ -199,21 +210,23 @@ for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Mode
 const occupied=new Set(timelineItems.map(i=>i.group));
 const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions'].includes(g.id));
 if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Decision API requests/responses'});
+for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 timelineData.groups=[...classGroups,...otherGroups];
 const maximum=Math.max(1000,(ordered.length-1)*1000);
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,verticalScroll:true,horizontalScroll:true,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
-el('zoom-in').onclick=()=>timeline.zoomIn(.5);
-el('zoom-out').onclick=()=>timeline.zoomOut(.5);
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{onInitialDrawComplete:()=>{if(reviewHistory.length)el('show-history').onclick();else showRun();},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,verticalScroll:true,horizontalScroll:true,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
+el('zoom-in').onclick=()=>timeline.zoomIn(.5,{animation:false});
+el('zoom-out').onclick=()=>timeline.zoomOut(.5,{animation:false});
+el('fit-all').onclick=()=>timeline.setWindow(-1000,maximum+1000,{animation:false});
 timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(Math.round(properties.time.valueOf()/1000));});
 function goStep(step){
  stop();const bounded=Math.max(0,Math.min(ordered.length-1,step)),key=ordered[bounded]?.key;
  if(key===undefined)return;
  if(key.startsWith('source:'))inspectSource(Number(key.split(':')[1]));else move(Number(key));
 }
-function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));}
-el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,60000));
-if(reviewHistory.length)el('show-history').onclick();else showRun();
-el('run-bounds').textContent=`${ordered.length} visible chronological steps; internal events do not add empty steps. Human review occurred before the later retrospective optimization: no new votes arrived during that later batch. Drag to pan; Shift+wheel pans horizontally; Ctrl+wheel zooms; ordinary wheel scrolls lanes. Zoom buttons also work. Drag the pointer or click symbols to inspect. Matching colors identify prediction/label classes.`;
+function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+20000),{animation:false});}
+el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,20000),{animation:false});
+const sourceSteps=ordered.map((record,index)=>record.key.startsWith('source:')?index+1:0).filter(Boolean);
+el('run-bounds').textContent=`${ordered.length} visible steps. ${sourceSteps.length?`Human review: steps ${Math.min(...sourceSteps)}–${Math.max(...sourceSteps)}. Later retrospective optimization: starts at step ${(stepPositions.get('0')||0)/1000+1}; it re-scores existing items and collects no new human votes.`:''} Internal events do not add empty steps. Drag to pan; Shift+wheel pans horizontally; Ctrl+wheel zooms; ordinary wheel scrolls lanes. Click a marker for details in the adjacent inspector.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
@@ -262,7 +275,7 @@ events.forEach((event,index)=>{
  if(event.kind==='step-started'||event.kind==='round-started') {const option=document.createElement('option');option.value=index;option.textContent=`${event.event_id}: ${event.step_stage||'optimization'} · ${event.trigger||'recorded round'}`;el('round').append(option);}
 });
 const latestStep=events.map(e=>e.kind).lastIndexOf('step-started');
-position=Math.max(0,events.length-1);el('start').value=Math.max(0,latestStep)+1;
+position=0;el('start').value=Math.max(0,latestStep)+1;
 el('round').value=String(Math.max(0,latestStep));
 el('end').value=events.length;
 function stop(){if(timer!==null)clearInterval(timer);timer=null;el('play').textContent='Play';}
@@ -296,6 +309,7 @@ function draw(){
  el('back').disabled=!ordered.length||currentStep===0;el('next').disabled=!ordered.length||currentStep===ordered.length-1;el('play').disabled=!events.length;
 }
 function inspectEvent(event){
+ el('inspector').scrollTop=0;
  el('event-fields').replaceChildren();
  el('content-box').open=false;
  el('paired-request').hidden=true;
@@ -341,6 +355,7 @@ function inspectEvent(event){
 }
 function inspectSource(index){
  stop();
+ el('inspector').scrollTop=0;
  const source=reviewHistory[index],row=source.record;
  const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
  currentStep=point.valueOf()/1000;
@@ -362,7 +377,8 @@ el('play').onclick=()=>{
  if(!Number.isInteger(first)||!Number.isInteger(last)||first<0||last>=events.length||first>last){el('status').textContent='Choose a valid event range';return;}
  if(position<first||position>=last)position=first;draw();el('play').textContent='Pause';
  timer=setInterval(()=>{if(position>=last){stop();return;}position++;draw();},1000);
-};draw();
+};
+if(reviewHistory.length)inspectSource(Number(ordered.find(record=>record.key.startsWith('source:')).key.split(':')[1]));else draw();
 el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: 0.`;
 let interactionCount=0;
 for(const name of ['click','rangechanged'])timeline.on(name,()=>{interactionCount++;el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: ${interactionCount}.`;});

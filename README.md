@@ -28,9 +28,13 @@ Export a private, offline debugging recording:
 
 ```bash
 python -m decision_flywheel.trace_artifact --database var/reviewer-runtime.sqlite3 --output var/reviewer-trace.html
+python -m decision_flywheel.trace_server --viewer var/reviewer-trace.html
 ```
 
-Open the recording in a browser. Previous/Next and the timeline step through
+Open `http://127.0.0.1:8780` in a browser. The server binds only to loopback,
+serves only the selected HTML file, disables caching, and makes no model calls.
+It never exposes neighboring databases or credentials. Stop it with Ctrl+C.
+Previous/Next and the timeline step through
 events. The bundled vis-timeline 8.5.4 view separates human feedback, rubric,
 few-shot examples, classifier questions, ML optimization, fitting, and evaluation.
 Feedback markers retain arbitrary label values, partition roles, comments, and
@@ -51,7 +55,8 @@ markers show the classifications. The timeline uses chronological ordinal steps,
 not a calendar axis. Prediction and human-label lanes share compact class symbols
 and a legend, with confidence and content in drill-down details. Non-stacking lanes
 and a bounded-height viewport prevent vertical piles. Drag the background to pan,
-scroll/pinch or use Zoom buttons to zoom, and drag the native playback pointer to
+use Ctrl+scroll or Zoom buttons to zoom, Shift+scroll to pan horizontally,
+ordinary scroll to move through lanes, and drag the native playback pointer to
 inspect a step. Previous/Next moves chronologically across labels, predictions and
 optimization records; the window follows an off-screen pointer without changing
 its zoom. Zoom stays between one step and recorded history; run/history buttons

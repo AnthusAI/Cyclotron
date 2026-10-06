@@ -76,6 +76,11 @@ assert.equal(timeline.options.horizontalScrollKey,'shiftKey');
 assert.equal(timeline.options.horizontalScrollInvert,true);
 assert.equal(timeline.options.zoomKey,'ctrlKey');
 assert.equal(timeline.options.zoomMin,1000);
+assert.equal(typeof timeline.options.onInitialDrawComplete,'function');
+assert.ok(HTML.includes('.vis-item.vis-line,.vis-item.vis-dot{display:none}'));
+assert.ok(HTML.includes('id="inspector"'));
+assert.ok(HTML.includes('.vis-panel.vis-background,.vis-axis{pointer-events:none}'));
+assert.ok(!HTML.includes('}.vis-group{min-height:36px}'));
 assert.ok(!HTML.includes('id="view-seek"'));
 elements['zoom-in'].onclick();assert.equal(timeline.zoomed,'in');
 elements['zoom-out'].onclick();assert.equal(timeline.zoomed,'out');
@@ -99,5 +104,5 @@ assert.equal(readable({messages:[{role:'user',content:JSON.stringify({human_expl
 assert.ok(!readable({content:'line one\\nline two'}).includes('\\\\n'));
 assert.ok(readable({content:'<script>untrusted</script>'}).includes('<script>untrusted</script>'));
 '''.replace('DATA', json.dumps(data)).replace('HTML', json.dumps(html)).replace('CODE', code)
-    completed = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
+    completed = subprocess.run(['node'], input=harness, capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr
