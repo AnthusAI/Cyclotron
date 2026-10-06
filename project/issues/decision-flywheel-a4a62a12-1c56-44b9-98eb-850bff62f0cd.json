@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-a4a62a12-1c56-44b9-98eb-850bff62f0cd",
+  "title": "Scale timeline symbols with visible event slot width",
+  "description": "Shrink event icons and content padding when zoomed out; restore close-up size when zoomed in. Recompute on range and viewport size changes; preserve metric lane geometry and item selection. Verify generated bundle and browser measurements at overview and close-up scales.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "134a7711-d6ce-46be-8968-8429b8e79530",
+      "author": "home",
+      "text": "Implemented range- and resize-aware symbol scaling from local event slot spacing, with 3px minimum and 20px maximum; padding scales with symbols. Browser verified roughly 3px at full overview, 14.5px after close-up zoom, and selecting an icon still opens recorded request details. UI bundle: 6 tests passed. Regenerated the currently served private artifact; no model calls or changes to recorded history.",
+      "created_at": "2026-10-06T18:23:54.386524Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T18:23:35.009028Z",
+  "updated_at": "2026-10-06T18:23:54.798042Z",
+  "closed_at": "2026-10-06T18:23:54.797937Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
