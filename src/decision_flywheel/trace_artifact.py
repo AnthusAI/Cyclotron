@@ -124,6 +124,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
 <label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
 <label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
+<label><input type="checkbox" id="disagreement-filter"> Only prediction/label disagreements</label>
 <div class="controls"><button id="back">Previous</button><button id="next">Next</button><button id="play">Play</button>
 <button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button>
 <label>From event <input id="start" type="number" min="1" value="1"></label>
@@ -195,7 +196,7 @@ const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions
 if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Decision API requests/responses'});
 timelineData.groups=[...classGroups,...otherGroups];
 const maximum=Math.max(1000,(ordered.length-1)*1000);
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,horizontalScroll:false,moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,verticalScroll:true,horizontalScroll:true,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
 el('zoom-in').onclick=()=>timeline.zoomIn(.5);
 el('zoom-out').onclick=()=>timeline.zoomOut(.5);
 timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(Math.round(properties.time.valueOf()/1000));});
@@ -207,13 +208,18 @@ function goStep(step){
 function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));}
 el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,60000));
 if(reviewHistory.length)el('show-history').onclick();else showRun();
-el('run-bounds').textContent=`${ordered.length} chronological steps. Optimization test: steps ${(stepPositions.get('0')||0)/1000+1}–${(stepPositions.get(String(events.length-1))||0)/1000+1}. Drag to pan; scroll/pinch or use Zoom buttons. Drag the pointer or click a symbol to inspect. Matching colors identify prediction/label classes.`;
+el('run-bounds').textContent=`${ordered.length} chronological steps. Human review occurred before the later retrospective optimization. Drag to pan; Shift+wheel pans horizontally; Ctrl+wheel zooms; ordinary wheel scrolls lanes. Zoom buttons also work. Drag the pointer or click symbols to inspect. Matching colors identify prediction/label classes.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
 }
 function applyFilters(){
  timeline.setItems(timelineItems.filter(item=>{
+ if(el('disagreement-filter').checked){
+  if(item.source_index===undefined)return false;
+  const source=reviewHistory[item.source_index],vote=source.source_table==='review_events'?source:reviewHistory.find(s=>s.source_table==='review_events'&&source.record.id!==undefined&&s.record.presentation_id===source.record.id&&s.record.action==='vote');
+  if(!vote||!vote.record.label||!vote.presentation||vote.record.label===vote.presentation.predicted_label)return false;
+ }
  if(item.source_index!==undefined){const source=reviewHistory[item.source_index];if(source.source_table!=='review_events')return true;
   return (!el('label-filter').value||source.record.label===el('label-filter').value)&&(!el('role-filter').value||source.article.assignment===el('role-filter').value)&&(!el('comment-filter').checked||Boolean(source.record.comment));}
  const e=events[item.event_index];if(e.kind!=='human-feedback')return true;
@@ -221,7 +227,7 @@ function applyFilters(){
    &&(!el('role-filter').value||(e.assignment||'unassigned')===el('role-filter').value)
    &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));}));
 }
-for(const id of ['label-filter','role-filter','comment-filter'])el(id).onchange=applyFilters;
+for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
 timeline.on('select',properties=>{if(properties.items.length){const id=properties.items[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
 el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} flywheel feedback events; ${reviewHistory.filter(s=>s.source_table==='review_events').length} original human actions and ${reviewHistory.filter(s=>s.source_table==='presentations').length} original pre-vote predictions. Pan/zoom and click individual markers. ${timelineData.undated_count} events lack valid timestamps. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
