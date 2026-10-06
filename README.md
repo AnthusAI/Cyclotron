@@ -53,10 +53,13 @@ against its recorded feedback context and displayed with labels and content.
 Decision request markers display actual expanded examples; decision response
 markers show the classifications. The timeline uses chronological ordinal steps,
 not a calendar axis. Prediction and human-label lanes share compact class symbols
-and a legend, with confidence and content in drill-down details. Non-stacking lanes
+and labeled class rows, with confidence and content in drill-down details.
+Close details to expand the timeline to full width; select a marker to reopen
+the adjacent inspector, or use Show details to restore the last selection. Non-stacking lanes
 and a bounded-height viewport prevent vertical piles. Drag the background to pan,
-use Ctrl+scroll or Zoom buttons to zoom, Shift+scroll to pan horizontally,
-ordinary scroll to move through lanes, and drag the native playback pointer to
+use ordinary scroll over the timeline or Zoom buttons to zoom without modifier keys,
+drag the background to pan, use the lane scrollbar to move vertically,
+and drag the native playback pointer to
 inspect a step. Previous/Next moves chronologically across labels, predictions and
 optimization records; the window follows an off-screen pointer without changing
 its zoom. Zoom stays between one step and recorded history; run/history buttons

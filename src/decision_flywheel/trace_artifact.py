@@ -104,6 +104,7 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 :root{color-scheme:light dark;font-family:system-ui,sans-serif;background:Canvas;color:CanvasText}
 body{max-width:1600px;margin:24px auto;padding:0 20px}h1{font-size:1.5rem}h2{font-size:1.1rem}
 .workspace{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:20px;align-items:start}
+.workspace.inspector-closed{grid-template-columns:minmax(0,1fr)}
 #inspector{position:sticky;top:12px;max-height:85vh;overflow:auto;border:1px solid GrayText;padding:14px;min-width:0}
 @media(max-width:900px){.workspace{grid-template-columns:minmax(0,1fr) 260px}}
 @media(max-width:700px){.workspace{grid-template-columns:1fr}#inspector{position:static;max-height:none}}
@@ -128,15 +129,15 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 .vis-item.vis-selected{outline:2px solid Highlight;border-radius:4px}
 .vis-labelset .vis-label{min-height:36px}.vis-foreground .vis-group{min-height:36px}
 .vis-panel.vis-background,.vis-axis{pointer-events:none}
-#label-legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
+[hidden]{display:none!important}
 </style>
 <h1>Decision Flywheel — recorded trace</h1>
 <p id="runtime-health" role="status">Build: visible-steps-v2. Waiting for interactive viewer startup. If this stays visible, JavaScript did not start.</p>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
-<div class="workspace"><div class="timeline-pane">
+<div id="workspace" class="workspace"><div class="timeline-pane">
 <h2>Feedback and optimization timeline</h2>
-<div class="controls"><button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button><button id="fit-all">Entire history</button></div>
-<div id="timeline"></div><div id="label-legend"></div><p id="timeline-note"></p>
+<div class="controls"><button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button><button id="fit-all">Entire history</button><button id="show-inspector" hidden>Show details</button></div>
+<div id="timeline"></div><p id="timeline-note"></p>
 <p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
 <div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
 <label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
@@ -147,7 +148,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <label>Through event <input id="end" type="number" min="1"></label>
 <label>Round <select id="round"><option value="">Select a recorded step</option></select></label></div>
 <p id="status" aria-live="polite"></p>
-</div><section id="inspector"><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
+</div><section id="inspector"><button id="close-inspector">Close details</button><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
 <button id="paired-request" hidden>Inspect matching optimizer request</button>
 <details id="content-box"><summary id="content-title">Inspect event content</summary><pre id="event-content"></pre></details>
 <details><summary>Configuration at this point</summary><pre id="configuration"></pre></details>
@@ -183,8 +184,6 @@ const stepPositions=new Map(ordered.map((record,index)=>[record.key,index*1000])
 const classes=[...new Set([...reviewHistory.map(s=>s.record.label||s.record.predicted_label),...events.filter(e=>e.kind==='human-feedback'||e.kind==='prediction').map(e=>e.label||e.feedback?.final_answer_value)].filter(Boolean))].sort();
 const classMark=label=>String.fromCharCode(65+classes.indexOf(label));
 const classColor=label=>`hsl(${(classes.indexOf(label)*137+205)%360} 65% 45%)`;
-classes.forEach(label=>{const entry=document.createElement('span');entry.textContent=`● ◆ ${label}`;entry.style.color=classColor(label);el('label-legend').append(entry);});
-const shapes=document.createElement('span');shapes.textContent='● prediction · ◆ human label · □ optimizer request · ■ optimizer response';el('label-legend').append(shapes);
 for(const item of timelineItems){
  item.title=item.content.textContent;item.start=new Date(stepPositions.get(String(item.id)));
  const source=item.source_index!==undefined?reviewHistory[item.source_index]:null,event=events[item.event_index];
@@ -213,10 +212,18 @@ if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Dec
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 timelineData.groups=[...classGroups,...otherGroups];
 const maximum=Math.max(1000,(ordered.length-1)*1000);
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{onInitialDrawComplete:()=>{if(reviewHistory.length)el('show-history').onclick();else showRun();},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,verticalScroll:true,horizontalScroll:true,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{onInitialDrawComplete:()=>{if(reviewHistory.length)el('show-history').onclick();else showRun();},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,verticalScroll:true,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
 el('zoom-in').onclick=()=>timeline.zoomIn(.5,{animation:false});
 el('zoom-out').onclick=()=>timeline.zoomOut(.5,{animation:false});
 el('fit-all').onclick=()=>timeline.setWindow(-1000,maximum+1000,{animation:false});
+function setInspectorOpen(open){
+ el('inspector').hidden=!open;
+ el('show-inspector').hidden=open;
+ el('workspace').className=open?'workspace':'workspace inspector-closed';
+ timeline.redraw();
+}
+el('close-inspector').onclick=()=>setInspectorOpen(false);
+el('show-inspector').onclick=()=>setInspectorOpen(true);
 timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(Math.round(properties.time.valueOf()/1000));});
 function goStep(step){
  stop();const bounded=Math.max(0,Math.min(ordered.length-1,step)),key=ordered[bounded]?.key;
@@ -226,7 +233,7 @@ function goStep(step){
 function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+20000),{animation:false});}
 el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,20000),{animation:false});
 const sourceSteps=ordered.map((record,index)=>record.key.startsWith('source:')?index+1:0).filter(Boolean);
-el('run-bounds').textContent=`${ordered.length} visible steps. ${sourceSteps.length?`Human review: steps ${Math.min(...sourceSteps)}–${Math.max(...sourceSteps)}. Later retrospective optimization: starts at step ${(stepPositions.get('0')||0)/1000+1}; it re-scores existing items and collects no new human votes.`:''} Internal events do not add empty steps. Drag to pan; Shift+wheel pans horizontally; Ctrl+wheel zooms; ordinary wheel scrolls lanes. Click a marker for details in the adjacent inspector.`;
+el('run-bounds').textContent=`${ordered.length} visible steps. ${sourceSteps.length?`Human review: steps ${Math.min(...sourceSteps)}–${Math.max(...sourceSteps)}. Later retrospective optimization: starts at step ${(stepPositions.get('0')||0)/1000+1}; it re-scores existing items and collects no new human votes.`:''} Internal events do not add empty steps. Scroll over the timeline to zoom (no modifier key); drag to pan. Use the lane scrollbar to move vertically. Click a marker for details in the adjacent inspector.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
@@ -246,7 +253,7 @@ function applyFilters(){
    &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));}));
 }
 for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
-timeline.on('select',properties=>{if(properties.items.length){const id=properties.items[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
+timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);const id=properties.items[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
 el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} flywheel feedback events; ${reviewHistory.filter(s=>s.source_table==='review_events').length} original human actions and ${reviewHistory.filter(s=>s.source_table==='presentations').length} original pre-vote predictions. Pan/zoom and click individual markers. ${timelineData.undated_count} events lack valid timestamps. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
