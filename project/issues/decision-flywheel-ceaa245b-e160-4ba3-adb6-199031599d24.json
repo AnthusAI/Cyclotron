@@ -63,10 +63,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "f357f4dc-b7fb-46e9-8300-7b1726efa058",
+      "author": "home",
+      "text": "Implemented explicit persisted human-explanation context, exact optimizer preview and actual prompt/reply/tool-call traces, cursor-based durable events, single-stage budgeted driver, feedback revision events, complete fit inputs/head outputs and reviewer lifecycle integration. Protected explanations are explicit guidance and mark evaluation independence false. Added standard decision cache options: reuse default, cache_only without new decision calls, refresh preserving historical answers; failed/pending paid attempts require separate retry_failed permission. 462 offline fake-client specs pass. No paid calls made in this implementation; future web visualization remains a consumer of these APIs.",
+      "created_at": "2026-10-06T11:46:01.397522Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.580145Z",
-  "updated_at": "2026-10-05T22:47:54.107529Z",
+  "updated_at": "2026-10-06T11:46:01.397556Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
