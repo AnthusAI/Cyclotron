@@ -1,6 +1,13 @@
 from .trace_timeline import timeline_data
 
 
+def test_optimizer_exchanges_are_individual_clickable_points_on_their_stage_lane():
+    data = timeline_data([{'kind': kind, 'created_at': '2026-10-06T12:00:00Z',
+        'step_stage': 'rubric'} for kind in ('optimizer-request', 'optimizer-response', 'proposal-validated')])
+    assert len(data['items']) == 3
+    assert all(item['type'] == 'point' and item['group'] == 'rubric' for item in data['items'])
+
+
 def test_labels_keep_values_roles_and_retractions_and_rounds_use_distinct_lanes():
     events = [
         {'kind': 'human-feedback', 'created_at': '2026-10-06T12:00:00Z', 'assignment': 'development', 'action': 'submitted', 'feedback': {'final_answer_value': 'accept', 'edit_comment_value': 'reason'}},

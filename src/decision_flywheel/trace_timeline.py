@@ -3,7 +3,8 @@ from datetime import datetime
 
 GROUPS = [('feedback', 'Human labels'), ('rubric', 'Rubric'), ('examples', 'Few-shot examples'),
           ('questions', 'Classifier questions'), ('classifier', 'ML optimization'),
-          ('fit', 'ML fitting'), ('evaluation', 'Evaluation / outcome')]
+          ('fit', 'ML fitting'), ('evaluation', 'Evaluation / outcome'), ('optimizer', 'Optimizer (unscoped)'),
+          ('configuration', 'Configuration changes')]
 
 
 def timeline_data(events):
@@ -38,6 +39,12 @@ def timeline_data(events):
             group, label = 'evaluation', event.get('status', kind.removeprefix('step-'))
         elif kind in {'fit-started', 'fit-completed'}:
             group, label = 'fit', kind
+        elif kind in {'optimizer-request', 'optimizer-response', 'proposal-validated'}:
+            group = event.get('step_stage') or 'optimizer'
+            label = {'optimizer-request': 'Optimizer request', 'optimizer-response': 'Optimizer response',
+                     'proposal-validated': 'Proposal validated'}[kind]
+        elif kind in {'classifier-activated', 'classifier-invalidated'}:
+            group, label = 'configuration', kind
         elif kind in {'candidate-evaluated', 'candidate-rejected', 'promoted', 'candidate-qualified'}:
             group, label = 'evaluation', kind
         if group:

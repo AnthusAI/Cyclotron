@@ -107,26 +107,19 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <h1>Decision Flywheel — recorded trace</h1>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
 <h2>Feedback and optimization timeline</h2><div id="timeline"></div><p id="timeline-note"></p>
+<div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
+<label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
+<label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
 <div class="controls"><button id="back">Previous</button><button id="next">Next</button><button id="play">Play</button>
 <label>From event <input id="start" type="number" min="1" value="1"></label>
 <label>Through event <input id="end" type="number" min="1"></label>
 <label>Round <select id="round"><option value="">Select a recorded step</option></select></label></div>
 <label for="seek">Recorded event position</label><input id="seek" type="range" min="0" value="0">
 <p id="status" aria-live="polite"></p>
-<section><h2>Selected optimization round — complete recorded details</h2>
-<p id="round-status" aria-live="polite"></p>
-<h3>Luna requests — exact messages</h3><pre id="round-requests"></pre>
-<h3>Luna responses — content and returned tool calls</h3><pre id="round-responses"></pre>
-<h3>Proposals and configuration before / after</h3><pre id="round-proposals"></pre>
-<h3>Evaluation and outcome</h3><pre id="round-outcome"></pre>
-<details><summary>ML fits and all expanded decision-model exchanges in this round</summary><pre id="round-exchanges"></pre></details></section>
-<div class="panels"><section><h2>Active configuration at this point</h2><pre id="configuration"></pre></section>
-<section><h2>Measured comparison at this event</h2><pre id="metrics"></pre></section></div>
-<section><h2>Latest optimizer request at this point — exact system/user messages</h2><pre id="optimizer_request"></pre></section>
-<section><h2>Latest optimizer response — actual content and tool calls</h2><pre id="optimizer_response"></pre></section>
-<section><h2>Latest decision-model request — actual expanded state and questions</h2><pre id="decision_request"></pre></section>
-<section><h2>Latest decision-model response</h2><pre id="decision_response"></pre></section>
-<section><h2>Exact recorded event: prompts, responses, requests, fits and results</h2><pre id="detail"></pre></section>
+<section><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
+<details id="content-box"><summary id="content-title">Inspect event content</summary><pre id="event-content"></pre></details>
+<details><summary>Configuration at this point</summary><pre id="configuration"></pre></details>
+<details><summary>Exact raw event</summary><pre id="raw-event"></pre></details></section>
 <script id="recording" type="application/json">__RECORDING__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
@@ -144,8 +137,19 @@ el('vendor-license').textContent=JSON.parse(el('vendor-license-data').textConten
 const timelineData=JSON.parse(el('timeline-data').textContent);
 const timelineItems=timelineData.items.map(item=>({...item,content:(()=>{const label=document.createElement('span');label.textContent=item.content;return label;})()}));
 const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:true,orientation:'top'});
+for(const [id,values] of [['label-filter',events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled'))],
+ ['role-filter',events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned')]]){
+ for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
+}
+function applyFilters(){
+ timeline.setItems(timelineItems.filter(item=>{const e=events[item.event_index];if(e.kind!=='human-feedback')return true;
+  return (!el('label-filter').value||String(e.feedback?.final_answer_value??'unlabeled')===el('label-filter').value)
+   &&(!el('role-filter').value||(e.assignment||'unassigned')===el('role-filter').value)
+   &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));}));
+}
+for(const id of ['label-filter','role-filter','comment-filter'])el(id).onchange=applyFilters;
 timeline.on('select',properties=>{if(properties.items.length)move(Number(properties.items[0]));});
-el('timeline-note').textContent=`Recorded times; pan/zoom and click a marker to inspect. ${timelineData.undated_count} events lack valid timestamps. Labels absent from the recording are not reconstructed. vis-timeline 8.5.4 (MIT).`;
+el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} recorded label events. Pan/zoom and click individual request, response, evaluation or label markers. ${timelineData.undated_count} events lack valid timestamps. Missing historical labels are not reconstructed. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
 // Display-only decoding: raw events below are kept byte-for-byte semantically intact.
@@ -196,22 +200,43 @@ function draw(){
   else timeline.setCustomTime(event.created_at,'playback');
  }
  el('configuration').textContent=readable(snapshots[position]||'Configuration not captured at this point');
- el('metrics').textContent=event?comparison(event):'No measured comparison at this event';
- el('detail').textContent=event?pretty(event):'No recorded events';
- const owner=roundData.owners[String(position)],round=roundData.rounds[String(owner)];
- const records=indexes=>(indexes||[]).map(index=>events[index]);
- el('round-status').textContent=round?`Round starts at event ID ${events[round.start].event_id}. Complete recorded round shown independently of playback position; missing records are not borrowed from other rounds.`:'No optimization round owns this event';
- el('round-requests').textContent=round&&round.optimizer_requests.length?readable(records(round.optimizer_requests)):'No optimizer request recorded in this round (may be cached or numerical-only).';
- el('round-responses').textContent=round&&round.optimizer_responses.length?readable(records(round.optimizer_responses)):'No optimizer response recorded in this round. Returned tool calls are not evidence of execution.';
- el('round-proposals').textContent=round?readable({configuration_before:events[round.start].classifier_snapshot||events[round.start].configuration||null,
-  proposals:records(round.proposals),configuration_after:round.end!==null?events[round.end].classifier_snapshot||null:null}):'No round selected';
- el('round-outcome').textContent=round?pretty({evaluations:records(round.evaluations),outcomes:records(round.outcomes)}):'No round selected';
- el('round-exchanges').textContent=round?readable({fits:records(round.fits),requests:records(round.decision_requests),responses:records(round.decision_responses)}):'No round selected';
- for(const name of ['optimizer_request','optimizer_response','decision_request','decision_response']){
-  const index=exchanges[position]?.[name];
-  el(name).textContent=index!==null&&index!==undefined?readable(events[index]):'No matching exchange recorded by this point';
- }
+ el('raw-event').textContent=event?pretty(event):'No recorded events';
+ inspectEvent(event);
  el('back').disabled=!events.length||position===0;el('next').disabled=!events.length||position===events.length-1;el('play').disabled=!events.length;
+}
+function inspectEvent(event){
+ el('event-fields').replaceChildren();
+ el('content-box').open=false;
+ if(!event){el('event-title').textContent='No recorded events';return;}
+ el('event-title').textContent=event.kind.replaceAll('-',' ');
+ el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||'unscoped'}`;
+ const field=(label,value)=>{if(value===undefined||value===null)return;const term=document.createElement('dt'),description=document.createElement('dd');term.textContent=label;description.textContent=typeof value==='object'?readable(value):String(value);el('event-fields').append(term,description);};
+ let payload=event,title='Full event content';
+ if(event.kind==='human-feedback'){
+  field('Label',event.feedback?.final_answer_value);field('Partition',event.assignment);field('Action',event.action);
+  field('Explanation',event.feedback?.edit_comment_value);field('Item',event.feedback?.item_id);
+ }else if(event.kind==='optimizer-request'){
+  field('Model',event.requested_model);field('Messages',event.messages?.length);
+  try{const briefing=JSON.parse(event.messages.at(-1).content);field('Feedback items',briefing.feedback?.length);field('Human explanations',briefing.human_explanations);field('Control being optimized',briefing.current?.control_under_test);}catch(error){}
+  payload=event.messages;title='Read exact optimizer messages';
+ }else if(event.kind==='optimizer-response'){
+  field('Model',event.model);let proposal;
+  try{proposal=JSON.parse(event.content);}catch(error){}
+  field('Rationale',proposal?.rationale);
+  const config=snapshots[position]?.config||snapshots[position]?.configuration||{};
+  if(proposal)for(const key of ['rubric','example_ids','tasks','dynamic_elements'])if(key in proposal){field('Before: '+key,config[key]??'Unavailable');field('Proposed: '+key,proposal[key]);}
+  field('Tool calls returned',event.tool_calls?.length||0);field('Status','Proposal only — not an active configuration change');
+  payload={content:proposal||event.content,tool_calls:event.tool_calls||[],usage:event.usage};title='Read optimizer response and returned tool calls';
+ }else if(event.kind==='candidate-evaluated'){
+  for(const key of ['accuracy','balanced_accuracy','balanced_brier']){field('Incumbent '+key,event.incumbent?.[key]);field('Candidate '+key,event.candidate?.[key]);}
+  field('Reason',event.reason);field('Independent evaluation',event.evaluation_independent_of_optimizer_context);
+ }else if(event.kind==='decision-request'){
+  field('Model',event.model);field('Target',event.target_id);field('Examples',event.state?.examples?.length);field('Questions',Object.keys(event.questions||{}).join(', '));title='Inspect actual expanded decision request';
+ }else{
+  field('Reason',event.reason||event.result?.reason);field('Status',event.status);field('Training items',event.training_count);field('Feature count',event.features?.length);
+  field('Promoted',event.promoted??event.result?.promoted);
+ }
+ el('content-title').textContent=title;el('event-content').textContent=readable(payload);
 }
 function move(index){stop();position=Math.max(0,Math.min(events.length-1,index));draw();}
 el('back').onclick=()=>move(position-1);el('next').onclick=()=>move(position+1);
