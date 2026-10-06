@@ -205,8 +205,7 @@ for(const item of timelineItems){
  }
  if(label&&(item.className==='marker-prediction'||item.className==='marker-human')){
   item.agreement=agreement(item);item.className+=' agreement-'+item.agreement;
-  const role=classConfig.find(row=>row.label===label)?.role;
-  markerIcon(item,role==='positive'?'circle-plus':role==='negative'?'circle-minus':'circle');
+  item.content.textContent='';
   item.title+=` · ${item.agreement==='match'?'Matches human label':item.agreement==='mismatch'?'Prediction and human label disagree':'No paired prediction/human label'}`;
  }else if(event?.kind==='trigger-evaluated'){
   item.className+=event.due?' trigger-fired':' trigger-idle';markerIcon(item,event.due?'circle-play':'circle');
@@ -271,6 +270,35 @@ const cycleItems=projection.cycles.flatMap((cycle,index)=>{
  return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''}];
 });
 const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
+const cellDetails=new Map();
+const cycleByEvent=new Map(projection.cycles.flatMap(c=>c.keys.map(key=>[key,c])));
+function cycleCells(items){
+ if(projection.axis!=='cycle')return items;
+ const buckets=new Map(),passthrough=[];
+ for(const item of items){
+  const cycle=cycleByEvent.get(String(item.event_index));
+  if(!cycle){passthrough.push(item);continue;}
+  const key=`cell:${cycle.key}:${item.group}`;
+  if(!buckets.has(key))buckets.set(key,{cycle,items:[]});
+  buckets.get(key).items.push(item);
+ }
+ return [...passthrough,...[...buckets].map(([id,bucket])=>{
+  const members=bucket.items,cycle=bucket.cycle;
+  const first=members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
+  const decision=first.className.includes('marker-prediction')||first.className.includes('marker-human');
+  const content=document.createElement('span');
+  if(!decision){
+   const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
+   if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
+   else content.textContent=String(members.length);
+  }
+  cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
+  return {...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
+   className:first.className+(decision?' cycle-decision-cell':' cycle-event-cell'),
+   title:members.map(m=>m.title).join('\n')};
+ })];
+}
+plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));
 const minimumWindow=projection.axis==='cycle'?4:100;
 let initialWindowSet=false;
 const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...plottedItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},height:'100%',editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:minimumWindow,zoomMax:maximum,verticalScroll:true,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'ctrlKey',moveable:true,zoomable:true,preferZoom:false,showMajorLabels:false,format:{minorLabels:date=>projection.axis==='cycle'&&date.valueOf()%1000!==0?'':`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
@@ -373,7 +401,16 @@ function applyFilters(){
    &&(!el('comment-filter').checked||Boolean(e.feedback?.edit_comment_value));})]);
 }
 for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
-timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];const countMarker=String(id).startsWith('configuration-count:');if(countMarker||String(id).startsWith('metric:')||String(id).startsWith('metric-line:'))id=String(id).split(':').at(-1);else if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));if(countMarker||['classifier-activated','classifier-invalidated'].includes(events[Number(id)]?.kind)){showConfiguration(Number(id));}}});
+function showCellEvents(members){
+ const host=el('cell-events');host.replaceChildren();host.hidden=members.length<2;
+ for(const member of [...members].sort((a,b)=>a.event_index-b.event_index)){
+  const button=document.createElement('button');const event=events[member.event_index];
+  button.textContent=`${event?.kind||member.title} · ${event?.event_id??''}`;
+  button.onclick=()=>{const key=String(member.id);move(member.event_index);if(key.startsWith('configuration-count:'))showConfiguration(member.event_index);showCellEvents(members);};
+  host.append(button);
+ }
+}
+timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];const members=cellDetails.get(id);if(members)id=members[0].id;const countMarker=String(id).startsWith('configuration-count:');if(countMarker||String(id).startsWith('metric:')||String(id).startsWith('metric-line:'))id=String(id).split(':').at(-1);else if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));if(countMarker||['classifier-activated','classifier-invalidated'].includes(events[Number(id)]?.kind)){showConfiguration(Number(id));}showCellEvents(members||[]);}});
 function showConfiguration(index){
  const snapshot=snapshots[index],config=snapshot?.config||snapshot?.configuration;
  el('event-title').textContent='Active configuration';
@@ -387,7 +424,7 @@ function showConfiguration(index){
 timeline.on('doubleClick',properties=>{
  const id=properties.item;if(id===undefined||id===null)return;
  const key=String(id);
- const range=key.startsWith('cycle-')?projection.cycles[Number(key.split(':')[1])]:key.startsWith('step-')?projection.steps[Number(key.split(':')[1])]:projection.steps.find(s=>s.keys.includes(key));
+ const range=cellDetails.has(key)?cycleByEvent.get(String(cellDetails.get(key)[0].event_index)):key.startsWith('cycle-')?projection.cycles[Number(key.split(':')[1])]:key.startsWith('step-')?projection.steps[Number(key.split(':')[1])]:projection.steps.find(s=>s.keys.includes(key));
  if(range)timeline.setWindow(range.start,range.end,{animation:false});
 });
 el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} flywheel feedback events; ${reviewHistory.filter(s=>s.source_table==='review_events').length} original human actions and ${reviewHistory.filter(s=>s.source_table==='presentations').length} original pre-vote predictions. Pan/zoom and click individual markers. ${timelineData.undated_count} events lack valid timestamps. vis-timeline 8.5.4 (MIT).`;
@@ -540,6 +577,7 @@ function showEvaluation(event){
  }
 }
 function inspectEvent(event){
+ el('cell-events').hidden=true;
  el('inspector').scrollTop=0;
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  el('event-fields').replaceChildren();
@@ -633,6 +671,7 @@ function inspectEvent(event){
  el('content-title').textContent=title;el('event-content').textContent=readable(payload);
 }
 function inspectSource(index,pause=true){
+ el('cell-events').hidden=true;
  if(pause)stop();
  el('inspector').scrollTop=0;
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
@@ -702,7 +741,8 @@ timeline.on('click',properties=>{
  if(properties.item!==null&&properties.item!==undefined)return;
  if(!properties.time||!ordered.length)return;
  const point=new Date(Math.max(0,Math.min(maximum,+properties.time)));
- const preceding=ordered.reduce((best,record,index)=>stepPositions.get(record.key)<=+point?index:best,0);
+ const cycle=projection.axis==='cycle'?projection.cycles.find(c=>+point>=c.start&&+point<c.end):null;
+ const preceding=cycle?ordered.findIndex(record=>record.key===cycle.keys[0]):ordered.reduce((best,record,index)=>stepPositions.get(record.key)<=+point?index:best,0);
  goStep(preceding);
  timeline.setCustomTime(point,'playback');
 });

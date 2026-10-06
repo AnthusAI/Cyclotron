@@ -77,3 +77,5 @@ def test_operational_cycles_have_equal_outer_width_and_internal_training_request
     assert result['cycles'][0]['title']=='Cycle 1 · Paper A'
     assert result['positions']['3']<1000
     assert result['positions']['6']>1000
+    assert result['positions']['0']==result['positions']['3']==500
+    assert result['positions']['5']==result['positions']['6']==1500

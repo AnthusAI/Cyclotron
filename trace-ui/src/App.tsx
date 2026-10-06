@@ -75,6 +75,7 @@ export function App({counts,comparison}:{counts:Counts;comparison?:RunComparison
               </section>
               <ExchangePanel kind="optimizer" title="Optimizer LLM" />
               <ExchangePanel kind="decision" title="Decision model" />
+              <section id="cell-events" className="cycle-cell-events" hidden aria-label="Events in this cycle and row" />
               <dl id="event-fields" />
               <details id="content-box" className="disclosure"><summary id="content-title">Inspect event content</summary><pre id="event-content" /></details>
               <details className="disclosure"><summary>Configuration at this point</summary><pre id="configuration" /></details>

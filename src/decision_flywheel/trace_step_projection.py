@@ -89,7 +89,7 @@ def step_projection(events, history, items):
             inside=steps[cycle['step_start']-1:cycle['step_end']]
             cycle.update(start=index*1000,end=(index+1)*1000)
             for offset,step in enumerate(inside):
-                step.update(start=index*1000+offset*1000/len(inside),end=index*1000+(offset+1)*1000/len(inside),cycle_step=offset+1)
+                step.update(start=cycle['start'],end=cycle['end'],cycle_step=offset+1)
                 for marker,key in enumerate(step['keys']):
-                    positions[key]=step['start']+(step['end']-step['start'])*(marker+1)/(len(step['keys'])+1)
+                    positions[key]=cycle['start']+500
     return {'steps': steps, 'positions': positions, 'order': order, 'cycles': cycles,'axis':axis}

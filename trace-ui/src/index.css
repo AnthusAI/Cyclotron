@@ -106,6 +106,16 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-item.agreement-match {color:light-dark(#15803d,#4ade80)}
 .vis-item.agreement-mismatch {color:light-dark(#dc2626,#fb7185)}
 .vis-item.agreement-unreviewed,.vis-item.trigger-idle {color:var(--muted-foreground)}
+.vis-item.vis-range.cycle-decision-cell {height:40px;border:0;border-radius:0;padding:0;cursor:pointer}
+.vis-item.vis-range.cycle-decision-cell.agreement-match {background:light-dark(#bbf7d0,#14532d)!important}
+.vis-item.vis-range.cycle-decision-cell.agreement-mismatch {background:light-dark(#fecaca,#7f1d1d)!important}
+.vis-item.vis-range.cycle-decision-cell.agreement-unreviewed {background:var(--muted)!important}
+.vis-item.vis-range.cycle-event-cell {height:40px;border:0;border-radius:0;background:color-mix(in srgb,var(--muted) 50%,transparent);color:var(--foreground);cursor:pointer;text-align:center}
+.vis-item.cycle-event-cell .vis-item-content {width:100%;height:40px;display:flex;align-items:center;justify-content:center;padding:0!important;font-size:12px}
+.vis-item.cycle-event-cell svg {width:16px;height:16px}
+.vis-item.cycle-decision-cell.vis-selected {outline-offset:-2px;border-radius:0}
+.cycle-cell-events {display:flex;flex-wrap:wrap;gap:6px}
+.cycle-cell-events button {border:1px solid var(--border);background:var(--muted);color:var(--foreground);border-radius:6px;padding:6px 8px;font-size:11px;cursor:pointer}
 .vis-item.trigger-fired {color:var(--foreground)}
 .vis-item.vis-box svg {width:var(--timeline-marker-size,20px);height:var(--timeline-marker-size,20px);display:block}
 .vis-item.metric-point {height:66px;border:0;background:transparent;color:var(--primary);z-index:3}
