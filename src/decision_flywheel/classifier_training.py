@@ -15,6 +15,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     counts = {label: sum(r.label == label for r in development) for label in wheel.initial.task.labels}
     if min(counts.values()) < min_development_per_class:
         result = {"stage": "classifier", "promoted": False, "development_counts": counts,
+                  "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
                   "reason": "waiting for development class coverage", "minimum_development_per_class": min_development_per_class}
         wheel._emit({"kind": "classifier-training-completed", **result})
         return result
@@ -31,6 +32,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     if additions:
         configs.append(("retained_questions", tasks + additions))
     evidence = {"version": wheel.active.fingerprint, "training": wheel._evidence(training),
+                "optimizer_context": wheel.optimizer_context,
                 "development": wheel._evidence(development), "protected": sorted(i.id for i in protected),
                 "propensities": propensities, "bank": [e["id"] for e in wheel.feature_bank()], "floor": min_development_per_class,
                 "apply_promotion": apply_promotion, "policy": "balanced-brier-no-recall-regression-v1"}
@@ -66,6 +68,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
         if best and apply_promotion:
             wheel.promote_trial(best["trial_fingerprint"], training, development)
         result = {"stage": "classifier", "promoted": bool(best and apply_promotion), "trials": trials,
+                  "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
                   "selected": best, "development_counts": counts,
                   "reason": "lower balanced Brier with no per-class recall regression" if best else "no candidate passed promotion safeguards"}
         with wheel.db:

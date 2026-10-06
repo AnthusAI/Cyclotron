@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
+from contextvars import ContextVar
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -103,7 +104,12 @@ class DecisionFlywheel:
                  optimizer: OptimizerAgent, *, observer: Callable[[dict], None] | None = None,
                  max_requests: int = 100, max_request_bytes: int = 32000,
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
-                 training_class_weighting: str = "natural", min_evaluation_per_class: int = 1):
+                 training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
+                 cache_options=None):
+        from .decision_cache import CacheOptions
+        self.cache_options = cache_options if cache_options is not None else CacheOptions()
+        if not isinstance(self.cache_options, CacheOptions):
+            raise ValueError("cache_options must be CacheOptions")
         if evaluation_weighting not in ("natural", "equal_class") or training_class_weighting not in ("natural", "equal_class"):
             raise ValueError("unknown evaluation or training class weighting")
         if type(min_evaluation_per_class) is not int or min_evaluation_per_class < 1:
@@ -122,9 +128,12 @@ class DecisionFlywheel:
             CREATE TABLE IF NOT EXISTS runtime_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS runtime_events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
+            CREATE TABLE IF NOT EXISTS runtime_answer_history (id INTEGER PRIMARY KEY, key TEXT NOT NULL, status TEXT NOT NULL, payload TEXT);
             CREATE TABLE IF NOT EXISTS runtime_rounds (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
         """)
         self.initial, self.model, self.optimizer = initial, model, optimizer
+        self._step_context = ContextVar("flywheel_step", default={})
+        self._step_running = False
         self.observer = observer or (lambda event: None)
         self.redact = tuple(value for value in redact if value)
         self.max_requests, self.max_request_bytes, self.requests = max_requests, max_request_bytes, 0
@@ -149,20 +158,76 @@ class DecisionFlywheel:
         self.optimizer.observer = self.optimizer_observer
         self.db.close()
 
+    @property
+    def optimizer_context(self):
+        saved = self.db.execute("SELECT value FROM runtime_state WHERE key='optimizer_context'").fetchone()
+        return json.loads(saved[0]) if saved else {"human_explanations": [], "evaluation_context_exposed": False}
+
+    def set_optimizer_context(self, human_explanations, *, evaluation_context_exposed=False):
+        """Persist explicitly supplied human guidance, separate from fit labels.
+
+        Mark exposure when guidance comes from protected evaluation feedback.
+        Clearing guidance cannot undo what a previous optimizer already saw.
+        """
+        if isinstance(human_explanations, (str, bytes)) or any(not isinstance(v, str) or not v.strip() for v in human_explanations):
+            raise ValueError("human explanations must be non-empty strings")
+        if type(evaluation_context_exposed) is not bool:
+            raise ValueError("evaluation exposure must be boolean")
+        previous = self.optimizer_context
+        human_explanations = list(human_explanations)
+        for secret in self.redact:
+            human_explanations = [v.replace(secret, "[REDACTED]") for v in human_explanations]
+        context = {"human_explanations": list(dict.fromkeys(human_explanations)),
+                   "evaluation_context_exposed": previous["evaluation_context_exposed"] or evaluation_context_exposed}
+        if context != previous:
+            with self.db:
+                self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('optimizer_context', ?)", (_json(context),))
+            self._emit({"kind": "optimizer-context-updated", **context})
+
     def _emit(self, event):
-        event = {"created_at": datetime.now(timezone.utc).isoformat(), **event}
+        event = {"created_at": datetime.now(timezone.utc).isoformat(), **event, **self._step_context.get()}
         text = _json(event)
         for value in self.redact:
             text = text.replace(json.dumps(value, ensure_ascii=False)[1:-1], "[REDACTED]")
         event = json.loads(text)
         with self.db:
-            self.db.execute("INSERT INTO runtime_events(payload) VALUES (?)", (_json(event),))
+            record = self.db.execute("INSERT INTO runtime_events(payload) VALUES (?)", (_json(event),))
+        event["event_id"] = record.lastrowid
         self.observer(event)
         return event
 
     def history(self, limit: int = 100) -> tuple[dict, ...]:
-        rows = self.db.execute("SELECT payload FROM runtime_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return tuple(json.loads(row[0]) for row in reversed(rows))
+        rows = self.db.execute("SELECT id,payload FROM runtime_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return tuple({**json.loads(payload), "event_id": event_id} for event_id, payload in reversed(rows))
+
+    def trace_events(self, *, after_event_id=0, limit=100):
+        """Ordered local events with a durable database-scoped reconnect cursor."""
+        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or not 1 <= limit <= 1000:
+            raise ValueError("trace cursor must be nonnegative and page size between 1 and 1000")
+        rows = self.db.execute("SELECT id,payload FROM runtime_events WHERE id>? ORDER BY id LIMIT ?",
+                               (after_event_id, limit)).fetchall()
+        return {"events": [{**json.loads(payload), "event_id": event_id} for event_id, payload in rows],
+                "cursor": rows[-1][0] if rows else after_event_id}
+
+    async def step(self, stage, training, development, **kwargs):
+        from .observability import step
+        return await step(self, stage, training, development, **kwargs)
+
+    def preview_optimizer_request(self, stage, training, development, *, protected):
+        """Preview the exact next-stage messages without collecting or emitting."""
+        from .staged_optimization import stage_briefing
+        briefing = stage_briefing(self, stage, training, development, protected)
+        return {"messages": self.optimizer.request_messages(briefing),
+                "briefing_fingerprint": briefing.fingerprint, "preview_only": True}
+
+    def record_feedback_event(self, feedback: FeedbackItem, *, action="submitted", assignment=None):
+        """Trace application-owned feedback; this never makes it a fit row."""
+        if not isinstance(feedback, FeedbackItem) or action not in {"submitted", "retracted"}:
+            raise ValueError("feedback event needs a FeedbackItem and a valid action")
+        if assignment is not None and (not isinstance(assignment, str) or not assignment.strip()):
+            raise ValueError("assignment must be a non-empty string")
+        return self._emit({"kind": "human-feedback", "action": action, "assignment": assignment,
+                           "feedback": asdict(feedback)})
 
     def hypotheses(self) -> tuple[dict, ...]:
         """Retain proposed structures and outcomes, including older saved rounds."""
@@ -238,25 +303,38 @@ class DecisionFlywheel:
             self._emit({"kind": "classifier-invalidated", "previous_version": before,
                         "reason": "training or development feedback was removed or corrected"})
 
-    async def _answers(self, config, target, training, now):
+    async def _answers(self, config, target, training, now, cache_options=None):
+        from .decision_cache import CacheOptions, CacheMiss
+        options = cache_options if cache_options is not None else self.cache_options
+        if not isinstance(options, CacheOptions):
+            raise ValueError("cache_options must be CacheOptions")
         request = config.request(target, training, now=now)
         serialized = _json(request)
         if len(serialized.encode()) > self.max_request_bytes:
             raise ValueError("complete decision request exceeds the configured byte safety ceiling")
         key = _hash({"model": self.model.model_identity, "request": request})
         row = self.db.execute("SELECT status,payload FROM runtime_answers WHERE key=?", (key,)).fetchone()
-        if row:
-            if row[0] != "complete":
+        self._emit({"kind": "decision-cache", "request_fingerprint": key,
+                    "policy": options.policy, "status": row[0] if row else "missing",
+                    "retry_failed": options.retry_failed})
+        if options.policy == "cache_only" and (not row or row[0] != "complete"):
+            raise CacheMiss("no complete answer exists for the exact decision request")
+        if row and row[0] != "complete" and not options.retry_failed:
                 raise RuntimeError("an interrupted or failed request needs explicit retry authorization")
+        if row and row[0] == "complete" and options.policy != "refresh":
             raw = json.loads(row[1])
-            self._emit({"kind": "features-cached", "target_id": target.id, "request_fingerprint": key})
+            self._emit({"kind": "features-cached", "target_id": target.id, "request_fingerprint": key,
+                        "request": request, "answers": raw["answers"], "cached": True})
             return ClassifiedAnswers({name: DecisionResult(**result) for name, result in raw["answers"].items()},
                                      raw["model"], raw["usage"], raw["latency_ms"])
         if self.requests >= self.max_requests:
-            raise RuntimeError("decision-model request ceiling reached")
+            from .observability import RequestBudgetExhausted
+            raise RequestBudgetExhausted("decision-model request ceiling reached")
         self.requests += 1
         with self.db:
-            self.db.execute("INSERT INTO runtime_answers VALUES (?, 'pending', NULL)", (key,))
+            if row:
+                self.db.execute("INSERT INTO runtime_answer_history(key,status,payload) VALUES (?,?,?)", (key, *row))
+            self.db.execute("INSERT OR REPLACE INTO runtime_answers VALUES (?, 'pending', NULL)", (key,))
         self._emit({"kind": "features-requested", "target_id": target.id, "request_fingerprint": key,
                     "requests": self.requests, "ceiling": self.max_requests})
         try:
@@ -264,12 +342,15 @@ class DecisionFlywheel:
             # Validate full coverage before committing a reusable cache entry.
             self._features(config, batch)
         except Exception as error:
+            with self.db:
+                self.db.execute("UPDATE runtime_answers SET status='failed' WHERE key=?", (key,))
             self._emit({"kind": "features-failed", "target_id": target.id, "error_type": type(error).__name__})
             raise RuntimeError("decision feature request failed; see recorded error type") from None
         with self.db:
             self.db.execute("UPDATE runtime_answers SET status='complete',payload=? WHERE key=?",
                             (_json(asdict(batch)), key))
         self._emit({"kind": "features-completed", "target_id": target.id, "model": batch.model,
+                    "request_fingerprint": key, "answers": asdict(batch)["answers"], "cached": False,
                     "usage": batch.usage, "latency_ms": batch.latency_ms})
         return batch
 
@@ -287,9 +368,10 @@ class DecisionFlywheel:
                 values[f"{name}/{label}"] = answer.probabilities[label]
         return values
 
-    async def predict(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None):
+    async def predict(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None,
+                      cache_options=None):
         self.reconcile_feedback(training)
-        batch = await self._answers(self.active.config, target, training, now or datetime.now(timezone.utc))
+        batch = await self._answers(self.active.config, target, training, now or datetime.now(timezone.utc), cache_options)
         if self.active.head:
             values = self._features(self.active.config, batch)
             probabilities = self.active.head.probabilities(values)
@@ -342,6 +424,7 @@ class DecisionFlywheel:
                            "training_class_weighting": self.training_class_weighting,
                            "min_evaluation_per_class": self.min_evaluation_per_class,
                            "require_recall_safeguards": require_recall_safeguards,
+                           "optimizer_context": self.optimizer_context,
                            **({"evaluation_time": evaluation_time.isoformat()}
                               if evaluation_time is not None and "current_datetime" in self.active.config.dynamic_elements else {}),
                            **({"apply_promotion": False, "baseline_version": self.active.fingerprint}
@@ -384,7 +467,8 @@ class DecisionFlywheel:
                          "request_budget_bytes": self.max_request_bytes,
                          "training_predictions": [event for event in self.history(1000)
                             if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}]},
-                protected=tuple(row.item for row in development) + tuple(protected))
+                protected=tuple(row.item for row in development) + tuple(protected),
+                human_explanations=self.optimizer_context["human_explanations"])
             if candidate_proposal is None:
                 proposal = self.optimizer.propose(briefing)
             else:
@@ -413,7 +497,10 @@ class DecisionFlywheel:
             if diagnostics:
                 self._emit({"kind": "feature-diagnostics", "diagnostics": diagnostics,
                             "training_count": len(rows), "scope": "training only"})
-            self._emit({"kind": "fit-started", "training_count": len(rows), "features": list(values)})
+            self._emit({"kind": "fit-started", "training_count": len(rows), "features": list(values),
+                        "rows": [{"item_id": row.item_id, "label": row.feedback.final_answer_value,
+                                  "propensity": row.feedback.selection_propensity,
+                                  "features": {f.name: f.value for f in row.features}} for row in rows]})
             head = fit_learned_head(config.task, rows, declared_features=tuple(values),
                 development_ids=tuple(row.item.id for row in development), scoreboard_ids=tuple(item.id for item in protected),
                 scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
@@ -421,6 +508,7 @@ class DecisionFlywheel:
                 training_class_weighting=self.training_class_weighting)
             candidate = FittedClassifier(config, head, self._evidence(training), self._evidence(development))
             self._emit({"kind": "fit-completed", "features": list(head.feature_names),
+                        "head": asdict(head),
                         "training_count": len(rows), "calibration": "out_of_fold"})
             incumbent_metrics = await self._score(self.active, development, training, now)
             candidate_metrics = await self._score(candidate, development, training, now)
@@ -437,6 +525,7 @@ class DecisionFlywheel:
                       "promotion_metric": metric, "evaluation_weighting": self.evaluation_weighting,
                       "training_class_weighting": self.training_class_weighting,
                       "feature_diagnostics": diagnostics,
+                      "evaluation_independent_of_optimizer_context": not self.optimizer_context["evaluation_context_exposed"],
                       "reason": (f"lower development {metric}" if improved else
                                  "candidate failed per-class recall safeguards" if not recall_safe else
                                  f"development {metric} did not improve")}
@@ -455,6 +544,10 @@ class DecisionFlywheel:
             return result
 
         except Exception as error:
+            from .observability import RequestBudgetExhausted
+            if isinstance(error, RequestBudgetExhausted):
+                self._emit({"kind": "round-paused", "reason": "request budget exhausted"})
+                raise
             result = {"promoted": False, "reason": "round failed", "error_type": type(error).__name__}
             self._emit({"kind": "round-failed", **result})
             with self.db:
@@ -487,5 +580,7 @@ class DecisionFlywheel:
                 probabilities, label = answer.probabilities, answer.label
             predictions.append(label)
             distributions.append(probabilities)
-        return classification_metrics(classifier.config.task.labels, [row.label for row in development],
-                                      predictions, distributions)
+        metrics = classification_metrics(classifier.config.task.labels, [row.label for row in development],
+                                         predictions, distributions)
+        metrics["evaluation_independent_of_optimizer_context"] = not self.optimizer_context["evaluation_context_exposed"]
+        return metrics

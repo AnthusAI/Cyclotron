@@ -69,7 +69,9 @@ def main(argv=None):
         offline = Offline()
         offline.model_identity = contract["model"]
         dry = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), offline, OptimizerAgent(forbidden))
-        training, development, protected = ReviewerFlywheel(store, dry).partitions()
+        reviewer = ReviewerFlywheel(store, dry)
+        explanation_context = reviewer.sync_optimizer_context()
+        training, development, protected = reviewer.partitions()
         original_version = dry.active.config.fingerprint
         dry.reconcile_feedback(training, development=development)
         if dry.active.config.fingerprint != original_version:
@@ -79,6 +81,8 @@ def main(argv=None):
         dry._validate_partitions(training, development, protected, props)
         window = select_window(training, reviewer_task().labels, args.limit)
         protocol = {"stage": "questions", "limit": args.limit, "actual_window": len(window),
+                    "explanation_context_count": len(explanation_context["human_explanations"]),
+                    "evaluation_independent_of_optimizer_context": not explanation_context["evaluation_context_exposed"],
                     "by_class": {label: sum(row.label == label for row in window) for label in reviewer_task().labels},
                     "context_version": original_version, "rubric_present": bool(dry.active.config.rubric),
                     "example_count": len(dry.active.config.example_ids), "existing_questions": [t.name for t in dry.active.config.tasks],

@@ -117,10 +117,13 @@ def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_pat
     class Client:
         improves = 0
         retries = []
-        def improve(self, *, retry_interrupted=False):
+        feedback_events = []
+        def improve(self, *, retry_interrupted=False, trigger="manual"):
             self.improves += 1
             if retry_interrupted:
                 self.retries.append(True)
+        def record_review_event(self, event):
+            self.feedback_events.append(event)
         def reconcile(self):
             pass
         def predict(self, article):

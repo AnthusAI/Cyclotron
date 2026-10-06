@@ -197,6 +197,10 @@ def _live_flywheel_status(client) -> Panel:
              f"Jev requests this session: {status['requests']}/{status['ceiling']}"]
     lines.append(f"Evaluation weighting: {status.get('evaluation_weighting', 'not recorded')} · "
                  f"Training weighting: {status.get('training_class_weighting', 'not recorded')}")
+    context = status.get("optimizer_context", {})
+    lines.append(f"Human explanation context: {len(context.get('human_explanations', []))} statement(s) · inspect with O/F")
+    if context.get("evaluation_context_exposed"):
+        lines.append("Evaluation warning: protected-role explanations are optimizer guidance; old holdouts are not independent.")
     if latest.get("development_counts") is not None:
         lines.append(f"Development counts: {latest['development_counts']} · "
                      f"minimum per class: {latest.get('minimum_development_per_class')}")
@@ -271,6 +275,19 @@ def _optimizer_transcript(events) -> Text:
     return Text("\n".join(lines))
 
 
+def _optimizer_request_context(event) -> Text:
+    payload = json.loads(event["messages"][-1]["content"])
+    explanations = payload.get("human_explanations", [])
+    lines = ["Exact human_explanations field sent with this request:"]
+    lines.extend(f"{i}. {text}" for i, text in enumerate(explanations, 1))
+    if not explanations:
+        lines.append("(empty)")
+    lines.append(f"Eligible labeled items: {len(payload.get('feedback', []))}")
+    lines.append(f"Request fingerprint: {event['briefing_fingerprint']}")
+    lines.append("O shows the complete actual system/user messages, reply and tool calls.")
+    return Text("\n".join(lines))
+
+
 def _decision_transcript(events) -> Text:
     request = next((event for event in reversed(events) if event["kind"] == "decision-request"), None)
     if not request:
@@ -332,7 +349,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
     console.print("Your choices and each displayed prediction are logged locally.\n")
     if flywheel:
         flywheel.reconcile()
-        flywheel.improve()
+        flywheel.improve(trigger="reviewer-startup")
     while True:
         article = store.next_unreviewed()
         console.clear()
@@ -382,11 +399,11 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 Prompt.ask("Press Enter to return to this article", default="")
                 continue
             if flywheel and action == "g":
-                flywheel.improve()
+                flywheel.improve(trigger="reviewer-G")
                 console.print(_live_flywheel_status(flywheel))
                 continue
             if flywheel and action in ("n", "x", "m"):
-                flywheel.improve(stage={"n": "questions", "x": "examples", "m": "classifier"}[action])
+                flywheel.improve(stage={"n": "questions", "x": "examples", "m": "classifier"}[action], trigger="reviewer-" + action.upper())
                 console.print(_live_flywheel_status(flywheel))
                 continue
             if flywheel and action == "r":
@@ -417,6 +434,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
             else:
                 console.print(f"Undid the last action; {restored.id} is back in the queue.")
                 if flywheel:
+                    flywheel.record_review_event(store.events_for(restored.id)[-1])
                     flywheel.reconcile()
                 Prompt.ask("Press Enter to continue", default="")
             continue
@@ -425,11 +443,12 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
             continue
         label = "include" if action == "i" else "exclude"
         comment = _optional_comment(console)
-        store.record_vote(article.id, label, comment=comment, presentation_id=shown.id if shown else None)
+        vote = store.record_vote(article.id, label, comment=comment, presentation_id=shown.id if shown else None)
         if flywheel:
+            flywheel.record_review_event(vote)
             reviewed_since_round += 1
             if reviewed_since_round >= optimize_every:
-                flywheel.improve()
+                flywheel.improve(trigger="feedback-cadence")
                 reviewed_since_round = 0
 
 
@@ -499,6 +518,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 kind = event["kind"]
                 if kind == "decision-request":
                     console.print(Text(f"Jev request: {event['target_id']} · {len(event['questions'])} question(s)"))
+                elif kind == "optimizer-request":
+                    console.print(Panel(_optimizer_request_context(event), title="Actual optimizer request context"))
+                elif kind == "step-started":
+                    console.print(Text(f"Step: {event['step_stage']} · trigger: {event['trigger']} · {event['step_id']}"))
+                elif kind in {"step-paused", "step-failed", "step-completed"}:
+                    console.print(Text(f"Step {event['step_stage']}: {kind} · {event.get('reason', event.get('status', event.get('error_type', '')))}"))
+                elif kind == "fit-started":
+                    console.print(Text(f"ML fit started: {event['training_count']} labels · {len(event['features'])} features"))
+                elif kind == "fit-completed":
+                    console.print(Text(f"ML fit completed: {event['training_count']} labels · calibration: {event['calibration']}"))
                 elif kind == "question-backfill-progress":
                     if event["completed"] % 10 == 0 or event["completed"] == event["total"]:
                         console.print(Text(f"Question backfill: {event['completed']}/{event['total']}"))
@@ -512,6 +541,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     except (ValueError, AttributeError):
                         rationale = "Malformed reply; inspect with O."
                     console.print(Panel(Text(str(rationale)), title="Optimizer's stated rationale"))
+                    console.print(Text("Optimizer tool calls: " + json.dumps(event.get("tool_calls", []), ensure_ascii=False)))
                 elif kind in {"optimizer-request", "fit-started", "fit-completed", "candidate-evaluated",
                               "promoted", "candidate-rejected", "round-failed", "waiting-for-labels",
                               "classifier-invalidated", "round-interrupted", "round-retry-authorized", "hypothesis-retry",

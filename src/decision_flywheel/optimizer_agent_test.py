@@ -28,6 +28,15 @@ def test_the_optimizer_receives_actual_labels_comments_and_the_current_configura
     assert payload["current"]["rubric"] == ""
 
 
+def test_explicit_human_explanations_are_separate_from_item_examples_and_change_the_fingerprint():
+    original = briefing()
+    informed = FeedbackBriefing.build(TASK, [example()], current={}, protected=(),
+        human_explanations=("knowledge base management", "information systems, information retrieval"))
+    assert informed.payload["human_explanations"] == ["knowledge base management", "information systems, information retrieval"]
+    assert informed.fingerprint != original.fingerprint
+    assert len(informed.payload["feedback"]) == 1
+
+
 def test_task_discovery_is_told_that_questions_are_individual_measurements_not_a_bundle():
     sent = []
     def complete(messages):

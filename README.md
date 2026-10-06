@@ -23,6 +23,29 @@ The live reviewer now calls the reusable `DecisionFlywheel` core.
 The core analyzes eligible votes and comments, validates proposals, collects Jev features,
 fits and calibrates the ML head, compares development results, and promotes or rejects a version.
 Private SQLite records preserve the active version, request cache, and actual transcripts.
+
+Decision answers use an exact-request cache by default. Its fingerprint includes
+the model identity and complete state/questions: target, rubric, ordered examples,
+and extra classifications. Changed requests require new answers; retraining a head
+alone can reuse unchanged decision answers.
+
+```python
+from decision_flywheel.decision_cache import CacheOptions
+
+# Default: reuse complete answers, collect missing ones.
+answer = await wheel.predict(item, training)
+# No new decision-model calls; raises CacheMiss if unavailable.
+answer = await wheel.predict(item, training, cache_options=CacheOptions("cache_only"))
+# Explicitly collect again and preserve the previous answer in SQLite history.
+answer = await wheel.predict(item, training, cache_options=CacheOptions("refresh"))
+```
+
+Constructor `cache_options` supplies the default for all decision collection.
+Failed or interrupted attempts require separate `retry_failed=True` permission;
+refresh alone does not authorize retrying an ambiguous paid call. Request ceilings
+still apply. Cache events are available in the normal trace. These options control
+decision collection, not optimizer calls or replay of completed optimization rounds.
+There is no automatic expiration or approximate-text reuse.
 Offline tests cover this connected path. A successful paid live demonstration is a separate verification step;
 passing tests does not establish live-model quality or improvement.
 
@@ -352,6 +375,94 @@ The script makes private copies, compares fitted candidates, and disables live
 deployment. Its explicit exploratory floor of two development items per class
 does not change the normal reviewer's coverage gate. It refuses automatic paid
 reruns after collection starts.
+
+### Human explanation context
+
+The reviewer supplies every active explanation comment as a separate
+`human_explanations` field in the optimizer's actual user message. This includes
+explanations attached to development and audit items, as requested by the user.
+Those items' texts, identifiers and labels do not become optimizer examples or
+ML training rows. The optimizer is instructed to use the explanations as stated
+preference evidence, cite them in its rationale, and distinguish them from
+guesses based on positive article topics. The request context appears when the
+request is sent; `O` shows the full system/user messages, returned content and
+actual tool calls. `F` shows the persisted context.
+
+Reusing protected-role explanations still reveals preference information.
+Consequently the runtime records `evaluation_context_exposed` and marks subsequent
+metrics with `evaluation_independent_of_optimizer_context: false`. Removing an
+explanation does not erase that exposure history. Earlier audit items must not
+be presented as an independent final evaluation after this guidance is used.
+Fresh, untouched evaluation items are required for such a claim.
+
+Reusable applications explicitly supply this context with
+`wheel.set_optimizer_context(explanations, evaluation_context_exposed=...)`.
+The generic library does not search another application's feedback store or
+silently extract audit comments. Explanation changes invalidate optimizer-stage
+cache keys, so the next discovery call receives the changed context.
+
+### Drive and observe one stage
+
+The library supplies the backend contract for a future interactive visualization;
+it does not yet supply that web UI. Each `step` advances one selected stage.
+A question step stops after discovery and measurement. A separate classifier
+step performs fitting and evaluation. The Rich reviewer automatically drives
+that second step after question measurement, but another application may wait
+for its user's next click.
+
+```python
+# No model call: inspect the exact next-stage messages.
+preview = wheel.preview_optimizer_request(
+    "questions", training, development, protected=protected,
+)
+
+# One new decision request at most; stop before fitting.
+outcome = await wheel.step(
+    "questions", training, development,
+    protected=protected, propensities=propensities,
+    trigger="web-next-button", request_budget=1,
+)
+# A paused stage resumes only on an explicit call with retry_interrupted=True.
+# Completed requests are reused; failed/pending paid requests are not repaid.
+
+page = wheel.trace_events(after_event_id=cursor, limit=100)
+cursor = page["cursor"]
+```
+
+`request_budget=0` permits optimizer discovery and cached work but no new decision
+request. This can stop at a returned proposal before collecting new Jev features.
+It is not a zero-cost guarantee: an optimizer discovery call may still be paid
+and is bounded separately by its transport's explicit call ceiling.
+
+Construct the wheel with `observer=on_event` for live push notifications. Keep
+the callback short and nonblocking; a web application can enqueue the events
+for its own authenticated stream. Reconnect with `trace_events` to replay durable
+events in ascending `event_id` order. Cursors belong to this runtime database.
+Events within a step carry `step_id` and `step_stage`, and request/reply pairs
+carry their briefing or complete-request fingerprint. Timestamps, explicit
+triggers, pauses, errors and completion states are recorded. A follow-up step may
+reference `parent_step_id`. `record_feedback_event` records submitted or retracted
+`FeedbackItem` inputs for visualization; it does not make them training rows or
+trigger optimization. Applications still own their feedback store and supply
+eligible training/development partitions explicitly. The reviewer records votes,
+undo events, startup/manual/cadence triggers and numerical-training handoffs.
+One driver must
+own the runtime; overlapping steps on the same instance are rejected. Separate
+processes must not independently drive the same runtime.
+
+| Trace | Actual data available |
+|---|---|
+| Optimizer request/response | System/user messages, explanation context, fingerprints, requested/returned model, content, tool calls, usage and elapsed time |
+| Decision features | Provider-bound state/questions and responses, cache fingerprints, cached inputs/answers, actual new-request usage and latency |
+| Numerical fit | Trusted input rows, feature values, labels, propensities, fitted coefficients, normalizers, OOF calibration and provenance |
+| Evaluation/promotion | Candidate/incumbent metrics, class counts, safeguards, selection result and active version |
+
+Tool-call records are outputs returned by the optimizer transport, not claims
+that a tool was executed. No private chain of thought is fabricated or exposed.
+Traces include private article text and feedback. Keep them local or access
+controlled; never publish raw traces, credentials, or copied dataset text.
+Supply known secret values through the constructor's `redact` argument to mask
+them in persisted and pushed events; credentials must never be task context.
 Rubric/example proposals are retained without deployment when development class
 coverage is insufficient. The default floor of 20 per class is configurable and
 is not itself a guarantee of statistical precision.

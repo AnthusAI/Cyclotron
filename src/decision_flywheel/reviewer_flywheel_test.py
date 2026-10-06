@@ -28,6 +28,37 @@ def test_reviewer_feedback_is_partitioned_without_exposing_audit_votes(tmp_path)
     store.close()
 
 
+def test_reviewer_passes_all_active_explanations_without_protected_item_text_or_labels(tmp_path):
+    import json
+    from .optimizer_agent import OptimizerAgent, OptimizerReply
+    store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
+    articles = tuple(Article(str(i), f"Paper {i}", f"Unique text {i}", "2026-10-05", ("cs.AI",)) for i in range(40))
+    store.import_articles(articles)
+    for article in articles:
+        store.record_vote(article.id, "include" if int(article.id) % 2 else "exclude", comment=f"Preference {article.id}")
+    prompts = []
+    def complete(messages):
+        prompts.append(json.loads(messages[-1]["content"]))
+        return OptimizerReply('{"rationale":"Use explanations","rubric":"Updated preferences"}', "fake")
+    core = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), OptimizerAgent(complete))
+    reviewer = ReviewerFlywheel(store, core)
+    result = reviewer.improve()
+    assert len(prompts[0]["human_explanations"]) == 40
+    _, development, protected = reviewer.partitions()
+    excluded_ids = {r.item.id for r in development} | {i.id for i in protected}
+    assert not excluded_ids & {r["id"] for r in prompts[0]["feedback"]}
+    assert all(not any(row["values"]["text"].endswith("Abstract: " + article.abstract)
+                       for row in prompts[0]["feedback"])
+               for article in articles if article.id in excluded_ids)
+    assert not result["evaluation_independent_of_optimizer_context"]
+    store.undo_last_vote()
+    reviewer.sync_optimizer_context()
+    assert "Preference 39" not in core.optimizer_context["human_explanations"]
+    assert core.optimizer_context["evaluation_context_exposed"]
+    core.close()
+    store.close()
+
+
 def test_reviewer_predictions_identify_the_core_version_without_a_local_replacement_head(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
     article = Article("one", "Paper", "Text", "2026-10-05", ("cs.AI",))

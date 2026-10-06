@@ -7,6 +7,7 @@ from .flywheel import DecisionFlywheel, development_assignment
 from .reviewer_core import reviewer_item, reviewer_labeled_items
 from .reviewer_predictor import ReviewerPrediction
 from .reviewer_store import ReviewStore
+from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
 
 
 class ReviewerFlywheel:
@@ -38,28 +39,74 @@ class ReviewerFlywheel:
             "jev:flywheel-head" if self.core.active.head else "jev:flywheel-warmup",
             self.core.active.fingerprint, len(training))
 
-    def improve(self, *, retry_interrupted: bool = False, stage=None):
+    def improve(self, *, retry_interrupted: bool = False, stage=None, trigger="manual"):
+        self.sync_optimizer_context()
         training, development, protected = self.partitions()
         selected_stage = stage or self.stage
         if retry_interrupted and stage is None:
             selected_stage = next((event["stage"] for event in reversed(self.history())
                                    if event["kind"] in {"optimization-stage-started", "optimization-stage-failed"}), self.stage)
+            selected_stage = next((event["step_stage"] for event in reversed(self.history())
+                                  if event["kind"] in {"step-paused", "step-failed", "step-started"}), selected_stage)
         # This demo reviews every displayed item. A future sampled reviewer must
         # pass its actual recorded review propensities instead of this full-review policy.
         try:
-            return asyncio.run(self.core.optimize_stage(selected_stage, training, development, protected=protected,
+            async def advance():
+                traced = await self.core.step(selected_stage, training, development, protected=protected,
                                             propensities={row.item.id: 1.0 for row in training},
                                             retry_interrupted=retry_interrupted, limit=self.retrospective_limit,
-                                            min_development_per_class=self.min_stage_evaluation_per_class))
+                                            min_development_per_class=self.min_stage_evaluation_per_class,
+                                            trigger="reviewer-retry" if retry_interrupted else trigger)
+                result = traced.get("result", {"stage": selected_stage, "promoted": False,
+                                               "reason": traced.get("reason"), "status": traced["status"]})
+                if selected_stage == "questions" and traced["status"] == "completed":
+                    fitted = await self.core.step("classifier", training, development, protected=protected,
+                        propensities={row.item.id: 1. for row in training}, retry_interrupted=retry_interrupted,
+                        min_development_per_class=self.min_stage_evaluation_per_class, trigger="reviewer-question-handoff",
+                        parent_step_id=traced["step_id"])
+                    result["classifier_training"] = fitted.get("result", {"status": fitted["status"], "reason": fitted.get("reason")})
+                return result
+            return asyncio.run(advance())
         except Exception as error:
-            result = {"stage": selected_stage, "promoted": False, "error_type": type(error).__name__,
+            result = {"stage": selected_stage, "promoted": False, "error_type": getattr(error, "error_type", type(error).__name__),
                       "reason": "stage failed; saved state retained, explicit retry required"}
             self.core._emit({"kind": "optimization-stage-failed", **result})
             return result
 
+    def sync_optimizer_context(self):
+        """Use the user's explanations as guidance, never as extra fit labels.
+
+        This reviewer intentionally includes protected-role comments. Their
+        reuse is visible and invalidates independent evaluation claims.
+        """
+        training, _, _ = self.partitions()
+        training_ids = {row.item.id for row in training}
+        comments = [(item_id, event.comment) for item_id, event in self.store._active_actions().items()
+                    if event.action == "vote" and event.comment and event.comment.strip()]
+        self.core.set_optimizer_context(tuple(comment for _, comment in comments),
+            evaluation_context_exposed=any(item_id not in training_ids for item_id, _ in comments))
+        return self.core.optimizer_context
+
     def reconcile(self):
         training, development, _ = self.partitions()
         self.core.reconcile_feedback(training, development=development)
+
+    def record_review_event(self, event):
+        action = "submitted"
+        if event.action == "undo":
+            action = "retracted"
+            event = next(e for e in self.store.events_for(event.article_id) if e.id == event.undoes_event_id)
+        if event.action != "vote":
+            return None
+        presentation = next((p for p in self.store.presentations_for(event.article_id) if p.id == event.presentation_id), None)
+        feedback = FeedbackItem(event.id, event.article_id, self.core.initial.task.name,
+            initial_answer_value=presentation.predicted_label if presentation else None,
+            final_answer_value=event.label, edit_comment_value=event.comment,
+            label_source=LABEL_SOURCE_VETTED, selection_propensity=1., review_provenance="human-reviewed")
+        assignment = self.store.assignment_for(event.article_id)
+        if assignment == "train" and development_assignment(self.store.study_seed, event.article_id):
+            assignment = "development"
+        return self.core.record_feedback_event(feedback, action=action, assignment=assignment)
 
     def hypotheses(self):
         return self.core.hypotheses()
@@ -79,10 +126,12 @@ class ReviewerFlywheel:
         outcome = next((event for event in reversed(events) if event["kind"] in
                        {"promoted", "candidate-rejected", "round-failed", "round-interrupted", "waiting-for-labels",
                         "classifier-invalidated", "control-cycle-completed", "optimization-stage-completed",
-                        "question-ranking-completed", "optimization-stage-failed", "classifier-training-completed"}), None)
+                        "question-ranking-completed", "optimization-stage-failed", "classifier-training-completed",
+                        "step-paused", "step-failed"}), None)
         def definition(task):
             return {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
         return {"version": active.fingerprint, "rubric": active.config.rubric,
+                "optimizer_context": self.core.optimizer_context,
                 "optimization_stage": self.stage, "retrospective_limit": self.retrospective_limit,
                 "stage_evaluation_floor": self.min_stage_evaluation_per_class,
                 "tasks": [task.name for task in active.config.tasks],

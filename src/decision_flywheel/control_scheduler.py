@@ -76,6 +76,7 @@ class ControlScheduler:
         wheel._validate_partitions(training, development, protected, propensities)
         wheel.reconcile_feedback(training, development=development)
         evidence = {"training": wheel._evidence(training), "development": wheel._evidence(development),
+                    "optimizer_context": wheel.optimizer_context,
                     "propensities": propensities, "protected": sorted(row.id for row in protected),
                     "evaluation_weighting": wheel.evaluation_weighting,
                     "training_class_weighting": wheel.training_class_weighting,
@@ -121,7 +122,8 @@ class ControlScheduler:
                     current={**wheel.active.config.briefing_state(), "control_under_test": control,
                              "request_budget_bytes": wheel.max_request_bytes,
                              "prior_control_ideas": [idea for idea in self.ideas() if idea["control"] == control]},
-                    protected=tuple(row.item for row in development)+tuple(protected))
+                    protected=tuple(row.item for row in development)+tuple(protected),
+                    human_explanations=wheel.optimizer_context["human_explanations"])
                 proposal = {control: wheel.active.config.briefing_state()[control]}
                 if control not in discovered:
                     proposal = wheel.optimizer.propose(briefing)
