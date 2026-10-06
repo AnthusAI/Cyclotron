@@ -9,6 +9,45 @@ import pytest
 from .trace_artifact import render_trace
 
 
+def test_operational_prediction_details_link_the_actual_request_and_disagreement_filters_keep_both_labels():
+    if not shutil.which('node'):
+        pytest.skip('Node is needed for viewer interaction spec')
+    events = [
+        {'kind': 'cycle-started', 'item': {'id': 'paper', 'values': {'text': 'Title: Paper'}}},
+        {'kind': 'decision-request', 'target_id': 'paper', 'state': {'examples': []}, 'questions': {}},
+        {'kind': 'decision-response', 'target_id': 'paper', 'answers': {'decision': {'choice': 'reject'}}},
+        {'kind': 'prediction', 'target_id': 'paper', 'label': 'reject', 'probabilities': {'reject': .8, 'accept': .2}},
+        {'kind': 'human-feedback', 'feedback': {'item_id': 'paper', 'final_answer_value': 'accept'}},
+        {'kind': 'cycle-completed'},
+    ]
+    events = [{**e, 'event_id': i+1, 'cycle_id': 'one', 'cycle_number': 1,
+               'created_at': f'2026-10-06T12:00:0{i}Z'} for i, e in enumerate(events)]
+    html = render_trace(events)
+    data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
+    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
+    harness = r'''
+const assert=require('node:assert/strict'),elements={},handlers={};
+for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
+global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[a,b];}getWindow(){return {start:0,end:1000}}moveTo(){}fit(){}}};
+CODE
+handlers.select({items:[3]});
+assert.equal(elements['paired-request'].hidden,false);
+elements['paired-request'].onclick();assert.equal(position,1);
+assert.ok(elements['event-content'].textContent.includes('examples'));
+assert.equal(timeline.options.zoomMin,1);
+assert.equal(elements['show-history'].hidden,true);
+handlers.doubleClick({item:3});
+assert.ok(timeline.window[1]-timeline.window[0]<1000);
+elements['show-run'].onclick();assert.deepEqual(timeline.window,[0,1000]);
+elements['disagreement-filter'].checked=true;applyFilters();
+assert.ok(timeline.items.some(i=>i.className==='marker-prediction'));
+assert.ok(timeline.items.some(i=>i.className==='marker-human'));
+'''.replace('DATA', json.dumps(data)).replace('CODE', code)
+    result = subprocess.run(['node'], input=harness, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded_history():
     if not shutil.which('node'):
         pytest.skip('Node is needed for viewer interaction spec')

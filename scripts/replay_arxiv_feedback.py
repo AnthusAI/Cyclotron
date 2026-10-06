@@ -13,6 +13,8 @@ from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.flywheel import DecisionFlywheel
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.replay import plan_replay, run_replay
+from decision_flywheel.cycle_replay import run_cycle_replay
+from decision_flywheel.trace_artifact import read_trace, render_trace
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
 
@@ -29,6 +31,7 @@ def main(argv=None):
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
+    parser.add_argument('--operational',action='store_true',help='predict before each vote, trace item cycles and separate triggered stages')
     args = parser.parse_args(argv)
     if min(args.batch_size, args.max_requests, args.max_optimizer_calls) < 1:
         parser.error("batch size and request ceilings must be positive")
@@ -53,21 +56,30 @@ def main(argv=None):
         ordered = tuple(items[key] for key in sorted(items, key=lambda key: (active[key].created_at, key)))
         plan = plan_replay(reviewer_task(), ordered, seed=args.seed, batch_size=args.batch_size)
     manifest = plan.manifest(reviewer_task())
+    manifest['execution'] = {
+        'mode': 'operational' if args.operational else 'batch',
+        'optimize_every': args.batch_size, 'retrain_every': args.batch_size,
+        'stages': ['rubric', 'questions', 'examples'],
+        'decisions_model': args.decisions_model, 'optimizer_model': args.optimizer_model,
+        'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
+    }
     path = args.output / "manifest.json"
     encoded = json.dumps(manifest, indent=2)
     if path.exists() and json.loads(path.read_text()) != json.loads(encoded):
         parser.error("frozen replay plan differs; choose a new output directory")
     path.write_text(encoded+"\n")
     counts = lambda rows: {label: sum(row.label == label for row in rows) for label in reviewer_task().labels}
-    print(json.dumps({"eligible_labels": len(plan.ordered), "training": counts(plan.training),
+    requests_bound = len(plan.ordered) * (1+6*(len(plan.ordered)//args.batch_size)) if args.operational else plan.request_upper_bound
+    optimizer_bound = len(plan.ordered)//args.batch_size if args.operational else len(plan.checkpoints)
+    print(json.dumps({"operational_cycles":args.operational,"eligible_labels": len(plan.ordered), "training": counts(plan.training),
                       "development": counts(plan.development), "protected_audit_pool": counts(plan.scoreboard),
                       "final_recent_balanced_evaluation": counts(plan.evaluation(len(plan.ordered), reviewer_task().labels)),
-                      "checkpoints": plan.checkpoints, "jev_uncached_upper_bound": plan.request_upper_bound,
-                      "optimizer_upper_bound": len(plan.checkpoints), "output": str(args.output)}), flush=True)
+                      "checkpoints": plan.checkpoints, "jev_uncached_upper_bound": requests_bound,
+                      "optimizer_upper_bound": optimizer_bound, "output": str(args.output)}), flush=True)
     if not args.confirm_live:
         print("Preflight only: no model clients constructed or called.")
         return 0
-    if plan.request_upper_bound > args.max_requests or len(plan.checkpoints) > args.max_optimizer_calls:
+    if requests_bound > args.max_requests or optimizer_bound > args.max_optimizer_calls:
         parser.error("replay does not fit the approved request ceilings")
     runtime = args.output / "runtime.sqlite3"
     if runtime.exists():
@@ -81,19 +93,32 @@ def main(argv=None):
             print(json.dumps({"event": kind, "model": event["model"], "proposal": proposal}), flush=True)
         elif kind in {"optimizer-request", "optimizer-failed", "proposal-validated", "fit-started", "fit-completed",
                       "candidate-evaluated", "candidate-rejected", "promoted", "waiting-for-labels", "round-failed", "features-failed"}:
-            print(json.dumps({k: v for k, v in event.items() if k not in {"messages", "previous", "candidate"}}), flush=True)
+            summary_fields = {'kind', 'event_id', 'cycle_number', 'step_stage', 'requested_model',
+                              'reason', 'status', 'promoted', 'training_count', 'error_type'}
+            print(json.dumps({k: v for k, v in event.items() if k in summary_fields}), flush=True)
     wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport),
                              max_requests=args.max_requests, evaluation_weighting="equal_class",
                              min_evaluation_per_class=2, observer=observe,
                              redact=tuple(os.environ.get(k, "") for k in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
     def checkpoint(report):
         (args.output / "results.json").write_text(json.dumps(report, indent=2)+"\n")
+        if args.operational:
+            point=report['cycles'][-1]
+            print(json.dumps({'cycle':point['cycle_number'],'agreement':point['metrics']['accuracy'],
+                             'requests':wheel.requests,'optimizer_calls':transport.calls}),flush=True)
+            return
         point = report["checkpoints"][-1]
         print(json.dumps({"checkpoint": point["revealed_labels"], "training_labels": point["training_labels"],
                           "fitted_head": point["fitted_head"], "scoreboard": point["scoreboard"],
                           "recent_balanced_scoreboard": point["recent_balanced_scoreboard"],
                           "requests": wheel.requests}), flush=True)
     try:
+        if args.operational:
+            report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=args.batch_size,
+                retrain_every=args.batch_size,on_cycle=checkpoint))
+            print(json.dumps({'complete':'stopped_reason' not in report,'cycles':len(report['cycles']),
+                              'jev_attempts':wheel.requests,'optimizer_attempts':transport.calls}),flush=True)
+            return int('stopped_reason' in report)
         report = asyncio.run(run_replay(wheel, plan, on_checkpoint=checkpoint))
         failed = any(point.get("round", {}).get("reason") == "round failed"
                      for point in report["checkpoints"] if point.get("round"))
@@ -101,6 +126,10 @@ def main(argv=None):
                           "optimizer_attempts": transport.calls}), flush=True)
         return int(failed)
     finally:
+        if args.operational:
+            events = read_trace(runtime)
+            (args.output/'trace.json').write_text(json.dumps(events, indent=2)+'\n')
+            (args.output/'playback.html').write_text(render_trace(events))
         wheel.close()
 
 

@@ -38,7 +38,7 @@ def test_unknown_items_are_identified_honestly_and_revisits_remain_chronological
     assert result['order'] == ['0', '1', '2']
 
 
-def test_cycles_use_recorded_round_ids_with_smaller_steps_inside_and_do_not_invent_history_cycles():
+def test_optimization_rounds_are_not_mislabeled_as_operational_cycles():
     events = [
         {'kind': 'step-started', 'step_id': 'cycle-one', 'step_stage': 'rubric'},
         {'kind': 'optimizer-request', 'step_id': 'cycle-one', 'step_stage': 'rubric'},
@@ -53,8 +53,27 @@ def test_cycles_use_recorded_round_ids_with_smaller_steps_inside_and_do_not_inve
     history = [{'source_table': 'presentations', 'article': {'title': 'Earlier paper'},
                 'record': {'id': 1, 'shown_at': '2026-10-05T12:00:00Z'}}]
     result = step_projection(events, history, items)
-    assert [cycle['title'] for cycle in result['cycles']] == ['Imported review history', 'Cycle 1 · Rubric', 'Cycle 2 · Examples']
+    assert [cycle['title'] for cycle in result['cycles']] == ['Imported review history', 'Retrospective optimization · Rubric', 'Retrospective optimization · Examples']
     assert result['cycles'][0]['recorded'] is False
     assert result['cycles'][1]['step_end'] > result['cycles'][1]['step_start']
     assert result['steps'][2]['keys'] == ['2', '3']
     assert result['cycles'][1]['end'] == result['cycles'][2]['start']
+
+
+def test_operational_cycles_have_equal_outer_width_and_internal_training_requests_do_not_create_new_cycles():
+    events=[{'kind':'cycle-started','cycle_id':'c1','cycle_number':1,'item':{'id':'a','values':{'text':'Title: Paper A'}}},
+            {'kind':'prediction','cycle_id':'c1','cycle_number':1,'target_id':'a'},
+            {'kind':'human-feedback','cycle_id':'c1','cycle_number':1,'feedback':{'item_id':'a'}},
+            {'kind':'decision-request','cycle_id':'c1','cycle_number':1,'target_id':'other','step_id':'opt'},
+            {'kind':'cycle-completed','cycle_id':'c1','cycle_number':1},
+            {'kind':'cycle-started','cycle_id':'c2','cycle_number':2,'item':{'id':'b','values':{'text':'Title: Paper B'}}},
+            {'kind':'prediction','cycle_id':'c2','cycle_number':2,'target_id':'b'}]
+    for index,event in enumerate(events):event['created_at']=f'2026-10-06T12:0{index}:00Z'
+    items=[{'id':i,'event_index':i,'start':event['created_at']} for i,event in enumerate(events)]
+    result=step_projection(events,[],items)
+    assert result['axis']=='cycle'
+    assert len(result['cycles'])==2
+    assert [cycle['end']-cycle['start'] for cycle in result['cycles']]==[1000,1000]
+    assert result['cycles'][0]['title']=='Cycle 1 · Paper A'
+    assert result['positions']['3']<1000
+    assert result['positions']['6']>1000

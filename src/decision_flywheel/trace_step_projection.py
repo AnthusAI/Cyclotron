@@ -4,6 +4,12 @@ from datetime import datetime
 
 def step_projection(events, history, items):
     articles = {str(source['article'].get('id')): source['article'] for source in history}
+    operational = {event['cycle_id']:event for event in events if event.get('kind')=='cycle-started' and event.get('cycle_id')}
+    for event in operational.values():
+        item=event.get('item')
+        if item:
+            title=item.get('values',{}).get('title') or item.get('values',{}).get('text','').split('\n')[0].removeprefix('Title: ')
+            articles[item['id']]={'id':item['id'],'title':title}
     parents = {event['step_id']: event['parent_step_id'] for event in events
                if event.get('step_id') and event.get('parent_step_id')}
     roots = {}
@@ -12,6 +18,8 @@ def step_projection(events, history, items):
             roots.setdefault(event['step_id'], event)
 
     def cycle_key(event):
+        if event.get('cycle_id'):
+            return event['cycle_id']
         root = event.get('step_id')
         seen = set()
         while root and parents.get(root) and root not in seen:
@@ -22,7 +30,7 @@ def step_projection(events, history, items):
     records = []
     for item in items:
         event = events[item['event_index']]
-        target = event.get('target_id') or event.get('item_id')
+        target = event.get('target_id') or event.get('item_id') or event.get('feedback',{}).get('item_id')
         kind = event.get('kind', '')
         stage = event.get('step_stage') or 'Context'
         if target:
@@ -61,13 +69,27 @@ def step_projection(events, history, items):
     for index, step in enumerate(steps):
         key = step['cycle_key']
         if not cycles or cycles[-1]['key'] != key:
-            if key in roots:
-                numbers.setdefault(key, len(numbers)+1)
-                title = f"Cycle {numbers[key]} · {(roots[key].get('step_stage') or 'Optimization').capitalize()}"
+            if key in operational:
+                event=operational[key]
+                item=event.get('item') or {}
+                title=f"Cycle {event['cycle_number']} · {articles.get(item.get('id'),{}).get('title') or 'Maintenance'}"
+            elif key in roots:
+                title=f"Retrospective optimization · {(roots[key].get('step_stage') or 'Optimization').capitalize()}"
             else:
                 title = 'Imported review history' if key == 'source-history' else 'Unscoped recorded events'
-            cycles.append({'key': key, 'title': title, 'recorded': key in roots,
+            cycles.append({'key': key, 'title': title, 'recorded': key in operational,
                            'start': index*1000, 'step_start': index+1, 'keys': []})
         cycles[-1].update(end=(index+1)*1000, step_end=index+1)
         cycles[-1]['keys'].extend(step['keys'])
-    return {'steps': steps, 'positions': positions, 'order': order, 'cycles': cycles}
+    for index,step in enumerate(steps):
+        step.update(start=index*1000,end=(index+1)*1000)
+    axis='cycle' if cycles and all(cycle['recorded'] for cycle in cycles) else 'step'
+    if axis=='cycle':
+        for index,cycle in enumerate(cycles):
+            inside=steps[cycle['step_start']-1:cycle['step_end']]
+            cycle.update(start=index*1000,end=(index+1)*1000)
+            for offset,step in enumerate(inside):
+                step.update(start=index*1000+offset*1000/len(inside),end=index*1000+(offset+1)*1000/len(inside),cycle_step=offset+1)
+                for marker,key in enumerate(step['keys']):
+                    positions[key]=step['start']+(step['end']-step['start'])*(marker+1)/(len(step['keys'])+1)
+    return {'steps': steps, 'positions': positions, 'order': order, 'cycles': cycles,'axis':axis}

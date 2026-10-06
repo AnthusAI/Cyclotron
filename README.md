@@ -66,9 +66,36 @@ not a calendar axis. Wide native background bands show recorded flywheel cycles;
 smaller item/activity steps sit within them. A Step / item row identifies paper
 titles as you zoom in. Linked predictions and votes, or decision requests and
 responses, share a step; each event remains individually selectable. Cycle
-membership follows recorded round IDs and parent IDs. Imported review history
+membership follows explicit operational cycle IDs, not optimization-round IDs.
+Each cycle predicts an item, optionally receives feedback, checks triggers and
+runs any triggered optimization or retraining before the next item. Internal
+backfill requests remain within the cycle that caused them. Imported review history
 without captured cycle boundaries is explicitly separate, never invented as
 earlier cycles. Click cycle or item headings to inspect their recorded events.
+
+Applications own the cycle boundary and trigger policy. Use
+`with wheel.cycle(item) as cycle:` around prediction, optional feedback, and
+triggered work. `cycle.check_trigger(stage, due=..., reason=..., details=...)`
+records both decisions to run and decisions to wait. Calls to `predict`,
+`record_feedback_event` and `step` inside that context share its durable
+`cycle_id`. A due trigger links subsequent work through `trigger_event_id`.
+For scheduled work without an item or a vote, use `wheel.cycle(None)`.
+Cycle start/end events capture the complete classifier configuration; failures
+close the cycle without suppressing the error. Reopening the runtime continues
+the cycle numbering. Optimization-round IDs remain subordinate activity IDs.
+
+`scripts/replay_arxiv_feedback.py --operational` freezes a chronological replay
+of existing eligible votes. It predicts before revealing each label or comment,
+starts with an empty rubric/examples/questions/head, and records separate
+rubric, questions, and examples stages in rotation, plus independent classifier
+retraining checks. `--batch-size` sets both trigger cadences for this demo.
+Preflight makes no calls; live collection requires `--confirm-live` and explicit
+request ceilings. It exports `trace.json` and self-contained `playback.html`,
+including on failure. Predictions scored before each arriving vote are
+prequential agreement, not the accuracy of the final classifier. Protected
+labels do not enter optimizer context or fitting. Insufficient development
+class coverage is recorded as waiting, never as a successful optimization.
+
 Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
 Close details to expand the timeline to full width; select a marker to reopen

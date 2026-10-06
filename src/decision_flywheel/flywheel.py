@@ -133,6 +133,8 @@ class DecisionFlywheel:
         """)
         self.initial, self.model, self.optimizer = initial, model, optimizer
         self._step_context = ContextVar("flywheel_step", default={})
+        self._cycle_context = ContextVar("flywheel_cycle", default={})
+        self._cycle_running = False
         self._step_running = False
         self.observer = observer or (lambda event: None)
         self.redact = tuple(value for value in redact if value)
@@ -185,7 +187,7 @@ class DecisionFlywheel:
             self._emit({"kind": "optimizer-context-updated", **context})
 
     def _emit(self, event):
-        event = {"created_at": datetime.now(timezone.utc).isoformat(), **event, **self._step_context.get()}
+        event = {"created_at": datetime.now(timezone.utc).isoformat(), **event, **self._cycle_context.get(), **self._step_context.get()}
         text = _json(event)
         for value in self.redact:
             text = text.replace(json.dumps(value, ensure_ascii=False)[1:-1], "[REDACTED]")
@@ -212,6 +214,11 @@ class DecisionFlywheel:
     async def step(self, stage, training, development, **kwargs):
         from .observability import step
         return await step(self, stage, training, development, **kwargs)
+
+    def cycle(self, item=None, *, reason='item-processing'):
+        """Scope prediction, optional feedback and triggered work under one durable cycle ID."""
+        from .cycles import Cycle
+        return Cycle(self, item, reason=reason)
 
     def preview_optimizer_request(self, stage, training, development, *, protected):
         """Preview the exact next-stage messages without collecting or emitting."""
@@ -385,7 +392,9 @@ class DecisionFlywheel:
             result = DecisionResult(main.label, main.probabilities, batch.model, batch.usage, batch.latency_ms,
                                     main.probabilities[main.label] if main.probabilities else main.confidence)
         self._emit({"kind": "prediction", "target_id": target.id, "label": result.label,
-                    "version": self.active.fingerprint, "fitted_head": self.active.head is not None})
+                    "version": self.active.fingerprint, "fitted_head": self.active.head is not None,
+                    "probabilities": result.probabilities, "confidence": result.confidence,
+                    "model": result.model, "usage": result.usage, "latency_ms": result.latency_ms})
         return result
 
     def _validate_partitions(self, training, development, protected, propensities):

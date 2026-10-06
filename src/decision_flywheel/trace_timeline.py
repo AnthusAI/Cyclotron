@@ -4,7 +4,7 @@ from datetime import datetime
 GROUPS = [('feedback', 'Human labels'), ('decisions', 'Decisions'), ('rubric', 'Rubric'), ('examples', 'Few-shot examples'),
           ('questions', 'Classifier questions'), ('classifier', 'ML optimization'),
           ('fit', 'ML fitting'), ('evaluation', 'Evaluation / outcome'), ('optimizer', 'Optimizer (unscoped)'),
-          ('configuration', 'Configuration changes')]
+          ('configuration', 'Configuration changes'), ('triggers','Trigger checks'), ('cycles','Cycle boundaries')]
 
 
 def timeline_data(events):
@@ -20,7 +20,13 @@ def timeline_data(events):
             continue
         kind = event.get('kind')
         group, label = None, None
-        if kind == 'human-feedback':
+        if kind in {'cycle-started','cycle-completed','cycle-failed'}:
+            group,label='cycles',kind.replace('-',' ')
+        elif kind == 'trigger-evaluated':
+            group,label='triggers',f"{event.get('stage')} · {'run' if event.get('due') else 'skip'} · {event.get('reason')}"
+        elif kind == 'cycle-metrics':
+            group,label='evaluation','Running prediction agreement'
+        elif kind == 'human-feedback':
             feedback = event.get('feedback', {})
             group = 'feedback'
             label = ' · '.join(str(value) for value in (feedback.get('final_answer_value', 'unlabeled'),

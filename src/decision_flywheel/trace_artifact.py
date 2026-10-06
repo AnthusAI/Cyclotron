@@ -153,7 +153,7 @@ for(const item of timelineItems){
  else if(label&&item.className==='marker-human')item.group='label-class-'+classes.indexOf(label);
  else if(item.group==='decisions')item.group='decision-api';
  item.type='box';
- item.content=document.createElement('span');item.content.textContent=item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
+ item.content=document.createElement('span');item.content.textContent=event?.kind==='trigger-evaluated'?(event.due?'⚑':'○'):item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
  item.content.setAttribute('aria-label',item.title);
 }
 const classGroups=[];
@@ -170,19 +170,19 @@ if(occupied.has('decision-api'))otherGroups.push({id:'decision-api',content:'Dec
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},{id:'step-items',content:'Step / item'},...classGroups,...otherGroups];
 const stepItems=projection.steps.flatMap((step,index)=>{
- const label=document.createElement('span');label.textContent=`${step.number} · ${step.title}`;
+ const label=document.createElement('span');label.textContent=`${step.cycle_step||step.number} · ${step.title}`;
  const title=document.createElement('span');title.textContent=`Step ${step.number}: ${step.title}${step.item_id?' · '+step.item_id:''}`;
- return [{id:'step-band:'+index,group:'step-items',start:new Date(index*1000),end:new Date((index+1)*1000),type:'background',className:index%2?'step-band-even':'step-band-odd',content:''},
-  {id:'step-label:'+index,group:'step-items',start:new Date(index*1000),end:new Date((index+1)*1000),type:'range',className:'step-item-label',content:label,title}];
+ return [{id:'step-band:'+index,group:'step-items',start:new Date(step.start),end:new Date(step.end),type:'background',className:index%2?'step-band-even':'step-band-odd',content:''},
+  {id:'step-label:'+index,group:'step-items',start:new Date(step.start),end:new Date(step.end),type:'range',className:'step-item-label',content:label,title}];
 });
 const cycleItems=projection.cycles.flatMap((cycle,index)=>{
  const label=document.createElement('span');label.textContent=`${cycle.title} · steps ${cycle.step_start}–${cycle.step_end}`;
  return [{id:'cycle-band:'+index,start:new Date(cycle.start),end:new Date(cycle.end),type:'background',className:cycle.recorded?(index%2?'cycle-band-even':'cycle-band-odd'):'cycle-band-history',content:''},
   {id:'cycle-label:'+index,group:'flywheel-cycles',start:new Date(cycle.start),end:new Date(cycle.end),type:'range',className:'cycle-label',content:label}];
 });
-const maximum=Math.max(1000,projection.steps.length*1000);
+const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
 let initialWindowSet=false;
-const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...timelineItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,maximum,{animation:false});}},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:100,zoomMax:maximum,verticalScroll:false,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.floor(date.valueOf()/1000)+1}`}});
+const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...timelineItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:projection.axis==='cycle'?1:100,zoomMax:maximum,verticalScroll:false,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
 el('zoom-in').onclick=()=>timeline.zoomIn(.5,{animation:false});
 el('zoom-out').onclick=()=>timeline.zoomOut(.5,{animation:false});
 el('fit-all').onclick=()=>timeline.setWindow(0,maximum,{animation:false});
@@ -200,10 +200,12 @@ function goStep(step){
  if(key===undefined)return;
  if(key.startsWith('source:'))inspectSource(Number(key.split(':')[1]));else move(Number(key));
 }
-function showRun(){const cycle=projection.cycles.find(c=>c.recorded);timeline.setWindow(cycle?.start||0,cycle?.end||maximum,{animation:false});}
+function showRun(){timeline.setWindow(0,maximum,{animation:false});}
+el('show-history').hidden=!reviewHistory.length;
+el('show-run').textContent='Recorded cycles';
 el('show-run').onclick=showRun;el('show-history').onclick=()=>{const cycle=projection.cycles.find(c=>c.key==='source-history');timeline.setWindow(cycle?.start||0,cycle?.end||maximum,{animation:false});};
 const sourceSteps=ordered.filter(record=>record.key.startsWith('source:')).map(record=>Math.floor(stepPositions.get(record.key)/1000)+1);
-el('run-bounds').textContent=`${projection.cycles.filter(c=>c.recorded).length} recorded cycle(s) · ${projection.steps.length} smaller steps · ${ordered.length} event markers. Wide background bands show flywheel cycles; zoom in for individual steps and paper titles. Imported review history has no captured cycle boundaries and is not counted as a cycle. ${sourceSteps.length?'The later retrospective optimization re-scores existing items; no new human votes arrived during it.':''} Scroll to zoom; drag to pan; click any heading or marker to inspect.`;
+el('run-bounds').textContent=`${projection.cycles.filter(c=>c.recorded).length} operational cycles · ${projection.steps.length} internal steps · ${ordered.length} event markers. Each cycle processes an item, optionally receives feedback and evaluates triggers. Optimization/backfill requests stay inside the cycle that caused them. Circle: trigger not due; flag: triggered work. Older records without operational cycle IDs are not presented as cycles. Scroll to zoom; drag to pan; click headings or markers for details.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
@@ -211,9 +213,15 @@ for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-f
 function applyFilters(){
  timeline.setItems([...cycleItems,...stepItems,...timelineItems.filter(item=>{
  if(el('disagreement-filter').checked){
-  if(item.source_index===undefined)return false;
+  if(item.source_index===undefined){
+   const event=events[item.event_index];
+   const vote=events.find(e=>e.kind==='human-feedback'&&e.cycle_id===event.cycle_id);
+   const prediction=events.find(e=>e.kind==='prediction'&&e.cycle_id===event.cycle_id);
+   if(!vote||!prediction||vote.feedback?.final_answer_value===prediction.label)return false;
+  }else{
   const source=reviewHistory[item.source_index],vote=source.source_table==='review_events'?source:reviewHistory.find(s=>s.source_table==='review_events'&&source.record.id!==undefined&&s.record.presentation_id===source.record.id&&s.record.action==='vote');
   if(!vote||!vote.record.label||!vote.presentation||vote.record.label===vote.presentation.predicted_label)return false;
+  }
  }
  if(item.source_index!==undefined){const source=reviewHistory[item.source_index];if(source.source_table!=='review_events')return true;
   return (!el('label-filter').value||source.record.label===el('label-filter').value)&&(!el('role-filter').value||source.article.assignment===el('role-filter').value)&&(!el('comment-filter').checked||Boolean(source.record.comment));}
@@ -224,6 +232,12 @@ function applyFilters(){
 }
 for(const id of ['label-filter','role-filter','comment-filter','disagreement-filter'])el(id).onchange=applyFilters;
 timeline.on('select',properties=>{if(properties.items.length){setInspectorOpen(true);let id=properties.items[0];if(String(id).startsWith('cycle-'))id=projection.cycles[Number(String(id).split(':')[1])].keys[0];else if(String(id).startsWith('step-'))id=projection.steps[Number(String(id).split(':')[1])].keys[0];if(String(id).startsWith('source:'))inspectSource(Number(String(id).split(':')[1]));else move(Number(id));}});
+timeline.on('doubleClick',properties=>{
+ const id=properties.item;if(id===undefined||id===null)return;
+ const key=String(id);
+ const range=key.startsWith('cycle-')?projection.cycles[Number(key.split(':')[1])]:key.startsWith('step-')?projection.steps[Number(key.split(':')[1])]:projection.steps.find(s=>s.keys.includes(key));
+ if(range)timeline.setWindow(range.start,range.end,{animation:false});
+});
 el('timeline-note').textContent=`${events.filter(e=>e.kind==='human-feedback').length} flywheel feedback events; ${reviewHistory.filter(s=>s.source_table==='review_events').length} original human actions and ${reviewHistory.filter(s=>s.source_table==='presentations').length} original pre-vote predictions. Pan/zoom and click individual markers. ${timelineData.undated_count} events lack valid timestamps. vis-timeline 8.5.4 (MIT).`;
 let cursorAdded=false;
 const pretty=value=>JSON.stringify(value,null,2);
@@ -272,7 +286,7 @@ function comparison(event){
 }
 function draw(){
  const event=events[position];
- el('status').textContent=event?`Event ${position+1}/${events.length} · ID ${event.event_id} · ${event.kind} · ${event.step_stage||'legacy/unscoped'} · ${event.status||event.reason||''}`:'No recorded events';
+ el('status').textContent=event?`${event.cycle_number?'Cycle '+event.cycle_number+' · ':''}Event ${event.event_id} · ${event.kind} · ${event.step_stage||(event.cycle_id?'item processing':'legacy/unscoped')} · ${event.status||event.reason||''}`:'No recorded events';
  if(event&&stepPositions.has(String(position))){
   const point=new Date(stepPositions.get(String(position)));
   currentStep=ordered.findIndex(record=>record.key===String(position));
@@ -293,16 +307,33 @@ function inspectEvent(event){
  el('paired-request').hidden=true;
  if(!event){el('event-title').textContent='No recorded events';return;}
  el('event-title').textContent=event.kind.replaceAll('-',' ');
- el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||'unscoped'}`;
+ el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||(event.cycle_id?'item processing':'unscoped')}`;
  const field=(label,value)=>{if(value===undefined||value===null)return;const term=document.createElement('dt'),description=document.createElement('dd');term.textContent=label;description.textContent=typeof value==='object'?readable(value):String(value);el('event-fields').append(term,description);};
  const itemStep=projection.steps.find(step=>step.keys.includes(String(position)));
  if(itemStep?.item_id)field('Item',itemStep.title);
  const cycle=projection.cycles.find(c=>c.keys.includes(String(position)));
  if(cycle)field('Cycle',cycle.title);
+ if(event.kind==='trigger-evaluated'){field('Stage',event.stage);field('Run',event.due);field('Reason',event.reason);field('Trigger inputs',event.details);}
+ if(event.trigger_event_id)field('Caused by trigger event',event.trigger_event_id);
+ if(event.kind==='cycle-metrics'){field('Measured scope',event.metric_scope);field('Metrics',event.metrics);}
  let payload=event,title='Full event content';
  if(event.kind==='human-feedback'){
   field('Label',event.feedback?.final_answer_value);field('Partition',event.assignment);field('Action',event.action);
   field('Explanation',event.feedback?.edit_comment_value);field('Item',event.feedback?.item_id);
+ }else if(event.kind==='prediction'){
+  field('Predicted class',event.label);field('Confidence',event.confidence);
+  field('Class probabilities',event.probabilities);field('Classifier version',event.version);
+  const start=events.find(e=>e.kind==='cycle-started'&&e.cycle_id===event.cycle_id);
+  field('Article',start?.item?.values);
+  const requests=events.filter(e=>e.kind==='decision-request'&&e.cycle_id===event.cycle_id&&e.target_id===event.target_id);
+  const responses=events.filter(e=>e.kind==='decision-response'&&e.cycle_id===event.cycle_id&&e.target_id===event.target_id);
+  const cached=events.filter(e=>e.kind==='features-cached'&&e.cycle_id===event.cycle_id&&e.target_id===event.target_id);
+  field('Decision request events',requests.map(e=>e.event_id));
+  field('Decision response events',responses.map(e=>e.event_id));
+  payload={prediction:event,requests,responses,cached};title='Exact decision exchange';
+  if(requests.length){el('paired-request').hidden=false;el('paired-request').textContent='Open actual decision request';el('paired-request').onclick=()=>move(events.indexOf(requests[0]));}
+ }else if(event.kind==='cycle-started'){
+  field('Article',event.item?.values);field('Reason',event.reason);
  }else if(event.kind==='optimizer-request'){
   field('Model',event.requested_model);field('Messages',event.messages?.length);
   try{const briefing=JSON.parse(event.messages.at(-1).content);field('Feedback items',briefing.feedback?.length);field('Human explanations',briefing.human_explanations);field('Control being optimized',briefing.current?.control_under_test);
@@ -320,7 +351,7 @@ function inspectEvent(event){
   payload={content:proposal||event.content,tool_calls:event.tool_calls||[],usage:event.usage};title='Read optimizer response and returned tool calls';
   const owner=roundData.owners[String(position)],round=roundData.rounds[String(owner)];
   const request=round?.optimizer_requests.filter(i=>i<position&&(!event.briefing_fingerprint||events[i].briefing_fingerprint===event.briefing_fingerprint)).at(-1);
-  if(request!==undefined){el('paired-request').hidden=false;el('paired-request').onclick=()=>move(request);}
+  if(request!==undefined){el('paired-request').hidden=false;el('paired-request').textContent='Open matching optimizer request';el('paired-request').onclick=()=>move(request);}
  }else if(event.kind==='candidate-evaluated'){
   for(const key of ['accuracy','balanced_accuracy','balanced_brier']){field('Incumbent '+key,event.incumbent?.[key]);field('Candidate '+key,event.candidate?.[key]);}
   field('Reason',event.reason);field('Independent evaluation',event.evaluation_independent_of_optimizer_context);

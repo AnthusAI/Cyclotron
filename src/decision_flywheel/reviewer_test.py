@@ -126,6 +126,10 @@ def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_pat
             self.feedback_events.append(event)
         def reconcile(self):
             pass
+        def finish_cycle(self):
+            pass
+        def feedback_trigger(self,every):
+            return True
         def predict(self, article):
             return ReviewerPrediction("include", .7, "jev:flywheel-head", "a"*64, 6)
         def status(self):

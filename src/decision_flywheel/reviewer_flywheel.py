@@ -16,6 +16,7 @@ class ReviewerFlywheel:
         self.store, self.core = store, core
         self.stage, self.retrospective_limit = stage, retrospective_limit
         self.min_stage_evaluation_per_class = min_stage_evaluation_per_class
+        self.current_cycle = None
 
     def partitions(self):
         eligible = reviewer_labeled_items(self.store.learning_feedback(), self.store.article)
@@ -32,6 +33,9 @@ class ReviewerFlywheel:
         return training, development, protected
 
     def predict(self, article):
+        self.finish_cycle()
+        self.current_cycle = self.core.cycle(reviewer_item(article))
+        self.current_cycle.__enter__()
         training, development, _ = self.partitions()
         self.core.reconcile_feedback(training, development=development)
         result = asyncio.run(self.core.predict(reviewer_item(article), training))
@@ -39,7 +43,33 @@ class ReviewerFlywheel:
             "jev:flywheel-head" if self.core.active.head else "jev:flywheel-warmup",
             self.core.active.fingerprint, len(training))
 
+    def finish_cycle(self):
+        if self.current_cycle:
+            self.current_cycle.__exit__(None,None,None)
+            self.current_cycle = None
+
+    def feedback_trigger(self, every):
+        count = self.core.db.execute("SELECT COUNT(*) FROM runtime_events WHERE json_extract(payload,'$.kind')='human-feedback' AND json_extract(payload,'$.action')='submitted' AND json_extract(payload,'$.cycle_id') IS NOT NULL").fetchone()[0]
+        due = count > 0 and count % every == 0
+        if self.current_cycle:
+            self.current_cycle.check_trigger(self.stage,due=due,
+                reason='feedback cadence reached' if due else 'feedback cadence not reached',
+                details={'feedback_count':count,'threshold':every})
+        return due
+
     def improve(self, *, retry_interrupted: bool = False, stage=None, trigger="manual"):
+        if self.current_cycle:
+            return self._improve(retry_interrupted=retry_interrupted, stage=stage, trigger=trigger)
+        with self.core.cycle(None, reason='reviewer-maintenance') as cycle:
+            self.current_cycle = cycle
+            try:
+                return self._improve(retry_interrupted=retry_interrupted, stage=stage, trigger=trigger)
+            finally:
+                self.current_cycle = None
+
+    def _improve(self, *, retry_interrupted: bool = False, stage=None, trigger="manual"):
+        if self.current_cycle and trigger != 'feedback-cadence':
+            self.current_cycle.check_trigger(stage or self.stage,due=True,reason=trigger)
         self.sync_optimizer_context()
         training, development, protected = self.partitions()
         selected_stage = stage or self.stage

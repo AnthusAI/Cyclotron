@@ -344,12 +344,10 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
     console = console or Console()
     if type(optimize_every) is not int or optimize_every < 1:
         raise ValueError("optimize_every must be positive")
-    reviewed_since_round = 0
     console.print("[bold]Knowledge-base article reviewer[/bold]")
     console.print("Your choices and each displayed prediction are logged locally.\n")
     if flywheel:
         flywheel.reconcile()
-        flywheel.improve(trigger="reviewer-startup")
     while True:
         article = store.next_unreviewed()
         console.clear()
@@ -424,6 +422,8 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 continue
             break
         if action == "q":
+            if flywheel:
+                flywheel.finish_cycle()
             console.print("Review session saved locally.")
             return
         if action == "b":
@@ -437,19 +437,23 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                     flywheel.record_review_event(store.events_for(restored.id)[-1])
                     flywheel.reconcile()
                 Prompt.ask("Press Enter to continue", default="")
+            if flywheel:
+                flywheel.finish_cycle()
             continue
         if action == "s":
             store.record_skip(article.id)
+            if flywheel:
+                flywheel.core._emit({'kind':'review-skipped','target_id':article.id})
+                flywheel.finish_cycle()
             continue
         label = "include" if action == "i" else "exclude"
         comment = _optional_comment(console)
         vote = store.record_vote(article.id, label, comment=comment, presentation_id=shown.id if shown else None)
         if flywheel:
             flywheel.record_review_event(vote)
-            reviewed_since_round += 1
-            if reviewed_since_round >= optimize_every:
+            if flywheel.feedback_trigger(optimize_every):
                 flywheel.improve(trigger="feedback-cadence")
-                reviewed_since_round = 0
+            flywheel.finish_cycle()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

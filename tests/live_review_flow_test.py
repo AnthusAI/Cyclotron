@@ -42,7 +42,7 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
                 p = .99 if positive else .01
                 answers["practical"] = {"choice": "yes" if positive else "no", "probabilities": {"yes": p, "no": 1-p}}
             return SimpleNamespace(answers=answers, model="fake-jev", usage={"input_tokens": 12})
-    choices = iter(["o", "", "j", "", "f", "", "i", "Practical and useful", "q"])
+    choices = iter(["i", "Practical and useful", "o", "", "j", "", "f", "", "q"])
     monkeypatch.setattr("decision_flywheel.reviewer.Prompt.ask", lambda *a, **k: next(choices))
     path = tmp_path / "runtime.sqlite"
     with ReviewStore(tmp_path / "review.sqlite", study_seed="integration") as store:
@@ -55,17 +55,22 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
             OptimizerAgent(OpenAIOptimizer(optimizer_sdk, model="fake", max_calls=3)), max_requests=150)
         output = StringIO()
         client = ReviewerFlywheel(store, wheel, min_stage_evaluation_per_class=2)
-        run_review_session(store, Console(file=output, width=120), flywheel=client)
+        run_review_session(store, Console(file=output, width=120), flywheel=client, optimize_every=1)
         assert wheel.active.head is not None
         assert store.current_label(articles[-2].id) == "include"
         shown = store.presentations_for(articles[-2].id)[-1]
-        assert shown.predictor_kind == "jev:flywheel-head"
+        assert shown.predictor_kind == "jev:flywheel-warmup"
         assert store.events_for(articles[-2].id)[0].comment == "Practical and useful"
         transcript = output.getvalue()
         assert "The human prefers practical papers" in transcript
         assert '"criteria"' in transcript
         assert "decision/include" in transcript
         events = wheel.history(10000)
+        first_prediction = next(e for e in events if e['kind'] == 'prediction')
+        first_feedback = next(e for e in events if e['kind'] == 'human-feedback')
+        first_optimizer = next(e for e in events if e['kind'] == 'optimizer-request')
+        assert first_prediction['event_id'] < first_feedback['event_id'] < first_optimizer['event_id']
+        assert first_prediction['cycle_id'] == first_optimizer['cycle_id']
         assert {e["kind"] for e in events} >= {"fit-started", "fit-completed", "promoted", "decision-request", "decision-response"}
         assert len(optimizer_calls) == 1
         protected_ids = {item.id for item in client.partitions()[2]}

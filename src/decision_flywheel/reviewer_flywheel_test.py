@@ -96,8 +96,13 @@ def test_a_stage_failure_is_visible_without_crashing_the_reviewer_or_echoing_exc
             raise ValueError("private-provider-secret")
         core.optimize_stage = fail
         result = ReviewerFlywheel(store, core).improve(stage="questions")
+        events = core.history(10000)
+        assert events[0]['kind'] == 'cycle-started'
+        assert events[-1]['kind'] == 'cycle-completed'
+        assert events[0]['cycle_item_id'] is None
+        assert all(e.get('cycle_id') == events[0]['cycle_id'] for e in events)
         assert result["stage"] == "questions"
         assert result["error_type"] == "ValueError"
         assert "private-provider-secret" not in str(core.history())
-        assert core.history()[-1]["kind"] == "optimization-stage-failed"
+        assert core.history()[-2]["kind"] == "optimization-stage-failed"
         core.close()
