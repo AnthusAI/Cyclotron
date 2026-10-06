@@ -272,6 +272,19 @@ const cycleItems=projection.cycles.flatMap((cycle,index)=>{
 const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
 const cellDetails=new Map();
 const cycleByEvent=new Map(projection.cycles.flatMap(c=>c.keys.map(key=>[key,c])));
+function rubricActivity(cycleId,recording=events){
+ const rows=recording.filter(event=>event.cycle_id===cycleId);
+ const work=rows.filter(event=>(event.step_stage||event.stage)==='rubric');
+ const ran=work.some(event=>event.kind==='optimizer-request');
+ const completed=work.some(event=>event.kind==='optimizer-response');
+ const failed=work.some(event=>['optimizer-failed','step-failed'].includes(event.kind));
+ const before=rows.find(event=>event.kind==='cycle-started')?.classifier_snapshot?.config?.rubric;
+ const after=rows.findLast(event=>['cycle-completed','cycle-failed','classifier-activated'].includes(event.kind))?.classifier_snapshot?.config?.rubric;
+ const changed=typeof before==='string'&&typeof after==='string'?before!==after:null;
+ const changeLabel=changed===null?'Change unknown':changed?'Changed':'Unchanged';
+ return {ran,completed,failed,before,after,changed,
+  label:failed?'Failed':ran&&!completed?'Running':`${ran?'Ran':'No LLM call'} · ${changeLabel}`};
+}
 function cycleCells(items){
  if(projection.axis!=='cycle')return items;
  const buckets=new Map(),passthrough=[];
@@ -284,20 +297,23 @@ function cycleCells(items){
  }
  return [...passthrough,...[...buckets].flatMap(([id,bucket])=>{
   const members=bucket.items,cycle=bucket.cycle;
-  const first=members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
+  const rubric=members[0].group==='rubric';
+  const first=rubric?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
+  const activity=rubric?rubricActivity(cycle.key):null;
   const trigger=first.group==='triggers';
   if(trigger&&!members.some(member=>member.className.includes('trigger-fired')))return [];
   const decision=first.className.includes('marker-prediction')||first.className.includes('marker-human');
   const content=document.createElement('span');
-  if(!decision&&!trigger){
+  if(rubric)content.textContent=activity.label;
+  else if(!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
    if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
   return [{...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
-   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell'),
-   title:members.map(m=>m.title).join('\n')}];
+   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.changed===true?'rubric-changed':'rubric-unchanged'):''),
+   title:rubric?`Rubric optimizer: ${activity.label}`:members.map(m=>m.title).join('\n')}];
  })];
 }
 plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));
@@ -609,6 +625,12 @@ function inspectEvent(event){
    field('Running recall',point.recall===null?'Undefined / unavailable':`${Math.round(point.recall*1000)/10}%`);}
  }
  let payload=event,title='Full event content';
+ if(event.cycle_id&&(event.step_stage||event.stage)==='rubric'){
+  const activity=rubricActivity(event.cycle_id);
+  field('Rubric optimization',activity.label);
+  field('Rubric before this cycle',activity.before===undefined?'Not recorded':activity.before||'(empty)');
+  field('Rubric after this cycle',activity.after===undefined?'Not recorded':activity.after||'(empty)');
+ }
  if(event.experiment==='single-example-swap'){
   field('Example removed',event.examples?.removed||event.removed_id);field('Example added',event.examples?.added||event.added_id);
   field('Brier improvement',event.brier_gain);field('Accuracy change',event.accuracy_change);

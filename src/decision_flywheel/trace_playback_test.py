@@ -52,6 +52,18 @@ assert.equal(triggerCell.content.textContent,'');
 assert.ok(triggerCell.className.includes('cycle-trigger-cell'));
 assert.ok(triggerCell.className.includes('trigger-fired'));
 assert.equal(+triggerCell.end-+triggerCell.start,1000);
+const rubricFixture=[
+ {kind:'cycle-started',cycle_id:'rubric-test',classifier_snapshot:{config:{rubric:'old'}}},
+ {kind:'optimizer-request',cycle_id:'rubric-test',step_stage:'rubric'},
+ {kind:'optimizer-response',cycle_id:'rubric-test',step_stage:'rubric'},
+ {kind:'proposal-validated',cycle_id:'rubric-test',step_stage:'rubric',proposal:{rubric:'new'}},
+ {kind:'cycle-completed',cycle_id:'rubric-test',classifier_snapshot:{config:{rubric:'old'}}}
+];
+assert.equal(rubricActivity('rubric-test',rubricFixture).label,'Ran · Unchanged');
+rubricFixture[4].classifier_snapshot.config.rubric='new';
+assert.equal(rubricActivity('rubric-test',rubricFixture).label,'Ran · Changed');
+assert.equal(rubricActivity('rubric-test',rubricFixture.slice(0,2)).label,'Running');
+assert.equal(rubricActivity('rubric-test',[rubricFixture[1],rubricFixture[2]]).label,'Ran · Change unknown');
 const exchangeCells=cycleCells(timelineItems.filter(item=>[1,2].includes(item.event_index)).map(item=>({...item,group:'rubric'})));
 assert.equal(exchangeCells.length,1);
 assert.deepEqual(cellDetails.get(exchangeCells[0].id).map(item=>item.event_index),[1,2]);
