@@ -492,9 +492,12 @@ and `wheel.feature_bank()` for model-free inspection. The ceiling bounds attempt
 individual questions, not discoveries: untried questions remain available for later
 feedback. Same-name question revisions retain prior definitions as lineage; code
 does not claim to infer semantic equivalence between differently named questions.
-The path is verified offline with fake providers; the new individual-question
-design has not yet produced a new live result. The historical results below used
-the previous grouped-questions trial.
+The path is verified offline with fake providers and has now completed a bounded
+live individual-question experiment: memory-systems and research-literature
+questions each improved development scores, while examples-only remained best.
+See the [feature-engineering lab notes](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/cursor/wip-sync-20261003-a67b2c9/studies/arxiv_feature_engineering/README.md)
+for exact comparisons, usage, recovery history, and small-sample limitations.
+The historical results below used the previous grouped-questions trial.
 
 ### Compare the three controls on frozen feedback
 

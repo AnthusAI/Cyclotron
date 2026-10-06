@@ -50,3 +50,9 @@ def test_malformed_probabilities_are_rejected_instead_of_reported_as_signal():
     for probabilities in ({"yes": .9}, {"yes": .9, "no": .9}, {"yes": float("nan"), "no": 0}):
         with pytest.raises(ValueError):
             probability_diagnostics(["include"], ["yes", "no"], [("include", probabilities)])
+
+
+def test_provider_rounding_is_preserved_using_the_same_tolerance_as_decision_answers():
+    report = probability_diagnostics(["include"], ["yes", "no", "unclear"],
+                                     [("include", {"yes": .33, "no": .33, "unclear": .33})])
+    assert report["by_class"]["include"]["mean_probabilities"] == {"yes": .33, "no": .33, "unclear": .33}

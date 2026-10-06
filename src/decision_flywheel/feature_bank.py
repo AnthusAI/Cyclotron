@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+from .models import PROBABILITY_SUM_TOLERANCE
 
 
 def _json(value):
@@ -21,7 +22,8 @@ def probability_diagnostics(classes, options, rows):
         if probabilities is not None:
             if set(probabilities) != set(options) or any(
                 isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1
-                for v in probabilities.values()) or not math.isclose(sum(probabilities.values()), 1., abs_tol=1e-6):
+                for v in probabilities.values()) or not math.isclose(sum(probabilities.values()), 1., rel_tol=0.,
+                                                                    abs_tol=PROBABILITY_SUM_TOLERANCE):
                 raise ValueError("diagnostics require a complete valid probability distribution")
         groups[label].append(probabilities)
     report = {}
