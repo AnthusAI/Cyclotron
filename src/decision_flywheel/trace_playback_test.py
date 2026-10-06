@@ -28,18 +28,30 @@ def test_operational_prediction_details_link_the_actual_request_and_disagreement
     harness = r'''
 const assert=require('node:assert/strict'),elements={},handlers={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
-global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
-global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[a,b];}getWindow(){return {start:0,end:1000}}moveTo(){}fit(){}}};
+global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
 CODE
 handlers.select({items:[3]});
 assert.equal(elements['paired-request'].hidden,false);
 elements['paired-request'].onclick();assert.equal(position,1);
 assert.ok(elements['event-content'].textContent.includes('examples'));
-assert.equal(timeline.options.zoomMin,1);
+assert.equal(timeline.options.zoomMin,4);
 assert.equal(elements['show-history'].hidden,true);
 handlers.doubleClick({item:3});
 assert.ok(timeline.window[1]-timeline.window[0]<1000);
 elements['show-run'].onclick();assert.deepEqual(timeline.window,[0,1000]);
+timeline.setWindow(100,300);
+const gesture=(dx,dy,extra={})=>({deltaX:dx,deltaY:dy,deltaMode:0,clientX:500,preventDefault(){},stopImmediatePropagation(){},...extra});
+elements.timeline.wheel(gesture(100,10));
+assert.deepEqual(timeline.window,[120,320]);
+elements.timeline.wheel(gesture(-100,0));assert.deepEqual(timeline.window,[100,300]);
+elements.timeline.wheel(gesture(100,10,{timeStamp:1000}));
+elements.timeline.wheel(gesture(10,100,{timeStamp:1010}));
+assert.equal(timeline.window[1]-timeline.window[0],200);
+elements.timeline.wheel(gesture(0,100));assert.ok(timeline.window[1]-timeline.window[0]>200);
+timeline.setWindow(100,101);elements['zoom-out'].onclick();assert.ok(timeline.window[1]-timeline.window[0]>=4);
+elements['zoom-out'].onclick();assert.ok(timeline.window[1]-timeline.window[0]>=8);
+timeline.setWindow(0,4);elements['fit-all'].onclick();assert.deepEqual(timeline.window,[0,1000]);
 elements['disagreement-filter'].checked=true;applyFilters();
 assert.ok(timeline.items.some(i=>i.className==='marker-prediction'));
 assert.ok(timeline.items.some(i=>i.className==='marker-human'));
@@ -75,9 +87,9 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
 const assert=require('node:assert/strict');
 const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
-global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
+global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
 let select;const handlers={};
-global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(){}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}zoomIn(){this.zoomed='in'}zoomOut(){this.zoomed='out'}}};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
 CODE
 select({items:[1]});
 assert.equal(position,1);
@@ -123,8 +135,8 @@ assert.ok(HTML.includes('data-ui="shadcn"'));
 assert.ok(HTML.includes('pointer-events:none'));
 assert.ok(!HTML.includes('}.vis-group{min-height:36px}'));
 assert.ok(!HTML.includes('id="view-seek"'));
-elements['zoom-in'].onclick();assert.equal(timeline.zoomed,'in');
-elements['zoom-out'].onclick();assert.equal(timeline.zoomed,'out');
+elements['zoom-in'].onclick();assert.equal(timeline.window[1]-timeline.window[0],500);
+elements['zoom-out'].onclick();assert.equal(timeline.window[1]-timeline.window[0],2000);
 handlers.timechanged({id:'playback',time:new Date(stepPositions.get('1'))});assert.equal(position,1);
 elements['next'].onclick();assert.equal(position,2);assert.equal(currentStep,ordered.findIndex(record=>record.key==='2'));
 assert.ok(timeline.options.format.minorLabels(new Date(1000)).includes('2'));

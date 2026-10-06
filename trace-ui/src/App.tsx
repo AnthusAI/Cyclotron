@@ -27,10 +27,10 @@ export function App({counts}:{counts:Counts}) {
         </details>
         <div id="workspace" className="workspace">
           <Card className="timeline-pane gap-0 overflow-hidden py-0">
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-5 py-4"><div><CardTitle className="text-base">Decision timeline</CardTitle><p className="mt-1 text-xs text-muted-foreground">Scroll to zoom · drag to pan · select a marker to inspect</p></div><div className="flex items-center gap-1">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-5 py-4"><div><CardTitle className="text-base">Decision timeline</CardTitle><p className="mt-1 text-xs text-muted-foreground">Horizontal scroll: pan · vertical scroll: zoom · drag to pan</p></div><div className="flex items-center gap-1">
               <Button id="zoom-in" variant="outline" size="icon" aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
               <Button id="zoom-out" variant="outline" size="icon" aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
-              <Button id="fit-all" variant="outline" size="sm"><ChevronsLeftRight /> Entire history</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
+              <Button id="fit-all" variant="outline" size="sm" title="Return to a four-cycle view"><ChevronsLeftRight /> Reset zoom</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
             </div></CardHeader>
             <Separator />
             <div className="flex flex-wrap items-center gap-2 px-5 py-3"><Button id="show-history" variant="secondary" size="sm">Recorded review history</Button><Button id="show-run" variant="outline" size="sm">This optimization run</Button><span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground"><CircleHelp className="size-3" /> Cycles → steps → events</span></div>

@@ -181,11 +181,43 @@ const cycleItems=projection.cycles.flatMap((cycle,index)=>{
   {id:'cycle-label:'+index,group:'flywheel-cycles',start:new Date(cycle.start),end:new Date(cycle.end),type:'range',className:'cycle-label',content:label}];
 });
 const maximum=Math.max(1000,...projection.cycles.map(c=>c.end));
+const minimumWindow=projection.axis==='cycle'?4:100;
 let initialWindowSet=false;
-const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...timelineItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:projection.axis==='cycle'?1:100,zoomMax:maximum,verticalScroll:false,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
-el('zoom-in').onclick=()=>timeline.zoomIn(.5,{animation:false});
-el('zoom-out').onclick=()=>timeline.zoomOut(.5,{animation:false});
-el('fit-all').onclick=()=>timeline.setWindow(0,maximum,{animation:false});
+const timeline=new vis.Timeline(el('timeline'),[...cycleItems,...stepItems,...timelineItems],timelineData.groups,{onInitialDrawComplete:()=>{if(!initialWindowSet){initialWindowSet=true;timeline.setWindow(0,projection.axis==='cycle'?Math.min(maximum,4000):maximum,{animation:false});}},editable:false,selectable:true,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:0,max:maximum,zoomMin:minimumWindow,zoomMax:maximum,verticalScroll:false,horizontalScroll:false,horizontalScrollKey:'shiftKey',horizontalScrollInvert:true,zoomKey:'',moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`${projection.axis==='cycle'?'Cycle':'Step'} ${Math.floor(date.valueOf()/1000)+1}`}});
+function setView(start,width){
+ width=Math.min(maximum,Math.max(minimumWindow,Math.ceil(width)));
+ start=Math.round(Math.max(0,Math.min(maximum-width,start)));
+ timeline.setWindow(start,start+width,{animation:false});
+}
+function zoomView(factor,anchor=.5){
+ const window=timeline.getWindow(),start=+window.start,width=+window.end-start;
+ const next=Math.min(maximum,Math.max(minimumWindow,factor>1?Math.max(width+1,Math.ceil(width*factor)):width*factor));
+ setView(start+width*anchor-next*anchor,next);
+}
+el('zoom-in').onclick=()=>zoomView(.5);
+el('zoom-out').onclick=()=>zoomView(2);
+el('fit-all').onclick=()=>{const window=timeline.getWindow(),width=Math.min(maximum,4000);setView((+window.start+ +window.end-width)/2,width);};
+// Capture before vis-timeline: its default wheel path treats diagonal/horizontal
+// trackpad gestures as zoom. Keep horizontal pan and vertical zoom independent.
+let wheelAxis=null,lastWheelAt=-Infinity;
+el('timeline').addEventListener('wheel',event=>{
+ const rect=(el('timeline').querySelector?.('.vis-panel.vis-center')||el('timeline')).getBoundingClientRect();
+ const scale=event.deltaMode===1?16:event.deltaMode===2?rect.width:1;
+ const dx=event.deltaX*scale,dy=event.deltaY*scale;
+ if(!dx&&!dy)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ const stamped=Number.isFinite(event.timeStamp);
+ if(!stamped||!wheelAxis||event.timeStamp-lastWheelAt>180||event.shiftKey)
+  wheelAxis=event.shiftKey||Math.abs(dx)>Math.abs(dy)?'pan':'zoom';
+ lastWheelAt=stamped?event.timeStamp:-Infinity;
+ if(wheelAxis==='pan'){
+  const window=timeline.getWindow(),width=+window.end- +window.start;
+  setView(+window.start+(event.shiftKey&&Math.abs(dy)>Math.abs(dx)?dy:dx)*width/Math.max(1,rect.width),width);
+ }else{
+  const anchor=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
+  zoomView(Math.exp(Math.max(-120,Math.min(120,dy))*.004),anchor);
+ }
+},{capture:true,passive:false});
 function setInspectorOpen(open){
  el('inspector').hidden=!open;
  el('show-inspector').hidden=open;
