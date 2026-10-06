@@ -254,7 +254,7 @@ for(const metric of ['accuracy','precision','recall']){
   const y=58-50*Math.max(0,Math.min(1,value));
   const title=`${metric}: ${Math.round(value*1000)/10}% · Cycle ${point.cycle_number??'unrecorded'} · ${point.count} reviewed items · ${point.scope||'recorded running performance'}${metric==='accuracy'?'':' · positive: '+point.positive_labels.join(', ')}`;
   if(previous){
-   const line=document.createElement('span');line.innerHTML=`<svg viewBox="0 0 100 66" width="100%" height="66" preserveAspectRatio="none" aria-hidden="true"><path d="M0 ${previous.y} L100 ${y}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+   const line=document.createElement('span');line.innerHTML=`<svg viewBox="0 0 100 66" width="100%" height="66" preserveAspectRatio="none" aria-hidden="true"><path class="metric-area" d="M0 ${previous.y} L100 ${y} L100 58 L0 58 Z"/><path d="M0 ${previous.y} L100 ${y}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
    trendItems.push({id:`metric-line:${metric}:${point.event_index}`,event_index:point.event_index,group:'metric-'+metric,start:new Date(previous.x),end:new Date(x),type:'range',className:'metric-line metric-'+metric,content:line,title});
   }
   previous={x,y};
