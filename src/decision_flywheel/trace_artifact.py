@@ -105,8 +105,15 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.panels{grid-template-columns:1fr}}
 .vis-timeline,.vis-panel,.vis-labelset .vis-label,.vis-time-axis .vis-text{color:CanvasText;border-color:GrayText}
 .vis-item{background:ButtonFace;color:ButtonText;border-color:GrayText}.vis-item.vis-selected{background:Highlight;color:HighlightText}
-.vis-item.vis-point .vis-dot{border-color:var(--marker-color,GrayText)}
-.vis-item.vis-point .vis-item-content{color:var(--marker-color,CanvasText);padding:2px 4px;font-weight:600}
+.vis-item.vis-point .vis-dot{width:10px;height:10px;border:0;background:var(--marker-color,GrayText);border-radius:50%;margin-top:-5px;margin-left:-5px}
+.vis-item.vis-point .vis-item-content{display:none}
+.vis-item.marker-human .vis-dot{border-radius:0;transform:rotate(45deg)}
+.vis-item.marker-optimizer-request .vis-dot{background:Canvas;border:2px solid CanvasText;border-radius:0;width:8px;height:8px}
+.vis-item.marker-optimizer-response .vis-dot{background:CanvasText;border-radius:0}
+.vis-item.vis-selected .vis-dot{outline:3px solid Highlight;outline-offset:3px}
+.vis-item.vis-box{background:Canvas;border:1px solid var(--marker-color,GrayText);color:var(--marker-color,CanvasText);min-width:18px;text-align:center}
+.vis-item.vis-box .vis-item-content{padding:1px 3px}
+.vis-item.vis-line{border-color:var(--marker-color,GrayText)}
 .vis-labelset .vis-label{min-height:36px}.vis-group{min-height:36px}
 #label-legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
 </style>
@@ -159,15 +166,18 @@ const stepPositions=new Map(ordered.map((record,index)=>[record.key,index*1000])
 const classes=[...new Set([...reviewHistory.map(s=>s.record.label||s.record.predicted_label),...events.filter(e=>e.kind==='human-feedback'||e.kind==='prediction').map(e=>e.label||e.feedback?.final_answer_value)].filter(Boolean))].sort();
 const classMark=label=>String.fromCharCode(65+classes.indexOf(label));
 const classColor=label=>`hsl(${(classes.indexOf(label)*137+205)%360} 65% 45%)`;
-classes.forEach(label=>{const entry=document.createElement('span');entry.textContent=`${classMark(label)} — ${label}`;entry.style.color=classColor(label);el('label-legend').append(entry);});
+classes.forEach(label=>{const entry=document.createElement('span');entry.textContent=`● ◆ ${label}`;entry.style.color=classColor(label);el('label-legend').append(entry);});
+const shapes=document.createElement('span');shapes.textContent='● prediction · ◆ human label · □ optimizer request · ■ optimizer response';el('label-legend').append(shapes);
 for(const item of timelineItems){
  item.title=item.content.textContent;item.start=new Date(stepPositions.get(String(item.id)));
  const source=item.source_index!==undefined?reviewHistory[item.source_index]:null,event=events[item.event_index];
  const label=source?(source.record.label||source.record.predicted_label):(event?.label||event?.feedback?.final_answer_value);
- let text;
- if(label){text=classMark(label);item.style=`--marker-color:${classColor(label)}`;}
- else{text=({'optimizer-request':'Req','optimizer-response':'Res','decision-request':'Req','decision-response':'Res','proposal-validated':'Prop','step-started':'Start','fit-started':'Fit','fit-completed':'Fit✓','candidate-evaluated':'Eval','candidate-rejected':'No','step-completed':'End','step-paused':'Pause','step-failed':'Fail','promoted':'Yes'})[event?.kind]||'•';}
- item.content=document.createElement('span');item.content.textContent=text;
+ if(label)item.style=`--marker-color:${classColor(label)}`;
+ item.className=source?(source.source_table==='presentations'?'marker-prediction':'marker-human'):
+  event?.kind==='human-feedback'?'marker-human':event?.kind==='prediction'?'marker-prediction':`marker-${event?.kind||'event'}`;
+ item.type='box';
+ item.content=document.createElement('span');item.content.textContent=item.className==='marker-human'?'◆':item.className==='marker-prediction'?'●':item.className==='marker-optimizer-request'?'□':item.className==='marker-optimizer-response'?'■':'•';
+ item.content.setAttribute('aria-label',item.title);
 }
 const maximum=Math.max(1000,(ordered.length-1)*1000);
 const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,horizontalScroll:false,moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
@@ -182,7 +192,7 @@ function goStep(step){
 function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));}
 el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,60000));
 if(reviewHistory.length)el('show-history').onclick();else showRun();
-el('run-bounds').textContent=`${ordered.length} chronological steps. Optimization test: steps ${(stepPositions.get('0')||0)/1000+1}–${(stepPositions.get(String(events.length-1))||0)/1000+1}. Drag the background to pan; scroll/pinch or use Zoom buttons to zoom. Drag the playback pointer to inspect a step. A/B/etc identify label classes; timestamps are in details only.`;
+el('run-bounds').textContent=`${ordered.length} chronological steps. Optimization test: steps ${(stepPositions.get('0')||0)/1000+1}–${(stepPositions.get(String(events.length-1))||0)/1000+1}. Drag to pan; scroll/pinch or use Zoom buttons. Drag the pointer or click a symbol to inspect. Matching colors identify prediction/label classes.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}

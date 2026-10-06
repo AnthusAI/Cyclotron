@@ -33,7 +33,7 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
 const assert=require('node:assert/strict');
 const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
-global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){}})};
+global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
 let select;const handlers={};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(){}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}zoomIn(){this.zoomed='in'}zoomOut(){this.zoomed='out'}}};
 CODE
@@ -73,7 +73,11 @@ handlers.timechanged({id:'playback',time:new Date(stepPositions.get('1'))});asse
 elements['next'].onclick();assert.equal(position,2);assert.equal(timeline.center,stepPositions.get('2'));
 assert.ok(timeline.options.maxHeight<=420);
 assert.ok(timeline.options.format.minorLabels(new Date(1000)).includes('2'));
-assert.ok(timelineItems.every(i=>i.content.textContent.length<=5));
+assert.ok(timelineItems.every(i=>i.content.textContent.length===1));
+assert.ok(timelineItems.every(i=>i.type==='box'));
+assert.ok(timelineItems.filter(i=>i.source_index!==undefined).every(i=>i.className==='marker-human'));
+assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-request'));
+assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-response'));
 assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);
 assert.equal(readable({messages:[{role:'user',content:JSON.stringify({human_explanations:['knowledge bases'],feedback:[{text:'Title\\nAbstract'}]})}]}).includes('Title\\n'),true);
 assert.ok(!readable({content:'line one\\nline two'}).includes('\\\\n'));
