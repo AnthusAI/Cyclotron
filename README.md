@@ -408,6 +408,76 @@ These historical labels may reflect recommendations shown during live review,
 and they informed prior experiments. This is a retrospective diagnostic, not an
 independent prospective performance claim. A fresh future audit is still needed.
 
+### Agreed next milestone: feature engineering, not permanent feature rejection
+
+This is a plan, not a claim that these capabilities are implemented. The existing
+scheduler isolates rubric, examples, and supporting questions, but its questions
+trial still adds a group of questions together. A losing fitted classifier does
+not establish that each proposed question is useless.
+
+Separate two decisions: **admit a plausible feature for exploration** and
+**promote a fitted classifier for deployment**. Admit structurally valid,
+feedback-grounded questions to a persistent feature bank without requiring an
+immediate development-score improvement. Keep the existing measured promotion
+gate for the active classifier. There is no large improvement threshold today;
+any strictly lower selected development Brier loss qualifies.
+
+Implement this milestone in this order:
+
+1. **Record individual feature hypotheses.** Give each question and wording
+   revision a stable identity. Record its intended concept, answer options,
+   rationale, supporting training-feedback references, lineage, and trial history.
+   Record missing answers, class counts, and probability distributions. Distinguish
+   proposed, measured, deferred, and deployed states. Losing a trial never deletes
+   the idea. Evidence references must not expose protected labels to the optimizer.
+2. **Measure signal before judging incremental value.** Report each feature's
+   returned probabilities by true class, answer coverage, and missingness on
+   training data. These are descriptive discovery diagnostics, not generalization
+   evidence. Show sample counts and distinguish Jev's confidence in a topic answer
+   from evidence that the topic predicts the human label.
+3. **Test one addition at a time.** Freeze the incumbent rubric, examples, main
+   question, model, partitions, weighting, and fitting procedure. Add one supporting
+   question, regenerate the required feature answers, and refit the numerical head.
+   Compare every candidate with the same baseline on the same development items.
+   Cache complete requests; persist exact experimental differences and call usage.
+4. **Test combinations and ablations.** Within explicit experiment and request
+   budgets, test selected pairs or small groups, then remove one question at a time
+   from promising combinations. Measure incremental value, redundancy, and possible
+   interactions. A weak standalone feature can help in a combination. Do not search
+   every subset without a budget or treat repeated development selection as unbiased.
+5. **Refine measurements and revisit ideas.** The intended concept and its current
+   question wording are different objects. Let the optimizer propose narrower or
+   clearer measurements from training feedback. Keep all versions and revisit
+   unsuccessful questions as more labels arrive, with retry opportunities for older
+   ideas as well as new discoveries. Development labels and audit errors do not
+   enter the optimizer's prompt or become examples.
+6. **Expose the work through the reusable library.** Emit feature discovery,
+   diagnostics, trial diffs, fitting, evaluation, retention, and promotion events.
+   The Rich application displays these events, current deployed features, pending
+   hypotheses, exact optimizer exchanges, and decision-model requests. It does not
+   implement a second optimizer or fitter.
+
+Specs must cover isolated additions, combination/ablation differences, deterministic
+budgets, persisted revisions and retries, restart safety, and unchanged incumbents
+after losing trials. They use fake clients, never live model calls. Evaluation
+experiments belong in Decision-Flywheel-Evaluations; reusable mechanisms belong here.
+Repeated development comparisons select candidates. The sealed scoreboard remains
+independent and must not determine question revisions or experiment selection.
+
+The motivation is real but preliminary: in the first questions-only trial, mean
+Jev probability of "central" on the four training Includes versus 61 Excludes was
+0.605 versus 0.061 for knowledge extraction/curation, 0.263 versus 0.030 for
+memory/data systems, and 0.750 versus 0.224 for research assessment/refinement.
+The fitted head learned positive Include weights for all three centrality features.
+However, knowledge-curation probabilities on the two development Includes were
+0 and 0.01. This discrepancy calls for measurement investigation and more evidence,
+not a claim that the concept is invalid or that training separation proves success.
+
+The first acceptance milestone is an auditable single-feature comparison from the
+feature bank through real Jev answers, ML fitting, and a visible development result.
+Combination search follows after that path is verified. No DSPy, retrieval, or
+long-document input-filter optimization is added by this plan.
+
 ### Compare the three controls on frozen feedback
 
 After freezing a feedback snapshot with replay preflight, inspect the separate
