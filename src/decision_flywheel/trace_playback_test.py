@@ -60,11 +60,23 @@ const rubricFixture=[
  {kind:'cycle-completed',cycle_id:'rubric-test',classifier_snapshot:{config:{rubric:'old'}}}
 ];
 assert.equal(rubricActivity('rubric-test',rubricFixture).label,'Ran · Unchanged');
+assert.equal(rubricActivity('rubric-test',rubricFixture).accepted,false);
+rubricFixture.push({kind:'step-completed',cycle_id:'rubric-test',step_stage:'rubric',result:{activated:true,promoted:false}});
+assert.equal(rubricActivity('rubric-test',rubricFixture).accepted,true);
+rubricFixture.pop();
 rubricFixture[4].classifier_snapshot.config.rubric='new';
 assert.equal(rubricActivity('rubric-test',rubricFixture).label,'Ran · Changed');
 assert.equal(rubricActivity('rubric-test',rubricFixture.slice(0,2)).label,'Running');
 assert.equal(rubricActivity('rubric-test',[rubricFixture[1],rubricFixture[2]]).label,'Ran · Change unknown');
-const exchangeCells=cycleCells(timelineItems.filter(item=>[1,2].includes(item.event_index)).map(item=>({...item,group:'rubric'})));
+const noCall=timelineItems.filter(item=>[1,2].includes(item.event_index)).map(item=>({...item,group:'rubric'}));
+assert.equal(cycleCells(noCall).length,0);
+events[1].step_stage='rubric';events[1].kind='optimizer-request';
+events[2].step_stage='rubric';events[2].kind='optimizer-response';
+const rubricCell=cycleCells(noCall)[0];
+assert.equal(rubricCell.content.textContent,'');
+assert.ok(rubricCell.className.includes('rubric-status-cell'));
+events[1].kind='decision-request';events[2].kind='decision-response';
+const exchangeCells=cycleCells(timelineItems.filter(item=>[1,2].includes(item.event_index)).map(item=>({...item,group:'examples'})));
 assert.equal(exchangeCells.length,1);
 assert.deepEqual(cellDetails.get(exchangeCells[0].id).map(item=>item.event_index),[1,2]);
 handlers.select({items:[exchangeCells[0].id]});

@@ -278,11 +278,12 @@ function rubricActivity(cycleId,recording=events){
  const ran=work.some(event=>event.kind==='optimizer-request');
  const completed=work.some(event=>event.kind==='optimizer-response');
  const failed=work.some(event=>['optimizer-failed','step-failed'].includes(event.kind));
+ const accepted=work.some(event=>(event.result||event).activated===true||(event.result||event).promoted===true||event.kind==='classifier-activated');
  const before=rows.find(event=>event.kind==='cycle-started')?.classifier_snapshot?.config?.rubric;
  const after=rows.findLast(event=>['cycle-completed','cycle-failed','classifier-activated'].includes(event.kind))?.classifier_snapshot?.config?.rubric;
  const changed=typeof before==='string'&&typeof after==='string'?before!==after:null;
  const changeLabel=changed===null?'Change unknown':changed?'Changed':'Unchanged';
- return {ran,completed,failed,before,after,changed,
+ return {ran,completed,failed,before,after,changed,accepted,
   label:failed?'Failed':ran&&!completed?'Running':`${ran?'Ran':'No LLM call'} · ${changeLabel}`};
 }
 function cycleCells(items){
@@ -300,20 +301,20 @@ function cycleCells(items){
   const rubric=members[0].group==='rubric';
   const first=rubric?(members.findLast(m=>events[m.event_index]?.kind==='optimizer-response')||members.findLast(m=>events[m.event_index]?.kind==='optimizer-request')||members[0]):members[0].group==='configuration-count'?members.at(-1):members.find(m=>m.className.includes('trigger-fired'))||members[0];
   const activity=rubric?rubricActivity(cycle.key):null;
+  if(rubric&&!activity.ran)return [];
   const trigger=first.group==='triggers';
   if(trigger&&!members.some(member=>member.className.includes('trigger-fired')))return [];
   const decision=first.className.includes('marker-prediction')||first.className.includes('marker-human');
   const content=document.createElement('span');
-  if(rubric)content.textContent=activity.label;
-  else if(!decision&&!trigger){
+  if(!rubric&&!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
    if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
   return [{...first,id,start:new Date(cycle.start),end:new Date(cycle.end),type:'range',content,
-   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.changed===true?'rubric-changed':'rubric-unchanged'):''),
-   title:rubric?`Rubric optimizer: ${activity.label}`:members.map(m=>m.title).join('\n')}];
+   className:first.className+(decision?' cycle-decision-cell':trigger?' cycle-trigger-cell':' cycle-event-cell')+(rubric?' rubric-status-cell '+(activity.accepted?'rubric-accepted':'rubric-not-accepted'):''),
+   title:rubric?`Rubric optimizer: ${activity.label} · ${activity.accepted?'Accepted':'Not accepted'}`:members.map(m=>m.title).join('\n')}];
  })];
 }
 plottedItems.splice(0,plottedItems.length,...cycleCells(plottedItems));
