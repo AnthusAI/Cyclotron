@@ -202,6 +202,10 @@ def _live_flywheel_status(client) -> Panel:
                      f"minimum per class: {latest.get('minimum_development_per_class')}")
     if latest.get("promotion_metric"):
         lines.append(f"Promotion metric: {latest['promotion_metric']}")
+    trained = latest.get("selected") or latest.get("classifier_training", {}).get("selected")
+    if trained:
+        lines.append("Selected numerical candidate: " + trained["feature_set"] + " · " + trained["training_class_weighting"])
+        latest = {**latest, "incumbent": trained["incumbent"], "candidate": trained["candidate"]}
     for name in ("incumbent", "candidate"):
         if name in latest:
             score = latest[name]
@@ -216,7 +220,7 @@ def _live_flywheel_status(client) -> Panel:
                 lines.append(f"  {name}/{label}: n={group['count']} · recall {recall}{uncertainty}")
     lines.append(f"Recorded optimizer requests/replies: {status.get('optimizer_requests_recorded', 0)}/"
                  f"{status.get('optimizer_responses_recorded', 0)}")
-    lines.append("O optimizer transcript · F active configuration · J Jev requests · G run a round · R retry interrupted round")
+    lines.append("O optimizer transcript · F active configuration · J Jev requests · G configured stage · M train classifier · R retry")
     bank = status.get("feature_bank", ())
     lines.append(f"Scheduled stage: {status.get('optimization_stage', 'legacy')} · "
                  f"question backfill limit: {status.get('retrospective_limit', 200)}")
@@ -230,7 +234,7 @@ def _live_flywheel_status(client) -> Panel:
     lines.append(f"Feature bank: {len(bank)} questions · "
                  f"{sum(entry['state'] == 'deployed' for entry in bank)} deployed · H for definitions and trial signal")
     lines.append("H feature bank and historical hypotheses (inspection only)")
-    lines.append("N discover/backfill questions · X run example-selection stage")
+    lines.append("N discover/backfill questions and train · X example selection · M retrain retained questions")
     return Panel(Text("\n".join(lines)), title="Live Decision Flywheel", border_style="green")
 
 
@@ -367,7 +371,7 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
             console.print(Text(f"Prediction unavailable ({type(error).__name__}); feedback can still be saved."))
         console.print(_article_panel(article, prediction))
         while True:
-            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r", "h", "n", "x") if flywheel else ("i", "e", "s", "b", "q")
+            choices = ("i", "e", "s", "b", "q", "o", "f", "j", "g", "r", "h", "n", "x", "m") if flywheel else ("i", "e", "s", "b", "q")
             action = Prompt.ask("Action", choices=choices + tuple(key.upper() for key in choices),
                                 show_choices=False).lower()
             if flywheel and action in ("o", "f", "j"):
@@ -381,8 +385,8 @@ def run_review_session(store: ReviewStore, console: Console | None = None,
                 flywheel.improve()
                 console.print(_live_flywheel_status(flywheel))
                 continue
-            if flywheel and action in ("n", "x"):
-                flywheel.improve(stage="questions" if action == "n" else "examples")
+            if flywheel and action in ("n", "x", "m"):
+                flywheel.improve(stage={"n": "questions", "x": "examples", "m": "classifier"}[action])
                 console.print(_live_flywheel_status(flywheel))
                 continue
             if flywheel and action == "r":
@@ -457,7 +461,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--training-class-weighting", choices=("natural", "equal_class"), default="natural")
     parser.add_argument("--min-evaluation-per-class", type=int, default=2)
     parser.add_argument("--max-optimizer-calls", type=int, default=10)
-    parser.add_argument("--optimization-stage", choices=("rubric", "examples", "questions"), default="rubric")
+    parser.add_argument("--optimization-stage", choices=("rubric", "examples", "questions", "classifier"), default="rubric")
     parser.add_argument("--retrospective-limit", type=int, default=200)
     parser.add_argument("--stage-min-evaluation-per-class", type=int, default=20)
     parser.add_argument("--optimize-every", type=int, default=10,
@@ -515,7 +519,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "control-trial-completed", "control-trial-deferred", "control-cycle-completed",
                               "feature-discovered", "feature-diagnostics", "optimization-stage-started",
                               "optimization-stage-completed", "optimization-stage-failed", "question-backfill-started", "question-backfill-progress",
-                              "question-ranking-completed"}:
+                              "question-ranking-completed", "classifier-training-started", "classifier-training-completed"}:
                     console.print(Text(f"Flywheel: {kind} · " + json.dumps(
                         {key: value for key, value in event.items() if key not in {"messages", "created_at", "kind"}},
                         ensure_ascii=False)))

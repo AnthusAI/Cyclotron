@@ -313,7 +313,45 @@ Adaptive review-rate reduction remains deferred until there is a validated rando
 After each 10 new votes, the core runs only the configured stage, **rubric** by
 default. Use `G` to request that stage sooner. `N` runs question discovery/backfill;
 `X` runs a separate example-selection experiment. A stage makes at most one
-optimizer discovery call; it never automatically runs the other stages.
+optimizer discovery call; it never automatically runs the other discovery stages.
+After question backfill, a separate numerical training phase evaluates current
+questions and current-plus-retained questions, each with natural and equal-class
+fitting. It keeps the rubric and fixed examples unchanged, fits only trusted
+training labels with full feature coverage, and calibrates only out of fold.
+`M` repeats this training phase without calling the optimizer. Set
+`OPTIMIZATION_STAGE=classifier` to schedule it every 10 votes instead of rubric
+discovery. The same development-coverage gate applies; backfill alone does not
+mean that the new features have been deployed.
+Selection minimizes balanced development Brier, requires non-decreasing balanced
+accuracy, and rejects any per-class recall regression. The selected fitted
+artifact, evidence, metrics, weighting policy and cache state persist across
+restarts. `F` shows active features; `J` shows requests; fit and evaluation events
+appear as they happen.
+
+The 2026-10-06 experiment used existing labels only: 60 training items (6 Include)
+and 27 development items (2 Include). Current-plus-retained questions with
+equal-class fitting improved development balanced accuracy from 50% to 75% and
+balanced Brier from 0.7755 to 0.4461. It got 26/27 correct, but only 1/2 Includes.
+This is a provisional development result, not final accuracy or evidence of
+reliable Include recognition. Collection needed 27 new Jev requests and no
+optimizer calls. The live head was not replaced. Full notes are in the
+evaluations repository's arXiv feature-engineering study.
+
+To reproduce bounded development training from a frozen backfill directory:
+
+```bash
+.venv/bin/python scripts/train_arxiv_classifier.py \
+  --source var/arxiv-staged-backfill-v2 --output var/arxiv-classifier-training-new
+# Inspect preflight before explicit paid collection:
+.venv/bin/python scripts/train_arxiv_classifier.py \
+  --source var/arxiv-staged-backfill-v2 --output var/arxiv-classifier-training-new \
+  --confirm-live --max-requests 174
+```
+
+The script makes private copies, compares fitted candidates, and disables live
+deployment. Its explicit exploratory floor of two development items per class
+does not change the normal reviewer's coverage gate. It refuses automatic paid
+reruns after collection starts.
 Rubric/example proposals are retained without deployment when development class
 coverage is insufficient. The default floor of 20 per class is configurable and
 is not itself a guarantee of statistical precision.

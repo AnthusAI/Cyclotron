@@ -51,6 +51,10 @@ def test_a_stages_own_promotion_does_not_repeat_discovery_on_unchanged_feedback(
     async def configured(classifier, *args):
         result = await score(classifier, *args)
         result["balanced_brier"] = .1 if classifier.head else .9
+        # This fixture isolates ledger replay, not the recall safeguard.
+        result["balanced_accuracy"] = 1.
+        for group in result["per_class"].values():
+            group["recall"] = 1.
         return result
     wheel._score = configured
     kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN}, min_development_per_class=1)
@@ -99,4 +103,19 @@ def test_a_recorded_optimizer_reply_survives_interruption_before_proposal_valida
     assert report["count"] == 6
     assert len(calls) == 1
     assert any(e["kind"] == "optimizer-response-reused" for e in wheel.history())
+    wheel.close()
+
+
+def test_question_discovery_flows_into_classifier_training_without_rediscovering_after_promotion(tmp_path):
+    calls = []
+    def complete(messages):
+        calls.append(messages)
+        return OptimizerReply('{"rationale":"Feedback feature","tasks":[{"name":"practical","instructions":"Practical?","labels":["yes","no"]}]}', "fake")
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), OptimizerAgent(complete))
+    kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN}, min_development_per_class=1)
+    report = asyncio.run(optimize_stage(wheel, "questions", TRAIN, DEV, **kwargs))
+    assert report["classifier_training"]["promoted"]
+    assert "practical/yes" in wheel.active.head.feature_names
+    asyncio.run(optimize_stage(wheel, "questions", TRAIN, DEV, **kwargs))
+    assert len(calls) == 1
     wheel.close()

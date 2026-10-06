@@ -330,7 +330,8 @@ class DecisionFlywheel:
     async def improve(self, training: Sequence[LabeledItem], development: Sequence[LabeledItem], *,
                       protected: Sequence[Item], propensities: Mapping[str, float],
                       retry_interrupted: bool = False, candidate_proposal: Mapping | None = None,
-                      apply_promotion: bool = True, evaluation_time: datetime | None = None) -> dict:
+                      apply_promotion: bool = True, evaluation_time: datetime | None = None,
+                      require_recall_safeguards: bool = False) -> dict:
         if evaluation_time is not None and (evaluation_time.tzinfo is None or evaluation_time.utcoffset() is None):
             raise ValueError("evaluation time must be timezone aware")
         self._validate_partitions(training, development, protected, propensities)
@@ -340,6 +341,7 @@ class DecisionFlywheel:
                            "evaluation_weighting": self.evaluation_weighting,
                            "training_class_weighting": self.training_class_weighting,
                            "min_evaluation_per_class": self.min_evaluation_per_class,
+                           "require_recall_safeguards": require_recall_safeguards,
                            **({"evaluation_time": evaluation_time.isoformat()}
                               if evaluation_time is not None and "current_datetime" in self.active.config.dynamic_elements else {}),
                            **({"apply_promotion": False, "baseline_version": self.active.fingerprint}
@@ -423,14 +425,21 @@ class DecisionFlywheel:
             incumbent_metrics = await self._score(self.active, development, training, now)
             candidate_metrics = await self._score(candidate, development, training, now)
             metric = "balanced_brier" if self.evaluation_weighting == "equal_class" else "brier"
-            improved = candidate_metrics[metric] < incumbent_metrics[metric] - 1e-12
+            brier_improved = candidate_metrics[metric] < incumbent_metrics[metric] - 1e-12
+            recall_safe = (candidate_metrics["balanced_accuracy"] >= incumbent_metrics["balanced_accuracy"] and
+                all(candidate_metrics["per_class"][label]["recall"] >= incumbent_metrics["per_class"][label]["recall"]
+                    for label in self.initial.task.labels)) if require_recall_safeguards else True
+            improved = brier_improved and recall_safe
             promoted = improved and apply_promotion
             result = {"promoted": promoted, "incumbent": incumbent_metrics, "candidate": candidate_metrics,
                       "improved": improved, "trial_fingerprint": round_key,
+                      "brier_improved": brier_improved, "recall_safeguards_passed": recall_safe,
                       "promotion_metric": metric, "evaluation_weighting": self.evaluation_weighting,
                       "training_class_weighting": self.training_class_weighting,
                       "feature_diagnostics": diagnostics,
-                      "reason": f"lower development {metric}" if improved else f"development {metric} did not improve"}
+                      "reason": (f"lower development {metric}" if improved else
+                                 "candidate failed per-class recall safeguards" if not recall_safe else
+                                 f"development {metric} did not improve")}
             self._emit({"kind": "candidate-evaluated", **result})
             baseline_version = self.active.fingerprint
             if promoted:

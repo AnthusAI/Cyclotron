@@ -79,7 +79,7 @@ class ReviewerFlywheel:
         outcome = next((event for event in reversed(events) if event["kind"] in
                        {"promoted", "candidate-rejected", "round-failed", "round-interrupted", "waiting-for-labels",
                         "classifier-invalidated", "control-cycle-completed", "optimization-stage-completed",
-                        "question-ranking-completed", "optimization-stage-failed"}), None)
+                        "question-ranking-completed", "optimization-stage-failed", "classifier-training-completed"}), None)
         def definition(task):
             return {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
         return {"version": active.fingerprint, "rubric": active.config.rubric,
