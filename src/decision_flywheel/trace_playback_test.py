@@ -9,6 +9,20 @@ import pytest
 from .trace_artifact import render_trace
 
 
+def test_a_long_run_opens_with_every_cycle_visible():
+    if not shutil.which('node'):
+        pytest.skip('Node is needed for viewer interaction spec')
+    html = render_trace([])
+    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
+    callback = re.search(r'onInitialDrawComplete:(.*?),height:', code).group(1)
+    result = subprocess.run(['node', '-e',
+        "const assert=require('node:assert/strict');let initialWindowSet=false;"
+        "const maximum=87000,projection={axis:'cycle'};"
+        "const timeline={setWindow:(start,end)=>assert.deepEqual([start,end],[0,maximum])};"
+        f"({callback})();"], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_operational_prediction_details_link_the_actual_request_and_disagreement_filters_keep_both_labels():
     if not shutil.which('node'):
         pytest.skip('Node is needed for viewer interaction spec')
