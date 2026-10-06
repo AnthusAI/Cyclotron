@@ -11,17 +11,26 @@ def test_round_configuration_is_recovered_from_its_actual_optimizer_input_not_a_
         {'event_id': 4, 'kind': 'step-started'},
         {'event_id': 5, 'kind': 'optimizer-request', 'messages': [{'content': json.dumps({'current': {'rubric': 'different', 'version': 'v2'}})}]}]
     recovered = recover_configurations(events)
-    assert recovered[0]['recovered_configuration']['configuration']['rubric'] == 'knowledge'
-    assert recovered[0]['recovered_configuration']['source_event_id'] == 2
-    assert recovered[3]['recovered_configuration']['configuration']['rubric'] == 'different'
-    assert 'head' not in recovered[0]['recovered_configuration']['configuration']
+    assert recovered[0]['configuration']['rubric'] == 'knowledge'
+    assert recovered[0]['source_event_id'] == 2
+    assert recovered[3]['configuration']['rubric'] == 'different'
+    assert 'head' not in recovered[0]['configuration']
     assert 'recovered_configuration' not in events[0]
 
 
 def test_recorded_snapshot_is_not_replaced_by_reconstruction():
     events = [{'kind': 'step-started', 'classifier_snapshot': {'head': 'recorded'}},
               {'kind': 'optimizer-request', 'messages': [{'content': '{"current":{"rubric":"other"}}'}]}]
-    assert 'recovered_configuration' not in recover_configurations(events)[0]
+    assert 0 not in recover_configurations(events)
+
+
+def test_embedded_recording_preserves_original_events_without_presentation_fields():
+    events = [{'event_id': 1, 'kind': 'round-started'}, {'event_id': 2,
+        'kind': 'optimizer-request', 'messages': [{'content': '{"current":{"rubric":"x"}}'}]}]
+    html = render_trace(events)
+    recording = html.split('<script id="recording" type="application/json">')[1].split('</script>')[0]
+    assert json.loads(recording) == events
+    assert 'recovered_configuration' not in recording
 
 
 def test_export_reads_all_events_in_order_without_changing_the_database(tmp_path):

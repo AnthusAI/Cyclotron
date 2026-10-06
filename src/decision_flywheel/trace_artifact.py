@@ -13,19 +13,21 @@ def read_trace(database):
 
 
 def render_trace(events):
-    data = json.dumps(recover_configurations(events), ensure_ascii=True, allow_nan=False)
-    data = data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
-    return TEMPLATE.replace('__RECORDING__', data)
+    def encode(value):
+        data = json.dumps(value, ensure_ascii=True, allow_nan=False)
+        return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
+        '__PRESENTATION__', encode(recover_configurations(events)))
 
 
 def recover_configurations(events):
     """Recover decision context only from the same round's recorded request."""
-    result = [dict(event) for event in events]
+    result = {}
     boundaries = {'step-started', 'round-started', 'optimization-stage-started'}
-    for index, event in enumerate(result):
+    for index, event in enumerate(events):
         if event.get('classifier_snapshot') or event.get('kind') not in boundaries:
             continue
-        for candidate in result[index+1:]:
+        for candidate in events[index+1:]:
             if candidate.get('kind') in {'step-started', 'round-started'}:
                 break
             if candidate.get('kind') != 'optimizer-request':
@@ -35,7 +37,7 @@ def recover_configurations(events):
                 current = briefing['current']
             except (KeyError, IndexError, TypeError, ValueError):
                 break
-            event['recovered_configuration'] = {
+            result[index] = {
                 'configuration': current, 'main_task': briefing.get('task'),
                 'source_event_id': candidate.get('event_id'),
                 'provenance': 'Decision context recovered from this round’s actual optimizer request',
@@ -83,15 +85,17 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <section><h2>Measured comparison at this event</h2><pre id="metrics"></pre></section></div>
 <section><h2>Exact recorded event: prompts, responses, requests, fits and results</h2><pre id="detail"></pre></section>
 <script id="recording" type="application/json">__RECORDING__</script>
+<script id="presentation" type="application/json">__PRESENTATION__</script>
 <script>
 const events=JSON.parse(document.getElementById('recording').textContent);
+const presentation=JSON.parse(document.getElementById('presentation').textContent);
 const el=id=>document.getElementById(id);let position=0,timer=null;
 const pretty=value=>JSON.stringify(value,null,2);
 const snapshots=[];let config=null;
 events.forEach((event,index)=>{
  if(event.kind==='step-started'||event.kind==='round-started')config=null;
  if(event.classifier_snapshot) config=event.classifier_snapshot;
- else if(event.recovered_configuration) config=event.recovered_configuration;
+ else if(presentation[index]) config=presentation[index];
  else if(event.kind==='step-started' && event.configuration) config={configuration:event.configuration,classifier_version:event.classifier_version,head:'Not captured in this older event'};
  snapshots.push(config);
  if(event.kind==='step-started'||event.kind==='round-started') {const option=document.createElement('option');option.value=index;option.textContent=`${event.event_id}: ${event.step_stage||'optimization'} · ${event.trigger||'recorded round'}`;el('round').append(option);}
