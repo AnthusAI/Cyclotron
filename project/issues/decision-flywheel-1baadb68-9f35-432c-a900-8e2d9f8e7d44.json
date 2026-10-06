@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-1baadb68-9f35-432c-a900-8e2d9f8e7d44",
   "title": "Engineer and test individual decision features before classifier promotion",
-  "description": "Agreed plan (2026-10-05): separate feature admission from fitted-classifier promotion. Current three-control scheduler bundles supporting questions; a losing bundle does not disprove individual concepts. Implement in order: (1) persistent individual feature bank with stable identity, wording revisions, intended concept, options, training evidence references, rationale, lineage, coverage and trial history; proposed/measured/deferred/deployed states, no permanent deletion on failure; (2) descriptive class-conditional probability/missingness diagnostics with counts, not held-out performance claims; (3) one-question additions against one frozen incumbent rubric/example list/model/partitions/weighting/fit, cached full requests and explicit budgets; (4) bounded pairs/groups and leave-one-question-out ablations for incremental value, redundancy and interactions; (5) wording refinement using training feedback only and fair retry as evidence grows; (6) reusable lifecycle events and Rich inspection of feature bank, trial diffs, actual optimizer exchanges, Jev requests, fits and deployment. Keep measured Brier promotion gate: any strict improvement currently qualifies, so do not merely lower a nonexistent large threshold. Development/audit labels must never enter optimizer briefing or demonstrations; sealed scoreboard must not steer search. Specs first with fake clients for isolation, deterministic budgets, revisions/retries, restart safety and failed-trial incumbent preservation. First milestone: auditable single-feature addition through decision answers, numerical fit and visible development result. Combination experiments follow after verification. Evaluations go in the separate evaluations repository; no DSPy, retrieval or input filtering. This is planned work, not implemented capability.",
+  "description": "Replacement plan agreed 2026-10-05: independent stages for few-shot experimentation, continuous main-rubric refinement, and question discovery. Do not run all controls as one automatic winner-selection cycle. Question measurement freezes CURRENT rubric/example list/existing questions, adds one question or wording revision, and retroactively re-scores a configurable eligible human-feedback window, default cap 200. Actual available N and per-class counts must be visible; retain scarce-class coverage while favoring recency. All questions get matched full-request answers/probabilities under the frozen context; other features may have longer histories but rank on a common window. Cache full state/question fingerprint and track feedback/context versions, usage, coverage, resumable progress. Never mix answers from different context versions as one matched trial. Human final-decision labels are the alignment target; supporting-question outputs are model-derived features, not ground truth for those questions. Direct agreement only for semantically matching final-label options; otherwise descriptive class-conditional probabilities and out-of-fold learned question-answer-to-final-label mapping, including inverse or multiclass relationships. Report raw/class-balanced alignment, majority baseline, missingness/counts and uncertainty. Agreement with model main answer is secondary, not human alignment. Retrospective feature ranking is discovery evidence, not deployment accuracy; do not gate admission on a four-item holdout comparison or claim cap200 guarantees adequate minority data. Keep protected audits/scoreboard untouched, preserve roles, omit target label/comment and own example from request. Retain concepts/revisions and rerun with new feedback/context. Downstream head refit and adequately supported promotion are distinct; combinations/ablations later. Reusable library owns separate-stage orchestration, bank/backfill/ranking/events; Rich displays stage, context versions, backfill progress, optimizer/decision exchanges, rank evidence and fits. Specs first with fakes and no DSPy. Existing implementation is individual-question trials within the older combined scheduler; replacement stage/backfill functionality is NOT implemented yet. First replacement milestone: bounded cached backfill and matched-window rank of one new question under active context.",
   "type": "story",
   "status": "in_progress",
   "priority": 1,
@@ -34,10 +34,22 @@
         "model": "GPT-5",
         "name": "Flywheel Implementation"
       }
+    },
+    {
+      "id": "bb0a3749-c186-4dc3-87d6-24eb1bc8bef3",
+      "author": "home",
+      "text": "User replaced the optimization design after challenging the four-item evaluation. README and issue description now explicitly supersede the combined cycle: separate example/rubric/question stages; question measurement uses active context and retrospective eligible window cap200; rank alignment to human final decisions with semantic mapping for other question labels. No code or live run changed in this planning step. Historical trial outcomes remain recorded, not reinterpreted as strong evidence.",
+      "created_at": "2026-10-06T00:36:29.482153Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
     }
   ],
   "created_at": "2026-10-06T00:06:48.486680Z",
-  "updated_at": "2026-10-06T00:25:53.809770Z",
+  "updated_at": "2026-10-06T00:36:29.482177Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
