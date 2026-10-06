@@ -228,12 +228,12 @@ optimizationLanes.find(group=>group.id==='classifier').nestedGroups=['classifier
 optimizationLanes.find(group=>group.id==='classifier').showNested=true;
 optimizationIds.push('optimization-outcomes');
 timelineData.groups=[...classGroups,
- {id:'evaluation-trends',content:'Evaluation',nestedGroups:['metric-accuracy','metric-precision','metric-recall'],showNested:true},
- ...['accuracy','precision','recall'].map(metric=>({id:'metric-'+metric,content:metric[0].toUpperCase()+metric.slice(1)+' · 0–100%'})),
  {id:'optimization',content:'Optimization',nestedGroups:optimizationIds,showNested:true},...optimizationLanes,
  {id:'classifier-attempts',content:'Proposals / trials'},{id:'fit',content:'Fitting'},
  {id:'optimization-outcomes',content:'Optimization outcomes'},
- ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&!['cycles','evaluation','fit'].includes(group.id))].map((group,order)=>({...group,order}));
+ ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&!['cycles','evaluation','fit'].includes(group.id)),
+ {id:'evaluation-trends',content:'Evaluation',nestedGroups:['metric-accuracy','metric-precision','metric-recall'],showNested:true},
+ ...['accuracy','precision','recall'].map(metric=>({id:'metric-'+metric,content:metric[0].toUpperCase()+metric.slice(1)+' · 0–100%'}))].map((group,order)=>({...group,order}));
 const metricSeries=JSON.parse(el('metric-series').textContent),trendItems=[];
 for(const metric of ['accuracy','precision','recall']){
  let previous=null;

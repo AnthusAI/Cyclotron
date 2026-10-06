@@ -251,6 +251,7 @@ assert.equal(optimization.showNested,true);
 assert.deepEqual(optimization.nestedGroups,['triggers','rubric','examples','questions','classifier','optimization-outcomes']);
 assert.deepEqual(timeline.groups.find(g=>g.id==='classifier').nestedGroups,['classifier-attempts','fit']);
 assert.deepEqual(timeline.groups.find(g=>g.id==='evaluation-trends').nestedGroups,['metric-accuracy','metric-precision','metric-recall']);
+assert.deepEqual(timeline.groups.slice(-4).map(g=>g.id),['evaluation-trends','metric-accuracy','metric-precision','metric-recall']);
 select({items:['source:0']});
 assert.ok(elements['event-title'].textContent.includes('accept'));
 assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);
