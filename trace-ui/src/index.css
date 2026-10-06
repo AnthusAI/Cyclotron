@@ -102,19 +102,19 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .vis-panel {border-color:var(--border)!important}
 .vis-panel.vis-background,.vis-axis {pointer-events:none}
 .vis-item.vis-line,.vis-item.vis-dot {display:none}
-.vis-item.vis-box {min-width:14px;border:0;background:transparent;color:var(--marker-color,var(--foreground));cursor:pointer;text-align:center}
+.vis-item.vis-box {min-width:0;border:0;background:transparent;color:var(--marker-color,var(--foreground));cursor:pointer;text-align:center}
 .vis-item.agreement-match {color:light-dark(#15803d,#4ade80)}
 .vis-item.agreement-mismatch {color:light-dark(#dc2626,#fb7185)}
 .vis-item.agreement-unreviewed,.vis-item.trigger-idle {color:var(--muted-foreground)}
 .vis-item.trigger-fired {color:var(--foreground)}
-.vis-item.vis-box svg {width:20px;height:20px;display:block}
+.vis-item.vis-box svg {width:var(--timeline-marker-size,20px);height:var(--timeline-marker-size,20px);display:block}
 .vis-item.metric-point {height:66px;border:0;background:transparent;color:var(--primary);z-index:3}
 .vis-item.metric-point .vis-item-content {padding:0!important}
 .vis-item.metric-point svg {height:66px;width:20px}
 .vis-item.vis-range.metric-line {height:66px;border:0!important;background:transparent!important;color:var(--primary);border-radius:0;z-index:2;pointer-events:auto}
 .vis-item.metric-line .vis-item-content {padding:0!important;width:100%;height:66px}
 .vis-item.metric-line svg {width:100%;height:66px;display:block}
-.vis-item.vis-box .vis-item-content {padding:4px;font-size:19px;line-height:24px}
+.vis-item.vis-box .vis-item-content {padding:var(--timeline-marker-padding,4px);font-size:var(--timeline-marker-size,20px);line-height:var(--timeline-marker-size,20px)}
 .vis-item.vis-selected {background:var(--accent)!important;border-color:var(--ring)!important;outline:2px solid var(--ring);border-radius:6px}
 .vis-tooltip {background:var(--popover)!important;color:var(--popover-foreground)!important;border:1px solid var(--border)!important;border-radius:var(--radius)!important;font:12px 'Geist Variable',sans-serif!important;padding:8px!important}
 .vis-custom-time {background:var(--primary)!important;width:2px!important;z-index:8!important}

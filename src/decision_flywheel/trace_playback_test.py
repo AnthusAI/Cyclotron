@@ -32,6 +32,8 @@ const assert=require('node:assert/strict'),elements={},handlers={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
+global.window={addEventListener(){}};
+Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelector(){return null;},style:{setProperty(){}}});
 let tick;global.setInterval=fn=>{tick=fn;return 1;};global.clearInterval=()=>{tick=null;};
 CODE
 assert.deepEqual(classes,['accept','reject']);
@@ -162,6 +164,8 @@ for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
 let select;const handlers={};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
+global.window={addEventListener(){}};
+Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelector(){return null;},style:{setProperty(){}}});
 CODE
 assert.equal(timelineItems.find(item=>item.event_index===12).iconName,'circle');
 assert.equal(timelineItems.find(item=>item.event_index===13).iconName,'circle-play');

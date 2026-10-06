@@ -87,3 +87,12 @@ def test_empty_history_is_an_explicit_empty_recording_not_a_fake_measurement():
     html = render_trace([])
     assert 'No recorded events' in html
     assert 'No measured comparison at this event' in html
+
+
+def test_timeline_marker_size_tracks_visible_slot_width_and_panel_resizes():
+    html = render_trace([])
+    assert 'function updateMarkerScale()' in html
+    assert "timeline.on('rangechange',updateMarkerScale)" in html
+    assert 'new ResizeObserver(updateMarkerScale)' in html
+    assert "setProperty('--timeline-marker-size'" in html
+    assert 'Math.min(20,Math.max(3,slotWidth*.7))' in html

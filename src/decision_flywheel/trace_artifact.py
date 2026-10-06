@@ -648,6 +648,30 @@ el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer st
 let interactionCount=0;
 function recordInteraction(){interactionCount++;el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: ${interactionCount}.`;}
 timeline.on('rangechanged',recordInteraction);
+const markerPositions=[...new Set(plottedItems.map(item=>+item.start))].sort((a,b)=>a-b);
+let markerSize=20;
+function updateMarkerScale(){
+ const window=timeline.getWindow(),start=+window.start,end=+window.end;
+ const plot=el('timeline').querySelector('.vis-panel.vis-center');
+ const width=plot?.clientWidth||el('timeline').clientWidth;
+ const visible=markerPositions.filter(position=>position>=start&&position<=end);
+ const gaps=visible.slice(1).map((position,index)=>position-visible[index]).filter(gap=>gap>0).sort((a,b)=>a-b);
+ // Typical local event spacing, rather than cycle width: multiple steps can
+ // occupy one cycle. Ignore rare tiny gaps so one cluster cannot shrink all icons.
+ const spacing=gaps.length?gaps[Math.floor(gaps.length/2)]:1000;
+ const slotWidth=width*spacing/Math.max(1,end-start);
+ const size=Math.round(Math.min(20,Math.max(3,slotWidth*.7))*10)/10;
+ if(size===markerSize)return;
+ markerSize=size;
+ el('timeline').style.setProperty('--timeline-marker-size',`${size}px`);
+ el('timeline').style.setProperty('--timeline-marker-padding',`${Math.min(4,size*.2)}px`);
+ timeline.redraw();
+}
+timeline.on('rangechange',updateMarkerScale);
+timeline.on('rangechanged',updateMarkerScale);
+if(typeof ResizeObserver!=='undefined')new ResizeObserver(updateMarkerScale).observe(el('timeline'));
+else window.addEventListener('resize',updateMarkerScale);
+updateMarkerScale();
 timeline.on('click',properties=>{
  recordInteraction();
  if(String(properties.item).startsWith('cycle-band:')){setInspectorOpen(true);const cycle=projection.cycles[Number(String(properties.item).split(':')[1])];goStep(ordered.findIndex(record=>record.key===cycle.keys[0]));return;}
