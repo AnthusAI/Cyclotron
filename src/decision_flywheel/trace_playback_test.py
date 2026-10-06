@@ -34,8 +34,8 @@ const assert=require('node:assert/strict');
 const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){}}),createElement:()=>({textContent:'',style:{},append(){}})};
-let select;
-global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;}on(name,fn){select=fn}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(){}fit(){}}};
+let select;const handlers={};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(){}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}zoomIn(){this.zoomed='in'}zoomOut(){this.zoomed='out'}}};
 CODE
 select({items:[1]});
 assert.equal(position,1);
@@ -62,6 +62,15 @@ assert.ok(elements['event-title'].textContent.includes('accept'));
 assert.ok(elements['event-content'].textContent.includes('Source abstract'));
 assert.ok(elements['event-content'].textContent.includes('reject'));
 assert.equal(timeline.options.stack,false);
+assert.equal(timeline.options.zoomable,true);
+assert.equal(timeline.options.preferZoom,true);
+assert.equal(timeline.options.horizontalScroll,false);
+assert.equal(timeline.options.zoomMin,1000);
+assert.ok(!HTML.includes('id="view-seek"'));
+elements['zoom-in'].onclick();assert.equal(timeline.zoomed,'in');
+elements['zoom-out'].onclick();assert.equal(timeline.zoomed,'out');
+handlers.timechanged({id:'playback',time:new Date(stepPositions.get('1'))});assert.equal(position,1);
+elements['next'].onclick();assert.equal(position,2);assert.equal(timeline.center,stepPositions.get('2'));
 assert.ok(timeline.options.maxHeight<=420);
 assert.ok(timeline.options.format.minorLabels(new Date(1000)).includes('2'));
 assert.ok(timelineItems.every(i=>i.content.textContent.length<=5));
@@ -69,6 +78,6 @@ assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);
 assert.equal(readable({messages:[{role:'user',content:JSON.stringify({human_explanations:['knowledge bases'],feedback:[{text:'Title\\nAbstract'}]})}]}).includes('Title\\n'),true);
 assert.ok(!readable({content:'line one\\nline two'}).includes('\\\\n'));
 assert.ok(readable({content:'<script>untrusted</script>'}).includes('<script>untrusted</script>'));
-'''.replace('DATA', json.dumps(data)).replace('CODE', code)
+'''.replace('DATA', json.dumps(data)).replace('HTML', json.dumps(html)).replace('CODE', code)
     completed = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr

@@ -114,15 +114,14 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
 <h2>Feedback and optimization timeline</h2><div id="timeline"></div><div id="label-legend"></div><p id="timeline-note"></p>
 <p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
-<label for="view-seek">Move timeline window through steps</label><input id="view-seek" type="range" min="0" value="0" style="width:100%">
 <div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
 <label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
 <label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
 <div class="controls"><button id="back">Previous</button><button id="next">Next</button><button id="play">Play</button>
+<button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button>
 <label>From event <input id="start" type="number" min="1" value="1"></label>
 <label>Through event <input id="end" type="number" min="1"></label>
 <label>Round <select id="round"><option value="">Select a recorded step</option></select></label></div>
-<label for="seek">Recorded event position</label><input id="seek" type="range" min="0" value="0">
 <p id="status" aria-live="polite"></p>
 <section><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
 <button id="paired-request" hidden>Inspect matching optimizer request</button>
@@ -143,7 +142,7 @@ const presentation=JSON.parse(document.getElementById('presentation').textConten
 const exchanges=JSON.parse(document.getElementById('exchanges').textContent);
 const roundData=JSON.parse(document.getElementById('round-data').textContent);
 const reviewHistory=JSON.parse(document.getElementById('review-history').textContent);
-const el=id=>document.getElementById(id);let position=0,timer=null;
+const el=id=>document.getElementById(id);let position=0,timer=null,currentStep=0;
 el('vendor-license').textContent=JSON.parse(el('vendor-license-data').textContent);
 const timelineData=JSON.parse(el('timeline-data').textContent);
 const timelineItems=timelineData.items.map(item=>({...item,content:(()=>{const label=document.createElement('span');label.textContent=item.content;return label;})()}));
@@ -171,12 +170,19 @@ for(const item of timelineItems){
  item.content=document.createElement('span');item.content.textContent=text;
 }
 const maximum=Math.max(1000,(ordered.length-1)*1000);
-const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:5000,zoomMax:maximum+2000,maxHeight:420,horizontalScroll:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
-el('view-seek').max=Math.max(0,ordered.length-1);el('view-seek').oninput=()=>{const first=Number(el('view-seek').value)*1000;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));};
+const timeline=new vis.Timeline(el('timeline'),timelineItems,timelineData.groups,{editable:false,showCurrentTime:false,stack:false,stackSubgroups:false,orientation:'top',min:-1000,max:maximum+1000,zoomMin:1000,zoomMax:maximum+2000,maxHeight:420,horizontalScroll:false,moveable:true,zoomable:true,preferZoom:true,showMajorLabels:false,format:{minorLabels:date=>`Step ${Math.round(date.valueOf()/1000)+1}`}});
+el('zoom-in').onclick=()=>timeline.zoomIn(.5);
+el('zoom-out').onclick=()=>timeline.zoomOut(.5);
+timeline.on('timechanged',properties=>{if(properties.id==='playback')goStep(Math.round(properties.time.valueOf()/1000));});
+function goStep(step){
+ stop();const bounded=Math.max(0,Math.min(ordered.length-1,step)),key=ordered[bounded]?.key;
+ if(key===undefined)return;
+ if(key.startsWith('source:'))inspectSource(Number(key.split(':')[1]));else move(Number(key));
+}
 function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));}
 el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,60000));
 if(reviewHistory.length)el('show-history').onclick();else showRun();
-el('run-bounds').textContent=`${ordered.length} chronological steps. Optimization test: steps ${(stepPositions.get('0')||0)/1000+1}–${(stepPositions.get(String(events.length-1))||0)/1000+1}. Drag left/right or zoom to inspect. A/B/etc identify label classes consistently in prediction and human-label lanes; timestamps are in event details only.`;
+el('run-bounds').textContent=`${ordered.length} chronological steps. Optimization test: steps ${(stepPositions.get('0')||0)/1000+1}–${(stepPositions.get(String(events.length-1))||0)/1000+1}. Drag the background to pan; scroll/pinch or use Zoom buttons to zoom. Drag the playback pointer to inspect a step. A/B/etc identify label classes; timestamps are in details only.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
@@ -222,8 +228,12 @@ events.forEach((event,index)=>{
 const latestStep=events.map(e=>e.kind).lastIndexOf('step-started');
 position=Math.max(0,events.length-1);el('start').value=Math.max(0,latestStep)+1;
 el('round').value=String(Math.max(0,latestStep));
-el('seek').max=Math.max(0,events.length-1);el('end').value=events.length;
+el('end').value=events.length;
 function stop(){if(timer!==null)clearInterval(timer);timer=null;el('play').textContent='Play';}
+function revealPointer(point){
+ const window=timeline.getWindow();
+ if(point.valueOf()<+window.start||point.valueOf()>+window.end)timeline.moveTo(point,{animation:false});
+}
 function comparison(event){
  const result=event.result||event;
  const rows=result.trials||(result.incumbent&&result.candidate?[result]:[]);
@@ -237,16 +247,17 @@ function comparison(event){
 function draw(){
  const event=events[position];
  el('status').textContent=event?`Event ${position+1}/${events.length} · ID ${event.event_id} · ${event.kind} · ${event.step_stage||'legacy/unscoped'} · ${event.status||event.reason||''}`:'No recorded events';
- el('seek').value=position;
  if(event&&stepPositions.has(String(position))){
   const point=new Date(stepPositions.get(String(position)));
+  currentStep=point.valueOf()/1000;
   if(!cursorAdded){timeline.addCustomTime(point,'playback');cursorAdded=true;}
   else timeline.setCustomTime(point,'playback');
+  revealPointer(point);
  }
  el('configuration').textContent=readable(snapshots[position]||'Configuration not captured at this point');
  el('raw-event').textContent=event?pretty(event):'No recorded events';
  inspectEvent(event);
- el('back').disabled=!events.length||position===0;el('next').disabled=!events.length||position===events.length-1;el('play').disabled=!events.length;
+ el('back').disabled=!ordered.length||currentStep===0;el('next').disabled=!ordered.length||currentStep===ordered.length-1;el('play').disabled=!events.length;
 }
 function inspectEvent(event){
  el('event-fields').replaceChildren();
@@ -296,6 +307,10 @@ function inspectSource(index){
  stop();
  const source=reviewHistory[index],row=source.record;
  const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
+ currentStep=point.valueOf()/1000;
+ revealPointer(point);
+ el('status').textContent=`Step ${currentStep+1}/${ordered.length} · original reviewer record`;
+ el('back').disabled=currentStep===0;el('next').disabled=currentStep===ordered.length-1;
  el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;
  el('event-title').textContent=source.source_table==='presentations'?`Predicted ${row.predicted_label} · ${Math.round(row.confidence*100)}%`:`Human ${row.action}: ${row.label||'—'}`;
  el('event-summary').textContent=`Original reviewer record · ${row.shown_at||row.created_at} · ${source.article.assignment}. Not generated by this optimization run.`;
@@ -303,8 +318,8 @@ function inspectSource(index){
  el('event-content').textContent=readable(source);el('raw-event').textContent=pretty(row);el('configuration').textContent='Historical source record: configuration not reconstructed from later optimization state.';
 }
 function move(index){stop();position=Math.max(0,Math.min(events.length-1,index));draw();}
-el('back').onclick=()=>move(position-1);el('next').onclick=()=>move(position+1);
-el('seek').oninput=()=>move(Number(el('seek').value));el('round').onchange=()=>{if(el('round').value!=='')move(Number(el('round').value));};
+el('back').onclick=()=>goStep(currentStep-1);el('next').onclick=()=>goStep(currentStep+1);
+el('round').onchange=()=>{if(el('round').value!=='')move(Number(el('round').value));};
 el('play').onclick=()=>{
  if(timer!==null){stop();return;}
  const first=Number(el('start').value)-1,last=Number(el('end').value)-1;

@@ -50,8 +50,11 @@ Decision request markers display actual expanded examples; decision response
 markers show the classifications. The timeline uses chronological ordinal steps,
 not a calendar axis. Prediction and human-label lanes share compact class symbols
 and a legend, with confidence and content in drill-down details. Non-stacking lanes
-and a bounded-height viewport prevent vertical piles; a window slider provides
-horizontal navigation. Zoom stays within recorded history; run/history buttons
+and a bounded-height viewport prevent vertical piles. Drag the background to pan,
+scroll/pinch or use Zoom buttons to zoom, and drag the native playback pointer to
+inspect a step. Previous/Next moves chronologically across labels, predictions and
+optimization records; the window follows an off-screen pointer without changing
+its zoom. Zoom stays between one step and recorded history; run/history buttons
 distinguish the optimization window. Original timestamps remain in source records.
 
 Pass `--reviews var/reviewer.sqlite3` to include the original human actions and
