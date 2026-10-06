@@ -26,6 +26,8 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
             'feedback': {'final_answer_value': label, 'edit_comment_value': 'reason' if label=='accept' else ''}})
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
               'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
+    history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
+                    'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'}})
     html = render_trace(events, history)
     data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
     code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
@@ -77,7 +79,8 @@ assert.ok(timeline.options.maxHeight<=420);
 assert.ok(timeline.options.format.minorLabels(new Date(1000)).includes('2'));
 assert.ok(timelineItems.every(i=>i.content.textContent.length===1));
 assert.ok(timelineItems.every(i=>i.type==='box'));
-assert.ok(timelineItems.filter(i=>i.source_index!==undefined).every(i=>i.className==='marker-human'));
+assert.equal(timelineItems.find(i=>i.source_index===0).className,'marker-human');
+assert.equal(timelineItems.find(i=>i.source_index===1).className,'marker-prediction');
 assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-request'));
 assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-response'));
 assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);
