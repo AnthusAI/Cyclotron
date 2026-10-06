@@ -16,7 +16,9 @@ def read_trace(database):
                 for number, payload in db.execute('SELECT id,payload FROM runtime_events ORDER BY id')]
 
 
-def render_trace(events, reviewer_history=(), *, class_config=None):
+def render_trace(events, reviewer_history=(), *, class_config=None, run_comparison=None):
+    if class_config is None and run_comparison is not None:
+        class_config = run_comparison.get('class_config')
     def encode(value):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
         return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
@@ -42,7 +44,7 @@ def render_trace(events, reviewer_history=(), *, class_config=None):
         if isinstance(result,dict) and ('incumbent' in result or 'candidate' in result):
             metric_view[str(index)]={key:positive_metrics(result.get(key) or {},classes) for key in ('incumbent','candidate')}
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
-        '__CLASS_CONFIG__',encode(classes)).replace('__METRIC_VIEW__',encode(metric_view)).replace('__METRIC_SERIES__',encode(running_metric_series(events,classes))).replace(
+        '__CLASS_CONFIG__',encode(classes)).replace('__RUN_COMPARISON__',encode(run_comparison)).replace('__METRIC_VIEW__',encode(metric_view)).replace('__METRIC_SERIES__',encode(running_metric_series(events,classes))).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
         '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
         '__TIMELINE_DATA__', encode(timeline_data(events))).replace('__STEP_PROJECTION__', encode(projected)).replace(
@@ -103,6 +105,7 @@ def main(argv=None):
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--reviews', type=Path, help='optional original reviewer source history, read-only')
     parser.add_argument('--class-config', type=Path, help='JSON ordered class labels and positive/negative/neutral roles')
+    parser.add_argument('--run-comparison', type=Path, help='JSON matched endpoint evaluation; never inferred from running scores')
     args = parser.parse_args(argv)
     if args.output.exists():
         parser.error('choose a new output path; recorded artifacts are not overwritten')
@@ -112,7 +115,8 @@ def main(argv=None):
     with args.output.open('x') as stream:
         from .trace_review_history import read_review_history
         stream.write(render_trace(read_trace(args.database), read_review_history(args.reviews) if args.reviews else (),
-            class_config=json.loads(args.class_config.read_text()) if args.class_config else None))
+            class_config=json.loads(args.class_config.read_text()) if args.class_config else None,
+            run_comparison=json.loads(args.run_comparison.read_text()) if args.run_comparison else None))
     print(f'Private offline trace: {args.output.resolve()}')
 
 
@@ -138,6 +142,7 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 <script id="review-history" type="application/json">__REVIEW_HISTORY__</script>
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
 <script id="class-config" type="application/json">__CLASS_CONFIG__</script>
+<script id="run-comparison" type="application/json">__RUN_COMPARISON__</script>
 <script id="metric-view" type="application/json">__METRIC_VIEW__</script>
 <script id="metric-series" type="application/json">__METRIC_SERIES__</script>
 <script>__VIEWER_JS__</script>

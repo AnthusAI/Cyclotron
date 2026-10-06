@@ -41,7 +41,16 @@ feedback) to that network without authentication. Do not use port forwarding.
 The default remains loopback-only; wildcard and public bind addresses are refused.
 The explorer uses CLI-generated shadcn/Radix controls, Geist fonts, and semantic
 light/dark themes that follow system appearance automatically, with no theme
-control. Run statistics are collapsed by default. Its React shell and fonts are bundled locally; no CDN or Node
+control. Run statistics are collapsed by default. Expand them for matched before/after
+accuracy, precision, and recall (using configured positive classes), followed by run counts.
+The comparison uses the same protected audit items at both endpoints, not the first
+and last cumulative running scores. Small class counts remain uncertain.
+For a completed replay, `scripts/evaluate_replay_endpoints.py --run <directory>`
+preflights a separate endpoint audit; add `--confirm-live --max-requests <ceiling>`
+to collect it without fitting or optimizing. Pass the saved `run-comparison.json`
+to the trace exporter with `--run-comparison`. Missing comparisons are shown as
+not recorded, and undefined precision is not represented as zero.
+Its React shell and fonts are bundled locally; no CDN or Node
 installation is needed for playback. UI contributors can run `make build-trace-ui`
 and `make test-trace-ui` after installing the locked dependencies in `trace-ui`.
 Previous/Next and the timeline step through

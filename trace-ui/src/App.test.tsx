@@ -5,6 +5,17 @@ import {App} from './App'
 
 afterEach(cleanup)
 
+test('expanded statistics lead with matched before and after metrics and undefined precision is not zero',()=>{
+  render(<App counts={{predictions:87,labels:87,optimizations:11,events:2000}} comparison={{scope:'Matched protected audit',sample_count:18,class_counts:{include:2,exclude:16},before:{accuracy:.5,precision:null,recall:0},after:{accuracy:.75,precision:.5,recall:1}}} />)
+  expect(screen.getByText('Accuracy')).toBeInTheDocument()
+  expect(screen.getByText('Precision')).toBeInTheDocument()
+  expect(screen.getByText('Recall')).toBeInTheDocument()
+  expect(screen.getByText('75.0%')).toBeInTheDocument()
+  expect(screen.getByText('+25.0 pp')).toBeInTheDocument()
+  expect(screen.getByText('Undefined')).toBeInTheDocument()
+  expect(screen.getByText(/include: 2/)).toBeInTheDocument()
+})
+
 test('the explorer exposes accessible timeline controls without a redundant legend',()=>{
   render(<App counts={{predictions:135,labels:132,optimizations:1,events:503}} />)
   expect(screen.getByRole('button',{name:'Zoom in'})).toBeVisible()

@@ -10,8 +10,11 @@ import {FilterCheckbox} from './FilterCheckbox'
 import {ExchangePanel} from './ExchangePanel'
 
 export type Counts={predictions:number;labels:number;optimizations:number;events:number}
+type Endpoint={accuracy:number|null;precision:number|null;recall:number|null}
+export type RunComparison={scope:string;sample_count:number;class_counts:Record<string,number>;before:Endpoint;after:Endpoint}
+const percent=(value:number|null|undefined)=>value==null?'Undefined':`${(value*100).toFixed(1)}%`
 
-export function App({counts}:{counts:Counts}) {
+export function App({counts,comparison}:{counts:Counts;comparison?:RunComparison|null}) {
   return <>
     <div className="app-shell">
       <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
@@ -22,9 +25,17 @@ export function App({counts}:{counts:Counts}) {
         <div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>
         <details className="run-statistics text-muted-foreground">
           <summary className="cursor-pointer text-xs font-medium">Run statistics</summary>
-          <div className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {([['Model predictions',counts.predictions,'Before human review'],['Human feedback',counts.labels,'Votes, comments & revisions'],['Optimizer requests',counts.optimizations,'Recorded LLM exchanges'],['Runtime events',counts.events,'Immutable source recording']] as const).map(([title,value,description])=><Card key={title} className="gap-2 py-4"><CardHeader className="px-4 pb-0"><p className="text-xs text-muted-foreground">{title}</p></CardHeader><CardContent className="px-4"><p className="font-mono text-2xl font-medium tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{description}</p></CardContent></Card>)}
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {([['Accuracy','accuracy'],['Precision','precision'],['Recall','recall']] as const).map(([title,key])=>{
+            const before=comparison?.before[key],after=comparison?.after[key]
+            const delta=before!=null&&after!=null?(after-before)*100:null
+            return <Card key={key} className="gap-2 py-4"><CardHeader className="px-4 pb-0"><p className="text-sm font-medium text-foreground">{title}</p></CardHeader><CardContent className="px-4">
+              {comparison?<><div className="flex items-center justify-between gap-2 font-mono text-xl font-medium"><div><p className="mb-1 font-sans text-xs font-normal text-muted-foreground">Before</p>{percent(before)}</div><span className="text-muted-foreground">→</span><div><p className="mb-1 font-sans text-xs font-normal text-muted-foreground">After</p>{percent(after)}</div></div><p className="mt-2 text-xs text-muted-foreground">{delta==null?'Change unavailable':`${delta>=0?'+':''}${delta.toFixed(1)} pp`}</p></>:<p className="text-xs text-muted-foreground">Matched comparison not recorded</p>}
+            </CardContent></Card>
+          })}
           </div>
+          {comparison&&<p className="mt-2 text-xs leading-relaxed">{comparison.scope} · {comparison.sample_count} items · {Object.entries(comparison.class_counts).map(([label,count])=>`${label}: ${count}`).join(' · ')}. Precision and recall use the configured positive class. Small class counts make these estimates uncertain; undefined means no applicable denominator.</p>}
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">{([['Predictions',counts.predictions],['Human feedback',counts.labels],['Optimizer requests',counts.optimizations],['Events',counts.events]] as const).map(([label,count])=><span key={label}>{label}: <span className="font-mono">{count}</span></span>)}</div>
         </details>
         <div id="workspace" className="workspace">
           <Card className="timeline-pane gap-0 overflow-hidden py-0">

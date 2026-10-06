@@ -96,3 +96,10 @@ def test_timeline_marker_size_tracks_visible_slot_width_and_panel_resizes():
     assert 'new ResizeObserver(updateMarkerScale)' in html
     assert "setProperty('--timeline-marker-size'" in html
     assert 'Math.min(20,Math.max(5,slotWidth*.7))' in html
+def test_a_matched_endpoint_summary_is_embedded_without_rewriting_the_recording():
+    from .trace_artifact import render_trace
+    comparison={'scope':'Matched audit <private>','sample_count':18,'before':{'accuracy':.3},'after':{'accuracy':.9}}
+    html=render_trace([],run_comparison=comparison)
+    assert '<script id="run-comparison" type="application/json">' in html
+    assert 'Matched audit \\u003cprivate\\u003e' in html
+    assert '"sample_count": 18' in html
