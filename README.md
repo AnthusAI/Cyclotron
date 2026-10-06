@@ -24,6 +24,22 @@ The core analyzes eligible votes and comments, validates proposals, collects Jev
 fits and calibrates the ML head, compares development results, and promotes or rejects a version.
 Private SQLite records preserve the active version, request cache, and actual transcripts.
 
+Export a private, offline debugging recording:
+
+```bash
+python -m decision_flywheel.trace_artifact --database var/reviewer-runtime.sqlite3 --output var/reviewer-trace.html
+```
+
+Open the recording in a browser. Previous/Next and the timeline step through
+events; Play/Pause replays a selected range; the round selector jumps to a recorded
+optimization step. Each event exposes its exact prompt, response or other payload.
+Measured comparisons show incumbent/candidate metrics and accuracy differences;
+unmeasured steps explicitly show no established accuracy change. New step and
+activation events retain full configuration and fitted-head snapshots. Old events
+cannot recover snapshots that were never recorded. Playback does not optimize,
+retrain, call any service or modify the runtime. The recording contains private
+feedback and article content: keep it local, never commit it or publish it.
+
 Decision answers use an exact-request cache by default. Its fingerprint includes
 the model identity and complete state/questions: target, rubric, ordered examples,
 and extra classifications. Changed requests require new answers; retraining a head

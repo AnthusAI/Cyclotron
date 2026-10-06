@@ -34,6 +34,8 @@ def test_one_step_exposes_exact_inputs_outputs_tools_and_stops_before_training(t
     assert response["tool_calls"][0]["name"] == "inspect"
     assert request["step_id"] == response["step_id"] == result["step_id"]
     assert next(e for e in events if e["kind"] == "step-started")["trigger"] == "web-next"
+    assert next(e for e in events if e["kind"] == "step-started")["classifier_snapshot"]["config"]["task"]["name"] == TASK.name
+    assert next(e for e in events if e["kind"] == "step-completed")["classifier_snapshot"]["head"] is None
     assert [e["event_id"] for e in observed] == [e["event_id"] for e in events]
     cursor = trace["cursor"]
     wheel.close()

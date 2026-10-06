@@ -284,6 +284,8 @@ class DecisionFlywheel:
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('active', ?)", (payload,))
         self.active = classifier
+        self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,
+                    "classifier_snapshot": asdict(classifier)})
 
     @staticmethod
     def _evidence(training):
