@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-d83af778-388a-4e97-81a9-6fbb174bf670",
+  "title": "Lead run statistics with matched before/after classifier metrics",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "87fe4b4c-bd67-49ff-8624-282f47f91de1",
+      "author": "home",
+      "text": "Implemented primary before/after Accuracy, Precision, Recall cards with pp changes and matched-sample scope. Explicit endpoint audit used 36 decision requests, zero optimizer calls, same protected 18 items (2 include, 16 exclude), no operational trace or labels changed. Accuracy 33.3% to 88.9%; precision 8.3% to 50%; recall 50% to 100%, small positive-count uncertainty displayed. Browser verified on localhost; 516 Python tests and 7 UI tests passed.",
+      "created_at": "2026-10-06T18:44:33.359059Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T18:40:40.132534Z",
+  "updated_at": "2026-10-06T18:44:45.380529Z",
+  "closed_at": "2026-10-06T18:44:45.380413Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
