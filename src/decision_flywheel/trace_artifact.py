@@ -447,22 +447,36 @@ function decisionExchange(index){
 }
 function showDecisionExchange(exchange){
  el('decision-exchange').hidden=false;
- el('decision-request-box').open=true;el('decision-response-box').open=true;
+ el('decision-exchange-summary').textContent=`Request event ${exchange.request?.event_id??'not recorded'} · response event ${exchange.response?.event_id??'not recorded'} · ${exchange.request?.model||exchange.response?.model||'model not recorded'}`;
+ el('decision-request-tab').focus?.();
  el('decision-request-content').textContent=exchange.request?readable({model:exchange.request.model,state:exchange.request.state,questions:exchange.request.questions}):'No matching request was recorded. It has not been reconstructed from a later configuration.';
  el('decision-response-content').textContent=exchange.response?readable(exchange.response):'No matching response was recorded.';
 }
 function showOptimizerExchange(index){
  const owner=roundData.owners[String(index)],round=roundData.rounds[String(owner)];
  el('optimizer-exchange').hidden=true;
+ el('optimizer-proposal').hidden=true;
  if(!round||(!round.optimizer_requests.length&&!round.optimizer_responses.length))return;
  el('optimizer-exchange').hidden=false;
- el('optimizer-request-box').open=true;el('optimizer-response-box').open=true;
+ el('optimizer-exchange-summary').textContent=`Request event ${round.optimizer_requests.map(i=>events[i].event_id).join(', ')||'not recorded'} · response event ${round.optimizer_responses.map(i=>events[i].event_id).join(', ')||'not recorded'} · ${events[round.optimizer_requests[0]]?.requested_model||'model not recorded'}`;
+ el('optimizer-request-tab').focus?.();
  el('optimizer-request-content').textContent=round.optimizer_requests.length?readable(round.optimizer_requests.map(i=>{
   const e=events[i];return {event_id:e.event_id,model:e.requested_model,messages:e.messages};
  })):'No optimizer request was recorded for this attempt.';
  el('optimizer-response-content').textContent=round.optimizer_responses.length?readable(round.optimizer_responses.map(i=>{
   const e=events[i];return {event_id:e.event_id,model:e.model,content:e.content,tool_calls:e.tool_calls||[],usage:e.usage};
  })):'No optimizer response was recorded for this attempt.';
+ const proposal=events[round.proposals.at(-1)];
+ if(proposal){
+  el('optimizer-proposal').hidden=false;
+  const changes={};
+  for(const key of ['rubric','example_ids','tasks','dynamic_elements']){
+   if(JSON.stringify(proposal.previous?.[key])!==JSON.stringify(proposal.candidate?.[key]))changes[key]={before:proposal.previous?.[key]??'Not recorded',proposed:proposal.candidate?.[key]??'Not recorded'};
+  }
+  el('optimizer-proposal-content').textContent=readable(changes);
+  const terminal=round.outcomes.map(i=>events[i]).findLast(e=>typeof (e.result||e).promoted==='boolean'),result=terminal?.result||terminal;
+  el('optimizer-proposal-status').textContent=`Validation is a proposal check, not activation. ${result?`${result.promoted?'Promoted into the active classifier':'Not promoted; active configuration unchanged'} · ${result.reason||'No reason recorded'}${result.candidate?.count!==undefined?' · '+result.candidate.count+' development items':''}`:'No promotion outcome was recorded.'}`;
+ }
 }
 function evaluationMetrics(event){
  if(!event)return null;

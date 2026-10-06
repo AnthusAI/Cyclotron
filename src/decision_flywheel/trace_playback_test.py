@@ -144,7 +144,8 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
             'created_at': '2026-10-06T12:01:00Z', 'assignment': 'development',
             'feedback': {'final_answer_value': label, 'edit_comment_value': 'reason' if label=='accept' else ''}})
     events.append({'event_id':11,'kind':'internal-cache-check','created_at':'2026-10-06T12:01:10Z'})
-    events.append({'event_id':12,'kind':'proposal-validated','step_id':'a','step_stage':'rubric','created_at':'2026-10-06T12:01:11Z'})
+    events.append({'event_id':12,'kind':'proposal-validated','step_id':'a','step_stage':'rubric','created_at':'2026-10-06T12:01:11Z',
+                   'previous':{'rubric':''},'candidate':{'rubric':'prefer curated knowledge'}})
     events.extend([{'event_id':13+i,'kind':'trigger-evaluated','stage':'rubric','due':due,'created_at':f'2026-10-06T12:01:{12+i}Z'} for i,due in enumerate((False,True))])
     events.append({'event_id':15,'kind':'cycle-metrics','created_at':'2026-10-06T12:01:14Z','metrics':{'accuracy':.5,'count':2}})
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
@@ -180,7 +181,12 @@ assert.ok(elements['event-content'].textContent.includes('reply-a'));
 assert.ok(elements['event-content'].textContent.includes('tool-a'));
 assert.ok(!elements['event-content'].textContent.includes('reply-b'));
 select({items:[11]});
+assert.equal(elements['optimizer-proposal'].hidden,false);
+assert.ok(elements['optimizer-proposal-content'].textContent.includes('prefer curated knowledge'));
+assert.ok(elements['optimizer-proposal-status'].textContent.includes('not activation'));
 assert.equal(elements['optimizer-exchange'].hidden,false);
+assert.ok(elements['optimizer-exchange-summary'].textContent.includes('Request event 2'));
+assert.ok(elements['optimizer-exchange-summary'].textContent.includes('response event 3'));
 assert.ok(elements['optimizer-request-content'].textContent.includes('prompt-a'));
 assert.ok(elements['optimizer-response-content'].textContent.includes('reply-a'));
 assert.ok(elements['optimizer-response-content'].textContent.includes('tool-a'));

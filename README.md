@@ -156,6 +156,12 @@ a four-cycle view near the current location; Recorded cycles shows the entire ru
 Zoom-out controls remain effective at the minimum scale.
 Select a marker to reopen the adjacent inspector, or use Show details to restore
 the last selection. Non-stacking lanes remain inside the timeline's scroll area.
+Classification markers open a Decision model exchange with Request and Response
+tabs. Optimization markers open the corresponding Optimizer LLM exchange with
+the full recorded messages and response/tool calls in separate tabs. Both show
+their source event IDs. Proposal validation is not promotion: its inspector also
+shows the before/proposed changes and the recorded promotion outcome. Rejected
+proposals do not change the active rubric.
 Drag the background to pan, use Zoom buttons in either mode,
 and drag the native playback pointer to
 inspect a step. Click empty timeline space to seek to that moment; select an event

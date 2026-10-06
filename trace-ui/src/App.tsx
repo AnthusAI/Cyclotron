@@ -7,6 +7,7 @@ import {NativeSelect, NativeSelectOption} from '@/components/ui/native-select'
 import {Label} from '@/components/ui/label'
 import {Separator} from '@/components/ui/separator'
 import {FilterCheckbox} from './FilterCheckbox'
+import {ExchangePanel} from './ExchangePanel'
 
 export type Counts={predictions:number;labels:number;optimizations:number;events:number}
 
@@ -56,14 +57,13 @@ export function App({counts}:{counts:Counts}) {
               <section id="evaluation-visual" className="disclosure p-3 space-y-3" hidden aria-label="Evaluation metric comparison">
                 <h3 className="text-sm font-semibold">Evaluation outcome</h3><p id="evaluation-summary" className="text-xs text-muted-foreground" /><div id="evaluation-bars" />
               </section>
-              <section id="optimizer-exchange" className="space-y-3" hidden aria-label="Optimizer LLM exchange">
-                <details id="optimizer-request-box" className="disclosure"><summary>Optimizer LLM request · full context</summary><pre id="optimizer-request-content" /></details>
-                <details id="optimizer-response-box" className="disclosure"><summary>Optimizer LLM responses · tool calls</summary><pre id="optimizer-response-content" /></details>
+              <section id="optimizer-proposal" className="space-y-3" hidden aria-label="Proposed configuration and recorded outcome">
+                <h3 className="text-sm font-semibold">Proposed change</h3>
+                <p id="optimizer-proposal-status" className="text-sm" />
+                <details className="disclosure"><summary>Before → proposed rubric / configuration</summary><pre id="optimizer-proposal-content" /></details>
               </section>
-              <section id="decision-exchange" className="space-y-3" hidden aria-label="Decision model exchange">
-                <details id="decision-request-box" className="disclosure"><summary>Exact decision-model request</summary><pre id="decision-request-content" /></details>
-                <details id="decision-response-box" className="disclosure"><summary>Exact decision-model response</summary><pre id="decision-response-content" /></details>
-              </section>
+              <ExchangePanel kind="optimizer" title="Optimizer LLM" />
+              <ExchangePanel kind="decision" title="Decision model" />
               <dl id="event-fields" />
               <details id="content-box" className="disclosure"><summary id="content-title">Inspect event content</summary><pre id="event-content" /></details>
               <details className="disclosure"><summary>Configuration at this point</summary><pre id="configuration" /></details>
