@@ -13,9 +13,35 @@ def read_trace(database):
 
 
 def render_trace(events):
-    data = json.dumps(events, ensure_ascii=True, allow_nan=False)
+    data = json.dumps(recover_configurations(events), ensure_ascii=True, allow_nan=False)
     data = data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     return TEMPLATE.replace('__RECORDING__', data)
+
+
+def recover_configurations(events):
+    """Recover decision context only from the same round's recorded request."""
+    result = [dict(event) for event in events]
+    boundaries = {'step-started', 'round-started', 'optimization-stage-started'}
+    for index, event in enumerate(result):
+        if event.get('classifier_snapshot') or event.get('kind') not in boundaries:
+            continue
+        for candidate in result[index+1:]:
+            if candidate.get('kind') in {'step-started', 'round-started'}:
+                break
+            if candidate.get('kind') != 'optimizer-request':
+                continue
+            try:
+                briefing = json.loads(candidate['messages'][-1]['content'])
+                current = briefing['current']
+            except (KeyError, IndexError, TypeError, ValueError):
+                break
+            event['recovered_configuration'] = {
+                'configuration': current, 'main_task': briefing.get('task'),
+                'source_event_id': candidate.get('event_id'),
+                'provenance': 'Decision context recovered from this round’s actual optimizer request',
+                'learned_head': 'Not present in this request; not reconstructed'}
+            break
+    return result
 
 
 def main(argv=None):
@@ -63,11 +89,16 @@ const el=id=>document.getElementById(id);let position=0,timer=null;
 const pretty=value=>JSON.stringify(value,null,2);
 const snapshots=[];let config=null;
 events.forEach((event,index)=>{
+ if(event.kind==='step-started'||event.kind==='round-started')config=null;
  if(event.classifier_snapshot) config=event.classifier_snapshot;
+ else if(event.recovered_configuration) config=event.recovered_configuration;
  else if(event.kind==='step-started' && event.configuration) config={configuration:event.configuration,classifier_version:event.classifier_version,head:'Not captured in this older event'};
  snapshots.push(config);
- if(event.kind==='step-started') {const option=document.createElement('option');option.value=index;option.textContent=`${event.event_id}: ${event.step_stage} · ${event.trigger}`;el('round').append(option);}
+ if(event.kind==='step-started'||event.kind==='round-started') {const option=document.createElement('option');option.value=index;option.textContent=`${event.event_id}: ${event.step_stage||'optimization'} · ${event.trigger||'recorded round'}`;el('round').append(option);}
 });
+const latestStep=events.map(e=>e.kind).lastIndexOf('step-started');
+position=Math.max(0,latestStep);el('start').value=position+1;
+el('round').value=String(position);
 el('seek').max=Math.max(0,events.length-1);el('end').value=events.length;
 function stop(){if(timer!==null)clearInterval(timer);timer=null;el('play').textContent='Play';}
 function comparison(event){

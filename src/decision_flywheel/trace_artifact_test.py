@@ -1,7 +1,27 @@
 import sqlite3
 import json
 
-from .trace_artifact import read_trace, render_trace
+from .trace_artifact import read_trace, render_trace, recover_configurations
+
+
+def test_round_configuration_is_recovered_from_its_actual_optimizer_input_not_a_later_round():
+    events = [{'event_id': 1, 'kind': 'step-started'},
+        {'event_id': 2, 'kind': 'optimizer-request', 'messages': [{'content': json.dumps({'task': {'name': 'include'}, 'current': {'rubric': 'knowledge', 'example_ids': ['a'], 'tasks': [], 'version': 'v1'}})}]},
+        {'event_id': 3, 'kind': 'step-completed'},
+        {'event_id': 4, 'kind': 'step-started'},
+        {'event_id': 5, 'kind': 'optimizer-request', 'messages': [{'content': json.dumps({'current': {'rubric': 'different', 'version': 'v2'}})}]}]
+    recovered = recover_configurations(events)
+    assert recovered[0]['recovered_configuration']['configuration']['rubric'] == 'knowledge'
+    assert recovered[0]['recovered_configuration']['source_event_id'] == 2
+    assert recovered[3]['recovered_configuration']['configuration']['rubric'] == 'different'
+    assert 'head' not in recovered[0]['recovered_configuration']['configuration']
+    assert 'recovered_configuration' not in events[0]
+
+
+def test_recorded_snapshot_is_not_replaced_by_reconstruction():
+    events = [{'kind': 'step-started', 'classifier_snapshot': {'head': 'recorded'}},
+              {'kind': 'optimizer-request', 'messages': [{'content': '{"current":{"rubric":"other"}}'}]}]
+    assert 'recovered_configuration' not in recover_configurations(events)[0]
 
 
 def test_export_reads_all_events_in_order_without_changing_the_database(tmp_path):
