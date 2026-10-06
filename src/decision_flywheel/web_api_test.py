@@ -65,3 +65,18 @@ def test_websocket_transport_delivers_a_persisted_event_and_rejects_cross_origin
             event = websocket.receive_json()
             assert event['payload']['data']['runEvents']['payload']['content'] == 'Actual reply'
             websocket.send_json({'type':'complete','id':'one'})
+
+
+def test_run_activity_counts_are_isolated_and_timeline_uses_embedded_chrome(tmp_path):
+    store = WebStore(tmp_path / 'web.sqlite')
+    run = store.create_run('Replay','recorded',{})
+    other = store.create_run('Other','recorded',{})
+    for index,kind in enumerate(('cycle-started','prediction','human-feedback','optimizer-request')):
+        store.append_event(run['id'],str(index),{'kind':kind,'event_id':index+1,'label':'include',
+            'created_at':'2026-10-06T21:00:00Z','cycle_id':'one','cycle_number':1,'feedback':{'final_answer_value':'include'}})
+    store.append_event(other['id'],'one',{'kind':'prediction'})
+    with TestClient(create_app(store)) as client:
+        result = client.post('/graphql',json={'query':'query($id:ID!){run(runId:$id){counts}}','variables':{'id':run['id']}}).json()
+        assert result['data']['run']['counts'] == {'cycles':1,'predictions':1,'labels':1,'optimizations':1}
+        html = client.get(f"/runs/{run['id']}/timeline").text
+        assert '<script id="workspace-options" type="application/json">{"embedded": true}</script>' in html

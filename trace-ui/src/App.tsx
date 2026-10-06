@@ -14,15 +14,15 @@ type Endpoint={accuracy:number|null;precision:number|null;recall:number|null}
 export type RunComparison={scope:string;sample_count:number;class_counts:Record<string,number>;before:Endpoint;after:Endpoint}
 const percent=(value:number|null|undefined)=>value==null?'Undefined':`${(value*100).toFixed(1)}%`
 
-export function App({counts,comparison}:{counts:Counts;comparison?:RunComparison|null}) {
+export function App({counts,comparison,embedded=false}:{counts:Counts;comparison?:RunComparison|null;embedded?:boolean}) {
   return <>
     <div className="app-shell">
-      <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+      {!embedded&&<header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><RefreshCw className="size-5" /></div><div><p className="text-sm font-semibold">Decision Flywheel</p><p className="text-xs text-muted-foreground">Experiment workspace</p></div></div>
         <Badge variant="outline"><ShieldCheck className="size-3" /> Private · offline</Badge>
-      </header>
-      <main className="explorer-main mx-auto w-full max-w-[1800px] gap-3 p-4">
-        <div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>
+      </header>}
+      <main className={`explorer-main mx-auto w-full max-w-[1800px] gap-3 ${embedded?'p-2':'p-4'}`}>
+        {!embedded&&<div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>}
         <details className="run-statistics text-muted-foreground">
           <summary className="cursor-pointer text-xs font-medium">Run statistics</summary>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -83,7 +83,7 @@ export function App({counts,comparison}:{counts:Counts;comparison?:RunComparison
             </CardContent>
           </Card>
         </div>
-        <p className="text-xs text-muted-foreground">Read-only playback. No model calls, no changes to labels, no data sent outside this machine.</p>
+        {!embedded&&<p className="text-xs text-muted-foreground">Read-only playback. No model calls, no changes to labels, no data sent outside this machine.</p>}
       </main>
     </div>
   </>

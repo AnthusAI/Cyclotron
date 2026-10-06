@@ -14,7 +14,8 @@ const counts={
 }
 // The DOM adapter initializes after this synchronous shell mount, exactly once.
 const comparison=JSON.parse(document.getElementById('run-comparison')?.textContent||'null') as RunComparison|null
-flushSync(()=>createRoot(document.getElementById('root')!).render(<App counts={counts} comparison={comparison} />))
+const options=JSON.parse(document.getElementById('workspace-options')?.textContent||'{}')
+flushSync(()=>createRoot(document.getElementById('root')!).render(<App counts={counts} comparison={comparison} embedded={options.embedded===true} />))
 const iconHost=document.createElement('div');iconHost.hidden=true;document.body.append(iconHost)
 flushSync(()=>createRoot(iconHost).render(<>
   <span id="icon-circle"><Circle strokeWidth={3} /></span>

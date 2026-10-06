@@ -68,6 +68,9 @@ body {margin:0;min-width:360px;-webkit-font-smoothing:antialiased}
 .timeline-pane > :not(.timeline-viewport) {flex-shrink:0}
 .timeline-viewport {flex:1;min-height:0;overflow:hidden}
 #timeline {height:100%;overscroll-behavior:contain}
+/* vis-timeline owns row scrolling through its label panel. Native focus/search
+   scrolling in the clipped item panel must not move items away from labels. */
+.vis-panel.vis-center {overflow:clip!important}
 .recording-details {max-height:130px;overflow:auto}
 .workspace.inspector-closed {grid-template-columns:minmax(0,1fr)}
 #inspector {min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}

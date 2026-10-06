@@ -8,6 +8,26 @@ inspector. Add run history and human labeling around them.
 
 ## Architecture
 
+A run is one execution of the flywheel, not a synonym for an optimization call.
+It has one of two input sources:
+
+- Interactive: predictions receive new human labels, explanations, skips, and
+  corrections through the labeling UI.
+- Replay: a frozen snapshot supplies the existing labels and explanations in
+  their recorded arrival order. Each parameter experiment starts a separate run.
+
+Both paths use the same predict → feedback → trigger checks → optional learning
+cycle logic and the same API event contract. They use the same timeline and
+request/response inspector. Input source, frozen label revision, model settings,
+learning cadence, objective, and parent run belong to run metadata, not invented
+events. Do not confuse read-only playback of a completed run with executing a
+new replay. Browsing a run must never start paid work.
+
+The current application can label interactively and inspect API-recorded replays.
+Replay scripts already support API ingestion. In-app replay launch, stepping,
+pause/resume, and parameter controls are remaining delivery work; imported history
+must not be presented as evidence that those controls are complete.
+
 - React and existing shadcn components provide the single-page workspace.
 - FastAPI serves the app. Strawberry provides GraphQL queries, mutations, and
   subscriptions. SQLite holds the run catalog, items, jobs, and trace history.
@@ -40,6 +60,9 @@ inspector. Add run history and human labeling around them.
    reference, prediction, Include/Exclude/Skip, optional explanation, and undo.
 5. Connect durable commands to the reusable engine. Show cycle progress,
    optimizer exchanges, model fitting, and current configuration live.
+6. Add replay execution controls around that same engine, using a frozen label
+   snapshot and explicit budgets. Keep historical playback independent of the
+   execution worker. Both input sources use the same run-history UI.
 
 ## Safety and comparison
 

@@ -30,6 +30,10 @@ class Run:
     async def summary(self, info: strawberry.Info) -> JSON | None:
         return await asyncio.to_thread(info.context['store'].summary,str(self.id))
 
+    @strawberry.field
+    async def counts(self, info: strawberry.Info) -> JSON:
+        return await asyncio.to_thread(info.context['store'].counts,str(self.id))
+
 
 @strawberry.type
 class TraceEvent:
@@ -214,6 +218,6 @@ def create_app(store, *, service=None, token=None, redact=()):
         rows = await asyncio.to_thread(store.all_events,run_id)
         summary = await asyncio.to_thread(store.summary,run_id)
         return await asyncio.to_thread(render_trace,[r['payload'] for r in rows],
-            class_config=run['config'].get('class_config'),run_comparison=(summary or {}).get('comparison'))
+            class_config=run['config'].get('class_config'),run_comparison=(summary or {}).get('comparison'),embedded=True)
 
     return app

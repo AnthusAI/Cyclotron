@@ -90,3 +90,27 @@ def test_failed_api_ingestion_marks_work_failed_without_a_paid_model_call(tmp_pa
     assert store.jobs(run['id'])[0]['status'] == 'failed'
     assert reviewer.core.model.calls == 0
     worker.close()
+
+
+def test_restart_accepts_feedback_for_the_displayed_prediction_in_the_same_cycle(tmp_path):
+    store = WebStore(tmp_path / 'web.sqlite')
+    client = TestClient(create_app(store))
+    factory = lambda run_id:GraphQLTraceSink('unused',run_id,transport=lambda body:client.post('/graphql',json=body).json())
+    kwargs = dict(sink_factory=factory,model_factory=lambda _: (FakeModel(),agent([])),allow_live=True,
+        articles=[asdict(Article('paper','Title','Abstract','2026-10-06',('cs.AI',)))])
+    worker = WebWorker(store,tmp_path / 'runs',**kwargs)
+    run = worker.create_run('Restart', {})
+    store.command(run['id'],'prepare','prepare',{})
+    worker.process(store.claim_command())
+    current = store.current_item(run['id'])
+    prediction = next(row['payload'] for row in store.all_events(run['id']) if row['payload']['kind']=='prediction')
+    worker.close()
+    reopened = WebWorker(store,tmp_path / 'runs',**kwargs)
+    store.command(run['id'],'vote','label',{'item_id':'paper','label':'include','comment':'Knowledge access',
+        'presentation_id':current['prediction']['presentation_id']})
+    reopened.process(store.claim_command())
+    assert store.jobs(run['id'])[0]['status'] == 'completed'
+    feedback = next(row['payload'] for row in store.all_events(run['id']) if row['payload']['kind']=='human-feedback')
+    assert feedback['cycle_id'] == prediction['cycle_id']
+    assert reopened.sessions[run['id']].core.model.calls == 0
+    reopened.close()

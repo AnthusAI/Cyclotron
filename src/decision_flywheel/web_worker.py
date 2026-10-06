@@ -103,6 +103,9 @@ class WebWorker:
             transport.calls = sum(e['kind']=='optimizer-request' for e in events)
         reviewer = ReviewerFlywheel(reviews,core,min_stage_evaluation_per_class=2,
             rubric_changes_every=config['rubric_changes_every'],include_protected_guidance=False)
+        current = self.store.current_item(run_id)
+        if current and current['prediction']['version']==core.active.fingerprint:
+            reviewer.current_cycle = core.resume_cycle(reviewer_item(reviews.article(current['item']['id'])))
         self.sessions[run_id], self.sinks[run_id] = reviewer, sink
         return reviewer
 

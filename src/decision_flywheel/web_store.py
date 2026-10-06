@@ -74,6 +74,13 @@ class WebStore:
         with self.connect() as db:
             return [self._run(r) for r in db.execute('SELECT * FROM web_runs ORDER BY rowid DESC')]
 
+    def counts(self, run_id):
+        self.run(run_id)
+        with self.connect() as db:
+            counts = dict(db.execute("SELECT json_extract(payload,'$.kind'),COUNT(*) FROM web_events WHERE run_id=? GROUP BY json_extract(payload,'$.kind')",(run_id,)))
+        return {name:counts.get(kind,0) for name,kind in (
+            ('cycles','cycle-started'),('predictions','prediction'),('labels','human-feedback'),('optimizations','optimizer-request'))}
+
     def set_status(self, run_id, status):
         self.run(run_id)
         with self.connect() as db:

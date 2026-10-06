@@ -49,3 +49,11 @@ test('run statistics are collapsed initially and there is no theme control',()=>
   // Native details owns disclosure state, without re-rendering the trace controller.
   expect(summary.tagName).toBe('SUMMARY')
 })
+
+test('the embedded explorer keeps timeline controls but does not repeat the app header',()=>{
+  render(<App embedded counts={{predictions:87,labels:87,optimizations:11,events:4772}} />)
+  expect(screen.queryByText('Private · offline')).toBeNull()
+  expect(screen.queryByText('Run explorer')).toBeNull()
+  expect(screen.getByText('Run statistics')).toBeInTheDocument()
+  expect(screen.getByRole('button',{name:'Zoom in'})).toBeVisible()
+})

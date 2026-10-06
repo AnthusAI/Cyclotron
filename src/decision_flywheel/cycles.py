@@ -12,6 +12,32 @@ class Cycle:
         self.wheel, self.item, self.reason = wheel, item, reason
         self.token = None
 
+    @classmethod
+    def resume(cls, wheel, item):
+        """Reattach to the last unfinished cycle; never repeat prediction or work."""
+        if wheel._cycle_running:
+            raise RuntimeError('one operational cycle may run at a time')
+        closed = set()
+        for event in reversed(wheel.history(100000)):
+            if event['kind'] in ('cycle-completed','cycle-failed'):
+                closed.add(event.get('cycle_id'))
+            if event['kind']=='cycle-started':
+                if event['cycle_id'] in closed or event.get('cycle_item_id') != item.id:
+                    return None
+                cycle=cls(wheel,item,reason=event.get('reason','item-processing'))
+                cycle.context={key:event[key] for key in ('cycle_id','cycle_number','cycle_item_id')}
+                cycle.token=wheel._cycle_context.set(cycle.context)
+                wheel._cycle_running=True
+                try:
+                    wheel._emit({'kind':'cycle-resumed','reason':cycle.reason,
+                        'classifier_snapshot':asdict(wheel.active)})
+                except Exception:
+                    wheel._cycle_context.reset(cycle.token)
+                    wheel._cycle_running=False
+                    raise
+                return cycle
+        return None
+
     def __enter__(self):
         wheel = self.wheel
         if wheel._cycle_running:

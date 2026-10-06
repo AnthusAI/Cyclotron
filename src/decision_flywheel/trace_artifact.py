@@ -16,7 +16,7 @@ def read_trace(database):
                 for number, payload in db.execute('SELECT id,payload FROM runtime_events ORDER BY id')]
 
 
-def render_trace(events, reviewer_history=(), *, class_config=None, run_comparison=None):
+def render_trace(events, reviewer_history=(), *, class_config=None, run_comparison=None, embedded=False):
     if class_config is None and run_comparison is not None:
         class_config = run_comparison.get('class_config')
     def encode(value):
@@ -43,7 +43,7 @@ def render_trace(events, reviewer_history=(), *, class_config=None, run_comparis
         result=event.get('result') or event
         if isinstance(result,dict) and ('incumbent' in result or 'candidate' in result):
             metric_view[str(index)]={key:positive_metrics(result.get(key) or {},classes) for key in ('incumbent','candidate')}
-    return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
+    return TEMPLATE.replace('__WORKSPACE_OPTIONS__',encode({'embedded':embedded})).replace('__RECORDING__', encode(events)).replace(
         '__CLASS_CONFIG__',encode(classes)).replace('__RUN_COMPARISON__',encode(run_comparison)).replace('__METRIC_VIEW__',encode(metric_view)).replace('__METRIC_SERIES__',encode(running_metric_series(events,classes))).replace(
         '__PRESENTATION__', encode(recover_configurations(events))).replace(
         '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
@@ -134,6 +134,7 @@ window.addEventListener('securitypolicyviolation',event=>{const node=document.ge
 <div id="root" data-ui="shadcn"></div>
 <noscript>This offline explorer requires JavaScript to display the timeline.</noscript>
 <script id="recording" type="application/json">__RECORDING__</script>
+<script id="workspace-options" type="application/json">__WORKSPACE_OPTIONS__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
 <script id="round-data" type="application/json">__ROUNDS__</script>
