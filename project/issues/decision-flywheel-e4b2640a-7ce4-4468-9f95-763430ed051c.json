@@ -1,0 +1,44 @@
+{
+  "id": "decision-flywheel-e4b2640a-7ce4-4468-9f95-763430ed051c",
+  "title": "Replay existing human feedback with transition-triggered rubric optimization",
+  "description": "Run fresh operational replay of frozen 87-label snapshot with every-second class-change rubric trigger. Preserve prior recording and source votes. Explicit ceilings: 6000 decision requests and 11 optimizer calls. Verify rubric call cycles, payloads, active question/example evolution and prequential per-class metrics; refresh served explorer only with the new trace. Existing example/question promotion policies remain unchanged so this evaluates the new rubric schedule.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "af8a2ade-53e4-4306-ae5e-1b72970a0638",
+      "author": "home",
+      "text": "First live replay v1 stopped at cycle 6 after optimizer explicitly declined to infer a rubric from one eligible Exclude example. Implemented nonfatal recorded no-change handling for blank proposals; active rubric is never cleared. Regression spec failed before fix; full suite now 512 passes. Fresh replay v2 is running within original per-run ceilings, with rubric requests already at cycles 6 and 15. User additionally authorized continuing low-cost experiments. Preserve v1 failure trace and report its 6 decision / 1 optimizer calls separately.",
+      "created_at": "2026-10-06T18:33:09.766938Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "7c5bc3ee-448c-4d63-a12c-5878217be614",
+      "author": "home",
+      "text": "Completed v2: 87 cycles, 370 decision requests, 11 optimizer requests. Seven rubric calls at cycles 6,15,22,25,33,41,61. Actual request audit: six examples from cycle 40; five classifications from cycle 60; seven examples from cycle 80; nonempty rubric after cycle 6. Prequential agreement 77/87 (88.5%), Include recall 4/8 (50%), precision 4/10 (40%), balanced accuracy 71.2%. Majority accuracy baseline 79/87 is higher but has zero Include recall. Not final-model held-out accuracy or a controlled causal comparison. Refreshed served explorer, browser verified late decision exposes expanded request. Failed v1 preserved (6 decision,1 optimizer call). Added safe no-change lifecycle handling and regression specs; full Python suite 513 passes. Added text-free aggregate README notes.",
+      "created_at": "2026-10-06T18:37:06.607226Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T18:31:50.496120Z",
+  "updated_at": "2026-10-06T18:37:07.438092Z",
+  "closed_at": "2026-10-06T18:37:07.437982Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
