@@ -9,6 +9,40 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
 
 
+def test_example_stage_measures_individual_swaps_even_before_development_is_large_enough_to_promote(tmp_path):
+    from .example_attribution_test import SignalModel
+    config=ClassifierConfig(TASK,rubric='Useful work',example_ids=('t0','t1'))
+    optimizer=OptimizerAgent(lambda _:OptimizerReply('{"example_ids":["t0","t3"]}','fake'))
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',config,SignalModel(),optimizer,max_requests=40)
+    report=asyncio.run(optimize_stage(wheel,'examples',TRAIN,DEV,
+        protected=(),propensities={r.item.id:1. for r in TRAIN}))
+    assert report['example_measurement']['rankings'][0]['added_id']=='t3'
+    assert report['pending_evaluation'] and not report['promoted']
+    assert wheel.active.config==config
+    assert any(e['kind']=='example-ranking-completed' for e in wheel.history(1000))
+    wheel.close()
+
+
+def test_reused_development_experiments_are_visible_to_the_optimizer_and_are_not_claimed_as_independent(tmp_path):
+    from .example_attribution_test import SignalModel
+    from .example_attribution import measure_example_swaps
+    from .staged_optimization import stage_briefing
+    config=ClassifierConfig(TASK,example_ids=('t0','t1'))
+    requests=[]
+    def reply(messages):
+        requests.append(json.loads(messages[-1]['content']))
+        return OptimizerReply('{"example_ids":["t0","t3"]}','fake')
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',config,SignalModel(),OptimizerAgent(reply),max_requests=40)
+    kwargs=dict(protected=(),propensities={r.item.id:1. for r in TRAIN})
+    asyncio.run(measure_example_swaps(wheel,TRAIN,DEV,**kwargs))
+    result=asyncio.run(optimize_stage(wheel,'examples',TRAIN,DEV,**kwargs))
+    experiments=requests[0]['current']['example_experiments']
+    assert experiments[0]['rankings'][0]['examples']['added']['values']['text']
+    assert not result['evaluation_independent_of_optimizer_context']
+    assert stage_briefing(wheel,'examples',TRAIN,(),()).payload['current']['example_experiments']==[]
+    wheel.close()
+
+
 def test_an_optimizer_that_cannot_infer_a_cold_start_rubric_defers_without_stopping_feedback(tmp_path):
     replies=iter(['','Later working rubric'])
     optimizer=OptimizerAgent(lambda _:OptimizerReply(json.dumps({'rubric':next(replies),'rationale':'Insufficient early evidence'}),'fake'))

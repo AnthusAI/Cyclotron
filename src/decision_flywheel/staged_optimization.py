@@ -7,20 +7,38 @@ from .optimizer_agent import FeedbackBriefing
 from .question_measurement import measure_questions
 
 
+def _example_experiments(wheel, training, development):
+    if not wheel.db.execute("SELECT name FROM sqlite_master WHERE name='example_measurements'").fetchone():return []
+    current_train=wheel._evidence(training);current_dev=wheel._evidence(development)
+    reports=[]
+    for payload, in wheel.db.execute("SELECT payload FROM example_measurements WHERE status='complete' ORDER BY rowid DESC"):
+        report=json.loads(payload)
+        if any(current_train.get(k)!=v for k,v in report.get('training_evidence',{}).items()) or any(current_dev.get(k)!=v for k,v in report.get('development_evidence',{}).items()):continue
+        if not report.get('development_evidence'):continue
+        summary={key:report[key] for key in ('baseline_fingerprint','scope','effect_scope','by_class')}
+        summary['rankings']=[{key:row[key] for key in ('examples','brier_gain','accuracy_change','question_effects')}
+                            for row in report['rankings'][:4]]
+        reports.append(summary)
+        if len(reports)==3:break
+    return reports
+
+
 def stage_briefing(wheel, stage, training, development, protected):
     control = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}.get(stage)
     if control is None:
         raise ValueError("this stage has no optimizer request")
+    measurements=_example_experiments(wheel,training,development) if stage=='examples' else []
     return FeedbackBriefing.build(wheel.initial.task, training,
         current={**wheel.active.config.briefing_state(), "control_under_test": control,
-                 "stage": stage, "request_budget_bytes": wheel.max_request_bytes},
+                 "stage": stage, "request_budget_bytes": wheel.max_request_bytes,
+                 **({'example_experiments':measurements} if stage=='examples' else {})},
         protected=tuple(row.item for row in development)+tuple(protected),
         human_explanations=wheel.optimizer_context["human_explanations"])
 
 
 async def optimize_stage(wheel, stage, training, development, *, protected, propensities,
                          limit=200, retry_interrupted=False, min_development_per_class=20,
-                         train_after_questions=True):
+                         train_after_questions=True, max_example_trials=8):
     if stage == "classifier":
         from .classifier_training import train_classifier
         return await train_classifier(wheel, training, development, protected=protected,
@@ -31,6 +49,8 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         raise ValueError("stage must be rubric, examples or questions")
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("retrospective limit must be a positive integer")
+    if type(max_example_trials) is not int or max_example_trials<1:
+        raise ValueError('example trial ceiling must be positive')
     if isinstance(min_development_per_class, bool) or not isinstance(min_development_per_class, int) or min_development_per_class < 1:
         raise ValueError("stage evaluation floor must be a positive integer")
     wheel._validate_partitions(training, development, protected, propensities)
@@ -39,6 +59,8 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         wheel._emit({"kind": "optimization-stage-completed", **result})
         return result
     wheel.reconcile_feedback(training, development=development)
+    if stage=='examples' and _example_experiments(wheel,training,development):
+        wheel.set_optimizer_context(wheel.optimizer_context['human_explanations'],evaluation_context_exposed=True)
     key_data = {"stage": stage, "context": wheel.active.config.fingerprint,
                  "training": wheel._evidence(training), "development": wheel._evidence(development),
                  "protected": sorted(item.id for item in protected), "propensities": propensities,
@@ -49,6 +71,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
     key_data["train_after_questions"] = train_after_questions
+    if stage=='examples':key_data['max_example_trials']=max_example_trials
     key = _hash(key_data)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS optimization_stages (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
     saved = wheel.db.execute("SELECT status,payload FROM optimization_stages WHERE id=?", (key,)).fetchone()
@@ -124,6 +147,28 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             result["classifier_training"] = await train_classifier(wheel, training, development,
                 protected=protected, propensities=propensities,
                 min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
+    elif stage=='examples' and wheel.active.config.example_ids:
+        from .example_attribution import measure_example_swaps
+        by_id={row.item.id:row for row in training}
+        hard={}
+        for event in wheel.history(10000):
+            if event.get('kind')=='prediction' and event.get('target_id') in by_id:
+                row=by_id[event['target_id']]
+                if event.get('label')!=row.label:
+                    hard[row.item.id]=event.get('confidence') or 0.
+        preferred=tuple(dict.fromkeys((*sorted(hard,key=lambda key:(-hard[key],key)),*proposal['example_ids'])))
+        measured=await measure_example_swaps(wheel,training,development,protected=protected,
+            propensities=propensities,preferred_ids=preferred,max_trials=max_example_trials,limit=min(limit,200))
+        best=measured['recommended_proposal']
+        counts=measured.get('by_class',{label:0 for label in wheel.initial.task.labels})
+        if best and min(counts.values())>=min_development_per_class:
+            result=await wheel.improve(training,development,protected=protected,propensities=propensities,
+                candidate_proposal=best,retry_interrupted=retry_interrupted,require_recall_safeguards=True)
+        else:
+            result={'promoted':False,'pending_evaluation':True,
+                'reason':'swap evidence retained for later labels; no measured winner with adequate class coverage',
+                'development_counts':counts,'minimum_development_per_class':min_development_per_class}
+        result['example_measurement']=measured
     else:
         counts = {label: sum(row.label == label for row in development) for label in wheel.initial.task.labels}
         if stage=='rubric' and not wheel.active.config.rubric.strip() and wheel.active.head is None:

@@ -607,6 +607,15 @@ function inspectEvent(event){
    field('Running recall',point.recall===null?'Undefined / unavailable':`${Math.round(point.recall*1000)/10}%`);}
  }
  let payload=event,title='Full event content';
+ if(event.experiment==='single-example-swap'){
+  field('Example removed',event.examples?.removed||event.removed_id);field('Example added',event.examples?.added||event.added_id);
+  field('Brier improvement',event.brier_gain);field('Accuracy change',event.accuracy_change);
+  field('Question probability changes by human class',event.question_effects);
+ }
+ if(event.kind==='example-ranking-completed'){
+  field('Measurement scope',event.scope);field('Effect scope',event.effect_scope);
+  field('Development class counts',event.by_class);field('Ranked example swaps',event.rankings);
+ }
  if(event.kind==='human-feedback'){
   field('Label',event.feedback?.final_answer_value);field('Partition',event.assignment);field('Action',event.action);
   field('Explanation',event.feedback?.edit_comment_value);field('Item',event.feedback?.item_id);

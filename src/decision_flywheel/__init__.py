@@ -24,6 +24,7 @@ from .replay import ReplayPlan, plan_replay, recent_balanced, run_replay
 from .feature_bank import FeatureBank, probability_diagnostics
 from .question_measurement import measure_questions, rank_question, select_window
 from .classifier_training import train_classifier
+from .example_attribution import measure_example_swaps, plan_swaps
 
 
 def run_demo(*args, **kwargs):
@@ -37,6 +38,7 @@ __all__ = [
     "FeatureBank", "probability_diagnostics",
     "measure_questions", "rank_question", "select_window",
     "train_classifier",
+    "measure_example_swaps", "plan_swaps",
     "ClassifierConfig", "DecisionFlywheel", "FittedClassifier", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply", "classification_metrics",
     "ReplayPlan", "plan_replay", "recent_balanced", "run_replay",
     "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",

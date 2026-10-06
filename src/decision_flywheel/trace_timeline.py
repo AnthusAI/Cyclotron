@@ -29,6 +29,8 @@ def timeline_data(events):
             group,label='cycles',kind.replace('-',' ')
         elif kind == 'trigger-evaluated':
             group,label='triggers',f"{event.get('stage')} · {'run' if event.get('due') else 'skip'} · {event.get('reason')}"
+        elif kind in {'example-swaps-planned','example-ranking-completed'}:
+            group,label='examples',kind.replace('-',' ')
         elif kind == 'cycle-metrics':
             group,label='evaluation','Running prediction agreement'
         elif kind == 'human-feedback':

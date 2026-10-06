@@ -1056,6 +1056,22 @@ Do not source `.env` in the shell.
 `DecisionFlywheel` owns `predict`, `improve`, `reconcile_feedback`, `history` and `close`.
 `ReviewerFlywheel` is a thin article-record adapter; the terminal has no fitting or promotion logic.
 `improve_example_list` and `search_context_policies` compare example policies.
+The connected `examples` stage also measures individual same-class example swaps
+once it has an incumbent list. It keeps the rubric, supporting questions, example
+count, display slots, and learned head fixed during these comparisons. By default
+it tests at most eight swaps on the same recent-stratified development sample
+(at most 200 items per configuration). `max_example_trials` controls the trial ceiling.
+`measure_example_swaps` can run these measurements without fitting or promotion.
+It ranks probability-based gains, records accuracy and per-class precision/recall,
+and records each question's probability shift grouped by the final human label.
+These effects are conditional on the other examples; supporting questions have
+no separate ground-truth labels. They are not intrinsic example-quality scores.
+Complete request caching resumes measurements without repeating valid calls.
+New labels trigger fresh comparisons, rather than permanently rejecting an idea.
+The optimizer can see summaries of prior eligible development experiments; those
+evaluations are then explicitly marked as not independent of optimizer context.
+Protected audit items never participate in selection. Initial list seeding remains
+separate; a promising swap still passes the existing fit and promotion safeguards.
 Frozen artifacts preserve the selected policy and its provenance.
 `JsonlRunLedger` records measured rounds.
 `JsonlEventStream` records request and trial activity.
