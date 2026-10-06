@@ -24,6 +24,7 @@ def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded
         events.append({'event_id': len(events)+1, 'kind': 'human-feedback',
             'created_at': '2026-10-06T12:01:00Z', 'assignment': 'development',
             'feedback': {'final_answer_value': label, 'edit_comment_value': 'reason' if label=='accept' else ''}})
+    events.append({'event_id':11,'kind':'internal-cache-check','created_at':'2026-10-06T12:01:10Z'})
     history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
               'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
     history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
@@ -88,6 +89,8 @@ assert.equal(timelineItems.find(i=>i.source_index===0).className,'marker-human')
 assert.equal(timelineItems.find(i=>i.source_index===1).className,'marker-prediction');
 assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-request'));
 assert.ok(timelineItems.some(i=>i.className==='marker-optimizer-response'));
+assert.equal(ordered.length,timelineItems.length);
+assert.equal(stepPositions.has('10'),false);
 elements['disagreement-filter'].checked=true;applyFilters();
 assert.equal(timeline.items.length,1);
 assert.equal(timeline.items[0].source_index,0);

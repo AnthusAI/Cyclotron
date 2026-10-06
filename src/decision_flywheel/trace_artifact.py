@@ -94,6 +94,10 @@ TEMPLATE = r'''<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'">
 <title>Decision Flywheel — recorded trace</title>
+<script>
+window.addEventListener('error',event=>{const node=document.getElementById('runtime-health');if(node){node.textContent='Viewer error: '+event.message;node.style.color='red';}});
+window.addEventListener('securitypolicyviolation',event=>{const node=document.getElementById('runtime-health');if(node){node.textContent='Browser blocked '+event.violatedDirective;node.style.color='red';}});
+</script>
 <style>__TIMELINE_CSS__</style>
 <script>__TIMELINE_JS__</script>
 <style>
@@ -118,6 +122,7 @@ button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{widt
 #label-legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
 </style>
 <h1>Decision Flywheel — recorded trace</h1>
+<p id="runtime-health" role="status">Build: visible-steps-v2. Waiting for interactive viewer startup. If this stays visible, JavaScript did not start.</p>
 <p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
 <h2>Feedback and optimization timeline</h2><div id="timeline"></div><div id="label-legend"></div><p id="timeline-note"></p>
 <p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
@@ -162,7 +167,7 @@ for(const [index,source] of reviewHistory.entries()){
 }
 for(const group of [{id:'feedback',content:'Human labels'},{id:'decisions',content:'Decisions'}])if(timelineItems.some(i=>i.group===group.id)&&!timelineData.groups.some(g=>g.id===group.id))timelineData.groups.push(group);
 // Ordinal positions are a view projection. Original event timestamps stay unchanged.
-const ordered=[...events.map((e,index)=>({key:String(index),date:Date.parse(e.created_at)})),...reviewHistory.map((s,index)=>({key:'source:'+index,date:Date.parse(s.record.shown_at||s.record.created_at)}))].sort((a,b)=>(a.date-b.date));
+const ordered=timelineItems.map(item=>({key:String(item.id),date:Date.parse(item.start)})).sort((a,b)=>(a.date-b.date));
 const stepPositions=new Map(ordered.map((record,index)=>[record.key,index*1000]));
 const classes=[...new Set([...reviewHistory.map(s=>s.record.label||s.record.predicted_label),...events.filter(e=>e.kind==='human-feedback'||e.kind==='prediction').map(e=>e.label||e.feedback?.final_answer_value)].filter(Boolean))].sort();
 const classMark=label=>String.fromCharCode(65+classes.indexOf(label));
@@ -208,7 +213,7 @@ function goStep(step){
 function showRun(){const first=stepPositions.get('0')||0;timeline.setWindow(first-1000,Math.min(maximum+1000,first+60000));}
 el('show-run').onclick=showRun;el('show-history').onclick=()=>timeline.setWindow(-1000,Math.min(maximum+1000,60000));
 if(reviewHistory.length)el('show-history').onclick();else showRun();
-el('run-bounds').textContent=`${ordered.length} chronological steps. Human review occurred before the later retrospective optimization. Drag to pan; Shift+wheel pans horizontally; Ctrl+wheel zooms; ordinary wheel scrolls lanes. Zoom buttons also work. Drag the pointer or click symbols to inspect. Matching colors identify prediction/label classes.`;
+el('run-bounds').textContent=`${ordered.length} visible chronological steps; internal events do not add empty steps. Human review occurred before the later retrospective optimization: no new votes arrived during that later batch. Drag to pan; Shift+wheel pans horizontally; Ctrl+wheel zooms; ordinary wheel scrolls lanes. Zoom buttons also work. Drag the pointer or click symbols to inspect. Matching colors identify prediction/label classes.`;
 for(const [id,values] of [['label-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>String(e.feedback?.final_answer_value??'unlabeled')),...reviewHistory.filter(s=>s.source_table==='review_events'&&s.record.label).map(s=>s.record.label)]],
  ['role-filter',[...events.filter(e=>e.kind==='human-feedback').map(e=>e.assignment||'unassigned'),...reviewHistory.map(s=>s.article.assignment)]]]){
  for(const value of [...new Set(values)].sort()){const option=document.createElement('option');option.value=value;option.textContent=value;el(id).append(option);}
@@ -358,6 +363,9 @@ el('play').onclick=()=>{
  if(position<first||position>=last)position=first;draw();el('play').textContent='Pause';
  timer=setInterval(()=>{if(position>=last){stop();return;}position++;draw();},1000);
 };draw();
+el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: 0.`;
+let interactionCount=0;
+for(const name of ['click','rangechanged'])timeline.on(name,()=>{interactionCount++;el('runtime-health').textContent=`Build: visible-steps-v2. Interactive viewer started: ${timelineItems.length} markers. Native clicks / range changes: ${interactionCount}.`;});
 </script></html>'''
 
 
