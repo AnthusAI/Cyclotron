@@ -17,6 +17,7 @@ test('the explorer exposes accessible timeline controls without a redundant lege
   expect(document.getElementById('label-legend')).toBeNull()
   expect(screen.queryByText('Cycles → steps → events')).toBeNull()
   expect(document.getElementById('timeline')).toBeInTheDocument()
+  expect(document.querySelector('header .lucide-refresh-cw')).toBeInTheDocument()
 })
 
 test('a shadcn checkbox notifies the existing offline filter controller',()=>{

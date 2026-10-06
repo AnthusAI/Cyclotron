@@ -1,4 +1,4 @@
-import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, FileText, Maximize, PanelRight, Play, ShieldCheck, Workflow, X, ZoomIn, ZoomOut} from 'lucide-react'
+import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, FileText, Maximize, PanelRight, Play, ShieldCheck, RefreshCw, X, ZoomIn, ZoomOut} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Badge} from '@/components/ui/badge'
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card'
@@ -15,7 +15,7 @@ export function App({counts}:{counts:Counts}) {
   return <>
     <div className="app-shell">
       <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
-        <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Workflow className="size-5" /></div><div><p className="text-sm font-semibold">Decision Flywheel</p><p className="text-xs text-muted-foreground">Experiment workspace</p></div></div>
+        <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><RefreshCw className="size-5" /></div><div><p className="text-sm font-semibold">Decision Flywheel</p><p className="text-xs text-muted-foreground">Experiment workspace</p></div></div>
         <Badge variant="outline"><ShieldCheck className="size-3" /> Private · offline</Badge>
       </header>
       <main className="explorer-main mx-auto w-full max-w-[1800px] gap-3 p-4">

@@ -677,7 +677,7 @@ function updateMarkerScale(){
  // occupy one cycle. Ignore rare tiny gaps so one cluster cannot shrink all icons.
  const spacing=gaps.length?gaps[Math.floor(gaps.length/2)]:1000;
  const slotWidth=width*spacing/Math.max(1,end-start);
- const size=Math.round(Math.min(20,Math.max(3,slotWidth*.7))*10)/10;
+ const size=Math.round(Math.min(20,Math.max(5,slotWidth*.7))*10)/10;
  if(size===markerSize)return;
  markerSize=size;
  el('timeline').style.setProperty('--timeline-marker-size',`${size}px`);

@@ -95,4 +95,4 @@ def test_timeline_marker_size_tracks_visible_slot_width_and_panel_resizes():
     assert "timeline.on('rangechange',updateMarkerScale)" in html
     assert 'new ResizeObserver(updateMarkerScale)' in html
     assert "setProperty('--timeline-marker-size'" in html
-    assert 'Math.min(20,Math.max(3,slotWidth*.7))' in html
+    assert 'Math.min(20,Math.max(5,slotWidth*.7))' in html
