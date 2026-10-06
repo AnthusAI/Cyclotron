@@ -20,6 +20,13 @@ STAGE_MIN_EVALUATION_PER_CLASS ?= 20
 test:
 	$(PYTHON) -m pytest -q
 
+.PHONY: build-trace-ui test-trace-ui
+build-trace-ui:
+	cd trace-ui && npm run build
+
+test-trace-ui:
+	cd trace-ui && npm test
+
 demo:
 	$(PYTHON) -m decision_flywheel.demo --output demo-output
 

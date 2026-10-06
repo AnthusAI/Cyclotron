@@ -19,6 +19,7 @@ def render_trace(events, reviewer_history=()):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
         return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     vendor = Path(__file__).parent / 'vendor' / 'vis-timeline'
+    viewer = Path(__file__).parent / 'vendor' / 'trace-ui'
     javascript = (vendor / 'standalone/umd/vis-timeline-graph2d.min.js').read_text()
     css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
     return TEMPLATE.replace('__RECORDING__', encode(events)).replace(
@@ -26,7 +27,10 @@ def render_trace(events, reviewer_history=()):
         '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
         '__TIMELINE_DATA__', encode(timeline_data(events))).replace(
         '__TIMELINE_JS__', javascript.replace('</script', '<\\/script')).replace('__TIMELINE_CSS__', css).replace(
-        '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text()))
+        '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text() + '\n\n' +
+        (viewer / 'THIRD_PARTY_NOTICES.txt').read_text())).replace(
+        '__VIEWER_CSS__', (viewer / 'viewer.css').read_text()).replace(
+        '__VIEWER_JS__', (viewer / 'viewer.js').read_text().replace('</script', '<\\/script'))
 
 
 def exchange_indices(events):
@@ -91,76 +95,26 @@ def main(argv=None):
 
 
 TEMPLATE = r'''<!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'">
-<title>Decision Flywheel — recorded trace</title>
+<html lang="en" class="dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; connect-src 'none'">
+<title>Decision Flywheel — run explorer</title>
 <script>
 window.addEventListener('error',event=>{const node=document.getElementById('runtime-health');if(node){node.textContent='Viewer error: '+event.message;node.style.color='red';}});
 window.addEventListener('securitypolicyviolation',event=>{const node=document.getElementById('runtime-health');if(node){node.textContent='Browser blocked '+event.violatedDirective;node.style.color='red';}});
 </script>
 <style>__TIMELINE_CSS__</style>
+<style>__VIEWER_CSS__</style>
 <script>__TIMELINE_JS__</script>
-<style>
-:root{color-scheme:light dark;font-family:system-ui,sans-serif;background:Canvas;color:CanvasText}
-body{max-width:1600px;margin:24px auto;padding:0 20px}h1{font-size:1.5rem}h2{font-size:1.1rem}
-.workspace{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:20px;align-items:start}
-.workspace.inspector-closed{grid-template-columns:minmax(0,1fr)}
-#inspector{position:sticky;top:12px;max-height:85vh;overflow:auto;border:1px solid GrayText;padding:14px;min-width:0}
-@media(max-width:900px){.workspace{grid-template-columns:minmax(0,1fr) 260px}}
-@media(max-width:700px){.workspace{grid-template-columns:1fr}#inspector{position:static;max-height:none}}
-.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0}
-button,input,select{font:inherit}button{padding:8px 12px}input[type=number]{width:6em}
-#seek{width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid GrayText}
-.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.panels{grid-template-columns:1fr}}
-.vis-timeline,.vis-panel,.vis-labelset .vis-label,.vis-time-axis .vis-text{color:CanvasText;border-color:GrayText}
-.vis-item{background:ButtonFace;color:ButtonText;border-color:GrayText}.vis-item.vis-selected{background:Highlight;color:HighlightText}
-.vis-item.vis-point .vis-dot{width:10px;height:10px;border:0;background:var(--marker-color,GrayText);border-radius:50%;margin-top:-5px;margin-left:-5px}
-.vis-item.vis-point .vis-item-content{display:none}
-.vis-item.marker-human .vis-dot{border-radius:0;transform:rotate(45deg)}
-.vis-item.marker-optimizer-request .vis-dot{background:Canvas;border:2px solid CanvasText;border-radius:0;width:8px;height:8px}
-.vis-item.marker-optimizer-response .vis-dot{background:CanvasText;border-radius:0}
-.vis-item.vis-selected .vis-dot{outline:3px solid Highlight;outline-offset:3px}
-.vis-item.vis-box{background:Canvas;border:1px solid var(--marker-color,GrayText);color:var(--marker-color,CanvasText);min-width:18px;text-align:center}
-.vis-item.vis-box .vis-item-content{padding:1px 3px}
-.vis-item.vis-line{border-color:var(--marker-color,GrayText)}
-.vis-item.vis-line,.vis-item.vis-dot{display:none}
-.vis-item.vis-box{min-width:14px;border:0;background:transparent;cursor:pointer}
-.vis-item.vis-box .vis-item-content{padding:2px;font-size:20px;line-height:24px}
-.vis-item.vis-selected{outline:2px solid Highlight;border-radius:4px}
-.vis-labelset .vis-label{min-height:36px}.vis-foreground .vis-group{min-height:36px}
-.vis-panel.vis-background,.vis-axis{pointer-events:none}
-[hidden]{display:none!important}
-</style>
-<h1>Decision Flywheel — recorded trace</h1>
-<p id="runtime-health" role="status">Build: visible-steps-v2. Waiting for interactive viewer startup. If this stays visible, JavaScript did not start.</p>
-<p>Private recording. Playback makes no model calls and changes no study data. Older records may lack configuration snapshots.</p>
-<div id="workspace" class="workspace"><div class="timeline-pane">
-<h2>Feedback and optimization timeline</h2>
-<div class="controls"><button id="zoom-in">Zoom in</button><button id="zoom-out">Zoom out</button><button id="fit-all">Entire history</button><button id="show-inspector" hidden>Show details</button></div>
-<div id="timeline"></div><p id="timeline-note"></p>
-<p id="run-bounds"></p><div class="controls"><button id="show-run">This optimization run</button><button id="show-history">Recorded review history</button></div>
-<div class="controls"><label>Label <select id="label-filter"><option value="">All labels</option></select></label>
-<label>Partition <select id="role-filter"><option value="">All partitions</option></select></label>
-<label><input type="checkbox" id="comment-filter"> Only labels with comments</label></div>
-<label><input type="checkbox" id="disagreement-filter"> Only prediction/label disagreements</label>
-<div class="controls"><button id="back">Previous</button><button id="next">Next</button><button id="play">Play</button>
-<label>From event <input id="start" type="number" min="1" value="1"></label>
-<label>Through event <input id="end" type="number" min="1"></label>
-<label>Round <select id="round"><option value="">Select a recorded step</option></select></label></div>
-<p id="status" aria-live="polite"></p>
-</div><section id="inspector"><button id="close-inspector">Close details</button><h2 id="event-title">Select a timeline event</h2><p id="event-summary"></p><dl id="event-fields"></dl>
-<button id="paired-request" hidden>Inspect matching optimizer request</button>
-<details id="content-box"><summary id="content-title">Inspect event content</summary><pre id="event-content"></pre></details>
-<details><summary>Configuration at this point</summary><pre id="configuration"></pre></details>
-<details><summary>Exact raw event</summary><pre id="raw-event"></pre></details></section></div>
+<div id="root" data-ui="shadcn"></div>
+<noscript>This offline explorer requires JavaScript to display the timeline.</noscript>
 <script id="recording" type="application/json">__RECORDING__</script>
 <script id="presentation" type="application/json">__PRESENTATION__</script>
 <script id="exchanges" type="application/json">__EXCHANGES__</script>
 <script id="round-data" type="application/json">__ROUNDS__</script>
 <script id="timeline-data" type="application/json">__TIMELINE_DATA__</script>
 <script id="review-history" type="application/json">__REVIEW_HISTORY__</script>
-<details><summary>Bundled vis-timeline MIT license</summary><pre id="vendor-license"></pre></details>
 <script id="vendor-license-data" type="application/json">__VENDOR_LICENSE__</script>
+<script>__VIEWER_JS__</script>
 <script>
 const events=JSON.parse(document.getElementById('recording').textContent);
 const presentation=JSON.parse(document.getElementById('presentation').textContent);
@@ -317,6 +271,7 @@ function draw(){
 }
 function inspectEvent(event){
  el('inspector').scrollTop=0;
+ const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  el('event-fields').replaceChildren();
  el('content-box').open=false;
  el('paired-request').hidden=true;
@@ -363,6 +318,7 @@ function inspectEvent(event){
 function inspectSource(index){
  stop();
  el('inspector').scrollTop=0;
+ const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  const source=reviewHistory[index],row=source.record;
  const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
  currentStep=point.valueOf()/1000;

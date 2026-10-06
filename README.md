@@ -34,6 +34,10 @@ python -m decision_flywheel.trace_server --viewer var/reviewer-trace.html
 Open `http://127.0.0.1:8780` in a browser. The server binds only to loopback,
 serves only the selected HTML file, disables caching, and makes no model calls.
 It never exposes neighboring databases or credentials. Stop it with Ctrl+C.
+The explorer uses CLI-generated shadcn/Radix controls, Geist fonts, and semantic
+light/dark themes. Its React shell and fonts are bundled locally; no CDN or Node
+installation is needed for playback. UI contributors can run `make build-trace-ui`
+and `make test-trace-ui` after installing the locked dependencies in `trace-ui`.
 Previous/Next and the timeline step through
 events. The bundled vis-timeline 8.5.4 view separates human feedback, rubric,
 few-shot examples, classifier questions, ML optimization, fitting, and evaluation.
@@ -58,7 +62,6 @@ Close details to expand the timeline to full width; select a marker to reopen
 the adjacent inspector, or use Show details to restore the last selection. Non-stacking lanes
 grow to fit all rows without internal vertical scrolling. Drag the background to pan,
 use ordinary scroll over the timeline or Zoom buttons to zoom without modifier keys,
-drag the background to pan,
 and drag the native playback pointer to
 inspect a step. Previous/Next moves chronologically across labels, predictions and
 optimization records; the window follows an off-screen pointer without changing

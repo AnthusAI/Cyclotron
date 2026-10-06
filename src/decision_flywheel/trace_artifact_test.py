@@ -4,6 +4,15 @@ import json
 from .trace_artifact import read_trace, render_trace, recover_configurations, exchanges_at
 
 
+def test_the_shadcn_shell_is_bundled_offline_with_no_external_script_or_font_requests():
+    html=render_trace([])
+    assert 'data-ui="shadcn"' in html
+    assert 'font-src data:' in html
+    assert '__VIEWER_JS__' not in html
+    assert '<script src=' not in html
+    assert 'SIL OPEN FONT LICENSE' in html
+
+
 def test_latest_transcripts_are_visible_without_selecting_their_raw_events():
     events = [{'event_id': 1, 'kind': 'optimizer-request', 'messages': [{'content': 'exact prompt'}]},
               {'event_id': 2, 'kind': 'optimizer-response', 'content': 'exact reply'},

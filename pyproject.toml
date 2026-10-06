@@ -44,7 +44,7 @@ changelog_file = "CHANGELOG.md"
 where = ["src"]
 
 [tool.setuptools.package-data]
-decision_flywheel = ["vendor/vis-timeline/*.txt", "vendor/vis-timeline/*.md", "vendor/vis-timeline/styles/*.css", "vendor/vis-timeline/standalone/umd/*.js"]
+decision_flywheel = ["vendor/vis-timeline/*.txt", "vendor/vis-timeline/*.md", "vendor/vis-timeline/styles/*.css", "vendor/vis-timeline/standalone/umd/*.js", "vendor/trace-ui/*.js", "vendor/trace-ui/*.css", "vendor/trace-ui/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["src", "tests"]
