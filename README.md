@@ -416,9 +416,78 @@ These historical labels may reflect recommendations shown during live review,
 and they informed prior experiments. This is a retrospective diagnostic, not an
 independent prospective performance claim. A fresh future audit is still needed.
 
-### Agreed next milestone: feature engineering, not permanent feature rejection
+### Replacement plan: separate optimization stages and retrospective feature ranking
 
-This is a staged roadmap. The first milestone is now implemented: a persistent
+This plan supersedes the combined-cycle schedule and the four-item development
+comparison as the mechanism for judging newly discovered factors. It is not
+implemented yet; the current runtime behavior above remains the existing code.
+
+Use three separately scheduled, separately budgeted stages:
+
+- **Few-shot selection:** experiment with example collections while the rubric
+  and supporting-question definitions stay fixed. Publish a new example-list
+  version independently of the other stages.
+- **Main-rubric refinement:** continuously refine the main decision's criteria
+  from eligible human feedback. Keep the current example list and question
+  definitions fixed during each rubric experiment.
+- **Question discovery and measurement:** propose one new supporting classification
+  or wording revision. Evaluate it with the **current** rubric, example list,
+  and existing questions, not an empty context or a separately optimized list.
+  Freeze those versions for the entire measurement run.
+
+For question discovery, backfill the complete augmented decision-model request
+over a configurable retrospective window of eligible human-reviewed items,
+**default maximum 200**. Use available items when fewer exist; report the actual
+denominator and per-class counts. Record selection policy and cutoff, favor recent
+feedback, and retain scarce-class coverage from older eligible feedback where
+needed. Existing features can have longer histories, but rank candidates on a
+common matched window; show broader history separately. Never invent labels or
+compare rates from different populations without identifying that difference.
+
+Each selected item has a human final-decision label plus model-generated answers
+and probabilities for each question. These are not human ground-truth labels for
+the supporting questions. Persist item IDs, feedback revisions, rubric/example/
+question versions, exact-request fingerprints, returned answers, usage, and
+coverage. Cache the full request; do not combine old-context answers with a new
+question's answers and present them as one matched experiment. The target's human
+label and explanation must not enter its decision request, and its own example
+must be excluded. No protected audit or sealed-scoreboard label enters discovery
+or retrospective fitting; existing partition roles remain intact.
+
+Rank each candidate's relationship with the **human final answer**, not merely
+agreement with the model's current main answer. The latter can be displayed as
+a separate diagnostic, never a substitute for human alignment. For questions
+whose answer options match the main labels, report direct agreement. For other
+questions, measure class-conditional probabilities and learn an answer-to-final-
+label relationship on training folds, scoring it on their held-out folds. Do not
+pretend `yes` to a topic question is automatically `Include`: an inverse relation
+can also be useful, and multiclass question options can differ from final labels.
+
+Report matched-window counts, per-final-class results, majority-label baseline,
+natural and class-balanced alignment, coverage, and uncertainty. Keep training
+association distinct from cross-validated alignment. These retrospective rankings
+guide feature exploration; they are not a fresh generalization estimate or an
+automatic classifier-deployment decision. A 200-item cap is not a guarantee of
+200 available labels, sufficient minority-class evidence, or statistical precision.
+Do not again present a four-item comparison as convincing improvement evidence.
+
+Retain feature concepts, wording revisions, and failed/deferred measurements.
+Repeat backfill/ranking when new feedback changes the evidence or a frozen context
+version changes. Refit the downstream ML head separately with trusted, covered
+training labels; combinations, redundancy checks, and ablations build on this
+feature matrix later. Promotion remains a distinct, adequately supported evaluation
+decision, not a side effect of admitting or ranking a new question.
+
+The reusable library owns stage control, frozen versions, bounded/resumable
+backfill, ranking and lifecycle events. The Rich reviewer must display the stage,
+window progress, current context versions, actual optimizer exchanges and decision
+requests, feature rankings, fit activity, and actual sample counts. It does not
+implement another flywheel. No paid calls are authorized by recording this plan.
+
+### Previous milestone: individual questions against a fixed incumbent
+
+This historical milestone is superseded by the staged/backfill plan above. The
+first milestone was implemented: a persistent
 individual feature bank, training-signal diagnostics, isolated single-question
 trials, retained ideas, and reviewer inspection. Combination and ablation search
 remain planned, not implemented. A losing fitted classifier does not establish
