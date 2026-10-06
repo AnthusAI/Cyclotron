@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-6ad46268-8a60-4b83-916b-2ea58d8a96af",
+  "title": "Show fired triggers as grey full-cycle cells and omit idle checks",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c33f1dcf-ccad-46cc-b383-2a7cee675d2e",
+      "author": "home",
+      "text": "Fired trigger checks are aggregated into one grey full-cycle range cell; idle-only cycles have no trigger item. Icons and text removed from trigger cells, original checks remain recorded and accessible when inspecting a fired cell. Light/dark system palettes retained. Browser verified grey fill, no SVG icons, zero idle cells, and click-through trigger details. 525 Python and 7 UI tests passed. No model calls.",
+      "created_at": "2026-10-06T19:04:34.827858Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T19:03:23.695587Z",
+  "updated_at": "2026-10-06T19:04:35.200777Z",
+  "closed_at": "2026-10-06T19:04:35.200647Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
