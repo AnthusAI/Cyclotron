@@ -672,6 +672,11 @@ function inspectEvent(event){
  }else if(event.kind==='prediction'){
   field('Predicted class',event.label);field('Confidence',event.confidence);
   field('Class probabilities',event.probabilities);field('Classifier version',event.version);
+  field('Learned head used',event.fitted_head);
+  field('Decision model probabilities',event.decision_model_probabilities);
+  field('ML input features',event.ml_features);
+  field('Uncalibrated ML probabilities',event.uncalibrated_probabilities);
+  field('Calibration temperature',event.calibration_temperature);
   const start=events.find(e=>e.kind==='cycle-started'&&e.cycle_id===event.cycle_id);
   field('Article',start?.item?.values);
   const requests=events.filter(e=>e.kind==='decision-request'&&e.cycle_id===event.cycle_id&&e.target_id===event.target_id);

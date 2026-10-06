@@ -21,8 +21,7 @@ from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .classification_metrics import classification_metrics
 from .context import _normalized_text
 from .feedback import Feature, FeedbackItem, LABEL_SOURCE_VETTED
-from .head import (Calibration, HeadProvenance, HeadRow, LearnedHead, OutOfFoldPredictions,
-                   fit_learned_head)
+from .head import Calibration, HeadProvenance, LearnedHead, OutOfFoldPredictions
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent
 
@@ -296,6 +295,8 @@ class DecisionFlywheel:
             propensities=propensities, retry_interrupted=retry_interrupted, max_feature_trials=max_feature_trials)
 
     def _activate(self, classifier):
+        if classifier.head and classifier.head.provenance.context_artifact_fingerprint != classifier.config.fingerprint:
+            raise ValueError('learned head does not match the classifier context')
         payload = _json(asdict(classifier))
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('active', ?)", (payload,))
@@ -403,6 +404,11 @@ class DecisionFlywheel:
         self._emit({"kind": "prediction", "target_id": target.id, "label": result.label,
                     "version": self.active.fingerprint, "fitted_head": self.active.head is not None,
                     "probabilities": result.probabilities, "confidence": result.confidence,
+                    "decision_model_label": batch.answers['decision'].label,
+                    "decision_model_probabilities": batch.answers['decision'].probabilities,
+                    "ml_features": values if self.active.head else None,
+                    "uncalibrated_probabilities": self.active.head.uncalibrated_probabilities(values) if self.active.head else None,
+                    "calibration_temperature": self.active.head.calibration.temperature if self.active.head else None,
                     "validation_status": self.active.validation_status,
                     "model": result.model, "usage": result.usage, "latency_ms": result.latency_ms})
         return result
@@ -501,40 +507,11 @@ class DecisionFlywheel:
             config = self.active.config.apply(proposal, training)
             self._emit({"kind": "proposal-validated", "proposal": proposal,
                         "previous": self.active.config.briefing_state(), "candidate": config.briefing_state()})
-            rows = []
-            feature_observations = {task.name: [] for task in config.tasks}
-            for row in training:
-                batch = await self._answers(config, row.item, training, now)
-                for task in config.tasks:
-                    feature_observations[task.name].append((row.label, batch.answers[task.name].probabilities))
-                values = self._features(config, batch)
-                feedback = FeedbackItem("review-" + row.item.id, row.item.id, config.task.name,
-                    final_answer_value=row.label, edit_comment_value=row.context.get("human_feedback"),
-                    label_source=LABEL_SOURCE_VETTED, selection_propensity=propensities[row.item.id],
-                    review_provenance="human-reviewed")
-                rows.append(HeadRow(row.item.id, feedback, tuple(Feature(key, value, key.split("/", 1)[0])
-                                                                for key, value in values.items())))
-            from .feature_bank import probability_diagnostics
-            diagnostics = {task.name: probability_diagnostics(config.task.labels, task.labels,
-                           feature_observations[task.name]) for task in config.tasks}
-            if diagnostics:
-                self._emit({"kind": "feature-diagnostics", "diagnostics": diagnostics,
-                            "training_count": len(rows), "scope": "training only"})
-            self._emit({"kind": "fit-started", "training_count": len(rows), "features": list(values),
-                        "rows": [{"item_id": row.item_id, "label": row.feedback.final_answer_value,
-                                  "propensity": row.feedback.selection_propensity,
-                                  "features": {f.name: f.value for f in row.features}} for row in rows]})
-            head = fit_learned_head(config.task, rows, declared_features=tuple(values),
-                development_ids=tuple(row.item.id for row in development), scoreboard_ids=tuple(item.id for item in protected),
-                scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
-                context_artifact_fingerprint=config.fingerprint, source_model_provenance=self.model.model_identity,
-                training_class_weighting=self.training_class_weighting)
             status=('provisional' if self.active.validation_status=='provisional' and
                     min(development_counts.values())<self.context_validation_floor else 'evaluated')
-            candidate = FittedClassifier(config, head, self._evidence(training), self._evidence(development),status)
-            self._emit({"kind": "fit-completed", "features": list(head.feature_names),
-                        "head": asdict(head),
-                        "training_count": len(rows), "calibration": "out_of_fold"})
+            from .candidate_fitting import fit_candidate
+            candidate, diagnostics = await fit_candidate(self, config, training, development,
+                protected=protected, propensities=propensities, validation_status=status, now=now)
             incumbent_metrics = await self._score(self.active, development, training, now)
             candidate_metrics = await self._score(candidate, development, training, now)
             metric = "balanced_brier" if self.evaluation_weighting == "equal_class" else "brier"

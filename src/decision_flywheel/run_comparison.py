@@ -3,6 +3,17 @@ from datetime import datetime, timezone
 from .trace_classification import class_configuration, positive_metrics
 
 
+async def compare_head(wheel, classifier, audit, training, *, class_config, now=None):
+    from dataclasses import replace
+    if classifier.head is None:
+        raise ValueError('head comparison requires a fitted classifier')
+    report=await compare_endpoints(wheel,replace(classifier,head=None),classifier,audit,training,
+                                 class_config=class_config,now=now)
+    report['scope']='Matched protected audit: decision model alone versus learned head on identical decision requests'
+    report['context_fingerprint']=classifier.config.fingerprint
+    return report
+
+
 async def compare_endpoints(wheel, before, after, audit, training, *, class_config, now=None):
     if not audit:
         raise ValueError('endpoint comparison requires audit labels')

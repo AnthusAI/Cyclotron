@@ -139,6 +139,11 @@ def test_feedback_proposals_become_features_a_fitted_head_and_a_promoted_classif
     assert wheel.active.config.rubric == "Practical research"
     prediction = asyncio.run(wheel.predict(Item("new", {"text": "yes new"}), TRAIN))
     assert prediction.label == "include"
+    recorded=wheel.history()[-1]
+    assert recorded['confidence'] == recorded['probabilities'][prediction.label]
+    assert set(recorded['uncalibrated_probabilities']) == set(TASK.labels)
+    assert set(recorded['ml_features']) == set(wheel.active.head.feature_names)
+    assert recorded['decision_model_probabilities'] == {'include':.2,'exclude':.8}
     assert {e["kind"] for e in events} >= {"optimizer-request", "optimizer-response", "proposal-validated",
                                            "fit-started", "fit-completed", "candidate-evaluated", "promoted"}
     assert wheel.history()[-1]["kind"] == "prediction"

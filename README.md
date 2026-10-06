@@ -296,6 +296,29 @@ The feature converter derives named numbers from the answers and their probabili
 The trained decision head combines these features to predict the final label.
 Calibration adjusts the head's confidence.
 
+Each classification supplies its probability distribution to the ML head. The
+feature converter omits the last probability in each distribution because it is
+equal to one minus the sum of the others. The head produces probabilities for
+the final classes; its confidence is the probability of the selected class.
+Prediction traces include the input features, Jev probabilities, raw ML
+probabilities, calibrated ML probabilities, and calibration temperature.
+Temperature calibration uses out-of-fold training predictions. Its quality
+must still be measured on unseen labels.
+
+Accepted context changes get a newly fitted head before activation when there
+are at least three trusted training labels per class. Code activates the context
+and compatible head together. Before that threshold, the trace records deferred
+fitting and the main decision supplies the warm-up prediction. An old head is
+never reused with a changed context. Periodic retraining also continues as labels
+arrive. Recency-based rubric acceptance remains provisional, not proof of a gain.
+
+`scripts/evaluate_replay_endpoints.py` also writes `head-comparison.json`: it
+compares the final context with and without its learned head on identical protected
+audit items and cached decision answers, without fitting or promoting anything.
+The [context-compatible head replay](docs/experiments/ml-head-lifecycle-20261006.md)
+documents the lifecycle repair and its audit: higher overall accuracy did not
+translate into better include recall.
+
 The holistic Jev answer can be one input to the decision head.
 It does not replace the head's final classification.
 Additional questions supply evidence that the holistic question can miss.

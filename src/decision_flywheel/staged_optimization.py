@@ -2,9 +2,10 @@
 import json
 from datetime import datetime,timezone
 
-from .flywheel import _hash, _json, FittedClassifier
+from .flywheel import _hash, _json
 from .optimizer_agent import FeedbackBriefing
 from .question_measurement import measure_questions
+from .candidate_fitting import fit_candidate
 
 
 def _example_experiments(wheel, training, development):
@@ -67,6 +68,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                  "limit": limit, "evaluation_floor": min_development_per_class,
                  "evaluation_weighting": wheel.evaluation_weighting, "training_class_weighting": wheel.training_class_weighting}
     key_data['context_validation_floor']=wheel.context_validation_floor
+    key_data['head_fitting']={'refit_on_context_activation':True,'minimum_training_per_class':3}
     from dataclasses import asdict
     key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
@@ -174,13 +176,16 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         if stage=='rubric' and not wheel.active.config.rubric.strip() and wheel.active.head is None:
             previous=wheel.active.config.briefing_state()
             wheel._emit({'kind':'proposal-validated','proposal':proposal,'previous':previous,'candidate':config.briefing_state()})
-            wheel._activate(FittedClassifier(config,training_evidence=wheel._evidence(training),validation_status='provisional'))
+            candidate,_=await fit_candidate(wheel,config,training,development,protected=protected,
+                propensities=propensities,validation_status='provisional')
+            wheel._activate(candidate)
             result={'promoted':False,'activated':True,'validation_status':'provisional','proposal':proposal,
                     'reason':'first nonempty rubric initialized provisionally; improvement has not been established',
                     'development_counts':counts,'minimum_development_per_class':min_development_per_class}
             wheel._emit({'kind':'context-initialized',**result,'configuration':config.briefing_state(),'previous':previous})
         elif stage=='rubric' and wheel.active.validation_status=='provisional' and wheel.evaluation_policy.recency_allowance(counts)>0:
-            candidate=FittedClassifier(config,training_evidence=wheel._evidence(training),validation_status='provisional')
+            candidate,_=await fit_candidate(wheel,config,training,development,protected=protected,
+                propensities=propensities,validation_status='provisional')
             measurements={}
             if min(counts.values())>0:
                 now=datetime.now(timezone.utc)

@@ -1,10 +1,27 @@
 import asyncio
 import pytest
 from .run_comparison import compare_endpoints
+from .run_comparison import compare_head
 from .trace_artifact import read_trace
 from .flywheel_test import TASK, TRAIN, DEV, FakeModel, agent
 from .flywheel import DecisionFlywheel
 from .classifier_config import ClassifierConfig
+
+
+def test_head_comparison_reuses_identical_requests_and_never_fits_or_promotes(tmp_path):
+    model=FakeModel()
+    wheel=DecisionFlywheel(tmp_path/'audit.sqlite',ClassifierConfig(TASK),model,agent([]))
+    asyncio.run(wheel.improve(TRAIN,DEV,protected=(),propensities={r.item.id:1. for r in TRAIN}))
+    before=wheel.active
+    model.calls=0
+    report=asyncio.run(compare_head(wheel,before,DEV,TRAIN,
+        class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]))
+    assert report['before']['fingerprint'] != report['after']['fingerprint']
+    assert report['before']['metrics']['sample_ids'] == report['after']['metrics']['sample_ids']
+    assert model.calls==0
+    assert wheel.active==before
+    assert 'identical decision requests' in report['scope']
+    wheel.close()
 
 
 def test_endpoint_comparison_scores_the_same_audit_items_without_optimizing_or_changing_the_active_classifier(tmp_path):

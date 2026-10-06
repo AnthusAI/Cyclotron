@@ -1,12 +1,37 @@
 """Example, rubric and question stages never silently run each other."""
 import asyncio
 import json
+import pytest
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
 from .flywheel_test import FakeModel, TASK, TRAIN, DEV
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
+
+
+def test_a_failed_context_refit_never_replaces_the_active_configuration_or_head(tmp_path):
+    from .candidate_fitting import fit_candidate
+    model=FakeModel()
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK,rubric='Existing'),model,
+        OptimizerAgent(lambda _:OptimizerReply('{"rubric":"Replacement"}','fake')))
+    kwargs=dict(protected=(),propensities={r.item.id:1. for r in TRAIN})
+    candidate,_=asyncio.run(fit_candidate(wheel,wheel.active.config,TRAIN,DEV,
+        validation_status='provisional',**kwargs))
+    wheel._activate(candidate)
+    incumbent=wheel.active
+    async def fail(*args,**kwargs):
+        raise RuntimeError('fake refit failure')
+    model.classify=fail
+    with pytest.raises(RuntimeError,match='decision feature request failed'):
+        asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,**kwargs))
+    assert wheel.active==incumbent
+    wheel.close()
+    reopened=DecisionFlywheel(tmp_path/'wheel.sqlite',ClassifierConfig(TASK,rubric='Existing'),
+        FakeModel(),OptimizerAgent(lambda _:None))
+    assert reopened.active.fingerprint==incumbent.fingerprint
+    assert reopened.active.head.feature_names==incumbent.head.feature_names
+    reopened.close()
 
 
 def test_example_stage_measures_individual_swaps_even_before_development_is_large_enough_to_promote(tmp_path):
@@ -95,12 +120,13 @@ def test_the_first_nonempty_rubric_is_used_provisionally_and_survives_restart_wi
     assert calls == ["rubric"]
     assert report["proposal"]["rubric"] == "Practical"
     assert report["minimum_development_per_class"] == 20
-    assert model.calls == 0
+    assert model.calls == len(TRAIN)
     assert wheel.active.config.rubric == "Practical"
     assert report['activated'] and not report['promoted']
     assert report['validation_status'] == 'provisional'
     assert wheel.active.validation_status == 'provisional'
-    assert wheel.active.head is None
+    assert wheel.active.head is not None
+    assert wheel.active.head.provenance.context_artifact_fingerprint == wheel.active.config.fingerprint
     assert any(e['kind']=='context-initialized' and e['configuration']['rubric']=='Practical' for e in wheel.history())
     wheel.close()
     wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), model, OptimizerAgent(complete))
@@ -146,7 +172,8 @@ def test_provisional_rubric_refinement_does_not_need_a_tiny_holdout_win_or_retai
     result=asyncio.run(optimize_stage(wheel,'rubric',TRAIN,DEV,**kwargs))
     assert wheel.active.config.rubric=='Refined rubric'
     assert wheel.active.validation_status=='provisional'
-    assert wheel.active.head is None
+    assert wheel.active.head is not None
+    assert wheel.active.head.provenance.context_artifact_fingerprint == wheel.active.config.fingerprint
     assert result['activated'] and not result['promoted']
     assert result['candidate']['count']==len(DEV)
     assert any(e['kind']=='context-refined' for e in wheel.history())

@@ -73,7 +73,7 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         first_optimizer = next(e for e in events if e['kind'] == 'optimizer-request')
         assert first_prediction['event_id'] < first_feedback['event_id'] < first_optimizer['event_id']
         assert first_prediction['cycle_id'] == first_optimizer['cycle_id']
-        assert {e["kind"] for e in events} >= {"fit-started", "fit-completed", "promoted", "decision-request", "decision-response"}
+        assert {e["kind"] for e in events} >= {"fit-started", "fit-completed", "classifier-activated", "decision-request", "decision-response"}
         assert len(optimizer_calls) == 1
         protected_ids = {item.id for item in client.partitions()[2]}
         briefing_ids = {row["id"] for row in json.loads(optimizer_calls[0]["messages"][1]["content"])["feedback"]}

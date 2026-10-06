@@ -4,13 +4,14 @@ import asyncio
 import json
 import sqlite3
 from pathlib import Path
+from datetime import datetime, timezone
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.flywheel import DecisionFlywheel, FittedClassifier, _restore
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
-from decision_flywheel.run_comparison import compare_endpoints
+from decision_flywheel.run_comparison import compare_endpoints, compare_head
 from decision_flywheel.trace_artifact import read_trace
 
 
@@ -43,10 +44,15 @@ def main(argv=None):
     wheel=DecisionFlywheel(args.run/'endpoint-audit.sqlite3',initial.config,adapter,
         OptimizerAgent(no_optimizer),max_requests=args.max_requests)
     try:
+        audit_time=datetime.now(timezone.utc)
         report=asyncio.run(compare_endpoints(wheel,initial,final,audit,training,
-            class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]))
+            class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}],now=audit_time))
         report['decision_requests']=wheel.requests
         (args.run/'run-comparison.json').write_text(json.dumps(report,indent=2)+'\n')
+        if final.head:
+            head_report=asyncio.run(compare_head(wheel,final,audit,training,
+                class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}],now=audit_time))
+            (args.run/'head-comparison.json').write_text(json.dumps(head_report,indent=2)+'\n')
         print(json.dumps({key:{metric:report[key][metric] for metric in ('accuracy','precision','recall')} for key in ('before','after')}),flush=True)
     finally:
         wheel.close()
