@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-e64ca536-7cb7-4eea-b576-896fd3023690",
+  "title": "Show active classification counts and configuration changes in separate lanes",
+  "description": "Configuration group now contains Changes and Classifications lanes. Counts reflect recorded active snapshots at cycle starts and activation events; either marker opens configuration details. Full recording audit: question trials were rejected at cycle 40, but retained questions were selected at cycle 80. Subsequent Jev requests in cycles 81-87 contain decision plus knowledge_clarification_curation_enhancement and memory_system_focus, so active count increases from 1 to 3. Browser verified selecting count opens matching snapshot; synthetic specs verify 1-to-3 count and selection routing. 511 Python tests pass.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-06T18:27:17.781765Z",
+  "updated_at": "2026-10-06T18:28:23.963686Z",
+  "closed_at": "2026-10-06T18:28:23.963599Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
