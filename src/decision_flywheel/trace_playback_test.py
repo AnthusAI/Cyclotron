@@ -22,6 +22,8 @@ def test_operational_prediction_details_link_the_actual_request_and_disagreement
     ]
     events = [{**e, 'event_id': i+1, 'cycle_id': 'one', 'cycle_number': 1,
                'created_at': f'2026-10-06T12:00:0{i}Z'} for i, e in enumerate(events)]
+    events[0]['classifier_snapshot'] = {'config': {'rubric': 'before rubric'}, 'head': None}
+    events[-1]['classifier_snapshot'] = {'config': {'rubric': 'after rubric'}, 'head': {'weights': [1]}}
     html = render_trace(events)
     data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
     code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
@@ -32,6 +34,11 @@ global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
 let tick;global.setInterval=fn=>{tick=fn;return 1;};global.clearInterval=()=>{tick=null;};
 CODE
+assert.ok(!timelineData.groups.some(group=>group.id==='cycles'));
+handlers.select({items:['cycle-label:0']});
+assert.equal(elements['cycle-states'].hidden,false);
+assert.ok(elements['cycle-before'].textContent.includes('before rubric'));
+assert.ok(elements['cycle-after'].textContent.includes('after rubric'));
 const pointerPositions=[];
 timeline.setCustomTime=point=>pointerPositions.push(+point);
 handlers.select({items:[4]});

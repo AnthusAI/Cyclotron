@@ -173,13 +173,13 @@ for(const [parent,prefix,title] of [['model-decisions','prediction-class-','Mode
 const occupied=new Set(timelineItems.map(i=>i.group));
 const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions'].includes(g.id));
 // API exchanges belong in the classification inspector, not a separate lane.
-const plottedItems=timelineItems.filter(item=>item.group!=='decision-api');
+const plottedItems=timelineItems.filter(item=>!['decision-api','cycles'].includes(item.group));
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
 const optimizationLanes=[['triggers','Triggers'],['rubric','Rubric'],['examples','Few-shot examples'],['questions','Classifier questions'],['classifier','ML optimization']].map(([id,content])=>({id,content}));
 const optimizationIds=optimizationLanes.map(group=>group.id);
 timelineData.groups=[{id:'flywheel-cycles',content:'Flywheel cycles'},...classGroups,
  {id:'optimization',content:'Optimization',nestedGroups:optimizationIds,showNested:true},...optimizationLanes,
- ...otherGroups.filter(group=>!optimizationIds.includes(group.id))].map((group,order)=>({...group,order}));
+ ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&group.id!=='cycles')].map((group,order)=>({...group,order}));
 // Internal step positions remain available for seeking and playback, but do
 // not need their own display lane. Cycle bands retain the item context.
 const stepItems=[];
@@ -432,6 +432,7 @@ function inspectEvent(event){
  el('content-box').hidden=false;
  showOptimizerExchange(position);
  showEvaluation(event);
+ el('cycle-states').hidden=true;
  if(!event){el('event-title').textContent='No recorded events';return;}
  el('event-title').textContent=event.kind.replaceAll('-',' ');
  el('event-summary').textContent=`Event ${event.event_id} · ${event.created_at||'time unavailable'} · ${event.step_stage||(event.cycle_id?'item processing':'unscoped')}`;
@@ -461,8 +462,15 @@ function inspectEvent(event){
   const actualRequest=events.findLastIndex((e,index)=>index<position&&e.kind==='decision-request'&&e.cycle_id===event.cycle_id&&e.step_id===event.step_id&&e.target_id===event.target_id);
   if(actualRequest>=0){showDecisionExchange(decisionExchange(actualRequest));el('content-box').hidden=true;}
   if(requests.length){el('paired-request').hidden=false;el('paired-request').textContent='Open actual decision request';el('paired-request').onclick=()=>move(events.indexOf(requests[0]));}
- }else if(event.kind==='cycle-started'){
-  field('Article',event.item?.values);field('Reason',event.reason);
+ }else if(['cycle-started','cycle-completed','cycle-failed'].includes(event.kind)){
+  const before=events.find(e=>e.kind==='cycle-started'&&e.cycle_id===event.cycle_id);
+  const after=events.findLast(e=>['cycle-completed','cycle-failed'].includes(e.kind)&&e.cycle_id===event.cycle_id);
+  el('event-title').textContent=`Cycle ${event.cycle_number} · recorded states`;
+  el('cycle-states').hidden=false;
+  el('cycle-before').textContent=readable(before?.classifier_snapshot||'Before state was not recorded.');
+  el('cycle-after').textContent=readable(after?.classifier_snapshot||'After state was not recorded.');
+  el('cycle-state-summary').textContent=`${after?.kind==='cycle-failed'?'Failed':after?'Completed':'No recorded completion'} · Before event ${before?.event_id??'unavailable'} → after event ${after?.event_id??'unavailable'}. These are recorded snapshots, not reconstructed states.`;
+  field('Article',before?.item?.values);field('Reason',event.reason);
  }else if(event.kind==='optimizer-request'){
   field('Model',event.requested_model);field('Messages',event.messages?.length);
   try{const briefing=JSON.parse(event.messages.at(-1).content);field('Feedback items',briefing.feedback?.length);field('Human explanations',briefing.human_explanations);field('Control being optimized',briefing.current?.control_under_test);
@@ -510,7 +518,7 @@ function inspectSource(index,pause=true){
  revealPointer(point);
  el('status').textContent=`Step ${Math.floor(point.valueOf()/1000)+1}/${projection.steps.length} · original reviewer record`;
  el('back').disabled=currentStep===0;el('next').disabled=currentStep===ordered.length-1;
- el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;el('content-box').hidden=false;el('decision-exchange').hidden=true;el('optimizer-exchange').hidden=true;el('evaluation-visual').hidden=true;
+ el('event-fields').replaceChildren();el('paired-request').hidden=true;el('content-box').open=false;el('content-box').hidden=false;el('decision-exchange').hidden=true;el('optimizer-exchange').hidden=true;el('evaluation-visual').hidden=true;el('cycle-states').hidden=true;
  el('event-title').textContent=source.source_table==='presentations'?`Predicted ${row.predicted_label} · ${Math.round(row.confidence*100)}%`:`Human ${row.action}: ${row.label||'—'}`;
  el('event-summary').textContent=`Original reviewer record · ${row.shown_at||row.created_at} · ${source.article.assignment}. Not generated by this optimization run.`;
  for(const [label,value] of Object.entries({Title:source.article.title,Abstract:source.article.abstract,Explanation:row.comment,'Prediction shown before vote':source.presentation?`${source.presentation.predicted_label} (${Math.round(source.presentation.confidence*100)}%)`:undefined}))if(value){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;el('event-fields').append(dt,dd);}

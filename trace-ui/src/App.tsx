@@ -48,6 +48,11 @@ export function App({counts}:{counts:Counts}) {
           <Card id="inspector" className="inspector-card gap-0 py-0">
             <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border px-5 py-3"><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="size-4" /> Event inspector</p><Button id="close-inspector" variant="ghost" size="icon" aria-label="Close details"><X /></Button></CardHeader>
             <CardContent className="inspector-body space-y-4 px-5 py-5"><div><h2 id="event-title" className="text-lg font-semibold capitalize tracking-tight">Select a timeline event</h2><p id="event-summary" className="mt-2 text-xs leading-relaxed text-muted-foreground" /></div><Button id="paired-request" variant="outline" size="sm" className="w-full" hidden>Inspect matching optimizer request</Button>
+              <section id="cycle-states" className="space-y-3" hidden aria-label="Cycle before and after states">
+                <p id="cycle-state-summary" className="text-xs text-muted-foreground" />
+                <details className="disclosure"><summary>Before this cycle</summary><pre id="cycle-before" /></details>
+                <details className="disclosure"><summary>After this cycle</summary><pre id="cycle-after" /></details>
+              </section>
               <section id="evaluation-visual" className="disclosure p-3 space-y-3" hidden aria-label="Evaluation metric comparison">
                 <h3 className="text-sm font-semibold">Evaluation outcome</h3><p id="evaluation-summary" className="text-xs text-muted-foreground" /><div id="evaluation-bars" />
               </section>
