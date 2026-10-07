@@ -169,6 +169,71 @@ def test_live_flywheel_requires_confirmation_before_constructing_clients(monkeyp
         main(["--live-flywheel"])
 
 
+@pytest.mark.parametrize('model,expected',[(None,'kev-latest'),('kev-pinned','kev-pinned')])
+def test_integrated_reviewer_selects_kev_and_its_own_model_without_constructing_jev(tmp_path,monkeypatch,model,expected):
+    from .reviewer import main
+    from .reviewer_store import ReviewStore
+    from .adapters.kev import KevAdapter
+    path=tmp_path/'reviews.sqlite3'
+    with ReviewStore(path,study_seed='arxiv-review-v1') as store:
+        store.import_articles([Article('paper','Title','Abstract','2026-10-07',('cs.AI',))])
+    class SelectedProvider(Exception):pass
+    calls=[]
+    def selected(self,**kwargs):
+        calls.append(kwargs['configuration'].model)
+        raise SelectedProvider()
+    monkeypatch.setattr(KevAdapter,'__init__',selected)
+    monkeypatch.setattr('decision_flywheel.reviewer.JevAdapter.from_environment',
+        lambda **kwargs:pytest.fail('Jev must not be constructed for Kev'))
+    args=['--database',str(path),'--live-flywheel','--confirm-live','--decisions-provider','kev']
+    if model is not None:args.extend(['--decisions-model',model])
+    with pytest.raises(SelectedProvider):main(args)
+    assert calls==[expected]
+
+
+def test_legacy_jev_artifact_mode_rejects_another_provider_before_reading_a_database(monkeypatch,capsys):
+    from .reviewer import main
+    monkeypatch.setattr('decision_flywheel.reviewer.JevAdapter.from_environment',
+        lambda **kwargs:pytest.fail('legacy mode must reject before provider setup'))
+    with pytest.raises(SystemExit):main(['--live-jev','--confirm-live','--decisions-provider','kev'])
+    assert 'legacy Jev artifact' in capsys.readouterr().err
+
+
+def test_integrated_kev_review_prediction_reaches_the_fake_wire_and_records_its_model(tmp_path,monkeypatch):
+    from . import reviewer
+    from .adapters.kev import KevAdapter
+    from .adapters.kev_test import FakeTransport,Response
+    from .reviewer_store import ReviewStore
+    from .optimizer_agent import DisabledOptimizer
+    article=Article('paper','Title','Abstract','2026-10-07',('cs.AI',))
+    path=tmp_path/'reviews.sqlite3';runtime=tmp_path/'runtime.sqlite3'
+    with ReviewStore(path,study_seed='arxiv-review-v1') as store:store.import_articles([article])
+    transport=FakeTransport(Response(payload={'model':'kev-test','answers':{
+        'q0':{'choice':'include','probabilities':{'include':.8,'exclude':.2}}}}))
+    original=KevAdapter.__init__
+    monkeypatch.setattr(KevAdapter,'__init__',lambda self,**kwargs:original(self,transport=transport,**kwargs))
+    monkeypatch.setattr('decision_flywheel.adapters.optimizer_transport.optimizer_transport',lambda config:DisabledOptimizer())
+    def session(store,console,*,flywheel,**kwargs):
+        prediction=flywheel.predict(article)
+        assert prediction.label=='include'
+        assert prediction.confidence==.8
+        assert prediction.kind=='decision:flywheel-warmup'
+        assert transport.body['model']=='kev-latest'
+        events=flywheel.core.trace_events(limit=100)['events']
+        request=next(row for row in events if row['kind']=='decision-request')
+        assert 'Title' in request['state']['target']['text']
+        assert 'q0' in request['questions']
+        assert request['model'].startswith('kev:')
+        response=next(row for row in events if row['kind']=='decision-response')
+        assert response['model']=='kev-test'
+        assert response['answers']['q0']['probabilities']=={'include':.8,'exclude':.2}
+        flywheel.finish_cycle()
+    monkeypatch.setattr(reviewer,'run_review_session',session)
+    assert reviewer.main(['--database',str(path),'--runtime-database',str(runtime),
+        '--live-flywheel','--confirm-live','--decisions-provider','kev'])==0
+    assert transport.calls==1
+
+
 def test_live_reviewer_routes_the_selected_optimizer_model_and_ceiling_without_using_openai(tmp_path, monkeypatch):
     from .reviewer import main
     from .reviewer_store import ReviewStore

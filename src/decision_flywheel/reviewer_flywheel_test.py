@@ -119,7 +119,7 @@ def test_reviewer_predictions_identify_the_core_version_without_a_local_replacem
     core = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), agent([]))
     reviewer = ReviewerFlywheel(store, core)
     result = reviewer.predict(article)
-    assert result.kind == "jev:flywheel-warmup"
+    assert result.kind == "decision:flywheel-warmup"
     assert result.fingerprint == core.active.fingerprint
     assert result.label == "exclude"
     assert reviewer.status()["fitted_head"] is False

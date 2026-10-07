@@ -385,6 +385,16 @@ not authorize collection: the existing `--confirm-live` and request ceilings
 still apply. Frozen preflight metadata records the selected transport; use a
 new output directory when changing a frozen protocol.
 
+The Rich reviewer's integrated `--live-flywheel` mode also supports
+`--decisions-provider jev|kev`. When `--decisions-model` is omitted, it uses
+the selected provider's default (`jev-1.13.0` or `kev-latest`), rather than
+sending a Jev identifier to Kev. Kev calls the local endpoint on port 8009;
+install the `kev` extra and start the server separately. Both providers use
+the same feedback, feature, fitting, calibration, and trace interfaces.
+The legacy `--live-jev` artifact mode remains Jev-only and rejects another
+provider before opening a review database or constructing a client.
+Laya full-context optimization remains unsupported; there is no silent fallback.
+
 ## Terms
 
 Use these terms with the same meaning throughout the system.

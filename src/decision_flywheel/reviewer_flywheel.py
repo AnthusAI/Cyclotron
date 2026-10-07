@@ -43,7 +43,7 @@ class ReviewerFlywheel:
         self.core.reconcile_feedback(training, development=development)
         result = asyncio.run(self.core.predict(reviewer_item(article), training))
         return ReviewerPrediction(result.label, result.confidence if result.confidence is not None else .5,
-            "jev:flywheel-head" if self.core.active.head else "jev:flywheel-warmup",
+            "decision:flywheel-head" if self.core.active.head else "decision:flywheel-warmup",
             self.core.active.fingerprint, len(training))
 
     def finish_cycle(self):

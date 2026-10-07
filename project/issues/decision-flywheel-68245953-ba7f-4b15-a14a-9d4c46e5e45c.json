@@ -181,10 +181,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "7548927b-bb2e-47bb-a708-b694d97e694f",
+      "author": "home",
+      "text": "Extended provider-neutral application wiring to the Rich reviewer's integrated --live-flywheel mode. It selects Jev or Kev through the shared adapter factory and resolves provider-specific defaults rather than passing a Jev model to Kev. Specs verify Kev default and pinned model selection with Jev forbidden, legacy --live-jev rejection before database/client use, and a real reviewer-to-core-to-Kev fake-wire prediction with .8 confidence and recorded request/response. New reviewer predictor kinds are decision:flywheel-head/warmup rather than hardcoded Jev attribution; historical kinds remain readable without rewriting records. 32 focused reviewer/flow specs pass; full suite running. No provider calls or production labels/configurations changed. Laya full-context optimization and broader provider acceptance remain open.",
+      "created_at": "2026-10-07T21:45:04.409833Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "aca86efe-b455-4547-8c6e-cd0e1d7d8ca5",
+      "author": "home",
+      "text": "Final reviewer provider regression: all 777 Python specs pass (16 existing pytest-bdd deprecation warnings). Kev fake-wire spec verifies the configured request model, returned kev-test model, full .8/.2 distribution, prediction confidence, and paired decision request/response events. Static checks and scoped whitespace checks pass. No live calls, production restart, label edits, or experiment reports.",
+      "created_at": "2026-10-07T21:45:44.451870Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T21:18:38.964207Z",
+  "updated_at": "2026-10-07T21:45:44.451966Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
