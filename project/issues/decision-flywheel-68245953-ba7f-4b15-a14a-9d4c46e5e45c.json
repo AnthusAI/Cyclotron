@@ -73,10 +73,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c202d872-ea22-4ce5-b407-d9c04eb4e20a",
+      "author": "home",
+      "text": "Fixed a cache isolation gap for custom Jev/Kev endpoints: the configured model identity now includes an opaque SHA-256 endpoint suffix. Default identities remain compatible; trailing slashes are equivalent, and URL details are not disclosed by the identity. Older custom-server cached answers remain stored but are not silently reused under the new identity. New adapter specs reproduced the collision before the fix; a real SharedDecisions SQLite spec with fake Kev transports verifies separate answers across servers and cache reuse when returning to the original server. Focused tests pass; full regression in progress. No production votes, paid calls, or server process changed.",
+      "created_at": "2026-10-07T19:00:57.755793Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "95aa3315-32d0-44ea-ac41-30b0d77d09ec",
+      "author": "home",
+      "text": "Final verification for endpoint-aware cache identities: all 713 Python tests pass, including the cross-server durable joint-cache regression. No network or credentials used in the specs. Documentation records compatibility and safe cache-miss behavior for historical custom-server answers. Remaining scorecard/Laya/acceptance work remains open.",
+      "created_at": "2026-10-07T19:01:23.910982Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T18:50:28.273501Z",
+  "updated_at": "2026-10-07T19:01:23.911063Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

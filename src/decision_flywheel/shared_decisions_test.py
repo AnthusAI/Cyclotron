@@ -28,3 +28,28 @@ def test_complete_batches_resume_from_cache_and_changes_require_another_call(tmp
         asyncio.run(shared.prepare({'a':config},target,{'a':[]},options=CacheOptions('refresh')))
     assert model.calls==2
     shared.close()
+
+
+def test_same_named_models_on_different_servers_do_not_reuse_joint_answers(tmp_path):
+    from .adapters.kev import KevAdapter, KevConfiguration
+    from .adapters.kev_test import FakeTransport, Response
+    config = ClassifierConfig(DecisionTask('main', ('yes', 'no'), 'Choose'))
+    target = Item('one', {'text': 'Text'})
+    first = FakeTransport(Response(payload={'answers': {'q0': {
+        'choice': 'yes', 'probabilities': {'yes': .8, 'no': .2}}}}))
+    second = FakeTransport(Response(payload={'answers': {'q0': {
+        'choice': 'no', 'probabilities': {'yes': .2, 'no': .8}}}}))
+    cache = tmp_path / 'cache.sqlite'
+    for endpoint, transport, label in [
+        ('https://first.example', first, 'yes'),
+        ('https://second.example', second, 'no'),
+        ('https://first.example/', first, 'yes'),
+    ]:
+        model = KevAdapter(transport=transport, configuration=KevConfiguration(base_url=endpoint))
+        shared = SharedDecisions(cache, model, max_requests=2, observer=lambda _: None)
+        try:
+            payload, _ = asyncio.run(shared.prepare({'a': config}, target, {'a': []}))
+            assert payload['result']['answers']['a']['decision']['label'] == label
+        finally:
+            shared.close()
+    assert first.calls == second.calls == 1

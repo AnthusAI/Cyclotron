@@ -65,6 +65,16 @@ def test_a_kev_adapter_has_an_immutable_configured_model_identity_for_caches():
         adapter.configuration.model = "other"
 
 
+def test_kev_cache_identity_separates_servers_without_disclosing_endpoint_details():
+    first = KevConfiguration(base_url="https://first.example/private-token")
+    second = KevConfiguration(base_url="https://second.example/private-token")
+    assert first.model_identity != second.model_identity
+    assert first.model_identity == KevConfiguration(base_url=first.base_url + "/").model_identity
+    assert "first.example" not in first.model_identity
+    assert "private-token" not in first.model_identity
+    assert KevConfiguration().model_identity == KevConfiguration(base_url="http://127.0.0.1:8009/").model_identity
+
+
 @pytest.mark.parametrize("response, message", [
     (Response(status_code=503, payload={}), "status 503"),
     (Response(payload={"answers": {}}), "missing answer"),

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from numbers import Real
 import time
 from typing import Any, Protocol, Sequence
@@ -30,7 +31,11 @@ class KevConfiguration:
 
     @property
     def model_identity(self) -> str:
-        return f"kev:{self.model}{'@' + self.revision if self.revision else ''}"
+        identity = f"kev:{self.model}{'@' + self.revision if self.revision else ''}"
+        endpoint = self.base_url.rstrip('/')
+        if endpoint != "http://127.0.0.1:8009":
+            identity += ":endpoint-" + sha256(endpoint.encode('utf-8')).hexdigest()
+        return identity
 
 
 class KevAdapter:

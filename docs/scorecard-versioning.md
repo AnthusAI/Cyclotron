@@ -163,6 +163,14 @@ before live classification. Applications can select a different endpoint with
 `KevConfiguration` in their injected factory; the default workspace uses the
 local endpoint above.
 
+Custom Jev and Kev endpoints are part of the configured model's cache identity.
+An opaque SHA-256 suffix distinguishes servers without exposing endpoint details
+in the identity; a trailing slash does not create a different identity. Default
+Jev and default local Kev identities remain unchanged. Older custom-endpoint
+cache entries are retained but are not reused under the new identity: the next
+request is a cache miss and still requires the normal live-call permissions and
+request ceiling. Do not relabel or migrate those old answers to a new server.
+
 Laya's standalone decision adapter remains available, but the default workspace
 rejects Laya scorecard optimization until a verified full-context protocol exists.
 It does not silently run Jev or discard examples. Unknown providers also reject

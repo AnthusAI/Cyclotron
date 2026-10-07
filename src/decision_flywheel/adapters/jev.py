@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from dataclasses import dataclass
+from hashlib import sha256
 from numbers import Real
 import time
 from typing import Any, Callable, Sequence
@@ -31,7 +32,11 @@ class JevConfiguration:
 
     @property
     def model_identity(self) -> str:
-        return f"jev:{self.model}"
+        identity = f"jev:{self.model}"
+        if self.base_url is not None:
+            endpoint = self.base_url.rstrip('/')
+            identity += ":endpoint-" + sha256(endpoint.encode('utf-8')).hexdigest()
+        return identity
 
 
 class JevAdapter:

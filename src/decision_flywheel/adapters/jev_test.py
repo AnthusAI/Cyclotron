@@ -12,6 +12,17 @@ TARGET = Item("target", {"text": "target text"})
 CONTEXT = [LabeledItem(Item("demo", {"text": "demo text"}), "yes")]
 
 
+def test_jev_cache_identity_separates_custom_servers_without_disclosing_endpoint_details():
+    first = JevConfiguration(base_url="https://first.example/private-token")
+    second = JevConfiguration(base_url="https://second.example/private-token")
+    assert first.model_identity != second.model_identity
+    assert first.model_identity != JevConfiguration().model_identity
+    assert first.model_identity == JevConfiguration(base_url=first.base_url + "/").model_identity
+    assert "first.example" not in first.model_identity
+    assert "private-token" not in first.model_identity
+    assert JevConfiguration().model_identity == "jev:jev-latest"
+
+
 def test_a_complete_classifier_request_asks_all_feature_questions_in_one_jev_call():
     from ..classifier_config import ClassifierConfig
     class Client:
