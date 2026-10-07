@@ -13,9 +13,16 @@ const read=(key:string):Draft=>{
 /** Key by immutable prediction presentation; drafts never count as recorded feedback. */
 export function useLabelDraft(presentation:string):[Draft,(value:SetStateAction<Draft>)=>void]{
   const key=`cyclotron.label-draft.v1:${presentation}`
-  const [draft,setDraft]=useState(()=>read(key))
+  const [stored,setStored]=useState(()=>({key,draft:read(key)}))
+  // Reset before children commit; an effect reset would briefly expose the old vote.
+  if(stored.key!==key)setStored({key,draft:read(key)})
   useEffect(()=>{
-    try{sessionStorage.setItem(key,JSON.stringify(draft))}catch{/* A private browser must still allow labeling. */}
-  },[key,draft])
-  return [draft,setDraft]
+    try{sessionStorage.setItem(stored.key,JSON.stringify(stored.draft))}catch{/* A private browser must still allow labeling. */}
+  },[stored])
+  const setDraft=(value:SetStateAction<Draft>)=>setStored(previous=>{
+    // A delayed callback from an old presentation must not edit the current item.
+    if(previous.key!==key)return previous
+    return {key,draft:typeof value==='function'?value(previous.draft):value}
+  })
+  return [stored.draft,setDraft]
 }

@@ -169,6 +169,29 @@ test('new run setup is a dismissible drawer and preserves unsent labeling feedba
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
+test('inspecting a replay and returning through browser history restores unsent labels and explanations',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'unsent',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[live,replay],capabilities:{liveEnabled:true,itemCount:250}}
+    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('events('))return {events:[]}
+    return {run:variables?.id==='live'?live:replay,currentItem:variables?.id==='live'?shown:null,jobs:[]}
+  })
+  render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Topic: exclude'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Topic'),{target:{value:'The original human explanation'}})
+  fireEvent.click(screen.getByRole('button',{name:'Run history'}))
+  fireEvent.click(screen.getByRole('button',{name:/Existing optimization replay.*cycles/}))
+  expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()
+  expect(screen.queryByLabelText('Explanation for Topic')).toBeNull()
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  fireEvent(window,new PopStateEvent('popstate'))
+  expect(await screen.findByRole('button',{name:'Topic: exclude'})).toHaveAttribute('aria-pressed','true')
+  expect(screen.getByLabelText('Explanation for Topic')).toHaveValue('The original human explanation')
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 test('opening the workspace shows the existing optimization timeline instead of an empty landing page',async()=>{
   render(<WebApp />)
   expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()

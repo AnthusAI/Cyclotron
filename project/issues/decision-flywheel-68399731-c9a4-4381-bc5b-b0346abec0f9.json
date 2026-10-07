@@ -46,10 +46,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "eb6ce01d-ccd9-4b99-a318-8bcb192fe688",
+      "author": "home",
+      "text": "Fixed presentation-scoped label drafts in the reusable hook: changing presentation without remounting no longer exposes or persists another items labels/comments, and delayed old-presentation callbacks are ignored. Regression watched fail first; hook, reviewer, and WebApp tests now cover item switching and replay inspection/browser-history return preserving unsent vote plus explanation without any API mutation. Session-storage failure remains non-blocking. Actual tablet/keyboard acceptance and browser-native cross-run testing still remain; this does not close the full drawer story.",
+      "created_at": "2026-10-07T22:55:32.453058Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:04.550216Z",
-  "updated_at": "2026-10-07T16:31:04.813916Z",
+  "updated_at": "2026-10-07T22:55:32.453154Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

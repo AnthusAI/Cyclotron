@@ -4,6 +4,22 @@ import '@testing-library/jest-dom/vitest'
 import {MultiLabelCard} from './MultiLabelCard'
 afterEach(()=>{cleanup();sessionStorage.clear()})
 
+it('restores explicit votes and explanations when returning to an item without remounting the reviewer',()=>{
+  const submit=vi.fn()
+  const item=(id:string)=>({item:{id,values:{text:`Paper ${id}`}},prediction:{presentation_id:id,classifiers:{a:{label:'yes',confidence:.8,classes:['yes','no']}}}})
+  const review=render(<MultiLabelCard current={item('first')} names={{a:'Library'}} busy={false} onSubmit={submit}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Library: no'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Library'),{target:{value:'Not about knowledge bases'}})
+  review.rerender(<MultiLabelCard current={item('second')} names={{a:'Library'}} busy={false} onSubmit={submit}/>)
+  expect(screen.getByRole('button',{name:'Library: no'})).toHaveAttribute('aria-pressed','false')
+  expect(screen.getByLabelText('Explanation for Library')).toHaveValue('')
+  expect(screen.getByRole('button',{name:'Submit feedback'})).toBeDisabled()
+  review.rerender(<MultiLabelCard current={item('first')} names={{a:'Library'}} busy={false} onSubmit={submit}/>)
+  expect(screen.getByRole('button',{name:'Library: no'})).toHaveAttribute('aria-pressed','true')
+  expect(screen.getByLabelText('Explanation for Library')).toHaveValue('Not about knowledge bases')
+  expect(submit).not.toHaveBeenCalled()
+})
+
 it('replays recorded labels without asking the human to vote on them again',()=>{
   const current={item:{id:'one',values:{text:'Paper'}},prediction:{presentation_id:'shown',classifiers:{a:{label:'yes',confidence:.8,classes:['yes','no']},b:{label:'no',confidence:.7,classes:['yes','no']}},recorded_labels:[{classifier_id:'a',label:'no',comment:'Original explanation'}]}}
   const submit=vi.fn()

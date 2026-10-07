@@ -65,6 +65,14 @@ A classifier edit lists all active
 scorecard definitions affected by saving it and explains that joint requests can
 affect their other classifiers while existing runs remain unchanged.
 
+Unsent multi-classifier votes and explanations are stored in browser session
+storage under their immutable prediction presentation. Inspecting another run
+and returning restores that presentation's draft, without recording feedback or
+starting model work. The draft hook also isolates presentations when the reviewer
+changes items without remounting, and ignores delayed updates from an old item.
+Malformed or unavailable browser storage does not prevent labeling. Drafts are
+local to the browser session; they are not saved human labels or server records.
+
 `scorecardDefinitionComparison` compares an active and inspected definition
 directionally. The read-only comparison drawer shows name changes, added/removed
 members, changed positions and pinned revisions, original classifier questions
