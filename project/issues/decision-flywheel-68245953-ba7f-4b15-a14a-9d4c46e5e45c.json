@@ -199,10 +199,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "9b659d6f-35c7-4a76-b81e-01417cd3e329",
+      "author": "home",
+      "text": "Implemented Laya structured-context scorecard transport based on current upstream Agent.system_one and serialize_state contracts. Laya now carries scoped rubric/examples plus all feature questions, preserves complete distributions and explicit confidence, and emits exact request/response bindings. The shared factory, Rich reviewer and scorecard provider selector route to Laya explicitly, with lazy optional loading and no Jev fallback. Conservative tokenizer guards reject oversized state, question instructions and option text; provider-reported truncated responses remain visible in traces but are not usable for fitting. Specs were written first and reproduced each missing path. Fake GraphQL-worker spec proves two classifier outputs share one physical Laya call; offline context search traverses Laya with labeled examples. 783 Python and 110 UI specs pass, build passes; existing lint warning unchanged. This is transport/technology support, not an experiment result or evidence of few-shot effectiveness. Actual checkpoint acceptance remains open: optional Laya dependency is not installed in the production environment, and no weights or paid calls were invoked. Production worker idle with 348 completed/2 historical failed jobs; preserving 255 item feedback and 39405 events during deployment.",
+      "created_at": "2026-10-07T22:01:28.272371Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T21:45:44.451966Z",
+  "updated_at": "2026-10-07T22:01:28.272461Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

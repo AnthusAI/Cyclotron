@@ -68,9 +68,11 @@ class FakeKevTransport:
         return FakeResponse(label)
 
 
-class NeverCalledLaya:
-    def system_one(self, **kwargs):
-        raise AssertionError("few-shot Laya must be excluded before model inference")
+class FakeLaya:
+    def system_one(self, *, state, questions):
+        self.requests = getattr(self, "requests", []) + [(state, questions)]
+        label = "yes" if state["target"]["text"].startswith("yes") else "no"
+        return {"answers": {"topic": {"choice": label}}}
 
 
 def test_optimizer_reaches_an_injected_jev_client_without_keys_or_network(monkeypatch):
@@ -107,8 +109,8 @@ def test_optimizer_reaches_an_injected_kev_transport_without_network_or_keys(mon
     assert all(body["state"]["labeled_examples"] for _, body, _ in transport.requests)
 
 
-def test_optimizer_records_laya_few_shot_exclusion_without_calling_a_local_model():
-    model = NeverCalledLaya()
+def test_optimizer_experiments_with_laya_context_through_an_injected_local_model():
+    model = FakeLaya()
     adapter = LayaAdapter(model)
 
     result = asyncio.run(search_context_policies(
@@ -116,6 +118,7 @@ def test_optimizer_records_laya_few_shot_exclusion_without_calling_a_local_model
         model_fingerprint=adapter.model_identity,
     ))
 
-    assert result.winner is None
-    assert result.trials[0].status == "incomplete"
-    assert result.trials[0].failure_count == 1
+    assert result.winner.objective == 1.0
+    assert len(model.requests) == 2
+    assert all(state['labeled_examples'] for state, _ in model.requests)
+    assert all(state['target']['text'].endswith('target') for state, _ in model.requests)

@@ -482,8 +482,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="private persistent flywheel state and actual request/reply transcripts")
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
     parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
-    parser.add_argument("--decisions-provider", choices=("jev", "kev"), default="jev",
-                        help="decision adapter for the integrated flywheel; Laya full-context optimization is not supported")
+    parser.add_argument("--decisions-provider", choices=("jev", "kev", "laya"), default="jev",
+                        help="decision adapter for the integrated flywheel; Laya requires its optional local model")
     parser.add_argument("--decisions-model", help="explicit model identifier; otherwise use the selected provider's default")
     parser.add_argument("--evaluation-weighting", choices=("natural", "equal_class"), default="equal_class")
     from .selection_policy import add_selection_arguments, selection_from_arguments

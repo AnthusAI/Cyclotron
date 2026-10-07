@@ -20,8 +20,16 @@ test('changing decision provider clears the other provider model in one settings
   expect(change).toHaveBeenCalledExactlyOnceWith({decisions_provider:'kev',seed:'stable'})
 })
 
-test('provider selection is disabled while saving and explains unavailable Laya optimization',()=>{
+test('provider selection is disabled while saving and explains Laya context limits',()=>{
   render(<ScorecardSettings settings={{}} onChange={()=>{}} disabled/>)
   expect(screen.getByLabelText('Decision provider')).toBeDisabled()
-  expect(screen.getByText(/Laya.*not yet supported/)).toBeVisible()
+  expect(screen.getByRole('option',{name:'Laya (local checkpoint)'})).toBeInTheDocument()
+  expect(screen.getByText(/Laya.*rejects context/)).toBeVisible()
+})
+
+test('selecting Laya preserves shared settings and clears the previous model',()=>{
+  const change=vi.fn()
+  render(<ScorecardSettings settings={{decisions_provider:'jev',decisions_model:'jev-pinned',seed:'stable'}} onChange={change} disabled={false}/>)
+  fireEvent.change(screen.getByLabelText('Decision provider'),{target:{value:'laya'}})
+  expect(change).toHaveBeenCalledExactlyOnceWith({decisions_provider:'laya',seed:'stable'})
 })

@@ -386,14 +386,20 @@ still apply. Frozen preflight metadata records the selected transport; use a
 new output directory when changing a frozen protocol.
 
 The Rich reviewer's integrated `--live-flywheel` mode also supports
-`--decisions-provider jev|kev`. When `--decisions-model` is omitted, it uses
-the selected provider's default (`jev-1.13.0` or `kev-latest`), rather than
+`--decisions-provider jev|kev|laya`. When `--decisions-model` is omitted, it uses
+the selected provider's default (`jev-1.13.0`, `kev-latest`, or `convaiinnovations/laya`), rather than
 sending a Jev identifier to Kev. Kev calls the local endpoint on port 8009;
 install the `kev` extra and start the server separately. Both providers use
 the same feedback, feature, fitting, calibration, and trace interfaces.
 The legacy `--live-jev` artifact mode remains Jev-only and rejects another
 provider before opening a review database or constructing a client.
-Laya full-context optimization remains unsupported; there is no silent fallback.
+Laya loads the selected local checkpoint through the optional `laya` extra.
+Its structured-state transport carries scoped rubrics, labeled examples, and all
+classifier questions in one call. This enables context experiments, not a claim
+that Laya has demonstrated few-shot improvements. Inputs over the conservative
+checkpoint token budget fail explicitly; provider-reported truncation is rejected.
+Use a checkpoint with enough room for the complete scorecard, or reduce context
+explicitly. There is no silent truncation or provider fallback.
 
 ## Terms
 
@@ -1368,7 +1374,9 @@ See [TypeSafe's model limits and alias policy](https://docs.typesafe.ai/models).
 Jev, Kev, and Laya have separate adapters.
 Provider-specific behavior belongs in an adapter.
 Use `[jev]`, `[kev]`, or `[laya]` to install the corresponding optional dependencies.
-The Laya adapter does not claim support for labeled context examples.
+Laya transports labeled context in structured state; its effectiveness must be
+measured for the selected checkpoint and task. The adapter guards against context
+truncation rather than silently losing rubric, examples, or target evidence.
 Request counters include attempted calls and failures.
 Returned token use is different from an estimated context size.
 
