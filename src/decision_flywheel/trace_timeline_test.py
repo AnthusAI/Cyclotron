@@ -25,7 +25,8 @@ def test_configuration_count_markers_show_active_questions_not_unpromoted_propos
     ]
     data=timeline_data([{**event,'created_at':'2026-10-06T12:00:00Z'} for event in events])
     counts=[item for item in data['items'] if item['group']=='configuration-count']
-    assert [item['content'] for item in counts]==['1','3','3']
+    assert [item['content'] for item in counts]==['1','3','']
+    assert [item['classification_count'] for item in counts]==[1,3,3]
     assert [item['event_index'] for item in counts]==[0,2,3]
 
 

@@ -37,10 +37,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "882f02e3-71b9-4479-b6e7-d59436d34328",
+      "author": "home",
+      "text": "Deployed the latest core datetime and question revision/removal fixes after confirming the production worker was idle and making a SQLite backup (var/web/before-question-selection-20261007.sqlite3). Verified stored 85-cycle history loads and GraphQL stream reconnects. Browser acceptance exposed repeated classification-count text in every unchanged cycle; projection now prints only count changes while retaining actual-count hover and inspectable cells. Spec failed before fix; browser click opens Active Configuration with the real count. Verified unchanged 255 human labels, zero retractions, 39405 events, and job totals 348 completed / 2 failed; no provider calls or jobs created. Broad physical-iPad gesture/keyboard acceptance remains open.",
+      "created_at": "2026-10-07T23:59:15.323590Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-07T23:17:31.197794Z",
+  "updated_at": "2026-10-07T23:59:15.323659Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

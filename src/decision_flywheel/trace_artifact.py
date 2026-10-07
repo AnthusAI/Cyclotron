@@ -202,7 +202,7 @@ for(const item of timelineItems){
  item.content.setAttribute('aria-label',item.title);
  if(item.group==='configuration-count'){
   item.content.textContent=item.title;item.className='marker-classification-count';
-  item.title+= ' active classifications (main decision plus supporting questions)';
+  item.title= `${item.classification_count??item.title} active classifications (main decision plus supporting questions)`;
  }
  if(label&&(item.className==='marker-prediction'||item.className==='marker-human')){
   item.agreement=agreement(item);item.className+=' agreement-'+item.agreement;
@@ -345,7 +345,10 @@ function cycleCells(items){
    if(changedCount!==null)content.textContent=String(changedCount);
   }else if(!rubric&&!ml&&!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
-   if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
+   if(first.group==='configuration-count'){
+    const changed=members.findLast(member=>member.content.textContent);
+    if(changed)content.append(changed.content.cloneNode(true));
+   }else if(members.length===1||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
