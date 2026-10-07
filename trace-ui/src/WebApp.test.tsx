@@ -82,6 +82,8 @@ test('new run setup is a dismissible drawer and preserves unsent labeling feedba
 test('opening the workspace shows the existing optimization timeline instead of an empty landing page',async()=>{
   render(<WebApp />)
   expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()
+  expect(screen.queryByText('No recorded cycles yet.')).toBeNull()
+  expect(screen.queryByLabelText('Cyclotron run timeline')).toBeNull()
   expect(screen.getByText('Cyclotron')).toHaveClass('cyclotron-brand')
   expect(screen.getByText('SELF-ALIGNING DECISION MODEL HARNESS')).toHaveClass('cyclotron-tagline')
   const title=screen.getByText('Cyclotron')
