@@ -37,10 +37,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "248efba6-b924-4755-adc9-19863160c6ae",
+      "author": "home",
+      "text": "Recall plus accuracy guard replay completed all 85 items and its final replay-next exhaustion command returned finished=true; 255 predictions, 255 labels, 29 optimization events. F1 replay has begun, with same frozen corpus and source history. API cycle-metrics at the end report PREQUENTIAL results, in recall/precision/accuracy order: Anthus 4/8 positives recalled, 4/13 predicted positives correct, 72/85 overall correct (50.0%, 30.8%, 84.7%); Knowledge Bases 3/5, 3/3, 83/85 (60.0%, 100%, 97.6%); Threat Intelligence 4/6, 4/6, 81/85 (66.7%, 66.7%, 95.3%). These are chronological learning-stream measurements, not frozen protected endpoint performance or evidence that one objective wins. All three metrics are recorded in API cycle-metrics with probability/calibration data. Discovered worker run status stays ready after finished=true; a failing restart/replay spec reproduces this and a generic-runtime/scorecard/legacy status fix is under regression. Do not restart the deployed server during this paired pilot; deploy new cache/status fixes after both trajectories finish so their loaded implementation remains matched.",
+      "created_at": "2026-10-07T20:47:07.239613Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T20:24:23.179077Z",
-  "updated_at": "2026-10-07T20:37:14.801908Z",
+  "updated_at": "2026-10-07T20:47:07.239816Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

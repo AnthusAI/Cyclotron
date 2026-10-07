@@ -177,10 +177,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "42132de9-1cb6-4f00-bde4-201ad4cde3b0",
+      "author": "home",
+      "text": "Real diagnostic replay revealed an end-of-input lifecycle defect: finished=true was acknowledged but run history still said ready. Extended the chronological restart/replay regression to require completed status; it failed on existing code. Worker now marks completed only for explicit boolean runtime exhaustion in the injected runtime, scorecard compatibility path, and legacy path. Added generic runtime coverage for true/false/nonboolean values; ordinary commands stay ready. Focused worker/runtime suite: 30 passed. Full suite running. Live server remains unchanged until the ongoing paired study ends; no source labels edited.",
+      "created_at": "2026-10-07T20:47:08.376552Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T18:18:35.517077Z",
+  "updated_at": "2026-10-07T20:47:08.376743Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

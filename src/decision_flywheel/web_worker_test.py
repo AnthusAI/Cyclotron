@@ -10,6 +10,25 @@ from .reviewer_store import Article
 from fastapi.testclient import TestClient
 
 
+def test_only_explicit_runtime_exhaustion_marks_a_run_completed(tmp_path):
+    from types import SimpleNamespace
+    from .application_runtime import RuntimeCommand
+    store = WebStore(tmp_path/'workspace.sqlite')
+    worker = WebWorker(store, tmp_path/'runs', allow_live=True)
+    try:
+        for index, finished in enumerate((True, False, 'true')):
+            run = store.create_run(f'Run {index}', 'live', {})
+            worker.sessions[run['id']] = SimpleNamespace(current_cycle=None, close=lambda: None)
+            worker.session_runtimes[run['id']] = SimpleNamespace(
+                execute=lambda *args, value=finished: RuntimeCommand({'finished': value}))
+            store.command(run['id'], 'prepare', 'prepare', {})
+            worker.process(store.claim_command())
+            assert store.run(run['id'])['status'] == ('completed' if finished is True else 'ready')
+            assert store.jobs(run['id'])[0]['status'] == 'completed'
+    finally:
+        worker.close()
+
+
 def test_a_scorecard_correction_command_is_not_misinterpreted_as_legacy_undo(tmp_path):
     from types import SimpleNamespace
     store = WebStore(tmp_path / 'workspace.sqlite')
@@ -179,6 +198,7 @@ def test_replay_resumes_chronological_cycles_after_restart_without_repeating_com
             store.command(replay['id'],'finish','replay-next',{})
             worker.process(store.claim_command())
             assert store.jobs(replay['id'])[0]['result']=={'finished':True}
+            assert store.run(replay['id'])['status']=='completed'
             assert model.calls==['one','two']
         finally:worker.close()
 

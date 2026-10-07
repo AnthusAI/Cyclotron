@@ -234,7 +234,7 @@ class WebWorker:
                         changes['reviewed'] = update.reviewed
                     self.store.update_item(run_id, update.item_id, **changes)
                 self.store.finish_command(job['id'], 'completed', dict(command.result))
-                self.store.set_status(run_id, 'ready')
+                self.store.set_status(run_id, 'completed' if command.result.get('finished') is True else 'ready')
                 if job['kind'] in ('label', 'skip'):
                     self.store.command(run_id, f"after-feedback:{job['id']}", 'prepare', {})
                 return
@@ -264,7 +264,7 @@ class WebWorker:
                     else:result=asyncio.run(reviewer.feedback({'item_id':shown['item']['id'],'presentation_id':shown['prediction']['presentation_id'],'labels':[]},f"replay:{shown['item']['id']}"))
                 else:raise ValueError('use catalog label correction; automatic learning rollback is not supported')
                 self.store.finish_command(job['id'],'completed',result)
-                self.store.set_status(run_id,'ready')
+                self.store.set_status(run_id,'completed' if result.get('finished') is True else 'ready')
                 if kind in ('label','skip'):
                     # Feedback is acknowledged separately from the next paid
                     # prediction. A preparation failure cannot turn saved
@@ -322,7 +322,7 @@ class WebWorker:
             else:
                 raise ValueError('unknown legacy workspace command')
             self.store.finish_command(job['id'],'completed',result)
-            self.store.set_status(run_id,'ready')
+            self.store.set_status(run_id,'completed' if result.get('finished') is True else 'ready')
         except Exception as error:
             # Do not log exception text: providers can include secrets or prompts.
             import traceback
