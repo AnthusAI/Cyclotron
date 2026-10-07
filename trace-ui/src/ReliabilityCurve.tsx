@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react'
+import {CalibrationProvenance} from './CalibrationProvenance'
 
 export type CalibrationCurve={count:number;missing_probability_count?:number;ece:number|null;bins:{count:number;mean_confidence:number|null;accuracy:number|null}[];brier?:number|null;log_loss?:number|null;source_counts?:Record<string,number>;version_counts?:Record<string,number>;samples?:unknown[];matched_head_comparison?:{raw:CalibrationCurve;calibrated:CalibrationCurve}}
 const percent=(value:number|null)=>value==null?'—':`${(value*100).toFixed(1)}%`
@@ -19,7 +20,7 @@ export function ReliabilityCurve({curve}:{curve?:CalibrationCurve}){
     {curve.source_counts?<p className="text-xs text-muted-foreground">{Object.entries(curve.source_counts).map(([source,count])=>`${source}: ${count}`).join(' · ')}. Recorded predictions, not a refit on this window.</p>:null}
     {curve.brier!=null?<p className="text-xs text-muted-foreground">Brier {curve.brier.toFixed(3)} · Log loss {curve.log_loss?.toFixed(3)??'—'}</p>:null}
     {curve.matched_head_comparison?<details><summary className="text-xs">Matched ML calibration comparison</summary><p className="text-xs">{curve.matched_head_comparison.raw.count} fitted-head samples · raw ECE {percent(curve.matched_head_comparison.raw.ece)} → calibrated ECE {percent(curve.matched_head_comparison.calibrated.ece)}</p></details>:null}
-    {curve.samples?<details><summary className="text-xs">Snapshot provenance</summary><pre className="max-h-48 overflow-auto text-xs">{JSON.stringify({versions:curve.version_counts,samples:curve.samples},null,2)}</pre></details>:null}
+    {curve.samples?<CalibrationProvenance samples={curve.samples} versionCounts={curve.version_counts}/>:null}
   </div>
 }
 

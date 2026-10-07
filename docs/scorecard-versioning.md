@@ -126,6 +126,14 @@ rolling curves are not estimates of current-model held-out calibration. Playback
 uses only snapshots recorded at or before its cursor; missing older evidence is
 shown as unavailable rather than reconstructed from future state.
 
+Open **Snapshot provenance** under a confidence curve to inspect the recorded
+samples. Each sample identifies its item, prediction and feedback event IDs,
+model version, and whether the output came from a calibrated ML head or raw
+decision passthrough. Expand a head sample to see its recorded calibration
+method, fit origin, temperature, and trusted training-item IDs. Missing legacy
+fields say “not recorded.” These disclosures read the immutable snapshot;
+opening them does not fit a model, re-score an item, or make a provider call.
+
 Label-only predictions still contribute to recall, precision and accuracy.
 Calibration, Brier and log loss use only recorded complete probability vectors;
 snapshots and the UI disclose missing-vector counts. The metric window is chosen
@@ -171,12 +179,18 @@ cache entries are retained but are not reused under the new identity: the next
 request is a cache miss and still requires the normal live-call permissions and
 request ceiling. Do not relabel or migrate those old answers to a new server.
 
-Laya's standalone decision adapter remains available, but the default workspace
-rejects Laya scorecard optimization until a verified full-context protocol exists.
-It does not silently run Jev or discard examples. Unknown providers also reject
-in the default server; custom hosts can inject their own model factory and
-explicit provider/model identifiers. This is not a claim of completed
-three-provider workspace evaluation.
+The default workspace also accepts `laya`, using the optional local Laya package.
+Its adapter sends the complete structured scorecard state and all scoped
+questions, including rubrics, actual labeled examples, and dynamic inputs.
+Conservative token-budget checks reject oversized state, questions, or options
+before inference instead of relying on Laya's internal truncation. Reported
+response truncation is also rejected and remains visible in the trace.
+Install and load the optional package and checkpoint before live use. Offline
+transport and lifecycle tests prove the wiring; they do not demonstrate that
+Laya uses few-shot context effectively or establish real-model accuracy.
+Unknown providers reject in the default server; custom hosts can inject their
+own model factory and explicit provider/model identifiers. There is no silent
+Jev fallback and no completed three-provider experiment claim.
 
 ## Correct a recorded scorecard label
 
