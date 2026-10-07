@@ -37,10 +37,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "28dd9265-868a-4d90-9daf-07a3bb72ac2b",
+      "author": "home",
+      "text": "Added reproducible seed_calibration_playback.py with a separate empty-workspace guard, three real API/worker cycles, two independent classifiers and fake synchronous Jev transport. Two no-network specs verify shared call count, immutable per-cycle calibration counts/ECE/provenance, independent labels and refusal to touch an existing workspace. Browser verified Play updates curves, cycle-three prediction retains two reviewed samples until its metrics event, reverse seeking restores one sample and then unavailable, and Inspect classifier selects the independent Practicality history (final ECE 36.7% vs Relevance 63.3%). No current-page console errors; screenshot var/web/calibration-playback-browser-proof.png. Verification skill guided API/SQLite-to-browser checks. This fixture is UI evidence, not optimization improvement evidence. Actual iPad/dark graph-space acceptance remains open; no real labels or paid model calls changed.",
+      "created_at": "2026-10-07T18:29:30.505788Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-07T17:03:07.582618Z",
+  "updated_at": "2026-10-07T18:29:30.505880Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

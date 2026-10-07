@@ -73,6 +73,31 @@ drawer does not restart a cycle or make model calls. Ordinary vertical scroll
 navigates content; horizontal scroll pans the timeline; pinch and zoom buttons
 control timeline scale. There is no separate fullscreen mode.
 
+### Reproduce calibration playback without paid calls
+
+Create a new **empty, separate** fixture directory. This script refuses an
+existing workspace database, so synthetic labels cannot enter your real study.
+
+```bash
+.venv/bin/python scripts/seed_calibration_playback.py --output /tmp/cyclotron-playback-demo
+.venv/bin/python -m decision_flywheel.web_server serve --database /tmp/cyclotron-playback-demo/workspace.sqlite3 --port 8784
+```
+
+Open `http://127.0.0.1:8784/` and select **OFFLINE FIXTURE — calibration playback**.
+The fixture has three worker cycles, two independent classifiers, six synthetic
+labels, and three shared fake decision calls. It uses the production worker,
+GraphQL ingestion, and SQLite storage, but makes no network or optimizer calls.
+Do not enable live calls when serving it. It is UI evidence, not experimental
+evidence that optimization improves a classifier.
+
+Open **Confidence calibration at this cycle** in the inspector. At the first
+prediction, no curve is available. At the third prediction, only the first two
+reviewed samples are available. Advancing through its metrics event adds the
+third sample. Seek backward to restore an earlier curve. **Play** follows these
+same recorded events. **Inspect classifier** switches to the other independent
+history, whose opposite labels produce a different curve. Snapshot provenance
+retains the prediction and feedback event IDs and identifies decision passthrough.
+
 Replay creation uses `createReplay` with an explicitly authorized request budget,
 source run and scorecard definition. It freezes source trace labels and comments
 for items labeled for every selected classifier at the same definition revision.
