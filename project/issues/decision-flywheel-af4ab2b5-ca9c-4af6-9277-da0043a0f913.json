@@ -64,10 +64,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "5946c50a-3f7f-4ac4-8bf0-ece1d16dacb9",
+      "author": "home",
+      "text": "Both frozen 85-item replays and the protected comparison are complete. Completed comparison run 4e2de625-ab63-4271-9c79-6fa5309b2b56, job 516e25bf-aec8-45f0-97da-3582d23ae26d, matched 16 protected targets with exactly 32 provider requests and 96 classifier output records. No fitting or optimization occurred on the protected set. In recall/precision/accuracy order, recall-plus-accuracy versus F1: Anthus 0%/unavailable/93.75% versus 100%/50%/93.75%; Knowledge Bases 50%/100%/93.75% versus 50%/50%/87.5%; Threat Intelligence unavailable/0%/93.75% versus unavailable/unavailable/100%. Positive counts are 1/2/0, so this is an inconclusive diagnostic pilot, not an objective winner. Anthus recall/accuracy final-head Brier was 0.152254 versus raw decision-model Brier 0.078063 on identical protected targets, a regression requiring investigation rather than a claimed ML benefit. Reporting and completed-comparison browser acceptance remain before closing this task. Original human labeling history remains unchanged.",
+      "created_at": "2026-10-07T21:00:14.079444Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T20:24:23.179077Z",
-  "updated_at": "2026-10-07T20:54:38.667153Z",
+  "updated_at": "2026-10-07T21:00:14.079538Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
