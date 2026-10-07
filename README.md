@@ -826,6 +826,17 @@ The generic library does not search another application's feedback store or
 silently extract audit comments. Explanation changes invalidate optimizer-stage
 cache keys, so the next discovery call receives the changed context.
 
+Eligible training records can also carry `LabeledItem.initial_answer_value`:
+the original prediction shown before human feedback. The optimizer receives this
+answer, the current trusted label, the explanation, and whether they agree.
+Missing predictions remain unknown. Workspace sessions and the local reviewer
+read this evidence from recorded feedback and presentations; they do not re-score
+old items to invent it. Corrections retain the original prediction. This diagnostic
+field is separate from demonstration context and does not enter decision-model
+examples. Changed prediction evidence changes optimization cache keys, not fitted
+training labels or decision-response cache keys. Audit and held-out records remain
+excluded from this per-item briefing.
+
 ### Drive and observe one stage
 
 The library supplies the backend contract for a future interactive visualization;

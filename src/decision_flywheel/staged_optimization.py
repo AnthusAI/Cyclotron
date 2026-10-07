@@ -79,6 +79,10 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     key_data['selection_policy']=asdict(wheel.selection_policy) if wheel.selection_policy else None
     key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
+    predictions = {row.item.id: row.initial_answer_value for row in training
+                   if row.initial_answer_value is not None}
+    if predictions:
+        key_data["initial_answers"] = predictions
     key_data["train_after_questions"] = train_after_questions
     if stage=='examples':key_data['max_example_trials']=max_example_trials
     key = _hash(key_data)

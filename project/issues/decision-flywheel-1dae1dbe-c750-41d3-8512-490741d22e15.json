@@ -33,10 +33,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "dd99ce4e-f0e2-4886-8181-0d9d0784b4ad",
+      "author": "home",
+      "text": "Implemented the missing original-prediction evidence in the reusable briefing contract. LabeledItem.initial_answer_value is separate from demonstration context. WorkspaceSession reads it from durable FeedbackItem records, including corrections and restarts; the Rich reviewer reads the linked pre-vote presentation. FeedbackBriefing exposes the recorded answer, current trusted label, explanation and agreement, with null for unavailable answers. Only eligible training rows enter this briefing; protected records remain rejected. Optimization-stage and round cache keys include recorded answers, while fit evidence and decision-response keys remain unchanged. Offline specs cover unknown answers, exact context separation, correction/restart, audit exclusion and stale optimizer-stage cache prevention. No paid calls, historical trace rewrites or experiment report. Full regression verification in progress.",
+      "created_at": "2026-10-07T22:12:13.411976Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "060d6d57-a7c4-44ee-b3c5-3496f6d03f79",
+      "author": "home",
+      "text": "Verification complete: 792 Python specs pass (16 existing pytest-bdd deprecation warnings). No live requests or production label changes. This closes the specifically identified missing error-evidence implementation gap; remaining wider application acceptance stays tracked on the board.",
+      "created_at": "2026-10-07T22:12:27.008067Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.163176Z",
-  "updated_at": "2026-10-07T22:06:46.381307Z",
+  "updated_at": "2026-10-07T22:12:27.008159Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

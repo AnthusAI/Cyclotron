@@ -10,6 +10,32 @@ from .optimizer_agent import DisabledOptimizer, FeedbackBriefing, OptimizerAgent
 TASK = DecisionTask("include", ("include", "exclude"), "Should this item be included?")
 
 
+def test_original_predictions_explain_errors_without_becoming_few_shot_context():
+    from .classifier_config import ClassifierConfig
+    row = LabeledItem(Item("train", {"text": "Recent research"}), "include",
+                      context={"human_feedback": "Practical work belongs here"},
+                      initial_answer_value="exclude")
+    payload = briefing([row]).payload["feedback"][0]
+    assert payload["initial_answer_value"] == "exclude"
+    assert payload["prediction_matches_label"] is False
+    request = ClassifierConfig(TASK, example_ids=("train",)).request(
+        Item("new", {"text": "Another paper"}), [row])
+    assert "initial_answer_value" not in request["state"]["examples"][0]
+    assert "prediction_matches_label" not in request["state"]["examples"][0]
+
+
+def test_a_missing_original_prediction_is_not_guessed_from_the_human_label():
+    feedback = briefing().payload["feedback"][0]
+    assert feedback["initial_answer_value"] is None
+    assert feedback["prediction_matches_label"] is None
+
+
+def test_original_prediction_evidence_changes_the_optimizer_briefing_fingerprint():
+    from dataclasses import replace
+    row = example()
+    assert briefing([row]).fingerprint != briefing([replace(row, initial_answer_value="include")]).fingerprint
+
+
 def example(key="train", text="Recent research", source="trusted"):
     return LabeledItem(Item(key, {"text": text}), "include", source,
                        {"human_feedback": "I want recent practical work"})

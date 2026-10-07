@@ -610,6 +610,9 @@ class DecisionFlywheel:
                            "context_validation_floor": self.context_validation_floor,
                            "require_recall_safeguards": require_recall_safeguards,
                            "optimizer_context": self.optimizer_context,
+                           **({"initial_answers": {row.item.id: row.initial_answer_value for row in training
+                                                   if row.initial_answer_value is not None}}
+                              if any(row.initial_answer_value is not None for row in training) else {}),
                            **({"evaluation_time": evaluation_time.isoformat()}
                               if evaluation_time is not None and "current_datetime" in self.active.config.dynamic_elements else {}),
                            **({"apply_promotion": False, "baseline_version": self.active.fingerprint}

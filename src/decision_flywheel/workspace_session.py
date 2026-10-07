@@ -99,7 +99,9 @@ class WorkspaceSession:
             if item_id not in active or active[item_id].get('assignment') in PROTECTED_ASSIGNMENTS or development_assignment(self.config['seed']+':audit',item_id,rate=.2):
                 protected.append(item);continue
             feedback=active[item_id]['feedback'];comment=feedback.get('edit_comment_value')
-            labeled=LabeledItem(item,task.validate_label(feedback['final_answer_value']),'trusted',{'human_feedback':comment} if comment else {})
+            labeled=LabeledItem(item,task.validate_label(feedback['final_answer_value']),'trusted',
+                {'human_feedback':comment} if comment else {},
+                initial_answer_value=feedback.get('initial_answer_value'))
             (development if active[item_id].get('assignment')=='development' or development_assignment(self.config['seed'],item_id) else training).append(labeled)
         # Preserve feedback arrival order for recent-balanced evaluation selection.
         position={item_id:index for index,item_id in enumerate(active)}

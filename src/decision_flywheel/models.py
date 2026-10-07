@@ -40,8 +40,13 @@ class LabeledItem:
     label: str
     source: str = "trusted"
     context: Mapping[str, str] = field(default_factory=dict)
+    # Original pre-feedback answer, for optimizer error analysis, not demonstrations.
+    initial_answer_value: str | None = None
 
     def __post_init__(self) -> None:
+        if self.initial_answer_value is not None and (
+                not isinstance(self.initial_answer_value, str) or not self.initial_answer_value.strip()):
+            raise ValueError("initial answer must be a non-empty string or None")
         if not isinstance(self.context, Mapping):
             raise ValueError("labeled item context must be a mapping")
         for name, value in self.context.items():

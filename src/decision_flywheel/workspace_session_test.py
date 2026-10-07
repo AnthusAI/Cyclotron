@@ -171,6 +171,12 @@ def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_
     assert wheel.active.config.rubric == '' and wheel.active.fingerprint != previous
     assert session.partitions('a')[0][0].label == 'no'
     assert session.partitions('a')[0][0].context['human_feedback'] == 'Correct explanation'
+    assert session.partitions('a')[0][0].initial_answer_value == 'yes'
+    from .optimizer_agent import FeedbackBriefing
+    feedback = FeedbackBriefing.build(wheel.initial.task, session.partitions('a')[0],
+        current={}, protected=session.partitions('a')[2]).payload['feedback'][0]
+    assert feedback['initial_answer_value'] == 'yes'
+    assert feedback['prediction_matches_label'] is False
     assert session.partitions('b')[0][0].label == 'yes'
     assert wheel.optimizer_context['human_explanations'] == ['Correct explanation']
     assert all(e == original_history[index] for index, e in enumerate(wheel.history(100000)[:len(original_history)]))
@@ -180,6 +186,7 @@ def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_
     session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
     try:
         assert session.correct_feedback(payload, 'correction') == result
+        assert session.partitions('a')[0][0].initial_answer_value == 'yes'
         assert len(session.wheels['a'].history(100000)) == before
         with pytest.raises(ValueError, match='different content'):
             session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'yes',
