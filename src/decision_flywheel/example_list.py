@@ -187,6 +187,7 @@ async def improve_example_list(
         task, plan.candidates, plan.development, model,
         [TrialSpec(fixed, per_label, name=name) for name, fixed in plan.trials],
         max_model_calls=max_model_calls, objective=objective, checkpoint=checkpoint,
+        missing_probabilities="incomplete",
         model_fingerprint=model_fingerprint, protected_ids=protected_ids,
         protected_text_hashes=protected_text_hashes, display_order=display_order,
         presentation_label_order=presentation_label_order,

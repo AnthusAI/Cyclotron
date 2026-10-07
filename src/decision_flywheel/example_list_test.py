@@ -74,6 +74,17 @@ def test_the_incumbent_keeps_a_tie():
     assert len({round(score["brier"], 12) for score in result.scores.values()}) == 1
 
 
+def test_brier_example_promotion_remains_strict_when_a_probability_provider_returns_only_labels():
+    class LabelOnlyModel(FakeModel):
+        async def decide(self, task, target, context):
+            return DecisionResult(target.id.split("-")[0])
+    result = _run(LabelOnlyModel(), hard_demo_ids=sorted(HELPFUL), seed=1)
+    assert not result.promoted and result.winner_trial == "incumbent"
+    assert result.optimization.objective == "brier"
+    assert all(trial.status == "incomplete" and trial.failure_reasons == ("missing-probabilities",)
+               for trial in result.optimization.trials)
+
+
 def test_swapping_in_hard_demos_wins_when_they_help():
     result = _run(FakeModel(HELPFUL), hard_demo_ids=sorted(HELPFUL), seed=1)
     assert result.winner_trial == "hard-swap" and result.promoted is True

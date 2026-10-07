@@ -1341,7 +1341,8 @@ endpoint-audit scripts accept `--trace-api-url` and `--trace-api-run-id` to reco
 their new events through the API. Offline exports remain available separately.
 
 This first workspace supports one reviewer at a time. It has no user accounts.
-LAN access requires `FLYWHEEL_WEB_TOKEN` and a private bind address. Provider keys
+LAN access requires `FLYWHEEL_WEB_TOKEN` unless the operator explicitly selects
+`--allow-unauthenticated-lan` for a trusted local network. Provider keys
 stay on the server. The local database contains private article text and feedback;
 do not publish it with the repository.
 
@@ -1353,6 +1354,19 @@ do not publish it with the repository.
 `DecisionFlywheel` owns `predict`, `improve`, `reconcile_feedback`, `history` and `close`.
 `ReviewerFlywheel` is a thin article-record adapter; the terminal has no fitting or promotion logic.
 `improve_example_list` and `search_context_policies` compare example policies.
+With `objective="brier"`, context search uses all returned class probabilities
+and minimizes label-averaged multiclass Brier. If any response or matching legacy
+checkpoint lacks probabilities, the default policy ranks **all** trials by
+accuracy instead. `ObjectiveFallbackResult` records `requested_objective="brier"`,
+effective `objective="accuracy"`, `fallback_reason`, and affected trial names.
+Complete probability vectors are never invented, and accuracy scores are never
+compared directly with Brier scores. Reusing label-only checkpoints makes no
+additional model calls. Malformed probability vectors still fail validation.
+Use `missing_probabilities="incomplete"` to require Brier evidence: label-only
+checkpoints then need a budgeted request, and missing distributions cannot win.
+`improve_example_list` keeps this strict policy for probability-based promotion.
+Accuracy and macro-F1 result formats remain unchanged. Call accounting is bound
+to the selected missing-probability policy as well as the search inputs.
 The connected `examples` stage also measures individual same-class example swaps
 once it has an incumbent list. It keeps the rubric, supporting questions, example
 count, display slots, and learned head fixed during these comparisons. By default

@@ -1,9 +1,9 @@
 {
   "id": "decision-flywheel-1ed56f35-629d-48d5-84c1-f9e26d038d9e",
   "title": "Score context trials by Brier on returned probabilities",
-  "description": "## Purpose\n\nLet the context optimizer choose by calibrated quality (Brier on the model's returned probabilities), not only by accuracy or macro-F1.\n\n## Scope\n\n- Optional `probabilities` field in checkpoint entries (today entries must be exactly `{\"label\"}`).\n- `objective=\"brier\"` in `search_context_policies`; lower is better.\n- When a trial lacks probabilities, fall back to accuracy explicitly and record that in the result (no silent mixing).\n- Existing checkpoints, objectives and results are unchanged. Phase 1, design build step 2.\n\n## Definition of done\n\nSpecs first: exact multiclass Brier on a fixture; old `{\"label\"}` checkpoints still load; missing-probability fallback is recorded; accuracy and macro-F1 outputs unchanged. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Score context trials by Brier on returned probabilities\n  Scenario: Trials with probabilities are ranked by Brier\n    Given two context trials whose checkpoints carry label probabilities\n    When the optimizer searches with objective brier\n    Then the trial with the lower development Brier wins and the objective is recorded\n  Scenario: Old checkpoints keep working\n    Given a checkpoint whose entries contain only a label\n    When it is loaded\n    Then it is accepted and accuracy is reported as the fallback objective\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) §3.1, §3.2 (Scoring and promotion), §6 step 2.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8e2358d8-3585-427a-ad4d-70655d0cf9cd`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8ab379b4-fa00-48f5-aab7-58af51222c18`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
+  "description": "## Purpose\n\nLet the context optimizer choose by calibrated quality (Brier on the model's returned probabilities), not only by accuracy or macro-F1.\n\n## Scope\n\n- Optional `probabilities` field in checkpoint entries (today entries must be exactly `{\"label\"}`).\n- `objective=\"brier\"` in `search_context_policies`; lower is better.\n- When a trial lacks probabilities, fall back to accuracy explicitly and record that in the result (no silent mixing).\n- Existing checkpoints, objectives and results are unchanged. Phase 1, design build step 2.\n\n## Definition of done\n\nSpecs first: exact multiclass Brier on a fixture; old `{\"label\"}` checkpoints still load; missing-probability fallback is recorded; accuracy and macro-F1 outputs unchanged. `make test` green. Cost: $0.\n\n## Acceptance scenario\n\n```gherkin\nFeature: Score context trials by Brier on returned probabilities\n  Scenario: Trials with probabilities are ranked by Brier\n    Given two context trials whose checkpoints carry label probabilities\n    When the optimizer searches with objective brier\n    Then the trial with the lower development Brier wins and the objective is recorded\n  Scenario: Old checkpoints keep working\n    Given a checkpoint whose entries contain only a label\n    When it is loaded\n    Then it is accepted and accuracy is reported as the fallback objective\n```\n\n## Design\n\n[DECISION_FLYWHEEL_DESIGN.md](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/blob/main/studies/DECISION_FLYWHEEL_DESIGN.md) \u00a73.1, \u00a73.2 (Scoring and promotion), \u00a76 step 2.\n\n## Companion-project coordination\n\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8e2358d8-3585-427a-ad4d-70655d0cf9cd`.\n- [Decision-Flywheel-Evaluations](https://github.com/AnthusAI/Decision-Flywheel-Evaluations/tree/main/project/issues): `decision-flywheel-evaluations-8ab379b4-fa00-48f5-aab7-58af51222c18`.\n\nThese are cross-repository references; local Kanbus blocked-by relationships encode prerequisites within this repository.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -20,25 +20,38 @@
       "text": "Implemented in f7721c4: objective='brier' (label-averaged multiclass Brier, equal to binary Brier for two labels; lower wins); checkpoint entries may carry probabilities (stored only under Brier, so accuracy/macro-F1 checkpoints and results are byte-for-byte unchanged); malformed entries refused. Left open on one point for the owner: this description asks label-only checkpoints under Brier to fall back to accuracy. I chose no mixing instead: under Brier a label-only entry is re-asked, and a model reply without probabilities makes the trial incomplete ('missing-probabilities'); the accuracy fallback is chosen up front by improve_example_list when the model declares no probability support. Close if that is acceptable; otherwise a small follow-up adds the recorded fallback.",
       "created_at": "2026-10-01T21:48:27.513601Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "claude_code",
         "model": "claude-opus-5-5",
-        "name": "phase1-subagent"
+        "name": "phase1-subagent",
+        "settings": {}
       }
+    },
+    {
+      "id": "ef1ca6b2-61f0-4913-9837-be1ac2cbe252",
+      "author": "home",
+      "text": "Completed the remaining recorded fallback requirement. Brier context search now defaults to a whole-search accuracy fallback when a valid response or matching label-only checkpoint lacks probabilities: every completed trial is rescored on the same labels, never mixed against Brier values. ObjectiveFallbackResult records the requested Brier objective, effective accuracy objective, missing-probabilities reason and affected trial names. Legacy checkpoints are reused without extra calls; incomplete calls/budgets cannot produce a winner, and malformed distributions still reject. Optional missing_probabilities=incomplete retains the previous strict path and its search identity; improve_example_list explicitly uses that strict path so probability-based promotion safeguards do not change. Accounting binds the policy; deployable artifacts correctly name accuracy after fallback. Specs first observed missing API/fallback failures. Verified exact three-class Brier, fallback/replay, budgets, policy-scope rejection, strict promotion and artifact roundtrip. All 800 Python specs pass with 16 existing pytest-bdd deprecation warnings. Documentation updated; no paid calls or experiment report.",
+      "created_at": "2026-10-07T22:26:41.818477Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-01T19:56:48.654386Z",
-  "updated_at": "2026-10-01T21:48:27.513629Z",
-  "closed_at": null,
-  "agent": {
-    "platform": "claude_code",
-    "model": "Claude Opus 5.5",
-    "name": "Flywheel Planning"
-  },
+  "updated_at": "2026-10-07T22:26:42.388491Z",
+  "closed_at": "2026-10-07T22:26:42.388386Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
 }
