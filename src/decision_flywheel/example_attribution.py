@@ -62,7 +62,9 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
     rows=wheel.evaluation_policy.select(development,baseline.config.task.labels)[:limit]
     if not swaps or not rows or any(not any(row.label==label for row in rows) for label in baseline.config.task.labels):
         return {'stage':'examples','rankings':[],'reason':'need an incumbent list, same-class alternatives and development coverage for every class','recommended_proposal':None}
-    key=_hash({'baseline':baseline.fingerprint,'model':wheel.model.model_identity,
+    configs=(baseline.config,*(swap['config'] for swap in swaps))
+    key=_hash({'baseline':baseline.fingerprint,
+        'model_contexts':[wheel.model_context(config,training) for config in configs],
         'training':wheel._evidence(training),'development':wheel._evidence(rows),
         'samples':[row.item.id for row in rows],'swaps':[(s['slot'],s['added_id']) for s in swaps],
         'cache_options':asdict(wheel.cache_options),
@@ -72,12 +74,13 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
     saved=wheel.db.execute('SELECT status,payload FROM example_measurements WHERE id=?',(key,)).fetchone()
     if saved and saved[0]=='complete' and wheel.cache_options.policy!='refresh':return json.loads(saved[1])
     now=datetime.fromisoformat(json.loads(saved[1])['evaluation_time']) if saved else datetime.now(timezone.utc)
-    configs=(baseline.config,*(swap['config'] for swap in swaps))
     bound=0
+    identity=getattr(wheel.model,'cache_identity',None)
     for config in configs:
         for row in rows:
             request=config.request(row.item,training,now=now)
-            request_key=_hash({'model':wheel.model.model_identity,'request':request})
+            model_identity=identity(config,row.item,training,now=now) if identity else wheel.model.model_identity
+            request_key=_hash({'model':model_identity,'request':request})
             cached=wheel.db.execute('SELECT status FROM runtime_answers WHERE key=?',(request_key,)).fetchone()
             bound+=wheel.cache_options.policy=='refresh' or not cached or cached[0]!='complete'
     wheel._emit({'kind':'example-swaps-planned','stage':'examples','measurement_fingerprint':key,
