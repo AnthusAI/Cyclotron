@@ -17,22 +17,35 @@
       "text": "Implementation progress: optimizer_agent.py now snapshots actual trusted training text/metadata, labels, explanation comments and current classifier configuration; excludes protected IDs and normalized-text matches; injected completion callable exposes exact prompts/replies/tool calls/model usage with safe failure diagnostics. Eight offline specs pass. Not complete: application live-client setup and durable UI transcript integration remain. No paid calls.",
       "created_at": "2026-10-05T22:02:47.946517Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
+    },
+    {
+      "id": "41e9cc23-33d6-4690-8161-80d3b621429d",
+      "author": "home",
+      "text": "Current-state audit: eligible item text/metadata, labels, comments, current configuration, exact messages/replies/tool calls, protected-record refusal and waiting-for-coverage tests pass. Found remaining requirement gap: WorkspaceSession._pools builds LabeledItem.context from only human_feedback, and FeedbackBriefing.build only serializes comment from that context. Recorded initial_answer_value and correctness/error evidence therefore do not reach the optimizer briefing, even though durable FeedbackItem records contain the displayed decision. Keep this story open. Next implementation must attach only each eligible training record original pre-vote prediction/error, retain correction provenance, exclude development/audit/scoreboard, and preserve historical requests unchanged. No inferred predictions or paid rescoring just to create evidence.",
+      "created_at": "2026-10-07T22:06:46.381235Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.163176Z",
-  "updated_at": "2026-10-05T22:02:47.946543Z",
+  "updated_at": "2026-10-07T22:06:46.381307Z",
   "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
   "agent": {
     "platform": "codex",
     "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
   },
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {}
+  "agent_assignment": null
 }
