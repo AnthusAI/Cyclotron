@@ -1,44 +1,49 @@
+# Separate learning from evaluation: the labeled-data partitions, what each
+# one may feed, and how a frozen version is measured.
+...@_cyclotron
+
 direction: down
 
-assignment: "Assign each item before its human label\nSave the assignment across restarts\nPrevent duplicate text across partitions"
+assignment: "Assign each item before its label\nSave the assignment across restarts\nPrevent duplicate text across partitions" {class: step}
 
 partitions: "LABELED DATA PARTITIONS" {
-  direction: right
-  training: "Training\nItems, labels, comments"
-  development: "Development\nItems and labels"
-  audit: "Ongoing audit\nItems and labels"
-  holdout: "Permanent holdout\nItems and labels"
+  class: group
+  training: "Training\nItems, labels,\ncomments"
+  development: "Development\nItems and\nlabels"
+  audit: "Ongoing audit\nItems and\nlabels"
+  holdout: "Permanent\nholdout\nItems and labels"
 }
-assignment -> partitions
+assignment -> partitions {class: flow}
 
 learning: "LEARN AND SELECT A CANDIDATE" {
-  direction: down
-  optimizer: "LLM optimizer and example selector\nInfer rubric and propose classification tasks\nSelect few-shot examples from training records"
-  fitter: "Custom ML fitter\nUse complete training features and labels\nFit weights and calibration"
-  compare: "Development comparison\nScore candidate and active versions\nChoose changes with the declared rule"
-  optimizer -> fitter: "Validated candidate definition"
-  fitter -> compare: "Candidate classifier"
+  class: group
+  optimizer: "LLM optimizer and example selector\nInfer rubric; propose tasks\nSelect few-shot training examples" {class: llm}
+  fitter: "Custom ML fitter\nUse complete training features\nand labels; fit weights and calibration" {class: ml}
+  compare: "Development comparison\nScore candidate and active versions\nChoose with the declared rule" {class: step}
+  optimizer -> fitter: "Validated candidate" {class: flow}
+  fitter -> compare: "Candidate classifier" {class: flow}
 }
-partitions.training -> learning.optimizer: "Training feedback only"
-partitions.training -> learning.fitter: "Training labels and feature rows"
-partitions.development -> learning.compare: "Comparison labels only"
+partitions.training -> learning.optimizer: "Training\nfeedback only" {class: proposal}
+partitions.training -> learning.fitter: "Training labels\nand features" {class: learning}
+partitions.development -> learning.compare: "Comparison\nlabels only" {class: flow}
 
-frozen: "Active classifier version\nSave rubric, examples, tasks, features, and ML model\nFreeze before independent evaluation"
-learning.compare -> frozen: "Promote only if the rule passes"
+frozen: "Active classifier version\nSave rubric, examples, tasks,\nfeatures, and ML model\nFreeze before independent evaluation" {class: outcome}
+learning.compare -> frozen: "Promote only if the rule passes" {class: flow}
 
 measurement: "MEASURE ALIGNMENT" {
-  direction: right
-  ongoing: "Ongoing audit score\nSave prediction before the human vote\nAccuracy, per-class recall, and uncertainty\nReport recent results and sample size"
-  final: "Final holdout score\nTest a frozen version\nDo not use the score to select changes"
+  class: group
+  ongoing: "Ongoing audit score\nSave prediction before the vote\nAccuracy, per-class recall,\nuncertainty, and sample size"
+  final: "Final holdout score\nTest a frozen version\nNever used to select changes"
 }
-frozen -> measurement.ongoing: "Saved-version predictions"
-frozen -> measurement.final: "Frozen-version predictions"
-partitions.audit -> measurement.ongoing: "Audit labels only"
-partitions.holdout -> measurement.final: "Holdout labels only"
+frozen -> measurement.ongoing: "Saved-version\npredictions" {class: evidence}
+frozen -> measurement.final: "Frozen-version\npredictions" {class: evidence}
+partitions.audit -> measurement.ongoing: "Audit labels only" {class: evidence}
+partitions.holdout -> measurement.final: "Holdout labels only" {class: evidence}
 
-review: "Review-rate control\nStart with full review\nReduce review only with sufficient audit evidence\nKeep a random audit sample"
-measurement.ongoing -> review: "Measured accuracy and uncertainty"
+review: "Review-rate control\nStart with full review; reduce it only\nwith sufficient audit evidence\nKeep a random audit sample" {class: human}
+measurement.ongoing -> review: "Measured accuracy\nand uncertainty" {class: evidence}
 
-rules: "DATA RULES\nAudit and holdout labels or comments never enter optimization or fitting.\nDevelopment labels never enter optimizer prompts, examples, or ML training.\nRepeated development searches can make selection scores optimistic.\nUncertain items alone do not give an unbiased accuracy estimate." {
-  shape: text
+rules: "DATA RULES\nAudit and holdout labels or comments never enter\noptimization or fitting.\nDevelopment labels never enter optimizer prompts,\nexamples, or ML training.\nRepeated development searches can make selection\nscores optimistic.\nUncertain items alone do not give an unbiased\naccuracy estimate." {
+  class: note
+  near: bottom-center
 }

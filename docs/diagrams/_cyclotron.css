@@ -1,0 +1,63 @@
+/* Cyclotron diagram roles. Values follow trace-ui/src/styles/shared.css. */
+.d2-svg {
+  --dg-text: oklch(0.18 0.014 326);
+  --dg-muted: oklch(0.39 0.026 326);
+  --dg-line: oklch(0.542 0.034 322.5);
+  --dg-step: oklch(0.955 0.009 326);
+  --dg-group: oklch(0.985 0.004 326);
+  --dg-group-line: oklch(0.89 0.012 326);
+  --dg-llm: oklch(0.87 0.045 290);
+  --dg-llm-line: oklch(0.55 0.12 290);
+  --dg-ml: oklch(0.87 0.08 150);
+  --dg-ml-line: oklch(0.5 0.1 150);
+  --dg-model: oklch(0.93 0.014 326);
+  --dg-human: oklch(0.92 0.06 75);
+  --dg-human-line: oklch(0.55 0.1 75);
+  --dg-outcome: oklch(0.21 0.019 322);
+  --dg-outcome-text: oklch(0.985 0 0);
+}
+@media screen and (prefers-color-scheme: dark) {
+  .d2-svg {
+    --dg-text: oklch(0.94 0.008 326);
+    --dg-muted: oklch(0.74 0.018 326);
+    --dg-line: oklch(0.62 0.03 322);
+    --dg-step: oklch(0.22 0.018 326);
+    --dg-group: oklch(0.2 0.016 326);
+    --dg-group-line: oklch(0.3 0.024 326);
+    --dg-llm: oklch(0.34 0.07 290);
+    --dg-llm-line: oklch(0.72 0.11 290);
+    --dg-ml: oklch(0.34 0.08 150);
+    --dg-ml-line: oklch(0.72 0.11 150);
+    --dg-model: oklch(0.27 0.024 326);
+    --dg-human: oklch(0.36 0.07 75);
+    --dg-human-line: oklch(0.78 0.1 75);
+    --dg-outcome: oklch(0.94 0.008 326);
+    --dg-outcome-text: oklch(0.18 0.014 326);
+  }
+}
+
+/* Transparent page so the diagram sits on any README or site background. */
+.d2-svg > rect:first-of-type { fill: transparent; }
+
+/* Nodes */
+.d2-svg g > .shape > * { fill: var(--dg-step); stroke: var(--dg-step); }
+.d2-svg g > text { fill: var(--dg-text); }
+.d2-svg g.group > .shape > * { fill: var(--dg-group); stroke: var(--dg-group-line); }
+.d2-svg g.group > text { fill: var(--dg-muted); letter-spacing: 0.04em; }
+.d2-svg g.llm > .shape > * { fill: var(--dg-llm); stroke: var(--dg-llm-line); }
+.d2-svg g.ml > .shape > * { fill: var(--dg-ml); stroke: var(--dg-ml-line); }
+.d2-svg g.model > .shape > * { fill: var(--dg-model); stroke: var(--dg-line); }
+.d2-svg g.human > .shape > * { fill: var(--dg-human); stroke: var(--dg-human-line); }
+.d2-svg g.store > .shape > * { fill: var(--dg-step); stroke: var(--dg-line); }
+.d2-svg g.outcome > .shape > * { fill: var(--dg-outcome); stroke: var(--dg-outcome); }
+.d2-svg g.outcome > text { fill: var(--dg-outcome-text); }
+.d2-svg g.note > text, .d2-svg g.note p, .d2-svg g.note li { fill: var(--dg-muted); color: var(--dg-muted); }
+
+/* Connections */
+.d2-svg path.connection { stroke: var(--dg-line); }
+.d2-svg polygon.connection { fill: var(--dg-line); stroke: var(--dg-line); }
+.d2-svg g.proposal path.connection { stroke: var(--dg-llm-line); }
+.d2-svg g.proposal polygon.connection { fill: var(--dg-llm-line); stroke: var(--dg-llm-line); }
+.d2-svg g.learning path.connection { stroke: var(--dg-ml-line); }
+.d2-svg g.learning polygon.connection { fill: var(--dg-ml-line); stroke: var(--dg-ml-line); }
+.d2-svg g:has(> path.connection) > text { fill: var(--dg-muted); }

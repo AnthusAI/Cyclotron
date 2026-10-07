@@ -11,7 +11,7 @@ from typing import Sequence
 from .models import DecisionTask, Item, normalize_label
 
 
-# Plexus-compatible provenance names.  Only explicit reviewed sources may teach
+# Primus-compatible provenance names.  Only explicit reviewed sources may teach
 # a future learned head; imported model output is never silently promoted.
 LABEL_SOURCE_VETTED = "vetted_feedback"
 LABEL_SOURCE_FINAL = "regular_final_feedback"
