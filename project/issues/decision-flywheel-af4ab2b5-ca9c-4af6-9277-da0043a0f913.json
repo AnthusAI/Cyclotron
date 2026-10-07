@@ -46,10 +46,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "f6d74cf6-05b0-4108-a087-c9f9b3653e77",
+      "author": "home",
+      "text": "Verification skill guided a production-browser trace check of the completed recall/accuracy replay. Selecting prediction event 24 opened recorded decision request 21 and response 22, including actual joint state, target metadata/text, all three classifier questions and empty early examples/rubrics; Response tab showed actual answers/probabilities. Browser error log was empty. Screenshot: var/web/objective-pilot-decision-exchange-proof.png (private, not committed). Read-only frozen endpoint audit confirmed the final Anthus learned head matches the final complete joint feature context. F1 still running; interim preflight sees only 8 protected matched items and is not approved or executed. Recompute once all 85 F1 items finish. No labels, source history, or active scorecard selection were changed by browser inspection.",
+      "created_at": "2026-10-07T20:53:36.876542Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "a01af647-bc5c-48f7-b5d1-59f3c8f14e2e",
+      "author": "home",
+      "text": "Prepared an API-only protected-comparison continuation waiting on the exact F1 replay. It requires final replay-next finished=true, no pending/running/failed/interrupted work, exactly 85 cycles and 255 labels; then recomputes and requires the preregistered 16 protected samples and 32-request upper bound before createMatchedComparison confirmation. Comparison ceiling is exactly 32 decision attempts, no optimizer calls and no automatic paid retries. It polls the resulting matched-evaluate job and stops on any failed/interrupted job. No protected calls have been made at this note time. Live runner handle is session 16338; original sequential replay runner remains session 71290. If a polling transport error occurs, inspect authoritative API jobs before any resubmission; do not start a duplicate comparison.",
+      "created_at": "2026-10-07T20:54:38.667061Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T20:24:23.179077Z",
-  "updated_at": "2026-10-07T20:47:07.239816Z",
+  "updated_at": "2026-10-07T20:54:38.667153Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
