@@ -85,4 +85,16 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         assert wheel.active.fingerprint == version
         assert wheel.active.head is not None
         assert any(event["kind"] == "optimizer-response" for event in wheel.history(10000))
+        # The application forwards an undo as a retraction. The reusable core
+        # must not keep serving a head fitted from superseded feedback.
+        restored = ReviewerFlywheel(store, wheel, min_stage_evaluation_per_class=2, rubric_changes_every=None)
+        restored_article = store.undo_last_vote()
+        assert restored_article is not None
+        undo = store.events_for(restored_article.id)[-1]
+        restored.record_review_event(undo)
+        restored.reconcile()
+        assert wheel.active.head is None
+        assert any(event["kind"] == "human-feedback" and event["action"] == "retracted"
+                   for event in wheel.history(10_000))
+        assert wheel.history(10_000)[-1]["kind"] == "classifier-invalidated"
         wheel.close()

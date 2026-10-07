@@ -3,9 +3,9 @@
   "title": "Prove the complete reusable flywheel through the reviewer interface",
   "description": "## Behavior and acceptance\nCross-module fake-client acceptance exercises vote/comment -> live-interface briefing -> rubric/examples/task proposal -> validated request -> regenerated features -> trained head -> development comparison -> promotion/rejection -> client-visible events, then restart and correction. Prove zero network calls and protected-data exclusion. Integration may not import proof-of-concept orchestration from Jev-Flywheel. A separate explicitly authorized live verification records actual model/usage and bounded requests without claiming guaranteed improvement.\nScenario: every stage is observable, the served prediction uses the trained head, and restart preserves lineage.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "home",
   "creator": null,
   "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
   "labels": [],
@@ -30,10 +30,12 @@
       "text": "User authorized real retrospective replay from scratch: snapshot existing human votes/comments via read-only SQLite backup; fresh rubric/examples/tasks/head and separate runtime. Preserve vote arrival order; fixed protected audit pool; recent-balanced evaluation chooses newest rows per class and walks backward for scarce labels without using future votes or moving learned rows into audit. Missing classes report insufficient coverage. Separate fixed balanced scoreboard curve aids across-version comparison. Frozen v2 plan: 87 eligible votes, 65 train, four dev, 18 protected audit pool, final selected audit two per class; checkpoints20/40/60/80/87; worst-case345 Jev requests, at most five optimizer calls. Offline suite411 passed; live replay launched with those ceilings, outcome pending. Existing live labels/runtime untouched.",
       "created_at": "2026-10-05T23:28:37.269764Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -42,25 +44,38 @@
       "text": "Real replay completed:79 Jev attempts,1 returned gpt-6-luna response (23764 returned total tokens), no provider errors. Empty start fixed balanced audit1/4 correct; early recent-balanced audit unavailable until both classes arrived. Existing development coverage gate postponed optimization at20/40/60/80 labels; one actual proposal at87. Agent inferred knowledge-systems/work rubric and seven examples, no supporting tasks. Fitted candidate got2/4 development correct but equal-class Brier worsened0.5663 ->0.9967913484 (Include recall0/2); correctly rejected, active head remained absent, fixed audit stayed1/4. This is not a successful multi-step optimization curve; exposes restrictive delayed coverage and unsuccessful candidate. All records private under var/arxiv-replay-v2; live DB untouched.411 offline specs passed, including recent-first backfill, disjointness, delayed feedback, and read-only/no-network preflight. Public code/docs prepared; no label/comment/paper text published.",
       "created_at": "2026-10-05T23:31:40.156059Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
+    },
+    {
+      "id": "ab4acf5e-89e4-41bf-93e5-fed6b9f3bca6",
+      "author": "home",
+      "text": "Behavior-first core/application boundary is now implemented in worktree branch behavior-core-boundary. Added executable Gherkin contract (tests/features/complete_feedback_loop.feature): scripted, zero-network feedback -> optimizer proposal -> decision requests/responses -> feature regeneration -> fitted/prompted head -> restart persistence; corrected trusted label invalidates the dependent fit. Also added frontend Gherkin-backed GraphQL label submission coverage and made the browser-bundle test work in fresh worktrees. Verification: 588 Python tests and 19 Vitest tests pass. Commits: a459909, 7b32380, 891febd, 26f4d3b.",
+      "created_at": "2026-10-07T17:46:48.702338Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.857422Z",
-  "updated_at": "2026-10-05T23:31:40.156098Z",
+  "updated_at": "2026-10-07T17:46:48.702470Z",
   "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
-  },
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
 }
