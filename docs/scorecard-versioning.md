@@ -207,3 +207,11 @@ history. Completed or already-busy comparisons cannot start new resume work.
 The ceiling includes all earlier attempts from both endpoints, not merely the
 calls remaining in this invocation. Failed attempts count, and prior ceilings
 cannot be reduced during resume. API jobs are serialized by the workspace worker.
+
+To recover a stopped comparison, open that comparison in run history and inspect
+its failed job first. Raise the total ceiling if prior failed attempts consumed
+the allowance. Enable failed-call retries only when you intend to repeat those
+calls, then approve and resume. If the submission acknowledgement is lost, submit
+again without changing the controls: the same submission identity prevents a
+second queued job. Changing the ceiling or retry option requires new approval.
+You do not need to recreate the comparison or rerun completed requests.
