@@ -22,3 +22,10 @@ test('the Cyclotron mark uses the subtitle width instead of a fixed empty grid c
   expect(layout?.[1]).toContain('width:fit-content')
   expect(layout?.[1]).not.toContain('width:17rem')
 })
+
+test('the application chrome uses flat surface tiers instead of borders, outlines, shadows, or gradients',()=>{
+  const css=readFileSync('src/index.css','utf8')
+  expect(css).toContain('/* Flat, polarity-consistent interface */')
+  expect(css).toMatch(/body \*,\nbody \*::before,\nbody \*::after \{[^}]*border:0!important[^}]*outline:0!important[^}]*box-shadow:none!important[^}]*background-image:none!important/s)
+  expect(css).toMatch(/body :focus-visible \{[^}]*background-color:var\(--accent\)!important[^}]*color:var\(--accent-foreground\)!important/s)
+})
