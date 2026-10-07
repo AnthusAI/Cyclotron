@@ -9,6 +9,23 @@ from .flywheel_test import FakeModel, agent
 from .reviewer_store import Article
 from fastapi.testclient import TestClient
 
+
+def test_a_scorecard_correction_command_is_not_misinterpreted_as_legacy_undo(tmp_path):
+    from types import SimpleNamespace
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    run = store.create_run('Legacy', 'live', {})
+    calls = []
+    reviewer = SimpleNamespace(current_cycle=None, finish_cycle=lambda: calls.append('finish'),
+        store=SimpleNamespace(undo_last_vote=lambda: calls.append('undo')))
+    worker = WebWorker(store, tmp_path / 'runs', allow_live=True)
+    worker.sessions[run['id']] = reviewer
+    store.command(run['id'], 'correction', 'correct', {'labels': []})
+    worker.process(store.claim_command())
+    assert not calls
+    assert store.jobs(run['id'])[0]['status'] == 'failed'
+    worker.sessions.clear()
+    worker.close()
+
 def test_legacy_web_metrics_use_recorded_probability_vectors_and_calibration_provenance():
     from types import SimpleNamespace
     events=[{'kind':'prediction','event_id':1,'target_id':'paper','label':'include','version':'head-v1',

@@ -194,6 +194,10 @@ class ScorecardRuntime:
             return RuntimeCommand(await workspace.feedback(payload, request_id))
         if kind == "skip":
             return RuntimeCommand(workspace.skip(payload))
+        if kind == "correct":
+            if not request_id:
+                raise ValueError("scorecard correction needs a command identity")
+            return RuntimeCommand(workspace.correct_feedback(payload, request_id))
         if kind == "optimize":
             return RuntimeCommand(await workspace.resume_optimization())
         if kind == "replay-next":

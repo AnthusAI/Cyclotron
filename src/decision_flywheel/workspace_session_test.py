@@ -9,6 +9,133 @@ from .observability import StepFailed
 from .flywheel_test import agent
 
 
+def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_without_paid_calls(tmp_path):
+    from .workspace_session import freeze_configuration
+    from .flywheel import FittedClassifier, development_assignment
+    from .classifier_config import ClassifierConfig
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    for cid in ('a', 'b'):
+        store.save_classifier(cid, cid, {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
+    store.save_item_list('items', 'Items')
+    # Ensure this fixture's vote is training, not a protected audit vote.
+    item_id = next(str(n) for n in range(100) if not development_assignment('test:audit', str(n), rate=.2)
+                   and not development_assignment('test', str(n)))
+    store.upsert_list_items('items', [{'id': item_id, 'occurred_at': '2026-01-01', 'values': {'text': 'Paper'}}])
+    config = freeze_configuration(store, {'classifier_ids': ['a', 'b'], 'item_list_id': 'items',
+        'max_requests': 10, 'max_optimizer_calls': 3, 'optimize_every': 20, 'rubric_changes_every': 2, 'seed': 'test'})
+    run = store.create_run('Corrections', 'live', config, items=store.list_items('items'))
+    class Model:
+        model_identity = 'fake'
+        calls = 0
+        async def classify_many(self, configs, target, training, **kwargs):
+            self.calls += 1
+            return BatchedAnswers({cid: {'decision': DecisionResult('yes', {'yes': .8, 'no': .2})}
+                                  for cid in configs}, 'fake', {}, 1)
+    model = Model(); events = []
+    session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
+    shown = asyncio.run(session.prepare())
+    asyncio.run(session.feedback({'item_id': item_id, 'presentation_id': shown['prediction']['presentation_id'],
+        'labels': [{'classifier_id': cid, 'label': 'yes', 'comment': 'Original'} for cid in ('a', 'b')]}, 'vote'))
+    wheel = session.wheels['a']; train, dev, _ = session.partitions('a')
+    wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Learned from old explanation'),
+                                    training_evidence=wheel._evidence(train), development_evidence=wheel._evidence(dev)))
+    previous = wheel.active.fingerprint
+    payload = {'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'no',
+        'comment': 'Correct explanation', 'expected_feedback_id': 'vote:a'}]}
+    original_history = wheel.history(100000)
+    with pytest.raises(ValueError, match='reload'):
+        session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'no',
+            'expected_feedback_id': 'stale-vote'}]}, 'stale')
+    assert wheel.history(100000) == original_history
+    result = session.correct_feedback(payload, 'correction')
+    assert result['corrected'] == item_id
+    assert wheel.active.config.rubric == '' and wheel.active.fingerprint != previous
+    assert session.partitions('a')[0][0].label == 'no'
+    assert session.partitions('a')[0][0].context['human_feedback'] == 'Correct explanation'
+    assert session.partitions('b')[0][0].label == 'yes'
+    assert wheel.optimizer_context['human_explanations'] == ['Correct explanation']
+    assert all(e == original_history[index] for index, e in enumerate(wheel.history(100000)[:len(original_history)]))
+    assert store.item_results('items', item_id, 1)[0]['payload'] == shown['prediction']
+    assert {v['classifier_id']: v['label'] for v in store.item_labels('items', item_id, 1)} == {'a': 'no', 'b': 'yes'}
+    before = len(wheel.history(100000)); session.close()
+    session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
+    try:
+        assert session.correct_feedback(payload, 'correction') == result
+        assert len(session.wheels['a'].history(100000)) == before
+        with pytest.raises(ValueError, match='different content'):
+            session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'yes',
+                'expected_feedback_id': 'vote:a'}]}, 'correction')
+        metrics = next(e['metrics'] for e in reversed(events) if e['kind'] == 'cycle-metrics' and e['classifier_id'] == 'a')
+        assert metrics['count'] == 1 and metrics['accuracy'] == 0
+        # An explanation-only edit must also invalidate inferred guidance.
+        wheel = session.wheels['a']; train, dev, _ = session.partitions('a')
+        wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Inferred guidance'),
+            training_evidence=wheel._evidence(train), development_evidence=wheel._evidence(dev)))
+        session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'no',
+            'comment': 'A more precise explanation', 'expected_feedback_id': 'correction:a'}]}, 'comment-edit')
+        assert wheel.active.config.rubric == ''
+        assert wheel.optimizer_context['human_explanations'] == ['A more precise explanation']
+        # An API acknowledgement loss after durable feedback must not leave
+        # the old inferred rubric current after explicit command recovery.
+        train, dev, _ = session.partitions('a')
+        wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Old inferred guidance'),
+            training_evidence=wheel._evidence(train), development_evidence=wheel._evidence(dev)))
+        interrupted = {'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'yes',
+            'comment': 'Recovered correction', 'expected_feedback_id': 'comment-edit:a'}]}
+        def lose_ack(event):
+            events.append(event)
+            if event['kind'] == 'human-feedback' and event['feedback']['id'] == 'interrupted:a':
+                raise RuntimeError('API acknowledgement lost')
+        session.observer = lose_ack
+        with pytest.raises(RuntimeError, match='acknowledgement'):
+            session.correct_feedback(interrupted, 'interrupted')
+        session.close()
+        session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
+        session.correct_feedback(interrupted, 'interrupted')
+        assert session.wheels['a'].active.config.rubric == ''
+        assert len([e for e in session.wheels['a'].history(100000)
+                    if e['kind'] == 'human-feedback' and e['feedback']['id'] == 'interrupted:a']) == 1
+        assert model.calls == 1
+    finally:
+        session.close()
+
+
+def test_protected_feedback_corrections_remain_protected_and_never_enter_learning_context(tmp_path):
+    from types import SimpleNamespace
+    from .workspace_session import freeze_configuration
+    from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
+    from .flywheel import FittedClassifier
+    from .classifier_config import ClassifierConfig
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    store.save_classifier('a', 'A', {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
+    store.save_item_list('items', 'Items')
+    store.upsert_list_items('items', [{'id': 'paper', 'occurred_at': '2026-01-01', 'values': {'text': 'Paper'}}])
+    config = freeze_configuration(store, {'classifier_ids': ['a'], 'item_list_id': 'items', 'max_requests': 10,
+        'max_optimizer_calls': 3, 'optimize_every': 20, 'rubric_changes_every': 2, 'seed': 'test'})
+    run = store.create_run('Protected', 'live', config, items=store.list_items('items'))
+    session = WorkspaceSession(store, run, tmp_path / 'run', SimpleNamespace(model_identity='fake'), agent([]), lambda _: None)
+    try:
+        wheel = session.wheels['a']
+        wheel.record_feedback_event(FeedbackItem('original', 'paper', 'a', final_answer_value='yes',
+            edit_comment_value='Sealed explanation', label_source=LABEL_SOURCE_VETTED,
+            selection_propensity=1., review_provenance='human'), assignment='final_audit')
+        store.update_item(run['id'], 'paper', reviewed=True)
+        wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Unrelated training rubric')))
+        version = wheel.active.fingerprint
+        session.correct_feedback({'item_id': 'paper', 'labels': [{'classifier_id': 'a', 'label': 'no',
+            'comment': 'Corrected sealed explanation', 'expected_feedback_id': 'original'}]}, 'correction')
+        assert wheel.active.fingerprint == version
+        assert session.partitions('a')[:2] == ((), ())
+        assert wheel.optimizer_context['human_explanations'] == []
+        corrected = next(e for e in reversed(wheel.history(100000)) if e['kind'] == 'human-feedback')
+        assert corrected['assignment'] == 'final_audit'
+        session.config['input_mode'] = 'replay'
+        with pytest.raises(ValueError, match='frozen replay'):
+            session.correct_feedback({'item_id': 'paper', 'labels': [{'classifier_id': 'a', 'label': 'yes'}]}, 'replay-edit')
+    finally:
+        session.close()
+
+
 def test_protected_audit_votes_do_not_trigger_learning_or_enter_optimizer_context(tmp_path):
     from types import SimpleNamespace
     from .workspace_session import freeze_configuration

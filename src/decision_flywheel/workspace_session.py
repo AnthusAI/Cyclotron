@@ -211,6 +211,73 @@ class WorkspaceSession:
                 results.append({'classifier_id':identifier,'warnings':warnings})
         return {'resumed':results}
 
+    def correct_feedback(self,payload,request_id):
+        """Append an explicit correction and invalidate dependent learning.
+
+        The original displayed prediction is immutable. Corrections do not
+        silently rerun prediction or optimization, or change frozen replay
+        inputs. The expected feedback ID protects against stale edits.
+        """
+        if self.config.get('input_mode')=='replay':
+            raise ValueError('frozen replay feedback cannot be corrected; correct its source and create a new replay')
+        item_id=payload.get('item_id');labels=payload.get('labels',[])
+        if not request_id or item_id not in self.items or not labels or len({r['classifier_id'] for r in labels})!=len(labels):
+            raise ValueError('correction needs an item, distinct classifier labels and a command identity')
+        if any(row['id']==item_id for row in self.store.unreviewed_items(self.run['id'])):
+            raise ValueError('finish recording this item before correcting its feedback')
+        plans=[]
+        for label in labels:
+            identifier=label['classifier_id']
+            if identifier not in self.wheels:raise ValueError('classifier not in run')
+            wheel=self.wheels[identifier]
+            canonical=wheel.initial.task.validate_label(label['label'])
+            comment=label.get('comment','')
+            if not isinstance(comment,str):raise ValueError('comment must be text')
+            expected=label.get('expected_feedback_id')
+            if not isinstance(expected,str) or not expected:raise ValueError('correction needs the expected feedback identity')
+            history=wheel.history(100000);feedback_id=f'{request_id}:{identifier}'
+            existing=next((e for e in history if e['kind']=='human-feedback' and e['feedback']['id']==feedback_id),None)
+            if existing:
+                if (existing['feedback']['item_id']!=item_id or existing['feedback']['final_answer_value']!=canonical or
+                    (existing['feedback'].get('edit_comment_value') or '')!=comment or
+                    existing['feedback'].get('review_provenance')!=f'corrected-human-vote:{expected}'):
+                    raise ValueError('feedback identity has different content')
+                original=existing
+            else:
+                original=next((e for e in reversed(history) if e['kind']=='human-feedback' and e['feedback']['item_id']==item_id),None)
+                if not original or original.get('action')!='submitted':raise ValueError('item has no active feedback to correct')
+                if expected!=original['feedback']['id']:
+                    raise ValueError('feedback changed; reload before correcting')
+            plans.append((identifier,wheel,canonical,comment,original,existing,feedback_id,expected))
+        item=self.items[item_id];target=Item(item_id,item['values'])
+        for identifier,wheel,canonical,comment,original,existing,feedback_id,expected in plans:
+            if any(e['kind']=='feedback-correction-completed' and e.get('feedback_id')==feedback_id
+                   for e in wheel.history(100000)):continue
+            cycle=wheel.resume_cycle(target) if existing else None
+            with_cycle=cycle or wheel.cycle(target,reason='human-correction').__enter__()
+            try:
+                classifier=next(c for c in self.config['classifiers'] if c['id']==identifier)
+                self.store.label_item(identifier,classifier['revision'],self.config['item_list_id'],item_id,item['revision'],
+                                      canonical,comment,feedback_id)
+                if not existing:
+                    prior=original['feedback']
+                    wheel.record_feedback_event(FeedbackItem(feedback_id,item_id,identifier,
+                        initial_answer_value=prior.get('initial_answer_value'),final_answer_value=canonical,
+                        edit_comment_value=comment or None,label_source=prior['label_source'],
+                        selection_propensity=prior.get('selection_propensity'),
+                        review_provenance=f"corrected-human-vote:{prior['id']}"),assignment=original.get('assignment'))
+                training,development,_=self.partitions(identifier)
+                wheel.reconcile_feedback(training,development=development)
+                wheel.set_optimizer_context([r.context['human_feedback'] for r in training if r.context.get('human_feedback')])
+                self.metrics(identifier)
+                wheel._emit({'kind':'feedback-correction-completed','feedback_id':feedback_id,
+                             'target_id':item_id,'previous_feedback_id':expected})
+                with_cycle.__exit__(None,None,None)
+            except Exception as error:
+                with_cycle.__exit__(type(error),error,None);raise
+        self.store.checkpoint_scorecard(self.run['id'],self.wheels)
+        return {'corrected':item_id,'classifier_ids':[r[0] for r in plans]}
+
     async def optimize(self,identifier,cycle,*,resume_stages=()):
         warnings=[]
         wheel=self.wheels[identifier];training,development,protected=self.partitions(identifier)
@@ -221,7 +288,7 @@ class WorkspaceSession:
         eligible=bool(latest and learning_feedback(latest) and latest.get('action')=='submitted')
         check=LabelTransitionTrigger(self.config['rubric_changes_every']).check(history)
         cycle.check_trigger('rubric',**check)
-        count=sum(learning_feedback(e) and e.get('action')=='submitted' for e in history)
+        count=len(training)+len(development)
         stages=['rubric'] if check['due'] else []
         for stage in ('questions','examples','classifier'):
             due=eligible and count>0 and count%self.config['optimize_every']==0

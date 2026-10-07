@@ -189,7 +189,7 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
             return db.execute('SELECT COALESCE(MAX(sequence),0) FROM web_events WHERE run_id=?',(run_id,)).fetchone()[0]
 
     def command(self, run_id, request_id, kind, payload):
-        if self.run(run_id)['mode'] != 'live' or kind not in ('prepare','label','skip','undo','optimize','replay-next') or not request_id:
+        if self.run(run_id)['mode'] != 'live' or kind not in ('prepare','label','correct','skip','undo','optimize','replay-next') or not request_id:
             raise ValueError('only live runs accept supported labeling commands')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')

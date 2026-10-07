@@ -47,3 +47,11 @@ def test_protected_votes_neither_increment_transition_counts_nor_fire_learning_c
     assert check['details']['transition_count']==0
     events.append({**vote(4,'b'),'assignment':'final_audit'})
     assert not LabelTransitionTrigger(1).check(events)['due']
+
+
+def test_corrections_replace_an_items_old_vote_instead_of_adding_a_second_training_item():
+    events = [{**vote(n, label), 'feedback': {**vote(n, label)['feedback'], 'item_id': item}}
+              for n, item, label in [(1, 'one', 'yes'), (2, 'two', 'no'), (3, 'three', 'yes'), (4, 'two', 'yes')]]
+    check = LabelTransitionTrigger().check(events)
+    assert check['details']['transition_count'] == 0
+    assert not check['due']

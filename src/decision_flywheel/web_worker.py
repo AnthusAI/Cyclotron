@@ -252,6 +252,7 @@ class WebWorker:
                 if kind=='prepare':result=asyncio.run(reviewer.prepare())
                 elif kind=='label':result=asyncio.run(reviewer.feedback(payload,job['request_id']))
                 elif kind=='skip':result=reviewer.skip(payload)
+                elif kind=='correct':result=reviewer.correct_feedback(payload,job['request_id'])
                 elif kind=='optimize':result=asyncio.run(reviewer.resume_optimization())
                 elif kind=='replay-next':
                     if config.get('input_mode')!='replay':raise ValueError('this run is not a replay')
@@ -304,7 +305,7 @@ class WebWorker:
                 reviewer.finish_cycle()
                 self.store.update_item(run_id,item_id,reviewed=True)
                 result = {'reviewed':item_id}
-            else:
+            elif kind == 'undo':
                 reviewer.finish_cycle()
                 article = reviewer.store.undo_last_vote()
                 if article:
@@ -315,6 +316,8 @@ class WebWorker:
                         self._metrics(reviewer)
                     self.store.update_item(run_id,article.id,reviewed=False)
                 result = {'undone':article.id if article else None}
+            else:
+                raise ValueError('unknown legacy workspace command')
             self.store.finish_command(job['id'],'completed',result)
             self.store.set_status(run_id,'ready')
         except Exception as error:

@@ -10,6 +10,55 @@ from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
 
 
+def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_path):
+    from fastapi.testclient import TestClient
+    from .web_api import create_app
+    from .api_event_sink import GraphQLTraceSink
+    store = WebStore(tmp_path / 'workspace.sqlite3')
+    store.save_classifier('topic', 'Topic', {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
+    store.save_item_list('papers', 'Papers')
+    store.upsert_list_items('papers', [{'id': 'paper', 'occurred_at': '2026-10-07', 'values': {'text': 'Paper'}}])
+    class Model:
+        model_identity = 'fake'; calls = 0
+        async def classify_many(self, configs, target, training, **kwargs):
+            self.calls += 1
+            return BatchedAnswers({'topic': {'decision': DecisionResult('yes', {'yes': .8, 'no': .2})}}, 'fake', {}, 1)
+    model = Model()
+    worker = WebWorker(store, tmp_path / 'runs', allow_live=True,
+        model_factory=lambda _: (model, agent([])), sink_factory=lambda run_id: GraphQLTraceSink('offline', run_id,
+            transport=lambda body: client.post('/graphql', json=body).json()))
+    client = TestClient(create_app(store, service=worker))
+    run = worker.create_run('Scorecard', {'scorecard_id': _scorecard(store), 'item_list_id': 'papers'})
+    try:
+        store.command(run['id'], 'prepare', 'prepare', {}); worker.process(store.claim_command())
+        shown = store.current_item(run['id'])
+        store.command(run['id'], 'vote', 'label', {'item_id': 'paper',
+            'presentation_id': shown['prediction']['presentation_id'], 'labels': [{'classifier_id': 'topic', 'label': 'yes'}]})
+        worker.process(store.claim_command())
+        worker.process(store.claim_command())  # finish the automatic next-item preparation
+        payload = {'item_id': 'paper', 'labels': [{'classifier_id': 'topic', 'label': 'no',
+            'comment': 'I clicked the wrong button', 'expected_feedback_id': 'vote:topic'}]}
+        response = client.post('/graphql', json={'query': '''mutation($run: ID!, $payload: JSON!) {
+            submitCommand(runId: $run, requestId: "correct", kind: "correct", payload: $payload) { id status }
+        }''', 'variables': {'run': run['id'], 'payload': payload}}).json()
+        assert not response.get('errors')
+        job = response['data']['submitCommand']
+        worker.process(store.claim_command())
+        finished = next(row for row in store.jobs(run['id']) if row['id'] == job['id'])
+        assert finished['status'] == 'completed' and finished['result']['corrected'] == 'paper'
+        assert store.item_labels('papers', 'paper', 1)[0]['label'] == 'no'
+        assert model.calls == 1
+        assert store.command(run['id'], 'correct', 'correct', payload)['id'] == job['id']
+        events = [row['payload'] for row in store.all_events(run['id'])]
+        corrected = next(e for e in events if e['kind'] == 'human-feedback' and e['feedback']['id'] == 'correct:topic')
+        assert corrected['feedback']['edit_comment_value'] == 'I clicked the wrong button'
+        metrics = next(e for e in reversed(events) if e['kind'] == 'cycle-metrics')
+        assert metrics['metrics']['count'] == 1 and metrics['metrics']['accuracy'] == 0
+    finally:
+        worker.close()
+        client.close()
+
+
 def test_scorecard_runtime_prepares_all_classifier_outputs_in_one_shared_request(tmp_path):
     store = WebStore(tmp_path / "workspace.sqlite3")
     for identifier in ("relevance", "quality"):

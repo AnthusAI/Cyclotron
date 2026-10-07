@@ -178,6 +178,48 @@ in the default server; custom hosts can inject their own model factory and
 explicit provider/model identifiers. This is not a claim of completed
 three-provider workspace evaluation.
 
+## Correct a recorded scorecard label
+
+The API command `correct` accepts an item ID and one or more classifier labels:
+
+```json
+{
+  "item_id": "paper-id",
+  "labels": [{
+    "classifier_id": "classifier-id",
+    "expected_feedback_id": "original-command:classifier-id",
+    "label": "include",
+    "comment": "The corrected explanation"
+  }]
+}
+```
+
+Submit this through `submitCommand` with a new, stable request ID. The expected
+feedback ID must identify that classifier's current vote; stale edits reject
+before any label changes. A repeat of the same command is idempotent. The item
+must have completed its original feedback submission. Frozen replay labels
+cannot be edited: correct the source and create another replay instead.
+
+The correction appends catalog feedback and a traced human-correction cycle;
+it never overwrites the original label event or displayed model prediction.
+Changed training or development evidence invalidates dependent inferred rubric,
+feature configuration and fitted head through the core's reconciliation path.
+Explanation-only edits also count as evidence changes. Updated explanations
+enter the next optimizer context, but protected audit labels and explanations
+remain excluded. The affected classifier records a new latest-200 metrics and
+calibration snapshot against its original pre-vote prediction. Other classifier
+labels remain unchanged, and a new scorecard checkpoint records the active state.
+
+Correction itself makes no model calls and does not automatically optimize.
+The next normal prediction uses the reconciled state; an explicit optimization
+command can rebuild it sooner. Explicit recovery after a lost trace/API
+acknowledgement finishes reconciliation without duplicating feedback or paid
+requests. Current trigger cadence counts unique active items, not old and
+corrected versions as separate training samples.
+
+The labeling UI still needs its scorecard correction/undo editor. The command
+above is the application interface, not a claim that this UI is complete.
+
 ## Paired output comparison
 
 Each new cycle-metrics snapshot includes a matched comparison of the raw main

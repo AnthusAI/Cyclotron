@@ -15,19 +15,40 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "9535aaa4-b9fa-4b2b-81bd-96d5db5bb52f",
+      "author": "home",
+      "text": "Implemented scorecard runtime correction command using existing core reconciliation, not a second flywheel. Explicit correct payload targets one or more classifier labels with expected_feedback_id stale-edit protection. Catalog votes, original predictions and historical events remain immutable; corrections append traced cycles, update explanations, invalidate dependent guidance/features/head, record new metrics/calibration and checkpoint the scorecard. Protected audit assignments stay protected; frozen replay labels cannot be edited. Correction makes no paid calls. Restart/trace-ack-loss specs prove idempotent recovery, explanation-only invalidation and independent classifier state; fake GraphQL/worker test proves correction ingestion and changed metrics through the API. Fixed unique-item trigger counting and legacy worker command fallthrough that could interpret unsupported commands as undo. Remaining: scorecard correction/undo UI, catalog retraction semantics and wider end-to-end acceptance. Full regression running; no production votes or running server changed.",
+      "created_at": "2026-10-07T19:15:03.785239Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "0ef8dcd7-e318-4577-b724-908019aa3c62",
+      "author": "home",
+      "text": "Final verification: 718 Python tests pass. Scorecard correction API/runtime, immutable history, protected-label firewall, stale-edit checks, independent label state and trace-ack-loss recovery are covered by offline fake-client specs. Correction/undo editor and catalog retractions remain unfinished; do not close this story based on backend implementation. No live session deployment or human label mutation was performed.",
+      "created_at": "2026-10-07T19:16:00.530159Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
   "created_at": "2026-10-05T21:56:01.731995Z",
-  "updated_at": "2026-10-05T21:56:02.348597Z",
+  "updated_at": "2026-10-07T19:16:00.530251Z",
   "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
-  },
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
 }

@@ -25,10 +25,13 @@ class LabelTransitionTrigger:
             last_feedback = event
             if not learning_feedback(event):continue
             feedback = event['feedback']
+            item_id = feedback.get('item_id', feedback['id'])
             if event['action'] == 'retracted':
-                active.pop(feedback['id'], None)
+                if item_id in active and active[item_id]['feedback']['id'] == feedback['id']:
+                    active.pop(item_id)
             else:
-                active[feedback['id']] = event
+                active.pop(item_id, None)
+                active[item_id] = event
         votes = list(active.values())
         labels = [event['feedback']['final_answer_value'] for event in votes]
         transitions = sum(left != right for left, right in zip(labels, labels[1:]))
