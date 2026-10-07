@@ -82,7 +82,13 @@ definition performs better; performance comparison requires matched evaluation.
 
 Labeling and timeline are viewport-sized app layouts. Run history opens in a
 left drawer; live optimizer activity opens in a right drawer. Opening either
-drawer does not restart a cycle or make model calls. Ordinary vertical scroll
+drawer does not restart a cycle or make model calls. Narrow-screen navigation
+uses a full-viewport modal with the current workspace marked accessibly. The
+menu traps keyboard focus, hides background controls, and restores its trigger
+on Escape. Drawers also restore their external opener when it is still mounted.
+Close controls and drawer footer buttons have explicit 44-pixel minimum touch
+targets; drawer headers and footers include safe-area padding. Drawer content
+scrolls independently of its pinned header and actions. Ordinary vertical scroll
 navigates content; horizontal scroll pans the timeline; pinch and zoom buttons
 control timeline scale. There is no separate fullscreen mode.
 

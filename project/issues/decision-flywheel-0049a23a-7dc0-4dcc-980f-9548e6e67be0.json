@@ -19,10 +19,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c1ed8c51-4feb-4824-ba5d-3e143ec0b81f",
+      "author": "home",
+      "text": "Narrow/short viewport verification exposed ~24px drawer close targets. Close and shared drawer footer buttons now have explicit 44px minimum targets, wrapping footer actions and safe-area top/bottom padding. Browser measured ~43.994px rounding for Close/Save, both inside a 1025x625 CSS viewport (820x500 browser override at existing zoom), no document scroll. Full-screen narrow menu checked at 487px CSS width with no document overflow and modal focus wrapping. Screenshots var/web/mobile-navigation-focus-proof.jpg and short-viewport-drawer-proof.jpg. No labels or model calls. Physical-iPad keyboard/safe-area and full timeline gesture acceptance remain unverified; issue remains open.",
+      "created_at": "2026-10-07T23:10:41.269933Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-07T15:49:01.642757Z",
+  "updated_at": "2026-10-07T23:10:41.270038Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

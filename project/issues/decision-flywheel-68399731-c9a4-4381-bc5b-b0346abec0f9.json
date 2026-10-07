@@ -73,10 +73,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "a8e77b65-8fb0-4841-b396-5ef17e4fb814",
+      "author": "home",
+      "text": "Keyboard acceptance found and fixed real shared UI gaps: narrow menu was hand-built aria-modal without focus trapping/background hiding; replaced with Radix modal while retaining descriptive full-viewport navigation, current-workspace aria-current and branding. AppDrawer external openers did not regain focus after Escape; now explicitly captured/restored when connected. Regression failures observed before fixes. 153 UI tests/build and focused new-component lint pass. Offline browser confirmed Tab/Shift+Tab wrapping, Escape focus return for menu and correction drawer, no console errors, no votes/model work. Broad run/edition/tablet timeline acceptance still open.",
+      "created_at": "2026-10-07T23:10:40.749875Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:04.550216Z",
-  "updated_at": "2026-10-07T23:03:07.247929Z",
+  "updated_at": "2026-10-07T23:10:40.749975Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

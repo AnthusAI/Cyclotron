@@ -1,6 +1,5 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
-import {createPortal} from 'react-dom'
-import {Activity, History, Menu, Plus, RefreshCw, Undo2, X} from 'lucide-react'
+import {Activity, History, Plus, RefreshCw, Undo2} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Card,CardContent,CardHeader,CardTitle} from '@/components/ui/card'
 import {Input} from '@/components/ui/input'
@@ -23,6 +22,8 @@ import {MatchedComparison,MatchedComparisonResult,type ComparisonResult} from '.
 import {ComparisonResume} from './ComparisonResume'
 import {FeedbackControls} from './FeedbackControls'
 import {OptimizationStatus,latestOptimizationActivity} from './OptimizationStatus'
+import {MobileNavigation} from './MobileNavigation'
+import {navigationItems} from './navigation'
 export {TraceDetail} from './TraceDetail'
 
 type Run={id:string;name:string;mode:string;status:string;createdAt:string;config:{input_mode?:string;scorecard_id?:string;selection_policy?:{primary:string;secondary?:string};max_requests?:number;backfill_count?:number;classifiers?:MetricClassifier[]};counts:{cycles:number;predictions:number;labels:number;optimizations:number}}
@@ -31,29 +32,6 @@ const RUNS='{runs{id name mode status createdAt config counts} capabilities{live
 const DETAILS='query($id:ID!){run(runId:$id){id name mode status createdAt config counts} currentItem(runId:$id) jobs(runId:$id){id kind status result}}'
 const locationState=()=>new URLSearchParams(window.location.hash.slice(1))
 const routeSection=()=>{const value=locationState().get('section');return value==='classifiers'||value==='scorecards'?'scorecards':value==='items'?'items':'optimizations'}
-const navigationItems=[
-  {id:'scorecards',label:'Scorecards',description:'Define the related classifiers that share one decision-model request.'},
-  {id:'items',label:'Item lists',description:'Browse source items, decisions, and human labels across scorecards.'},
-  {id:'optimizations',label:'Optimizations',description:'Run, compare, and inspect live or replayed flywheel experiments.'},
-] as const
-
-function MobileNavigation({section,onNavigate}:{section:typeof navigationItems[number]['id'];onNavigate:(section:typeof navigationItems[number]['id'])=>void}){
-  const [open,setOpen]=useState(false)
-  useEffect(()=>{
-    if(!open)return
-    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')setOpen(false)}
-    window.addEventListener('keydown',closeOnEscape)
-    return()=>window.removeEventListener('keydown',closeOnEscape)
-  },[open])
-  return <>
-    <Button variant="ghost" size="icon" className="sm:hidden" aria-label={open?'Close main menu':'Open main menu'} aria-expanded={open} onClick={()=>setOpen(previous=>!previous)}>{open?<X/>:<Menu/>}</Button>
-    {open?createPortal(<section role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title" aria-describedby="mobile-navigation-description" className="mobile-navigation-panel fixed inset-0 z-40 flex flex-col bg-background">
-      <h2 id="mobile-navigation-title" className="sr-only">Navigate Cyclotron</h2>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5"><p id="mobile-navigation-description" className="text-sm leading-relaxed text-muted-foreground">Choose a workspace. Each view keeps its own context and returns here without restarting a session.</p><nav aria-label="Mobile navigation" className="mt-8 grid gap-3" >{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'outline'} className="h-auto min-h-24 items-start justify-start whitespace-normal px-5 py-4 text-left" onClick={()=>{onNavigate(item.id);setOpen(false)}}><span><span className="block text-base font-semibold">{item.label}</span><span className="mt-1 block text-sm font-normal leading-relaxed text-muted-foreground">{item.description}</span></span></Button>)}</nav></div>
-    </section>,document.body):null}
-  </>
-}
-
 function LabelCard(props:{current:CurrentItem;busy:boolean;onSubmit:(kind:string,payload:Record<string,unknown>)=>void;classifiers?:MetricClassifier[];events?:TraceEvent[];footer?:ReactNode}){
   if('classifiers' in props.current.prediction){
     const current=props.current as unknown as BatchItem
