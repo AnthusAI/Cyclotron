@@ -95,7 +95,7 @@ class ScorecardRuntime:
         values=normalize_decision_settings(values)
         values.setdefault("optimizer_model", "gpt-6-luna")
         values["evaluation_protocol"] = "protected-feedback-v1"
-        values = freeze_configuration(self.store, values)
+        values = freeze_configuration(self.store, values,selection_policy_override='selection_policy' in config)
         items: list[dict] = []
         offset = 0
         while page := self.store.list_items(values["item_list_id"], after=offset):

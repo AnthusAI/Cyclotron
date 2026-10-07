@@ -17,6 +17,35 @@ class Model:
         return BatchedAnswers({cid:{'decision':DecisionResult('yes',{'yes':.8,'no':.2})} for cid in configs},'fake',{},1.)
 
 
+def test_an_incompatible_frozen_head_is_rejected_before_either_endpoint_makes_calls(tmp_path):
+    import pytest
+    from .candidate_fitting import fit_candidate
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import FakeModel,TRAIN,DEV,agent
+    config=ClassifierConfig(DecisionTask('topic',('include','exclude'),'Choose'))
+    wheel=DecisionFlywheel(tmp_path/'fit.sqlite',config,FakeModel(),agent([]))
+    try:
+        fitted,_=asyncio.run(fit_candidate(wheel,config,TRAIN,DEV,protected=(),
+            propensities={r.item.id:1. for r in TRAIN},validation_status='evaluated'))
+    finally:wheel.close()
+    endpoints={side:source(side) for side in ('before','after')}
+    for endpoint in endpoints.values():
+        endpoint['config']['classifiers'][0]['config']['classes']=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]
+        endpoint['checkpoint']['payload']['classifiers']={'topic':{'state':asdict(FittedClassifier(config))}}
+        for row in endpoint['events']:
+            row['payload']['feedback']['final_answer_value']='include' if row['payload']['feedback']['final_answer_value']=='yes' else 'exclude'
+    endpoints['after']['checkpoint']['payload']['classifiers']['topic']['state']=asdict(fitted)
+    class EndpointModel(Model):
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.requests.append(target.id)
+            return BatchedAnswers({cid:{'decision':DecisionResult('include',{'include':.8,'exclude':.2})}
+                for cid in configs},'fake',{},1.)
+    plan=plan_matched_runs(**endpoints);models={side:EndpointModel() for side in endpoints}
+    with pytest.raises(ValueError,match='feature context'):
+        asyncio.run(evaluate_matched_runs(plan,endpoints,models,tmp_path/'comparison',max_requests=8,observer=lambda _:None))
+    assert not any(model.requests for model in models.values())
+
+
 def test_neutral_class_comparison_records_macro_rates_and_missing_prediction_support(tmp_path):
     endpoints={side:source(side) for side in ('before','after')}
     for endpoint in endpoints.values():

@@ -14,7 +14,7 @@ from .selection_policy import SelectionPolicy
 from .shared_decisions import SharedDecisions
 
 
-def freeze_configuration(store,config):
+def freeze_configuration(store,config,*,selection_policy_override=False):
     config=dict(config)
     ids=config.pop('classifier_ids')
     if not ids or len(set(ids))!=len(ids): raise ValueError('choose distinct classifiers')
@@ -30,7 +30,8 @@ def freeze_configuration(store,config):
         labels=[row['label'] for row in definition['classes']]
         task=DecisionTask(classifier['id'],tuple(labels),definition['question'],definition.get('input_field','text'))
         for item in items:task.validate_target(Item(item['id'],item['values']))
-        policy=definition.get('selection_policy',config.get('selection_policy',{'primary':'f1','aggregation':'macro'}))
+        policy=(config['selection_policy'] if selection_policy_override else
+            definition.get('selection_policy',config.get('selection_policy',{'primary':'f1','aggregation':'macro'})))
         positive=next((row['label'] for row in definition['classes'] if row.get('role')=='positive'),None)
         policy={**policy,'aggregation':'positive' if positive else 'macro','positive_class':positive}
         classifier['config']={**definition,'selection_policy':policy}

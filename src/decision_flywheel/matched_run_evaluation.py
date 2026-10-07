@@ -9,7 +9,7 @@ from .matched_run_plan import plan_matched_runs, fingerprint
 from .flywheel import DecisionFlywheel, _restore
 from .models import Item, LabeledItem, DecisionResult
 from .classifier_config import ClassifiedAnswers
-from .shared_decisions import SharedDecisions
+from .shared_decisions import SharedDecisions, feature_context_identity
 from .rolling_metrics import recent_reviewed_metrics
 from .trace_classification import comparison_metrics
 from .output_comparison import compare_outputs
@@ -66,6 +66,14 @@ async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_reque
     if plan != plan_matched_runs(endpoints['before'], endpoints['after'], limit=plan['limit']):
         raise ValueError('preflight changed; create a new approved plan')
     frozen = {side: _endpoint(endpoints[side]) for side in ('before', 'after')}
+    # Validate both sides before collecting either side. An immutable endpoint
+    # must not silently refit or fall back to raw output during comparison.
+    for side,(fitted,_,training) in frozen.items():
+        configs={cid:classifier.config for cid,classifier in fitted.items()}
+        expected=feature_context_identity(models[side].model_identity,configs,training)
+        for classifier in fitted.values():
+            if classifier.head and classifier.head.provenance.source_model_provenance!=expected:
+                raise ValueError('frozen head does not match the joint decision feature context; replay and refit this endpoint')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(directory / 'evaluation.sqlite3') as db:

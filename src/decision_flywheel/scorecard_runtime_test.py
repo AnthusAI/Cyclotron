@@ -10,6 +10,49 @@ from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
 
 
+def test_an_explicit_run_objective_overrides_saved_classifier_objectives_without_editing_definitions(tmp_path):
+    store=WebStore(tmp_path/'workspace.sqlite')
+    definition=store.save_classifier('topic','Topic',{'question':'Choose',
+        'classes':[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}],
+        'selection_policy':{'primary':'f1','positive_class':'yes'}})
+    store.save_item_list('papers','Papers')
+    store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Paper'}}])
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    run=runtime.create_run('Recall objective',{'classifier_ids':['topic'],'item_list_id':'papers',
+        'selection_policy':{'primary':'recall','secondary':'accuracy','positive_class':'yes'}})
+    policy=run['config']['classifiers'][0]['config']['selection_policy']
+    assert policy['primary']=='recall' and policy['secondary']=='accuracy'
+    assert policy['positive_class']=='yes' and policy['max_secondary_regression']==0
+    assert store.classifier('topic',definition['revision'])==definition
+    default=runtime.create_run('Default objective',{'classifier_ids':['topic'],'item_list_id':'papers'})
+    assert default['config']['classifiers'][0]['config']['selection_policy']['primary']=='f1'
+
+
+def test_objective_replays_freeze_the_same_votes_and_comments_but_different_effective_policies(tmp_path):
+    store=WebStore(tmp_path/'workspace.sqlite')
+    store.save_classifier('topic','Topic',{'question':'Choose',
+        'classes':[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}],
+        'selection_policy':{'primary':'f1','positive_class':'yes'}})
+    scorecard=_scorecard(store)
+    store.save_item_list('papers','Papers')
+    store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Paper'}}])
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    source=runtime.create_run('Source',{'scorecard_id':scorecard,'item_list_id':'papers'})
+    store.append_event(source['id'],'source-label',{'kind':'human-feedback','classifier_id':'topic','action':'submitted',
+        'feedback':{'id':'vote','item_id':'paper','final_answer_value':'yes','edit_comment_value':'A frozen explanation'}})
+    before=store.all_events(source['id'])
+    replays=[runtime.create_replay(name,source['id'],{'scorecard_id':scorecard,'seed':'matched-objectives',
+        'selection_policy':policy}) for name,policy in [
+            ('Recall',{'primary':'recall','secondary':'accuracy','positive_class':'yes'}),
+            ('F1',{'primary':'f1','positive_class':'yes'})]]
+    assert store.items(replays[0]['id'])==store.items(replays[1]['id'])
+    assert store.inherited_labels(replays[0]['id'],'paper')==store.inherited_labels(replays[1]['id'],'paper')
+    assert store.inherited_labels(replays[0]['id'],'paper')[0]['comment']=='A frozen explanation'
+    assert [r['config']['classifiers'][0]['config']['selection_policy']['primary'] for r in replays]==['recall','f1']
+    assert all(r['config']['evaluation_protocol']=='protected-feedback-v1' for r in replays)
+    assert store.all_events(source['id'])==before
+
+
 def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_path):
     from fastapi.testclient import TestClient
     from .web_api import create_app

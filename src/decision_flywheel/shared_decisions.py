@@ -14,6 +14,16 @@ def key(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',', ':'),allow_nan=False).encode()).hexdigest()
 
 
+def feature_context_identity(model_identity,configs,training):
+    """Stable provenance for fitting and frozen endpoint validation."""
+    context={}
+    for name,definition in configs.items():
+        pool={row.item.id:row for row in training[name]}
+        context[name]={'configuration':definition.fingerprint,
+            'examples':[asdict(pool[item_id]) for item_id in definition.example_ids]}
+    return model_identity+':shared-features-v1:'+key(context)
+
+
 class SharedDecisions:
     def __init__(self,path,model,*,max_requests,observer):
         self.model,self.max_requests,self.observer=model,max_requests,observer
@@ -103,12 +113,7 @@ class SharedDecisions:
                 return shared.model.model_identity+':shared-answer-v3:'+fingerprint+':'+str(shared.generation(fingerprint))
             def feature_context_identity(self,config,training):
                 configs,pools=shared.scope(identifier,config,training)
-                context={}
-                for name,definition in configs.items():
-                    pool={row.item.id:row for row in pools[name]}
-                    context[name]={'configuration':definition.fingerprint,
-                        'examples':[asdict(pool[item_id]) for item_id in definition.example_ids]}
-                return shared.model.model_identity+':shared-features-v1:'+key(context)
+                return feature_context_identity(shared.model.model_identity,configs,pools)
             async def classify(self,config,target,training,*,now=None,event_sink=None):
                 return await self.classify_with_cache_options(config,target,training,now=now,event_sink=event_sink,cache_options=CacheOptions())
             async def classify_with_cache_options(self,config,target,training,*,now=None,event_sink=None,cache_options):
