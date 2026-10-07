@@ -6,6 +6,7 @@
   "files": [
     "trace-ui/src/components/ui",
     "trace-ui/src/components/lab-metrics.tsx",
+    "trace-ui/src/components/cycle-timeline.tsx",
     "trace-ui/src/ClassifierMetrics.tsx",
     "trace-ui/src/ReliabilityCurve.tsx",
     "trace-ui/src/ModelComparison.tsx",
@@ -17,6 +18,7 @@
   "exports": {
     "./components/ui/*": "./trace-ui/src/components/ui/*.tsx",
     "./components/lab-metrics": "./trace-ui/src/components/lab-metrics.tsx",
+    "./components/cycle-timeline": "./trace-ui/src/components/cycle-timeline.tsx",
     "./components/classifier-metrics": "./trace-ui/src/ClassifierMetrics.tsx",
     "./lib/utils": "./trace-ui/src/lib/utils.ts",
     "./styles/shared.css": "./trace-ui/src/styles/shared.css",
