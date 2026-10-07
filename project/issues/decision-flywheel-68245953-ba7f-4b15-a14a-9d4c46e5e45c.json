@@ -163,10 +163,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "ea40507e-ec44-4d58-a62f-74e671d58760",
+      "author": "home",
+      "text": "Closed the legacy-fit safety gap with specs first: saved heads lacking response-dependency metadata retain their historical identity and configuration on load, but reconciliation does not serve them or invent provenance. It records before/after classifier snapshots, clears only the numerical head, and enters the bounded next-cycle refit path. Historical trial payloads remain byte-for-byte unchanged. New regression covers legacy fit, sibling context change and training-response refresh through the actual WorkspaceSession preparation flow. All 750 Python specs and 105 UI specs pass. No active production jobs; SQLite backup created at var/web/workspace-before-response-dependency-deploy-20261007.sqlite3. Verification skill is guiding deployment checks of browser to API to stored state; deployment in progress, no model calls authorized merely by viewing the app.",
+      "created_at": "2026-10-07T21:16:57.308680Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T21:11:49.273541Z",
+  "updated_at": "2026-10-07T21:16:57.308812Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

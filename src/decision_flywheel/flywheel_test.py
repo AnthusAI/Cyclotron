@@ -245,6 +245,43 @@ def test_restart_restores_the_head_and_does_not_repeat_cached_feature_calls(tmp_
     wheel.close()
 
 
+def test_a_legacy_fit_is_retained_in_history_but_not_served_with_invented_response_provenance(tmp_path):
+    import json
+    from dataclasses import asdict
+    from .candidate_fitting import fit_candidate
+    from .flywheel import _restore
+    config = ClassifierConfig(TASK, rubric='Practical research', example_ids=('t0', 't1'),
+        tasks=(DecisionTask('practical', ('yes', 'no'), 'Is this practical?'),))
+    path = tmp_path/'wheel.sqlite'
+    model = FakeModel()
+    wheel = DecisionFlywheel(path, config, model, agent([]))
+    fitted, _ = asyncio.run(fit_candidate(wheel, config, TRAIN, DEV, protected=(),
+        propensities={r.item.id: 1. for r in TRAIN}, validation_status='evaluated'))
+    legacy = asdict(fitted)
+    legacy.pop('answer_dependencies')
+    encoded = json.dumps(legacy)
+    legacy_version = _restore(json.loads(encoded)).fingerprint
+    with wheel.db:
+        wheel.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('active', ?)", (encoded,))
+        wheel.db.execute("INSERT INTO runtime_rounds VALUES ('legacy-history', 'complete', ?)", (encoded,))
+    wheel.close()
+    calls = model.calls
+    wheel = DecisionFlywheel(path, config, model, agent([]))
+    try:
+        assert wheel.active.fingerprint == legacy_version
+        assert not wheel.active.answer_dependencies
+        assert wheel.reconcile_model_context(TRAIN)
+        assert wheel.active.head is None
+        assert wheel.active.config == config
+        assert model.calls == calls
+        assert wheel.db.execute("SELECT payload FROM runtime_rounds WHERE key='legacy-history'").fetchone()[0] == encoded
+        event = next(e for e in reversed(wheel.history()) if e['kind'] == 'head-invalidated')
+        assert event['reason'] == 'decision response dependencies were not recorded'
+        assert event['previous_classifier_snapshot']['head'] == json.loads(encoded)['head']
+    finally:
+        wheel.close()
+
+
 def test_missing_propensities_or_protected_overlap_fail_before_paid_calls(tmp_path):
     model = FakeModel()
     wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), model, agent([]))

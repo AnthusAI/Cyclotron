@@ -338,7 +338,8 @@ class DecisionFlywheel:
     def _activate(self, classifier):
         if classifier.head and classifier.head.provenance.context_artifact_fingerprint != classifier.config.fingerprint:
             raise ValueError('learned head does not match the classifier context')
-        if classifier.head and not self.answer_dependencies_current(classifier.answer_dependencies):
+        if classifier.head and (not classifier.answer_dependencies or
+                                not self.answer_dependencies_current(classifier.answer_dependencies)):
             raise ValueError('decision answers changed; refit the learned head')
         payload = _json(asdict(classifier))
         with self.db:
@@ -418,13 +419,18 @@ class DecisionFlywheel:
             return False
         current = self.model_context(self.active.config, training)
         previous = self.active.head.provenance.source_model_provenance
-        answers_current = self.answer_dependencies_current(self.active.answer_dependencies)
+        dependencies_recorded = bool(self.active.answer_dependencies)
+        answers_current = dependencies_recorded and self.answer_dependencies_current(self.active.answer_dependencies)
         if current == previous and answers_current:
             return False
         from dataclasses import replace
+        previous_snapshot = asdict(self.active)
         self._activate(replace(self.active, head=None, answer_dependencies=()))
         self._emit({'kind':'head-invalidated','reason':('decision feature context changed' if current != previous
-                    else 'consumed decision response changed'),
+                    else 'consumed decision response changed' if dependencies_recorded
+                    else 'decision response dependencies were not recorded'),
+                    'previous_classifier_snapshot': previous_snapshot,
+                    'classifier_snapshot': asdict(self.active),
                     'previous_model_context':previous,'model_context':current})
         return True
 

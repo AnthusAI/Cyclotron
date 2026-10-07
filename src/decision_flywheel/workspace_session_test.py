@@ -9,7 +9,7 @@ from .observability import StepFailed
 from .flywheel_test import agent
 
 
-@pytest.mark.parametrize('change', ['sibling_context', 'training_response'])
+@pytest.mark.parametrize('change', ['sibling_context', 'training_response', 'legacy_fit'])
 def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_prediction(tmp_path, change):
     from dataclasses import replace
     from .workspace_session import freeze_configuration
@@ -43,10 +43,19 @@ def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_pr
         sibling=session.wheels['b']
         if change == 'sibling_context':
             sibling._activate(replace(sibling.active,config=replace(sibling.active.config,rubric='New sibling criteria')))
-        else:
+        elif change == 'training_response':
             from .decision_cache import CacheOptions
             asyncio.run(session.shared.adapter('b').classify_with_cache_options(sibling.active.config,
                 TRAIN[0].item, TRAIN, cache_options=CacheOptions('refresh')))
+        else:
+            import json
+            from dataclasses import asdict
+            from .flywheel import _restore
+            legacy = asdict(wheel.active)
+            legacy.pop('answer_dependencies')
+            wheel.active = _restore(legacy)
+            with wheel.db:
+                wheel.db.execute("UPDATE runtime_state SET value=? WHERE key='active'", (json.dumps(legacy),))
         shown=asyncio.run(session.prepare())
         assert shown['item']['id']=='new'
         assert all(set(configs)=={'a','b'} for configs,_ in model.requests)

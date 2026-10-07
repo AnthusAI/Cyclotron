@@ -123,6 +123,7 @@ class WorkspaceSession:
         for _ in range(len(self.wheels)+1):
             stale=[identifier for identifier,wheel in self.wheels.items() if wheel.active.head and
                 (wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])
+                 or not wheel.active.answer_dependencies
                  or not wheel.answer_dependencies_current(wheel.active.answer_dependencies))]
             if not stale:break
             for identifier in stale:
