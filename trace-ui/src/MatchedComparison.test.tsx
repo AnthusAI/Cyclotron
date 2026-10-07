@@ -41,6 +41,13 @@ test('comparison identifies macro averaging and undefined class support',()=>{
   expect(screen.getByText('Before precision undefined for: b.')).toBeVisible()
   expect(screen.getByText('After precision undefined for: b.')).toBeVisible()
 })
+test('each protected endpoint exposes a raw versus final comparison',()=>{
+  const output={accuracy:1,per_class:{yes:{recall:1,precision:1}},calibration:{count:1,ece:.1,bins:[]}}
+  const metrics={class_config:[{label:'yes',role:'positive'}],decision_model_comparison:{count:1,missing_raw_count:0,evaluation_scope:'protected-matched' as const,raw:output,final:output}}
+  render(<MatchedComparisonResult status="completed" result={{sample_count:1,classifiers:{topic:{before:metrics,after:metrics}}}} />)
+  fireEvent.click(screen.getByText('Before raw decision model vs final classifier'))
+  expect(screen.getAllByText('Same 1 protected matched items · frozen versions · no fitting.')[0]).toBeVisible()
+})
 test('item inspection fetches only the selected recorded exchange',async()=>{
   vi.mocked(graphql).mockResolvedValue({matchedEvaluationTarget:null})
   render(<MatchedComparisonResult runId="comparison" status="completed" result={{sample_count:1,classifiers:{},records:[{endpoint:'before',classifier_id:'topic',item_id:'paper',actual_label:'yes',label:'no',decision_model_label:'no',trace_event_id:12}]}} />)

@@ -141,10 +141,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "9d40811e-590d-48e0-b3c2-7ef5576250f5",
+      "author": "home",
+      "text": "Protected comparison reports now aggregate raw decision output versus final outer classifier per endpoint, not only per-item raw answers. Shared compare_outputs calculation also powers live latest-200 snapshots, pairs probability eligibility on both sides, records scope and accuracy/ECE/Brier deltas. UI disclosures preserve configured class roles and show final-minus-raw Recall/Precision/Accuracy percentage-point differences and calibration curves/deltas. Browser verified freshly recorded offline fixture through API/SQLite; no console errors, screenshot var/web/protected-raw-final-proof.png. 672 Python / 83 UI tests and build pass. React skill guided shared component/derived values; verification skill checked actual report flow. No real labels/paid calls altered. Wider interactive/replay, tablet/dark and objective-comparison acceptance remains open.",
+      "created_at": "2026-10-07T18:01:27.054547Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T17:57:15.463181Z",
+  "updated_at": "2026-10-07T18:01:27.054652Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

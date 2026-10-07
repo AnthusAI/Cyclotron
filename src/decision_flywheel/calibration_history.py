@@ -2,6 +2,7 @@
 from collections import OrderedDict, Counter
 from .rolling_metrics import recent_reviewed_metrics
 from .calibration_metrics import reliability_curve
+from .output_comparison import compare_outputs
 
 
 def reviewed_calibration_metrics(classes, events, *, limit=200):
@@ -36,21 +37,6 @@ def reviewed_calibration_metrics(classes, events, *, limit=200):
             'calibrated':reliability_curve(classes,truth,[max(classes,key=row.get) for row in calibrated],calibrated),
             'scope':'matched fitted-head samples only; raw and calibrated use their own top labels'}
     window=list(reviewed.items())[-limit:]
-    paired=[(identifier,actual,prediction) for identifier,(actual,prediction,_) in window
-            if prediction.get('decision_model_label') in classes]
-    metrics['decision_model_comparison']={
-        'count':len(paired),'missing_raw_count':len(window)-len(paired),
-        'item_ids':[identifier for identifier,_,_ in paired],
-        'scope':'same latest reviewed pre-vote items; descriptive, not held-out',
-        'raw':recent_reviewed_metrics(classes,[(identifier,actual,p['decision_model_label'],p.get('decision_model_probabilities'))
-                                             for identifier,actual,p in paired],limit=limit),
-        'final':recent_reviewed_metrics(classes,[(identifier,actual,p['label'],p.get('probabilities'))
-                                               for identifier,actual,p in paired],limit=limit)}
-    comparison=metrics['decision_model_comparison']
-    paired_probabilities=[bool(p.get('decision_model_probabilities') and p.get('probabilities')) for _,_,p in paired]
-    comparison['missing_paired_probability_count']=sum(not eligible for eligible in paired_probabilities)
-    for side,label_key,probability_key in (('raw','decision_model_label','decision_model_probabilities'),('final','label','probabilities')):
-        comparison[side]['calibration']=reliability_curve(classes,[actual for _,actual,_ in paired],
-            [p[label_key] for _,_,p in paired],
-            [p.get(probability_key) if eligible else None for (_,_,p),eligible in zip(paired,paired_probabilities)])
+    metrics['decision_model_comparison']=compare_outputs(classes,
+        [{**prediction,'item_id':identifier,'actual_label':actual} for identifier,(actual,prediction,_) in window],limit=limit)
     return metrics

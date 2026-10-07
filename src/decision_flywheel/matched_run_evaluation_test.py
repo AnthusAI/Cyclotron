@@ -41,6 +41,11 @@ def test_matched_evaluation_preserves_joint_requests_uses_frozen_states_and_resu
     models={side:Model() for side in endpoints};events=[]
     result=asyncio.run(evaluate_matched_runs(plan,endpoints,models,tmp_path,max_requests=8,observer=events.append))
     assert result['classifiers']['topic']['before']['accuracy']==.5
+    comparison=result['classifiers']['topic']['before']['decision_model_comparison']
+    assert comparison['evaluation_scope']=='protected-matched'
+    assert comparison['raw']['accuracy']==comparison['final']['accuracy']==.5
+    assert comparison['accuracy_delta']==0
+    assert comparison['count']==4
     assert all(request[0]==('topic','extra') for model in models.values() for request in model.requests)
     assert result['requests']==8
     targets=[event for event in events if event['kind']=='matched-evaluation-target']

@@ -1,7 +1,18 @@
 import {render,screen,fireEvent,cleanup} from '@testing-library/react'
-import {expect,it} from 'vitest'
+import {expect,it,afterEach} from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import {ModelComparison,PlaybackModelComparison} from './ModelComparison'
+afterEach(cleanup)
+
+it('protected comparison identifies its scope instead of claiming ongoing review',()=>{
+  const raw={accuracy:0,per_class:{yes:{recall:0,precision:0}},calibration:{count:1,ece:.8,brier:.64,bins:[]}}
+  const final={accuracy:1,per_class:{yes:{recall:1,precision:1}},calibration:{count:1,ece:.2,brier:.04,bins:[]}}
+  render(<ModelComparison classes={[{label:'yes',role:'positive'}]} comparison={{count:1,missing_raw_count:0,evaluation_scope:'protected-matched',raw,final}} />)
+  expect(screen.getByText('Same 1 protected matched items · frozen versions · no fitting.')).toBeVisible()
+  expect(screen.queryByText(/not held-out/)).toBeNull()
+  expect(screen.getByRole('rowheader',{name:'Final − raw'})).toBeVisible()
+  expect(screen.getByText(/ECE change −60.0 pp/)).toBeVisible()
+})
 
 it('compares raw and final on matching items in recall precision accuracy order',()=>{
   const metrics={count:2,accuracy:.5,per_class:{yes:{recall:.25,precision:.75}},calibration:{count:2,ece:.2,bins:[]}}

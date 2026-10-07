@@ -195,7 +195,15 @@ protected-sample check. Changing endpoints invalidates its prior approval. The
 drawer shows the shared item count, per-class balance, and request upper bound;
 execution requires the paid-call checkbox and an adequate ceiling. Results open
 as a separate recorded run, showing recall, precision, accuracy, ECE, Brier and
-per-endpoint reliability curves. Its individual-predictions table shows protected
+per-endpoint reliability curves. Raw-versus-final comparison disclosures for each
+endpoint use exactly the same
+protected targets and paired probability vectors. The display reports final-minus-
+raw recall, precision and accuracy in percentage points, plus ECE and Brier
+differences. Lower calibration scores are better; a difference is descriptive,
+not proof of statistical significance. Live reviewed-item snapshots use the same
+calculation but retain their distinct, non-held-out scope.
+
+The individual-predictions table shows protected
 human labels beside raw and final answers, with a disagreement filter. “Inspect”
 loads only the selected recorded target trace: item content, complete joint state
 with rubric and actual examples, all questions and responses, final outputs,

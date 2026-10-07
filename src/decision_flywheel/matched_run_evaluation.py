@@ -12,6 +12,7 @@ from .classifier_config import ClassifiedAnswers
 from .shared_decisions import SharedDecisions
 from .rolling_metrics import recent_reviewed_metrics
 from .trace_classification import comparison_metrics
+from .output_comparison import compare_outputs
 from .batched_classification import batch_request
 from .decision_cache import CacheOptions
 
@@ -136,6 +137,9 @@ async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_reque
                 summary = recent_reviewed_metrics(configs[cid].task.labels, output[cid])
                 ref = next(row for row in endpoints[side]['config']['classifiers'] if row['id'] == cid)
                 summary.update(comparison_metrics(summary, ref['config']['classes']))
+                summary['class_config']=ref['config']['classes']
+                summary['decision_model_comparison']=compare_outputs(configs[cid].task.labels,
+                    [row for row in records if row['endpoint']==side and row['classifier_id']==cid],scope='protected-matched')
                 metrics[cid][side] = summary
         finally:
             requests += shared.requests
