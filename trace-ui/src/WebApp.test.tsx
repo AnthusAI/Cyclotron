@@ -30,6 +30,28 @@ function classifiedRunFixture(){
   })
 }
 
+test('labeling exposes recorded optimizer completion and opens the full correlated exchange',async()=>{
+  const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
+  const scope={classifier_id:'a',step_id:'rubric-one',step_stage:'rubric'}
+  const history=[
+    {sequence:1,sourceId:'request',payload:{...scope,kind:'optimizer-request',messages:[{role:'user',content:'The human explanation must be retained in this optimizer context'}]}},
+    {sequence:2,sourceId:'response',payload:{...scope,kind:'optimizer-response',content:'Prefer knowledge-base research'}},
+    {sequence:3,sourceId:'completed',payload:{...scope,kind:'step-completed',status:'completed',result:{activated:true}}},
+  ]
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[card],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:variables?.after===0?history:[]}
+    return {run:card,currentItem:null,jobs:[]}
+  })
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  render(<WebApp/> )
+  expect(await screen.findByText('Accepted')).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'Inspect latest optimization event'}))
+  expect(screen.getByText('The human explanation must be retained in this optimizer context')).toBeVisible()
+  expect(screen.getByText('Prefer knowledge-base research')).toBeVisible()
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
 test('a classifier-specific deep link restores the matching history on initial load',async()=>{
   classifiedRunFixture()
   window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=b')

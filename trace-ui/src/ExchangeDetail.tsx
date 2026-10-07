@@ -4,7 +4,10 @@ import {TraceDetail} from './TraceDetail'
 /** Only use durable identities; temporal proximity is not proof of causation. */
 export function exchangeEvents(selected:TraceEvent,events:TraceEvent[]):TraceEvent[]{
   const value=selected.payload
-  const optimizer=String(value.kind).startsWith('optimizer-')||value.kind==='proposal-validated'
+  const stage=value.stage??value.step_stage
+  const optimizer=String(value.kind).startsWith('optimizer-')||value.kind==='proposal-validated'||
+    (['rubric','examples','questions'].includes(String(stage))&&
+      ['step-started','step-completed','step-failed','step-paused','optimization-stage-started','optimization-stage-completed','optimization-stage-failed'].includes(String(value.kind)))
   const family=optimizer?'optimizer':'decision'
   const candidates=events.filter(row=>{
     const other=row.payload

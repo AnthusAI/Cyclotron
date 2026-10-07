@@ -27,3 +27,13 @@ test('decision inspection includes the request and response for that target and 
 test('missing correlation does not substitute an unrelated nearby model call',()=>{
   expect(exchangeEvents(event(2,{kind:'proposal-validated'}),[event(1,{kind:'optimizer-request'})])).toEqual([])
 })
+
+test('inspecting a completed rubric stage includes its exact optimizer request and response',()=>{
+  const scope={classifier_id:'a',step_id:'rubric-1',step_stage:'rubric'}
+  const request=event(1,{...scope,kind:'optimizer-request',messages:[{role:'user',content:'Preserve the explanation about knowledge bases'}]})
+  const response=event(2,{...scope,kind:'optimizer-response',content:'A refined rubric'})
+  const completion=event(4,{...scope,kind:'step-completed',result:{activated:true}})
+  render(<ExchangeDetail event={completion} events={[request,response,event(3,{...scope,step_id:'another-step',kind:'optimizer-request'}),completion]}/> )
+  expect(screen.getByText('Preserve the explanation about knowledge bases')).toBeVisible()
+  expect(screen.getByText('A refined rubric')).toBeVisible()
+})

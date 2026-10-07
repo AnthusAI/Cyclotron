@@ -73,6 +73,15 @@ drawer does not restart a cycle or make model calls. Ordinary vertical scroll
 navigates content; horizontal scroll pans the timeline; pinch and zoom buttons
 control timeline scale. There is no separate fullscreen mode.
 
+The labeling workspace has a compact **Flywheel activity** summary, separate
+from acknowledgement that feedback was saved. It names the classifier and stage,
+then shows the latest recorded optimizer, validation, evaluation, ML fitting or
+selection phase. A response received is not an accepted change. Routine no-op
+trigger checks remain in the drawer without hiding the last optimization outcome.
+Paused and failed work is explicit; the UI does not retry it. **Inspect activity**
+opens that event and its correlated model request/response, using stored step
+and classifier identities rather than substituting a nearby call.
+
 ### Reproduce calibration playback without paid calls
 
 Create a new **empty, separate** fixture directory. This script refuses an
