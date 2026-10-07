@@ -7,6 +7,40 @@ from .batched_classification import BatchedAnswers
 from .decision_cache import CacheOptions
 
 
+def test_a_measured_head_cannot_be_promoted_after_a_sibling_changes_the_joint_request(tmp_path):
+    from dataclasses import replace
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    from .optimizer_agent import OptimizerAgent
+    class Model(FakeModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {}
+            for cid, config in configs.items():
+                batch = await self.classify(config, target, training[cid], **kwargs)
+                answers[cid] = batch.answers
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    config = ClassifierConfig(TASK)
+    shared = SharedDecisions(tmp_path/'cache.sqlite', Model(), max_requests=100,
+                             observer=lambda _: None)
+    shared.bind_context({'a': config, 'b': config}, {'a': TRAIN, 'b': TRAIN})
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'),
+                             OptimizerAgent(lambda _: None), max_requests=100)
+    try:
+        result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(),
+            propensities={row.item.id: 1. for row in TRAIN},
+            candidate_proposal={'rubric': 'Use the human criteria'}, apply_promotion=False))
+        assert result['improved']
+        before = wheel.active.fingerprint
+        shared.bind_context({'a': config, 'b': replace(config, rubric='Changed sibling criteria')},
+                            {'a': TRAIN, 'b': TRAIN})
+        with pytest.raises(ValueError, match='decision feature context changed'):
+            wheel.promote_trial(result['trial_fingerprint'], TRAIN, DEV)
+        assert wheel.active.fingerprint == before
+    finally:
+        wheel.close()
+        shared.close()
+
+
 def test_explicit_refresh_recollects_the_joint_request_and_updates_all_child_caches(tmp_path):
     from datetime import datetime,timezone
     from .flywheel import DecisionFlywheel

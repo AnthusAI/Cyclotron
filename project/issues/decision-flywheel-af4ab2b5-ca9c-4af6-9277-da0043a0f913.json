@@ -3,7 +3,7 @@
   "title": "Compare recall with accuracy guard against F1 using frozen labels and matched partitions after web workspace verification",
   "description": "",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "b381a4ac-fd9b-42b8-8da3-09fd343d6cef",
+      "author": "home",
+      "text": "Live diagnostic comparison is now running through the GraphQL API on the deployed backend. Recall plus accuracy guard run: 25804ab2-b027-4853-bfa2-e1a8e50dbd94. F1 run: 764466bd-dda5-4820-be3d-625e1d22d3fc. Both freeze the same 85 source items, human labels and explanations under Anthus definition revision 1; ceilings remain 1000 decision attempts and 100 optimizer calls per run. Sequential orchestrator uses stable objective-pilot-cycle command IDs and stops on failed/interrupted jobs without automatic paid retry. Verified live progress: first replay completed 30 cycles without reported warnings and queued cycle 33. Original interactive labeling history remains unchanged. Neither replay nor the protected endpoint comparison is complete; no winner claimed.",
+      "created_at": "2026-10-07T20:37:14.801832Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T20:24:23.179077Z",
-  "updated_at": "2026-10-07T20:30:43.592950Z",
+  "updated_at": "2026-10-07T20:37:14.801908Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

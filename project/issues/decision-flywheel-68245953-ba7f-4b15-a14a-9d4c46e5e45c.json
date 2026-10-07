@@ -127,10 +127,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "9844f2fb-49b7-4de4-be34-0db767b167fa",
+      "author": "home",
+      "text": "Added a failing regression spec for a qualified fitted candidate whose sibling classifier changes the joint request before promotion. The old code incorrectly promoted that stale head. Promotion now checks the measured candidate feature-context identity against the current complete joint context and refuses stale measurements before activating anything. Numerical and raw-decision trials both persist their measured context. Focused shared-request, classifier-training and flywheel suite: 37 passing specs. This closes the delayed-promotion gap, not the separate unverified refresh-to-derived-fit-cache dependency audit. Running full regression before integration.",
+      "created_at": "2026-10-07T20:38:30.837705Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T20:16:39.926025Z",
+  "updated_at": "2026-10-07T20:38:30.837791Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

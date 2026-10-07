@@ -77,6 +77,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
             with wheel.db:
                 wheel.db.execute("INSERT OR REPLACE INTO runtime_rounds VALUES (?, 'complete', ?)",
                     (trial_key,_json({'result':trial,'fitted_candidate':asdict(raw),
+                        'candidate_model_context':wheel.model_context(raw.config, training),
                         'baseline_version':wheel.active.fingerprint,'training_evidence':wheel._evidence(training),
                         'development_evidence':wheel._evidence(development)})))
             wheel._emit({'kind':'candidate-evaluated',**trial})

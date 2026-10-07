@@ -609,6 +609,7 @@ class DecisionFlywheel:
                 self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
                                 (_json({"result": result, "active": asdict(self.active),
                                         "fitted_candidate": asdict(candidate), "baseline_version": baseline_version,
+                                        "candidate_model_context": self.model_context(candidate.config, training),
                                         "training_evidence": self._evidence(training),
                                         "development_evidence": self._evidence(development)}), round_key))
             return result
@@ -638,7 +639,12 @@ class DecisionFlywheel:
             raise ValueError("trial did not improve this incumbent")
         if saved.get("training_evidence") != self._evidence(training) or saved.get("development_evidence") != self._evidence(development):
             raise ValueError("trial feedback changed; refit and reevaluate")
-        self._activate(_restore(saved["fitted_candidate"]))
+        candidate = _restore(saved["fitted_candidate"])
+        measured_context = saved.get("candidate_model_context") or (
+            candidate.head.provenance.source_model_provenance if candidate.head else None)
+        if measured_context != self.model_context(candidate.config, training):
+            raise ValueError('decision feature context changed; refit and reevaluate the trial')
+        self._activate(candidate)
         self._emit({"kind": "promoted", **saved["result"], "promoted": True,
                     "version": self.active.fingerprint})
 
