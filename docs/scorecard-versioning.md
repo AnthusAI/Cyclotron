@@ -82,6 +82,14 @@ Paused and failed work is explicit; the UI does not retry it. **Inspect activity
 opens that event and its correlated model request/response, using stored step
 and classifier identities rather than substituting a nearby call.
 
+The activity inspector also shows **Before** and **After** for the same recorded
+optimization step: applied rubric, main/supporting questions and class order,
+example membership, dynamic elements, and raw passthrough versus learned ML
+features/calibration. A proposed rubric is not substituted for the applied
+snapshot. Example cards resolve labels and text only from that step's recorded
+optimizer training context; missing content stays explicitly unavailable. Older
+steps without matching snapshots do not borrow another step's configuration.
+
 ### Reproduce calibration playback without paid calls
 
 Create a new **empty, separate** fixture directory. This script refuses an

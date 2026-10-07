@@ -51,10 +51,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c4105e8f-677e-4044-8ba5-38dd69a50211",
+      "author": "home",
+      "text": "Added structured before/after optimization snapshots to the live activity inspector. It displays applied rubric, main/supporting questions with classes/counts, examples with recorded training labels/text/comments, dynamic elements, raw passthrough vs learned-head features and calibration temperature/OOF origin. Snapshots and example evidence are scoped by durable step/classifier/cycle identities; missing older records are explicitly unavailable, and proposals cannot masquerade as applied rubrics. Four specs first failed, then passed; all 129 UI specs and build pass, focused final inspector tests/build pass. Browser verified real cycle-81 optimizer response renders both actual rubric versions, acceptance reason and changed calibrated head plus its paired full optimizer request/response, without model calls or votes. React kept transformation pure and disclosures native; verification checked existing API-owned history. Broad tablet/reconnect story acceptance remains open.",
+      "created_at": "2026-10-07T22:43:34.125121Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:06.171698Z",
-  "updated_at": "2026-10-07T22:39:20.099252Z",
+  "updated_at": "2026-10-07T22:43:34.125209Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
