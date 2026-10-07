@@ -55,10 +55,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "0545f02b-c5e2-49d4-9660-73edc0d5048a",
+      "author": "home",
+      "text": "Implemented Kev classify/classify_many on the existing System One HTTP contract. One full scorecard request carries scoped rubrics, actual labeled examples and all feature questions; answers/probabilities/usage and exact request/response bindings remain observable. No hidden retry. Fake GraphQL/worker integration proves two classifiers share one physical Kev call and the trace projections share one request fingerprint. Fixed scorecard runtime dropping decisions_provider from inherited settings; new runs pin provider/model, explicit provider overrides cannot inherit another provider model. Default server now dispatches Jev or local Kev explicitly; unknown/Laya scorecard providers reject rather than silently using Jev. Laya standalone adapter remains, full-context Laya scorecard optimization is not claimed complete. React skill guided atomic provider/model editing; browser/API/SQLite verification saved a separate fixture definition revision with Kev and no residual Jev model. No browser errors; narrow Save visible, screenshot var/web/provider-settings-browser-proof.png. 92 UI tests/build pass; full Python regression rerunning. Real workspace idle at 175 completed/2 failed jobs, no labels or paid calls changed; server runtime deployment not yet restarted. Wider acceptance and Laya protocol/evaluation work remain open.",
+      "created_at": "2026-10-07T18:47:33.092253Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T18:22:02.535298Z",
+  "updated_at": "2026-10-07T18:47:33.092347Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, Sequence
 from .application_runtime import ApplicationSession, RuntimeCommand
 from .selection_policy import SelectionPolicy
 from .workspace_session import WorkspaceSession, freeze_configuration
+from .decision_provider_settings import normalize_decision_settings
 
 
 @dataclass
@@ -58,7 +59,7 @@ class ScorecardRuntime:
         values = dict(config)
         allowed = {
             "selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
-            "rubric_changes_every", "seed", "decisions_model", "optimizer_model",
+            "rubric_changes_every", "seed", "decisions_model", "decisions_provider", "optimizer_model",
             "classifier_ids", "item_list_id", "scorecard_id", "scorecard_definition_revision",
         }
         if set(values) - allowed:
@@ -70,8 +71,12 @@ class ScorecardRuntime:
                 values["scorecard_id"], values.get("scorecard_definition_revision"),
             )
             settings = {key: value for key, value in definition["settings"].items()
-                        if key in {"selection_policy", "seed", "decisions_model", "optimizer_model",
+                        if key in {"selection_policy", "seed", "decisions_model", "decisions_provider", "optimizer_model",
                                    "optimize_every", "rubric_changes_every"}}
+            if ('decisions_provider' in values and
+                values['decisions_provider']!=settings.get('decisions_provider','jev') and
+                'decisions_model' not in values):
+                settings.pop('decisions_model',None)
             values = {**settings, **values}
             values["scorecard_definition_revision"] = definition["revision"]
             values["scorecard_definition_fingerprint"] = definition["fingerprint"]
@@ -87,7 +92,7 @@ class ScorecardRuntime:
         values.setdefault("selection_policy", {"primary": "f1", "positive_class": "include"})
         values["selection_policy"] = asdict(SelectionPolicy(**values["selection_policy"]))
         values.setdefault("seed", "arxiv-web-v1")
-        values.setdefault("decisions_model", "jev-1.13.0")
+        values=normalize_decision_settings(values)
         values.setdefault("optimizer_model", "gpt-6-luna")
         values["evaluation_protocol"] = "protected-feedback-v1"
         values = freeze_configuration(self.store, values)

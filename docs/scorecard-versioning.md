@@ -147,9 +147,28 @@ overridden. Classifier-specific policies take precedence, and each classifier's
 positive class or macro aggregation is resolved separately. Saving settings does
 not call a model or start optimization.
 
-The local demo server currently instantiates the Jev decision adapter and the
-configured optimizer adapter. A model identifier is not a provider switch; the
-reusable worker accepts an injected model factory for other providers.
+The local server dispatches `decisions_provider` explicitly: `jev` uses the Jev
+SDK and `kev` uses the local Kev server at `http://127.0.0.1:8009`. Jev is the
+default for older runs that did not record a provider. Both paths send the full
+joint scorecard request, with per-classifier rubric, labeled examples, and
+feature questions. Both preserve requests, answers, probability vectors and
+usage. A model identifier alone is not a provider switch.
+
+Provider selection belongs to immutable shared defaults and frozen run
+configuration. Changing it in the editor clears the previous provider's model
+identifier. An explicit run override does the same unless a new model is also
+supplied. Kev defaults to `kev-latest`; Jev defaults to `jev-1.13.0`. Saving a
+definition does not construct a model or open a connection. Kev must be running
+before live classification. Applications can select a different endpoint with
+`KevConfiguration` in their injected factory; the default workspace uses the
+local endpoint above.
+
+Laya's standalone decision adapter remains available, but the default workspace
+rejects Laya scorecard optimization until a verified full-context protocol exists.
+It does not silently run Jev or discard examples. Unknown providers also reject
+in the default server; custom hosts can inject their own model factory and
+explicit provider/model identifiers. This is not a claim of completed
+three-provider workspace evaluation.
 
 ## Paired output comparison
 

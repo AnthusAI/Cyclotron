@@ -20,11 +20,20 @@ export function validScorecardSettings(settings:Settings){
 
 export function ScorecardSettings({settings,onChange,disabled}:{settings:Settings;onChange:(value:Settings)=>void;disabled:boolean}){
   const policy=settings.selection_policy as Policy|undefined
+  const provider=String(settings.decisions_provider??'')
+  const changeProvider=(value:string)=>{
+    const next={...settings}
+    if(value)next.decisions_provider=value;else delete next.decisions_provider
+    if((provider||'jev')!==(value||'jev'))delete next.decisions_model
+    onChange(next)
+  }
   const update=(key:string,value:unknown)=>{const next={...settings};if(value===undefined)delete next[key];else next[key]=value;onChange(next)}
   const updatePolicy=(change:Partial<Policy>)=>update('selection_policy',{aggregation:'macro',...policy,primary:policy?.primary??'f1',...change})
   return <fieldset className="space-y-3 rounded-md border p-3" disabled={disabled}>
     <legend className="px-1 text-sm font-semibold">Shared run defaults</legend>
     <p className="text-xs text-muted-foreground">Blank values use application defaults. New runs pin these settings. Existing sessions do not change.</p>
+    <div className="space-y-1"><Label htmlFor="scorecard-decisions_provider">Decision provider</Label><NativeSelect id="scorecard-decisions_provider" value={provider} onChange={e=>changeProvider(e.target.value)}><NativeSelectOption value="">Application default (Jev)</NativeSelectOption><NativeSelectOption value="jev">Jev</NativeSelectOption><NativeSelectOption value="kev">Kev (local server)</NativeSelectOption>{provider&&!['jev','kev'].includes(provider)?<NativeSelectOption value={provider}>{provider} (custom host required)</NativeSelectOption>:null}</NativeSelect></div>
+    <p className="text-xs text-muted-foreground">Changing provider clears the model identifier so its default can apply. Kev uses the local server on port 8009. Laya scorecard optimization is not yet supported; it never falls back to Jev.</p>
     <div className="grid gap-3 sm:grid-cols-2">{textFields.map(([key,label])=><div key={key} className="space-y-1"><Label htmlFor={`scorecard-${key}`}>{label}</Label><Input id={`scorecard-${key}`} value={String(settings[key]??'')} onChange={e=>update(key,e.target.value.trim()||undefined)}/></div>)}
     {cadenceFields.map(([key,label])=><div key={key} className="space-y-1"><Label htmlFor={`scorecard-${key}`}>{label}</Label><Input id={`scorecard-${key}`} type="number" min="1" step="1" value={String(settings[key]??'')} onChange={e=>update(key,e.target.value===''?undefined:Number(e.target.value))}/></div>)}</div>
     <p className="text-xs text-muted-foreground">Only learning-eligible labels count toward triggers. Each classifier keeps its own cadence.</p>

@@ -65,7 +65,7 @@ def main(argv=None):
         parser.error(str(error))
     if host != '127.0.0.1' and not token and not args.allow_unauthenticated_lan:
         parser.error('LAN access requires FLYWHEEL_WEB_TOKEN in the environment')
-    from .adapters.jev import JevAdapter,JevConfiguration
+    from .adapters.workspace import decision_adapter
     from .adapters.openai_optimizer import OpenAIOptimizer
     from .optimizer_agent import OptimizerAgent
     from .reviewer import load_articles_jsonl
@@ -77,7 +77,7 @@ def main(argv=None):
     redact = tuple(os.environ.get(key,'') for key in ('FLYWHEEL_WEB_TOKEN','TYPESAFE_API_KEY','OPENAI_API_KEY'))
     endpoint = f'http://{host}:{args.port}/graphql'
     def model_factory(config):
-        return (JevAdapter.from_environment(configuration=JevConfiguration(model=config['decisions_model'])),
+        return (decision_adapter(config),
                 OptimizerAgent(OpenAIOptimizer.from_environment(model=config['optimizer_model'],max_calls=config['max_optimizer_calls'])))
     service = WebWorker(store,args.database.parent / 'runs',articles=articles,allow_live=args.allow_live,
         sink_factory=lambda run_id:GraphQLTraceSink(endpoint,run_id,token=token),model_factory=model_factory,redact=redact)

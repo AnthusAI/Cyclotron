@@ -92,3 +92,36 @@ def test_worker_routes_a_frozen_scorecard_through_the_scorecard_runtime(tmp_path
 
 def _scorecard(store):
     return store.save_scorecard_definition("scorecard", "Scorecard", [{"id": "topic", "revision": 1}], {})["id"]
+
+
+def test_scorecard_provider_is_inherited_pinned_and_delivered_to_the_model_factory(tmp_path):
+    from types import SimpleNamespace
+    store=WebStore(tmp_path/'db')
+    store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('items','Items')
+    store.upsert_list_items('items',[{'id':'item','occurred_at':'2026-01-01','values':{'text':'Synthetic item'}}])
+    definition=store.save_scorecard_definition('scorecard','Scorecard',[{'id':'topic','revision':1}],
+        {'decisions_provider':'kev','decisions_model':'kev-4b'})
+    observed=[]
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda config:observed.append(config) or (SimpleNamespace(model_identity='fake'),agent([])),sink_factory=lambda _:lambda event:None)
+    run=runtime.create_run('Pinned',{'scorecard_id':definition['id'],'item_list_id':'items'})
+    assert run['config']['decisions_provider']=='kev'
+    assert run['config']['decisions_model']=='kev-4b'
+    # Configuration remains inspectable without constructing any provider.
+    assert observed==[]
+    session=runtime.open_session(run['id'],run['config'],store.items(run['id']),None)
+    session.close()
+    assert observed[0]['decisions_provider']=='kev'
+
+
+def test_explicit_provider_override_uses_its_default_model_without_inheriting_another_provider_model(tmp_path):
+    store=WebStore(tmp_path/'db')
+    store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('items','Items')
+    store.upsert_list_items('items',[{'id':'item','occurred_at':'2026-01-01','values':{'text':'Synthetic item'}}])
+    store.save_scorecard_definition('scorecard','Scorecard',[{'id':'topic','revision':1}],
+        {'decisions_provider':'jev','decisions_model':'jev-1.13.0'})
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    run=runtime.create_run('Kev',{'scorecard_id':'scorecard','item_list_id':'items','decisions_provider':'kev'})
+    assert run['config']['decisions_provider']=='kev'
+    assert run['config']['decisions_model']=='kev-latest'

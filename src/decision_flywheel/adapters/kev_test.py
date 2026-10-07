@@ -24,8 +24,10 @@ class Response:
 class FakeTransport:
     def __init__(self, response):
         self.response = response
+        self.calls = 0
 
     async def post(self, url, *, json, timeout):
+        self.calls += 1
         self.url, self.body, self.timeout = url, json, timeout
         if isinstance(self.response, Exception):
             raise self.response
@@ -89,3 +91,59 @@ def test_a_kev_adapter_checks_context_before_requesting_the_endpoint():
 def test_a_kev_adapter_reports_a_transport_timeout_without_a_retry():
     with pytest.raises(ValueError, match="timed out"):
         asyncio.run(KevAdapter(transport=FakeTransport(TimeoutError())).decide(TASK, TARGET, []))
+
+
+def test_kev_sends_all_scorecard_questions_with_scoped_rubrics_examples_and_observable_wire_exchanges():
+    from ..classifier_config import ClassifierConfig
+    extra=DecisionTask('practical',('yes','no'),'Is it practical?')
+    configs={'topic':ClassifierConfig(TASK,rubric='Prefer research',example_ids=('demo',),tasks=(extra,)),
+             'quality':ClassifierConfig(TASK,rubric='Prefer evidence')}
+    demo=LabeledItem(Item('demo',{'text':'Example paper'}),'yes',context={'human_feedback':'Useful research'})
+    transport=FakeTransport(Response(payload={'model':'kev-4b','usage':{'input_tokens':12},'answers':{
+        'q0':{'choice':'yes','probabilities':{'yes':.9,'no':.1}},
+        'q1':{'choice':'no','probabilities':{'yes':.3,'no':.7}},
+        'q2':{'choice':'no','probabilities':{'yes':.2,'no':.8}}}}))
+    events=[]
+    adapter=KevAdapter(transport=transport)
+    result=asyncio.run(adapter.classify_many(configs,TARGET,{'topic':(demo,),'quality':()},event_sink=events.append))
+    assert transport.body['state']['classifiers']['topic']['rubric']=='Prefer research'
+    assert transport.body['state']['classifiers']['topic']['examples'][0]['label']=='yes'
+    assert transport.body['state']['classifiers']['quality']['examples']==[]
+    assert result.answers['topic']['practical'].probabilities=={'yes':.3,'no':.7}
+    assert result.answers['quality']['decision'].label=='no'
+    assert result.usage=={'input_tokens':12}
+    assert events[0]['state']==transport.body['state']
+    assert events[0]['questions']==transport.body['questions']
+    assert events[0]['question_bindings']['q1']['question']=='practical'
+    assert events[1]['answers']==transport.response.payload['answers']
+    assert transport.calls==1
+
+
+def test_kev_single_classifier_optimization_preserves_all_extra_question_features():
+    from ..classifier_config import ClassifierConfig
+    config=ClassifierConfig(TASK,tasks=(DecisionTask('factor',('yes','no'),'Factor?'),))
+    transport=FakeTransport(Response(payload={'answers':{'q0':{'choice':'yes'},'q1':{'choice':'no'}}}))
+    result=asyncio.run(KevAdapter(transport=transport).classify(config,TARGET,()))
+    assert set(result.answers)=={'decision','factor'}
+    assert result.answers['factor'].label=='no'
+
+
+def test_kev_joint_context_validation_and_missing_answers_fail_without_hidden_retries():
+    from ..classifier_config import ClassifierConfig
+    config=ClassifierConfig(TASK,example_ids=('missing',))
+    transport=FakeTransport(Response(payload={'answers':{}}))
+    with pytest.raises(ValueError):
+        asyncio.run(KevAdapter(transport=transport).classify_many({'topic':config},TARGET,
+            {'topic':(LabeledItem(TARGET,'yes'),)}))
+    assert not hasattr(transport,'body')
+    config=ClassifierConfig(TASK)
+    with pytest.raises(ValueError,match='missing answer'):
+        asyncio.run(KevAdapter(transport=transport).classify_many({'topic':config},TARGET,{'topic':()}))
+
+
+def test_kev_never_sends_a_target_as_its_own_demonstration():
+    from ..classifier_config import ClassifierConfig
+    transport=FakeTransport(Response(payload={'answers':{'q0':{'choice':'yes'}}}))
+    asyncio.run(KevAdapter(transport=transport).classify_many(
+        {'topic':ClassifierConfig(TASK,example_ids=('target',))},TARGET,{'topic':(LabeledItem(TARGET,'yes'),)}))
+    assert transport.body['state']['classifiers']['topic']['examples']==[]
