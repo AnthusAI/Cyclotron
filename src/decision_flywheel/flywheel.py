@@ -328,6 +328,24 @@ class DecisionFlywheel:
         self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,
                     "classifier_snapshot": asdict(classifier)})
 
+    def model_context(self, config, training):
+        identity = getattr(self.model, 'feature_context_identity', None)
+        return identity(config, training) if identity else self.model.model_identity
+
+    def reconcile_model_context(self, training):
+        """Discard a stale numerical head without discarding learned criteria."""
+        if not self.active.head:
+            return False
+        current = self.model_context(self.active.config, training)
+        previous = self.active.head.provenance.source_model_provenance
+        if current == previous:
+            return False
+        from dataclasses import replace
+        self._activate(replace(self.active, head=None))
+        self._emit({'kind':'head-invalidated','reason':'decision feature context changed',
+                    'previous_model_context':previous,'model_context':current})
+        return True
+
     @staticmethod
     def _evidence(training):
         return {row.item.id: _hash({"values": dict(row.item.values), "label": row.label,
@@ -416,6 +434,7 @@ class DecisionFlywheel:
     async def predict(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None,
                       cache_options=None):
         self.reconcile_feedback(training)
+        self.reconcile_model_context(training)
         batch = await self._answers(self.active.config, target, training, now or datetime.now(timezone.utc), cache_options)
         if self.active.head:
             values = self._features(self.active.config, batch)
@@ -473,7 +492,9 @@ class DecisionFlywheel:
             raise ValueError("evaluation time must be timezone aware")
         self._validate_partitions(training, development, protected, propensities)
         self.reconcile_feedback(training, development=development)
+        self.reconcile_model_context(training)
         round_key = _hash({"training": self._evidence(training), "development": self._evidence(development),
+                           "model_context": self.model_context(self.active.config, training),
                            "propensities": propensities, "protected": sorted(item.id for item in protected),
                            "evaluation_weighting": self.evaluation_weighting,
                            "training_class_weighting": self.training_class_weighting,

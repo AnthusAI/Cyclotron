@@ -62,9 +62,11 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         wheel._emit({"kind": "optimization-stage-completed", **result})
         return result
     wheel.reconcile_feedback(training, development=development)
+    wheel.reconcile_model_context(training)
     if stage=='examples' and _example_experiments(wheel,training,development):
         wheel.set_optimizer_context(wheel.optimizer_context['human_explanations'],evaluation_context_exposed=True)
     key_data = {"stage": stage, "context": wheel.active.config.fingerprint,
+                 "model_context": wheel.model_context(wheel.active.config, training),
                  "training": wheel._evidence(training), "development": wheel._evidence(development),
                  "protected": sorted(item.id for item in protected), "propensities": propensities,
                  "limit": limit, "evaluation_floor": min_development_per_class,

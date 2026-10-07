@@ -14,6 +14,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
         raise ValueError("development class floor must be positive")
     wheel._validate_partitions(training, development, protected, propensities)
     wheel.reconcile_feedback(training, development=development)
+    wheel.reconcile_model_context(training)
     counts = {label: sum(r.label == label for r in development) for label in wheel.initial.task.labels}
     if min(counts.values()) < min_development_per_class:
         result = {"stage": "classifier", "promoted": False, "development_counts": counts,
@@ -34,6 +35,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     if additions:
         configs.append(("retained_questions", tasks + additions))
     evidence = {"version": wheel.active.fingerprint, "training": wheel._evidence(training),
+                "model_context": wheel.model_context(wheel.active.config, training),
                 "optimizer_context": wheel.optimizer_context,
                 "development": wheel._evidence(development), "protected": sorted(i.id for i in protected),
                 "propensities": propensities, "bank": [e["id"] for e in wheel.feature_bank()], "floor": min_development_per_class,

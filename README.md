@@ -314,6 +314,16 @@ The shared-answer key format is versioned; older engine answer entries remain
 stored but are not silently reused under the new key. The complete batch cache
 can still serve matching requests without another provider call.
 
+The workspace pins sibling rubric, example, and question context during feature
+collection. Candidate measurements use that joint context, not a solo substitute.
+Fitted heads record a feature-context identity, including the provider and selected
+examples. A sibling change invalidates a dependent head but preserves its rubric.
+Before the next item prediction, the workspace attempts bounded numerical refitting
+and records the trigger in that item's cycle. If fitting cannot supply a compatible
+head, prediction uses raw decision output rather than stale learned weights.
+Standalone context-aware adapters can expose
+`feature_context_identity(config, training)` for the same provenance check.
+
 ```python
 from decision_flywheel.decision_cache import CacheOptions
 

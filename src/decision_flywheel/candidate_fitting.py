@@ -46,7 +46,7 @@ async def fit_candidate(wheel, config, training, development, *, protected,
         scoreboard_ids=tuple(item.id for item in protected),
         scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
         context_artifact_fingerprint=config.fingerprint,
-        source_model_provenance=wheel.model.model_identity,
+        source_model_provenance=wheel.model_context(config, training),
         training_class_weighting=wheel.training_class_weighting)
     candidate = FittedClassifier(config, head, wheel._evidence(training),
                                 wheel._evidence(development), validation_status)

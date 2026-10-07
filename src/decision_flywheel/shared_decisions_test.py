@@ -7,6 +7,31 @@ from .batched_classification import BatchedAnswers
 from .decision_cache import CacheOptions
 
 
+def test_candidate_feature_collection_keeps_the_sibling_scorecard_context(tmp_path):
+    from dataclasses import replace
+    class Model:
+        model_identity='fake'
+        requests=[]
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.requests.append(configs)
+            return BatchedAnswers({name:{'decision':DecisionResult('yes',{'yes':.8,'no':.2})}
+                for name in configs},'fake',None,1)
+    config=ClassifierConfig(DecisionTask('main',('yes','no'),'Choose'))
+    sibling=replace(config,rubric='Sibling criteria');candidate=replace(config,rubric='Candidate criteria')
+    model=Model();shared=SharedDecisions(tmp_path/'cache.sqlite',model,max_requests=3,observer=lambda _:None)
+    try:
+        shared.bind_context({'a':config,'b':sibling},{'a':[],'b':[]})
+        adapter=shared.adapter('a');original=adapter.feature_context_identity(config,[])
+        asyncio.run(adapter.classify(candidate,Item('one',{'text':'Text'}),[]))
+        assert model.requests[-1]=={'a':candidate,'b':sibling}
+        assert adapter.feature_context_identity(config,[])==original
+        asyncio.run(shared.adapter('b').classify(sibling,Item('one',{'text':'Text'}),[]))
+        assert model.requests[-1]=={'a':config,'b':sibling}
+        shared.bind_context({'a':config,'b':replace(sibling,rubric='Revised sibling')},{'a':[],'b':[]})
+        assert adapter.feature_context_identity(config,[])!=original
+    finally:shared.close()
+
+
 def test_a_previous_joint_batch_is_not_reused_after_the_request_scope_changes(tmp_path):
     class Model:
         model_identity='fake'

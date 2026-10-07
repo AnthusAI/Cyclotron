@@ -115,6 +115,32 @@ class WorkspaceSession:
         for identifier,wheel in self.wheels.items():
             train,dev,_=self.partitions(identifier);wheel.reconcile_feedback(train,development=dev)
             training[identifier]=train;configs[identifier]=wheel.active.config
+        self.shared.bind_context(configs,training)
+        # Refit stale heads inside the item's operational cycle. Sibling
+        # context changes can alter probability features even when this
+        # classifier's own question list stays unchanged.
+        for _ in range(len(self.wheels)+1):
+            stale=[identifier for identifier,wheel in self.wheels.items() if wheel.active.head and
+                wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])]
+            if not stale:break
+            for identifier in stale:
+                wheel=self.wheels[identifier]
+                cycle=wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
+                try:
+                    wheel.reconcile_model_context(training[identifier])
+                    cycle.check_trigger('classifier',due=True,reason='shared decision feature context changed',details={})
+                    train,dev,protected=self.partitions(identifier)
+                    await wheel.step('classifier',train,dev,protected=protected,
+                        propensities={r.item.id:1. for r in train},min_development_per_class=2,
+                        limit=200,trigger='shared-context-change')
+                    cycle.suspend()
+                except Exception as error:
+                    cycle.__exit__(type(error),error,None)
+                    raise
+            configs={identifier:wheel.active.config for identifier,wheel in self.wheels.items()}
+            self.shared.bind_context(configs,training)
+        # A bounded reconciliation must never serve an incompatible head.
+        for identifier,wheel in self.wheels.items():wheel.reconcile_model_context(training[identifier])
         scorecard_fingerprint=self.store.checkpoint_scorecard(self.run['id'],self.wheels)
         await self.shared.prepare(configs,target,training,now=now)
         predictions={}
@@ -356,6 +382,8 @@ class WorkspaceSession:
             if due:stages.append(stage)
         stages=list(dict.fromkeys([*stages,*resume_stages]))
         for stage in stages:
+            self.shared.bind_context({cid:w.active.config for cid,w in self.wheels.items()},
+                {cid:self.partitions(cid)[0] for cid in self.wheels})
             transport=getattr(wheel.optimizer,'complete',None)
             if stage!='classifier' and hasattr(transport,'max_calls') and transport.calls>=transport.max_calls:
                 wheel._emit({'kind':'optimization-paused','stage':stage,'reason':'optimizer call limit reached','calls':transport.calls,'limit':transport.max_calls})

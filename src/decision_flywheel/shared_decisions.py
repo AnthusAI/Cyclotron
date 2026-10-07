@@ -20,6 +20,19 @@ class SharedDecisions:
         self.db=sqlite3.connect(path)
         self.db.executescript('CREATE TABLE IF NOT EXISTS batches(key TEXT PRIMARY KEY,status TEXT,payload TEXT); CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY,key TEXT);')
         self.prepared={};self.identity='unprepared'
+        self.context_configs={};self.context_training={}
+
+    def bind_context(self,configs,training):
+        """Pin siblings for all candidate and inference feature requests."""
+        if not configs or set(configs)!=set(training):
+            raise ValueError('every classifier needs its own explicit training pool')
+        self.context_configs=dict(configs)
+        self.context_training={name:tuple(rows) for name,rows in training.items()}
+        self.prepared={}
+
+    def scope(self,identifier,config,training):
+        return ({**self.context_configs,identifier:config},
+                {**self.context_training,identifier:tuple(training)})
 
     @property
     def requests(self): return self.db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0]
@@ -72,16 +85,28 @@ class SharedDecisions:
             def model_identity(self):return shared.model.model_identity+':shared-v1:'+shared.identity
             def cache_identity(self,config,target,training,*,now=None):
                 child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
-                if child in shared.prepared:
+                if child in shared.prepared and not shared.context_configs:
                     fingerprint=shared.prepared[child][2]
                 else:
-                    request,_=batch_request({identifier:config},target,{identifier:training},now=now)
+                    configs,pools=shared.scope(identifier,config,training)
+                    request,_=batch_request(configs,target,pools,now=now)
                     fingerprint=key({'model':shared.model.model_identity,'request':request})
                 return shared.model.model_identity+':shared-answer-v2:'+fingerprint
+            def feature_context_identity(self,config,training):
+                configs,pools=shared.scope(identifier,config,training)
+                context={}
+                for name,definition in configs.items():
+                    pool={row.item.id:row for row in pools[name]}
+                    context[name]={'configuration':definition.fingerprint,
+                        'examples':[asdict(pool[item_id]) for item_id in definition.example_ids]}
+                return shared.model.model_identity+':shared-features-v1:'+key(context)
             async def classify(self,config,target,training,*,now=None,event_sink=None):
                 child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
-                if child not in shared.prepared:
-                    await shared.prepare({identifier:config},target,{identifier:training},now=now)
+                expected=self.cache_identity(config,target,training,now=now)
+                prepared=shared.prepared.get(child)
+                if not prepared or expected!=shared.model.model_identity+':shared-answer-v2:'+prepared[2]:
+                    configs,pools=shared.scope(identifier,config,training)
+                    await shared.prepare(configs,target,pools,now=now)
                 payload,_,fingerprint=shared.prepared[child]
                 for exchange in payload['exchanges']:
                     if event_sink:event_sink({**exchange,'shared_request_fingerprint':fingerprint,'usage':None,'shared_exchange':True})

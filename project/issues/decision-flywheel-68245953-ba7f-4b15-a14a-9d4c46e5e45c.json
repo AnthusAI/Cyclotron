@@ -100,10 +100,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c4136b59-ef0d-4415-8b39-f44aaa7216b5",
+      "author": "home",
+      "text": "Implemented pinned sibling context for candidate feature collection and inference. Heads now persist a stable feature-context identity (provider, classifier configs, and actual selected example records); context-aware adapters expose this through feature_context_identity. Changed sibling context invalidates only the head, preserving learned rubric/examples/questions. Workspace attempts bounded classifier refits inside the next item cycle, records shared-context-change triggers, and never serves an incompatible head. Round/stage/training caches include context identity. Specs verify candidate requests retain siblings, candidate answers cannot contaminate later baseline requests, stale-head invalidation preserves rubric, restart prediction rejects old context, and a real multi-wheel preparation refits before prediction within the same cycle. Focused specs pass; final full regression in progress. Production replay/objective comparisons and explicit shared refresh propagation remain unverified.",
+      "created_at": "2026-10-07T20:06:42.230256Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "5874bb54-c97e-4c96-9f1d-d430b97dbbd5",
+      "author": "home",
+      "text": "Final numerical/context regression: 731 Python specs pass after the bound-context candidate/baseline isolation fix. Added a clickable head-invalidated marker to the ML optimization lane; all 11 timeline/playback specs pass. The old head is never applied after a context change, even on restart, and its rubric remains intact. Complete final suite is running with the added timeline spec. No production labels or provider calls were changed by verification.",
+      "created_at": "2026-10-07T20:08:47.306272Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T19:56:40.754809Z",
+  "updated_at": "2026-10-07T20:08:47.306363Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

@@ -1,6 +1,14 @@
 from .trace_timeline import timeline_data
 
 
+def test_a_stale_head_is_inspectable_in_the_ml_optimization_lane():
+    event={'kind':'head-invalidated','created_at':'2026-10-07T12:00:00Z',
+        'reason':'decision feature context changed','previous_model_context':'old','model_context':'new'}
+    item=timeline_data([event])['items'][0]
+    assert item['group']=='classifier' and item['event_index']==0
+    assert item['content']=='ML head invalidated'
+
+
 def test_the_classifier_selection_outcome_is_clickable_in_the_ml_lane():
     data=timeline_data([{'kind':'classifier-training-completed','stage':'classifier',
         'promoted':True,'created_at':'2026-10-06T12:00:00Z'}])

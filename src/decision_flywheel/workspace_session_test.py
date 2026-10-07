@@ -9,6 +9,50 @@ from .observability import StepFailed
 from .flywheel_test import agent
 
 
+def test_a_sibling_change_refits_features_in_the_joint_context_before_the_next_prediction(tmp_path):
+    from dataclasses import replace
+    from .workspace_session import freeze_configuration
+    from .candidate_fitting import fit_candidate
+    from .models import Item,LabeledItem
+    from .flywheel_test import TRAIN,DEV
+    store=WebStore(tmp_path/'workspace.sqlite')
+    for cid in ('a','b'):
+        store.save_classifier(cid,cid,{'question':'Choose','classes':[{'label':'include'},{'label':'exclude'}]})
+    store.save_item_list('items','Items')
+    store.upsert_list_items('items',[{'id':'new','occurred_at':'2026-01-01','values':{'text':'yes new paper'}}])
+    config=freeze_configuration(store,{'classifier_ids':['a','b'],'item_list_id':'items','max_requests':100,
+        'max_optimizer_calls':0,'optimize_every':20,'rubric_changes_every':2,'seed':'test'})
+    run=store.create_run('Joint refit','live',config,items=store.list_items('items'))
+    class Model:
+        model_identity='fake';requests=[]
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.requests.append((configs,target))
+            probability=.8 if 'yes' in target.values['text'] else .2
+            return BatchedAnswers({cid:{'decision':DecisionResult('include' if probability>.5 else 'exclude',
+                {'include':probability,'exclude':1-probability})} for cid in configs},'fake',{},1)
+    model=Model();events=[];session=WorkspaceSession(store,run,tmp_path/'run',model,agent([]),events.append)
+    dev=(*DEV,*[LabeledItem(Item(r.item.id+'-extra',{'text':r.item.values['text']+' extra'}),r.label) for r in DEV])
+    session.partitions=lambda _: (TRAIN,dev,())
+    try:
+        session.shared.bind_context({cid:w.active.config for cid,w in session.wheels.items()},{cid:TRAIN for cid in session.wheels})
+        wheel=session.wheels['a']
+        fitted,_=asyncio.run(fit_candidate(wheel,wheel.active.config,TRAIN,dev,protected=(),
+            propensities={r.item.id:1. for r in TRAIN},validation_status='evaluated'))
+        wheel._activate(fitted)
+        sibling=session.wheels['b']
+        sibling._activate(replace(sibling.active,config=replace(sibling.active.config,rubric='New sibling criteria')))
+        shown=asyncio.run(session.prepare())
+        assert shown['item']['id']=='new'
+        assert all(set(configs)=={'a','b'} for configs,_ in model.requests)
+        assert any(e['kind']=='head-invalidated' and e['classifier_id']=='a' for e in events)
+        assert any(e['kind']=='step-started' and e.get('trigger')=='shared-context-change' for e in events)
+        prediction=next(e for e in reversed(events) if e['kind']=='prediction' and e['classifier_id']=='a')
+        if wheel.active.head:
+            assert wheel.active.head.provenance.source_model_provenance==wheel.model_context(wheel.active.config,TRAIN)
+        assert prediction['cycle_id']==next(e for e in events if e['kind']=='step-started' and e.get('trigger')=='shared-context-change')['cycle_id']
+    finally:session.close()
+
+
 def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_prediction(tmp_path):
     from .workspace_session import freeze_configuration
     from .flywheel import FittedClassifier, development_assignment
