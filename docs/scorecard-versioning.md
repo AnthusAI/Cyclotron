@@ -309,11 +309,18 @@ original expected feedback identity, so a concurrent update cannot silently
 replace the vote being edited. Inherited source feedback remains read-only;
 frozen replay runs do not offer editing controls.
 
-Closing the correction drawer or switching reviewed items retains unsaved edits
-within the current run workspace. Completing a correction discards only that
-item's draft, not drafts for other items. These editor drafts are in memory;
-unlike the labeling draft described above, they do not yet survive a page reload
-or leaving the run. Queued commands show pending feedback; failed or interrupted
+Closing the correction drawer, switching reviewed items, reloading the page, or
+leaving and returning to the run retains unsaved edits in browser session storage,
+scoped by run. Completing a correction discards only that item's draft, not drafts
+for other items. Stored snapshots are validated before use; unavailable storage
+does not prevent editing but cannot provide reload durability. These local drafts
+are not saved labels and do not transfer to another browser or device.
+
+If saved feedback changes after editing began, Save is disabled and the old draft
+is retained. **Discard draft and load saved feedback** explicitly replaces it with
+the current recorded vote; only a new human edit can then submit a correction.
+The server still checks the expected feedback identity for races after that check.
+Queued commands show pending feedback; failed or interrupted
 correction/undo commands expose **Recover feedback command** for explicit recovery
 of the original command, not a new paid retry.
 
