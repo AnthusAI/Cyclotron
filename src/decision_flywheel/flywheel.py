@@ -355,7 +355,9 @@ class DecisionFlywheel:
         serialized = _json(request)
         if len(serialized.encode()) > self.max_request_bytes:
             raise ValueError("complete decision request exceeds the configured byte safety ceiling")
-        key = _hash({"model": self.model.model_identity, "request": request})
+        identity = getattr(self.model, 'cache_identity', None)
+        model_identity = identity(config, target, training, now=now) if identity else self.model.model_identity
+        key = _hash({"model": model_identity, "request": request})
         row = self.db.execute("SELECT status,payload FROM runtime_answers WHERE key=?", (key,)).fetchone()
         self._emit({"kind": "decision-cache", "request_fingerprint": key,
                     "policy": options.policy, "status": row[0] if row else "missing",

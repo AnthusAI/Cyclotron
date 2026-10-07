@@ -27,6 +27,9 @@ class SharedDecisions:
     def close(self): self.db.close()
 
     async def prepare(self,configs,target,training,*,now=None,options=None):
+        # Prepared children belong to exactly one complete batch. A later
+        # scope must not silently retain answers from its predecessor.
+        self.prepared={}
         options=options or CacheOptions()
         now=now or datetime.now(timezone.utc)
         request,_=batch_request(configs,target,training,now=now)
@@ -67,6 +70,14 @@ class SharedDecisions:
         class Adapter:
             @property
             def model_identity(self):return shared.model.model_identity+':shared-v1:'+shared.identity
+            def cache_identity(self,config,target,training,*,now=None):
+                child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
+                if child in shared.prepared:
+                    fingerprint=shared.prepared[child][2]
+                else:
+                    request,_=batch_request({identifier:config},target,{identifier:training},now=now)
+                    fingerprint=key({'model':shared.model.model_identity,'request':request})
+                return shared.model.model_identity+':shared-answer-v2:'+fingerprint
             async def classify(self,config,target,training,*,now=None,event_sink=None):
                 child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
                 if child not in shared.prepared:

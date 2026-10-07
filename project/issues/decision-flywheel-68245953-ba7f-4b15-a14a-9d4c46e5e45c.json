@@ -91,10 +91,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "978d9556-0825-4dd5-ab5f-d12184213c22",
+      "author": "home",
+      "text": "Found and reproduced a shared-request cache defect: prepared child answers survived later batch-scope changes, while the engine fingerprint used the most recent global batch identity. Added specs for scope changes, identity stability before/after execution, sibling-rubric changes, and engine-level solo/joint separation. Prepared children now belong only to the latest batch; the engine uses an optional request-specific cache_identity adapter hook. Durable complete-batch cache remains reusable; old ambiguous engine entries are not reused under shared-answer-v2 keys. Five shared-cache specs and 14 focused coordinator/cache specs pass; full regression running. This does not yet prove that numerical heads trained from solo feature requests transfer safely to joint inference: joint-context feature provenance and sibling-change head invalidation/refitting remain a required acceptance gap. Explicit refresh propagation through shared adapter also needs verification.",
+      "created_at": "2026-10-07T19:56:40.754720Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T19:01:23.911063Z",
+  "updated_at": "2026-10-07T19:56:40.754809Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

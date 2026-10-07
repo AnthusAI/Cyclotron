@@ -303,6 +303,17 @@ the model identity and complete state/questions: target, rubric, ordered example
 and extra classifications. Changed requests require new answers; retraining a head
 alone can reuse unchanged decision answers.
 
+For shared scorecard calls, the answer key includes the complete joint request,
+including sibling classifiers. A solo answer is not interchangeable with a joint
+answer. Only the most recently prepared batch is eligible for in-memory reuse;
+older batches remain available through the durable exact-request cache.
+Adapters with request-dependent context can implement
+`cache_identity(config, target, training, *, now)` so the engine computes the
+correct answer key before execution. Other adapters use `model_identity`.
+The shared-answer key format is versioned; older engine answer entries remain
+stored but are not silently reused under the new key. The complete batch cache
+can still serve matching requests without another provider call.
+
 ```python
 from decision_flywheel.decision_cache import CacheOptions
 
