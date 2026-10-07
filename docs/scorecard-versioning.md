@@ -302,8 +302,20 @@ label-submission, replay and optimization jobs, since those can incur new model
 calls. It also refuses recovery while other run work is pending or while that
 run's scorecard edition is inactive. No automatic paid retry is introduced.
 
-The labeling UI still needs its scorecard correction/undo editor. These commands
-are the application interface, not a claim that this UI is complete.
+The scorecard labeling UI offers **Edit recorded feedback** and **Undo item
+labels** in right-hand drawers. Opening either drawer makes no changes. The
+correction editor sends only changed labels or explanations and retains the
+original expected feedback identity, so a concurrent update cannot silently
+replace the vote being edited. Inherited source feedback remains read-only;
+frozen replay runs do not offer editing controls.
+
+Closing the correction drawer or switching reviewed items retains unsaved edits
+within the current run workspace. Completing a correction discards only that
+item's draft, not drafts for other items. These editor drafts are in memory;
+unlike the labeling draft described above, they do not yet survive a page reload
+or leaving the run. Queued commands show pending feedback; failed or interrupted
+correction/undo commands expose **Recover feedback command** for explicit recovery
+of the original command, not a new paid retry.
 
 ## Paired output comparison
 

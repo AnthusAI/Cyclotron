@@ -9,6 +9,13 @@ import type {MetricClassifier} from './ClassifierMetrics'
 
 export type FeedbackJob={id:string;kind:string;status:string;result:Record<string,unknown>|null}
 type Vote={id:string;item:string;classifier:string;label:string;comment:string;readonly:boolean}
+type Edit={rows:Vote[];draft:Record<string,{label:string;comment:string}>}
+const emptyEdit:Edit={rows:[],draft:{}}
+function discardCompleted(edits:Record<string,Edit>,job:FeedbackJob){
+  const item=job.result?.corrected??job.result?.undone
+  if(typeof item!=='string')return edits
+  const remaining={...edits};delete remaining[item];return remaining
+}
 
 function currentVotes(events:TraceEvent[]){
   const votes=new Map<string,Vote>()
@@ -30,8 +37,12 @@ export function FeedbackControls({classifiers,events,jobs,busy,replay=false,onSu
   onResume:(id:string)=>Promise<FeedbackJob|null>;
 }){
   const [mode,setMode]=useState<'edit'|'undo'|null>(null),[item,setItem]=useState('')
-  const [draft,setDraft]=useState<Record<string,{label:string;comment:string}>>({})
-  const [rows,setRows]=useState<Vote[]>([])
+  const [edits,setEdits]=useState<Record<string,Edit>>({})
+  const {rows,draft}=edits[item]??emptyEdit
+  const setDraft=(update:(previous:Edit['draft'])=>Edit['draft'])=>setEdits(previous=>{
+    const edit=previous[item]
+    return edit?{...previous,[item]:{...edit,draft:update(edit.draft)}}:previous
+  })
   const [waiting,setWaiting]=useState<string|null>(null),[sending,setSending]=useState(false),[message,setMessage]=useState('')
   const votes=currentVotes(events),local=votes.filter(v=>!v.readonly)
   const items=[...new Set(local.map(v=>v.item))].reverse().slice(0,200)
@@ -43,23 +54,29 @@ export function FeedbackControls({classifiers,events,jobs,busy,replay=false,onSu
   useEffect(()=>{
     if(!waiting)return
     const job=jobs.find(j=>j.id===waiting)
-    if(job?.status==='completed'){setWaiting(null);setMode(null);setMessage('Feedback updated. Metrics use the saved original prediction.')}
+    if(job?.status==='completed'){setWaiting(null);setMode(null);setEdits(previous=>discardCompleted(previous,job));setItem('');setMessage('Feedback updated. Metrics use the saved original prediction.')}
     else if(job&&['failed','interrupted'].includes(job.status)){setWaiting(null);setMessage('Feedback needs attention. Recover the original command before trying another edit.')}
   },[jobs,waiting])
   if(replay)return null
-  const choose=(id:string)=>{const selected=votes.filter(v=>v.item===id);setItem(id);setRows(selected);setDraft(Object.fromEntries(selected.map(v=>[v.classifier,{label:v.label,comment:v.comment}])))}
+  const choose=(id:string)=>{
+    const selected=votes.filter(v=>v.item===id)
+    setItem(id)
+    // Keep the vote identity captured when editing began; newer streamed votes
+    // must not silently authorize an old draft against different feedback.
+    setEdits(previous=>previous[id]?previous:{...previous,[id]:{rows:selected,draft:Object.fromEntries(selected.map(v=>[v.classifier,{label:v.label,comment:v.comment}]))}})
+  }
   const perform=async(action:()=>Promise<FeedbackJob|null>)=>{
     setSending(true);setMessage('Recording feedback changes…')
     try{
       const job=await action()
       if(!job){setMessage('The command could not be confirmed. Your edit is retained.');return}
-      if(job.status==='completed'){setMode(null);setMessage('Feedback updated. Metrics use the saved original prediction.')}
+      if(job.status==='completed'){setMode(null);setEdits(previous=>discardCompleted(previous,job));setItem('');setMessage('Feedback updated. Metrics use the saved original prediction.')}
       else{setWaiting(job.id);setMessage('Feedback command queued. Waiting for the recorded result…')}
     }catch(error){setMessage((error as Error).message)}finally{setSending(false)}
   }
   const changes=rows.filter(v=>!v.readonly&&draft[v.classifier]&&(draft[v.classifier].label!==v.label||draft[v.classifier].comment!==v.comment))
   return <div className="space-y-2">
-    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={locked||!local.length} onClick={()=>{choose(items[0]);setMode('edit')}}><Pencil/>Edit recorded feedback</Button>
+    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={locked||!local.length} onClick={()=>{choose(items.includes(item)?item:items[0]);setMode('edit')}}><Pencil/>Edit recorded feedback</Button>
       <Button variant="outline" disabled={locked||!local.length} onClick={()=>setMode('undo')}><Undo2/>Undo item labels</Button>
       {failed?<Button variant="outline" disabled={locked} onClick={()=>void perform(()=>onResume(failed.id))}>Recover feedback command</Button>:null}</div>
     {message?<p role="status" className="text-xs text-muted-foreground">{message}</p>:null}
