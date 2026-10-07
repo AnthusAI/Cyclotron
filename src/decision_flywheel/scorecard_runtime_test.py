@@ -1,5 +1,6 @@
 """A scorecard application runtime owns the shared-request session details."""
 import asyncio
+import pytest
 
 from .batched_classification import BatchedAnswers
 from .flywheel_test import agent
@@ -8,6 +9,26 @@ from .scorecard_runtime import ScorecardRuntime
 from .web_store import WebStore
 from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
+
+
+def test_a_run_pins_its_optimizer_transport_even_when_the_scorecard_later_changes(tmp_path):
+    store=WebStore(tmp_path/'workspace.sqlite')
+    classifier=store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('papers','Papers')
+    store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Paper'}}])
+    scorecard=store.save_scorecard_definition('card','Card',classifiers=[{'id':'topic','revision':classifier['revision']}],
+        settings={'optimizer_transport':'litellm','optimizer_model':'anthropic/fake'})
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    run=runtime.create_run('Pinned transport',{'scorecard_id':scorecard['id'],'item_list_id':'papers'})
+    assert run['config']['optimizer_transport']=='litellm'
+    assert run['config']['optimizer_model']=='anthropic/fake'
+    store.save_scorecard_definition('card','Card',classifiers=scorecard['classifiers'],
+        settings={'optimizer_transport':'openai','optimizer_model':'fake-openai'})
+    assert store.run(run['id'])['config']['optimizer_transport']=='litellm'
+    newer=runtime.create_run('New transport',{'scorecard_id':scorecard['id'],'item_list_id':'papers'})
+    assert newer['config']['optimizer_transport']=='openai'
+    with pytest.raises(ValueError,match='transport'):
+        runtime.create_run('Invalid',{'scorecard_id':scorecard['id'],'item_list_id':'papers','optimizer_transport':'unknown'})
 
 
 def test_an_explicit_run_objective_overrides_saved_classifier_objectives_without_editing_definitions(tmp_path):

@@ -10,6 +10,28 @@ from decision_flywheel.models import DecisionTask, Item, LabeledItem
 from decision_flywheel.optimizer import TrialSpec, search_context_policies
 
 
+def test_a_litellm_optimizer_exposes_the_complete_human_context_and_returned_reply_in_the_normal_trace():
+    from decision_flywheel.adapters.litellm_optimizer import LiteLLMOptimizer
+    from decision_flywheel.optimizer_agent import FeedbackBriefing, OptimizerAgent
+    requests=[];events=[]
+    def complete(**kwargs):
+        requests.append(kwargs)
+        return SimpleNamespace(model='fake-returned',usage=None,choices=[SimpleNamespace(message=
+            SimpleNamespace(content='{"rubric":"Keep knowledge-base management research"}',tool_calls=None))])
+    briefing=FeedbackBriefing.build(TASK,[LabeledItem(Item('trusted',{'text':'An actual training abstract'}),'yes',
+        context={'human_feedback':'I want papers about managing knowledge bases'})],
+        current={'rubric':'','control_under_test':'rubric'},protected=[])
+    agent=OptimizerAgent(LiteLLMOptimizer(complete,model='ollama/fake'),observer=events.append)
+    proposal=agent.propose(briefing)
+    assert proposal['rubric']=='Keep knowledge-base management research'
+    request,response=events
+    assert request['kind']=='optimizer-request' and response['kind']=='optimizer-response'
+    assert request['messages']==requests[0]['messages']
+    assert 'I want papers about managing knowledge bases' in request['messages'][1]['content']
+    assert response['content']=='{"rubric":"Keep knowledge-base management research"}'
+    assert response['model']=='fake-returned'
+
+
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only the target.")
 CANDIDATES = [
     LabeledItem(Item(f"{label}-{number}", {"text": f"{label} demonstration {number}"}), label)

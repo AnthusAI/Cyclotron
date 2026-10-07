@@ -66,7 +66,7 @@ def main(argv=None):
     if host != '127.0.0.1' and not token and not args.allow_unauthenticated_lan:
         parser.error('LAN access requires FLYWHEEL_WEB_TOKEN in the environment')
     from .adapters.workspace import decision_adapter
-    from .adapters.openai_optimizer import OpenAIOptimizer
+    from .adapters.optimizer_transport import optimizer_transport
     from .optimizer_agent import OptimizerAgent
     from .reviewer import load_articles_jsonl
     from .web_api import create_app
@@ -74,11 +74,12 @@ def main(argv=None):
     import uvicorn
     store = WebStore(args.database)
     articles = tuple(asdict(article) for article in load_articles_jsonl(args.articles)) if args.articles else ()
-    redact = tuple(os.environ.get(key,'') for key in ('FLYWHEEL_WEB_TOKEN','TYPESAFE_API_KEY','OPENAI_API_KEY'))
+    from .credential_redaction import credential_values
+    redact = credential_values(os.environ)
     endpoint = f'http://127.0.0.1:{args.port}/graphql' if host == '0.0.0.0' else f'http://{host}:{args.port}/graphql'
     def model_factory(config):
         return (decision_adapter(config),
-                OptimizerAgent(OpenAIOptimizer.from_environment(model=config['optimizer_model'],max_calls=config['max_optimizer_calls'])))
+                OptimizerAgent(optimizer_transport(config)))
     service = WebWorker(store,args.database.parent / 'runs',articles=articles,allow_live=args.allow_live,
         sink_factory=lambda run_id:GraphQLTraceSink(endpoint,run_id,token=token),model_factory=model_factory,redact=redact)
     app = create_app(store,service=service,token=token,redact=redact,

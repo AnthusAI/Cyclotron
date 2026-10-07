@@ -59,7 +59,7 @@ class ScorecardRuntime:
         values = dict(config)
         allowed = {
             "selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
-            "rubric_changes_every", "seed", "decisions_model", "decisions_provider", "optimizer_model",
+            "rubric_changes_every", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
             "classifier_ids", "item_list_id", "scorecard_id", "scorecard_definition_revision",
         }
         if set(values) - allowed:
@@ -71,7 +71,7 @@ class ScorecardRuntime:
                 values["scorecard_id"], values.get("scorecard_definition_revision"),
             )
             settings = {key: value for key, value in definition["settings"].items()
-                        if key in {"selection_policy", "seed", "decisions_model", "decisions_provider", "optimizer_model",
+                        if key in {"selection_policy", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
                                    "optimize_every", "rubric_changes_every"}}
             if ('decisions_provider' in values and
                 values['decisions_provider']!=settings.get('decisions_provider','jev') and
@@ -94,6 +94,8 @@ class ScorecardRuntime:
         values.setdefault("seed", "arxiv-web-v1")
         values=normalize_decision_settings(values)
         values.setdefault("optimizer_model", "gpt-6-luna")
+        from .adapters.optimizer_transport import validate_optimizer_transport
+        values['optimizer_transport']=validate_optimizer_transport(values.get('optimizer_transport','openai'))
         values["evaluation_protocol"] = "protected-feedback-v1"
         values = freeze_configuration(self.store, values,selection_policy_override='selection_policy' in config)
         items: list[dict] = []

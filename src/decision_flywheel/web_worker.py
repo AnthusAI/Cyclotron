@@ -91,7 +91,7 @@ class WebWorker:
             raise ValueError('live collection is not enabled')
         config = {**config}
         if set(config) - {'selection_policy','max_requests','max_optimizer_calls','optimize_every','rubric_changes_every',
-                           'seed','decisions_model','optimizer_model'}:
+                           'seed','decisions_model','optimizer_model','optimizer_transport'}:
             raise ValueError('unknown run configuration option')
         for key, default in (('max_requests',500),('max_optimizer_calls',1000),('optimize_every',20),('rubric_changes_every',2)):
             value = config.setdefault(key,default)
@@ -105,6 +105,8 @@ class WebWorker:
         config.setdefault('seed','arxiv-web-v1')
         config.setdefault('decisions_model','jev-1.13.0')
         config.setdefault('optimizer_model','gpt-6-luna')
+        from .adapters.optimizer_transport import validate_optimizer_transport
+        config['optimizer_transport']=validate_optimizer_transport(config.get('optimizer_transport','openai'))
         config['evaluation_protocol']='protected-feedback-v1'
         config['class_config'] = [{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]
         config['dataset_fingerprint'] = hashlib.sha256(json.dumps(self.articles,sort_keys=True).encode()).hexdigest()

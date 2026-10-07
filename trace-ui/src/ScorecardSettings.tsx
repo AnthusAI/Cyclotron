@@ -8,6 +8,7 @@ const textFields=[['decisions_model','Decision model identifier'],['optimizer_mo
 type Settings=Record<string,unknown>
 type Policy={primary?:string;secondary?:string|null;aggregation?:string;max_secondary_regression?:number;minimum_secondary?:number|null}
 export function validScorecardSettings(settings:Settings){
+  if('optimizer_transport' in settings&&!['openai','litellm'].includes(String(settings.optimizer_transport)))return false
   for(const [key] of cadenceFields)if(key in settings&&(!Number.isSafeInteger(settings[key])||Number(settings[key])<1))return false
   const policy=settings.selection_policy as Policy|undefined
   if(policy){
@@ -34,6 +35,8 @@ export function ScorecardSettings({settings,onChange,disabled}:{settings:Setting
     <p className="text-xs text-muted-foreground">Blank values use application defaults. New runs pin these settings. Existing sessions do not change.</p>
     <div className="space-y-1"><Label htmlFor="scorecard-decisions_provider">Decision provider</Label><NativeSelect id="scorecard-decisions_provider" value={provider} onChange={e=>changeProvider(e.target.value)}><NativeSelectOption value="">Application default (Jev)</NativeSelectOption><NativeSelectOption value="jev">Jev</NativeSelectOption><NativeSelectOption value="kev">Kev (local server)</NativeSelectOption>{provider&&!['jev','kev'].includes(provider)?<NativeSelectOption value={provider}>{provider} (custom host required)</NativeSelectOption>:null}</NativeSelect></div>
     <p className="text-xs text-muted-foreground">Changing provider clears the model identifier so its default can apply. Kev uses the local server on port 8009. Laya scorecard optimization is not yet supported; it never falls back to Jev.</p>
+    <div className="space-y-1"><Label htmlFor="scorecard-optimizer_transport">Optimizer transport</Label><NativeSelect id="scorecard-optimizer_transport" value={String(settings.optimizer_transport??'')} onChange={e=>update('optimizer_transport',e.target.value||undefined)}><NativeSelectOption value="">Application default (OpenAI)</NativeSelectOption><NativeSelectOption value="openai">OpenAI</NativeSelectOption><NativeSelectOption value="litellm">LiteLLM (multiple providers)</NativeSelectOption></NativeSelect></div>
+    <p className="text-xs text-muted-foreground">LiteLLM requires the optional litellm-optimizer installation and a provider-qualified model identifier, such as anthropic/your-model or ollama/your-model. Provider credentials remain on the server. Unsupported JSON output fails explicitly; no automatic paid retry.</p>
     <div className="grid gap-3 sm:grid-cols-2">{textFields.map(([key,label])=><div key={key} className="space-y-1"><Label htmlFor={`scorecard-${key}`}>{label}</Label><Input id={`scorecard-${key}`} value={String(settings[key]??'')} onChange={e=>update(key,e.target.value.trim()||undefined)}/></div>)}
     {cadenceFields.map(([key,label])=><div key={key} className="space-y-1"><Label htmlFor={`scorecard-${key}`}>{label}</Label><Input id={`scorecard-${key}`} type="number" min="1" step="1" value={String(settings[key]??'')} onChange={e=>update(key,e.target.value===''?undefined:Number(e.target.value))}/></div>)}</div>
     <p className="text-xs text-muted-foreground">Only learning-eligible labels count toward triggers. Each classifier keeps its own cadence.</p>

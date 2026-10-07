@@ -18,21 +18,43 @@
       "author": "home",
       "text": "Accountability: this was an assistant-authored scope error, not a stale external requirement. DSPy is explicitly excluded; the epic now covers only native, provider-neutral optimization.",
       "created_at": "2026-09-30T20:23:41.957120Z",
-      "comment_type": "default"
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "7d84be37-79e2-4ef5-bd6b-f3e8b37ca896",
+      "author": "home",
+      "text": "Added explicit optional LiteLLM optimizer transport alongside the existing OpenAI default. Shared scorecard setting optimizer_transport is validated, frozen into new runs, retained through run-definition registration, and exposed in the scorecard editor. Native optimization, full-context request/response/tool-call tracing, failed-attempt ceilings, and zero SDK retries are preserved. Non-OpenAI environment credentials participate in trace redaction. Offline specs: 765 Python and 107 UI pass; build passes. Browser editor inspected and canceled without production writes. Server restarted only after idle check and SQLite backup; feedback 255, replay labels 765, events 39405 unchanged. Actual installed SDK smoke exposed an incomplete pre-existing LiteLLM package; repair and real-SDK offline smoke are in progress. No paid model calls or experiment reports.",
+      "created_at": "2026-10-07T21:36:24.292601Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "92530e4c-1d96-47e6-9431-d17bc3d877e0",
+      "author": "home",
+      "text": "Deployment follow-up: repaired the incomplete installed LiteLLM 1.103.1 distribution using its official PyPI wheel. Real LiteLLM completion with explicit mock_response and local model-cost map passes through the adapter without a provider call. Trusted-LAN server PID 48374 is running on port 8782; browser reload succeeds with no console errors. No production definition edits, labels, events, or jobs changed. Broader provider/live acceptance remains open.",
+      "created_at": "2026-10-07T21:36:59.846187Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-09-30T18:08:33.870714Z",
-  "updated_at": "2026-10-05T21:56:53.218191Z",
+  "updated_at": "2026-10-07T21:36:59.846308Z",
   "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-6",
-    "name": "Flywheel Planning"
-  },
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
 }

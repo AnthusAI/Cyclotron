@@ -1,5 +1,6 @@
 """Validate executable shared defaults without discarding extension metadata."""
 from .selection_policy import SelectionPolicy
+from .adapters.optimizer_transport import validate_optimizer_transport
 
 
 def validate_shared_settings(settings):
@@ -10,6 +11,8 @@ def validate_shared_settings(settings):
     for key in ('seed','decisions_model','optimizer_model','decisions_provider'):
         if key in settings and (not isinstance(settings[key],str) or not settings[key].strip()):
             raise ValueError(f'{key} must be a nonempty identifier')
+    if 'optimizer_transport' in settings:
+        validate_optimizer_transport(settings['optimizer_transport'])
     if 'selection_policy' in settings:
         policy=settings['selection_policy']
         if not isinstance(policy,dict):raise ValueError('selection policy must be structured')

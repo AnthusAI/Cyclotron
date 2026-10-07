@@ -64,11 +64,13 @@ def test_existing_run_editions_migrate_idempotently_without_rewriting_runs(tmp_p
 def test_run_definition_registration_retains_shared_trigger_cadences(tmp_path):
     store=WebStore(tmp_path/'db');classifier(store,'a');classifier(store,'b')
     store.save_item_list('list','List')
-    first=store.create_run('First','live',{'classifiers':[store.classifier('a')],'item_list_id':'list','optimize_every':7,'rubric_changes_every':3})
+    first=store.create_run('First','live',{'classifiers':[store.classifier('a')],'item_list_id':'list','optimize_every':7,'rubric_changes_every':3,
+        'optimizer_transport':'litellm'})
     extended=store.extend_scorecard(first['id'],['b'],name='Card')
     definition=store.run_scorecard_definition(extended['id'])
     assert definition['settings']['optimize_every']==7
     assert definition['settings']['rubric_changes_every']==3
+    assert definition['settings']['optimizer_transport']=='litellm'
 
 
 def test_run_edition_numbers_cannot_overwrite_independent_definition_revisions(tmp_path):

@@ -354,12 +354,28 @@ passing tests does not establish live-model quality or improvement.
 | --- | --- |
 | Human votes, comments, skip, and undo | Available in the reviewer |
 | Fixed example selection | Optimizer proposes a list; code validates it and measures the candidate |
-| LLM analysis of feedback | Injected optimizer interface; opt-in OpenAI transport |
+| LLM analysis of feedback | Injected optimizer interface; opt-in OpenAI or LiteLLM transport |
 | Rubric and classification-task changes | Validated structured proposals, applied to the actual request |
 | Feature conversion and ML fit | Connected to the core; trusted fitting and out-of-fold calibration |
 | Candidate evaluation and promotion | Same-development Brier comparison; incumbent retained on failure |
 | Optimizer and Jev inspection | Actual local prompts, replies, tool calls, request state/questions and answers |
 | Live performance | Must be measured; no guaranteed improvement |
+
+### Optimizer transports
+
+The scorecard editor's **Optimizer transport** selects `openai` (the existing
+default) or `litellm`. For the latter, install
+`pip install -e '.[litellm-optimizer]'`, then set the optimizer model to a
+LiteLLM provider-qualified identifier, such as `anthropic/your-model` or
+`ollama/your-model`. Configure credentials through the server environment or its
+gitignored `.env`, never through scorecard settings. Runs pin the transport and
+model; editing a definition does not change an existing run. The native optimizer
+and its proposal validation stay the same—this is not DSPy. Both transports
+retain returned usage and tool calls, count failed attempts against the call
+ceiling, and disable hidden retries. Models must support JSON-object output;
+unsupported output settings fail rather than silently being dropped. See
+[LiteLLM's input parameters](https://docs.litellm.ai/docs/completion/input) and
+[JSON output documentation](https://docs.litellm.ai/docs/completion/json_mode).
 
 ## Terms
 
