@@ -105,10 +105,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "19291509-b27d-4cb6-bbf6-28c8c422239d",
+      "author": "home",
+      "text": "Browser verification: real older interactive run loads classifier cards and honestly reports no paired raw/final snapshot rather than reconstructing one. Separate offline fixture served through actual FastAPI/GraphQL/SQLite renders completed comparison metrics/calibration, and Inspect opens selected full state/questions plus response and protected scoring labels. No browser errors; no real votes or paid calls. Screenshot saved privately at var/web/comparison-browser-proof.png. Viewport override did not produce the requested tablet dimensions (observed 1280x960), so tablet acceptance remains unproven. Found and fixed legacy records with absent human labels being colored wrong and treated as disagreements; regression spec passes (6 UI specs), build passes. Resume, dark/tablet, and live updated comparison snapshot acceptance remain open.",
+      "created_at": "2026-10-07T17:51:23.980454Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T17:49:01.603382Z",
+  "updated_at": "2026-10-07T17:51:23.980560Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

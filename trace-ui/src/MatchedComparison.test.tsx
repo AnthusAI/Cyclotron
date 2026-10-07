@@ -49,3 +49,10 @@ test('item inspection fetches only the selected recorded exchange',async()=>{
   await screen.findByText(/No item trace was recorded/)
   expect(vi.mocked(graphql).mock.calls[0][1]).toEqual({run:'comparison',event:12})
 })
+test('missing historical human labels are unknown not colored or filtered as disagreements',()=>{
+  render(<MatchedComparisonResult status="completed" result={{sample_count:1,classifiers:{},records:[{endpoint:'before',classifier_id:'topic',item_id:'unlabeled',label:'yes',decision_model_label:'no'}]}} />)
+  expect(screen.getByText('Not recorded')).toBeVisible()
+  expect(screen.getByRole('cell',{name:'yes'})).not.toHaveClass('text-destructive')
+  fireEvent.click(screen.getByLabelText('Only disagreements'))
+  expect(screen.queryByText('unlabeled')).toBeNull()
+})
