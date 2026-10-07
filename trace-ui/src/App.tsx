@@ -11,12 +11,11 @@ import {ExchangePanel} from './ExchangePanel'
 import {PlaybackCalibration} from './ReliabilityCurve'
 import {PlaybackModelComparison} from './ModelComparison'
 import {CyclotronBrand} from './CyclotronBrand'
+import {LabMetrics} from './components/lab-metrics'
 
 export type Counts={predictions:number;labels:number;optimizations:number;events:number}
 type Endpoint={accuracy:number|null;precision:number|null;recall:number|null}
 export type RunComparison={scope:string;sample_count:number;class_counts:Record<string,number>;before:Endpoint;after:Endpoint}
-const percent=(value:number|null|undefined)=>value==null?'Undefined':`${(value*100).toFixed(1)}%`
-
 export function App({counts,comparison,embedded=false}:{counts:Counts;comparison?:RunComparison|null;embedded?:boolean}) {
   return <>
     <div className="app-shell">
@@ -28,15 +27,9 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
         {!embedded&&<div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>}
         <details className="run-statistics text-muted-foreground">
           <summary className="cursor-pointer text-xs font-medium">Run statistics</summary>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {([['Recall','recall'],['Precision','precision'],['Accuracy','accuracy']] as const).map(([title,key])=>{
-            const before=comparison?.before[key],after=comparison?.after[key]
-            const delta=before!=null&&after!=null?(after-before)*100:null
-            return <Card key={key} className="gap-2 py-4"><CardHeader className="px-4 pb-0"><p className="text-sm font-medium text-foreground">{title}</p></CardHeader><CardContent className="px-4">
-              {comparison?<><div className="flex items-center justify-between gap-2 font-mono text-xl font-medium"><div><p className="mb-1 font-sans text-xs font-normal text-muted-foreground">Before</p>{percent(before)}</div><span className="text-muted-foreground">→</span><div><p className="mb-1 font-sans text-xs font-normal text-muted-foreground">After</p>{percent(after)}</div></div><p className="mt-2 text-xs text-muted-foreground">{delta==null?'Change unavailable':`${delta>=0?'+':''}${delta.toFixed(1)} pp`}</p></>:<p className="text-xs text-muted-foreground">Matched comparison not recorded</p>}
-            </CardContent></Card>
-          })}
-          </div>
+          {comparison
+            ? <div className="mt-3"><LabMetrics metrics={([['Recall','recall'],['Precision','precision'],['Accuracy','accuracy']] as const).map(([name,key])=>({name,before:comparison.before[key],after:comparison.after[key]}))} /></div>
+            : <p className="mt-3 text-xs text-muted-foreground">Matched comparison not recorded</p>}
           {comparison&&<p className="mt-2 text-xs leading-relaxed">{comparison.scope} · {comparison.sample_count} items · {Object.entries(comparison.class_counts).map(([label,count])=>`${label}: ${count}`).join(' · ')}. Precision and recall use the configured positive class. Small class counts make these estimates uncertain; undefined means no applicable denominator.</p>}
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">{([['Predictions',counts.predictions],['Human feedback',counts.labels],['Optimizer requests',counts.optimizations],['Events',counts.events]] as const).map(([label,count])=><span key={label}>{label}: <span className="font-mono">{count}</span></span>)}</div>
         </details>
