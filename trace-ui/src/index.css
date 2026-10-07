@@ -66,6 +66,8 @@ h1,h2,h3,h4,h5,h6,[data-slot="card-title"],.font-heading {font-family:'Blinker',
 .cyclotron-tagline {grid-column:1 / -1;font-family:'Blinker',sans-serif;font-size:.625rem;font-weight:400;letter-spacing:.08em;line-height:1.3;color:var(--muted-foreground)}
 .app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .app-shell > header {flex-shrink:0}
+.app-header {--app-header-height:4.625rem;position:relative;z-index:50}
+.mobile-navigation-panel {padding-top:var(--app-header-height)}
 .explorer-main {display:flex;flex-direction:column;flex:1;min-height:0}
 .explorer-main > :not(.workspace) {flex-shrink:0}
 .run-statistics {max-height:160px;overflow:auto}
