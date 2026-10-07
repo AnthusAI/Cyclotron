@@ -90,7 +90,10 @@ Close controls and drawer footer buttons have explicit 44-pixel minimum touch
 targets; drawer headers and footers include safe-area padding. Drawer content
 scrolls independently of its pinned header and actions. Ordinary vertical scroll
 navigates content; horizontal scroll pans the timeline; pinch and zoom buttons
-control timeline scale. There is no separate fullscreen mode.
+control timeline scale. **Fit all cycles** restores the entire recorded range
+after zooming, rather than a fixed window around the selected event. Previous,
+Next and Play advance through recorded events; playback makes no model calls.
+There is no separate fullscreen mode.
 
 The labeling workspace has a compact **Flywheel activity** summary, separate
 from acknowledgement that feedback was saved. It names the classifier and stage,

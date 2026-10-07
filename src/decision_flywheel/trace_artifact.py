@@ -370,7 +370,7 @@ function zoomView(factor,anchor=.5){
 }
 el('zoom-in').onclick=()=>zoomView(.5);
 el('zoom-out').onclick=()=>zoomView(2);
-el('fit-all').onclick=()=>{const window=timeline.getWindow(),width=Math.min(maximum,4000);setView((+window.start+ +window.end-width)/2,width);};
+el('fit-all').onclick=()=>setView(0,maximum);
 // Capture before vis-timeline: its default wheel path treats diagonal/horizontal
 // trackpad gestures as zoom. Ordinary scrolling navigates; only pinch zooms.
 let wheelAxis=null,lastWheelAt=-Infinity;
