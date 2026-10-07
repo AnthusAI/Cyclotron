@@ -307,6 +307,17 @@ complete-request budget, numerical refitting, and promotion checks. Its recorded
 Rubric and example stages cannot change dynamic inputs. Retrieval and long-text
 filter optimization remain deferred.
 
+Numerical training compares retained question measurements against the same
+incumbent. Each addition, wording/answer-option revision, or removal changes one
+question only; all other questions, rubric, and examples remain fixed. Alternative
+measurements with the same question name are separate candidates, not silently
+discarded by name. Both natural and equal-class fits use the configured objective
+and safeguards. Only the winning candidate is activated, with freshly fitted
+feature columns and calibration provenance. Removing a deployed question does
+not delete its retained hypothesis, so later feedback can justify another trial.
+Request ceilings still apply to the search; interrupted work requires explicit
+recovery rather than automatic paid retries.
+
 Correction itself makes no model calls and does not automatically optimize.
 The next normal prediction uses the reconciled state; an explicit optimization
 command can rebuild it sooner. Explicit recovery after a lost trace/API

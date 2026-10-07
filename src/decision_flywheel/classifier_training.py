@@ -23,24 +23,30 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                   "reason": "waiting for development class coverage", "minimum_development_per_class": min_development_per_class}
         wheel._emit({"kind": "classifier-training-completed", **result})
         return result
-    # Keep the incumbent's questions. Add one retained revision per new concept;
-    # revisions already deployed are not silently replaced by a bank entry.
+    # All trials share the incumbent. Wording revisions and removals change one
+    # question at a time; discovery never silently replaces a deployed feature.
     tasks = [{"name": t.name, "instructions": t.instructions, "labels": list(t.labels)} for t in wheel.active.config.tasks]
-    names = {t["name"] for t in tasks}
     additions = []
+    revisions = []
     for entry in wheel.feature_bank():
-        if entry["question"]["name"] not in names:
-            additions.append(entry["question"])
-            names.add(entry["question"]["name"])
+        question = entry['question']
+        current = next((task for task in tasks if task['name'] == question['name']), None)
+        if current is not None and current != question:
+            revisions.append((f"revision:{entry['id']}",
+                [question if task['name'] == question['name'] else task for task in tasks]))
+        elif current is None:
+            additions.append((entry['id'], question))
     configs = [("current", tasks)]
-    if additions:
-        configs.append(("retained_questions", tasks + additions))
+    configs.extend((f"addition:{key}", tasks + [question]) for key, question in additions)
+    configs.extend(revisions)
+    configs.extend((f"without:{task['name']}", [other for other in tasks if other['name'] != task['name']])
+                   for task in tasks)
     evidence = {"version": wheel.active.fingerprint, "training": wheel._evidence(training),
                 "model_context": wheel.model_context(wheel.active.config, training),
                 "optimizer_context": wheel.optimizer_context,
                 "development": wheel._evidence(development), "protected": sorted(i.id for i in protected),
                 "propensities": propensities, "bank": [e["id"] for e in wheel.feature_bank()], "floor": min_development_per_class,
-                "apply_promotion": apply_promotion, "policy": "balanced-brier-no-recall-regression-v1",
+                "apply_promotion": apply_promotion, "policy": "question-revisions-and-ablation-v2",
                 "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None}
     key = _hash(evidence)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS classifier_training (id TEXT PRIMARY KEY, status TEXT, payload TEXT)")

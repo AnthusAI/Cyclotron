@@ -47,10 +47,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "533a0f07-e45f-49d4-a1ae-b7a44cb6349e",
+      "author": "home",
+      "text": "Fixed numerical question-selection gaps found in the end-to-end audit. Active-name wording/answer-option revisions were previously skipped, and new-concept alternatives were silently deduplicated by name. Training now compares each retained addition or revision independently against one incumbent, plus one-question removal candidates. Other rubric/examples/questions stay fixed per structural candidate. Successful fake-model specs prove revision promotion, changed probability feature columns, restart persistence, a winning removal reaching the next actual request, and retained hypotheses remaining available. New failing specs preceded implementation. Cache protocol updated; unchanged completed fitting still resumes without calls. No paid requests, no user-label changes, no experiment report. Keep open for the remaining broader proposal and application acceptance audit.",
+      "created_at": "2026-10-07T23:53:47.098898Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.282413Z",
-  "updated_at": "2026-10-07T23:47:23.700744Z",
+  "updated_at": "2026-10-07T23:53:47.098981Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
