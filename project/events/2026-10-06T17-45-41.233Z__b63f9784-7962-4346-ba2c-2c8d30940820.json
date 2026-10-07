@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b63f9784-7962-4346-ba2c-2c8d30940820",
+  "issue_id": "decision-flywheel-1178983b-12e0-4de2-8cea-ca82945f664e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T17:45:41.233Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Activate and refine provisional rubrics with bounded class-aware evaluation",
+    "description": "Fix cold-start empty rubric and undersized evaluation gates. Initialize nonempty working rubric, refine provisionally, invalidate stale head and refit separately. Persist truthful activation status and full exchanges. Cap each candidate development evaluation at 200 samples with recent stratified selection; expose configurable decaying recency Brier allowance based on scarce-class coverage. Retain unaccepted hypotheses for later evaluation. Verify with offline specs and bounded operational replay; do not claim majority accuracy establishes alignment.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

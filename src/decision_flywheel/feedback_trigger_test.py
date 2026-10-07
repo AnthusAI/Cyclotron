@@ -38,3 +38,12 @@ def test_retractions_remove_votes_from_the_sequence_but_do_not_trigger_optimizat
     check = LabelTransitionTrigger().check(events)
     assert not check['due']
     assert check['details']['transition_count'] == 0
+
+
+def test_protected_votes_neither_increment_transition_counts_nor_fire_learning_checks():
+    events=[vote(1,'a'),{**vote(2,'b'),'assignment':'scoreboard'},vote(3,'a')]
+    check=LabelTransitionTrigger(1).check(events)
+    assert not check['due']
+    assert check['details']['transition_count']==0
+    events.append({**vote(4,'b'),'assignment':'final_audit'})
+    assert not LabelTransitionTrigger(1).check(events)['due']

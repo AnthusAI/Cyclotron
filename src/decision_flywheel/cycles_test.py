@@ -58,3 +58,21 @@ def test_an_unfinished_cycle_can_resume_after_restart_without_predicting_again(t
     assert reopened.history()[-1]['kind']=='cycle-completed'
     assert reopened.resume_cycle(item) is None
     reopened.close()
+
+
+def test_a_waiting_review_survives_a_later_completed_optimization_cycle(tmp_path):
+    item=Item('waiting-paper',{'text':'yes paper'})
+    wheel=DecisionFlywheel(tmp_path/'runtime.sqlite3',ClassifierConfig(TASK),FakeModel(),agent([]))
+    cycle=wheel.cycle(item).__enter__()
+    asyncio.run(wheel.predict(item,()))
+    expected=cycle.context['cycle_id']
+    cycle.suspend()
+    with wheel.cycle(Item('older-paper',{'text':'previously reviewed'}),reason='optimization-resume'):
+        pass
+    resumed=wheel.resume_cycle(item)
+    assert resumed is not None
+    assert resumed.context['cycle_id']==expected
+    assert wheel.model.calls==1
+    resumed.__exit__(None,None,None)
+    assert wheel.resume_cycle(item) is None
+    wheel.close()

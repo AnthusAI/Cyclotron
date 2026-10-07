@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "52c0959a-8e12-477c-8b2b-865a476284b1",
+  "issue_id": "decision-flywheel-68245953-ba7f-4b15-a14a-9d4c46e5e45c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T21:39:41.885Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Coordinate multiple classifiers in shared decision requests and independent flywheel sessions",
+    "description": "Use catalog classifier revisions and source-neutral item lists for live/replay sessions. Batch compatible classifiers in one decision request with scoped rubric/examples/questions and mapped outputs. Maintain independent heads, feedback and trigger/optimization state. Cache complete shared requests; count usage once. Connect catalog labels/explanations to optimization without future-label leakage. Existing arXiv worker is not completion of this general coordinator.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

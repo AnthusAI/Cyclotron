@@ -1,0 +1,62 @@
+{
+  "id": "decision-flywheel-678d1333-e8e8-4e80-a46b-d80222363450",
+  "title": "Verify and document the versioned scorecard app end to end",
+  "description": "Acceptance milestone covering migration, GraphQL contracts, restart/idempotency, interactive and replay cycles, joint requests, immutable labels/explanations, version comparison/revert, reachable classifier Save buttons, drawers and full-viewport tablet UX. All automated tests fake clients/no keys; browser test real deployed local app in desktop and iPad-sized viewports with no fabricated human votes. Verify timeline requests/responses and calibration snapshots through API/storage/UI, and Play/seek/zoom/pan. Preserve existing Anthus v1/v2 data; document what is implemented versus remaining. Publish concise usage/model/versioning/metrics/calibration semantics and operator recovery instructions. No promise calibration or accuracy always improves; compare on matched eligible evidence. User live labeling remains resumable and no paid run begins merely to view UI.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-814a43a6-542c-449a-96a6-94f7c35304e6",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-59199373-0c9f-4e08-9371-84545a967bbb",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-68399731-c9a4-4381-bc5b-b0346abec0f9",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-bd17637e-ee17-4109-997e-115a3e658cc1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-42d202c8-9635-4748-81fd-10d1bc46dc70",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "803fbe21-2d5f-4381-bddb-b830783032d7",
+      "author": "home",
+      "text": "Current verification: 618 offline Python specs passing; frontend build passing. Browser confirmed reachable run-creation drawer, canonical Scorecards navigation, nested pinned classifier revisions and paired real optimizer request/response with human explanations. Existing Anthus v2 session remains 1 cycle, 0 labels, 0 optimizer calls. Remaining end-to-end acceptance includes replay restart/pause, protected matched-version comparison, classifier-history inspection, scorecard deep links, and tablet/dark/keyboard checks. No issues closed merely from passing specs.",
+      "created_at": "2026-10-07T16:19:54.442193Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "978769f1-b205-45e5-946d-76c7b15d0fb8",
+      "author": "home",
+      "text": "Verification update: 62 offline UI specs and production build pass. Deployed historical Anthus timeline exposes paired raw/final comparison disclosure and correctly reports unavailable older snapshots without manufacturing evidence. Fixed protected-label cadence across scorecard, legacy reviewer and sequential replay; sequential replay now emits the same latest-200 calibration/paired metrics as interactive sessions. Added no-network 205-cycle window regression and playback event dispatch forward/reverse regression. Remaining acceptance is unchanged: protected matched-run comparison, responsive/dark/keyboard tests, and actual multi-cycle calibration browser proof.",
+      "created_at": "2026-10-07T17:04:55.272779Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:11.067923Z",
+  "updated_at": "2026-10-07T17:04:55.272865Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

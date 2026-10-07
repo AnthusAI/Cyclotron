@@ -1,0 +1,59 @@
+{
+  "id": "decision-flywheel-68399731-c9a4-4381-bc5b-b0346abec0f9",
+  "title": "Integrate run history and navigation with accessible slide-out drawers",
+  "description": "Provide a left slide-out history drawer for optimization runs/interactive sessions and edition history, scoped to selected scorecard with search/filter and active/inspected distinction. Keep it closed during focused labeling by default; do not permanently consume labeling width. Provide app-level navigation accessible at narrow sizes, deep links and browser back/forward preserving selected scorecard/run/view. Drawer opening is local UI state, not a run mutation; retain current item, pending job and unsaved comments/labels on close or navigation cancellation. Focus management, Escape, backdrop dismissal, accessible names and touch targets. Acceptance: open history, inspect another run, return to active session with drafts intact; tablet overlay never obscures unreachable dismiss/actions; inactive editions clearly read-only until explicitly activated.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-0049a23a-7dc0-4dcc-980f-9548e6e67be0",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-814a43a6-542c-449a-96a6-94f7c35304e6",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "5c68eb62-9886-4aa8-8726-ce50677d0802",
+      "author": "home",
+      "text": "History now uses a dismissible left drawer instead of permanent side column. Selecting a run or creating a run closes drawer; current item remains mounted while opening/closing it. Remaining: scorecard-scoped filtering/search, proper browser back/forward and preservation of drafts when switching runs.",
+      "created_at": "2026-10-07T15:49:02.160857Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "8f77b8d7-c625-4e1b-b88f-9c48a173f3c8",
+      "author": "home",
+      "text": "Added browser back/forward route restoration, run-name search and scorecard filtering. Unsent multi-classifier labels and explanations persist per immutable prediction presentation in session storage; unavailable/malformed storage does not block labeling. New-run setup moved from inline cards to a dismissible right drawer; browser checked Create run reachable at 720px height, closing returns to unchanged live item. Remaining: selected scorecard deep links, edition read-only distinction, tablet and keyboard acceptance across run switching.",
+      "created_at": "2026-10-07T16:13:37.947040Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "8bfeb03b-41d1-4c33-9db6-1dae31893533",
+      "author": "home",
+      "text": "Selected scorecard now has a scorecard=<id> deep link. WebApp preserves this routing parameter and browser Back restores the selected card; tested in components and live Anthus browser. No configuration changes, human labels, or model calls were produced by navigation. Remaining: inspected revision deep links, inactive-edition read-only distinction and tablet/keyboard cross-run draft acceptance.",
+      "created_at": "2026-10-07T16:31:04.813834Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:04.550216Z",
+  "updated_at": "2026-10-07T16:31:04.813916Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

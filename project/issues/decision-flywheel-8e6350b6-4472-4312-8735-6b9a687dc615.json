@@ -1,0 +1,71 @@
+{
+  "id": "decision-flywheel-8e6350b6-4472-4312-8735-6b9a687dc615",
+  "title": "Build local FastAPI GraphQL workspace with SQLite run history and interactive labeling",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "aad9a956-bf4d-4d32-aa51-e668705b8eba",
+      "author": "home",
+      "text": "Architecture recorded in docs/web-workspace-plan.md. API is the authoritative event source: runner must ingest exact requests/responses, triggers, labels, configurations and fitting/metrics via GraphQL with commit acknowledgements, stable identities and cursor reconnect. React/shadcn retains current timeline inspector. SQLite run catalog and serialized durable commands drive the existing engine. No new flywheel. Live confirmation/ceilings, protected comments excluded, undo retained. Objective comparisons wait for web-cycle acceptance.",
+      "created_at": "2026-10-06T20:25:51.019662Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "7f19c9d4-f545-41ae-81c8-8714e192e06f",
+      "author": "home",
+      "text": "Implemented local FastAPI/Strawberry GraphQL application, SQLite catalog/events/jobs/items, acknowledged idempotent GraphQLTraceSink, cursor subscriptions, arXiv label/comment/undo UI, serialized existing-engine worker, and API-backed recorded timeline. Engine optimizer context and decision exchanges tested end-to-end through API with fake clients. Offline export and online client bundles are separated. Local app runs on 8782; one real prediction is being checked without submitting human labels. Remaining: full browser optimization cycle, incremental live timeline updates, operator recovery for failed trace delivery, objective comparison runs and protected audit reports.",
+      "created_at": "2026-10-06T20:49:05.097546Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "8f830445-2058-4281-b099-e7d236ff9f6c",
+      "author": "home",
+      "text": "Browser verification succeeded: recorded history and protected before/after metrics rendered from API-owned SQLite data; subscription showed Connected. Created independent Interactive arXiv F1 live run and prepared one article: 8 committed events, real Jev prediction Exclude 53%, full decision state/examples/rubric and questions inspectable. No human votes submitted. Fake integration separately verifies optimizer request includes human explanations and optimizer response plus decision request/response persist via GraphQL. 570 Python and 11 frontend tests pass. Not yet complete: live optimizer cycle browser verification, incremental live timeline, failure-delivery recovery and matched objective comparisons.",
+      "created_at": "2026-10-06T20:50:11.050162Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "8c1daab9-f8e2-4380-a020-e4288d48ee3a",
+      "author": "home",
+      "text": "Restored the web run explorer: open existing optimizer history by default, retain selected run/view in URL, expose per-run cycle/label/optimizer counts, identify Interactive vs Replay, remove Local/GraphQL/SQLite badge and duplicate embedded headers, show loading feedback, and prevent hidden item-panel scrolling from separating events from lane labels. Added reusable unfinished-cycle resume and worker restart test: feedback references the original displayed prediction and cycle with zero repeated model calls. Browser verified replay has 87 cycles/87 labels/11 optimizer calls and clicking rubric cell opens exact request 201/response 202. 573 Python and 16 frontend specs pass. Plan now explicitly defines shared engine/events for interactive and frozen-label replay input sources. In-app replay launching/parameter controls and incremental timeline updates remain unfinished; do not treat imported playback as completion of replay execution controls.",
+      "created_at": "2026-10-06T21:12:01.264838Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "bbd8bfe3-74ea-4300-8bb4-4ecd90761904",
+      "author": "home",
+      "text": "Planning update: epic flywheele0 now owns scorecard-first navigation, immutable scorecard/classifier revisions, permanent viewport app layouts, history/activity drawers, calibration snapshots and playback, and end-to-end acceptance. Existing implementation is retained as partial groundwork; do not mark this complete from draft code or imported historical traces. No further implementation or live reruns during this planning turn.",
+      "created_at": "2026-10-07T14:54:53.272580Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T20:24:22.737289Z",
+  "updated_at": "2026-10-07T14:54:53.272662Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

@@ -36,3 +36,6 @@ def test_each_class_records_precision_and_the_full_confusion_matrix():
     assert result['per_class']['a']['precision'] == 1
     assert result['per_class']['b']['precision'] == .5
     assert result['confusion_matrix'] == {'a':{'a':1,'b':1},'b':{'a':0,'b':1}}
+def test_candidate_evaluation_still_rejects_missing_distributions_instead_of_optimizing_partial_losses():
+    with __import__('pytest').raises(ValueError,match='declared labels'):
+        classification_metrics(('yes','no'),['yes'],['yes'],[None])

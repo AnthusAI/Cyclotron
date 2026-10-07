@@ -1,0 +1,53 @@
+{
+  "id": "decision-flywheel-68245953-ba7f-4b15-a14a-9d4c46e5e45c",
+  "title": "Coordinate multiple classifiers in shared decision requests and independent flywheel sessions",
+  "description": "Use catalog classifier revisions and source-neutral item lists for live/replay sessions. Batch compatible classifiers in one decision request with scoped rubric/examples/questions and mapped outputs. Maintain independent heads, feedback and trigger/optimization state. Cache complete shared requests; count usage once. Connect catalog labels/explanations to optimization without future-label leakage. Existing arXiv worker is not completion of this general coordinator.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f8bff1ed-196e-4f02-bf67-7c9d0dbcc66b",
+      "author": "home",
+      "text": "Implemented classifier/item-list revisioned catalog, independent per-classifier item feedback and corrections, GraphQL API and navigation/labeling screens. Imported 250 saved arXiv articles through external chronological idempotent updater; no provider calls. Added native Jev classify_many transport with scoped rubric/examples/questions, mapped outputs and usage counted once. Remaining: general worker/coordinator, connecting catalog labels into learning, complete-request cache, attaching live/replay run configurations and migrating historical label provenance (do not silently reuse across new classifier revisions). No fresh optimization study executed.",
+      "created_at": "2026-10-06T21:41:08.250793Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "f1b9065c-364e-421f-b40d-e2fb312ad06f",
+      "author": "home",
+      "text": "Implemented source-neutral WorkspaceSession using existing DecisionFlywheel per classifier; full-batch durable cache and run-wide request ceiling; shared Jev predictions, independent labels/comments and learning triggers; classifier-filtered timelines and stored item results. Fake GraphQL integration and restart specs pass. Browser verified classifier navigation and interactive setup; real Jev prediction shown in run 67c0390b-05aa-4bce-af2c-687f0bf0c532, request inspector opened, no human votes fabricated. Initial worker command failed before any batch attempt; direct retry prepared successfully and restarted API worker recovered current prediction without another model call. Added safe code-location diagnostics for future failures. Remaining: in-app replay launch, correction/learning rollback, extended multi-classifier learning-round integration verification.",
+      "created_at": "2026-10-06T22:01:35.763633Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "6adfdc1e-10eb-4bed-8dfe-69d8dd2ab2f4",
+      "author": "home",
+      "text": "Planning update: epic flywheele0 now owns scorecard-first navigation, immutable scorecard/classifier revisions, permanent viewport app layouts, history/activity drawers, calibration snapshots and playback, and end-to-end acceptance. Existing implementation is retained as partial groundwork; do not mark this complete from draft code or imported historical traces. No further implementation or live reruns during this planning turn.",
+      "created_at": "2026-10-07T14:54:53.956085Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T21:39:41.885072Z",
+  "updated_at": "2026-10-07T14:54:53.956155Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0eb65ede-2f17-4dd5-af02-736b8750e873",
+  "issue_id": "decision-flywheel-68399731-c9a4-4381-bc5b-b0346abec0f9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:04.550Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Integrate run history and navigation with accessible slide-out drawers",
+    "description": "Provide a left slide-out history drawer for optimization runs/interactive sessions and edition history, scoped to selected scorecard with search/filter and active/inspected distinction. Keep it closed during focused labeling by default; do not permanently consume labeling width. Provide app-level navigation accessible at narrow sizes, deep links and browser back/forward preserving selected scorecard/run/view. Drawer opening is local UI state, not a run mutation; retain current item, pending job and unsaved comments/labels on close or navigation cancellation. Focus management, Escape, backdrop dismissal, accessible names and touch targets. Acceptance: open history, inspect another run, return to active session with drafts intact; tablet overlay never obscures unreachable dismiss/actions; inactive editions clearly read-only until explicitly activated.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

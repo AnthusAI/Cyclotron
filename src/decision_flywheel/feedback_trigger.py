@@ -1,6 +1,11 @@
 """Reusable label-transition triggers derived from durable feedback, not UI state."""
 from dataclasses import dataclass
 
+PROTECTED_ASSIGNMENTS=frozenset(('scoreboard','rolling_audit','final_audit'))
+
+def learning_feedback(event):
+    return event.get('kind')=='human-feedback' and event.get('assignment') not in PROTECTED_ASSIGNMENTS
+
 
 @dataclass(frozen=True)
 class LabelTransitionTrigger:
@@ -18,6 +23,7 @@ class LabelTransitionTrigger:
             if event.get('kind') != 'human-feedback':
                 continue
             last_feedback = event
+            if not learning_feedback(event):continue
             feedback = event['feedback']
             if event['action'] == 'retracted':
                 active.pop(feedback['id'], None)
@@ -31,7 +37,7 @@ class LabelTransitionTrigger:
         checked = any(event.get('kind') == 'trigger-evaluated' and event.get('stage') == 'rubric'
                       and event.get('details', {}).get('policy') == 'label-transitions'
                       and event['details'].get('feedback_id') == feedback_id for event in events)
-        due = bool(last_feedback and last_feedback['action'] == 'submitted' and changed
+        due = bool(last_feedback and learning_feedback(last_feedback) and last_feedback['action'] == 'submitted' and changed
                    and transitions % self.every == 0 and not checked)
         return {'due': due,
                 'reason': 'label transition cadence reached' if due else 'label transition cadence not reached',

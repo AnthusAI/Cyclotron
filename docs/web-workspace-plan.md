@@ -8,6 +8,51 @@ inspector. Add run history and human labeling around them.
 
 ## Architecture
 
+### Workspace identities
+
+Top-level navigation is Scorecards, Item lists, and Optimizations. Each scorecard
+definition pins ordered classifier revisions and shared settings. A classifier
+has a stable identity and immutable configuration revisions, an ordered class
+list, a decision question, and optional positive/negative roles. Binary and
+multi-class configurations are both valid. An item list is source-neutral;
+imports use stable item identities, UTC source timestamps and immutable content
+revisions. Classifier labels and explanations attach to a classifier revision
+and an item revision, not universally to the item. Corrections append history.
+The same item can receive independent labels for any number of classifiers.
+
+Prediction transport is not one request per classifier. Compatible classifiers
+can share a decision-model request for the same target. Each contributes its
+main question and discovered supporting questions. The shared state namespaces
+each classifier's rubric, examples and dynamic elements. Question bindings map
+provider output keys back to classifier and local question identities. Each
+classifier's learned head uses only its own mapped features. Usage is counted
+once for the shared exchange, not multiplied by the number of classifiers.
+Provider/model compatibility and context budgets determine batch boundaries;
+an oversized batch is rejected before a model call, never silently truncated.
+Cache identity must include the entire shared request and all configuration
+fingerprints. A changed classifier cannot reuse an unrelated previous answer.
+
+The catalog, independent-label UI/API, external arXiv item updater, shared Jev
+transport/cache, and general interactive session coordinator are implemented.
+Run setup selects a frozen item list and classifier revisions. Each classifier
+uses the existing DecisionFlywheel, its own feedback, head, and optimization
+state. Preparing an item shares a request; explicit labels and explanations
+drive the corresponding classifier's learning triggers through API-recorded
+cycles. Tests cover shared calls, restart reuse, independent feedback, and
+GraphQL trace ingestion. The old arXiv adapter remains for existing runs.
+
+Labels saved directly in the catalog do not trigger session learning. Automatic
+learning rollback after label corrections is not implemented; general sessions
+reject undo rather than claim to reverse a trained model. Existing runs freeze
+their item queue: refreshed lists supply new runs, not silently changed history.
+
+`scripts/update_arxiv_items.py` is an external example importer. It refreshes a
+local SQLite mirror from normalized or raw arXiv JSONL and upserts chronological
+pages through GraphQL. A Hugging Face JSONL download resolves and records an
+immutable revision first. Repeating imports is idempotent; changed items retain
+their old revisions and labels. The importer never starts optimization or
+constructs decision-model clients. Dataset retrieval stays out of the library.
+
 A run is one execution of the flywheel, not a synonym for an optimization call.
 It has one of two input sources:
 
@@ -23,10 +68,14 @@ learning cadence, objective, and parent run belong to run metadata, not invented
 events. Do not confuse read-only playback of a completed run with executing a
 new replay. Browsing a run must never start paid work.
 
-The current application can label interactively and inspect API-recorded replays.
-Replay scripts already support API ingestion. In-app replay launch, stepping,
-pause/resume, and parameter controls are remaining delivery work; imported history
-must not be presented as evidence that those controls are complete.
+The application supports interactive labeling and in-app frozen-feedback replay
+creation, stepping and run/pause controls. Both use the same command worker and
+API traces. Creating a replay is atomic and makes no provider calls; advancing it
+does, within explicitly approved budgets. The timeline refreshes on completed
+replay cycles. Offline restart/pause specs verify chronological replay across
+restart, frozen explanations and no automatic continuation after failure. Browser
+replay control acceptance and matched protected-version comparison remain delivery
+work; imported history is not evidence that those checks passed.
 
 - React and existing shadcn components provide the single-page workspace.
 - FastAPI serves the app. Strawberry provides GraphQL queries, mutations, and
@@ -66,10 +115,22 @@ must not be presented as evidence that those controls are complete.
 
 ## Safety and comparison
 
-Local-first, one worker process, no public deployment. LAN access needs a secret
-and same-origin checks. No browser receives provider keys. Creating a live run
+Local-first, one worker process, no public deployment. LAN access can use a secret;
+this trusted-LAN demo explicitly runs with `--allow-unauthenticated-lan` at the
+user's request. Do not expose it on a public network. Same-origin checks remain
+in place and no browser receives provider keys. Creating a live run
 requires explicit confirmation, decision-request ceiling, and optimizer-call
 ceiling. Failed/interrupted paid work never resumes silently.
+
+Interactive sessions default to a 1,000-call optimizer ceiling rather than a
+ten-call demonstration budget. Limits remain finite and explicit. The GraphQL
+`updateRunLimits` mutation requires confirmation, preserves classifier and label
+history, and records the before/after operating limits. The serialized worker
+applies updated limits before the next command. An explicit `optimize` command
+performs a catch-up pass over rubric, questions, examples, and classifier-head
+stages using already recorded feedback, without submitting votes again. Future
+feedback then uses the normal transition and cadence triggers. Hitting a ceiling
+pauses learning separately from successful label storage.
 
 After the web cycle is verified, compare recall-primary/accuracy-secondary and
 F1-primary as separate runs. Freeze the same labels, arrival order, initial empty

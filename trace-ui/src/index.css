@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/geist-mono/wght.css";
+@import "@fontsource/blinker/600.css";
 
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
@@ -11,7 +12,7 @@
 }
 
 @theme inline {
-    --font-heading: var(--font-sans);
+    --font-heading: 'Blinker', sans-serif;
     --font-sans: 'Geist Variable', sans-serif;
     --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -57,13 +58,16 @@
 html {color-scheme:light dark;font-size:14px}
 html,body,#root {height:100%;overflow:hidden}
 body {margin:0;min-width:360px;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5,h6,[data-slot="card-title"],.font-heading {font-family:'Blinker',sans-serif;font-weight:600}
+.app-shell > header p.font-semibold {font-family:'Blinker',sans-serif;font-weight:600}
+.cyclotron-brand {font-family:'Blinker',sans-serif;font-size:1.5rem;font-weight:600;line-height:1.2}
+.cyclotron-tagline {font-family:'Blinker',sans-serif;font-size:.625rem;font-weight:400;letter-spacing:.08em;line-height:1.3;color:var(--muted-foreground);max-width:17rem}
 .app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .app-shell > header {flex-shrink:0}
 .explorer-main {display:flex;flex-direction:column;flex:1;min-height:0}
 .explorer-main > :not(.workspace) {flex-shrink:0}
 .run-statistics {max-height:160px;overflow:auto}
 .workspace {position:relative;display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:16px;align-items:stretch}
-.workspace.is-fullscreen,.workspace:fullscreen {position:fixed;inset:0;z-index:50;padding:12px;background:var(--background);height:100dvh}
 .timeline-pane {min-height:0;min-width:0;display:flex;flex-direction:column}
 .timeline-pane > :not(.timeline-viewport) {flex-shrink:0}
 .timeline-viewport {flex:1;min-height:0;overflow:hidden}
@@ -230,4 +234,54 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
   html {
     @apply font-sans;
     }
+}
+/* Focused labeling is the normal app layout, not a separate fullscreen mode. */
+[data-labeling-view="true"] main > div:first-child:has(#timeline-classifier) { display:none; }
+[data-labeling-view="true"] main { padding:8px 16px; gap:6px; }
+[data-labeling-view="true"] [data-labeling-content] { display:flex; overflow:hidden; }
+[data-labeling-view="true"] [data-labeling-content] > section { display:flex; flex:1; min-height:0; min-width:0; flex-direction:column; }
+[data-labeling-view="true"] [data-labeling-content] > section > div:first-child:has(button) { flex-shrink:0; }
+[data-labeling-view="true"] .labeling-card { flex:1; min-height:0; margin-top:0; }
+[data-labeling-view="true"] .labeling-card-content { display:flex; flex:1; min-height:0; flex-direction:column; gap:10px; }
+[data-labeling-view="true"] .labeling-card-content > * { margin-block:0; flex-shrink:0; }
+[data-labeling-view="true"] .labeling-reading { flex:1; min-height:0; overflow-y:auto; }
+[data-labeling-view="true"] .labeling-article { font-size:clamp(17px,1.8vw,20px); line-height:1.5; }
+[data-labeling-view="true"] [data-slot="card"] { gap:10px; padding-block:10px; }
+[data-labeling-view="true"] [data-slot="card-title"] { font-size:20px; line-height:1.2; }
+.classifier-metrics[data-compact="true"] [data-slot="card"] { padding-block:8px; gap:0; }
+.classifier-metrics[data-compact="true"] [data-slot="card-content"] { padding-inline:12px; }
+.classifier-metrics[data-compact="true"] dl > div { display:grid; grid-template-columns:1fr auto; align-items:baseline; column-gap:4px; }
+.classifier-metrics[data-compact="true"] dd { margin-top:0; font-size:12px; }
+.classifier-metrics[data-compact="true"] [role="meter"] { grid-column:1 / -1; }
+.metric-recall { background:#10b981; }
+.metric-precision { background:#38bdf8; }
+.metric-accuracy { background:#a78bfa; }
+.label-choice[data-predicted="true"] { border-color:#3b82f6; background:color-mix(in srgb,#3b82f6 12%,var(--background)); }
+.label-choice[data-agreement="correct"] { border-color:#16a34a; background:#15803d; color:white; }
+.label-choice[data-agreement="incorrect"] { border-color:#dc2626; background:#b91c1c; color:white; }
+.label-choice:focus-visible { outline:3px solid var(--ring); outline-offset:3px; }
+[aria-label="Review actions"] button { min-height:48px; }
+.label-classifier { container-type:inline-size; }
+.labeling-card, .labeling-card-content { min-width:0; max-width:100%; }
+.classifier-feedback-strip { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(260px,1fr); gap:12px; overflow-x:auto; min-width:0; width:100%; max-width:100%; padding-bottom:6px; overscroll-behavior-x:contain; scroll-snap-type:x proximity; }
+.classifier-feedback-strip > section { scroll-snap-align:start; }
+.classifier-metrics[data-embedded="true"] { border-top:1px solid var(--border); padding-top:8px; }
+.classifier-metrics[data-embedded="true"] > div { display:block; }
+.classifier-metrics[data-embedded="true"] [data-slot="card"] { border:0; background:transparent; padding:0; box-shadow:none; }
+.classifier-metrics[data-embedded="true"] [data-slot="card-content"] { padding:0; }
+@media(max-width:600px) { .labeling-footer { flex-wrap:wrap; } .labeling-footer > div:first-child { flex-basis:100%; } .labeling-footer [aria-label="Review actions"] { margin-left:auto; } }
+.prediction-choices { display:flex; flex-direction:column; gap:6px; }
+.prediction-buttons { display:flex; gap:8px; }
+.prediction-confidence { display:flex; height:7px; overflow:hidden; border-radius:999px; background:var(--muted); }
+.prediction-confidence > span { flex-basis:0; min-width:0; }
+[data-confidence-index="0"] { background:#8b5cf6; }
+[data-confidence-index="1"] { background:#0ea5e9; }
+[data-confidence-index="2"] { background:#f59e0b; }
+[data-confidence-index="3"] { background:#ec4899; }
+.confidence-key { display:inline-block; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+@container (max-width:240px) {
+  .prediction-choices { flex-direction:row; align-items:stretch; }
+  .prediction-buttons { flex:1; min-width:0; flex-direction:column; }
+  .prediction-confidence { flex-direction:column; width:7px; height:auto; flex-shrink:0; }
+  .prediction-confidence > span { min-height:0; }
 }

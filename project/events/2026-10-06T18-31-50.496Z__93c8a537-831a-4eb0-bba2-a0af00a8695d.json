@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "93c8a537-831a-4eb0-bba2-a0af00a8695d",
+  "issue_id": "decision-flywheel-e4b2640a-7ce4-4468-9f95-763430ed051c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T18:31:50.496Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Replay existing human feedback with transition-triggered rubric optimization",
+    "description": "Run fresh operational replay of frozen 87-label snapshot with every-second class-change rubric trigger. Preserve prior recording and source votes. Explicit ceilings: 6000 decision requests and 11 optimizer calls. Verify rubric call cycles, payloads, active question/example evolution and prequential per-class metrics; refresh served explorer only with the new trace. Existing example/question promotion policies remain unchanged so this evaluates the new rubric schedule.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

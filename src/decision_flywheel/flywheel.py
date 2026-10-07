@@ -430,6 +430,8 @@ class DecisionFlywheel:
                     "ml_features": values if self.active.head else None,
                     "uncalibrated_probabilities": self.active.head.uncalibrated_probabilities(values) if self.active.head else None,
                     "calibration_temperature": self.active.head.calibration.temperature if self.active.head else None,
+                    "calibration_provenance": {"method":"temperature","fit_on":self.active.head.calibration.fit_on,
+                                               "training_ids":list(self.active.head.provenance.training_ids)} if self.active.head else None,
                     "validation_status": self.active.validation_status,
                     "model": result.model, "usage": result.usage, "latency_ms": result.latency_ms})
         return result

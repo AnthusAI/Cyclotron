@@ -9,6 +9,17 @@ from .reviewer_flywheel import ReviewerFlywheel
 from .reviewer_store import Article, ReviewStore
 
 
+def test_protected_vote_does_not_advance_non_rubric_review_cadence():
+    from types import SimpleNamespace
+    checks=[]
+    events=[{'kind':'human-feedback','action':'submitted','assignment':'train','cycle_id':'one'},
+            {'kind':'human-feedback','action':'submitted','assignment':'rolling_audit','cycle_id':'two'}]
+    reviewer=SimpleNamespace(stage='examples',core=SimpleNamespace(history=lambda _:events),
+        current_cycle=SimpleNamespace(check_trigger=lambda stage,**check:checks.append(check)))
+    assert not ReviewerFlywheel.feedback_trigger(reviewer,1)
+    assert checks[0]['details']['feedback_count']==1
+
+
 def test_reviewer_transition_trigger_survives_restart_and_records_its_cause(tmp_path):
     path=tmp_path/'runtime.sqlite'
     with ReviewStore(tmp_path/'reviews.sqlite',study_seed='transitions') as store:

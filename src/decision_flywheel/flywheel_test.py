@@ -182,6 +182,10 @@ def test_feedback_proposals_become_features_a_fitted_head_and_a_promoted_classif
     assert recorded['confidence'] == recorded['probabilities'][prediction.label]
     assert set(recorded['uncalibrated_probabilities']) == set(TASK.labels)
     assert set(recorded['ml_features']) == set(wheel.active.head.feature_names)
+    assert recorded['calibration_provenance']['fit_on']=='out_of_fold'
+    assert set(recorded['calibration_provenance']['training_ids'])==set(wheel.active.head.provenance.training_ids)
+    assert not set(recorded['calibration_provenance']['training_ids']).intersection(row.item.id for row in DEV)
+    assert recorded['calibration_temperature']==wheel.active.head.calibration.temperature
     assert recorded['decision_model_probabilities'] == {'include':.2,'exclude':.8}
     assert {e["kind"] for e in events} >= {"optimizer-request", "optimizer-response", "proposal-validated",
                                            "fit-started", "fit-completed", "candidate-evaluated", "promoted"}

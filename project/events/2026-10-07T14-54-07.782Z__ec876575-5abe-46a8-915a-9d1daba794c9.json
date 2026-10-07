@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ec876575-5abe-46a8-915a-9d1daba794c9",
+  "issue_id": "decision-flywheel-34c14344-569a-4758-8390-c6460c8cac3f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:07.782Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Record reliable per-classifier confidence calibration snapshots",
+    "description": "Audit and verify existing OOF temperature calibration on learned heads; fitted calibration must use only trusted training OOF predictions and propensity weights, never fit on audit/held-out or on the displayed rolling evaluation window. Record raw and calibrated final probability vectors, model/head identity and calibration provenance on every prediction; identify raw decision passthrough when no fitted head is selected. Per-classifier cycle-metrics must retain immutable ten-bin top-label reliability curves, counts, mean confidence, observed accuracy, ECE and Brier/log loss over the same latest 200 unique human-labeled pre-vote predictions used by ongoing metrics. Empty bins stay undefined, tiny samples visibly uncertain. Corrections/retractions create new snapshots, do not rewrite history. Optional raw-versus-calibrated comparisons require matched eligible samples and clear scope. Record sample IDs/window/version mix and cycle/event identity for auditability; recompute when window/config-relevant predictions change, not by silently rescoring old predictions. Existing calibration_metrics and UI changes are drafts; add integration/provenance specs and complete wiring before marking done.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

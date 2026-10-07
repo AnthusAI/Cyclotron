@@ -1275,3 +1275,55 @@ Inspect the task board with `kanbus list`.
 
 The repository code has an MIT license.
 Downloaded datasets and model weights retain their upstream terms.
+
+## Workspace catalog and item imports
+
+The workspace exposes **Scorecards**, **Item lists**, and **Optimizations**.
+Each scorecard shows its ordered classifiers and pinned configuration revisions.
+Create a scorecard, add existing classifiers or create a new classifier in its
+membership editor, then save a new immutable definition. Existing sessions keep
+their frozen versions. Inspecting or editing configuration makes no model calls.
+Create independent binary or multi-class classifier configurations with ordered
+classes. In Item lists, select an item and provide a separate label and optional
+explanation for each classifier. Classifier edits and label corrections retain
+history; labels identify the exact classifier and item revisions.
+
+The external arXiv example can refresh a local item mirror and upsert through
+the API without running a model:
+
+```bash
+.venv/bin/python scripts/update_arxiv_items.py --source var/arxiv-review.jsonl
+```
+
+For a Hugging Face JSONL metadata file, replace `--source` with
+`--dataset REPOSITORY_ID --filename METADATA.jsonl --revision REVISION`.
+The importer resolves and records the immutable revision, downloads into the
+Hub's local cache, then updates the local SQLite mirror. Items are published in
+submission-date order with a stable-ID tie-breaker. Re-running is idempotent.
+Full dataset refreshes may be large; use a local JSONL export for small demos.
+
+The library's Jev adapter can batch several independent classifiers and their
+supporting questions into one request with scoped contexts and mapped results.
+From **Optimizations → Run history → New run**, select an item list and scorecard
+to start an interactive session. Each item gets a shared decision-model request,
+separate predictions, and separate label and explanation inputs. The session uses
+the reusable `DecisionFlywheel` for each classifier: feedback checks learning
+triggers, and eligible optimization and retraining events stream through the API.
+Exact shared requests are cached durably; restarting preserves a displayed
+prediction without repeating its model call. Saved results appear in Item lists.
+
+Catalog labels saved outside a session are stored feedback, not an automatic
+learning command. New-run setup also offers **Replay existing feedback**. It
+freezes source labels and explanations matching the selected classifier revisions
+and starts with empty learned state. **Step replay** runs one cycle; **Run replay**
+continues until paused, complete, or failed. Paid calls require explicit approval
+and limits. Replay creation commits its inputs and initial trace atomically.
+
+Labeling and timeline use viewport-sized app layouts, without fullscreen switches.
+History and optimizer activity open in dismissible drawers. Unsent labels and
+explanations remain local to the browser session and prediction presentation;
+they are not counted as saved feedback. The activity inspector pairs model calls
+by recorded identities and never substitutes a nearby unrelated request.
+
+See [scorecard versioning and calibration](docs/scorecard-versioning.md) and
+[remaining workspace acceptance work](docs/web-workspace-plan.md).

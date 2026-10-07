@@ -2,10 +2,12 @@
 import asyncio
 from contextlib import asynccontextmanager
 import hmac
+from ipaddress import ip_address
 import json
 from pathlib import Path
 from typing import AsyncGenerator
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -25,6 +27,10 @@ class Run:
     status: str
     created_at: str
     config: JSON
+
+    @strawberry.field
+    async def event_cursor(self,info:strawberry.Info)->int:
+        return await asyncio.to_thread(info.context['store'].event_cursor,str(self.id))
 
     @strawberry.field
     async def summary(self, info: strawberry.Info) -> JSON | None:
@@ -73,6 +79,67 @@ async def call(info, method, *args, **kwargs):
 @strawberry.type
 class Query:
     @strawberry.field
+    async def scorecards(self,info:strawberry.Info)->JSON:
+        return await call(info,'scorecards')
+
+    @strawberry.field
+    async def scorecard_definitions(self,info:strawberry.Info)->JSON:
+        return await call(info,'scorecard_definitions')
+
+    @strawberry.field
+    async def scorecard_definition_versions(self,info:strawberry.Info,scorecard_id:strawberry.ID)->JSON:
+        return await call(info,'scorecard_definition_versions',str(scorecard_id))
+
+    @strawberry.field
+    async def scorecard_definition_comparison(self,info:strawberry.Info,scorecard_id:strawberry.ID,before_revision:int,after_revision:int)->JSON:
+        return await call(info,'scorecard_definition_comparison',str(scorecard_id),before_revision,after_revision)
+
+    @strawberry.field
+    async def scorecard_classifiers(self,info:strawberry.Info,scorecard_id:strawberry.ID,revision:int|None=None)->JSON:
+        definition=await call(info,'scorecard_definition',str(scorecard_id),revision)
+        return [await call(info,'classifier',ref['id'],ref['revision']) for ref in definition['classifiers']]
+
+    @strawberry.field
+    async def scorecard_versions(self,info:strawberry.Info,scorecard_id:strawberry.ID)->JSON:
+        return await call(info,'scorecard_versions',str(scorecard_id))
+
+    @strawberry.field
+    async def scorecard_checkpoints(self,info:strawberry.Info,run_id:strawberry.ID)->JSON:
+        return await call(info,'scorecard_checkpoints',str(run_id))
+
+    @strawberry.field
+    async def matched_evaluation_target(self,info:strawberry.Info,run_id:strawberry.ID,event_id:int)->JSON|None:
+        return await call(info,'matched_evaluation_target',str(run_id),event_id)
+
+    @strawberry.field
+    async def matched_run_preflight(self,info:strawberry.Info,before_run_id:strawberry.ID,after_run_id:strawberry.ID,limit:int=200)->JSON:
+        return await call(info,'matched_run_preflight',str(before_run_id),str(after_run_id),limit=limit)
+
+    @strawberry.field
+    async def item_results(self, info: strawberry.Info, list_id: strawberry.ID, item_id: str, item_revision: int) -> JSON:
+        return await call(info, 'item_results', str(list_id), item_id, item_revision)
+
+    @strawberry.field
+    async def item_labels(self, info: strawberry.Info, list_id: strawberry.ID, item_id: str, item_revision: int) -> JSON:
+        return await call(info, 'item_labels', str(list_id), item_id, item_revision)
+
+    @strawberry.field
+    async def classifiers(self, info: strawberry.Info) -> JSON:
+        return await call(info, 'classifiers')
+
+    @strawberry.field
+    async def classifier_versions(self, info: strawberry.Info, classifier_id: strawberry.ID) -> JSON:
+        return await call(info, 'classifier_versions', str(classifier_id))
+
+    @strawberry.field
+    async def item_lists(self, info: strawberry.Info) -> JSON:
+        return await call(info, 'item_lists')
+
+    @strawberry.field
+    async def list_items(self, info: strawberry.Info, list_id: strawberry.ID, after: int = 0, limit: int = 200) -> JSON:
+        return await call(info, 'list_items', str(list_id), after=after, limit=limit)
+
+    @strawberry.field
     async def capabilities(self, info: strawberry.Info) -> Capabilities:
         service = info.context.get('service')
         return Capabilities(live_enabled=bool(service and service.allow_live),item_count=len(service.articles) if service else 0)
@@ -101,6 +168,54 @@ class Query:
 @strawberry.type
 class Mutation:
     @strawberry.mutation
+    async def extend_scorecard(self,info:strawberry.Info,parent_run_id:strawberry.ID,classifier_ids:list[str],name:str,confirmed:bool=False)->Run:
+        service=info.context.get('service')
+        if not confirmed or service is None or not service.allow_live:
+            raise ValueError('scorecard replay requires explicit live authority')
+        run=await call(info,'extend_scorecard',str(parent_run_id),classifier_ids,name=name)
+        await call(info,'append_event',run['id'],'scorecard-created',{'kind':'scorecard-version-created','scorecard_id':run['config']['scorecard_id'],'revision':run['config']['scorecard_revision'],'parent_run_id':str(parent_run_id),'learning_policy':'fresh-replay','backfill_count':run['config']['backfill_count']})
+        return Run(**run)
+
+    @strawberry.mutation
+    async def activate_scorecard_version(self,info:strawberry.Info,scorecard_id:strawberry.ID,revision:int)->Run:
+        run=await call(info,'activate_scorecard_version',str(scorecard_id),revision)
+        await call(info,'append_event',run['id'],f'activate:{uuid4()}',{'kind':'scorecard-version-activated','scorecard_id':str(scorecard_id),'revision':revision})
+        return Run(**run)
+
+    @strawberry.mutation
+    async def label_item(self, info: strawberry.Info, classifier_id: strawberry.ID, classifier_revision: int,
+                         list_id: strawberry.ID, item_id: str, item_revision: int, label: str, comment: str, request_id: str) -> JSON:
+        if any(secret and secret in comment for secret in info.context.get('redact', ())):
+            raise ValueError('feedback contains a credential')
+        return await call(info,'label_item',str(classifier_id),classifier_revision,str(list_id),item_id,item_revision,label,comment,request_id)
+
+    @strawberry.mutation
+    async def save_classifier(self, info: strawberry.Info, identifier: str, name: str, config: JSON) -> JSON:
+        if any(secret and secret in json.dumps(config) for secret in info.context.get('redact', ())):
+            raise ValueError('configuration contains a credential')
+        return await call(info, 'save_classifier', identifier, name, config)
+
+    @strawberry.mutation
+    async def save_scorecard_definition(self,info:strawberry.Info,identifier:str,name:str,classifiers:JSON,settings:JSON)->JSON:
+        if any(secret and secret in json.dumps([name,classifiers,settings]) for secret in info.context.get('redact',())):
+            raise ValueError('configuration contains a credential')
+        return await call(info,'save_scorecard_definition',identifier,name,classifiers,settings)
+
+    @strawberry.mutation
+    async def activate_scorecard_definition(self,info:strawberry.Info,scorecard_id:strawberry.ID,revision:int)->JSON:
+        return await call(info,'activate_scorecard_definition',str(scorecard_id),revision)
+
+    @strawberry.mutation
+    async def save_item_list(self, info: strawberry.Info, identifier: str, name: str) -> JSON:
+        return await call(info, 'save_item_list', identifier, name)
+
+    @strawberry.mutation
+    async def upsert_list_items(self, info: strawberry.Info, list_id: strawberry.ID, items: JSON) -> JSON:
+        if any(secret and secret in json.dumps(items) for secret in info.context.get('redact', ())):
+            raise ValueError('items contain a credential')
+        return await call(info, 'upsert_list_items', str(list_id), items)
+
+    @strawberry.mutation
     async def complete_run(self, info: strawberry.Info, run_id: strawberry.ID, summary: JSON) -> Run:
         if any(secret and secret in json.dumps(summary) for secret in info.context.get('redact', ())):
             raise ValueError('summary contains a credential')
@@ -121,12 +236,53 @@ class Mutation:
         return Run(**result)
 
     @strawberry.mutation
+    async def resume_matched_comparison(self,info:strawberry.Info,run_id:strawberry.ID,request_id:str,
+                                       max_requests:int,retry_failed:bool=False,confirmed:bool=False)->Job:
+        service=info.context.get('service')
+        if not confirmed or service is None or not service.allow_live:
+            raise ValueError('matched comparison resume requires explicit live-call authority')
+        row=await asyncio.to_thread(service.resume_comparison,str(run_id),request_id,
+                                   max_requests=max_requests,retry_failed=retry_failed)
+        return Job(id=row['id'],kind=row['kind'],status=row['status'],result=row['result'])
+
+    @strawberry.mutation
+    async def create_matched_comparison(self,info:strawberry.Info,name:str,before_run_id:strawberry.ID,
+                                       after_run_id:strawberry.ID,approved_fingerprint:str,max_requests:int,
+                                       limit:int=200,confirmed:bool=False)->Run:
+        service=info.context.get('service')
+        if not confirmed or service is None or not service.allow_live:
+            raise ValueError('matched comparison requires explicit live-call authority')
+        return Run(**await asyncio.to_thread(service.create_comparison,name,str(before_run_id),str(after_run_id),
+                                            approved_fingerprint,max_requests=max_requests,limit=limit))
+
+    @strawberry.mutation
+    async def create_replay(self,info:strawberry.Info,name:str,source_run_id:strawberry.ID,config:JSON,confirmed:bool=False)->Run:
+        service=info.context.get('service')
+        if not confirmed or service is None or not service.allow_live:
+            raise ValueError('replay execution requires explicit live-call authority')
+        if any(secret and secret in json.dumps(config) for secret in info.context.get('redact',())):
+            raise ValueError('configuration contains a credential')
+        return Run(**await asyncio.to_thread(service.create_replay,name,str(source_run_id),config))
+
+    @strawberry.mutation
     async def ingest_events(self, info: strawberry.Info, run_id: strawberry.ID, events: list[TraceInput]) -> list[TraceEvent]:
         data = [(e.source_id,e.payload) for e in events]
         encoded = json.dumps(data)
         if any(secret and secret in encoded for secret in info.context.get('redact', ())):
             raise ValueError('trace contains a credential; ingestion refused')
         return [event_type(r) for r in await call(info,'append_batch',str(run_id),data)]
+
+    @strawberry.mutation
+    async def update_run_limits(self,info:strawberry.Info,run_id:strawberry.ID,max_requests:int,max_optimizer_calls:int,confirmed:bool=False)->Run:
+        service=info.context.get('service')
+        if not confirmed or service is None or not service.allow_live:
+            raise ValueError('changing paid limits requires explicit confirmation and a live server')
+        before=await call(info,'run',str(run_id))
+        result=await call(info,'update_run_limits',str(run_id),max_requests,max_optimizer_calls)
+        await call(info,'append_event',str(run_id),f'limits:{uuid4()}',
+            {'kind':'operating-limits-changed','before':{key:before['config'].get(key) for key in ('max_requests','max_optimizer_calls')},
+             'after':{'max_requests':max_requests,'max_optimizer_calls':max_optimizer_calls}})
+        return Run(**result)
 
     @strawberry.mutation
     async def submit_command(self, info: strawberry.Info, run_id: strawberry.ID, request_id: str,
@@ -153,8 +309,15 @@ class Subscription:
 schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription)
 
 
-def create_app(store, *, service=None, token=None, redact=()):
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False):
     def authorized(connection):
+        if allow_unauthenticated_lan and connection.client:
+            try:
+                address = ip_address(connection.client.host)
+                if address.is_private and not address.is_unspecified:
+                    return True
+            except ValueError:
+                pass
         if not token:
             return connection.client is not None and connection.client.host in ('127.0.0.1','::1','testclient')
         supplied = connection.headers.get('authorization', '').removeprefix('Bearer ') or connection.cookies.get('flywheel-session','')
@@ -213,11 +376,19 @@ def create_app(store, *, service=None, token=None, redact=()):
         return '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Decision Flywheel</title><link rel="stylesheet" href="/assets/web.css"></head><body><div id="root"></div><script src="/assets/web.js"></script></body></html>'
 
     @app.get('/runs/{run_id}/timeline',response_class=HTMLResponse)
-    async def timeline(run_id: str):
+    async def timeline(run_id: str, classifier_id: str | None = None):
         run = await asyncio.to_thread(store.run,run_id)
         rows = await asyncio.to_thread(store.all_events,run_id)
         summary = await asyncio.to_thread(store.summary,run_id)
+        classes=run['config'].get('class_config')
+        if run['config'].get('classifiers'):
+            classifiers=run['config']['classifiers']
+            classifier_id=classifier_id or classifiers[0]['id']
+            classifier=next((c for c in classifiers if c['id']==classifier_id),None)
+            if classifier is None:raise HTTPException(404,'unknown classifier in run')
+            rows=[row for row in rows if row['payload'].get('classifier_id')==classifier_id]
+            classes=classifier['config']['classes']
         return await asyncio.to_thread(render_trace,[r['payload'] for r in rows],
-            class_config=run['config'].get('class_config'),run_comparison=(summary or {}).get('comparison'),embedded=True)
+            class_config=classes,run_comparison=(summary or {}).get('comparison'),embedded=True)
 
     return app

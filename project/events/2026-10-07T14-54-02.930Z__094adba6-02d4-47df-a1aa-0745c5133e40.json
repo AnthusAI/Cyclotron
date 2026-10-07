@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "094adba6-02d4-47df-a1aa-0745c5133e40",
+  "issue_id": "decision-flywheel-0049a23a-7dc0-4dcc-980f-9548e6e67be0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:02.930Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Make full-viewport labeling and timeline the permanent app layouts",
+    "description": "Replace regular versus fullscreen branches with one viewport-sized single-page shell. Remove fullscreen entry/exit buttons and redundant page layouts. Keep compact persistent app navigation and bounded content panels, no document-level scrolling; only intended panels scroll. Labeling retains large readable item text, horizontal classifier cards when needed, per-card metrics below labeling controls, confidence visualization, optional explanations, persistent bottom-left status and bottom-right Skip/Submit. Timeline fills available pane with its inspector closable; pinch zoom only, horizontal pan and ordinary vertical scrolling remain distinct; mouse zoom buttons and Fit remain reachable. Responsive desktop/iPad portrait/landscape, safe-area and on-screen keyboard behavior. Acceptance: no clipped actions, unintended page scroll or hidden item content; label draft retained across drawers; timeline zoom/pan/play/click cursor still work. Reuse successful existing fullscreen CSS rather than redesign from scratch.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

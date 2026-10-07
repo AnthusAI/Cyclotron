@@ -1,6 +1,6 @@
 """Sequential operational replay: predict first, reveal one historical vote, then act."""
 from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
-from .classification_metrics import classification_metrics
+from .calibration_history import reviewed_calibration_metrics
 
 
 async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
@@ -18,8 +18,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
     roles={row.item.id:role for role,group in (('training',plan.training),('development',plan.development),('scoreboard',plan.scoreboard)) for row in group}
     report={'protocol':plan.manifest(wheel.initial.task),'cycles':[]}
     report['rubric_trigger'] = {'policy':'label-transitions','every':rubric_changes_every} if rubric_trigger else {'policy':'feedback-cadence','every':optimize_every}
-    predicted,truth,probabilities=[],[],[]
     optimization_number=0
+    eligible_count=0
     for index,row in enumerate(plan.ordered):
         train,dev=plan.revealed(index)
         with wheel.cycle(row.item,reason='historical-feedback-replay') as cycle:
@@ -29,6 +29,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                 edit_comment_value=row.context.get('human_feedback'),label_source=LABEL_SOURCE_VETTED,
                 selection_propensity=1.,review_provenance='historical-human-vote-replayed-after-prediction')
             wheel.record_feedback_event(feedback,assignment=roles[row.item.id])
+            eligible=roles[row.item.id]!='scoreboard'
+            eligible_count+=int(eligible)
             train,dev=plan.revealed(index+1)
             wheel.set_optimizer_context(tuple(r.context['human_feedback'] for r in train if r.context.get('human_feedback')))
             protected=tuple(r.item for r in plan.ordered if r.item.id not in {r.item.id for r in (*train,*dev)})
@@ -43,20 +45,19 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                     outcomes.append(await wheel.step('rubric',train,dev,trigger='label-transitions',**kwargs))
             if scheduled_stages:
                 stage=scheduled_stages[optimization_number%len(scheduled_stages)]
-                due=(index+1)%optimize_every==0
+                due=eligible and eligible_count%optimize_every==0
                 cycle.check_trigger(stage,due=due,reason='feedback cadence reached' if due else 'feedback cadence not reached',
-                                    details={'feedback_count':index+1,'threshold':optimize_every})
+                                    details={'feedback_count':eligible_count,'threshold':optimize_every})
                 if due:
                     outcomes.append(await wheel.step(stage,train,dev,trigger='feedback-cadence',**kwargs))
                     optimization_number+=1
-            fit_due=(index+1)%retrain_every==0
+            fit_due=eligible and eligible_count%retrain_every==0
             cycle.check_trigger('classifier',due=fit_due,reason='retraining cadence reached' if fit_due else 'retraining cadence not reached',
-                                details={'feedback_count':index+1,'threshold':retrain_every})
+                                details={'feedback_count':eligible_count,'threshold':retrain_every})
             if fit_due:
                 outcomes.append(await wheel.step('classifier',train,dev,trigger='retraining-cadence',**kwargs))
-            truth.append(row.label);predicted.append(result.label);probabilities.append(result.probabilities)
-            metrics=classification_metrics(wheel.initial.task.labels,truth,predicted,probabilities)
-            wheel._emit({'kind':'cycle-metrics','metric_scope':'prequential prediction before each revealed vote',
+            metrics=reviewed_calibration_metrics(wheel.initial.task.labels,wheel.history(100000))
+            wheel._emit({'kind':'cycle-metrics','metric_scope':'latest 200 human-reviewed pre-vote predictions; descriptive, not held-out',
                          'metrics':metrics,'training_count':len(train),'development_count':len(dev)})
             report['cycles'].append({'cycle_id':cycle.context['cycle_id'],'cycle_number':index+1,
                 'item_id':row.item.id,'predicted_label':result.label,'human_label':row.label,

@@ -9,6 +9,31 @@ import pytest
 from .trace_artifact import render_trace
 
 
+def test_playback_dispatches_only_recorded_model_comparisons_at_or_before_the_cursor():
+    if not shutil.which('node'):
+        pytest.skip('Node is needed for viewer interaction spec')
+    code=re.findall(r'<script>(.*?)</script>',render_trace([]),re.S)[-1]
+    dispatch=code[code.index(' const calibrationSnapshots={};'):code.index(" el('status').textContent=")]
+    harness="""
+const assert=require('node:assert/strict');
+const classConfig=[{label:'include',role:'positive'}];
+const events=[{kind:'prediction'},
+ {kind:'cycle-metrics',classifier_id:'Topic',class_config:[{label:'yes',role:'positive'}],metrics:{decision_model_comparison:{count:1}}},
+ {kind:'cycle-metrics',classifier_id:'Topic',metrics:{decision_model_comparison:{count:2}}}];
+let position=1, delivered={};
+class CustomEvent{constructor(name,options){this.name=name;this.detail=options.detail;}}
+const window={dispatchEvent:event=>delivered[event.name]=event.detail};
+function dispatch(){DISPATCH}
+dispatch();
+assert.equal(delivered['flywheel-model-comparison-position'].Topic.comparison.count,1);
+assert.equal(delivered['flywheel-model-comparison-position'].Topic.positive,'yes');
+position=2;dispatch();assert.equal(delivered['flywheel-model-comparison-position'].Topic.comparison.count,2);
+position=0;dispatch();assert.deepEqual(delivered['flywheel-model-comparison-position'],{});
+""".replace('DISPATCH',dispatch)
+    result=subprocess.run(['node','-e',harness],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+
+
 def test_selection_details_expose_priorities_and_raw_selection_is_not_called_a_head_activation():
     html = render_trace([])
     assert "field('Candidate objective scores'" in html
@@ -62,7 +87,8 @@ const assert=require('node:assert/strict'),elements={},handlers={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},cloneNode(){return {...this};},append(){},setAttribute(){}})};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
-global.window={addEventListener(){}};
+global.CustomEvent=class{constructor(type,options){this.type=type;this.detail=options.detail;}};
+global.window={addEventListener(){},dispatchEvent(){}};
 Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelector(){return null;},style:{setProperty(){}}});
 let tick;global.setInterval=fn=>{tick=fn;return 1;};global.clearInterval=()=>{tick=null;};
 CODE
@@ -206,14 +232,10 @@ let consumed=false;
 elements.timeline.wheel(gesture(0,100,{preventDefault(){consumed=true;}}));
 assert.deepEqual(timeline.window,beforeVertical);assert.equal(consumed,false);
 assert.equal(timeline.options.height,'100%');assert.equal(timeline.options.verticalScroll,true);
-elements['fullscreen-toggle'].onclick();
-assert.ok(elements['navigation-hint'].textContent.includes('vertical scroll: rows'));
 elements.timeline.wheel(gesture(0,100,{preventDefault(){consumed=true;}}));
 assert.deepEqual(timeline.window,beforeVertical);assert.equal(consumed,false);
 elements.timeline.wheel(gesture(0,-100,{ctrlKey:true,preventDefault(){consumed=true;}}));
 assert.ok(timeline.window[1]-timeline.window[0]<200);assert.equal(consumed,true);
-elements['fullscreen-toggle'].onclick();
-assert.ok(elements['navigation-hint'].textContent.includes('vertical scroll: rows'));
 const beforePinch=timeline.window[1]-timeline.window[0];
 elements.timeline.wheel(gesture(10,100,{ctrlKey:true,timeStamp:1020}));
 assert.ok(timeline.window[1]-timeline.window[0]>beforePinch);
@@ -263,7 +285,8 @@ for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
 let select;const handlers={};
 global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
-global.window={addEventListener(){}};
+global.CustomEvent=class{constructor(type,options){this.type=type;this.detail=options.detail;}};
+global.window={addEventListener(){},dispatchEvent(){}};
 Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelector(){return null;},style:{setProperty(){}}});
 CODE
 assert.equal(timelineItems.find(item=>item.event_index===12).iconName,'circle');
@@ -368,8 +391,8 @@ assert.equal(optimization.content,'Optimization');
 assert.equal(optimization.showNested,true);
 assert.deepEqual(optimization.nestedGroups,['triggers','rubric','examples','questions','classifier','optimization-outcomes']);
 assert.deepEqual(timeline.groups.find(g=>g.id==='classifier').nestedGroups,['classifier-attempts','fit']);
-assert.deepEqual(timeline.groups.find(g=>g.id==='evaluation-trends').nestedGroups,['metric-accuracy','metric-precision','metric-recall']);
-assert.deepEqual(timeline.groups.slice(-4).map(g=>g.id),['evaluation-trends','metric-accuracy','metric-precision','metric-recall']);
+assert.deepEqual(timeline.groups.find(g=>g.id==='evaluation-trends').nestedGroups,['metric-recall','metric-precision','metric-accuracy']);
+assert.deepEqual(timeline.groups.slice(-4).map(g=>g.id),['evaluation-trends','metric-recall','metric-precision','metric-accuracy']);
 select({items:['source:0']});
 assert.ok(elements['event-title'].textContent.includes('accept'));
 assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);

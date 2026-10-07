@@ -3,6 +3,15 @@ import pytest
 from .web_store import WebStore
 
 
+def test_operating_limits_can_change_without_resetting_labels_or_classifier_configuration(tmp_path):
+    store=WebStore(tmp_path/'web.sqlite')
+    run=store.create_run('Live','live',{'max_requests':500,'max_optimizer_calls':10,'classifiers':[{'id':'a'}]})
+    changed=store.update_run_limits(run['id'],10000,1000)
+    assert changed['config']['max_optimizer_calls']==1000
+    assert changed['config']['classifiers']==[{'id':'a'}]
+    with pytest.raises(ValueError):store.update_run_limits(run['id'],10000,0)
+
+
 def test_event_ingestion_is_idempotent_but_cannot_rewrite_a_committed_event(tmp_path):
     store = WebStore(tmp_path / 'web.sqlite')
     run = store.create_run('First', 'recorded', {'primary':'f1'})
@@ -41,6 +50,15 @@ def test_commands_are_durable_idempotent_and_interrupted_work_is_not_retried_sil
     assert store.claim_command() is None
 
 
+def test_a_restart_preserves_commands_that_have_not_started(tmp_path):
+    store=WebStore(tmp_path/'web.sqlite')
+    run=store.create_run('Live','live',{})
+    job=store.command(run['id'],'saved-vote','label',{'labels':[]})
+    store.recover_interrupted()
+    assert store.jobs(run['id'])[0]['status']=='pending'
+    assert store.claim_command()['id']==job['id']
+
+
 def test_event_batches_roll_back_together_and_read_pages_are_bounded(tmp_path):
     store = WebStore(tmp_path / 'web.sqlite')
     run = store.create_run('A', 'recorded', {})
@@ -61,3 +79,18 @@ def test_final_summary_is_persisted_without_rewriting_run_configuration(tmp_path
     assert store.run(run['id'])['status'] == 'completed'
     with pytest.raises(ValueError):
         store.complete_run(run['id'],{'comparison':'different'})
+
+
+def test_replay_creation_commits_its_items_feedback_and_initial_trace_as_one_transaction(tmp_path):
+    import sqlite3
+    store=WebStore(tmp_path/'web.sqlite')
+    vote=('item','classifier',{'label':'yes','comment':'Reason'})
+    with pytest.raises(sqlite3.IntegrityError):
+        store.create_run('Replay','live',{'input_mode':'replay'},items=[{'id':'item'}],
+                         frozen_feedback=[vote,vote],initial_events=[('created',{'kind':'replay-created'})])
+    assert store.runs()==[]
+    run=store.create_run('Replay','live',{'input_mode':'replay'},items=[{'id':'item'}],
+                         frozen_feedback=[vote],initial_events=[('created',{'kind':'replay-created'})])
+    assert store.items(run['id'])[0]['id']=='item'
+    assert store.inherited_labels(run['id'],'item')[0]['comment']=='Reason'
+    assert store.events(run['id'])[0]['payload']['kind']=='replay-created'

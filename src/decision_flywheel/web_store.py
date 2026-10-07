@@ -5,13 +5,16 @@ import json
 from pathlib import Path
 import sqlite3
 from uuid import uuid4
+from .workspace_catalog import WorkspaceCatalog
+from .scorecards import Scorecards
+from .scorecard_definitions import ScorecardDefinitions
 
 
 def encode(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-class WebStore:
+class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,6 +39,9 @@ class WebStore:
                 CREATE TABLE IF NOT EXISTS web_summaries (
                   run_id TEXT PRIMARY KEY REFERENCES web_runs(id), payload TEXT NOT NULL);
             ''')
+        self.initialize_catalog()
+        self.initialize_scorecards()
+        self.initialize_scorecard_definitions()
 
     @contextmanager
     def connect(self):
@@ -52,7 +58,7 @@ class WebStore:
     def _run(row):
         return {**dict(row), 'config': json.loads(row['config'])}
 
-    def create_run(self, name, mode, config, *, items=()):
+    def create_run(self, name, mode, config, *, items=(), frozen_feedback=(), initial_events=()):
         if not name.strip() or mode not in ('live', 'recorded'):
             raise ValueError('name and supported run mode required')
         run_id = str(uuid4())
@@ -61,6 +67,14 @@ class WebStore:
                 (run_id, name, mode, 'ready', datetime.now(timezone.utc).isoformat(), encode(config)))
             for item in items:
                 db.execute('INSERT INTO web_items(run_id,id,payload) VALUES (?,?,?)', (run_id,item['id'],encode(item)))
+            for item_id,classifier_id,feedback in frozen_feedback:
+                db.execute('INSERT INTO replay_feedback VALUES (?,?,?,?)',(run_id,item_id,classifier_id,encode(feedback)))
+            for source_id,payload in initial_events:
+                if not source_id or not isinstance(payload,dict) or not payload.get('kind'):
+                    raise ValueError('event identity and kind required')
+                db.execute('INSERT INTO web_events(run_id,source_id,payload) VALUES (?,?,?)',(run_id,source_id,encode(payload)))
+            if config.get('scorecard_definition_revision'):
+                self.register_run_definition(db,run_id,config['scorecard_id'],name,config)
         return self.run(run_id)
 
     def run(self, run_id):
@@ -75,16 +89,33 @@ class WebStore:
             return [self._run(r) for r in db.execute('SELECT * FROM web_runs ORDER BY rowid DESC')]
 
     def counts(self, run_id):
-        self.run(run_id)
+        run=self.run(run_id)
         with self.connect() as db:
             counts = dict(db.execute("SELECT json_extract(payload,'$.kind'),COUNT(*) FROM web_events WHERE run_id=? GROUP BY json_extract(payload,'$.kind')",(run_id,)))
-        return {name:counts.get(kind,0) for name,kind in (
+        result={name:counts.get(kind,0) for name,kind in (
             ('cycles','cycle-started'),('predictions','prediction'),('labels','human-feedback'),('optimizations','optimizer-request'))}
+        if run['config'].get('classifiers'):
+            with self.connect() as db:
+                result['cycles']=db.execute("SELECT COUNT(DISTINCT json_extract(payload,'$.cycle_number')) FROM web_events WHERE run_id=? AND json_extract(payload,'$.kind')='cycle-started'",(run_id,)).fetchone()[0]
+        return result
 
     def set_status(self, run_id, status):
         self.run(run_id)
         with self.connect() as db:
             db.execute('UPDATE web_runs SET status=? WHERE id=?', (status,run_id))
+
+    def update_run_limits(self,run_id,max_requests,max_optimizer_calls):
+        if any(type(value) is not int or value<1 for value in (max_requests,max_optimizer_calls)):
+            raise ValueError('operating limits must be positive integers')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT config,mode FROM web_runs WHERE id=?',(run_id,)).fetchone()
+            if row is None or row['mode']!='live':raise ValueError('only live runs accept operating limits')
+            if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')",(run_id,)).fetchone():
+                raise ValueError('wait for current work before changing limits')
+            config={**json.loads(row['config']),'max_requests':max_requests,'max_optimizer_calls':max_optimizer_calls}
+            db.execute('UPDATE web_runs SET config=? WHERE id=?',(encode(config),run_id))
+        return self.run(run_id)
 
     def summary(self, run_id):
         self.run(run_id)
@@ -149,11 +180,19 @@ class WebStore:
             cursor = page[-1]['sequence']
         return events
 
+    def event_cursor(self,run_id):
+        self.run(run_id)
+        with self.connect() as db:
+            return db.execute('SELECT COALESCE(MAX(sequence),0) FROM web_events WHERE run_id=?',(run_id,)).fetchone()[0]
+
     def command(self, run_id, request_id, kind, payload):
-        if self.run(run_id)['mode'] != 'live' or kind not in ('prepare','label','skip','undo') or not request_id:
+        if self.run(run_id)['mode'] != 'live' or kind not in ('prepare','label','skip','undo','optimize','replay-next') or not request_id:
             raise ValueError('only live runs accept supported labeling commands')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            edition=db.execute('SELECT v.revision,s.active_revision FROM scorecard_versions v JOIN scorecards s ON s.id=v.scorecard_id WHERE v.run_id=?',(run_id,)).fetchone()
+            if edition and edition['revision']!=edition['active_revision']:
+                raise ValueError('activate this scorecard version before continuing its labeling')
             row = db.execute('SELECT * FROM web_jobs WHERE run_id=? AND request_id=?', (run_id,request_id)).fetchone()
             if row:
                 if row['kind'] != kind or row['payload'] != encode(payload):
@@ -190,7 +229,10 @@ class WebStore:
 
     def recover_interrupted(self):
         with self.connect() as db:
-            db.execute("UPDATE web_jobs SET status='interrupted' WHERE status IN ('running','pending')")
+            # Pending commands have never started: keep the user's durable
+            # submission queued. Running work may have made paid calls or
+            # partial changes and must not be retried automatically.
+            db.execute("UPDATE web_jobs SET status='interrupted' WHERE status='running'")
 
     def current_item(self, run_id):
         self.run(run_id)
@@ -209,3 +251,8 @@ class WebStore:
         self.run(run_id)
         with self.connect() as db:
             return [json.loads(r[0]) for r in db.execute('SELECT payload FROM web_items WHERE run_id=? ORDER BY rowid', (run_id,))]
+
+    def unreviewed_items(self,run_id):
+        self.run(run_id)
+        with self.connect() as db:
+            return [json.loads(r[0]) for r in db.execute('SELECT payload FROM web_items WHERE run_id=? AND reviewed=0 ORDER BY rowid',(run_id,))]

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "82e0902a-0caf-461a-b918-1f619d2e301d",
+  "issue_id": "decision-flywheel-6ad46268-8a60-4b83-916b-2ea58d8a96af",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T19:03:23.695Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Show fired triggers as grey full-cycle cells and omit idle checks",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

@@ -22,13 +22,14 @@ test('the explorer exposes accessible timeline controls without a redundant lege
   expect(screen.getByRole('button',{name:'Reset zoom'})).toBeVisible()
   expect(screen.getByRole('button',{name:'Zoom in'})).toHaveAttribute('title','Zoom in')
   expect(screen.getByRole('button',{name:'Close details'})).toBeVisible()
-  expect(screen.getByRole('button',{name:'Enter fullscreen'})).toBeVisible()
+  expect(screen.queryByRole('button',{name:'Enter fullscreen'})).toBeNull()
   expect(screen.getByText('Horizontal scroll: pan · vertical scroll: rows')).toBeVisible()
   expect(screen.getByText('135')).not.toBeVisible()
   expect(document.getElementById('label-legend')).toBeNull()
   expect(screen.queryByText('Cycles → steps → events')).toBeNull()
   expect(document.getElementById('timeline')).toBeInTheDocument()
-  expect(document.querySelector('header .lucide-refresh-cw')).toBeInTheDocument()
+  expect(document.querySelector('header .lucide-refresh-cw')).toBeNull()
+  expect(document.querySelector('header svg[viewBox="0 0 72 24"]')).toBeInTheDocument()
 })
 
 test('a shadcn checkbox notifies the existing offline filter controller',()=>{

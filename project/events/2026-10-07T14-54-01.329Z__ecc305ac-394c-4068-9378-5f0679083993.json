@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ecc305ac-394c-4068-9378-5f0679083993",
+  "issue_id": "decision-flywheel-59199373-0c9f-4e08-9371-84545a967bbb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:01.329Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Unify interactive and replay runs under pinned scorecard versions",
+    "description": "Interactive sessions and replay studies use the same engine, scorecard revision, cycle/event contract and API-owned SQLite logging. Adding Cyberian Gallery creates a new scorecard edition; old classifier labels/comments remain immutable, request new missing labels for previously reviewed items before unseen items. Replay learning starts from an explicitly recorded empty or selected initial checkpoint, never future labels/examples; process feedback chronologically after prediction. Re-optimize the entire new scorecard from the beginning when requested, with separate per-classifier heads/triggers and one compatible joint decision request. Persist replay input snapshot, parameters, dataset/list revision and lineage. Version comparison distinguishes descriptive latest-200 metrics from matched protected evaluation; switching active edition must be explicit and non-destructive. Acceptance: fake end-to-end tests verify no cycle-one label leakage, retained explanations, restored restart state, missing-label priority and independent original-version metrics; UI exposes active vs inspected version. No automatic paid replay.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

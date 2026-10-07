@@ -1,0 +1,50 @@
+{
+  "id": "decision-flywheel-34c14344-569a-4758-8390-c6460c8cac3f",
+  "title": "Record reliable per-classifier confidence calibration snapshots",
+  "description": "Audit and verify existing OOF temperature calibration on learned heads; fitted calibration must use only trusted training OOF predictions and propensity weights, never fit on audit/held-out or on the displayed rolling evaluation window. Record raw and calibrated final probability vectors, model/head identity and calibration provenance on every prediction; identify raw decision passthrough when no fitted head is selected. Per-classifier cycle-metrics must retain immutable ten-bin top-label reliability curves, counts, mean confidence, observed accuracy, ECE and Brier/log loss over the same latest 200 unique human-labeled pre-vote predictions used by ongoing metrics. Empty bins stay undefined, tiny samples visibly uncertain. Corrections/retractions create new snapshots, do not rewrite history. Optional raw-versus-calibrated comparisons require matched eligible samples and clear scope. Record sample IDs/window/version mix and cycle/event identity for auditability; recompute when window/config-relevant predictions change, not by silently rescoring old predictions. Existing calibration_metrics and UI changes are drafts; add integration/provenance specs and complete wiring before marking done.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b1bea8b0-43ad-4ad0-922e-ea165699573e",
+      "author": "home",
+      "text": "Added recorded calibration provenance on fitted-head predictions (temperature, OOF fit origin, trusted training IDs); per-cycle snapshots carry latest-200 sample prediction/feedback event IDs, source and model-version mix, ECE, Brier and log loss. Matched raw/calibrated comparison includes only fitted-head samples. Pure specs prove later predictions do not rewrite old curves and retractions remove samples. Remaining: pipeline integration provenance assertions and legacy metric consistency/complete browser playback acceptance.",
+      "created_at": "2026-10-07T15:57:49.689587Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "d8877790-df1e-47e2-b612-e1be1d628f8a",
+      "author": "home",
+      "text": "Legacy web reviewer metrics now share reviewed_calibration_metrics with scorecard sessions and read exact trace probability vectors/provenance, not reconstructed binary complements. Added regression using deliberately different displayed confidence to prove the original vector is used. Label-only responses still count toward recall/precision/accuracy but are excluded from probability metrics with disclosed missing-vector counts; candidate evaluation remains strict. Fitted-head trace assertions verify OOF origin, temperature and training IDs disjoint from development. Full suite 624 Python passing before final provenance assertions; frontend 57 tests/build pass. Remaining: browser multi-cycle calibration playback acceptance and richer confidence provenance display.",
+      "created_at": "2026-10-07T16:39:32.558974Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "96167987-47e4-4090-bdfe-1c71bd82e6a3",
+      "author": "home",
+      "text": "Raw decision-model/final-classifier comparison now uses the same latest reviewed pre-vote items and reports missing raw records. Kept distinct from uncalibrated/calibrated head comparison. Fixed protected feedback cadence leakage in all three learning paths; regression specs prove audit votes neither advance transition/cadence triggers nor expose optimizer context. Existing historical runs may have had cadence affected and are not reclassified as clean experiments. Full Python suite: 634 passing before an additional passing playback dispatch regression; UI: 62 passing, production build passing.",
+      "created_at": "2026-10-07T17:03:40.156033Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:07.781946Z",
+  "updated_at": "2026-10-07T17:03:40.156106Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

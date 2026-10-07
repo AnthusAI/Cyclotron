@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "318131f8-225d-4f04-8548-83a7c0aa0e93",
+  "issue_id": "decision-flywheel-814a43a6-542c-449a-96a6-94f7c35304e6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:53:59.760Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Replace Classifiers navigation with Scorecards and nested classifier editors",
+    "description": "Top-level navigation: Scorecards, Item lists, Optimizations. Scorecards list shows names, active revisions and classifier membership; scorecard detail lists ordered classifiers and opens their configuration/history. Support creating a scorecard, adding an existing classifier or a new classifier, binary/multiclass classes with configurable order and positive/negative roles, editing as a new revision and explicit version activation. Show impact of classifier edits on affected scorecard versions and joint requests. Keep existing session/run selection in deep links; do not accidentally start paid runs on navigation. Save/Cancel must remain reachable in a bounded editor footer with scrollable form body at narrow/iPad viewports. Acceptance: browser and component tests navigate, edit Knowledge Bases, save a new version, inspect old versions, and retain in-progress label drafts when opening/closing navigation.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

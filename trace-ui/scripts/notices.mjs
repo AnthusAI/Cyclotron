@@ -5,6 +5,7 @@ import path from 'node:path'
 const packages = ['react', 'react-dom', 'scheduler', 'radix-ui', 'lucide-react',
   'cn', 'clsx', 'tailwind-merge', 'class-variance-authority', 'tw-animate-css',
   '@fontsource-variable/geist', '@fontsource-variable/geist-mono',
+  '@fontsource/blinker',
   ...readdirSync('node_modules/@radix-ui').map(name => `@radix-ui/${name}`)]
 const notices = packages.map(name => {
   const directory = path.join('node_modules', name)

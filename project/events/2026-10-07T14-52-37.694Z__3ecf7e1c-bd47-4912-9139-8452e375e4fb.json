@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3ecf7e1c-bd47-4912-9139-8452e375e4fb",
+  "issue_id": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:52:37.694Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Make Cyclotron a versioned scorecard-first single-page application",
+    "description": "Deliver one coherent app for versioned scorecards containing versioned classifiers, interactive labeling and frozen-label optimization replay. Replace standalone Classifiers navigation with Scorecards and nested classifier configuration. Use the existing full-screen timeline and labeling layouts as the permanent app layouts; remove fullscreen controls. Integrate history and live optimizer activity with app drawers. Record and visualize per-classifier calibrated confidence alongside recall, precision and accuracy. Preserve existing labels, explanations, item identities and immutable run evidence. Implementation must follow the child issues, specs first and fake clients; no DSPy, no new engine, no fabricated labels, no implicit paid replay. Existing draft versioning/calibration code is partial work, not acceptance. Completion requires browser verification including iPad-sized labeling and timeline playback.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+    "labels": []
+  }
+}

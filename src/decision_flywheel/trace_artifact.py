@@ -244,8 +244,8 @@ timelineData.groups=[...classGroups,
  ...otherGroups.filter(group=>!optimizationIds.includes(group.id)&&!['cycles','evaluation','fit','configuration','configuration-count'].includes(group.id)),
  {id:'configuration-group',content:'Configuration',nestedGroups:['configuration','configuration-count'],showNested:true},
  {id:'configuration',content:'Changes'},{id:'configuration-count',content:'Classifications'},
- {id:'evaluation-trends',content:'Evaluation',nestedGroups:['metric-accuracy','metric-precision','metric-recall'],showNested:true},
- ...['accuracy','precision','recall'].map(metric=>({id:'metric-'+metric,content:metric[0].toUpperCase()+metric.slice(1)+' · 0–100%'}))].map((group,order)=>({...group,order}));
+ {id:'evaluation-trends',content:'Evaluation',nestedGroups:['metric-recall','metric-precision','metric-accuracy'],showNested:true},
+ ...['recall','precision','accuracy'].map(metric=>({id:'metric-'+metric,content:metric[0].toUpperCase()+metric.slice(1)+' · 0–100%'}))].map((group,order)=>({...group,order}));
 const metricSeries=JSON.parse(el('metric-series').textContent),trendItems=[];
 for(const metric of ['accuracy','precision','recall']){
  let previous=null;
@@ -373,21 +373,7 @@ el('zoom-out').onclick=()=>zoomView(2);
 el('fit-all').onclick=()=>{const window=timeline.getWindow(),width=Math.min(maximum,4000);setView((+window.start+ +window.end-width)/2,width);};
 // Capture before vis-timeline: its default wheel path treats diagonal/horizontal
 // trackpad gestures as zoom. Ordinary scrolling navigates; only pinch zooms.
-let wheelAxis=null,lastWheelAt=-Infinity,fullscreen=false;
-function updateFullscreen(active){
- fullscreen=active;wheelAxis=null;lastWheelAt=-Infinity;
- el('workspace').classList?.toggle('is-fullscreen',active);
- const button=el('fullscreen-toggle'),label=active?'Exit fullscreen':'Enter fullscreen';
- button.setAttribute?.('aria-label',label);button.title=label;
- el('navigation-hint').textContent='Horizontal scroll: pan · vertical scroll: rows · pinch: zoom';
- timeline.redraw();
-}
-el('fullscreen-toggle').onclick=async()=>{
- if(fullscreen){if(document.fullscreenElement&&document.exitFullscreen)await document.exitFullscreen();updateFullscreen(false);}
- else {updateFullscreen(true);try{await el('workspace').requestFullscreen?.();}catch{/* Fixed-viewport fallback when native fullscreen is unavailable. */}}
-};
-document.addEventListener?.('fullscreenchange',()=>updateFullscreen(Boolean(document.fullscreenElement)));
-document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&fullscreen&&!document.fullscreenElement)updateFullscreen(false);});
+let wheelAxis=null,lastWheelAt=-Infinity;
 el('timeline').addEventListener('wheel',event=>{
  const rect=(el('timeline').querySelector?.('.vis-panel.vis-center')||el('timeline')).getBoundingClientRect();
  const scale=event.deltaMode===1?16:event.deltaMode===2?rect.width:1;
@@ -415,7 +401,7 @@ el('timeline').addEventListener('wheel',event=>{
 function setInspectorOpen(open){
  el('inspector').hidden=!open;
  el('show-inspector').hidden=open;
- el('workspace').className=(open?'workspace':'workspace inspector-closed')+(fullscreen?' is-fullscreen':'');
+ el('workspace').className=open?'workspace':'workspace inspector-closed';
  timeline.redraw();
 }
 el('close-inspector').onclick=()=>setInspectorOpen(false);
@@ -531,6 +517,15 @@ function comparison(event){
 }
 function draw(){
  const event=events[position];
+ const calibrationSnapshots={};
+ for(let i=0;i<=position&&i<events.length;i++)if(events[i].kind==='cycle-metrics'&&events[i].metrics?.calibration)calibrationSnapshots[events[i].classifier_id||'Classifier']=events[i].metrics.calibration;
+ window.dispatchEvent(new CustomEvent('flywheel-calibration-position',{detail:calibrationSnapshots}));
+ const modelComparisons={};
+ for(let i=0;i<=position&&i<events.length;i++)if(events[i].kind==='cycle-metrics'&&events[i].metrics?.decision_model_comparison){
+  const config=events[i].class_config||classConfig;
+  modelComparisons[events[i].classifier_id||'Classifier']={comparison:events[i].metrics.decision_model_comparison,positive:config.find(row=>row.role==='positive')?.label};
+ }
+ window.dispatchEvent(new CustomEvent('flywheel-model-comparison-position',{detail:modelComparisons}));
  el('status').textContent=event?`${event.cycle_number?'Cycle '+event.cycle_number+' · ':''}Event ${event.event_id} · ${event.kind} · ${event.step_stage||(event.cycle_id?'item processing':'legacy/unscoped')} · ${event.status||event.reason||''}`:'No recorded events';
  if(event&&stepPositions.has(String(position))){
   const point=new Date(stepPositions.get(String(position)));
@@ -612,6 +607,8 @@ function evaluationMetrics(event){
  for(const label of classes.filter(label=>label in (incumbent.per_class||{})||label in (candidate.per_class||{}))){
   for(const metric of ['recall','precision'])rows.push({label:`${metric==='recall'?'Recall':'Precision'} · ${label}`,incumbent:score(incumbent.per_class?.[label]?.[metric]),candidate:score(candidate.per_class?.[label]?.[metric])});
  }
+ const metricOrder=label=>label.startsWith('Recall')?0:label.startsWith('Precision')?1:label==='Accuracy'?2:3;
+ rows.sort((left,right)=>metricOrder(left.label)-metricOrder(right.label));
  return {rows,count:candidate.count??incumbent.count,reason:result.reason,promoted:result.promoted};
 }
 function showEvaluation(event){

@@ -1,4 +1,4 @@
-import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, FileText, Maximize, PanelRight, Play, ShieldCheck, RefreshCw, X, ZoomIn, ZoomOut} from 'lucide-react'
+import {Activity, ArrowLeft, ArrowRight, ChevronsLeftRight, FileText, PanelRight, Play, ShieldCheck, X, ZoomIn, ZoomOut} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Badge} from '@/components/ui/badge'
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card'
@@ -8,6 +8,9 @@ import {Label} from '@/components/ui/label'
 import {Separator} from '@/components/ui/separator'
 import {FilterCheckbox} from './FilterCheckbox'
 import {ExchangePanel} from './ExchangePanel'
+import {PlaybackCalibration} from './ReliabilityCurve'
+import {PlaybackModelComparison} from './ModelComparison'
+import {CyclotronBrand} from './CyclotronBrand'
 
 export type Counts={predictions:number;labels:number;optimizations:number;events:number}
 type Endpoint={accuracy:number|null;precision:number|null;recall:number|null}
@@ -18,7 +21,7 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
   return <>
     <div className="app-shell">
       {!embedded&&<header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
-        <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><RefreshCw className="size-5" /></div><div><p className="text-sm font-semibold">Decision Flywheel</p><p className="text-xs text-muted-foreground">Experiment workspace</p></div></div>
+        <CyclotronBrand />
         <Badge variant="outline"><ShieldCheck className="size-3" /> Private · offline</Badge>
       </header>}
       <main className={`explorer-main mx-auto w-full max-w-[1800px] gap-3 ${embedded?'p-2':'p-4'}`}>
@@ -26,7 +29,7 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
         <details className="run-statistics text-muted-foreground">
           <summary className="cursor-pointer text-xs font-medium">Run statistics</summary>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {([['Accuracy','accuracy'],['Precision','precision'],['Recall','recall']] as const).map(([title,key])=>{
+          {([['Recall','recall'],['Precision','precision'],['Accuracy','accuracy']] as const).map(([title,key])=>{
             const before=comparison?.before[key],after=comparison?.after[key]
             const delta=before!=null&&after!=null?(after-before)*100:null
             return <Card key={key} className="gap-2 py-4"><CardHeader className="px-4 pb-0"><p className="text-sm font-medium text-foreground">{title}</p></CardHeader><CardContent className="px-4">
@@ -40,7 +43,6 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
         <div id="workspace" className="workspace">
           <Card className="timeline-pane gap-0 overflow-hidden py-0">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-5 py-3"><div><CardTitle className="text-base">Decision timeline</CardTitle><p id="navigation-hint" className="mt-1 text-xs text-muted-foreground">Horizontal scroll: pan · vertical scroll: rows</p></div><div className="flex items-center gap-1">
-              <Button id="fullscreen-toggle" variant="outline" size="icon" aria-label="Enter fullscreen" title="Enter fullscreen"><Maximize /></Button>
               <Button id="zoom-in" variant="outline" size="icon" aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
               <Button id="zoom-out" variant="outline" size="icon" aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
               <Button id="fit-all" variant="outline" size="sm" title="Return to a four-cycle view"><ChevronsLeftRight /> Reset zoom</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
@@ -76,6 +78,8 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
               <ExchangePanel kind="optimizer" title="Optimizer LLM" />
               <ExchangePanel kind="decision" title="Decision model" />
               <section id="cell-events" className="cycle-cell-events" hidden aria-label="Events in this cycle and row" />
+              <PlaybackCalibration />
+              <PlaybackModelComparison />
               <dl id="event-fields" />
               <details id="content-box" className="disclosure"><summary id="content-title">Inspect event content</summary><pre id="event-content" /></details>
               <details className="disclosure"><summary>Configuration at this point</summary><pre id="configuration" /></details>

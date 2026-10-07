@@ -14,7 +14,7 @@ class Cycle:
 
     @classmethod
     def resume(cls, wheel, item):
-        """Reattach to the last unfinished cycle; never repeat prediction or work."""
+        """Reattach to this item's latest unfinished cycle, skipping other work."""
         if wheel._cycle_running:
             raise RuntimeError('one operational cycle may run at a time')
         closed = set()
@@ -23,7 +23,7 @@ class Cycle:
                 closed.add(event.get('cycle_id'))
             if event['kind']=='cycle-started':
                 if event['cycle_id'] in closed or event.get('cycle_item_id') != item.id:
-                    return None
+                    continue
                 cycle=cls(wheel,item,reason=event.get('reason','item-processing'))
                 cycle.context={key:event[key] for key in ('cycle_id','cycle_number','cycle_item_id')}
                 cycle.token=wheel._cycle_context.set(cycle.context)
@@ -60,6 +60,14 @@ class Cycle:
         if due:
             self.wheel._cycle_context.set({**self.context, 'trigger_event_id':event['event_id']})
         return event
+
+    def suspend(self):
+        """Detach a waiting cycle without marking it complete; resume before feedback."""
+        if self.token is None: raise RuntimeError('cycle is not attached')
+        self.wheel._emit({'kind':'cycle-waiting-for-feedback'})
+        self.wheel._cycle_context.reset(self.token)
+        self.wheel._cycle_running=False
+        self.token=None
 
     def __exit__(self, error_type, error, traceback):
         try:

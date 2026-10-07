@@ -43,6 +43,8 @@ def main(argv=None):
     serve.add_argument('--host',default='127.0.0.1')
     serve.add_argument('--port',type=int,default=8782)
     serve.add_argument('--allow-live',action='store_true',help='enable explicit live-run creation; does not itself make model calls')
+    serve.add_argument('--allow-unauthenticated-lan',action='store_true',
+        help='allow devices on the trusted local network to use the workspace without signing in')
     load = sub.add_parser('import-recording')
     load.add_argument('--endpoint',default='http://127.0.0.1:8782/graphql')
     load.add_argument('--database',type=Path,required=True)
@@ -61,7 +63,7 @@ def main(argv=None):
         host = bind_address(args.host)
     except ValueError as error:
         parser.error(str(error))
-    if host != '127.0.0.1' and not token:
+    if host != '127.0.0.1' and not token and not args.allow_unauthenticated_lan:
         parser.error('LAN access requires FLYWHEEL_WEB_TOKEN in the environment')
     from .adapters.jev import JevAdapter,JevConfiguration
     from .adapters.openai_optimizer import OpenAIOptimizer
@@ -79,7 +81,8 @@ def main(argv=None):
                 OptimizerAgent(OpenAIOptimizer.from_environment(model=config['optimizer_model'],max_calls=config['max_optimizer_calls'])))
     service = WebWorker(store,args.database.parent / 'runs',articles=articles,allow_live=args.allow_live,
         sink_factory=lambda run_id:GraphQLTraceSink(endpoint,run_id,token=token),model_factory=model_factory,redact=redact)
-    app = create_app(store,service=service,token=token,redact=redact)
+    app = create_app(store,service=service,token=token,redact=redact,
+        allow_unauthenticated_lan=args.allow_unauthenticated_lan)
     print(f'Workspace: http://{host}:{args.port}/',flush=True)
     uvicorn.run(app,host=host,port=args.port,workers=1,access_log=False)
     return 0
