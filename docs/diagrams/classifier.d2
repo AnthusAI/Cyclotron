@@ -1,47 +1,73 @@
-direction: down
+# The classifier at the centre of the flywheel: the decision request the
+# LLM optimizer adjusts, and the learned ML head that turns answers into a
+# final classification.
+#
+# A two-column grid keeps it README-width: the request runs down the right
+# column, and human feedback, the optimizer, and the ML fitter sit on the left.
+...@_cyclotron
 
-feedback: "Human training feedback\nLabels and explanations"
-optimizer: "LLM optimizer\nPropose rubric, example-list, and task edits"
-feedback -> optimizer
+grid-rows: 6
+grid-columns: 2
+horizontal-gap: 64
+vertical-gap: 56
 
-request: "ACTUAL DECISION-MODEL REQUEST\nstate + questions" {
-  direction: right
-  state: "state" {
-    target: "target\nThe new item's text and metadata"
-    rubric: "rubric [adjustable]\nCriteria for Include or Exclude\nStarts with a simple question"
-    examples: "examples [adjustable]\nSelected labeled items\nInclude / Exclude + optional explanations"
-  }
-  questions: "questions" {
-    main: "Main decision [rubric adjustable]\nShould this item be included?\nApply state.rubric to state.target\nUse state.examples\nOptions: Include / Exclude"
-    elements: "Element classifications [adjustable]\nOptimizer-defined questions and criteria\nExample: practical / theoretical / none\nExample: evaluation / other\nEach task applies to state.target"
-  }
+# Row 1
+optimizer: "LLM optimizer\nPropose rubric,\nexample-list, and\ntask edits" {class: llm}
+request: "DECISION-MODEL REQUEST\nadjustable parts (left) · fixed parts (right)" {
+  class: group
+  grid-rows: 3
+  grid-columns: 2
+  grid-gap: 16
+  rubric: "state.rubric\nInclude or Exclude\ncriteria"
+  target: "state.target\nThe new item's\ntext and metadata"
+  examples: "state.examples\nSelected labeled\nitems"
+  main: "Main decision\nShould this item be\nincluded? Apply the\nrubric and examples"
+  elements: "Element questions\nOptimizer-defined\nquestions and criteria"
+  _spacer: "" {class: spacer}
 }
 
-optimizer -> request.state.rubric: "1. Revise rubric"
-optimizer -> request.state.examples: "2. Improve example collection"
-optimizer -> request.questions.elements: "3. Add, edit, or remove tasks"
+# Row 2
+feedback: "Human training\nfeedback\nLabels and explanations" {class: human}
+model: "Decision model\nJev or another provider\nOne request carries state\nand all questions" {class: model}
 
-model: "Decision model\nJev (or another provider adapter)\nOne Jev request carries state and all questions"
-request -> model: "Send the complete request"
-
-answers: "Structured response" {
-  direction: right
-  main: "Main answer\nInclude / Exclude probabilities"
-  elements: "Element answers\nClassification probabilities or scores\nOne answer per task"
+# Row 3
+_r3c1: "" {class: spacer}
+answers: "STRUCTURED RESPONSE" {
+  class: group
+  grid-columns: 2
+  horizontal-gap: 24
+  main: "Main answer\nInclude / Exclude\nprobabilities"
+  elements: "Element answers\nOne probability or\nscore per task"
 }
-model -> answers: "Return all task answers"
-features: "Feature conversion\nMain answer + element answers\nBecome named numerical ML inputs"
-answers -> features
-head: "Custom trained ML model\nCombine features with fitted weights\nApply fitted confidence calibration"
-features -> head
-result: "Final classification\nInclude or Exclude + confidence"
-head -> result
 
-training: "ML fitter\nFit from complete feature rows\nand trusted human training labels"
-feedback -> training: "Training labels"
-features -> training: "Training-item features"
-training -> head: "Fitted weights and calibration"
+# Row 4
+training: "ML fitter\nFit from complete\nfeature rows and\ntrusted labels" {class: ml}
+features: "Feature conversion\nAnswers become\nnamed ML inputs" {class: step}
 
-note: "Proposed edits must pass validation and evaluation before use.\nFixed optimized example collection first; per-item retrieval is a later exploration." {
-  shape: text
+# Row 5
+_r5c1: "" {class: spacer}
+head: "Custom trained ML model\nCombine features with fitted\nweights; apply calibration" {class: ml}
+
+# Row 6
+_r6c1: "" {class: spacer}
+result: "Final classification\nInclude or Exclude + confidence" {class: outcome}
+
+feedback -> optimizer {class: proposal}
+optimizer -> request.rubric: "1. rubric" {class: proposal}
+optimizer -> request.examples: "2. examples" {class: proposal}
+optimizer -> request.elements: "3. tasks" {class: proposal}
+
+request -> model: "send the complete request" {class: flow}
+model -> answers: "return all answers" {class: flow}
+answers -> features {class: flow}
+features -> head {class: flow}
+head -> result {class: flow}
+
+feedback -> training: "training labels" {class: learning}
+features -> training: "training\nfeatures" {class: evidence}
+training -> head: "fitted weights\nand calibration" {class: learning}
+
+note: "Proposed edits must pass validation and evaluation before use.\nA fixed optimized example collection comes first;\nper-item retrieval is a later exploration." {
+  class: note
+  near: bottom-center
 }

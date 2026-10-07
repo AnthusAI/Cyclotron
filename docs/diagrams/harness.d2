@@ -1,0 +1,38 @@
+# Cyclotron: a self-aligning decision model harness.
+# The harness learns what to ask a decision model and how to combine its answers.
+#
+# A 3 × 3 grid keeps the diagram README-width and the loop planar: one
+# prediction runs clockwise around the edge, human feedback returns to the
+# LLM optimizer, and ML fitting sits in the centre.
+...@_cyclotron
+
+grid-rows: 3
+grid-columns: 3
+horizontal-gap: 96
+vertical-gap: 80
+
+context: "Classifier context\nRubric · examples ·\nextra questions" {class: store}
+request: "Decision request\nTarget plus context\nand questions" {class: step}
+model: "Decision model\nJev or another\nprovider" {class: model}
+
+optimizer: "LLM optimizer\nPropose context\nchanges" {class: llm}
+fitter: "ML fitting\nFit weights and\ntemperature from\ntrusted labels" {class: ml}
+answers: "Structured answers\nMain and element\nprobabilities" {class: step}
+
+feedback: "Human feedback\nLabel and\nexplanation" {class: human}
+prediction: "Final prediction\nLabel and\nconfidence" {class: outcome}
+head: "Learned ML head\nCombine features;\ncalibrate confidence" {class: ml}
+
+context -> request: "context" {class: flow}
+request -> model: "one\nrequest" {class: flow}
+model -> answers: "answers" {class: flow}
+answers -> head: "features" {class: flow}
+head -> prediction: "label +\nconfidence" {class: flow}
+
+prediction -> feedback: "review" {class: evidence}
+feedback -> optimizer: "labels and\nexplanations" {class: proposal}
+optimizer -> context: "propose\nchanges" {class: proposal}
+
+answers -> fitter: "feature\nrows" {class: evidence}
+feedback -> fitter: "trusted labels" {class: learning}
+fitter -> head: "fitted weights +\ncalibration" {class: learning}

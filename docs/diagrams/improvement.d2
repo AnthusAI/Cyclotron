@@ -1,51 +1,74 @@
-direction: down
+# Analyze feedback and improve the system: one optimization round, from new
+# feedback to a promoted or retained classifier version.
+#
+# A three-column grid keeps the diagram README-width: the round runs down the
+# centre, ML training sits on the left, and records and comparison labels on
+# the right.
+...@_cyclotron
 
-feedback: "New human training feedback\nLabels, explanations, and prediction errors"
-active: "Current classifier definition\nRubric, examples, tasks, and fitted ML model"
-optimizer: "LLM optimizer\nAnalyze feedback and propose an experiment"
-feedback -> optimizer
-active -> optimizer
+grid-rows: 8
+grid-columns: 3
+horizontal-gap: 72
+vertical-gap: 56
 
-candidate: "CANDIDATE REQUEST DEFINITION" {
-  direction: right
-  rubric: "Main decision rubric\nRevise criteria for Include or Exclude"
-  examples: "Few-shot example collection\nSelect or replace labeled examples"
-  tasks: "Element classification tasks\nAdd, edit, or remove questions\nSet answer options and criteria"
-}
-optimizer -> candidate.rubric: "Adjust rubric"
-optimizer -> candidate.examples: "Improve example selection"
-optimizer -> candidate.tasks: "Experiment with features"
+# Row 1
+feedback: "New human training\nfeedback\nLabels, explanations,\nand prediction errors" {class: human}
+optimizer: "LLM optimizer\nAnalyze feedback and\npropose an experiment" {class: llm}
+active: "Current classifier\ndefinition\nRubric, examples, tasks,\nand fitted ML model" {class: store}
 
-validate: "Validate proposed changes\nCheck schema, limits, and data separation"
-candidate -> validate
-collect: "Collect candidate decision-model answers\nApply rubric, examples, and tasks to each item\nReuse only matching saved requests"
-validate -> collect: "Valid candidate"
-features: "Convert answers to numerical features\nComplete training and development feature rows"
-collect -> features
-fit: "Retrain custom ML model\nFit weights from trusted training labels\nCalibrate from out-of-fold predictions"
-features -> fit: "Training feature rows"
-feedback -> fit: "Training labels"
+# Row 2
+_r2c1: "" {class: spacer}
+candidate: "Candidate request\ndefinition\nRubric · examples ·\nelement tasks" {class: llm}
+transcript: "Visible optimization\nrecord\nPrompts, responses,\ntool calls, and diff" {class: store}
 
-evaluate: "Evaluate candidate against active classifier\nSame development items and labels\nApply the declared promotion rule"
-fit -> evaluate: "Candidate model"
-features -> evaluate: "Development feature rows"
-development: "Development labels\nUsed for comparison, not optimizer input or training"
-development -> evaluate
+# Row 3
+_r3c1: "" {class: spacer}
+validate: "Validate proposed\nchanges\nSchema, limits, and\ndata separation" {class: step}
+_r3c3: "" {class: spacer}
 
-promote: "Save improved classifier version\nRubric + examples + tasks + features + ML model"
-retain: "Keep current classifier\nRecord failure or insufficient improvement"
-evaluate -> promote: "Pass"
-evaluate -> retain: "Fail or incomplete"
-validate -> retain: "Invalid proposal"
+# Row 4
+_r4c1: "" {class: spacer}
+collect: "Collect candidate\nanswers\nReuse only matching\nsaved requests" {class: step}
+_r4c3: "" {class: spacer}
 
-next: "Classify more items and collect human feedback\nStart the next improvement round"
-promote -> next
-retain -> next
+# Row 5
+fit: "Retrain custom\nML model\nFit from trusted labels;\ncalibrate out of fold" {class: ml}
+features: "Convert answers\nto features\nTraining and\ndevelopment rows" {class: step}
+_r5c3: "" {class: spacer}
 
-transcript: "Visible optimization record\nExact prompts, responses, and tool calls\nProposal diff, training status, scores, and outcome"
-optimizer -> transcript: "Save exchange"
-evaluate -> transcript: "Save measured result"
+# Row 6
+_r6c1: "" {class: spacer}
+evaluate: "Evaluate candidate\nvs. active\nSame development items;\napply the promotion rule" {class: step}
+development: "Development labels\nFor comparison only;\nnever optimizer input\nor training" {class: human}
 
-note: "Intended complete loop; current demo integration is incomplete.\nAudit and permanent holdout labels remain outside optimization.\nPer-item example retrieval is a later exploration." {
-  shape: text
+# Row 7
+promote: "Save improved\nversion\nRubric, examples, tasks,\nfeatures, and ML model" {class: outcome}
+_r7c2: "" {class: spacer}
+retain: "Keep current\nclassifier\nRecord an invalid, failed,\nor weak candidate" {class: step}
+
+# Row 8
+_r8c1: "" {class: spacer}
+next: "Next round\nClassify more items and\ncollect human feedback" {class: step}
+_r8c3: "" {class: spacer}
+
+feedback -> optimizer {class: proposal}
+active -> optimizer {class: proposal}
+optimizer -> candidate: "adjust rubric,\nexamples, tasks" {class: proposal}
+optimizer -> transcript: "save\nexchange" {class: proposal}
+candidate -> validate {class: flow}
+validate -> collect: "valid" {class: flow}
+collect -> features {class: flow}
+features -> fit: "training\nrows" {class: learning}
+feedback -> fit: "training labels" {class: learning}
+features -> evaluate: "development rows" {class: flow}
+fit -> evaluate: "candidate\nmodel" {class: learning}
+development -> evaluate {class: flow}
+evaluate -> promote: "pass" {class: flow}
+evaluate -> retain: "fail or\nincomplete" {class: flow}
+promote -> next {class: flow}
+retain -> next {class: flow}
+
+note: "Intended complete loop; current demo integration is incomplete.\nAudit and permanent holdout labels stay outside optimization.\nPer-item example retrieval is a later exploration." {
+  class: note
+  near: bottom-center
 }
