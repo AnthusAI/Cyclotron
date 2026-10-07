@@ -4,6 +4,49 @@ import pytest
 from .web_store import WebStore
 
 
+def test_explicit_feedback_recovery_requeues_only_non_paid_scorecard_commands_and_preserves_failure_history(tmp_path):
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})
+    job = store.command(run['id'], 'undo', 'undo', {})
+    store.claim_command()
+    store.finish_command(job['id'], 'failed', {'error_type': 'RuntimeError', 'reason': 'state retained'})
+    resumed = store.resume_feedback_command(run['id'], job['id'])
+    assert resumed['id'] == job['id'] and resumed['status'] == 'pending'
+    assert store.resume_feedback_command(run['id'], job['id']) == resumed
+    events = store.all_events(run['id'])
+    assert len(events) == 1 and events[0]['payload']['previous_result']['error_type'] == 'RuntimeError'
+    assert store.claim_command()['id'] == job['id']
+    store.finish_command(job['id'], 'completed', {'undone': 'paper'})
+    assert store.resume_feedback_command(run['id'], job['id'])['status'] == 'completed'
+    for kind in ('optimize', 'prepare', 'label', 'replay-next'):
+        paid = store.command(run['id'], kind, kind, {})
+        store.claim_command(); store.finish_command(paid['id'], 'failed', {})
+        with pytest.raises(ValueError, match='correction or undo'):
+            store.resume_feedback_command(run['id'], paid['id'])
+
+
+def test_feedback_recovery_cannot_interleave_with_work_or_reactivate_an_inactive_edition(tmp_path):
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})
+    job = store.command(run['id'], 'undo', 'undo', {})
+    store.claim_command(); store.finish_command(job['id'], 'failed', {})
+    busy = store.command(run['id'], 'prepare', 'prepare', {})
+    with pytest.raises(ValueError, match='work in progress'):
+        store.resume_feedback_command(run['id'], job['id'])
+    store.claim_command(); store.finish_command(busy['id'], 'completed', {})
+    other = store.create_run('New edition', 'live', {'classifiers': [{'id': 'a'}]})
+    with store.connect() as db:
+        db.execute('INSERT INTO scorecards VALUES (?,?,?)', ('card', 'Card', 2))
+        db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)', ('card', 1, run['id'], None, run['created_at']))
+        db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)', ('card', 2, other['id'], run['id'], other['created_at']))
+    with pytest.raises(ValueError, match='activate'):
+        store.resume_feedback_command(run['id'], job['id'])
+    with pytest.raises(ValueError, match='correction or undo'):
+        store.resume_feedback_command(other['id'], job['id'])
+    assert store.all_events(run['id']) == []
+    assert next(row for row in store.jobs(run['id']) if row['id'] == job['id'])['status'] == 'failed'
+
+
 def test_operating_limits_can_change_without_resetting_labels_or_classifier_configuration(tmp_path):
     store=WebStore(tmp_path/'web.sqlite')
     run=store.create_run('Live','live',{'max_requests':500,'max_optimizer_calls':10,'classifiers':[{'id':'a'}]})

@@ -212,6 +212,32 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
     def _job(row):
         return {**dict(row), 'payload': json.loads(row['payload']), 'result':json.loads(row['result']) if row['result'] else None}
 
+    def resume_feedback_command(self,run_id,job_id):
+        """Explicitly recover scorecard corrections/undo, never paid work."""
+        run=self.run(run_id)
+        if run['mode']!='live' or not run['config'].get('classifiers'):
+            raise ValueError('feedback recovery requires a scorecard run')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT * FROM web_jobs WHERE run_id=? AND id=?',(run_id,job_id)).fetchone()
+            if row is None or row['kind'] not in ('correct','undo'):
+                raise ValueError('only a scorecard correction or undo command can be recovered')
+            if row['status'] in ('pending','running','completed'):return self._job(row)
+            if row['status'] not in ('failed','interrupted'):raise ValueError('command is not recoverable')
+            edition=db.execute('SELECT v.revision,s.active_revision FROM scorecard_versions v JOIN scorecards s ON s.id=v.scorecard_id WHERE v.run_id=?',(run_id,)).fetchone()
+            if edition and edition['revision']!=edition['active_revision']:
+                raise ValueError('activate this scorecard version before recovering its feedback')
+            if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')",(run_id,)).fetchone():
+                raise ValueError('run already has work in progress')
+            event={'kind':'feedback-command-resumed','job_id':job_id,'command':row['kind'],
+                   'previous_status':row['status'],'previous_result':json.loads(row['result']) if row['result'] else None,
+                   'created_at':datetime.now(timezone.utc).isoformat()}
+            db.execute('INSERT INTO web_events(run_id,source_id,payload) VALUES (?,?,?)',
+                       (run_id,f'feedback-recovery:{uuid4()}',encode(event)))
+            db.execute("UPDATE web_jobs SET status='pending',result=NULL WHERE id=?",(job_id,))
+            db.execute("UPDATE web_runs SET status='ready' WHERE id=?",(run_id,))
+            return self._job(db.execute('SELECT * FROM web_jobs WHERE id=?',(job_id,)).fetchone())
+
     def jobs(self, run_id):
         self.run(run_id)
         with self.connect() as db:

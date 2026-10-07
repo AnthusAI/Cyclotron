@@ -24,9 +24,17 @@ def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_
             self.calls += 1
             return BatchedAnswers({'topic': {'decision': DecisionResult('yes', {'yes': .8, 'no': .2})}}, 'fake', {}, 1)
     model = Model()
+    lose_undo_ack = [False]
+    def trace(body):
+        response = client.post('/graphql', json=body).json()
+        event = body['variables']['events'][0]['payload']
+        if lose_undo_ack[0] and event['kind'] == 'human-feedback' and event.get('action') == 'retracted':
+            lose_undo_ack[0] = False
+            return {'errors': [{'message': 'Synthetic acknowledgement loss'}]}
+        return response
     worker = WebWorker(store, tmp_path / 'runs', allow_live=True,
         model_factory=lambda _: (model, agent([])), sink_factory=lambda run_id: GraphQLTraceSink('offline', run_id,
-            transport=lambda body: client.post('/graphql', json=body).json()))
+            transport=trace))
     client = TestClient(create_app(store, service=worker))
     run = worker.create_run('Scorecard', {'scorecard_id': _scorecard(store), 'item_list_id': 'papers'})
     try:
@@ -54,6 +62,27 @@ def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_
         assert corrected['feedback']['edit_comment_value'] == 'I clicked the wrong button'
         metrics = next(e for e in reversed(events) if e['kind'] == 'cycle-metrics')
         assert metrics['metrics']['count'] == 1 and metrics['metrics']['accuracy'] == 0
+        undo = store.command(run['id'], 'undo', 'undo', {})
+        lose_undo_ack[0] = True
+        worker.process(store.claim_command())
+        assert store.jobs(run['id'])[0]['status'] == 'failed'
+        worker.close()
+        worker = WebWorker(store, tmp_path / 'runs', allow_live=True,
+            model_factory=lambda _: (model, agent([])), sink_factory=lambda run_id: GraphQLTraceSink('offline', run_id,
+                transport=trace))
+        resumed = client.post('/graphql', json={'query': '''mutation($run: ID!, $job: ID!) {
+            resumeFeedbackCommand(runId: $run, jobId: $job) { id status }
+        }''', 'variables': {'run': run['id'], 'job': undo['id']}}).json()
+        assert not resumed.get('errors')
+        assert resumed['data']['resumeFeedbackCommand']['id'] == undo['id']
+        worker.process(store.claim_command())
+        assert store.jobs(run['id'])[0]['status'] == 'completed'
+        assert store.item_labels('papers', 'paper', 1) == []
+        assert store.current_item(run['id'])['prediction'] == shown['prediction']
+        assert model.calls == 1
+        retractions = [r for r in store.all_events(run['id'])
+                       if r['payload']['kind'] == 'human-feedback' and r['payload'].get('action') == 'retracted']
+        assert len(retractions) == 1
     finally:
         worker.close()
         client.close()

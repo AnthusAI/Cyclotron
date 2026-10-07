@@ -33,10 +33,46 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "6efe2312-f3d6-4d24-94c6-e3ecbdce7adf",
+      "author": "home",
+      "text": "Added the scorecard undo backend and append-only catalog retractions. Undo retracts local active classifier labels for the most recently labeled item, invalidates dependent learning through core reconciliation, updates metrics/calibration, checkpoints, and reopens the same saved prediction with explicit reuse trace references. No new decision/optimizer calls. Superseded old votes never resurface. Backfill source labels remain immutable; frozen replay undo rejects. Durable undo-plan/retraction/completion events support explicit recovery after trace acknowledgement loss. Offline tests prove two-classifier undo/relabel across restart with one total fake request, source-label protection in backfill, catalog tombstone persistence/idempotency/stale-retraction rejection, and worker/API trace integration. Full regression in progress. Correction/undo UI and broader acceptance remain open; production data/server untouched.",
+      "created_at": "2026-10-07T19:26:05.478478Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "d18f6a64-6d3e-4075-b619-5c72dee7f3c7",
+      "author": "home",
+      "text": "Closed the backend recovery gap as part of undo work: resumeFeedbackCommand explicitly requeues only failed/interrupted scorecard correction or undo jobs with their original identities/payloads, preserves prior failure result in trace history, rejects paid-capable command kinds, busy runs and inactive editions, and is idempotent. Fake GraphQL integration loses the retraction acknowledgement after API storage, restarts WebWorker, resumes that same job via GraphQL, and verifies one retraction and one total model call. UI recovery/correction/undo controls still remain acceptance work; full regression rerunning after this addition.",
+      "created_at": "2026-10-07T19:30:03.785995Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "dc3a3644-c0e3-4bb7-b38a-ce1feb30f2f0",
+      "author": "home",
+      "text": "Recovery guard specs also verify that another pending run command blocks requeue, inactive editions cannot be reactivated through recovery, and a job cannot be recovered through a different run ID. Current undo API semantics are item-level local-label retraction, not restoration of superseded values; documented explicitly. Completed full regression passed 721 tests before the final guard spec was added; focused WebStore suite including that guard passes. Final all-tests rerun is active. UI work remains deliberately open.",
+      "created_at": "2026-10-07T19:32:15.863131Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "98a54446-c4ea-4e7a-ba1b-7a149ada9310",
+      "author": "home",
+      "text": "Final regression: all 722 Python tests pass for scorecard undo, catalog retractions and explicit non-paid API command recovery. Ready for frontend correction/undo/recovery controls and browser acceptance. Production session/database remain unchanged; backend has not been redeployed during this turn.",
+      "created_at": "2026-10-07T19:33:04.498162Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.731995Z",
-  "updated_at": "2026-10-07T19:16:00.530251Z",
+  "updated_at": "2026-10-07T19:33:04.498259Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

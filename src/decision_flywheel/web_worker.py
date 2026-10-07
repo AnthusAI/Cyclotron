@@ -253,6 +253,9 @@ class WebWorker:
                 elif kind=='label':result=asyncio.run(reviewer.feedback(payload,job['request_id']))
                 elif kind=='skip':result=reviewer.skip(payload)
                 elif kind=='correct':result=reviewer.correct_feedback(payload,job['request_id'])
+                elif kind=='undo':
+                    if payload:raise ValueError('scorecard undo needs an empty payload')
+                    result=reviewer.undo_feedback(job['request_id'])
                 elif kind=='optimize':result=asyncio.run(reviewer.resume_optimization())
                 elif kind=='replay-next':
                     if config.get('input_mode')!='replay':raise ValueError('this run is not a replay')

@@ -33,6 +33,9 @@ class WorkspaceCatalog:
                 FOREIGN KEY(list_id,item_id,item_revision) REFERENCES list_item_revisions(list_id,id,revision));
               CREATE TABLE IF NOT EXISTS item_predictions(run_id TEXT, list_id TEXT, item_id TEXT,
                 item_revision INTEGER, payload TEXT NOT NULL, PRIMARY KEY(run_id,list_id,item_id,item_revision));
+              CREATE TABLE IF NOT EXISTS item_feedback_retractions(
+                request_id TEXT PRIMARY KEY, feedback_request_id TEXT UNIQUE NOT NULL
+                  REFERENCES item_feedback(request_id), created_at TEXT NOT NULL);
             ''')
 
     def save_classifier(self, identifier, name, config):
@@ -140,8 +143,28 @@ class WorkspaceCatalog:
 
     def item_labels(self, list_id, item_id, item_revision):
         with self.connect() as db:
-            return [dict(row) for row in db.execute('SELECT f.* FROM item_feedback f WHERE list_id=? AND item_id=? AND item_revision=? AND sequence=(SELECT MAX(sequence) FROM item_feedback WHERE classifier_id=f.classifier_id AND classifier_revision=f.classifier_revision AND list_id=f.list_id AND item_id=f.item_id AND item_revision=f.item_revision) ORDER BY classifier_id,classifier_revision',
+            return [dict(row) for row in db.execute('SELECT f.* FROM item_feedback f WHERE list_id=? AND item_id=? AND item_revision=? AND sequence=(SELECT MAX(sequence) FROM item_feedback WHERE classifier_id=f.classifier_id AND classifier_revision=f.classifier_revision AND list_id=f.list_id AND item_id=f.item_id AND item_revision=f.item_revision) AND NOT EXISTS(SELECT 1 FROM item_feedback_retractions WHERE feedback_request_id=f.request_id) ORDER BY classifier_id,classifier_revision',
                                                     (list_id,item_id,item_revision))]
+
+    def retract_item_label(self, feedback_request_id, request_id):
+        """Append a tombstone for the current vote; never delete its history."""
+        if not isinstance(request_id,str) or not request_id:raise ValueError('retraction identity required')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            existing=db.execute('SELECT * FROM item_feedback_retractions WHERE request_id=?',(request_id,)).fetchone()
+            if existing:
+                if existing['feedback_request_id']!=feedback_request_id:raise ValueError('retraction identity has different content')
+                return dict(existing)
+            vote=db.execute('SELECT * FROM item_feedback WHERE request_id=?',(feedback_request_id,)).fetchone()
+            if vote is None:raise ValueError('unknown feedback identity')
+            current=db.execute('SELECT MAX(sequence) FROM item_feedback WHERE classifier_id=? AND classifier_revision=? AND list_id=? AND item_id=? AND item_revision=?',
+                (vote['classifier_id'],vote['classifier_revision'],vote['list_id'],vote['item_id'],vote['item_revision'])).fetchone()[0]
+            if current!=vote['sequence']:raise ValueError('only the current label can be retracted')
+            if db.execute('SELECT 1 FROM item_feedback_retractions WHERE feedback_request_id=?',(feedback_request_id,)).fetchone():
+                raise ValueError('label already retracted by another command')
+            db.execute('INSERT INTO item_feedback_retractions VALUES (?,?,?)',
+                       (request_id,feedback_request_id,datetime.now(timezone.utc).isoformat()))
+            return dict(db.execute('SELECT * FROM item_feedback_retractions WHERE request_id=?',(request_id,)).fetchone())
 
     def record_item_prediction(self,run_id,list_id,item_id,item_revision,prediction):
         self.item_revision(list_id,item_id,item_revision)

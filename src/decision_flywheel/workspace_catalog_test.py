@@ -67,3 +67,25 @@ def test_one_item_has_independent_classifier_labels_and_corrections_preserve_his
         assert db.execute('SELECT COUNT(*) FROM item_feedback').fetchone()[0] == 3
     with pytest.raises(ValueError): vote('topics','invalid','vote-4')
     with pytest.raises(ValueError): vote('topics','sport','vote-1')
+
+
+def test_retracting_a_current_label_preserves_history_without_resurrecting_superseded_votes(tmp_path):
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    store.save_classifier('topics', 'Topics', configuration())
+    store.save_item_list('papers', 'Papers')
+    store.upsert_list_items('papers', [{'id': 'a', 'occurred_at': '2026-01-01', 'values': {'text': 'Paper'}}])
+    store.label_item('topics', 1, 'papers', 'a', 1, 'science', 'First', 'first')
+    store.label_item('topics', 1, 'papers', 'a', 1, 'business', 'Correction', 'corrected')
+    with pytest.raises(ValueError, match='current'):
+        store.retract_item_label('first', 'stale-undo')
+    result = store.retract_item_label('corrected', 'undo')
+    assert store.item_labels('papers', 'a', 1) == []
+    assert WebStore(tmp_path / 'workspace.sqlite').item_labels('papers', 'a', 1) == []
+    assert store.retract_item_label('corrected', 'undo') == result
+    with store.connect() as db:
+        assert db.execute('SELECT count(*) FROM item_feedback').fetchone()[0] == 2
+        assert db.execute('SELECT count(*) FROM item_feedback_retractions').fetchone()[0] == 1
+    store.label_item('topics', 1, 'papers', 'a', 1, 'sport', 'New review', 'new')
+    assert store.item_labels('papers', 'a', 1)[0]['label'] == 'sport'
+    with pytest.raises(ValueError, match='different content'):
+        store.retract_item_label('new', 'undo')

@@ -9,6 +9,66 @@ from .observability import StepFailed
 from .flywheel_test import agent
 
 
+def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_prediction(tmp_path):
+    from .workspace_session import freeze_configuration
+    from .flywheel import FittedClassifier, development_assignment
+    from .classifier_config import ClassifierConfig
+    store = WebStore(tmp_path / 'workspace.sqlite')
+    for cid in ('a', 'b'):
+        store.save_classifier(cid, cid, {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
+    store.save_item_list('items', 'Items')
+    item_id = next(str(n) for n in range(100) if not development_assignment('test:audit', str(n), rate=.2)
+                   and not development_assignment('test', str(n)))
+    store.upsert_list_items('items', [{'id': item_id, 'occurred_at': '2026-01-01', 'values': {'text': 'Paper'}}])
+    config = freeze_configuration(store, {'classifier_ids': ['a', 'b'], 'item_list_id': 'items', 'max_requests': 10,
+        'max_optimizer_calls': 3, 'optimize_every': 20, 'rubric_changes_every': 2, 'seed': 'test'})
+    run = store.create_run('Undo', 'live', config, items=store.list_items('items'))
+    class Model:
+        model_identity = 'fake'; calls = 0
+        async def classify_many(self, configs, target, training, **kwargs):
+            self.calls += 1
+            return BatchedAnswers({cid: {'decision': DecisionResult('yes', {'yes': .8, 'no': .2})}
+                for cid in configs}, 'fake', {}, 1)
+    model = Model(); events = []
+    session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
+    shown = asyncio.run(session.prepare())
+    asyncio.run(session.feedback({'item_id': item_id, 'presentation_id': shown['prediction']['presentation_id'],
+        'labels': [{'classifier_id': cid, 'label': 'yes'} for cid in ('a', 'b')]}, 'vote'))
+    for wheel in session.wheels.values():
+        train, dev, _ = session.partitions(wheel.initial.task.name)
+        wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Old learned guidance'),
+            training_evidence=wheel._evidence(train), development_evidence=wheel._evidence(dev)))
+    def lose_ack(event):
+        events.append(event)
+        if event['kind'] == 'human-feedback' and event['action'] == 'retracted' and event['classifier_id'] == 'a':
+            raise RuntimeError('retraction acknowledgement lost')
+    session.observer = lose_ack
+    with pytest.raises(RuntimeError, match='acknowledgement'):
+        session.undo_feedback('undo')
+    session.close()
+    session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
+    result = session.undo_feedback('undo')
+    assert result['undone'] == item_id
+    assert store.item_labels('items', item_id, 1) == []
+    assert store.item_results('items', item_id, 1)[0]['payload'] == shown['prediction']
+    assert asyncio.run(session.prepare())['prediction'] == shown['prediction']
+    assert all(not w.active.config.rubric for w in session.wheels.values())
+    session.close()
+    session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
+    try:
+        before = len(events)
+        assert session.undo_feedback('undo') == result
+        assert len(events) == before
+        asyncio.run(session.feedback({'item_id': item_id, 'presentation_id': shown['prediction']['presentation_id'],
+            'labels': [{'classifier_id': cid, 'label': 'no', 'comment': 'Corrected review'} for cid in ('a', 'b')]}, 'new-vote'))
+        assert {row['label'] for row in store.item_labels('items', item_id, 1)} == {'no'}
+        assert all(session.partitions(cid)[0][0].label == 'no' for cid in ('a', 'b'))
+        assert len([e for e in events if e['kind'] == 'human-feedback' and e['action'] == 'retracted']) == 2
+        assert model.calls == 1
+    finally:
+        session.close()
+
+
 def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_without_paid_calls(tmp_path):
     from .workspace_session import freeze_configuration
     from .flywheel import FittedClassifier, development_assignment
@@ -225,6 +285,15 @@ def test_backfill_predicts_from_zero_then_replays_old_feedback_with_a_new_human_
         assert {f['item_id'] for f in feedback}=={'one'}
         assert {f['edit_comment_value'] for f in feedback}=={'Original explanation','New rubric'}
         assert len(store.item_labels('list','one',1))==2
+        # Undo only labels provided in this session, not immutable source votes
+        # that were replayed to backfill the newly added classifier.
+        result=session.undo_feedback('undo-new-vote')
+        assert result['classifier_ids']==['b']
+        assert [(r['classifier_id'],r['request_id']) for r in store.item_labels('list','one',1)]==[('a','original')]
+        assert asyncio.run(session.prepare())['prediction']==shown['prediction']
+        asyncio.run(session.feedback({'item_id':'one','presentation_id':shown['prediction']['presentation_id'],
+            'labels':[{'classifier_id':'b','label':'no','comment':'Corrected new-classifier vote'}]},'corrected-new-vote'))
+        assert {r['classifier_id']:r['label'] for r in store.item_labels('list','one',1)}=={'a':'no','b':'no'}
     finally:session.close()
 
 

@@ -285,6 +285,14 @@ class Mutation:
         return Run(**result)
 
     @strawberry.mutation
+    async def resume_feedback_command(self, info: strawberry.Info, run_id: strawberry.ID,
+                                      job_id: strawberry.ID) -> Job:
+        if not info.context.get('service'):
+            raise ValueError('labeling worker is not available')
+        row=await call(info,'resume_feedback_command',str(run_id),str(job_id))
+        return Job(id=row['id'],kind=row['kind'],status=row['status'],result=row['result'])
+
+    @strawberry.mutation
     async def submit_command(self, info: strawberry.Info, run_id: strawberry.ID, request_id: str,
                              kind: str, payload: JSON | None = None) -> Job:
         if not info.context.get('service'):

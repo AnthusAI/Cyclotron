@@ -278,6 +278,66 @@ class WorkspaceSession:
         self.store.checkpoint_scorecard(self.run['id'],self.wheels)
         return {'corrected':item_id,'classifier_ids':[r[0] for r in plans]}
 
+    def undo_feedback(self,request_id):
+        """Retract the last reviewed item's local labels and reopen its display."""
+        if not isinstance(request_id,str) or not request_id:raise ValueError('undo needs a command identity')
+        if self.config.get('input_mode')=='replay':raise ValueError('frozen replay feedback cannot be undone')
+        owner=next(iter(self.wheels.values()))
+        history=owner.history(100000)
+        completed=next((e for e in history if e['kind']=='feedback-undo-completed' and e.get('request_id')==request_id),None)
+        if completed:return completed['result']
+        plan=next((e for e in history if e['kind']=='feedback-undo-started' and e.get('request_id')==request_id),None)
+        if plan is None:
+            active={}
+            for identifier,wheel in self.wheels.items():
+                for event in wheel.history(100000):
+                    if event['kind']!='human-feedback':continue
+                    key=(identifier,event['feedback']['item_id'])
+                    active.pop(key,None)
+                    if event.get('action')=='submitted':active[key]=event
+            local={key:event for key,event in active.items()
+                   if not (event['feedback'].get('review_provenance') or '').startswith('replayed-human-vote:')}
+            if not local:return {'undone':None}
+            latest=max(local.values(),key=lambda e:e['created_at'])
+            item_id=latest['feedback']['item_id']
+            if any(row['id']==item_id for row in self.store.unreviewed_items(self.run['id'])):
+                raise ValueError('finish recording this item before undoing its feedback')
+            targets=[{'classifier_id':cid,'feedback_id':event['feedback']['id']}
+                     for (cid,item),event in local.items() if item==item_id]
+            plan=owner._emit({'kind':'feedback-undo-started','request_id':request_id,'target_id':item_id,'targets':targets})
+        item_id=plan['target_id'];item=self.items[item_id];target=Item(item_id,item['values'])
+        for ref in plan['targets']:
+            identifier=ref['classifier_id'];wheel=self.wheels[identifier];history=wheel.history(100000)
+            if any(e['kind']=='feedback-retraction-completed' and e.get('request_id')==request_id for e in history):continue
+            original=next(e for e in history if e['kind']=='human-feedback' and e['feedback']['id']==ref['feedback_id'])
+            current=next(e for e in reversed(history) if e['kind']=='human-feedback' and e['feedback']['item_id']==item_id)
+            if current['feedback']['id']!=ref['feedback_id']:raise ValueError('feedback changed; cannot resume stale undo')
+            with wheel.cycle(target,reason='human-retraction'):
+                self.store.retract_item_label(ref['feedback_id'],f'{request_id}:{identifier}')
+                if current.get('action')!='retracted':
+                    wheel.record_feedback_event(FeedbackItem(**original['feedback']),action='retracted',assignment=original.get('assignment'))
+                training,development,_=self.partitions(identifier)
+                wheel.reconcile_feedback(training,development=development)
+                wheel.set_optimizer_context([r.context['human_feedback'] for r in training if r.context.get('human_feedback')])
+                self.metrics(identifier)
+                wheel._emit({'kind':'feedback-retraction-completed','request_id':request_id,'feedback_id':ref['feedback_id']})
+        self.store.update_item(self.run['id'],item_id,reviewed=False)
+        # The saved pre-vote prediction is still the thing the human reviews.
+        # Do not invent a new prediction or make a model call just to undo.
+        for wheel in self.wheels.values():
+            cycle=wheel.resume_cycle(target) or wheel.cycle(target,reason='review-after-undo').__enter__()
+            try:
+                prediction=next(e for e in reversed(wheel.history(100000)) if e['kind']=='prediction' and e['target_id']==item_id)
+                wheel._emit({'kind':'displayed-prediction-reused','target_id':item_id,
+                             'prediction_event_id':prediction['event_id'],'reason':'review after undo'})
+                cycle.suspend()
+            except Exception as error:
+                cycle.__exit__(type(error),error,None);raise
+        self.store.checkpoint_scorecard(self.run['id'],self.wheels)
+        result={'undone':item_id,'classifier_ids':[row['classifier_id'] for row in plan['targets']]}
+        owner._emit({'kind':'feedback-undo-completed','request_id':request_id,'result':result})
+        return result
+
     async def optimize(self,identifier,cycle,*,resume_stages=()):
         warnings=[]
         wheel=self.wheels[identifier];training,development,protected=self.partitions(identifier)

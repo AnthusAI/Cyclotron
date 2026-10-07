@@ -198,6 +198,10 @@ class ScorecardRuntime:
             if not request_id:
                 raise ValueError("scorecard correction needs a command identity")
             return RuntimeCommand(workspace.correct_feedback(payload, request_id))
+        if kind == "undo":
+            if payload or not request_id:
+                raise ValueError("scorecard undo needs an empty payload and a command identity")
+            return RuntimeCommand(workspace.undo_feedback(request_id))
         if kind == "optimize":
             return RuntimeCommand(await workspace.resume_optimization())
         if kind == "replay-next":

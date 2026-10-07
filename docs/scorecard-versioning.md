@@ -217,8 +217,34 @@ acknowledgement finishes reconciliation without duplicating feedback or paid
 requests. Current trigger cadence counts unique active items, not old and
 corrected versions as separate training samples.
 
-The labeling UI still needs its scorecard correction/undo editor. The command
-above is the application interface, not a claim that this UI is complete.
+### Undo an item's labels
+
+Submit `undo` with an empty payload and a stable request ID to retract all local
+classifier labels for the item with the most recent active local feedback. This
+is an item-level undo, not a revert to the previous label value. Append-only
+catalog retractions keep original votes and corrections available as history;
+superseded votes do not become active again. A later review creates fresh votes.
+Inherited source labels in a missing-label/backfill run remain read-only and are
+not retracted. Frozen replay inputs cannot be undone.
+
+The runtime reconciles affected classifiers, records new metrics and calibration
+snapshots, checkpoints the scorecard, and reopens the item with its original
+displayed prediction. Each classifier records a `displayed-prediction-reused`
+event referencing that original prediction. No decision or optimizer request is
+made. Suspended review cycles let the human submit new labels normally, including
+after a restart. A durable undo plan allows explicit interrupted-command recovery
+without retracting another item or duplicating completed work.
+
+If a correction or undo job is failed or interrupted, explicitly call
+`resumeFeedbackCommand(runId: ..., jobId: ...)`. This requeues the original
+command identity and payload, records its previous failure result in history,
+and is idempotent while pending, running or complete. It refuses prediction,
+label-submission, replay and optimization jobs, since those can incur new model
+calls. It also refuses recovery while other run work is pending or while that
+run's scorecard edition is inactive. No automatic paid retry is introduced.
+
+The labeling UI still needs its scorecard correction/undo editor. These commands
+are the application interface, not a claim that this UI is complete.
 
 ## Paired output comparison
 
