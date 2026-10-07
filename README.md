@@ -1,21 +1,60 @@
-# Decision Flywheel
+# Cyclotron — Decision Flywheel
 
-Decision Flywheel is a reusable Python library for decisions that improve with human feedback.
-The human supplies labels and optional explanations.
-An LLM optimizer uses this feedback to propose changes to the decision rubric.
-The decision model answers the rubric questions.
-A fitted ML model uses those answers to predict the final label.
-Code measures each change before it replaces the active version.
+**Cyclotron is a self-aligning decision model harness.** It wraps a decision
+model such as Jev with the parts that turn human feedback into an auditable,
+improvable classifier.
 
-The flywheel improves two parts of the classifier.
-The LLM optimizer adjusts the rubric and defines the classification tasks for the decision model.
-It sets each task's question, answer options, and criteria. It also selects labeled examples.
-The ML fitter learns how to combine the answers from the decision model.
-Human feedback supplies the evidence for both changes.
+A decision model can give a fast structured answer. It does not know a team's
+private definition of a good item. Cyclotron starts with a simple decision, then
+uses human labels and explanations to make three controlled changes around the
+model: an evolving rubric, a fixed few-shot example list, and extra classifier
+questions. The answers to the main and extra questions become features for a
+small learned ML head. The head produces the final prediction and calibrated
+confidence.
+
+The optimizer proposes changes. Code validates them, fits the numerical model,
+and measures candidates before it changes what is active. It records the
+requests, responses, feedback, versions, and measurements so a run can be
+inspected later. It does not promise that every change improves a classifier.
+
+## What Cyclotron adds around a decision model
+
+<img src="docs/diagrams/cyclotron-harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
+
+[Open the interactive diagram](docs/diagrams/cyclotron-harness.html) · [Read its Archify specification](.archify/architecture-cyclotron-20261007-120000/harness.json)
+
+The diagram separates two jobs that must not be confused:
+
+- The **LLM optimizer** proposes changes to language and structure: rubric,
+  examples, and classifier questions.
+- The **ML fitter** learns numerical feature weights and confidence calibration
+  only from trusted labels. The optimizer cannot write those numbers.
+
+## Scorecards: many classifiers, one request
+
+A **classifier** answers one human question, such as “Should this item be in the
+knowledge base?” A **scorecard** is a versioned, ordered group of classifiers
+that apply to the same item. Each classifier keeps its own rubric, examples,
+questions, labels, learned head, and metrics.
+
+Cyclotron can place all compatible classifier contexts in one decision-model
+request. The target item appears once. Each classifier context stays scoped to
+that classifier. Returned answers map back to the correct classifier, where its
+own ML head makes the final prediction. A human can label several classifiers for
+the same item in one review.
+
+<img src="docs/diagrams/cyclotron-scorecards.svg" alt="A versioned scorecard holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
+
+[Open the interactive diagram](docs/diagrams/cyclotron-scorecards.html) · [Read its Archify specification](.archify/architecture-cyclotron-20261007-120000/scorecards.json)
+
+Changing a classifier creates a new classifier revision and an affected
+scorecard revision. A run retains the scorecard revision and learned checkpoints
+that produced its predictions. This lets a team compare versions or revert a
+scorecard without rewriting earlier evidence.
 
 ## Design and implementation status
 
-The diagrams below show the intended complete system.
+The detailed diagrams below show the intended complete system.
 They define the work that the library must support.
 They do not prove that the current reviewer runs all these steps.
 
@@ -243,8 +282,9 @@ Use these terms with the same meaning throughout the system.
 | Label | The human's final decision for an item |
 | Feedback | A label, an optional comment, and the prediction shown before the vote |
 | Rubric | The criteria that explain which label an item should receive |
-| Decision element | One question or programmatic input in the scorecard |
-| Scorecard | The saved set of decision elements and their definitions |
+| Decision element | One question or programmatic input inside a classifier context |
+| Classifier | One versioned human decision, its context, and its learned prediction head |
+| Scorecard | A versioned, ordered group of classifier revisions and shared run settings |
 | Decision model | A model, such as Jev, that answers the scorecard questions |
 | Feature | A numerical input derived from a decision-element answer |
 | ML model | The fitted decision head that maps features to a final prediction |
@@ -290,7 +330,7 @@ One task can classify the method as practical or theoretical.
 Another task can classify the paper's age against the supplied current date.
 The fitter learns how these answers relate to the human's labels.
 
-The scorecard defines a holistic question and additional decision-element questions.
+The classifier context defines a holistic question and additional decision-element questions.
 Jev answers these questions for the same item in one request.
 The feature converter derives named numbers from the answers and their probabilities.
 The trained decision head combines these features to predict the final label.
@@ -409,7 +449,7 @@ The interface shows the title, abstract, date, categories, authors, and publicat
 The human can skip an item or undo a vote.
 An undo must invalidate dependent candidates and training records when necessary.
 
-The active version contains the scorecard, example policy, feature rules, fitted weights, and calibration.
+The active classifier version contains its context, example policy, feature rules, fitted weights, and calibration.
 It also identifies the source model and training data.
 These parts must remain together during save, load, and restart operations.
 

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "cyclotron scorecards: many classifiers, one decision-model request",
+    "subtitle": "A scorecard groups independent classifiers around the same item without mixing their contexts.",
+    "locale": "en",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/cyclotron-scorecards.html"
+  },
+  "components": [
+    {"id":"items","type":"external","label":"Item list","sublabel":"Versioned items from any source","pos":[30,285],"size":[175,72]},
+    {"id":"scorecard","type":"database","label":"Scorecard revision","sublabel":"Ordered classifier revisions","pos":[220,70],"size":[205,72]},
+    {"id":"contexts","type":"database","label":"Classifier contexts","sublabel":"A · B · C; each owns context and classes","pos":[220,285],"size":[220,82]},
+    {"id":"composer","type":"backend","label":"Request composer","sublabel":"Keep contexts scoped; name all questions","pos":[540,285],"size":[205,72]},
+    {"id":"request","type":"backend","label":"One decision request","sublabel":"One target, scoped context, all questions","pos":[820,285],"size":[220,72]},
+    {"id":"model","type":"cloud","label":"Decision model","sublabel":"One provider call","pos":[1110,285],"size":[160,72]},
+    {"id":"answers","type":"backend","label":"Mapped answers","sublabel":"Return each answer to its classifier","pos":[1330,285],"size":[190,72]},
+    {"id":"heads","type":"backend","label":"Independent ML heads","sublabel":"One final prediction and calibration per classifier","pos":[1050,500],"size":[260,72]},
+    {"id":"labels","type":"frontend","label":"Human labeling","sublabel":"Label several classifiers for the same item","pos":[1050,640],"size":[260,72]}
+  ],
+  "connections": [
+    {"from":"scorecard","to":"contexts","label":"pins revisions","variant":"emphasis"},
+    {"from":"items","to":"composer","label":"shared target","variant":"emphasis"},
+    {"from":"contexts","to":"composer","label":"scoped contexts","variant":"emphasis"},
+    {"from":"composer","to":"request","label":"compose","variant":"emphasis"},
+    {"from":"request","to":"model","label":"one call","variant":"emphasis"},
+    {"from":"model","to":"answers","label":"answers","variant":"emphasis"},
+    {"from":"answers","to":"heads","label":"map by classifier","variant":"emphasis"},
+    {"from":"heads","to":"labels","label":"separate predictions","variant":"emphasis"}
+  ],
+  "cards": [
+    {"dot":"cyan","title":"A scorecard is a versioned group","items":["It saves an ordered list of classifier revisions and shared run settings.","Each classifier keeps its own labels, learned head, trigger state, and metrics."]},
+    {"dot":"emerald","title":"Why send one request","items":["The target appears once while each classifier context stays under its own scope.","Usage is counted once and the complete request is cached by its full fingerprint."]},
+    {"dot":"amber","title":"History stays auditable","items":["Changing a classifier creates a new classifier revision and an affected scorecard revision.","A run retains the exact scorecard revision and learned checkpoints that produced it."]}
+  ]
+}
