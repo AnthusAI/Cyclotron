@@ -13,6 +13,22 @@ test('endpoint support follows that endpoint pinned class ordering',()=>{
   expect(support.getAllByRole('rowheader').map(row=>row.textContent)).toEqual(['include','exclude'])
 })
 const runs=[{id:'before',name:'Before'},{id:'after',name:'After'}]
+test('an unconfirmed creation retries the same approval identity without duplicating paid work',async()=>{
+  vi.mocked(graphql).mockResolvedValueOnce({matchedRunPreflight:{fingerprint:'frozen',sample_count:1,request_upper_bound:2,class_counts:{},excluded_count:0}})
+    .mockRejectedValueOnce(new Error('Acknowledgement unavailable'))
+    .mockResolvedValueOnce({createMatchedComparison:{id:'comparison'}})
+  render(<MatchedComparison runs={runs} initialRunId="after" onCreated={()=>{}} onClose={()=>{}} />)
+  fireEvent.click(screen.getByRole('button',{name:'Check protected samples'}))
+  await screen.findByText('1 matched items · at most 2 requests')
+  fireEvent.click(screen.getByLabelText('Authorize paid comparison requests'))
+  fireEvent.click(screen.getByRole('button',{name:'Run matched comparison'}))
+  await screen.findByRole('alert')
+  fireEvent.click(screen.getByRole('button',{name:'Run matched comparison'}))
+  await waitFor(()=>expect(vi.mocked(graphql).mock.calls).toHaveLength(3))
+  const first=vi.mocked(graphql).mock.calls[1][1]
+  expect(first?.request).toEqual(expect.any(String))
+  expect(vi.mocked(graphql).mock.calls[2][1]).toEqual(first)
+})
 test('comparison preflight makes no paid mutation and requires explicit approval',async()=>{
   vi.mocked(graphql).mockImplementation(async query=>query.includes('createMatchedComparison')?{createMatchedComparison:{id:'comparison'}}:{matchedRunPreflight:{fingerprint:'frozen',sample_count:10,request_upper_bound:20,class_counts:{topic:{yes:5,no:5}},excluded_count:2}})
   const select=vi.fn()

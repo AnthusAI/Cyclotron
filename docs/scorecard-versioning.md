@@ -396,6 +396,14 @@ are acknowledged through the same GraphQL trace API, with durable event identiti
 for safe re-delivery. Source runs and active editions remain unchanged. Interrupted
 or failed jobs do not automatically retry paid requests.
 
+The app sends a stable `requestId` with initial comparison approval. SQLite
+commits that identity, authorization, frozen inputs and job atomically. If the
+acknowledgement is lost, retrying unchanged controls returns the original run,
+including after restart or later source changes; it does not queue another job.
+Changing endpoints, preflight or ceiling starts a new approval identity. Reusing
+an identity with different authorization is rejected. API clients should also
+send `requestId` for this guarantee; legacy calls without it create new runs.
+
 No paid evaluation starts from the preflight query, navigation, or saving a
 definition. “Compare runs” opens a drawer with endpoint selection and a read-only
 protected-sample check. Changing endpoints invalidates its prior approval. The

@@ -249,12 +249,13 @@ class Mutation:
     @strawberry.mutation
     async def create_matched_comparison(self,info:strawberry.Info,name:str,before_run_id:strawberry.ID,
                                        after_run_id:strawberry.ID,approved_fingerprint:str,max_requests:int,
-                                       limit:int=200,confirmed:bool=False)->Run:
+                                       limit:int=200,confirmed:bool=False,request_id:str|None=None)->Run:
         service=info.context.get('service')
         if not confirmed or service is None or not service.allow_live:
             raise ValueError('matched comparison requires explicit live-call authority')
+        identity={} if request_id is None else {'request_id':request_id}
         return Run(**await asyncio.to_thread(service.create_comparison,name,str(before_run_id),str(after_run_id),
-                                            approved_fingerprint,max_requests=max_requests,limit=limit))
+                                            approved_fingerprint,max_requests=max_requests,limit=limit,**identity))
 
     @strawberry.mutation
     async def create_replay(self,info:strawberry.Info,name:str,source_run_id:strawberry.ID,config:JSON,confirmed:bool=False)->Run:

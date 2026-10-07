@@ -56,10 +56,14 @@ class WebWorker:
         return ScorecardRuntime(self.store, self.directory, model_factory=self.model_factory,
                                 sink_factory=self.sink_factory, redact=self.redact)
 
-    def create_comparison(self,name,before_run_id,after_run_id,approved_fingerprint,*,max_requests,limit=200):
+    def create_comparison(self,name,before_run_id,after_run_id,approved_fingerprint,*,max_requests,limit=200,request_id=None):
         from .matched_run_plan import plan_matched_runs
         from .matched_run_evaluation import _endpoint
         if not self.allow_live:raise ValueError('comparison execution requires live-call authority')
+        authorization={'name':name,'before_run_id':before_run_id,'after_run_id':after_run_id,
+                       'approved_fingerprint':approved_fingerprint,'max_requests':max_requests,'limit':limit}
+        existing=self.store.matched_evaluation_authorization(request_id,authorization)
+        if existing is not None:return existing
         endpoints=self.store.matched_run_sources(before_run_id,after_run_id)
         plan=plan_matched_runs(**endpoints,limit=limit)
         if plan['fingerprint']!=approved_fingerprint:raise ValueError('preflight changed; approve a new plan')
@@ -67,7 +71,8 @@ class WebWorker:
         if type(max_requests) is not int or max_requests<plan['request_upper_bound']:
             raise ValueError('request ceiling is below preflight upper bound')
         for source in endpoints.values():_endpoint(source)
-        return self.store.create_matched_evaluation(name,plan,endpoints,max_requests)
+        return self.store.create_matched_evaluation(name,plan,endpoints,max_requests,
+            request_id=request_id,authorization=authorization)
 
     def resume_comparison(self,run_id,request_id,*,max_requests,retry_failed=False):
         if not self.allow_live:raise ValueError('comparison resume requires live-call authority')
