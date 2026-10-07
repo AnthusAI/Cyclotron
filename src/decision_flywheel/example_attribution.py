@@ -7,7 +7,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import json
 from .classification_metrics import classification_metrics
-from .flywheel import _hash, _json
+from .flywheel import _hash, _json, track_answer_dependencies
 
 
 def plan_swaps(config, training, *, preferred_ids=(), max_trials=8):
@@ -51,10 +51,13 @@ def _question_means(config, rows, batches):
         for option in task.labels} for label in config.task.labels} for name,task in tasks.items()}
 
 
+@track_answer_dependencies
 async def measure_example_swaps(wheel, training, development, *, protected, propensities,
                                preferred_ids=(), max_trials=8, limit=200):
     """Measure but never fit or promote. Persist progress and reuse exact requests."""
     wheel._validate_partitions(training,development,protected,propensities)
+    wheel.reconcile_feedback(training, development=development)
+    wheel.reconcile_model_context(training)
     if type(limit) is not int or not 1<=limit<=200:
         raise ValueError('matched evaluation sample limit must be between 1 and 200')
     baseline=wheel.active
@@ -71,7 +74,7 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
         'evaluation_weighting':wheel.evaluation_weighting,
         'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None})
     wheel.db.execute('CREATE TABLE IF NOT EXISTS example_measurements (id TEXT PRIMARY KEY,status TEXT,payload TEXT)')
-    saved=wheel.db.execute('SELECT status,payload FROM example_measurements WHERE id=?',(key,)).fetchone()
+    key,saved=wheel.cached_artifact('example_measurements','id',key)
     if saved and saved[0]=='complete' and wheel.cache_options.policy!='refresh':return json.loads(saved[1])
     now=datetime.fromisoformat(json.loads(saved[1])['evaluation_time']) if saved else datetime.now(timezone.utc)
     bound=0
@@ -126,6 +129,7 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
         'sample_ids':[r.item.id for r in rows],'count':len(rows),'by_class':{label:sum(r.label==label for r in rows) for label in baseline.config.task.labels},
         'evaluation_time':now.isoformat(),'request_upper_bound':bound,'baseline_fingerprint':baseline.fingerprint,
         'training_evidence':wheel._evidence(training),'development_evidence':wheel._evidence(rows),
+        'answer_dependencies':wheel.collected_answer_dependencies(),
         'incumbent':base_metrics,'incumbent_decision_metrics':base_decision_metrics,
         'baseline_question_means':base_means,'promotion_metric':metric,'rankings':rankings,
         'recommended_proposal':{'example_ids':winners[0]['example_ids'],'rationale':'Best measured one-example swap on matched development items'} if winners else None}

@@ -102,7 +102,7 @@ class SharedDecisions:
         class Adapter:
             @property
             def model_identity(self):return shared.model.model_identity+':shared-v1:'+shared.identity
-            def cache_identity(self,config,target,training,*,now=None):
+            def request_fingerprint(self,config,target,training,*,now=None):
                 child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
                 if child in shared.prepared and not shared.context_configs:
                     fingerprint=shared.prepared[child][2]
@@ -110,7 +110,17 @@ class SharedDecisions:
                     configs,pools=shared.scope(identifier,config,training)
                     request,_=batch_request(configs,target,pools,now=now)
                     fingerprint=key({'model':shared.model.model_identity,'request':request})
+                return fingerprint
+            def cache_identity(self,config,target,training,*,now=None):
+                fingerprint=self.request_fingerprint(config,target,training,now=now)
                 return shared.model.model_identity+':shared-answer-v3:'+fingerprint+':'+str(shared.generation(fingerprint))
+            def answer_dependency(self,config,target,training,*,now=None):
+                fingerprint=self.request_fingerprint(config,target,training,now=now)
+                return {'request_fingerprint':fingerprint,'generation':shared.generation(fingerprint)}
+            def answer_dependency_current(self,dependency):
+                fingerprint=dependency['request_fingerprint']
+                row=shared.db.execute('SELECT status FROM batches WHERE key=?',(fingerprint,)).fetchone()
+                return bool(row and row[0]=='complete' and shared.generation(fingerprint)==dependency['generation'])
             def feature_context_identity(self,config,training):
                 configs,pools=shared.scope(identifier,config,training)
                 return feature_context_identity(shared.model.model_identity,configs,pools)

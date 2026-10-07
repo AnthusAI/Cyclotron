@@ -9,7 +9,8 @@ from .observability import StepFailed
 from .flywheel_test import agent
 
 
-def test_a_sibling_change_refits_features_in_the_joint_context_before_the_next_prediction(tmp_path):
+@pytest.mark.parametrize('change', ['sibling_context', 'training_response'])
+def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_prediction(tmp_path, change):
     from dataclasses import replace
     from .workspace_session import freeze_configuration
     from .candidate_fitting import fit_candidate
@@ -40,7 +41,12 @@ def test_a_sibling_change_refits_features_in_the_joint_context_before_the_next_p
             propensities={r.item.id:1. for r in TRAIN},validation_status='evaluated'))
         wheel._activate(fitted)
         sibling=session.wheels['b']
-        sibling._activate(replace(sibling.active,config=replace(sibling.active.config,rubric='New sibling criteria')))
+        if change == 'sibling_context':
+            sibling._activate(replace(sibling.active,config=replace(sibling.active.config,rubric='New sibling criteria')))
+        else:
+            from .decision_cache import CacheOptions
+            asyncio.run(session.shared.adapter('b').classify_with_cache_options(sibling.active.config,
+                TRAIN[0].item, TRAIN, cache_options=CacheOptions('refresh')))
         shown=asyncio.run(session.prepare())
         assert shown['item']['id']=='new'
         assert all(set(configs)=={'a','b'} for configs,_ in model.requests)

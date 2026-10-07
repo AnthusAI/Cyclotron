@@ -122,14 +122,15 @@ class WorkspaceSession:
         # classifier's own question list stays unchanged.
         for _ in range(len(self.wheels)+1):
             stale=[identifier for identifier,wheel in self.wheels.items() if wheel.active.head and
-                wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])]
+                (wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])
+                 or not wheel.answer_dependencies_current(wheel.active.answer_dependencies))]
             if not stale:break
             for identifier in stale:
                 wheel=self.wheels[identifier]
                 cycle=wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
                 try:
                     wheel.reconcile_model_context(training[identifier])
-                    cycle.check_trigger('classifier',due=True,reason='shared decision feature context changed',details={})
+                    cycle.check_trigger('classifier',due=True,reason='shared decision feature source changed',details={})
                     train,dev,protected=self.partitions(identifier)
                     await wheel.step('classifier',train,dev,protected=protected,
                         propensities={r.item.id:1. for r in train},min_development_per_class=2,

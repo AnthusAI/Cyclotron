@@ -7,6 +7,73 @@ from .batched_classification import BatchedAnswers
 from .decision_cache import CacheOptions
 
 
+@pytest.mark.parametrize('restart', [False, True])
+def test_refreshing_a_used_training_answer_invalidates_the_head_and_preserves_the_rubric(tmp_path, restart):
+    from datetime import datetime, timezone
+    from .candidate_fitting import fit_candidate
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    class Model(FakeModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {}
+            for cid, config in configs.items():
+                answers[cid] = (await self.classify(config, target, training[cid], **kwargs)).answers
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    config = ClassifierConfig(TASK, rubric='Keep the human criteria')
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    shared = SharedDecisions(tmp_path/'cache.sqlite', Model(), max_requests=100, observer=lambda _: None)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), max_requests=100)
+    shared.bind_context({'a': config, 'b': config}, {'a': TRAIN, 'b': TRAIN})
+    try:
+        fitted, _ = asyncio.run(fit_candidate(wheel, config, TRAIN, DEV, protected=(),
+            propensities={row.item.id: 1. for row in TRAIN}, validation_status='evaluated', now=now))
+        wheel._activate(fitted)
+        assert wheel.active.head is not None
+        # Refresh through the sibling adapter: this wheel's local answer rows
+        # are unchanged, but the physical joint response has a new revision.
+        asyncio.run(shared.adapter('b').classify_with_cache_options(config, TRAIN[0].item, TRAIN,
+            now=now, cache_options=CacheOptions('refresh')))
+        if restart:
+            wheel.close(); shared.close()
+            shared = SharedDecisions(tmp_path/'cache.sqlite', Model(), max_requests=100, observer=lambda _: None)
+            wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), max_requests=100)
+            shared.bind_context({'a': config, 'b': config}, {'a': TRAIN, 'b': TRAIN})
+        requests = shared.requests
+        assert wheel.reconcile_model_context(TRAIN)
+        assert wheel.active.head is None
+        assert wheel.active.config.rubric == 'Keep the human criteria'
+        assert shared.requests == requests
+        assert any(e['kind'] == 'head-invalidated' for e in wheel.history())
+    finally:
+        wheel.close(); shared.close()
+
+
+def test_collecting_an_unrelated_answer_does_not_invalidate_a_fitted_head(tmp_path):
+    from datetime import datetime, timezone
+    from .candidate_fitting import fit_candidate
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    class Model(FakeModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {cid: (await self.classify(config, target, training[cid], **kwargs)).answers
+                       for cid, config in configs.items()}
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    config = ClassifierConfig(TASK)
+    shared = SharedDecisions(tmp_path/'cache.sqlite', Model(), max_requests=100, observer=lambda _: None)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), max_requests=100)
+    shared.bind_context({'a': config}, {'a': TRAIN})
+    try:
+        fitted, _ = asyncio.run(fit_candidate(wheel, config, TRAIN, DEV, protected=(),
+            propensities={row.item.id: 1. for row in TRAIN}, validation_status='evaluated',
+            now=datetime(2026, 1, 1, tzinfo=timezone.utc)))
+        wheel._activate(fitted)
+        asyncio.run(shared.prepare({'a': config}, Item('unrelated', {'text': 'New item'}), {'a': TRAIN}))
+        assert not wheel.reconcile_model_context(TRAIN)
+        assert wheel.active.head is fitted.head
+    finally:
+        wheel.close(); shared.close()
+
+
 def test_a_measured_head_cannot_be_promoted_after_a_sibling_changes_the_joint_request(tmp_path):
     from dataclasses import replace
     from .flywheel import DecisionFlywheel
@@ -39,6 +106,78 @@ def test_a_measured_head_cannot_be_promoted_after_a_sibling_changes_the_joint_re
     finally:
         wheel.close()
         shared.close()
+
+
+def test_a_refreshed_trial_is_refitted_under_a_new_identity_without_erasing_the_old_trial(tmp_path):
+    from datetime import datetime, timezone
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    class Model(FakeModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {cid: (await self.classify(config, target, training[cid], **kwargs)).answers
+                       for cid, config in configs.items()}
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    config = ClassifierConfig(TASK)
+    proposal = {'tasks': [{'name': 'practical', 'instructions': 'Is this practical?', 'labels': ['yes', 'no']}]}
+    candidate = config.apply(proposal, TRAIN)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    shared = SharedDecisions(tmp_path/'cache.sqlite', Model(), max_requests=100, observer=lambda _: None)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), max_requests=100)
+    shared.bind_context({'a': config}, {'a': TRAIN})
+    kwargs = dict(protected=(), propensities={row.item.id: 1. for row in TRAIN},
+                  candidate_proposal=proposal, apply_promotion=False, evaluation_time=now)
+    try:
+        first = asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))
+        assert first['improved']
+        asyncio.run(wheel._answers(candidate, TRAIN[0].item, TRAIN, now, CacheOptions('refresh')))
+        with pytest.raises(ValueError, match='decision answers changed'):
+            wheel.promote_trial(first['trial_fingerprint'], TRAIN, DEV)
+        second = asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))
+        assert second['trial_fingerprint'] != first['trial_fingerprint']
+        assert sum(event['kind'] == 'fit-completed' for event in wheel.history()) == 2
+        assert wheel.db.execute('SELECT COUNT(*) FROM runtime_rounds WHERE status="complete"').fetchone()[0] == 2
+        requests = shared.requests
+        assert asyncio.run(wheel.improve(TRAIN, DEV, **kwargs)) == second
+        assert shared.requests == requests
+    finally:
+        wheel.close(); shared.close()
+
+
+@pytest.mark.parametrize('operation', ['questions', 'examples'])
+def test_refreshing_a_measurement_response_recomputes_only_the_derived_measurement(tmp_path, operation):
+    from .example_attribution import measure_example_swaps
+    from .question_measurement import measure_questions
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    class Model(FakeModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {cid: (await self.classify(config, target, training[cid], **kwargs)).answers
+                       for cid, config in configs.items()}
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    config = ClassifierConfig(TASK, example_ids=('t0', 't1'))
+    shared = SharedDecisions(tmp_path/'cache.sqlite', Model(), max_requests=100, observer=lambda _: None)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), max_requests=100)
+    shared.bind_context({'a': config}, {'a': TRAIN})
+    question = {'name': 'practical', 'instructions': 'Is this practical?', 'labels': ['yes', 'no']}
+    props = {row.item.id: 1. for row in TRAIN}
+    async def measure():
+        if operation == 'questions':
+            return await measure_questions(wheel, TRAIN, [question], protected=(), propensities=props)
+        return await measure_example_swaps(wheel, TRAIN, DEV, protected=(), propensities=props, max_trials=2)
+    target = TRAIN[0].item if operation == 'questions' else DEV[0].item
+    measured_config = config.apply({'tasks': [question]}, TRAIN) if operation == 'questions' else config
+    try:
+        first = asyncio.run(measure())
+        assert 'measurement_fingerprint' in first
+        asyncio.run(wheel._answers(measured_config, target, TRAIN, None, CacheOptions('refresh')))
+        requests = shared.requests
+        second = asyncio.run(measure())
+        assert second['measurement_fingerprint'] != first['measurement_fingerprint']
+        assert shared.requests == requests
+        assert asyncio.run(measure()) == second
+        assert shared.requests == requests
+    finally:
+        wheel.close(); shared.close()
 
 
 def test_explicit_refresh_recollects_the_joint_request_and_updates_all_child_caches(tmp_path):

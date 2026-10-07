@@ -19,9 +19,10 @@ async def fit_candidate(wheel, config, training, development, *, protected,
         return FittedClassifier(config, training_evidence=wheel._evidence(training),
                                 validation_status=validation_status), {}
     now = now or datetime.now(timezone.utc)
-    rows, observations = [], {task.name:[] for task in config.tasks}
+    rows, observations, dependencies = [], {task.name:[] for task in config.tasks}, []
     for row in training:
         batch = await wheel._answers(config, row.item, training, now)
+        dependencies.append(wheel.answer_dependency(config, row.item, training, now))
         for task in config.tasks:
             observations[task.name].append((row.label, batch.answers[task.name].probabilities))
         values = wheel._features(config, batch)
@@ -49,8 +50,9 @@ async def fit_candidate(wheel, config, training, development, *, protected,
         source_model_provenance=wheel.model_context(config, training),
         training_class_weighting=wheel.training_class_weighting)
     candidate = FittedClassifier(config, head, wheel._evidence(training),
-                                wheel._evidence(development), validation_status)
+                                wheel._evidence(development), validation_status, tuple(dependencies))
     wheel._emit({'kind':'fit-completed','features':list(head.feature_names),'head':asdict(head),
                  'context_fingerprint':config.fingerprint,'training_count':len(rows),
+                 'answer_dependencies': dependencies,
                  'calibration':'out_of_fold'})
     return candidate, diagnostics

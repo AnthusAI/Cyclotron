@@ -145,10 +145,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "74a6256c-29a4-499b-827b-f9d838131c49",
+      "author": "home",
+      "text": "Technology work only; experiment reporting is deferred at user direction. Specs first reproduced a fitted head remaining active after a sibling refresh replaced a used joint training response, including after restart. Fits now persist exact consumed response dependencies as fingerprints, with durable shared request generations. Reconciliation checks these without provider calls, preserves rubric/examples/questions, and invalidates only the stale numerical head; unrelated new-item responses do not invalidate it. Qualified trials reject changed training or evaluation responses. Derived round, classifier-training, stage, question-measurement and example-measurement caches record consumed dependencies and retain obsolete revisions under their original identities rather than overwriting them. Recomputed measurements reuse unchanged provider responses. A second failing integration spec found the workspace was dropping a response-stale head without entering retraining; the session now includes response changes in its bounded in-cycle refit checks. 52 focused coordinator/measurement/session/stage specs pass; full regression running. Existing legacy heads without response-dependency metadata remain a migration/acceptance gap, not claimed covered. No live calls or production labels were changed; deployment remains pending.",
+      "created_at": "2026-10-07T21:11:37.950347Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "181cca82-32c9-4c19-a16c-f03bdf973576",
+      "author": "home",
+      "text": "Final offline regression for the response-dependency and in-cycle-refit changes: all 748 Python specs pass (16 existing pytest-bdd deprecation warnings). Own source diff passes whitespace checks. No provider calls, label edits or production-server restart occurred. Legacy dependency migration and deployed browser/API acceptance still remain; this issue stays in progress.",
+      "created_at": "2026-10-07T21:11:49.273471Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T20:43:03.906656Z",
+  "updated_at": "2026-10-07T21:11:49.273541Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
