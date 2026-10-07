@@ -16,6 +16,7 @@ from .reviewer_flywheel import ReviewerFlywheel
 from .reviewer_store import Article, ReviewStore
 from .selection_policy import SelectionPolicy
 from .feedback_trigger import learning_feedback
+from .scorecard_runtime import ScorecardRuntime, run_scorecard_command
 
 
 class WebWorker:
@@ -34,6 +35,7 @@ class WebWorker:
         self.articles, self.allow_live, self.redact = tuple(articles), allow_live, tuple(redact)
         self.runtime = runtime
         self.sessions, self.sinks = {}, {}
+        self.session_runtimes = {}
         self.stopping = Event()
         self.thread = None
 
@@ -181,15 +183,16 @@ class WebWorker:
             self._close_sessions()
 
     def _close_sessions(self):
-        for reviewer in self.sessions.values():
+        for run_id, reviewer in self.sessions.items():
             # Shutdown is not a completed review. An open cycle remains visible
             # as incomplete, rather than inventing a completion event.
-            if self.runtime is not None:reviewer.close()
+            if run_id in self.session_runtimes:reviewer.close()
             elif hasattr(reviewer,'wheels'):reviewer.close()
             else:
                 reviewer.core.close()
                 reviewer.store.close()
         self.sessions.clear()
+        self.session_runtimes.clear()
 
     def _runtime_session(self, run_id):
         if run_id in self.sessions:
@@ -198,22 +201,21 @@ class WebWorker:
         config = run['config']
         if run['mode'] != 'live' or not self.allow_live:
             raise ValueError('run is read-only')
-        if self.runtime is not None:
-            session = self.runtime.open_session(
+        runtime = self.runtime
+        if runtime is None and 'classifiers' in config:
+            runtime = ScorecardRuntime(self.store, self.directory, model_factory=self.model_factory,
+                                       sink_factory=self.sink_factory, redact=self.redact)
+        if runtime is not None:
+            session = runtime.open_session(
                 run_id, config, self.store.items(run_id), self.store.current_item(run_id),
             )
             if not hasattr(session, 'close') or not hasattr(session, 'abort') or not hasattr(session, 'current_cycle'):
                 raise ValueError('workspace runtime returned an invalid session')
             self.sessions[run_id] = session
+            self.session_runtimes[run_id] = runtime
             return session
         directory = self.directory / run_id
         directory.mkdir(parents=True,exist_ok=True)
-        if 'classifiers' in config:
-            from .workspace_session import WorkspaceSession
-            model,optimizer=self.model_factory(config)
-            reviewer=WorkspaceSession(self.store,run,directory,model,optimizer,self.sink_factory(run_id),redact=self.redact)
-            self.sessions[run_id]=reviewer
-            return reviewer
         reviews = ReviewStore(directory / 'reviews.sqlite3',study_seed=config['seed'])
         reviews.import_articles(tuple(Article(**item) for item in self.store.items(run_id)))
         sink = self.sink_factory(run_id)
@@ -251,9 +253,15 @@ class WebWorker:
             if any(key != run_id and value.current_cycle is not None for key,value in self.sessions.items()):
                 raise ValueError('finish the current review before operating another live run')
             reviewer = self._runtime_session(run_id)
-            if self.runtime is not None:
-                command = self.runtime.execute(reviewer, job['kind'], job['payload'],
-                                               self.store.current_item(run_id), self.store.run(run_id)['config'])
+            runtime = self.session_runtimes.get(run_id)
+            if runtime is not None:
+                current = self.store.current_item(run_id)
+                config = self.store.run(run_id)['config']
+                if isinstance(runtime, ScorecardRuntime):
+                    command = run_scorecard_command(runtime, reviewer, job['kind'], job['payload'], current,
+                                                     config, request_id=job['request_id'])
+                else:
+                    command = runtime.execute(reviewer, job['kind'], job['payload'], current, config)
                 for update in command.updates:
                     changes = {}
                     if update.prediction is not None:
@@ -356,7 +364,7 @@ class WebWorker:
             self.store.set_status(run_id,'failed')
             if run_id in self.sessions:
                 reviewer = self.sessions[run_id]
-                if self.runtime is not None:
+                if run_id in self.session_runtimes:
                     try:
                         reviewer.abort(error)
                     except Exception:

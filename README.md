@@ -63,12 +63,14 @@ adapter, storage choice, and event consumer are application decisions.
 - The optional web application persists those contracts in its own SQLite store
   and presents them through GraphQL and React. It does not fit models or make
   optimization decisions in the browser.
-- `WebWorker` is an API command runner. It depends on an injected
-  `WorkspaceRuntime`; `ArticleReviewRuntime` is the optional arXiv adapter.
-  A scorecard workspace can implement the same runtime contract without adding
-  article-review imports to the worker or the core. The runtime owns command
-  semantics and returns explicit item updates; the worker only persists them,
-  streams events, and records failures.
+- `WebWorker` is an API command runner. Its `WorkspaceRuntime` seam owns
+  application session creation and command semantics. `ArticleReviewRuntime`
+  is the optional single-classifier arXiv adapter; `ScorecardRuntime` is the
+  Cyclotron adapter for one shared decision request and independent classifier
+  wheels. Neither adds article-review imports to the worker or the core.
+  A runtime can return explicit item updates or make its own atomic
+  scorecard/catalog writes; the worker records the command result, streams
+  events, and records failures.
 - Provider adapters translate between the core contracts and Jev, Kev, Laya, or
   another decision-model API.
 
