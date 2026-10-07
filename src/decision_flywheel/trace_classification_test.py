@@ -1,6 +1,6 @@
 """Specs for explicit ordered class roles and positive-class measurements."""
 import pytest
-from .trace_classification import class_configuration, positive_metrics, running_metric_series
+from .trace_classification import class_configuration, positive_metrics, running_metric_series, comparison_metrics
 from .classification_metrics import classification_metrics
 
 
@@ -36,6 +36,26 @@ def test_multiple_positive_classes_are_measured_as_positive_versus_rest():
     metrics=classification_metrics(['a','b','c'],['a','b','c'],['b','b','a'],[{'a':1/3,'b':1/3,'c':1/3}]*3)
     assert positive_metrics(metrics,config)['precision']==pytest.approx(2/3)
     assert positive_metrics(metrics,config)['recall']==1
+
+
+def test_neutral_classes_use_explicit_macro_metrics_without_dropping_undefined_classes():
+    config=[{'label':label,'role':'neutral'} for label in ('a','b','c')]
+    metrics=classification_metrics(['a','b','c'],['a','b','c'],['a','a','c'],[{'a':1/3,'b':1/3,'c':1/3}]*3)
+    result=comparison_metrics(metrics,config)
+    assert result['metric_aggregation']=='macro'
+    assert result['recall']==pytest.approx(2/3)
+    assert result['precision'] is None
+    assert result['undefined_precision_classes']==['b']
+    assert result['undefined_recall_classes']==[]
+
+
+def test_comparison_metrics_keep_configured_multiple_positives_as_one_positive_group():
+    config=[{'label':'a','role':'positive'},{'label':'b','role':'positive'},{'label':'c','role':'negative'}]
+    metrics=classification_metrics(['a','b','c'],['a','b','c'],['b','b','a'],[{'a':1/3,'b':1/3,'c':1/3}]*3)
+    result=comparison_metrics(metrics,config)
+    assert result['metric_aggregation']=='positive-vs-rest'
+    assert result['precision']==pytest.approx(2/3)
+    assert result['recall']==1
 
 
 def test_running_trends_use_only_recorded_prequential_measurements_and_keep_gaps():

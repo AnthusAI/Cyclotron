@@ -96,10 +96,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "4d750b8e-2709-472a-9af1-01184571cf96",
+      "author": "home",
+      "text": "Protected comparison metrics now explicitly choose positive-versus-rest for configured positive roles, or a macro average across all configured classes when there are no positive roles. Undefined class recall/precision is not guessed or dropped from the average; result metadata and UI identify unsupported classes. Added pure aggregation specs, fake-model endpoint integration spec, and UI disclosure spec. Focused 17 Python and 5 UI tests pass; production build passes. Historical artifacts are unchanged. Browser resume acceptance, tablet/dark verification and broader acceptance audit remain open.",
+      "created_at": "2026-10-07T17:49:01.603290Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T17:41:36.432405Z",
+  "updated_at": "2026-10-07T17:49:01.603382Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

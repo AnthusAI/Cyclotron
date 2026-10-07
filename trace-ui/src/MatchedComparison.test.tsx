@@ -34,6 +34,13 @@ test('comparison result orders metrics recall precision accuracy and discloses p
   expect(screen.getAllByRole('columnheader').map(node=>node.textContent)).toEqual(['Endpoint','Recall','Precision','Accuracy','ECE','Brier'])
   expect(screen.getByText(/5 shared protected items/)).toBeVisible()
 })
+test('comparison identifies macro averaging and undefined class support',()=>{
+  const metrics={metric_aggregation:'macro' as const,recall:.5,precision:null,accuracy:.5,undefined_precision_classes:['b']}
+  render(<MatchedComparisonResult status="completed" result={{sample_count:5,classifiers:{topic:{before:metrics,after:metrics}}}} />)
+  expect(screen.getByText('Recall and precision: macro average across configured classes.')).toBeVisible()
+  expect(screen.getByText('Before precision undefined for: b.')).toBeVisible()
+  expect(screen.getByText('After precision undefined for: b.')).toBeVisible()
+})
 test('item inspection fetches only the selected recorded exchange',async()=>{
   vi.mocked(graphql).mockResolvedValue({matchedEvaluationTarget:null})
   render(<MatchedComparisonResult runId="comparison" status="completed" result={{sample_count:1,classifiers:{},records:[{endpoint:'before',classifier_id:'topic',item_id:'paper',actual_label:'yes',label:'no',decision_model_label:'no',trace_event_id:12}]}} />)

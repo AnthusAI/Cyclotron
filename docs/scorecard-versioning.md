@@ -153,6 +153,12 @@ experiment.
 
 ## Protected matched-run evaluation
 
+Comparison recall and precision use the configured positive classes as one
+positive-versus-rest group. If no positive class is configured, they use a macro
+average across all configured classes. Results record and display this choice.
+Undefined class rates remain undefined, with the unsupported classes disclosed;
+the comparison does not silently drop them or substitute zero.
+
 The read-only `matchedRunPreflight` query selects at most 200 shared items with
 matching pinned item content, classifier definitions, and protected human labels.
 It rejects legacy runs without the recorded protection protocol or a checkpoint

@@ -11,7 +11,7 @@ from .models import Item, LabeledItem, DecisionResult
 from .classifier_config import ClassifiedAnswers
 from .shared_decisions import SharedDecisions
 from .rolling_metrics import recent_reviewed_metrics
-from .trace_classification import positive_metrics
+from .trace_classification import comparison_metrics
 from .batched_classification import batch_request
 from .decision_cache import CacheOptions
 
@@ -135,7 +135,7 @@ async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_reque
             for cid in metrics:
                 summary = recent_reviewed_metrics(configs[cid].task.labels, output[cid])
                 ref = next(row for row in endpoints[side]['config']['classifiers'] if row['id'] == cid)
-                summary.update(positive_metrics(summary, ref['config']['classes']))
+                summary.update(comparison_metrics(summary, ref['config']['classes']))
                 metrics[cid][side] = summary
         finally:
             requests += shared.requests

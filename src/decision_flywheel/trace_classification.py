@@ -42,6 +42,22 @@ def positive_metrics(metrics, config):
     return result
 
 
+def comparison_metrics(metrics, config):
+    """Declare aggregation; missing class support stays undefined, never guessed."""
+    if any(row['role']=='positive' for row in config):
+        return dict(positive_metrics(metrics, config), metric_aggregation='positive-vs-rest')
+    result={'metric_aggregation':'macro', 'positive_labels':[]}
+    groups=metrics.get('per_class', {})
+    for key in ('recall', 'precision'):
+        values=[groups.get(row['label'], {}).get(key) for row in config]
+        undefined=[row['label'] for row,value in zip(config,values)
+                   if isinstance(value,bool) or not isinstance(value,(int,float)) or
+                   not math.isfinite(value) or not 0<=value<=1]
+        result[f'undefined_{key}_classes']=undefined
+        result[key]=sum(values)/len(values) if values and not undefined else None
+    return result
+
+
 def running_metric_series(events, config):
     """Recorded cumulative prequential measurements, never candidate scores."""
     points=[]

@@ -9,7 +9,7 @@ import {ReliabilityCurve,type CalibrationCurve} from './ReliabilityCurve'
 import {MatchedItemTrace} from './MatchedItemTrace'
 
 type Plan={fingerprint:string;sample_count:number;request_upper_bound:number;excluded_count:number;class_counts:Record<string,Record<string,number>>}
-type Metrics={recall?:number|null;precision?:number|null;accuracy?:number|null;calibration?:CalibrationCurve}
+type Metrics={recall?:number|null;precision?:number|null;accuracy?:number|null;calibration?:CalibrationCurve;metric_aggregation?:'macro'|'positive-vs-rest';positive_labels?:string[];undefined_precision_classes?:string[];undefined_recall_classes?:string[]}
 type RecordResult={endpoint:string;classifier_id:string;item_id:string;actual_label:string;label:string;decision_model_label:string;trace_event_id?:number}
 export type ComparisonResult={sample_count:number;classifiers:Record<string,{before:Metrics;after:Metrics}>;requests?:number;new_requests?:number;records?:RecordResult[]}
 const percent=(value:number|null|undefined)=>value==null?'—':`${(value*100).toFixed(1)}%`
@@ -63,6 +63,8 @@ export function MatchedComparisonResult({status,result,runId}:{status:string;res
     <p className="text-sm">{result.sample_count} shared protected items · frozen versions · no fitting or promotion</p>
     <p className="text-xs text-muted-foreground">{result.requests??'—'} total request attempts · {result.new_requests??'—'} new attempts in this execution. Calibration curves use recorded probability vectors, not labels reconstructed as confidence.</p>
     {Object.entries(result.classifiers).map(([cid,outputs])=><section key={cid} className="space-y-2"><h2 className="font-semibold">{cid}</h2>
+      {outputs.before.metric_aggregation==='macro'?<p className="text-xs text-muted-foreground">Recall and precision: macro average across configured classes.</p>:outputs.before.metric_aggregation==='positive-vs-rest'?<p className="text-xs text-muted-foreground">Recall and precision: positive versus rest ({outputs.before.positive_labels?.join(', ')}).</p>:<p className="text-xs text-muted-foreground">Metric aggregation was not recorded in this older result.</p>}
+      {(['before','after'] as const).flatMap(side=>(['recall','precision'] as const).map(metric=>outputs[side][`undefined_${metric}_classes`]?.length?<p key={`${side}:${metric}`} className="text-xs text-muted-foreground">{side==='before'?'Before':'After'} {metric} undefined for: {outputs[side][`undefined_${metric}_classes`]!.join(', ')}.</p>:null))}
       <div className="overflow-x-auto"><table className="w-full text-left text-sm tabular-nums"><thead><tr>{['Endpoint','Recall','Precision','Accuracy','ECE','Brier'].map(label=><th scope="col" key={label} className="p-2">{label}</th>)}</tr></thead><tbody>{(['before','after'] as const).map(side=><tr key={side} className="border-t"><th scope="row" className="p-2 capitalize">{side}</th>{[outputs[side].recall,outputs[side].precision,outputs[side].accuracy,outputs[side].calibration?.ece].map((value,index)=><td key={index} className="p-2">{percent(value)}</td>)}<td className="p-2">{outputs[side].calibration?.brier?.toFixed(3)??'—'}</td></tr>)}</tbody></table></div>
       <div className="grid gap-4 sm:grid-cols-2">{(['before','after'] as const).map(side=><div key={side}><h3 className="text-xs font-semibold capitalize">{side} calibration</h3><ReliabilityCurve curve={outputs[side].calibration} /></div>)}</div>
     </section>)}

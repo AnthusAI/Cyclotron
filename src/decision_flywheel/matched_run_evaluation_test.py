@@ -17,6 +17,19 @@ class Model:
         return BatchedAnswers({cid:{'decision':DecisionResult('yes',{'yes':.8,'no':.2})} for cid in configs},'fake',{},1.)
 
 
+def test_neutral_class_comparison_records_macro_rates_and_missing_prediction_support(tmp_path):
+    endpoints={side:source(side) for side in ('before','after')}
+    for endpoint in endpoints.values():
+        endpoint['config']['classifiers'][0]['config']['classes']=[{'label':label,'role':'neutral'} for label in ('yes','no')]
+        endpoint['checkpoint']['payload']['classifiers']={'topic':{'state':asdict(FittedClassifier(ClassifierConfig(DecisionTask('topic',('yes','no'),'Choose'))))}}
+    result=asyncio.run(evaluate_matched_runs(plan_matched_runs(**endpoints),endpoints,{side:Model() for side in endpoints},tmp_path,max_requests=8,observer=lambda _:None))
+    for metrics in result['classifiers']['topic'].values():
+        assert metrics['metric_aggregation']=='macro'
+        assert metrics['recall']==.5
+        assert metrics['precision'] is None
+        assert metrics['undefined_precision_classes']==['no']
+
+
 def test_matched_evaluation_preserves_joint_requests_uses_frozen_states_and_resumes_from_cache(tmp_path):
     endpoints={side:source(side) for side in ('before','after')}
     for endpoint in endpoints.values():
