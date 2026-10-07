@@ -56,6 +56,13 @@ def test_comparison_metrics_keep_configured_multiple_positives_as_one_positive_g
     assert result['metric_aggregation']=='positive-vs-rest'
     assert result['precision']==pytest.approx(2/3)
     assert result['recall']==1
+    assert result['f1']==pytest.approx(.8)
+
+
+def test_macro_comparison_f1_requires_all_declared_classes_to_have_support():
+    config=[{'label':'a','role':'neutral'},{'label':'b','role':'neutral'}]
+    metrics=classification_metrics(['a','b'],['a'],['a'],[{'a':1.,'b':0.}])
+    assert comparison_metrics(metrics,config)['f1'] is None
 
 
 def test_running_trends_use_only_recorded_prequential_measurements_and_keep_gaps():

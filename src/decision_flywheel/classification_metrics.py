@@ -2,6 +2,15 @@
 import math
 
 
+def wilson_interval(correct,count):
+    if not count:return None
+    rate=correct/count;z=1.959963984540054
+    denominator=1+z*z/count
+    center=(rate+z*z/(2*count))/denominator
+    half=z*math.sqrt(rate*(1-rate)/count+z*z/(4*count*count))/denominator
+    return [max(0.,center-half),min(1.,center+half)]
+
+
 def classification_metrics(classes, truth, predictions, probabilities, *, allow_missing_probabilities=False):
     classes, truth, predictions, probabilities = map(tuple, (classes, truth, predictions, probabilities))
     if not classes or len(set(classes)) != len(classes):
@@ -31,21 +40,21 @@ def classification_metrics(classes, truth, predictions, probabilities, *, allow_
     for label, group in groups.items():
         n = group["count"]
         recall = group["correct"] / n if n else None
-        interval = None
-        if n:
-            z = 1.959963984540054
-            denominator = 1 + z*z/n
-            center = (recall + z*z/(2*n)) / denominator
-            half = z * math.sqrt(recall*(1-recall)/n + z*z/(4*n*n)) / denominator
-            interval = [max(0., center-half), min(1., center+half)]
+        interval = wilson_interval(group['correct'],n)
         predicted_count = sum(confusion[actual][label] for actual in classes)
         per_class[label] = {"count": n, "correct": group["correct"], "recall": recall,
+                            "predicted_count":predicted_count,
                             "precision":group['correct']/predicted_count if predicted_count else None,
+                            "f1":2*group['correct']/(n+predicted_count) if n+predicted_count else None,
                             "recall_interval_95": interval, "brier": group["loss"]/group['probability_count'] if group['probability_count'] else None}
     missing = [label for label in classes if not groups[label]["count"]]
     count = len(truth)
     probability_count=sum(g['probability_count'] for g in groups.values())
+    correct=sum(g['correct'] for g in groups.values())
     return {"count": count, "accuracy": sum(g["correct"] for g in groups.values())/count if count else None,
+            "accuracy_interval_95":wilson_interval(correct,count),
+            "accuracy_interval_method":"Wilson 95%; descriptive, not selection-adjusted or a paired effect interval",
+            "macro_f1":None if missing else sum(g['f1'] for g in per_class.values())/len(classes),
             "brier": sum(g["loss"] for g in groups.values())/probability_count if probability_count else None,
             "probability_count":probability_count,
             "balanced_accuracy": None if missing else sum(g["recall"] for g in per_class.values())/len(classes),

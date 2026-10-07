@@ -39,3 +39,19 @@ def test_each_class_records_precision_and_the_full_confusion_matrix():
 def test_candidate_evaluation_still_rejects_missing_distributions_instead_of_optimizing_partial_losses():
     with __import__('pytest').raises(ValueError,match='declared labels'):
         classification_metrics(('yes','no'),['yes'],['yes'],[None])
+
+
+def test_f1_uses_confusion_counts_and_accuracy_interval_discloses_small_sample_uncertainty():
+    result=classification_metrics(('a','b'),['a','a','b'],['a','b','b'],[{'a':.5,'b':.5}]*3)
+    assert result['per_class']['a']['f1']==pytest.approx(2/3)
+    assert result['per_class']['b']['f1']==pytest.approx(2/3)
+    assert result['macro_f1']==pytest.approx(2/3)
+    assert result['accuracy_interval_95'][0]<.25
+    assert result['accuracy_interval_95'][1]>.9
+    assert 'not selection-adjusted' in result['accuracy_interval_method']
+
+
+def test_no_labels_have_no_accuracy_interval_or_macro_f1():
+    result=classification_metrics(('a','b'),[],[],[])
+    assert result['accuracy_interval_95'] is None
+    assert result['macro_f1'] is None

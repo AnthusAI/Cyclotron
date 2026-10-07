@@ -203,6 +203,13 @@ differences. Lower calibration scores are better; a difference is descriptive,
 not proof of statistical significance. Live reviewed-item snapshots use the same
 calculation but retain their distinct, non-held-out scope.
 
+Each protected endpoint also exposes F1, per-class reviewed/predicted counts,
+and a Wilson 95% accuracy reference interval in a collapsed detail. F1 uses the
+same positive-versus-rest or macro definition as the reported recall/precision.
+The interval is descriptive: it is not corrected for model selection, adaptive
+labeling, or stratified sampling, and it is not an interval for a paired change.
+Old reports without recorded intervals remain explicitly unavailable.
+
 The individual-predictions table shows protected
 human labels beside raw and final answers, with a disagreement filter. “Inspect”
 loads only the selected recorded target trace: item content, complete joint state

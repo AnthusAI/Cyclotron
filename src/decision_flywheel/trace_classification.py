@@ -17,7 +17,7 @@ def class_configuration(labels, config=None):
 
 def positive_metrics(metrics, config):
     positives = [row['label'] for row in config if row['role']=='positive']
-    result = {'positive_labels':positives, 'precision':None, 'recall':None}
+    result = {'positive_labels':positives, 'precision':None, 'recall':None, 'f1':None}
     if not positives:
         return result
     labels = [row['label'] for row in config]
@@ -38,6 +38,7 @@ def positive_metrics(metrics, config):
     actual = sum(matrix[a][p] for a in positives for p in labels)
     predicted = sum(matrix[a][p] for a in labels for p in positives)
     result.update(precision=tp/predicted if predicted else None, recall=tp/actual if actual else None,
+                  f1=2*tp/(actual+predicted) if actual+predicted else None,
                   predicted_positive_count=predicted, actual_positive_count=actual)
     return result
 
@@ -55,6 +56,9 @@ def comparison_metrics(metrics, config):
                    not math.isfinite(value) or not 0<=value<=1]
         result[f'undefined_{key}_classes']=undefined
         result[key]=sum(values)/len(values) if values and not undefined else None
+    supported=[groups.get(row['label'], {}) for row in config]
+    values=[group.get('f1') if group.get('count',0)>0 else None for group in supported]
+    result['f1']=sum(values)/len(values) if values and all(isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and 0<=value<=1 for value in values) else None
     return result
 
 

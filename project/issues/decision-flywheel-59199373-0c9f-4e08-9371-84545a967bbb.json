@@ -150,10 +150,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "e9d255b7-26ce-4792-97ee-d1d9bd450d79",
+      "author": "home",
+      "text": "Added per-class F1/predicted counts, macro F1 with explicit missing-support handling, and Wilson 95% descriptive accuracy reference intervals in reusable classification metrics. Positive-versus-rest F1 aggregates all configured positives. Protected result UI adds collapsed F1/support/uncertainty details without changing primary Recall\u2192Precision\u2192Accuracy order. Specs cover tiny samples, empty records, multiple positives, missing class support and unavailable historical intervals. 85 UI tests and build pass; 22 focused Python metrics/evaluator specs pass; full Python suite running. Selection-policy audit confirmed recall cannot violate secondary accuracy guardrails (11 existing specs pass). Interval is explicitly not selection/design-adjusted or a paired effect claim. Real jobs remain 175 completed/2 failed, no pending/running; no labels or paid calls changed. Browser acceptance for these new details remains open.",
+      "created_at": "2026-10-07T18:05:35.883577Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "e1f76018-27ae-4d6a-b5e8-34eb59ffd9db",
+      "author": "home",
+      "text": "Full Python regression completed: 675 passed. UI regression: 85 passed; production build passed. F1/support/uncertainty delivery remains pending browser acceptance, not declared complete.",
+      "created_at": "2026-10-07T18:05:45.626413Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T18:01:27.054652Z",
+  "updated_at": "2026-10-07T18:05:45.626694Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
