@@ -64,10 +64,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "2f16c182-186b-4249-9092-e928801cccb5",
+      "author": "home",
+      "text": "Final regression: 710 Python tests and 92 UI tests pass; production build passes. Pushed provider dispatch implementation as 907f830 on develop. Gracefully stopped the exact verified idle server (no pending/running jobs), confirmed terminal shutdown/PID removal, then restarted the same LAN URL/database/options with current integrated source. Read-only HTTP/GraphQL health checks pass; job counts stay 175 completed/2 failed. User browser tab was not reloaded, production labels/paid calls unchanged. Laya full-context support and remaining acceptance stay open.",
+      "created_at": "2026-10-07T18:50:28.273372Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T18:47:33.092347Z",
+  "updated_at": "2026-10-07T18:50:28.273501Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
