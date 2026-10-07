@@ -11,6 +11,10 @@ def test_the_viewer_defaults_to_loopback_and_allows_an_explicit_local_network_ad
             bind_address(host)
 
 
+def test_an_unspecified_bind_requires_an_explicit_opt_in():
+    assert bind_address('0.0.0.0',allow_unspecified=True) == '0.0.0.0'
+
+
 def test_only_the_selected_viewer_is_served_not_neighboring_private_files(tmp_path):
     viewer=tmp_path/'viewer.html'
     viewer.write_text('<h1>Trace</h1>')

@@ -18,6 +18,22 @@ beforeEach(()=>{
 })
 afterEach(()=>{cleanup();sessionStorage.clear();vi.clearAllMocks()})
 
+test('scorecard feedback recovery uses the original job through its dedicated API mutation',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('capabilities'))return {runs:[card],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    if(query.includes('resumeFeedbackCommand'))return {resumeFeedbackCommand:{id:'original-job',kind:'undo',status:'pending',result:null}}
+    return {run:card,currentItem:null,jobs:[{id:'original-job',kind:'undo',status:'failed',result:null}]}
+  })
+  render(<WebApp/> )
+  fireEvent.click(await screen.findByRole('button',{name:'Recover feedback command'}))
+  await waitFor(()=>expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('resumeFeedbackCommand'))).toBe(true))
+  expect(vi.mocked(graphql).mock.calls.find(([q])=>q.includes('resumeFeedbackCommand'))?.[1]).toEqual({id:'live',job:'original-job'})
+  expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('submitCommand'))).toBe(false)
+})
+
 test('new scorecard runs inherit their objective unless the user explicitly overrides it',async()=>{
   vi.mocked(graphql).mockImplementation(async(query)=>{
     if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
@@ -78,6 +94,22 @@ test('opening the workspace shows the existing optimization timeline instead of 
   expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/replay/timeline?revision=0')
   expect(screen.queryByText('Local · GraphQL · SQLite')).toBeNull()
   expect(screen.getByText(/87 cycles · 87 labels · 11 optimizer calls/)).toBeVisible()
+})
+
+test('a selected run keeps the workspace shape with a skeleton while its details load',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  let resolveDetails:(value:unknown)=>void=()=>{}
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
+    if(query.includes('events('))return {events:[]}
+    if(query.includes('run(runId:$id)'))return new Promise(resolve=>{resolveDetails=resolve})
+    return {run:variables?.id==='live'?live:replay,currentItem:null,jobs:[]}
+  })
+  render(<WebApp />)
+  expect(await screen.findByTestId('run-workspace-skeleton')).toBeVisible()
+  expect(screen.queryByText('Loading run…')).toBeNull()
+  resolveDetails({run:live,currentItem:null,jobs:[]})
+  expect(await screen.findByRole('heading',{name:live.name})).toBeVisible()
 })
 
 test('reloading preserves an interactive run and its labeling view without creating or restarting it',async()=>{

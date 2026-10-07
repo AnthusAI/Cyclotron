@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
+import {createPortal} from 'react-dom'
 import {Activity, History, Menu, Plus, RefreshCw, Undo2, X} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Card,CardContent,CardHeader,CardTitle} from '@/components/ui/card'
@@ -20,6 +21,7 @@ import {ExchangeDetail} from './ExchangeDetail'
 import {CyclotronBrand} from './CyclotronBrand'
 import {MatchedComparison,MatchedComparisonResult,type ComparisonResult} from './MatchedComparison'
 import {ComparisonResume} from './ComparisonResume'
+import {FeedbackControls} from './FeedbackControls'
 export {TraceDetail} from './TraceDetail'
 
 type Run={id:string;name:string;mode:string;status:string;createdAt:string;config:{input_mode?:string;scorecard_id?:string;selection_policy?:{primary:string;secondary?:string};max_requests?:number;backfill_count?:number;classifiers?:MetricClassifier[]};counts:{cycles:number;predictions:number;labels:number;optimizations:number}}
@@ -44,10 +46,10 @@ function MobileNavigation({section,onNavigate}:{section:typeof navigationItems[n
   },[open])
   return <>
     <Button variant="ghost" size="icon" className="sm:hidden" aria-label={open?'Close main menu':'Open main menu'} aria-expanded={open} onClick={()=>setOpen(previous=>!previous)}>{open?<X/>:<Menu/>}</Button>
-    {open?<section role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title" aria-describedby="mobile-navigation-description" className="mobile-navigation-panel fixed inset-0 z-40 flex flex-col bg-background">
+    {open?createPortal(<section role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title" aria-describedby="mobile-navigation-description" className="mobile-navigation-panel fixed inset-0 z-40 flex flex-col bg-background">
       <h2 id="mobile-navigation-title" className="sr-only">Navigate Cyclotron</h2>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5"><p id="mobile-navigation-description" className="text-sm leading-relaxed text-muted-foreground">Choose a workspace. Each view keeps its own context and returns here without restarting a session.</p><nav aria-label="Mobile navigation" className="mt-8 grid gap-3" >{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'outline'} className="h-auto min-h-24 items-start justify-start whitespace-normal px-5 py-4 text-left" onClick={()=>{onNavigate(item.id);setOpen(false)}}><span><span className="block text-base font-semibold">{item.label}</span><span className="mt-1 block text-sm font-normal leading-relaxed text-muted-foreground">{item.description}</span></span></Button>)}</nav></div>
-    </section>:null}
+    </section>,document.body):null}
   </>
 }
 
@@ -57,6 +59,14 @@ function LabelCard(props:{current:CurrentItem;busy:boolean;onSubmit:(kind:string
     return <MultiLabelCard {...props} current={current} names={Object.fromEntries(Object.entries(current.prediction.classifiers).map(([id,result])=>[id,(result as {name?:string}).name??id]))} />
   }
   return <><LegacyLabelCard {...props} />{props.footer}</>
+}
+
+function RunWorkspaceSkeleton(){
+  return <main data-testid="run-workspace-skeleton" aria-busy="true" aria-label="Loading run" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4">
+    <div className="flex items-center justify-between gap-3"><div className="space-y-2"><div className="h-7 w-52 animate-pulse rounded-md bg-muted" /><div className="h-3 w-80 max-w-[75vw] animate-pulse rounded bg-muted" /></div><div className="flex gap-2"><div className="h-9 w-20 animate-pulse rounded-lg bg-muted" /><div className="h-9 w-24 animate-pulse rounded-lg bg-muted" /></div></div>
+    <div className="h-8 w-36 animate-pulse rounded-lg bg-muted" />
+    <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]"><section className="min-h-0 rounded-xl border border-border bg-card p-5"><div className="h-5 w-48 animate-pulse rounded bg-muted" /><div className="mt-5 space-y-3"><div className="h-4 w-full animate-pulse rounded bg-muted" /><div className="h-4 w-11/12 animate-pulse rounded bg-muted" /><div className="h-4 w-4/5 animate-pulse rounded bg-muted" /></div><div className="mt-8 h-40 animate-pulse rounded-lg bg-muted/70" /></section><aside className="hidden rounded-xl border border-border bg-card p-5 lg:block"><div className="h-4 w-32 animate-pulse rounded bg-muted" /><div className="mt-5 space-y-3"><div className="h-16 animate-pulse rounded-lg bg-muted/70" /><div className="h-16 animate-pulse rounded-lg bg-muted/70" /><div className="h-16 animate-pulse rounded-lg bg-muted/70" /></div></aside></div>
+  </main>
 }
 
 
@@ -160,7 +170,15 @@ export function WebApp(){
       setJobs(previous=>[result.submitCommand,...previous])
       if(kind==='label')setSubmission(previous=>previous?{...previous,jobId:result.submitCommand.id}:null)
       if(kind==='skip')setCurrent(null)
-    }catch(e){setError((e as Error).message);if(kind==='label')setSubmission(previous=>previous?{...previous,unconfirmed:true}:null)}finally{setSending(false)}
+      return result.submitCommand
+    }catch(e){setError((e as Error).message);if(kind==='label')setSubmission(previous=>previous?{...previous,unconfirmed:true}:null);return null}finally{setSending(false)}
+  }
+  const resumeFeedback=async(jobId:string)=>{
+    setSending(true);setError('')
+    try{const result=await graphql<{resumeFeedbackCommand:Job}>('mutation($id:ID!,$job:ID!){resumeFeedbackCommand(runId:$id,jobId:$job){id kind status result}}',{id:selected,job:jobId})
+      setJobs(previous=>[result.resumeFeedbackCommand,...previous.filter(job=>job.id!==jobId)])
+      return result.resumeFeedbackCommand
+    }catch(e){setError((e as Error).message);return null}finally{setSending(false)}
   }
   const create=async()=>{
     setSending(true);setError('')
@@ -195,9 +213,10 @@ export function WebApp(){
         <div className="shrink-0"><Button variant="outline" size="sm" disabled={!capabilities.liveEnabled||busy} onClick={()=>setComparisonOpen(true)}>Compare runs</Button></div>
         {comparisonOpen?<MatchedComparison runs={runs.filter(row=>row.config.classifiers?.length)} initialRunId={run.id} onClose={()=>setComparisonOpen(false)} onCreated={id=>{setComparisonOpen(false);setSelected(id);setView('timeline');void refresh().catch(e=>setError(e.message))}} />:null}
         {view==='label'&&!run.config.classifiers?.length?<ClassifierMetrics classifiers={[{id:'legacy',name:'Classifier',config:{classes:[{label:'include',role:'positive'}]}}]} events={events} compact />:null}
+        {view==='label'&&run.config.classifiers?.length?<FeedbackControls key={run.id} classifiers={run.config.classifiers} events={events} jobs={jobs} busy={busy} replay={run.config.input_mode==='replay'} onSubmit={submit} onResume={resumeFeedback}/>:null}
           {run.config.input_mode==='comparison'?<MatchedComparisonResult key={run.id} runId={run.id} status={jobs[0]?.status??run.status} result={jobs.find(job=>job.kind==='matched-evaluate'&&job.status==='completed')?.result as ComparisonResult|undefined} />:view==='timeline'?<div className="flex min-h-0 flex-1 flex-col gap-2"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Click a cycle or event to inspect its request, response, and configuration.</p><Button variant="outline" size="sm" onClick={()=>setRevision(events.at(-1)?.sequence??0)}><RefreshCw />Load latest events</Button></div><RunTimeline key={selected} runId={selected} revision={run.config.input_mode==='replay'?(jobs.find(job=>job.kind==='replay-next'&&job.status==='completed')?.id??revision):revision} classifierId={timelineClassifier||undefined} /></div>:
           <div data-labeling-content className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]"><section className="space-y-3"><div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>submit('prepare')}>{current?'Refresh prediction':'Prepare next item'}</Button>{!run.config.classifiers?.length?<Button variant="outline" disabled={busy} onClick={()=>submit('undo')}><Undo2 />Undo last review</Button>:null}</div>{current?<LabelCard key={current.prediction.presentation_id} current={current} busy={busy} onSubmit={submit} classifiers={run.config.classifiers} events={events} footer={submission?.runId===selected?<SubmissionFeedback submission={submission} jobs={jobs} compact />:run.config.backfill_count && run.counts.cycles<=run.config.backfill_count?<p className="text-xs text-muted-foreground">Historical item {run.counts.cycles} of {run.config.backfill_count} · Provide missing labels</p>:null} />:<Card><CardContent><p className="text-sm text-muted-foreground">{busy?'Processing this cycle. Events stream on the right.':'Prepare an item to get its prediction before voting.'}</p></CardContent></Card>}{jobs[0]?.status==='failed'||jobs[0]?.status==='interrupted'?<p role="alert" className="text-sm text-destructive">Last command {jobs[0].status}. State retained; no automatic paid retry.</p>:null}</section><AppDrawer title="Optimizer activity" side="right" open={activityOpen} onOpenChange={setActivityOpen}><div className="flex items-center gap-2 text-sm font-semibold"><Activity className="size-4" />Live engine activity</div><Label htmlFor="activity-type">Activity type</Label><NativeSelect id="activity-type" value={activityFilter} onChange={e=>{setActivityFilter(e.target.value);setDetail(null)}}><NativeSelectOption value="all">All activity</NativeSelectOption><NativeSelectOption value="optimizer">Optimizer calls</NativeSelectOption><NativeSelectOption value="decision">Decision calls</NativeSelectOption></NativeSelect>{!detail?recent.map(event=><button key={event.sequence} onClick={()=>setDetail(event)} className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-left text-xs"><span className="capitalize">{String(event.payload.kind).replaceAll('-',' ')}</span><span className="font-mono text-muted-foreground">{String(event.payload.cycle_number??'')}</span></button>):null}{detail?<><Button variant="outline" onClick={()=>setDetail(null)}>Back to activity</Button><ExchangeDetail event={detail} events={events} /></>:<p className="text-xs text-muted-foreground">Select a streamed model request or response to inspect its exact content.</p>}</AppDrawer></div>}
-        </>:<div className="flex flex-1 items-center justify-center"><div className="max-w-sm text-center"><RefreshCw className="mx-auto mb-4 size-8 text-muted-foreground" />{selected?<p role="status" className="text-sm text-muted-foreground">Loading run…</p>:<><h1 className="text-xl font-semibold">A history you can inspect</h1><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a recorded run, or start a new labeling session. Every optimization exchange is stored by the API.</p></>}</div></div>}
+        </>:selected?<RunWorkspaceSkeleton/>:<div className="flex flex-1 items-center justify-center"><div className="max-w-sm text-center"><h1 className="text-xl font-semibold">A history you can inspect</h1><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a recorded run, or start a new labeling session. Every optimization exchange is stored by the API.</p></div></div>}
       </main>
     </div>}
   </div>

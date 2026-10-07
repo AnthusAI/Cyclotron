@@ -69,10 +69,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d7ca2aa9-fb87-4528-9399-818578579d2f",
+      "author": "home",
+      "text": "Connected scorecard feedback correction, explicit undo confirmation, and original-command recovery to the GraphQL UI. Five component specs cover explanations, stale edits, inherited labels, replay restrictions, and recovery; WebApp verifies the dedicated resume mutation. Disposable browser proof saved a label/explanation correction and undid both local labels, reopening the original 80% prediction. SQLite retained seven feedback rows and recorded two retractions; no real labels or paid models were used. Integrated backend suite: 724 passing specs. UI suite/build being rechecked with concurrent mobile navigation and loading-shell edits. End-to-end production deployment acceptance remains open.",
+      "created_at": "2026-10-07T19:50:09.747051Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.731995Z",
-  "updated_at": "2026-10-07T19:33:04.498259Z",
+  "updated_at": "2026-10-07T19:50:09.747148Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

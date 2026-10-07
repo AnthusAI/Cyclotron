@@ -6,8 +6,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-def bind_address(host='127.0.0.1'):
+def bind_address(host='127.0.0.1', *, allow_unspecified=False):
     address = IPv4Address(host)
+    if address.is_unspecified and allow_unspecified:
+        return str(address)
     if not (address.is_loopback or address.is_private) or address.is_unspecified or address.is_reserved:
         raise ValueError('use a loopback or specific private LAN IPv4 address')
     return str(address)

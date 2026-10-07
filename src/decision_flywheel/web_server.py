@@ -60,7 +60,7 @@ def main(argv=None):
         print(json.dumps({'imported_run_id':run_id}))
         return 0
     try:
-        host = bind_address(args.host)
+        host = bind_address(args.host,allow_unspecified=args.allow_unauthenticated_lan)
     except ValueError as error:
         parser.error(str(error))
     if host != '127.0.0.1' and not token and not args.allow_unauthenticated_lan:
@@ -75,7 +75,7 @@ def main(argv=None):
     store = WebStore(args.database)
     articles = tuple(asdict(article) for article in load_articles_jsonl(args.articles)) if args.articles else ()
     redact = tuple(os.environ.get(key,'') for key in ('FLYWHEEL_WEB_TOKEN','TYPESAFE_API_KEY','OPENAI_API_KEY'))
-    endpoint = f'http://{host}:{args.port}/graphql'
+    endpoint = f'http://127.0.0.1:{args.port}/graphql' if host == '0.0.0.0' else f'http://{host}:{args.port}/graphql'
     def model_factory(config):
         return (decision_adapter(config),
                 OptimizerAgent(OpenAIOptimizer.from_environment(model=config['optimizer_model'],max_calls=config['max_optimizer_calls'])))
@@ -83,7 +83,10 @@ def main(argv=None):
         sink_factory=lambda run_id:GraphQLTraceSink(endpoint,run_id,token=token),model_factory=model_factory,redact=redact)
     app = create_app(store,service=service,token=token,redact=redact,
         allow_unauthenticated_lan=args.allow_unauthenticated_lan)
-    print(f'Workspace: http://{host}:{args.port}/',flush=True)
+    if host == '0.0.0.0':
+        print(f'Workspace: http://127.0.0.1:{args.port}/ (and this Mac\'s private LAN address)',flush=True)
+    else:
+        print(f'Workspace: http://{host}:{args.port}/',flush=True)
     uvicorn.run(app,host=host,port=args.port,workers=1,access_log=False)
     return 0
 

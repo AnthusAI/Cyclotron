@@ -1,6 +1,7 @@
 """Local GraphQL workspace; SQLite is authoritative for API trace history."""
 import asyncio
 from contextlib import asynccontextmanager
+from hashlib import sha256
 import hmac
 from ipaddress import ip_address
 import json
@@ -366,6 +367,12 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')
     assets = Path(__file__).parent / 'vendor' / 'trace-ui'
+
+    def asset_url(name):
+        """Give each rebuilt bundle a new URL without depending on browser cache state."""
+        fingerprint=sha256((assets / name).read_bytes()).hexdigest()[:16]
+        return f'/assets/{name}?v={fingerprint}'
+
     app.mount('/assets',StaticFiles(directory=assets),name='assets')
 
     @app.post('/session')
@@ -381,7 +388,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.get('/',response_class=HTMLResponse)
     async def index():
-        return '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Decision Flywheel</title><link rel="stylesheet" href="/assets/web.css"></head><body><div id="root"></div><script src="/assets/web.js"></script></body></html>'
+        return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"></div><script src="{asset_url("web.js")}"></script></body></html>'
 
     @app.get('/runs/{run_id}/timeline',response_class=HTMLResponse)
     async def timeline(run_id: str, classifier_id: str | None = None):

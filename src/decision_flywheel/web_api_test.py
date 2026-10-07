@@ -217,3 +217,11 @@ def test_explicit_local_network_access_does_not_require_a_password(tmp_path):
         assert response.json()['data']['runs'] == []
         assert client.post('/graphql', headers={'Origin': 'http://unrelated.example'},
                            json={'query': '{runs{id}}'}).status_code == 403
+
+
+def test_workspace_shell_versions_its_static_bundles_by_content(tmp_path):
+    with TestClient(create_app(WebStore(tmp_path/'web.sqlite'))) as client:
+        response=client.get('/')
+    assert response.status_code == 200
+    assert '/assets/web.css?v=' in response.text
+    assert '/assets/web.js?v=' in response.text
