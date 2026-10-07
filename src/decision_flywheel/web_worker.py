@@ -45,8 +45,16 @@ class WebWorker:
                 raise ValueError('live collection is not enabled')
             normalized = self.runtime.normalize_run_config(config, self.articles)
             return self.store.create_run(name, 'live', normalized, items=self.articles)
+        if config.get('scorecard_id') or config.get('classifier_ids') or config.get('item_list_id'):
+            if not self.allow_live:
+                raise ValueError('live collection is not enabled')
+            return self._scorecard_runtime().create_run(name, config)
         config,items=self._run_inputs(config)
         return self.store.create_run(name,'live',config,items=items)
+
+    def _scorecard_runtime(self):
+        return ScorecardRuntime(self.store, self.directory, model_factory=self.model_factory,
+                                sink_factory=self.sink_factory, redact=self.redact)
 
     def create_comparison(self,name,before_run_id,after_run_id,approved_fingerprint,*,max_requests,limit=200):
         from .matched_run_plan import plan_matched_runs
@@ -83,18 +91,8 @@ class WebWorker:
             raise ValueError('live collection is not enabled')
         config = {**config}
         if set(config) - {'selection_policy','max_requests','max_optimizer_calls','optimize_every','rubric_changes_every',
-                           'seed','decisions_model','optimizer_model','classifier_ids','item_list_id','scorecard_id','scorecard_definition_revision'}:
+                           'seed','decisions_model','optimizer_model'}:
             raise ValueError('unknown run configuration option')
-        if config.get('scorecard_id'):
-            if config.get('classifier_ids'):
-                raise ValueError('select a scorecard or independent classifiers, not both')
-            definition=self.store.scorecard_definition(config['scorecard_id'],config.get('scorecard_definition_revision'))
-            allowed_settings={'selection_policy','seed','decisions_model','optimizer_model','optimize_every','rubric_changes_every'}
-            config={**{key:value for key,value in definition['settings'].items() if key in allowed_settings},**config}
-            config['scorecard_definition_revision']=definition['revision']
-            config['scorecard_definition_fingerprint']=definition['fingerprint']
-            config['classifier_ids']=[row['id'] for row in definition['classifiers']]
-            config['classifier_revisions']={row['id']:row['revision'] for row in definition['classifiers']}
         for key, default in (('max_requests',500),('max_optimizer_calls',1000),('optimize_every',20),('rubric_changes_every',2)):
             value = config.setdefault(key,default)
             if type(value) is not int or value < 1:
@@ -108,14 +106,6 @@ class WebWorker:
         config.setdefault('decisions_model','jev-1.13.0')
         config.setdefault('optimizer_model','gpt-6-luna')
         config['evaluation_protocol']='protected-feedback-v1'
-        if 'classifier_ids' in config or 'item_list_id' in config:
-            if not config.get('classifier_ids') or not config.get('item_list_id'):
-                raise ValueError('choose classifiers and an item list')
-            from .workspace_session import freeze_configuration
-            config=freeze_configuration(self.store,config)
-            items=[];offset=0
-            while page:=self.store.list_items(config['item_list_id'],after=offset):items.extend(page);offset+=len(page)
-            return config,items
         config['class_config'] = [{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]
         config['dataset_fingerprint'] = hashlib.sha256(json.dumps(self.articles,sort_keys=True).encode()).hexdigest()
         return config,self.articles
@@ -127,34 +117,9 @@ class WebWorker:
 
     def create_replay(self,name,source_run_id,config):
         """Freeze source feedback before creating a new, empty learning session."""
-        source=self.store.run(source_run_id)
-        if not config.get('scorecard_id'):raise ValueError('choose a versioned scorecard for replay')
-        definition=self.store.scorecard_definition(config['scorecard_id'],config.get('scorecard_definition_revision'))
-        refs=definition['classifiers'];source_refs={row['id']:row['revision'] for row in source['config'].get('classifiers',[])}
-        if any(source_refs.get(row['id'])!=row['revision'] for row in refs):
-            raise ValueError('source feedback must match every classifier definition; collect missing labels first')
-        votes={};order=[]
-        for row in self.store.all_events(source_run_id):
-            event=row['payload']
-            if event.get('kind')!='human-feedback' or event.get('classifier_id') not in source_refs:continue
-            feedback=event['feedback'];identifier=feedback['item_id'];key=(identifier,event['classifier_id'])
-            if event.get('action')=='retracted':votes.pop(key,None);continue
-            if identifier not in order:order.append(identifier)
-            votes[key]={'classifier_id':event['classifier_id'],'label':feedback['final_answer_value'],
-                        'comment':feedback.get('edit_comment_value') or '', 'request_id':feedback['id']}
-        source_items={row['id']:row for row in self.store.items(source_run_id)}
-        eligible=[identifier for identifier in order if identifier in source_items and all((identifier,ref['id']) in votes for ref in refs)]
-        if not eligible:raise ValueError('no fully labeled source items available for this scorecard')
-        # Creation validates providers, policies and all operating ceilings;
-        # it never prepares an item or instantiates a model client.
-        validated,_=self._run_inputs({**config,'item_list_id':source['config']['item_list_id']})
-        frozen={**validated,'input_mode':'replay','source_run_id':source_run_id,
-                'learning_policy':'fresh-replay','replay_count':len(eligible)}
-        frozen['item_revisions']=[{'id':source_items[key]['id'],'revision':source_items[key]['revision'],'fingerprint':source_items[key]['fingerprint']} for key in eligible]
-        return self.store.create_run(name,'live',frozen,items=[source_items[identifier] for identifier in eligible],
-            frozen_feedback=[(identifier,ref['id'],votes[(identifier,ref['id'])]) for identifier in eligible for ref in refs],
-            initial_events=[('replay-created',{'kind':'replay-created','source_run_id':source_run_id,
-                            'sample_count':len(eligible),'initial_state':'empty context and no fitted heads'})])
+        if not self.allow_live:
+            raise ValueError('live collection is not enabled')
+        return self._scorecard_runtime().create_replay(name, source_run_id, config)
 
     def _loop(self):
         try:
@@ -203,8 +168,7 @@ class WebWorker:
             raise ValueError('run is read-only')
         runtime = self.runtime
         if runtime is None and 'classifiers' in config:
-            runtime = ScorecardRuntime(self.store, self.directory, model_factory=self.model_factory,
-                                       sink_factory=self.sink_factory, redact=self.redact)
+            runtime = self._scorecard_runtime()
         if runtime is not None:
             session = runtime.open_session(
                 run_id, config, self.store.items(run_id), self.store.current_item(run_id),

@@ -7,12 +7,13 @@ per-classifier wheels, and asynchronous decision providers.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from .application_runtime import ApplicationSession, RuntimeCommand
-from .workspace_session import WorkspaceSession
+from .selection_policy import SelectionPolicy
+from .workspace_session import WorkspaceSession, freeze_configuration
 
 
 @dataclass
@@ -47,6 +48,104 @@ class ScorecardRuntime:
         self.model_factory = model_factory
         self.sink_factory = sink_factory
         self.redact = tuple(redact)
+
+    def normalize_run_config(self, config: Mapping[str, object]) -> tuple[dict, list[dict]]:
+        """Validate a scorecard run and freeze its definitions and item list.
+
+        The returned configuration holds only immutable definition/item
+        references.  No provider is constructed and no prediction is made.
+        """
+        values = dict(config)
+        allowed = {
+            "selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
+            "rubric_changes_every", "seed", "decisions_model", "optimizer_model",
+            "classifier_ids", "item_list_id", "scorecard_id", "scorecard_definition_revision",
+        }
+        if set(values) - allowed:
+            raise ValueError("unknown run configuration option")
+        if values.get("scorecard_id"):
+            if values.get("classifier_ids"):
+                raise ValueError("select a scorecard or independent classifiers, not both")
+            definition = self.store.scorecard_definition(
+                values["scorecard_id"], values.get("scorecard_definition_revision"),
+            )
+            settings = {key: value for key, value in definition["settings"].items()
+                        if key in {"selection_policy", "seed", "decisions_model", "optimizer_model",
+                                   "optimize_every", "rubric_changes_every"}}
+            values = {**settings, **values}
+            values["scorecard_definition_revision"] = definition["revision"]
+            values["scorecard_definition_fingerprint"] = definition["fingerprint"]
+            values["classifier_ids"] = [row["id"] for row in definition["classifiers"]]
+            values["classifier_revisions"] = {row["id"]: row["revision"] for row in definition["classifiers"]}
+        if not values.get("classifier_ids") or not values.get("item_list_id"):
+            raise ValueError("choose classifiers and an item list")
+        for key, default in (("max_requests", 500), ("max_optimizer_calls", 1000),
+                             ("optimize_every", 20), ("rubric_changes_every", 2)):
+            value = values.setdefault(key, default)
+            if type(value) is not int or value < 1:
+                raise ValueError("run ceilings and cadences must be positive integers")
+        values.setdefault("selection_policy", {"primary": "f1", "positive_class": "include"})
+        values["selection_policy"] = asdict(SelectionPolicy(**values["selection_policy"]))
+        values.setdefault("seed", "arxiv-web-v1")
+        values.setdefault("decisions_model", "jev-1.13.0")
+        values.setdefault("optimizer_model", "gpt-6-luna")
+        values["evaluation_protocol"] = "protected-feedback-v1"
+        values = freeze_configuration(self.store, values)
+        items: list[dict] = []
+        offset = 0
+        while page := self.store.list_items(values["item_list_id"], after=offset):
+            items.extend(page)
+            offset += len(page)
+        return values, items
+
+    def create_run(self, name: str, config: Mapping[str, object]) -> dict:
+        """Persist a new scorecard run with a fully frozen input snapshot."""
+        values, items = self.normalize_run_config(config)
+        return self.store.create_run(name, "live", values, items=items)
+
+    def create_replay(self, name: str, source_run_id: str, config: Mapping[str, object]) -> dict:
+        """Create a chronology-preserving replay without leaking future labels."""
+        source = self.store.run(source_run_id)
+        if not config.get("scorecard_id"):
+            raise ValueError("choose a versioned scorecard for replay")
+        definition = self.store.scorecard_definition(config["scorecard_id"], config.get("scorecard_definition_revision"))
+        refs = definition["classifiers"]
+        source_refs = {row["id"]: row["revision"] for row in source["config"].get("classifiers", [])}
+        if any(source_refs.get(row["id"]) != row["revision"] for row in refs):
+            raise ValueError("source feedback must match every classifier definition; collect missing labels first")
+        votes: dict[tuple[str, str], dict] = {}
+        order: list[str] = []
+        for row in self.store.all_events(source_run_id):
+            event = row["payload"]
+            if event.get("kind") != "human-feedback" or event.get("classifier_id") not in source_refs:
+                continue
+            feedback = event["feedback"]
+            item_id, classifier_id = feedback["item_id"], event["classifier_id"]
+            key = (item_id, classifier_id)
+            if event.get("action") == "retracted":
+                votes.pop(key, None)
+                continue
+            if item_id not in order:
+                order.append(item_id)
+            votes[key] = {"classifier_id": classifier_id, "label": feedback["final_answer_value"],
+                          "comment": feedback.get("edit_comment_value") or "", "request_id": feedback["id"]}
+        source_items = {row["id"]: row for row in self.store.items(source_run_id)}
+        eligible = [item_id for item_id in order if item_id in source_items
+                    and all((item_id, ref["id"]) in votes for ref in refs)]
+        if not eligible:
+            raise ValueError("no fully labeled source items available for this scorecard")
+        values, _ = self.normalize_run_config({**config, "item_list_id": source["config"]["item_list_id"]})
+        frozen = {**values, "input_mode": "replay", "source_run_id": source_run_id,
+                  "learning_policy": "fresh-replay", "replay_count": len(eligible)}
+        frozen["item_revisions"] = [{"id": source_items[item_id]["id"], "revision": source_items[item_id]["revision"],
+                                     "fingerprint": source_items[item_id]["fingerprint"]} for item_id in eligible]
+        return self.store.create_run(
+            name, "live", frozen, items=[source_items[item_id] for item_id in eligible],
+            frozen_feedback=[(item_id, ref["id"], votes[(item_id, ref["id"])])
+                             for item_id in eligible for ref in refs],
+            initial_events=[("replay-created", {"kind": "replay-created", "source_run_id": source_run_id,
+                              "sample_count": len(eligible), "initial_state": "empty context and no fitted heads"})],
+        )
 
     def open_session(self, run_id: str, config: Mapping[str, object],
                      _items: Sequence[Mapping[str, object]],
