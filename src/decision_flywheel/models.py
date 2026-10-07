@@ -13,7 +13,7 @@ PROBABILITY_SUM_TOLERANCE = 0.01 + 1e-12
 
 
 def normalize_label(value: Any) -> str:
-    """Normalize a label the way Plexus Evaluation does.
+    """Normalize a label the way Primus Evaluation does.
 
     The task retains its supplied canonical strings; normalization is only used
     to recognize equivalent provider and feedback spellings.
