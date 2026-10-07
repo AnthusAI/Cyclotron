@@ -208,10 +208,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d51ab3e9-d1ec-4ef0-871f-64c84e7cd3f1",
+      "author": "home",
+      "text": "Integrated 61cb4ef on develop and deployed after confirming an idle worker. Created SQLite backup var/web/workspace-before-laya-transport-deploy-20261007.sqlite3; graceful server replacement now PID 61649, session 64540, same trusted-LAN URL and options. Verification skill guided read-only production browser/API/SQLite checks: existing Anthus v2 review reconnects with original item, three readonly labels and Cyberian Gallery awaiting human input. Provider editor shows Laya, switching clears the previous Jev model; test draft was canceled, active definition remains revision 3. No browser errors. Screenshot var/web/laya-provider-browser-proof.jpg. Stored counts unchanged: 255 item_feedback, 39405 web_events, 348 completed/2 historical failed jobs; no labels or model calls were created. React review guided atomic settings updates. Real Laya checkpoint performance and installation acceptance remain open; experiment reports excluded.",
+      "created_at": "2026-10-07T22:02:36.710810Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T22:01:28.272461Z",
+  "updated_at": "2026-10-07T22:02:36.710895Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
