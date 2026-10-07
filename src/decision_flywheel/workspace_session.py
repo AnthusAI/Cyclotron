@@ -5,7 +5,7 @@ from uuid import uuid4
 import hashlib
 from copy import copy
 from .classifier_config import ClassifierConfig
-from .calibration_history import reviewed_calibration_metrics
+from .calibration_history import reviewed_calibration_metrics,reviewed_prediction_bindings
 from .feedback import FeedbackItem,LABEL_SOURCE_VETTED
 from .feedback_trigger import LabelTransitionTrigger,PROTECTED_ASSIGNMENTS,learning_feedback
 from .flywheel import DecisionFlywheel,development_assignment
@@ -337,6 +337,17 @@ class WorkspaceSession:
                      for (cid,item),event in local.items() if item==item_id]
             plan=owner._emit({'kind':'feedback-undo-started','request_id':request_id,'target_id':item_id,'targets':targets})
         item_id=plan['target_id'];item=self.items[item_id];target=Item(item_id,item['values'])
+        reused_predictions={}
+        # Resolve all saved reviews before retracting anything. Missing trace
+        # provenance cannot be replaced with an unrelated retrospective score.
+        for identifier,wheel in self.wheels.items():
+            history=wheel.history(100000)
+            ref=next((row for row in plan['targets'] if row['classifier_id']==identifier),None)
+            feedback_id=ref['feedback_id'] if ref else next(e['feedback']['id'] for e in reversed(history)
+                if e['kind']=='human-feedback' and e['feedback']['item_id']==item_id)
+            prediction=reviewed_prediction_bindings(history).get(feedback_id)
+            if prediction is None:raise ValueError('saved review has no recorded pre-vote prediction')
+            reused_predictions[identifier]=prediction
         for ref in plan['targets']:
             identifier=ref['classifier_id'];wheel=self.wheels[identifier];history=wheel.history(100000)
             if any(e['kind']=='feedback-retraction-completed' and e.get('request_id')==request_id for e in history):continue
@@ -355,10 +366,10 @@ class WorkspaceSession:
         self.store.update_item(self.run['id'],item_id,reviewed=False)
         # The saved pre-vote prediction is still the thing the human reviews.
         # Do not invent a new prediction or make a model call just to undo.
-        for wheel in self.wheels.values():
+        for identifier,wheel in self.wheels.items():
             cycle=wheel.resume_cycle(target) or wheel.cycle(target,reason='review-after-undo').__enter__()
             try:
-                prediction=next(e for e in reversed(wheel.history(100000)) if e['kind']=='prediction' and e['target_id']==item_id)
+                prediction=reused_predictions[identifier]
                 wheel._emit({'kind':'displayed-prediction-reused','target_id':item_id,
                              'prediction_event_id':prediction['event_id'],'reason':'review after undo'})
                 cycle.suspend()

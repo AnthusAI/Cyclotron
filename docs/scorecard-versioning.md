@@ -180,6 +180,15 @@ rolling curves are not estimates of current-model held-out calibration. Playback
 uses only snapshots recorded at or before its cursor; missing older evidence is
 shown as unavailable rather than reconstructed from future state.
 
+An active human review stays bound to the prediction originally reviewed.
+Correcting its label or explanation refreshes its position in the latest-200
+window, but cannot substitute a later retrospective score, probability vector,
+or model version. Retraction releases that binding for a fresh review. Undo's
+explicit saved-prediction reuse restores the original binding even if other
+scores for that item were recorded meanwhile. All classifier references are
+resolved before retraction; missing or mismatched provenance is an error, not
+permission to borrow another output. Previously recorded snapshots stay immutable.
+
 Open **Snapshot provenance** under a confidence curve to inspect the recorded
 samples. Each sample identifies its item, prediction and feedback event IDs,
 model version, and whether the output came from a calibrated ML head or raw

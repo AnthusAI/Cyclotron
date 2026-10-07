@@ -93,7 +93,11 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
     shown = asyncio.run(session.prepare())
     asyncio.run(session.feedback({'item_id': item_id, 'presentation_id': shown['prediction']['presentation_id'],
         'labels': [{'classifier_id': cid, 'label': 'yes'} for cid in ('a', 'b')]}, 'vote'))
+    reviewed_predictions={cid:next(e for e in wheel.history(100000) if e['kind']=='prediction')['event_id']
+                          for cid,wheel in session.wheels.items()}
     for wheel in session.wheels.values():
+        wheel._emit({'kind':'prediction','target_id':item_id,'label':'no',
+            'probabilities':{'yes':.05,'no':.95},'version':'retrospective-fixture'})
         train, dev, _ = session.partitions(wheel.initial.task.name)
         wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Old learned guidance'),
             training_evidence=wheel._evidence(train), development_evidence=wheel._evidence(dev)))
@@ -108,6 +112,8 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
     session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
     result = session.undo_feedback('undo')
     assert result['undone'] == item_id
+    assert {e['classifier_id']:e['prediction_event_id'] for e in events
+            if e['kind']=='displayed-prediction-reused'}==reviewed_predictions
     assert store.item_labels('items', item_id, 1) == []
     assert store.item_results('items', item_id, 1)[0]['payload'] == shown['prediction']
     assert asyncio.run(session.prepare())['prediction'] == shown['prediction']
@@ -124,6 +130,10 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
         assert all(session.partitions(cid)[0][0].label == 'no' for cid in ('a', 'b'))
         assert len([e for e in events if e['kind'] == 'human-feedback' and e['action'] == 'retracted']) == 2
         assert model.calls == 1
+        for cid in ('a','b'):
+            metrics=next(e['metrics'] for e in reversed(events) if e['kind']=='cycle-metrics' and e['classifier_id']==cid)
+            assert metrics['accuracy']==0
+            assert metrics['calibration']['samples'][0]['prediction_event_id']==reviewed_predictions[cid]
     finally:
         session.close()
 
@@ -166,6 +176,11 @@ def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_
         session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'no',
             'expected_feedback_id': 'stale-vote'}]}, 'stale')
     assert wheel.history(100000) == original_history
+    original_prediction=next(e for e in original_history if e['kind']=='prediction')
+    # A retrospective score is not the prediction the labeler reviewed.
+    wheel._emit({'kind':'prediction','target_id':item_id,'label':'no',
+        'probabilities':{'yes':.05,'no':.95},'version':'retrospective-fixture',
+        'decision_model_label':'no','decision_model_probabilities':{'yes':.05,'no':.95}})
     result = session.correct_feedback(payload, 'correction')
     assert result['corrected'] == item_id
     assert wheel.active.config.rubric == '' and wheel.active.fingerprint != previous
@@ -193,6 +208,8 @@ def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_
                 'expected_feedback_id': 'vote:a'}]}, 'correction')
         metrics = next(e['metrics'] for e in reversed(events) if e['kind'] == 'cycle-metrics' and e['classifier_id'] == 'a')
         assert metrics['count'] == 1 and metrics['accuracy'] == 0
+        assert metrics['calibration']['samples'][0]['prediction_event_id']==original_prediction['event_id']
+        assert metrics['calibration']['ece']==pytest.approx(.8)
         # An explanation-only edit must also invalidate inferred guidance.
         wheel = session.wheels['a']; train, dev, _ = session.partitions('a')
         wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Inferred guidance'),
