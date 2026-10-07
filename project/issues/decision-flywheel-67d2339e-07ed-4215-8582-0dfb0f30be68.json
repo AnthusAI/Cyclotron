@@ -38,10 +38,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "11ad228d-d925-4023-9069-299bc52472db",
+      "author": "home",
+      "text": "Resolved the advertised datetime capability mismatch in the native staged loop. Classifier-question discovery now proposes exactly one independent control: tasks OR dynamic_elements; rubric/examples/questions stay fixed for a dynamic-input candidate. Only current_datetime is allowlisted, [] removes it, mixed edits and arbitrary code are rejected. Actual fake-provider requests prove UTC state.current_datetime, measured promotion, next prediction and restart persistence; an over-budget datetime candidate is rejected before any provider call. Protocol fingerprint changed to prevent old stage-result reuse. No paid calls or human-label changes. Broader add/update/remove task acceptance remains under audit, so this issue stays open.",
+      "created_at": "2026-10-07T23:47:23.700397Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.282413Z",
-  "updated_at": "2026-10-07T23:41:19.001352Z",
+  "updated_at": "2026-10-07T23:47:23.700744Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

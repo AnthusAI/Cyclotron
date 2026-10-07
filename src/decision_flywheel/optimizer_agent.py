@@ -133,7 +133,11 @@ class OptimizerAgent:
                 instructions += ("\nEach proposed question enters an individual feature bank. Code tests one question at a time "
                                  "against the same incumbent, preserving its other questions, rubric and examples. "
                                  "Use the same name when refining the wording of an existing measurement so its lineage is retained. "
-                                 "A losing classifier does not invalidate a feature concept; consider alternative measurements.")
+                                 "A losing classifier does not invalidate a feature concept; consider alternative measurements. "
+                                 "Alternatively, this discovery call may test dynamic_elements instead of tasks. "
+                                 "Return rationale and exactly one of tasks or dynamic_elements, never both. "
+                                 "The only allowed dynamic input is current_datetime; [] removes it. "
+                                 "This alternative keeps all questions, rubric and examples fixed while code evaluates the input change.")
         messages = [{"role": "system", "content": instructions},
                     {"role": "user", "content": briefing.encoded}]
         return messages

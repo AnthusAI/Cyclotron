@@ -10,6 +10,14 @@ from .optimizer_agent import DisabledOptimizer, FeedbackBriefing, OptimizerAgent
 TASK = DecisionTask("include", ("include", "exclude"), "Should this item be included?")
 
 
+def test_question_discovery_advertises_datetime_as_an_independent_alternative_not_a_mixed_edit():
+    request = FeedbackBriefing.build(TASK, [example()], protected=(),
+        current={'control_under_test':'tasks'})
+    instructions = OptimizerAgent(lambda _: None).request_messages(request)[0]['content']
+    assert 'exactly one of tasks or dynamic_elements, never both' in instructions
+    assert 'keeps all questions, rubric and examples fixed' in instructions
+
+
 def test_original_predictions_explain_errors_without_becoming_few_shot_context():
     from .classifier_config import ClassifierConfig
     row = LabeledItem(Item("train", {"text": "Recent research"}), "include",

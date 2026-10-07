@@ -33,6 +33,7 @@ def stage_briefing(wheel, stage, training, development, protected):
     measurements=_example_experiments(wheel,training,development) if stage=='examples' else []
     return FeedbackBriefing.build(wheel.initial.task, training,
         current={**wheel.active.config.briefing_state(), "control_under_test": control,
+                 "allowed_proposal_controls": [control, "dynamic_elements"] if stage == "questions" else [control],
                  "selection_policy":asdict(wheel.selection_policy) if wheel.selection_policy else None,
                  "stage": stage, "request_budget_bytes": wheel.max_request_bytes,
                  **({'example_experiments':measurements} if stage=='examples' else {})},
@@ -74,6 +75,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                  "limit": limit, "evaluation_floor": min_development_per_class,
                  "evaluation_weighting": wheel.evaluation_weighting, "training_class_weighting": wheel.training_class_weighting}
     key_data['context_validation_floor']=wheel.context_validation_floor
+    key_data['proposal_protocol']='independent-dynamic-inputs-v1'
     key_data['head_fitting']={'refit_on_context_activation':True,'minimum_training_per_class':3}
     from dataclasses import asdict
     key_data['selection_policy']=asdict(wheel.selection_policy) if wheel.selection_policy else None
@@ -136,6 +138,8 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 task = {k: v for k, v in task.items() if k != "input_field"}
             tasks.append(task)
         proposal = {**proposal, "tasks": tasks}
+    if stage == 'questions' and 'dynamic_elements' in proposal:
+        control = 'dynamic_elements'
     if set(proposal)-{"rationale", control} or control not in proposal:
         raise ValueError("stage proposal must change only its assigned control")
     config=wheel.active.config.apply(proposal, training)
@@ -152,7 +156,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         return result
     with wheel.db:
         wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?", (_json({"proposal": proposal}), key))
-    if stage == "questions":
+    if stage == "questions" and control == "tasks":
         result = await measure_questions(wheel, training, proposal["tasks"],
             protected=tuple(row.item for row in development)+tuple(protected), propensities=propensities,
             limit=limit, retry_interrupted=retry_interrupted)
@@ -233,6 +237,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             result = await wheel.improve(training, development, protected=protected, propensities=propensities,
                 candidate_proposal=proposal, retry_interrupted=retry_interrupted, require_recall_safeguards=True)
     result = {**result, "stage": stage, 'proposal':proposal,
+              'control_under_test':control,
               'answer_dependencies':wheel.collected_answer_dependencies(),
               'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
               'basis_context_version':key_data['context'], 'proposal_training_evidence':key_data['training'],

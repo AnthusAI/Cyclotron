@@ -296,6 +296,17 @@ exploration, but that permanently marks the runtime's evaluation context as
 exposed. It cannot be presented as independent evaluation afterward. Historical
 runs made with the former permissive default are not retroactively declared clean.
 
+Classifier-question discovery can propose either `tasks` or `dynamic_elements`,
+never both in one candidate. The dynamic-input alternative leaves the rubric,
+fixed examples, and question definitions unchanged. Only `current_datetime` is
+allowlisted; it supplies request-time UTC as `state.current_datetime`. An empty
+list removes the input. This is state data, not generated executable code or an
+extra classifier output. The candidate follows the normal development coverage,
+complete-request budget, numerical refitting, and promotion checks. Its recorded
+`control_under_test` distinguishes this experiment from question discovery.
+Rubric and example stages cannot change dynamic inputs. Retrieval and long-text
+filter optimization remain deferred.
+
 Correction itself makes no model calls and does not automatically optimize.
 The next normal prediction uses the reconciled state; an explicit optimization
 command can rebuild it sooner. Explicit recovery after a lost trace/API
