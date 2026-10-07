@@ -46,10 +46,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "461b7f7c-5a09-440a-9091-f2e5978db51f",
+      "author": "home",
+      "text": "Fixed two calibration display failures: unavailable matched-head ECE now remains unavailable instead of showing 0.0%, and raw/final reliability graphs now show supported single-bin points with counts/confidence/correctness tooltips and an observed-correctness axis label. Specs were written first and failed before implementation; all 109 UI tests, production build, focused lint, and diff checks pass. Verified the three-cycle synthetic API workspace at an 820x1180 browser viewport: both coincident output points remain visible; no browser errors. No production votes or paid requests changed. Actual physical-iPad and dark-mode labeling-space acceptance remains open. Also observed the outer compact cycle summary saying no recorded cycles despite the embedded timeline showing three; investigate that event projection separately rather than fabricate missing history. Experiment reports remain out of scope.",
+      "created_at": "2026-10-07T21:52:50.494051Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-07T18:29:30.505880Z",
+  "updated_at": "2026-10-07T21:52:50.494159Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

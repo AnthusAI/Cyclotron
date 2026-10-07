@@ -4,6 +4,14 @@ import '@testing-library/jest-dom/vitest'
 import {ModelComparison,PlaybackModelComparison} from './ModelComparison'
 afterEach(cleanup)
 
+it('shows a supported point for each output even when only one bin is occupied',()=>{
+  const metrics={accuracy:1,per_class:{},calibration:{count:3,ece:.2,bins:[{count:3,mean_confidence:.8,accuracy:1}]}}
+  const {container}=render(<ModelComparison comparison={{count:3,missing_raw_count:0,raw:metrics,final:metrics}}/> )
+  expect(container.querySelectorAll('svg circle')).toHaveLength(2)
+  expect(screen.getByText('Raw decision model: 3 predictions · confidence 80% · correct 100%')).toBeInTheDocument()
+  expect(screen.getByText('Final classifier: 3 predictions · confidence 80% · correct 100%')).toBeInTheDocument()
+})
+
 it('protected comparison identifies its scope instead of claiming ongoing review',()=>{
   const raw={accuracy:0,per_class:{yes:{recall:0,precision:0}},calibration:{count:1,ece:.8,brier:.64,bins:[]}}
   const final={accuracy:1,per_class:{yes:{recall:1,precision:1}},calibration:{count:1,ece:.2,brier:.04,bins:[]}}
