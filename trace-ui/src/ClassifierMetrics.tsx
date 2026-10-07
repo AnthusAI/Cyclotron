@@ -1,14 +1,15 @@
-import {Card,CardContent} from '@/components/ui/card'
-import type {TraceEvent} from './graphql'
+import {Card,CardContent} from './components/ui/card'
 import {ReliabilityCurve,type CalibrationCurve} from './ReliabilityCurve'
 import {ModelComparison,type DecisionModelComparison} from './ModelComparison'
 import {metricRates,type RateMetrics} from './metricRates'
 
 export type MetricClassifier={id:string;name:string;config?:{classes?:{label:string;role?:string}[]}}
+/** Minimal recorded event shape so the monitor can be embedded outside the app. */
+export type MetricEvent={payload:Record<string,unknown>;[key:string]:unknown}
 type Metrics=RateMetrics&{count:number;accuracy:number|null;calibration?:CalibrationCurve;decision_model_comparison?:DecisionModelComparison}
 const percent=(value:number|null|undefined)=>value==null?'—':`${(value*100).toFixed(1)}%`
 
-export function ClassifierMetrics({classifiers,events,compact=false,embedded=false}:{classifiers:MetricClassifier[];events:TraceEvent[];compact?:boolean;embedded?:boolean}){
+export function ClassifierMetrics({classifiers,events,compact=false,embedded=false}:{classifiers:MetricClassifier[];events:MetricEvent[];compact?:boolean;embedded?:boolean}){
   const latest=new Map<string,Metrics>()
   for(const event of events)if(event.payload.kind==='cycle-metrics')latest.set(String(event.payload.classifier_id??'legacy'),event.payload.metrics as Metrics)
   return <section aria-label="Running classifier metrics" data-compact={compact} data-embedded={embedded} className="classifier-metrics shrink-0 space-y-2">

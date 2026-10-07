@@ -19,6 +19,9 @@ from rich.table import Table
 from rich.text import Text
 
 from .adapters.jev import JevAdapter, JevConfiguration
+from .adapters.workspace import decision_adapter
+from .decision_provider_settings import normalize_decision_settings
+from .credential_redaction import credential_values
 from .artifacts import load_artifact
 from .example_list import plan_example_list_round
 from .events import FlywheelEvent, JsonlEventStream
@@ -310,8 +313,8 @@ def _article_panel(article: Article, prediction: ReviewerPrediction | None) -> P
                              article.abstract)
         return Panel(body, title="Article review", border_style="yellow", padding=(1, 2))
     label = "INCLUDE" if prediction.label == "include" else "EXCLUDE"
-    source = ("Decision Flywheel: trained ML head over Jev features" if prediction.kind == "jev:flywheel-head" else
-              "Decision Flywheel warm-up: Jev main decision, no fitted head yet" if prediction.kind == "jev:flywheel-warmup" else
+    source = ("Decision Flywheel: trained ML head over decision-model features" if prediction.kind in {"decision:flywheel-head","jev:flywheel-head"} else
+              "Decision Flywheel warm-up: main decision, no fitted head yet" if prediction.kind in {"decision:flywheel-warmup","jev:flywheel-warmup"} else
               f"Measured Jev policy ({prediction.kind.removeprefix('jev:')})"
               if prediction.kind.startswith("jev:") else
               "Cold-start fallback" if prediction.kind == "cold_start_prior" else
@@ -478,9 +481,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--runtime-database", type=Path,
                         help="private persistent flywheel state and actual request/reply transcripts")
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
-    parser.add_argument("--decisions-provider", choices=("jev",), default="jev",
-                        help="decision adapter; the connected reviewer currently supports Jev")
-    parser.add_argument("--decisions-model", default="jev-1.13.0")
+    parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
+    parser.add_argument("--decisions-provider", choices=("jev", "kev", "laya"), default="jev",
+                        help="decision adapter for the integrated flywheel; Laya requires its optional local model")
+    parser.add_argument("--decisions-model", help="explicit model identifier; otherwise use the selected provider's default")
     parser.add_argument("--evaluation-weighting", choices=("natural", "equal_class"), default="equal_class")
     from .selection_policy import add_selection_arguments, selection_from_arguments
     add_selection_arguments(parser)
@@ -495,13 +499,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--optimize-every", type=int, default=10,
                         help="vote cadence for non-rubric stages; rubric uses --rubric-changes-every; G requests a round sooner")
     parser.add_argument("--confirm-live", action="store_true",
-                        help="required for live modes: authorizes the explicit Jev and optimizer ceilings")
+                        help="required for live modes: authorizes the explicit decision and optimizer ceilings")
     parser.add_argument("--max-live-requests", type=int, default=50)
     args = parser.parse_args(argv)
     try:
         selection_policy = selection_from_arguments(args)
     except ValueError as error:
         parser.error(str(error))
+    if args.live_jev and args.decisions_provider!='jev':
+        parser.error('legacy Jev artifact mode requires the Jev provider; use --live-flywheel for other providers')
+    try:
+        decision_settings=normalize_decision_settings({'decisions_provider':args.decisions_provider,
+            **({'decisions_model':args.decisions_model} if args.decisions_model is not None else {})})
+    except ValueError as error:
+        parser.error(str(error))
+    args.decisions_model=decision_settings['decisions_model']
     if args.live_flywheel or args.live_jev:
         if not args.confirm_live:
             parser.error("refusing paid model calls without --confirm-live")
@@ -519,18 +531,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not store.articles():
             parser.error("supply --articles for a new review database")
         if args.live_flywheel:
-            from .adapters.openai_optimizer import OpenAIOptimizer
-            adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
-            transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+            from .adapters.optimizer_transport import optimizer_transport
+            adapter = decision_adapter(decision_settings)
+            transport = optimizer_transport(vars(args))
             console = Console()
-            console.print(Text(f"Paid live mode: at most {args.max_live_requests} Jev requests and "
+            console.print(Text(f"Authorized live mode: at most {args.max_live_requests} decision requests and "
                                f"{args.max_optimizer_calls} optimizer requests in this session. "
                                f"Decisions: {args.decisions_provider}/{args.decisions_model}. "
-                               f"Optimizer: {args.optimizer_model}."))
+                               f"Optimizer: {args.optimizer_transport}/{args.optimizer_model}."))
             def observe(event):
                 kind = event["kind"]
                 if kind == "decision-request":
-                    console.print(Text(f"Jev request: {event['target_id']} · {len(event['questions'])} question(s)"))
+                    console.print(Text(f"Decision request: {event['target_id']} · {len(event['questions'])} question(s)"))
                 elif kind == "optimizer-request":
                     console.print(Panel(_optimizer_request_context(event), title="Actual optimizer request context"))
                 elif kind == "step-started":
@@ -573,7 +585,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 selection_policy=selection_policy,
                 training_class_weighting=args.training_class_weighting,
                 min_evaluation_per_class=args.min_evaluation_per_class,
-                redact=tuple(os.environ.get(key, "") for key in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
+                redact=credential_values(os.environ))
             try:
                 run_review_session(store, console, flywheel=ReviewerFlywheel(store, runtime,
                                    stage=args.optimization_stage, retrospective_limit=args.retrospective_limit,

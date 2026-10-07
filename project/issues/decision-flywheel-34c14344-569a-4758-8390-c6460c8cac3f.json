@@ -3,7 +3,7 @@
   "title": "Record reliable per-classifier confidence calibration snapshots",
   "description": "Audit and verify existing OOF temperature calibration on learned heads; fitted calibration must use only trusted training OOF predictions and propensity weights, never fit on audit/held-out or on the displayed rolling evaluation window. Record raw and calibrated final probability vectors, model/head identity and calibration provenance on every prediction; identify raw decision passthrough when no fitted head is selected. Per-classifier cycle-metrics must retain immutable ten-bin top-label reliability curves, counts, mean confidence, observed accuracy, ECE and Brier/log loss over the same latest 200 unique human-labeled pre-vote predictions used by ongoing metrics. Empty bins stay undefined, tiny samples visibly uncertain. Corrections/retractions create new snapshots, do not rewrite history. Optional raw-versus-calibrated comparisons require matched eligible samples and clear scope. Record sample IDs/window/version mix and cycle/event identity for auditability; recompute when window/config-relevant predictions change, not by silently rescoring old predictions. Existing calibration_metrics and UI changes are drafts; add integration/provenance specs and complete wiring before marking done.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -37,11 +37,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "5ec4feca-e4e6-4c91-97a7-7060d75f06e0",
+      "author": "home",
+      "text": "Recording acceptance audit complete. Current 808-test Python suite covers trusted propensity-weighted OOF-only calibration and split separation (head_test), raw/calibrated vectors and exact training provenance for Jev/Kev/Laya (provider_feature_lifecycle_test and flywheel_test), ten-bin/support/null/missing-vector semantics and latest-200 unique windows (calibration_metrics_test, calibration_history_test), and independent API-owned multicycle SQLite snapshots (calibration_playback_fixture_test). Fixed the final audit defect: corrections after retrospective scores now retain the original reviewed prediction; undo resolves saved review bindings before retraction and re-labeling retains original probabilities across restart/ack loss with one total fake request. Pure and runtime regressions were observed failing first. Existing recorded snapshots are not rewritten. Earlier three-cycle browser playback and classifier filtering evidence is recorded under task 4; task 4 remains open for device/layout acceptance. No new provider calls or real label changes; experiment reports deferred.",
+      "created_at": "2026-10-07T23:33:49.910760Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:07.781946Z",
-  "updated_at": "2026-10-07T17:03:40.156106Z",
-  "closed_at": null,
+  "updated_at": "2026-10-07T23:33:50.293266Z",
+  "closed_at": "2026-10-07T23:33:50.293181Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

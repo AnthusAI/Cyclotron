@@ -6,6 +6,61 @@ import {graphql} from './graphql'
 vi.mock('./graphql',()=>({graphql:vi.fn()}))
 afterEach(()=>{cleanup();vi.clearAllMocks();window.history.replaceState(null,'','/')})
 
+it('an unavailable revision stops loading and does not query or edit an unrelated classifier definition',async()=>{
+  window.history.replaceState(null,'','/#section=scorecards&scorecard=card&scorecard_revision=999')
+  const current={id:'card',name:'Current card',revision:2,classifiers:[]}
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('scorecardDefinitions'))return {scorecardDefinitions:[current],classifiers:[]}
+    if(query.includes('scorecardDefinitionVersions'))return {scorecardDefinitionVersions:[current]}
+    return {classifiers:[],itemLists:[],scorecardClassifiers:[]}
+  })
+  render(<ScorecardCatalog/> )
+  expect(await screen.findByText('Scorecard revision 999 is not available.')).toBeVisible()
+  expect(screen.getByRole('combobox',{name:'Inspect scorecard revision'})).toHaveValue('999')
+  expect(screen.queryByText('Loading scorecard revision…')).toBeNull()
+  expect(screen.queryByRole('button',{name:'Use this definition'})).toBeNull()
+  expect(screen.queryByRole('button',{name:'Edit scorecard'})).toBeNull()
+  expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('scorecardClassifiers'))).toBe(false)
+  fireEvent.click(screen.getByRole('button',{name:'Return to active definition'}))
+  expect(await screen.findByRole('button',{name:'Edit scorecard'})).toBeVisible()
+  expect(new URLSearchParams(window.location.hash.slice(1)).get('scorecard_revision')).toBe('2')
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
+it('a failed history request is not presented as loading forever or as a valid historical version',async()=>{
+  window.history.replaceState(null,'','/#section=scorecards&scorecard=card&scorecard_revision=1')
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('scorecardDefinitions'))return {scorecardDefinitions:[{id:'card',name:'Current card',revision:2,classifiers:[]}],classifiers:[]}
+    if(query.includes('scorecardDefinitionVersions'))throw new Error('History request failed')
+    return {classifiers:[],itemLists:[],scorecardClassifiers:[]}
+  })
+  render(<ScorecardCatalog/> )
+  expect(await screen.findByText('Scorecard history could not be loaded.')).toBeVisible()
+  expect(screen.queryByText('Loading scorecard revision…')).toBeNull()
+  expect(screen.queryByRole('button',{name:'Use this definition'})).toBeNull()
+  expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('scorecardClassifiers'))).toBe(false)
+})
+
+it('names each scorecard member from its pinned classifier revision rather than the latest rename',async()=>{
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('scorecardDefinitions'))return {scorecardDefinitions:[
+      {id:'old',name:'Restored scorecard',revision:3,classifiers:[{id:'topic',revision:1}]},
+      {id:'new',name:'Current scorecard',revision:1,classifiers:[{id:'topic',revision:2}]},
+    ],classifiers:[{id:'topic',name:'Renamed topic',revision:2}]}
+    if(query.includes('classifierVersions'))return {classifierVersions:[
+      {id:'topic',name:'Original topic',revision:1},
+      {id:'topic',name:'Renamed topic',revision:2},
+    ]}
+    return {}
+  })
+  render(<ScorecardCatalog/> )
+  expect(await screen.findByText('Original topic · classifier revision 1')).toBeVisible()
+  expect(screen.getByText('Renamed topic · classifier revision 2')).toBeVisible()
+  expect(screen.queryByText('Renamed topic · classifier revision 1')).toBeNull()
+  expect(vi.mocked(graphql).mock.calls.filter(([query])=>query.includes('classifierVersions'))).toHaveLength(1)
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 it('restores an exact historical revision with its original classifier configuration in a read-only view',async()=>{
   window.history.replaceState(null,'','/#section=scorecards&scorecard=card&scorecard_revision=1')
   const current={id:'card',name:'New card',revision:2,classifiers:[{id:'a',revision:2}]}

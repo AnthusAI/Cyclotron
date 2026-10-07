@@ -56,10 +56,14 @@ class WebWorker:
         return ScorecardRuntime(self.store, self.directory, model_factory=self.model_factory,
                                 sink_factory=self.sink_factory, redact=self.redact)
 
-    def create_comparison(self,name,before_run_id,after_run_id,approved_fingerprint,*,max_requests,limit=200):
+    def create_comparison(self,name,before_run_id,after_run_id,approved_fingerprint,*,max_requests,limit=200,request_id=None):
         from .matched_run_plan import plan_matched_runs
         from .matched_run_evaluation import _endpoint
         if not self.allow_live:raise ValueError('comparison execution requires live-call authority')
+        authorization={'name':name,'before_run_id':before_run_id,'after_run_id':after_run_id,
+                       'approved_fingerprint':approved_fingerprint,'max_requests':max_requests,'limit':limit}
+        existing=self.store.matched_evaluation_authorization(request_id,authorization)
+        if existing is not None:return existing
         endpoints=self.store.matched_run_sources(before_run_id,after_run_id)
         plan=plan_matched_runs(**endpoints,limit=limit)
         if plan['fingerprint']!=approved_fingerprint:raise ValueError('preflight changed; approve a new plan')
@@ -67,7 +71,8 @@ class WebWorker:
         if type(max_requests) is not int or max_requests<plan['request_upper_bound']:
             raise ValueError('request ceiling is below preflight upper bound')
         for source in endpoints.values():_endpoint(source)
-        return self.store.create_matched_evaluation(name,plan,endpoints,max_requests)
+        return self.store.create_matched_evaluation(name,plan,endpoints,max_requests,
+            request_id=request_id,authorization=authorization)
 
     def resume_comparison(self,run_id,request_id,*,max_requests,retry_failed=False):
         if not self.allow_live:raise ValueError('comparison resume requires live-call authority')
@@ -91,7 +96,7 @@ class WebWorker:
             raise ValueError('live collection is not enabled')
         config = {**config}
         if set(config) - {'selection_policy','max_requests','max_optimizer_calls','optimize_every','rubric_changes_every',
-                           'seed','decisions_model','optimizer_model'}:
+                           'seed','decisions_model','optimizer_model','optimizer_transport'}:
             raise ValueError('unknown run configuration option')
         for key, default in (('max_requests',500),('max_optimizer_calls',1000),('optimize_every',20),('rubric_changes_every',2)):
             value = config.setdefault(key,default)
@@ -105,6 +110,8 @@ class WebWorker:
         config.setdefault('seed','arxiv-web-v1')
         config.setdefault('decisions_model','jev-1.13.0')
         config.setdefault('optimizer_model','gpt-6-luna')
+        from .adapters.optimizer_transport import validate_optimizer_transport
+        config['optimizer_transport']=validate_optimizer_transport(config.get('optimizer_transport','openai'))
         config['evaluation_protocol']='protected-feedback-v1'
         config['class_config'] = [{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]
         config['dataset_fingerprint'] = hashlib.sha256(json.dumps(self.articles,sort_keys=True).encode()).hexdigest()
@@ -234,7 +241,7 @@ class WebWorker:
                         changes['reviewed'] = update.reviewed
                     self.store.update_item(run_id, update.item_id, **changes)
                 self.store.finish_command(job['id'], 'completed', dict(command.result))
-                self.store.set_status(run_id, 'ready')
+                self.store.set_status(run_id, 'completed' if command.result.get('finished') is True else 'ready')
                 if job['kind'] in ('label', 'skip'):
                     self.store.command(run_id, f"after-feedback:{job['id']}", 'prepare', {})
                 return
@@ -264,7 +271,7 @@ class WebWorker:
                     else:result=asyncio.run(reviewer.feedback({'item_id':shown['item']['id'],'presentation_id':shown['prediction']['presentation_id'],'labels':[]},f"replay:{shown['item']['id']}"))
                 else:raise ValueError('use catalog label correction; automatic learning rollback is not supported')
                 self.store.finish_command(job['id'],'completed',result)
-                self.store.set_status(run_id,'ready')
+                self.store.set_status(run_id,'completed' if result.get('finished') is True else 'ready')
                 if kind in ('label','skip'):
                     # Feedback is acknowledged separately from the next paid
                     # prediction. A preparation failure cannot turn saved
@@ -322,7 +329,7 @@ class WebWorker:
             else:
                 raise ValueError('unknown legacy workspace command')
             self.store.finish_command(job['id'],'completed',result)
-            self.store.set_status(run_id,'ready')
+            self.store.set_status(run_id,'completed' if result.get('finished') is True else 'ready')
         except Exception as error:
             # Do not log exception text: providers can include secrets or prompts.
             import traceback

@@ -10,6 +10,7 @@ import {MatchedItemTrace} from './MatchedItemTrace'
 import {ModelComparison,type DecisionModelComparison} from './ModelComparison'
 import type {ClassRole} from './metricRates'
 import {EvaluationDetails,type EvaluationSupport} from './EvaluationDetails'
+import {requestId} from './requestId'
 
 type Plan={fingerprint:string;sample_count:number;request_upper_bound:number;excluded_count:number;class_counts:Record<string,Record<string,number>>}
 type Metrics=EvaluationSupport&{recall?:number|null;precision?:number|null;accuracy?:number|null;calibration?:CalibrationCurve;metric_aggregation?:'macro'|'positive-vs-rest';positive_labels?:string[];undefined_precision_classes?:string[];undefined_recall_classes?:string[];class_config?:ClassRole[];decision_model_comparison?:DecisionModelComparison}
@@ -23,12 +24,14 @@ export function MatchedComparison({runs,initialRunId,onCreated,onClose}:{runs:{i
   const [ceiling,setCeiling]=useState(400),[confirmed,setConfirmed]=useState(false)
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
   const generation=useRef(0)
+  const [identity,setIdentity]=useState(requestId)
   const change=(side:'before'|'after',value:string)=>{
-    generation.current++;setPlan(null);setConfirmed(false);setError('')
+    generation.current++;setPlan(null);setConfirmed(false);setError('');setIdentity(requestId())
     if(side==='before')setBefore(value);else setAfter(value)
   }
   const preflight=async()=>{
     const version=++generation.current
+    setIdentity(requestId())
     setBusy(true);setError('');setPlan(null);setConfirmed(false)
     try{
       const result=await graphql<{matchedRunPreflight:Plan}>('query($before:ID!,$after:ID!){matchedRunPreflight(beforeRunId:$before,afterRunId:$after,limit:200)}',{before,after})
@@ -39,7 +42,7 @@ export function MatchedComparison({runs,initialRunId,onCreated,onClose}:{runs:{i
     if(!plan||!confirmed||!Number.isInteger(ceiling)||ceiling<plan.request_upper_bound)return
     setBusy(true);setError('')
     try{
-      const result=await graphql<{createMatchedComparison:{id:string}}>('mutation($before:ID!,$after:ID!,$fingerprint:String!,$ceiling:Int!,$confirmed:Boolean!){createMatchedComparison(name:"Protected matched comparison",beforeRunId:$before,afterRunId:$after,approvedFingerprint:$fingerprint,maxRequests:$ceiling,confirmed:$confirmed){id}}',{before,after,fingerprint:plan.fingerprint,ceiling,confirmed:true})
+      const result=await graphql<{createMatchedComparison:{id:string}}>('mutation($before:ID!,$after:ID!,$fingerprint:String!,$ceiling:Int!,$confirmed:Boolean!,$request:String!){createMatchedComparison(name:"Protected matched comparison",beforeRunId:$before,afterRunId:$after,approvedFingerprint:$fingerprint,maxRequests:$ceiling,confirmed:$confirmed,requestId:$request){id}}',{before,after,fingerprint:plan.fingerprint,ceiling,confirmed:true,request:identity})
       onCreated(result.createMatchedComparison.id)
     }catch(e){setError((e as Error).message)}finally{setBusy(false)}
   }
@@ -51,11 +54,11 @@ export function MatchedComparison({runs,initialRunId,onCreated,onClose}:{runs:{i
       <p className="font-semibold">{plan.sample_count} matched items · at most {plan.request_upper_bound} requests</p>
       <p className="text-xs text-muted-foreground">{plan.excluded_count} items excluded. At most 200 targets; counts below disclose each classifier's balance.</p>
       {Object.entries(plan.class_counts).map(([cid,counts])=><p key={cid} className="text-xs"><strong>{cid}</strong>: {Object.entries(counts).map(([label,count])=>`${label}: ${count}`).join(' · ')}</p>)}
-      <Label htmlFor="comparison-ceiling">Maximum requests</Label><Input id="comparison-ceiling" type="number" min={plan.request_upper_bound} value={ceiling} disabled={busy} onChange={event=>{setCeiling(Number(event.target.value));setConfirmed(false)}} />
+      <Label htmlFor="comparison-ceiling">Maximum requests</Label><Input id="comparison-ceiling" type="number" min={plan.request_upper_bound} value={ceiling} disabled={busy} onChange={event=>{setCeiling(Number(event.target.value));setConfirmed(false);setIdentity(requestId())}} />
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmed} disabled={busy} onChange={event=>setConfirmed(event.target.checked)} />Authorize paid comparison requests</label>
       <Button disabled={busy||!confirmed||!plan.sample_count||!Number.isInteger(ceiling)||ceiling<plan.request_upper_bound} onClick={execute}>Run matched comparison</Button>
     </section>:null}
-    {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}
+    {error?<p role="alert" className="text-sm text-destructive">{error} If submission could not be confirmed, retrying unchanged controls recovers the same comparison.</p>:null}
   </AppDrawer>
 }
 

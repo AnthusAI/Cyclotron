@@ -15,6 +15,7 @@ import json
 import math
 from pathlib import Path
 import sqlite3
+from functools import wraps
 from typing import Protocol
 
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
@@ -32,6 +33,18 @@ def _json(value):
 
 def _hash(value):
     return hashlib.sha256(_json(value).encode()).hexdigest()
+
+
+def track_answer_dependencies(function):
+    """Nested operations retain exactly the responses they consumed."""
+    @wraps(function)
+    async def tracked(wheel, *args, **kwargs):
+        token = wheel._answer_scopes.set((*wheel._answer_scopes.get(), {}))
+        try:
+            return await function(wheel, *args, **kwargs)
+        finally:
+            wheel._answer_scopes.reset(token)
+    return tracked
 
 
 def development_assignment(seed: str, item_id: str, *, rate: float = .25) -> bool:
@@ -58,6 +71,7 @@ class FittedClassifier:
     training_evidence: Mapping[str, str] | None = None
     development_evidence: Mapping[str, str] | None = None
     validation_status: str | None = None
+    answer_dependencies: tuple[Mapping, ...] = ()
 
     @property
     def fingerprint(self):
@@ -67,6 +81,7 @@ class FittedClassifier:
             head["provenance"].pop("training_class_weighting", None)
         return _hash({"config": self.config.fingerprint, "head": head,
                       "training_evidence": self.training_evidence, "development_evidence": self.development_evidence,
+                      **({"answer_dependencies": self.answer_dependencies} if self.answer_dependencies else {}),
                       **({"validation_status":self.validation_status} if self.validation_status is not None else {})})
 
 
@@ -89,7 +104,8 @@ def _restore(raw):
                            {name: tuple(value) for name, value in head["feature_normalizers"].items()},
                            Calibration(**head["calibration"]), OutOfFoldPredictions(**oof),
                            HeadProvenance(**provenance), head["refitted_scorecard_fingerprint"])
-    return FittedClassifier(config, head, raw["training_evidence"], raw.get("development_evidence"),raw.get('validation_status'))
+    return FittedClassifier(config, head, raw["training_evidence"], raw.get("development_evidence"),
+                            raw.get('validation_status'), tuple(raw.get('answer_dependencies', ())))
 
 
 class DecisionFlywheel:
@@ -150,6 +166,7 @@ class DecisionFlywheel:
             optimizer = DisabledOptimizer()
         self.initial, self.model, self.optimizer = initial, model, optimizer
         self._step_context = ContextVar("flywheel_step", default={})
+        self._answer_scopes = ContextVar('answer_dependencies', default=())
         self._cycle_context = ContextVar("flywheel_cycle", default={})
         self._cycle_running = False
         self._step_running = False
@@ -321,6 +338,9 @@ class DecisionFlywheel:
     def _activate(self, classifier):
         if classifier.head and classifier.head.provenance.context_artifact_fingerprint != classifier.config.fingerprint:
             raise ValueError('learned head does not match the classifier context')
+        if classifier.head and (not classifier.answer_dependencies or
+                                not self.answer_dependencies_current(classifier.answer_dependencies)):
+            raise ValueError('decision answers changed; refit the learned head')
         payload = _json(asdict(classifier))
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('active', ?)", (payload,))
@@ -332,17 +352,85 @@ class DecisionFlywheel:
         identity = getattr(self.model, 'feature_context_identity', None)
         return identity(config, training) if identity else self.model.model_identity
 
+    def _answer_key(self, config, target, training, now):
+        identity = getattr(self.model, 'cache_identity', None)
+        model = identity(config, target, training, now=now) if identity else self.model.model_identity
+        return _hash({'model': model, 'request': config.request(target, training, now=now)})
+
+    def answer_dependency(self, config, target, training, now):
+        """Reference the exact consumed response, without copying article text."""
+        key = self._answer_key(config, target, training, now)
+        row = self.db.execute('SELECT status,payload FROM runtime_answers WHERE key=?', (key,)).fetchone()
+        if not row or row[0] != 'complete':
+            raise ValueError('a fit requires a complete recorded decision response')
+        dependency = {'request_fingerprint': key, 'response_fingerprint': _hash(json.loads(row[1]))}
+        snapshot = getattr(self.model, 'answer_dependency', None)
+        if snapshot:
+            dependency['provider_dependency'] = snapshot(config, target, training, now=now)
+        return dependency
+
+    def answer_dependencies_current(self, dependencies):
+        """Check consumed response revisions locally; never call a provider."""
+        check = getattr(self.model, 'answer_dependency_current', None)
+        for dependency in dependencies:
+            row = self.db.execute('SELECT status,payload FROM runtime_answers WHERE key=?',
+                                 (dependency['request_fingerprint'],)).fetchone()
+            if not row or row[0] != 'complete' or _hash(json.loads(row[1])) != dependency['response_fingerprint']:
+                return False
+            provider = dependency.get('provider_dependency')
+            if provider is not None and (check is None or not check(provider)):
+                return False
+        return True
+
+    def _record_answer_dependencies(self, dependencies):
+        for scope in self._answer_scopes.get():
+            for dependency in dependencies:
+                scope[_hash(dependency)] = dependency
+
+    def collected_answer_dependencies(self):
+        scopes = self._answer_scopes.get()
+        return list(scopes[-1].values()) if scopes else []
+
+    def cached_artifact(self, table, column, key):
+        """Reuse valid derived work; retain obsolete revisions for inspection."""
+        if (table, column) not in {('runtime_rounds', 'key'), ('classifier_training', 'id'),
+                                 ('optimization_stages', 'id'), ('question_measurements', 'id'),
+                                 ('example_measurements', 'id')}:
+            raise ValueError('unknown derived cache')
+        while True:
+            row = self.db.execute(f'SELECT status,payload FROM {table} WHERE {column}=?', (key,)).fetchone()
+            if not row or row[0] != 'complete':
+                return key, row
+            payload = json.loads(row[1])
+            dependencies = payload.get('answer_dependencies')
+            if dependencies is not None and self.answer_dependencies_current(dependencies):
+                self._record_answer_dependencies(dependencies)
+                return key, row
+            previous = key
+            key = _hash({'previous_artifact': previous, 'response_revision': 1})
+            if not self.db.execute(f'SELECT 1 FROM {table} WHERE {column}=?', (key,)).fetchone():
+                self._emit({'kind': 'derived-cache-invalidated', 'artifact_type': table,
+                            'previous_artifact': previous, 'artifact_fingerprint': key,
+                            'reason': 'consumed decision responses changed or dependencies were not recorded'})
+
     def reconcile_model_context(self, training):
         """Discard a stale numerical head without discarding learned criteria."""
         if not self.active.head:
             return False
         current = self.model_context(self.active.config, training)
         previous = self.active.head.provenance.source_model_provenance
-        if current == previous:
+        dependencies_recorded = bool(self.active.answer_dependencies)
+        answers_current = dependencies_recorded and self.answer_dependencies_current(self.active.answer_dependencies)
+        if current == previous and answers_current:
             return False
         from dataclasses import replace
-        self._activate(replace(self.active, head=None))
-        self._emit({'kind':'head-invalidated','reason':'decision feature context changed',
+        previous_snapshot = asdict(self.active)
+        self._activate(replace(self.active, head=None, answer_dependencies=()))
+        self._emit({'kind':'head-invalidated','reason':('decision feature context changed' if current != previous
+                    else 'consumed decision response changed' if dependencies_recorded
+                    else 'decision response dependencies were not recorded'),
+                    'previous_classifier_snapshot': previous_snapshot,
+                    'classifier_snapshot': asdict(self.active),
                     'previous_model_context':previous,'model_context':current})
         return True
 
@@ -374,8 +462,7 @@ class DecisionFlywheel:
         if len(serialized.encode()) > self.max_request_bytes:
             raise ValueError("complete decision request exceeds the configured byte safety ceiling")
         identity = getattr(self.model, 'cache_identity', None)
-        model_identity = identity(config, target, training, now=now) if identity else self.model.model_identity
-        key = _hash({"model": model_identity, "request": request})
+        key = self._answer_key(config, target, training, now)
         row = self.db.execute("SELECT status,payload FROM runtime_answers WHERE key=?", (key,)).fetchone()
         self._emit({"kind": "decision-cache", "request_fingerprint": key,
                     "policy": options.policy, "status": row[0] if row else "missing",
@@ -388,6 +475,7 @@ class DecisionFlywheel:
             raw = json.loads(row[1])
             self._emit({"kind": "features-cached", "target_id": target.id, "request_fingerprint": key,
                         "request": request, "answers": raw["answers"], "cached": True})
+            self._record_answer_dependencies([self.answer_dependency(config, target, training, now)])
             return ClassifiedAnswers({name: DecisionResult(**result) for name, result in raw["answers"].items()},
                                      raw["model"], raw["usage"], raw["latency_ms"])
         if self.requests >= self.max_requests:
@@ -429,6 +517,7 @@ class DecisionFlywheel:
         self._emit({"kind": "features-completed", "target_id": target.id, "model": batch.model,
                     "request_fingerprint": key, "answers": asdict(batch)["answers"], "cached": False,
                     "usage": batch.usage, "latency_ms": batch.latency_ms})
+        self._record_answer_dependencies([self.answer_dependency(config, target, training, now)])
         return batch
 
     @staticmethod
@@ -450,6 +539,8 @@ class DecisionFlywheel:
         self.reconcile_feedback(training)
         self.reconcile_model_context(training)
         batch = await self._answers(self.active.config, target, training, now or datetime.now(timezone.utc), cache_options)
+        # A refresh can replace a consumed training response during this call.
+        self.reconcile_model_context(training)
         if self.active.head:
             values = self._features(self.active.config, batch)
             probabilities = self.active.head.probabilities(values)
@@ -497,6 +588,7 @@ class DecisionFlywheel:
             if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or not 0 < p <= 1:
                 raise ValueError("each training label requires a recorded selection propensity")
 
+    @track_answer_dependencies
     async def improve(self, training: Sequence[LabeledItem], development: Sequence[LabeledItem], *,
                       protected: Sequence[Item], propensities: Mapping[str, float],
                       retry_interrupted: bool = False, candidate_proposal: Mapping | None = None,
@@ -518,12 +610,15 @@ class DecisionFlywheel:
                            "context_validation_floor": self.context_validation_floor,
                            "require_recall_safeguards": require_recall_safeguards,
                            "optimizer_context": self.optimizer_context,
+                           **({"initial_answers": {row.item.id: row.initial_answer_value for row in training
+                                                   if row.initial_answer_value is not None}}
+                              if any(row.initial_answer_value is not None for row in training) else {}),
                            **({"evaluation_time": evaluation_time.isoformat()}
                               if evaluation_time is not None and "current_datetime" in self.active.config.dynamic_elements else {}),
                            **({"apply_promotion": False, "baseline_version": self.active.fingerprint}
                               if not apply_promotion else {}),
                            **({"candidate_proposal": candidate_proposal} if candidate_proposal is not None else {})})
-        saved = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (round_key,)).fetchone()
+        round_key, saved = self.cached_artifact('runtime_rounds', 'key', round_key)
         if saved:
             if saved[0] == "complete":
                 cached = json.loads(saved[1])
@@ -577,6 +672,7 @@ class DecisionFlywheel:
             from .candidate_fitting import fit_candidate
             candidate, diagnostics = await fit_candidate(self, config, training, development,
                 protected=protected, propensities=propensities, validation_status=status, now=now)
+            self.reconcile_model_context(training)
             incumbent_metrics = await self._score(self.active, development, training, now)
             candidate_metrics = await self._score(candidate, development, training, now)
             metric = "balanced_brier" if self.evaluation_weighting == "equal_class" else "brier"
@@ -610,6 +706,7 @@ class DecisionFlywheel:
                                 (_json({"result": result, "active": asdict(self.active),
                                         "fitted_candidate": asdict(candidate), "baseline_version": baseline_version,
                                         "candidate_model_context": self.model_context(candidate.config, training),
+                                        "answer_dependencies": self.collected_answer_dependencies(),
                                         "training_evidence": self._evidence(training),
                                         "development_evidence": self._evidence(development)}), round_key))
             return result
@@ -623,7 +720,8 @@ class DecisionFlywheel:
             self._emit({"kind": "round-failed", **result})
             with self.db:
                 self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
-                                (_json({"result": result, "active": asdict(self.active)}), round_key))
+                                (_json({"result": result, "active": asdict(self.active),
+                                        "answer_dependencies": self.collected_answer_dependencies()}), round_key))
             return result
 
     def promote_trial(self, trial_fingerprint, training, development):
@@ -631,6 +729,8 @@ class DecisionFlywheel:
         if not row or row[0] != "complete":
             raise ValueError("trial is not complete")
         saved = json.loads(row[1])
+        if saved.get('answer_dependencies') is not None and not self.answer_dependencies_current(saved['answer_dependencies']):
+            raise ValueError('decision answers changed; refit and reevaluate the trial')
         selection = saved['result'].get('selection')
         previous_policy = saved['result'].get('selection_policy', selection.get('policy') if isinstance(selection, dict) else None)
         if previous_policy != (asdict(self.selection_policy) if self.selection_policy else None):
@@ -644,6 +744,8 @@ class DecisionFlywheel:
             candidate.head.provenance.source_model_provenance if candidate.head else None)
         if measured_context != self.model_context(candidate.config, training):
             raise ValueError('decision feature context changed; refit and reevaluate the trial')
+        if not self.answer_dependencies_current(candidate.answer_dependencies):
+            raise ValueError('decision answers changed; refit and reevaluate the trial')
         self._activate(candidate)
         self._emit({"kind": "promoted", **saved["result"], "promoted": True,
                     "version": self.active.fingerprint})

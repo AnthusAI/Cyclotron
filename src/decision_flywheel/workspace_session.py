@@ -5,7 +5,7 @@ from uuid import uuid4
 import hashlib
 from copy import copy
 from .classifier_config import ClassifierConfig
-from .calibration_history import reviewed_calibration_metrics
+from .calibration_history import reviewed_calibration_metrics,reviewed_prediction_bindings
 from .feedback import FeedbackItem,LABEL_SOURCE_VETTED
 from .feedback_trigger import LabelTransitionTrigger,PROTECTED_ASSIGNMENTS,learning_feedback
 from .flywheel import DecisionFlywheel,development_assignment
@@ -99,7 +99,9 @@ class WorkspaceSession:
             if item_id not in active or active[item_id].get('assignment') in PROTECTED_ASSIGNMENTS or development_assignment(self.config['seed']+':audit',item_id,rate=.2):
                 protected.append(item);continue
             feedback=active[item_id]['feedback'];comment=feedback.get('edit_comment_value')
-            labeled=LabeledItem(item,task.validate_label(feedback['final_answer_value']),'trusted',{'human_feedback':comment} if comment else {})
+            labeled=LabeledItem(item,task.validate_label(feedback['final_answer_value']),'trusted',
+                {'human_feedback':comment} if comment else {},
+                initial_answer_value=feedback.get('initial_answer_value'))
             (development if active[item_id].get('assignment')=='development' or development_assignment(self.config['seed'],item_id) else training).append(labeled)
         # Preserve feedback arrival order for recent-balanced evaluation selection.
         position={item_id:index for index,item_id in enumerate(active)}
@@ -122,14 +124,16 @@ class WorkspaceSession:
         # classifier's own question list stays unchanged.
         for _ in range(len(self.wheels)+1):
             stale=[identifier for identifier,wheel in self.wheels.items() if wheel.active.head and
-                wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])]
+                (wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])
+                 or not wheel.active.answer_dependencies
+                 or not wheel.answer_dependencies_current(wheel.active.answer_dependencies))]
             if not stale:break
             for identifier in stale:
                 wheel=self.wheels[identifier]
                 cycle=wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
                 try:
                     wheel.reconcile_model_context(training[identifier])
-                    cycle.check_trigger('classifier',due=True,reason='shared decision feature context changed',details={})
+                    cycle.check_trigger('classifier',due=True,reason='shared decision feature source changed',details={})
                     train,dev,protected=self.partitions(identifier)
                     await wheel.step('classifier',train,dev,protected=protected,
                         propensities={r.item.id:1. for r in train},min_development_per_class=2,
@@ -333,6 +337,17 @@ class WorkspaceSession:
                      for (cid,item),event in local.items() if item==item_id]
             plan=owner._emit({'kind':'feedback-undo-started','request_id':request_id,'target_id':item_id,'targets':targets})
         item_id=plan['target_id'];item=self.items[item_id];target=Item(item_id,item['values'])
+        reused_predictions={}
+        # Resolve all saved reviews before retracting anything. Missing trace
+        # provenance cannot be replaced with an unrelated retrospective score.
+        for identifier,wheel in self.wheels.items():
+            history=wheel.history(100000)
+            ref=next((row for row in plan['targets'] if row['classifier_id']==identifier),None)
+            feedback_id=ref['feedback_id'] if ref else next(e['feedback']['id'] for e in reversed(history)
+                if e['kind']=='human-feedback' and e['feedback']['item_id']==item_id)
+            prediction=reviewed_prediction_bindings(history).get(feedback_id)
+            if prediction is None:raise ValueError('saved review has no recorded pre-vote prediction')
+            reused_predictions[identifier]=prediction
         for ref in plan['targets']:
             identifier=ref['classifier_id'];wheel=self.wheels[identifier];history=wheel.history(100000)
             if any(e['kind']=='feedback-retraction-completed' and e.get('request_id')==request_id for e in history):continue
@@ -351,10 +366,10 @@ class WorkspaceSession:
         self.store.update_item(self.run['id'],item_id,reviewed=False)
         # The saved pre-vote prediction is still the thing the human reviews.
         # Do not invent a new prediction or make a model call just to undo.
-        for wheel in self.wheels.values():
+        for identifier,wheel in self.wheels.items():
             cycle=wheel.resume_cycle(target) or wheel.cycle(target,reason='review-after-undo').__enter__()
             try:
-                prediction=next(e for e in reversed(wheel.history(100000)) if e['kind']=='prediction' and e['target_id']==item_id)
+                prediction=reused_predictions[identifier]
                 wheel._emit({'kind':'displayed-prediction-reused','target_id':item_id,
                              'prediction_event_id':prediction['event_id'],'reason':'review after undo'})
                 cycle.suspend()

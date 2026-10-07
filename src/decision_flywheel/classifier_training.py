@@ -3,10 +3,11 @@ import json
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
 
-from .flywheel import _hash, _json
+from .flywheel import _hash, _json, track_answer_dependencies
 from .selection_policy import SelectionPolicy
 
 
+@track_answer_dependencies
 async def train_classifier(wheel, training, development, *, protected, propensities,
                            min_development_per_class=20, retry_interrupted=False,
                            apply_promotion=True):
@@ -43,7 +44,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                 "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None}
     key = _hash(evidence)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS classifier_training (id TEXT PRIMARY KEY, status TEXT, payload TEXT)")
-    saved = wheel.db.execute("SELECT status,payload FROM classifier_training WHERE id=?", (key,)).fetchone()
+    key, saved = wheel.cached_artifact('classifier_training', 'id', key)
     if saved and saved[0] == "complete":
         return json.loads(saved[1])
     if saved and not retry_interrupted:
@@ -58,7 +59,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     try:
         wheel.evaluation_weighting = "equal_class"
         if wheel.active.head is not None:
-            raw = replace(wheel.active, head=None, training_evidence=wheel._evidence(training),
+            raw = replace(wheel.active, head=None, answer_dependencies=(), training_evidence=wheel._evidence(training),
                           development_evidence=wheel._evidence(development))
             baseline = await wheel._score(wheel.active, development, training, now)
             metrics = await wheel._score(raw, development, training, now)
@@ -77,6 +78,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
             with wheel.db:
                 wheel.db.execute("INSERT OR REPLACE INTO runtime_rounds VALUES (?, 'complete', ?)",
                     (trial_key,_json({'result':trial,'fitted_candidate':asdict(raw),
+                        'answer_dependencies':wheel.collected_answer_dependencies(),
                         'candidate_model_context':wheel.model_context(raw.config, training),
                         'baseline_version':wheel.active.fingerprint,'training_evidence':wheel._evidence(training),
                         'development_evidence':wheel._evidence(development)})))
@@ -101,6 +103,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
         result = {"stage": "classifier", "promoted": bool(best and apply_promotion), "trials": trials,
                   "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
                   "selected": best, "development_counts": counts,
+                  "answer_dependencies": wheel.collected_answer_dependencies(),
                   "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
                   "reason": (best['reason'] if wheel.selection_policy else "lower balanced Brier with no per-class recall regression") if best else "no candidate passed promotion safeguards"}
         with wheel.db:

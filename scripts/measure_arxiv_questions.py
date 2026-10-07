@@ -2,12 +2,14 @@
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 import sqlite3
 
 from decision_flywheel import ClassifierConfig, DecisionFlywheel, OptimizerAgent, select_window
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
-from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
+from decision_flywheel.adapters.optimizer_transport import optimizer_transport
+from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.reviewer_core import reviewer_task
 from decision_flywheel.reviewer_flywheel import ReviewerFlywheel
 from decision_flywheel.reviewer_store import ReviewStore
@@ -46,6 +48,7 @@ def main(argv=None):
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
+    parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
     args = parser.parse_args(argv)
     if args.limit < 1 or not args.database.is_file() or not args.runtime.is_file():
         parser.error("existing review/runtime databases and a positive window limit are required")
@@ -89,11 +92,15 @@ def main(argv=None):
                     "window_ids": [r.item.id for r in window], "feedback_evidence": dry._evidence(window),
                     "request_upper_bound": len(window), "optimizer_upper_bound": 1,
                     "decisions_model": args.decisions_model, "optimizer_model": args.optimizer_model,
+                    "optimizer_transport": args.optimizer_transport,
                     "ranker": "stratified OOF soft contingency; fixed context, retrospective discovery only"}
         dry.close()
-        if preflight.exists() and json.loads(preflight.read_text()) != protocol:
-            parser.error("arguments no longer match the frozen preflight")
-        preflight.write_text(json.dumps(protocol, indent=2)+"\n")
+        if preflight.exists():
+            saved=json.loads(preflight.read_text())
+            if {"optimizer_transport":"openai",**saved} != protocol:
+                parser.error("arguments no longer match the frozen preflight")
+        else:
+            preflight.write_text(json.dumps(protocol, indent=2)+"\n")
         print(json.dumps({k: v for k, v in protocol.items() if k not in {"window_ids", "feedback_evidence"}}), flush=True)
         if not args.confirm_live:
             return 0
@@ -103,7 +110,7 @@ def main(argv=None):
             (args.output / "started.json").write_text(json.dumps({"max_requests": args.max_requests,
                                                                 "max_optimizer_calls": args.max_optimizer_calls})+"\n")
         model = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
-        optimizer = NoOptimizer() if args.resume else OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+        optimizer = NoOptimizer() if args.resume else optimizer_transport(vars(args))
         def observe(event):
             if event["kind"] in {"optimization-stage-started", "question-backfill-started", "question-backfill-progress"}:
                 print(json.dumps(event), flush=True)
@@ -111,7 +118,7 @@ def main(argv=None):
                 print(json.dumps({"event": "optimizer-response", "model": event["model"],
                                   "proposal": json.loads(event["content"])}), flush=True)
         wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), model, OptimizerAgent(optimizer),
-                                 max_requests=args.max_requests, observer=observe)
+                                 max_requests=args.max_requests, observer=observe, redact=credential_values(os.environ))
         before = wheel.active.fingerprint
         try:
             report = asyncio.run(wheel.optimize_stage("questions", training, development,

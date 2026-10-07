@@ -49,10 +49,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "37106a75-4865-4ed6-8852-7ef375a245c6",
+      "author": "home",
+      "text": "Removed the redundant compact cycle grid from the playback workspace. It consumed only newly streamed events while the real recorded vis-timeline loaded history separately, incorrectly claiming no cycles in completed runs. Regression was observed failing before implementation; all 109 UI tests and build pass. Browser verified synthetic run shows three recorded cycles in the single interactive timeline, without the false empty state; no console errors. Screenshot var/web/single-history-timeline-proof.jpg. No labels or provider calls changed. React review retained the existing history-loading boundary instead of adding an unbounded duplicate history fetch. Existing unrelated effect lint warnings remain unchanged.",
+      "created_at": "2026-10-07T21:54:44.833675Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "99af1bbd-4c74-496d-8da7-a57c6ec3d56c",
+      "author": "home",
+      "text": "Fixed classifier-history route persistence: Inspect classifier now binds the frozen run member to classifier=<id> in the app URL. Reload, view changes and Back/Forward restore it; unknown IDs canonicalize via replacement and never load unrelated history. Four regression specs were observed failing before implementation; all 117 UI specs and production build now pass. Browser verified separate offline fixture tab selection, reload and Back with matching iframe history IDs; no console errors, votes or model work. Existing broad acceptance remains open. Experiment reporting remains explicitly deferred.",
+      "created_at": "2026-10-07T22:33:41.718238Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:11.067923Z",
-  "updated_at": "2026-10-07T17:04:55.272865Z",
+  "updated_at": "2026-10-07T22:33:41.718328Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

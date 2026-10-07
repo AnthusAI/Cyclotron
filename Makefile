@@ -36,6 +36,17 @@ build-trace-ui:
 test-trace-ui:
 	cd trace-ui && npm test
 
+.PHONY: diagrams check-diagrams
+docs/diagrams/node_modules: docs/diagrams/package-lock.json
+	cd docs/diagrams && npm ci
+	touch $@
+
+diagrams: docs/diagrams/node_modules
+	cd docs/diagrams && node render.mjs
+
+check-diagrams: docs/diagrams/node_modules
+	cd docs/diagrams && node render.mjs --check
+
 demo:
 	$(PYTHON) -m decision_flywheel.demo --output demo-output
 

@@ -23,6 +23,8 @@ class Scorecards:
                 fingerprint TEXT,payload TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(run_id,fingerprint));
               CREATE TABLE IF NOT EXISTS matched_evaluation_inputs(run_id TEXT PRIMARY KEY REFERENCES web_runs(id),
                 payload TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS matched_evaluation_authorizations(request_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES web_runs(id),payload TEXT NOT NULL);
             ''')
 
     def extend_scorecard(self,parent_run_id,classifier_ids,*,name):
@@ -138,15 +140,35 @@ class Scorecards:
             result[side]={**run,'checkpoint':checkpoints[-1],'items':self.items(identifier),'events':self.all_events(identifier)}
         return result
 
-    def create_matched_evaluation(self,name,plan,endpoints,max_requests):
+    def matched_evaluation_authorization(self,request_id,authorization):
+        if request_id is None:return None
+        if not isinstance(request_id,str) or not request_id.strip():raise ValueError('comparison identity required')
+        with self.connect() as db:
+            row=db.execute('SELECT run_id,payload FROM matched_evaluation_authorizations WHERE request_id=?',(request_id,)).fetchone()
+        if row:
+            if row['payload']!=encode(authorization):raise ValueError('command identity has different content')
+            return self.run(row['run_id'])
+        return None
+
+    def create_matched_evaluation(self,name,plan,endpoints,max_requests,*,request_id=None,authorization=None):
         """Atomic immutable input snapshot and queued comparison, not an edition."""
         if not name.strip():raise ValueError('comparison name required')
         identifier,job_id=str(uuid4()),str(uuid4())
         config={'input_mode':'comparison','plan':plan,'max_requests':max_requests}
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if request_id is not None:
+                if not isinstance(request_id,str) or not request_id.strip() or authorization is None:
+                    raise ValueError('comparison identity and authorization required')
+                existing=db.execute('SELECT run_id,payload FROM matched_evaluation_authorizations WHERE request_id=?',(request_id,)).fetchone()
+                if existing:
+                    if existing['payload']!=encode(authorization):raise ValueError('command identity has different content')
+                    return self.run(existing['run_id'])
             db.execute('INSERT INTO web_runs VALUES (?,?,?,?,?,?)',(identifier,name,'recorded','ready',datetime.now(timezone.utc).isoformat(),encode(config)))
             db.execute('INSERT INTO matched_evaluation_inputs VALUES (?,?)',(identifier,encode(endpoints)))
             db.execute('INSERT INTO web_jobs VALUES (?,?,?,?,?,?,?)',(job_id,identifier,'approved-comparison','matched-evaluate','{}','pending',None))
+            if request_id is not None:
+                db.execute('INSERT INTO matched_evaluation_authorizations VALUES (?,?,?)',(request_id,identifier,encode(authorization)))
         return self.run(identifier)
 
     def matched_evaluation_inputs(self,run_id):

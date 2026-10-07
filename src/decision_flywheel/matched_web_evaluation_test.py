@@ -23,6 +23,59 @@ def runs(store):
     return result
 
 
+def test_creation_retry_recovers_the_same_frozen_job_after_restart_and_source_changes(tmp_path):
+    store=WebStore(tmp_path/'db');before,after=runs(store)
+    plan=store.matched_run_preflight(before['id'],after['id'])
+    worker=WebWorker(store,tmp_path/'cache',allow_live=True)
+    args=('Matched',before['id'],after['id'],plan['fingerprint'])
+    first=worker.create_comparison(*args,max_requests=8,request_id='approval-1')
+    frozen=store.matched_evaluation_inputs(first['id'])
+    store.append_event(after['id'],'changed',{'kind':'human-feedback','classifier_id':'topic',
+        'assignment':'training','feedback':{'item_id':'0','final_answer_value':'yes'}})
+    restarted=WebWorker(WebStore(tmp_path/'db'),tmp_path/'cache',allow_live=True)
+    assert restarted.create_comparison(*args,max_requests=8,request_id='approval-1')==first
+    assert store.matched_evaluation_inputs(first['id'])==frozen
+    assert len(store.jobs(first['id']))==1
+    assert len(store.runs())==3
+    with pytest.raises(ValueError,match='identity has different content'):
+        restarted.create_comparison(*args,max_requests=9,request_id='approval-1')
+    assert len(store.runs())==3
+
+
+def test_duplicate_graphql_approval_returns_one_comparison_and_one_pending_job(tmp_path):
+    from fastapi.testclient import TestClient
+    from .web_api import create_app
+    store=WebStore(tmp_path/'db');before,after=runs(store)
+    plan=store.matched_run_preflight(before['id'],after['id'])
+    worker=WebWorker(store,tmp_path/'cache',allow_live=True,
+        model_factory=lambda _:pytest.fail('creation must not open a model'))
+    client=TestClient(create_app(store,service=worker))
+    query='mutation($before:ID!,$after:ID!,$plan:String!,$request:String!){createMatchedComparison(name:"Matched",beforeRunId:$before,afterRunId:$after,approvedFingerprint:$plan,maxRequests:8,confirmed:true,requestId:$request){id}}'
+    variables={'before':before['id'],'after':after['id'],'plan':plan['fingerprint'],'request':'approval'}
+    first=client.post('/graphql',json={'query':query,'variables':variables}).json()
+    assert 'errors' not in first
+    second=client.post('/graphql',json={'query':query,'variables':variables}).json()
+    assert second==first
+    assert len(store.jobs(first['data']['createMatchedComparison']['id']))==1
+    assert len(store.runs())==3
+    rejected=client.post('/graphql',json={'query':query,'variables':{**variables,'request':' '}}).json()
+    assert 'identity required' in rejected['errors'][0]['message']
+    assert len(store.runs())==3
+
+
+def test_concurrent_creation_approvals_commit_one_frozen_snapshot_and_job(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    store=WebStore(tmp_path/'db')
+    def create(_):
+        return WebStore(tmp_path/'db').create_matched_evaluation('Matched',{'fingerprint':'p'},{},2,
+            request_id='one-approval',authorization={'fingerprint':'p','max_requests':2})
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first,second=list(pool.map(create,range(2)))
+    assert first==second
+    assert len(store.runs())==1
+    assert len(store.jobs(first['id']))==1
+
+
 def test_comparison_job_freezes_sources_and_records_results_without_opening_learning_sessions(tmp_path):
     store=WebStore(tmp_path/'db');before,after=runs(store)
     plan=store.matched_run_preflight(before['id'],after['id'])

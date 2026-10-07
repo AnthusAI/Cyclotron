@@ -18,6 +18,40 @@ class SignalModel:
         return ClassifiedAnswers({'decision':DecisionResult(label,{key:p if key==label else 1-p for key in TASK.labels})},self.model_identity,{},0.)
 
 
+def test_shared_example_measurements_resume_without_a_new_budget_or_a_spurious_context_change(tmp_path):
+    from .shared_decisions import SharedDecisions
+    from .batched_classification import BatchedAnswers
+    class Model(SignalModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {}
+            for cid, config in configs.items():
+                answers[cid] = (await self.classify(config, target, training[cid], **kwargs)).answers
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    config = ClassifierConfig(TASK, example_ids=('t0','t1'))
+    model = Model()
+    shared = SharedDecisions(tmp_path/'shared.sqlite', model, max_requests=12, observer=lambda _: None)
+    shared.bind_context({'a': config, 'b': ClassifierConfig(TASK)}, {'a': TRAIN, 'b': TRAIN})
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), agent([]), max_requests=6)
+    kwargs = dict(protected=(), propensities={row.item.id: 1. for row in TRAIN}, max_trials=2)
+    try:
+        first = asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, **kwargs))
+        assert first['count'] == 2
+        assert shared.requests == 6
+        assert asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, **kwargs)) == first
+        assert shared.requests == 6
+        # A new authorization permits measuring a genuinely different joint
+        # request, not reusing evidence from the previous sibling rubric.
+        wheel.max_requests = 12
+        shared.bind_context({'a': config, 'b': ClassifierConfig(TASK, rubric='Changed sibling')},
+                            {'a': TRAIN, 'b': TRAIN})
+        second = asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, **kwargs))
+        assert second['measurement_fingerprint'] != first['measurement_fingerprint']
+        assert shared.requests == 12
+    finally:
+        wheel.close()
+        shared.close()
+
+
 def test_probability_only_gain_does_not_win_when_example_selection_optimizes_f1(tmp_path):
     from .selection_policy import SelectionPolicy
     wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK, example_ids=('t0','t1')),

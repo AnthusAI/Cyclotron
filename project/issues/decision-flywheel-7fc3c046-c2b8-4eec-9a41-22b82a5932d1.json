@@ -78,10 +78,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "888331a3-e8cc-43a5-9a22-140e6c1eb8bd",
+      "author": "home",
+      "text": "Closed another uncertain-acknowledgement gap in the labeling application: generic run commands now retain their identities and complete intent in browser session storage until API acknowledgement. A no-network WebApp regression first failed because label retry after remount generated a new command ID; it now proves identical command payload/identity and correct pending-feedback acknowledgement. The shared journal scopes by run/kind/canonical full payload, preserves explanation changes as distinct intents, removes acknowledged commands, tolerates malformed/unavailable storage, and never auto-retries. 159 UI specs and production build pass; 27 backend command-idempotency/GraphQL specs pass. Documents storage-unavailable and cross-device limits explicitly. No real labels or model calls. Wider restart/correction/undo production-story acceptance remains open.",
+      "created_at": "2026-10-07T23:27:50.655561Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.731995Z",
-  "updated_at": "2026-10-07T19:50:09.747148Z",
+  "updated_at": "2026-10-07T23:27:50.655642Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

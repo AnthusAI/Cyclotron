@@ -10,6 +10,28 @@ from decision_flywheel.models import DecisionTask, Item, LabeledItem
 from decision_flywheel.optimizer import TrialSpec, search_context_policies
 
 
+def test_a_litellm_optimizer_exposes_the_complete_human_context_and_returned_reply_in_the_normal_trace():
+    from decision_flywheel.adapters.litellm_optimizer import LiteLLMOptimizer
+    from decision_flywheel.optimizer_agent import FeedbackBriefing, OptimizerAgent
+    requests=[];events=[]
+    def complete(**kwargs):
+        requests.append(kwargs)
+        return SimpleNamespace(model='fake-returned',usage=None,choices=[SimpleNamespace(message=
+            SimpleNamespace(content='{"rubric":"Keep knowledge-base management research"}',tool_calls=None))])
+    briefing=FeedbackBriefing.build(TASK,[LabeledItem(Item('trusted',{'text':'An actual training abstract'}),'yes',
+        context={'human_feedback':'I want papers about managing knowledge bases'})],
+        current={'rubric':'','control_under_test':'rubric'},protected=[])
+    agent=OptimizerAgent(LiteLLMOptimizer(complete,model='ollama/fake'),observer=events.append)
+    proposal=agent.propose(briefing)
+    assert proposal['rubric']=='Keep knowledge-base management research'
+    request,response=events
+    assert request['kind']=='optimizer-request' and response['kind']=='optimizer-response'
+    assert request['messages']==requests[0]['messages']
+    assert 'I want papers about managing knowledge bases' in request['messages'][1]['content']
+    assert response['content']=='{"rubric":"Keep knowledge-base management research"}'
+    assert response['model']=='fake-returned'
+
+
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only the target.")
 CANDIDATES = [
     LabeledItem(Item(f"{label}-{number}", {"text": f"{label} demonstration {number}"}), label)
@@ -46,9 +68,11 @@ class FakeKevTransport:
         return FakeResponse(label)
 
 
-class NeverCalledLaya:
-    def system_one(self, **kwargs):
-        raise AssertionError("few-shot Laya must be excluded before model inference")
+class FakeLaya:
+    def system_one(self, *, state, questions):
+        self.requests = getattr(self, "requests", []) + [(state, questions)]
+        label = "yes" if state["target"]["text"].startswith("yes") else "no"
+        return {"answers": {"topic": {"choice": label}}}
 
 
 def test_optimizer_reaches_an_injected_jev_client_without_keys_or_network(monkeypatch):
@@ -85,8 +109,8 @@ def test_optimizer_reaches_an_injected_kev_transport_without_network_or_keys(mon
     assert all(body["state"]["labeled_examples"] for _, body, _ in transport.requests)
 
 
-def test_optimizer_records_laya_few_shot_exclusion_without_calling_a_local_model():
-    model = NeverCalledLaya()
+def test_optimizer_experiments_with_laya_context_through_an_injected_local_model():
+    model = FakeLaya()
     adapter = LayaAdapter(model)
 
     result = asyncio.run(search_context_policies(
@@ -94,6 +118,7 @@ def test_optimizer_records_laya_few_shot_exclusion_without_calling_a_local_model
         model_fingerprint=adapter.model_identity,
     ))
 
-    assert result.winner is None
-    assert result.trials[0].status == "incomplete"
-    assert result.trials[0].failure_count == 1
+    assert result.winner.objective == 1.0
+    assert len(model.requests) == 2
+    assert all(state['labeled_examples'] for state, _ in model.requests)
+    assert all(state['target']['text'].endswith('target') for state, _ in model.requests)

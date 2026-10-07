@@ -19,7 +19,8 @@ test('expanded statistics lead with matched before and after metrics and undefin
 test('the explorer exposes accessible timeline controls without a redundant legend',()=>{
   render(<App counts={{predictions:135,labels:132,optimizations:1,events:503}} />)
   expect(screen.getByRole('button',{name:'Zoom in'})).toBeVisible()
-  expect(screen.getByRole('button',{name:'Reset zoom'})).toBeVisible()
+  expect(screen.getByRole('button',{name:'Fit all cycles'})).toBeVisible()
+  expect(screen.getByRole('button',{name:'Fit all cycles'})).toHaveAttribute('title','Show the entire recorded run')
   expect(screen.getByRole('button',{name:'Zoom in'})).toHaveAttribute('title','Zoom in')
   expect(screen.getByRole('button',{name:'Close details'})).toBeVisible()
   expect(screen.queryByRole('button',{name:'Enter fullscreen'})).toBeNull()

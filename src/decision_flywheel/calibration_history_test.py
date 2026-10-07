@@ -39,6 +39,48 @@ def test_later_predictions_cannot_rewrite_old_curves_and_retractions_remove_samp
     assert removed['count']==0
     assert removed['calibration']['ece'] is None
 
+
+def test_a_correction_scores_the_original_reviewed_prediction_not_a_later_rescore():
+    original=prediction(1,.8,decision_model_label='yes',decision_model_probabilities={'yes':.8,'no':.2})
+    later=prediction(2,.95,target_id='1',label='no',probabilities={'yes':.05,'no':.95},
+        decision_model_label='no',decision_model_probabilities={'yes':.05,'no':.95})
+    corrected=vote(1,'no');corrected['event_id']=1002
+    result=reviewed_calibration_metrics(('yes','no'),[original,vote(1),later,corrected])
+    assert result['count']==1
+    assert result['accuracy']==0
+    assert result['calibration']['ece']==pytest.approx(.8)
+    assert result['calibration']['samples'][0]['prediction_event_id']==1
+    assert result['calibration']['samples'][0]['feedback_event_id']==1002
+    assert result['calibration']['version_counts']=={'v1':1}
+    assert result['decision_model_comparison']['raw']['accuracy']==0
+    assert result['decision_model_comparison']['final']['accuracy']==0
+
+
+def test_retraction_then_a_fresh_review_can_bind_a_new_prediction_for_the_same_item():
+    original=prediction(1,.8)
+    later=prediction(2,target_id='1',label='no',probabilities={'yes':.05,'no':.95})
+    result=reviewed_calibration_metrics(('yes','no'),
+        [original,vote(1),vote(1,action='retracted'),later,vote(1,'no')])
+    assert result['count']==1
+    assert result['accuracy']==1
+    assert result['calibration']['samples'][0]['prediction_event_id']==2
+
+
+def test_an_explicit_reused_display_binds_the_saved_prediction_not_a_retrospective_score():
+    original=prediction(1,.8)
+    later=prediction(2,target_id='1',label='no',probabilities={'yes':.05,'no':.95})
+    reuse={'kind':'displayed-prediction-reused','target_id':'1','prediction_event_id':1}
+    result=reviewed_calibration_metrics(('yes','no'),
+        [original,vote(1),later,vote(1,action='retracted'),reuse,vote(1,'no')])
+    assert result['accuracy']==0
+    assert result['calibration']['samples'][0]['prediction_event_id']==1
+
+
+def test_reused_prediction_references_cannot_borrow_another_items_output():
+    reuse={'kind':'displayed-prediction-reused','target_id':'other','prediction_event_id':1}
+    with pytest.raises(ValueError,match='reference does not match target'):
+        reviewed_calibration_metrics(('yes','no'),[prediction(1),reuse])
+
 def test_missing_probability_vectors_keep_human_agreement_without_fabricating_calibration():
     result=reviewed_calibration_metrics(('yes','no'),[prediction(1,probabilities=None),vote(1)])
     assert result['accuracy']==1

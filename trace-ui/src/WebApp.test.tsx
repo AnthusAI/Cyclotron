@@ -18,6 +18,96 @@ beforeEach(()=>{
 })
 afterEach(()=>{cleanup();sessionStorage.clear();vi.clearAllMocks()})
 
+function classifiedRunFixture(){
+  const card={...live,config:{classifiers:[
+    {id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}},
+    {id:'b',name:'Practicality',config:{classes:[{label:'yes'},{label:'no'}]}},
+  ]}}
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('capabilities'))return {runs:[card],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    return {run:card,currentItem:null,jobs:[]}
+  })
+}
+
+test('labeling exposes recorded optimizer completion and opens the full correlated exchange',async()=>{
+  const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
+  const scope={classifier_id:'a',step_id:'rubric-one',step_stage:'rubric'}
+  const history=[
+    {sequence:1,sourceId:'request',payload:{...scope,kind:'optimizer-request',messages:[{role:'user',content:'The human explanation must be retained in this optimizer context'}]}},
+    {sequence:2,sourceId:'response',payload:{...scope,kind:'optimizer-response',content:'Prefer knowledge-base research'}},
+    {sequence:3,sourceId:'completed',payload:{...scope,kind:'step-completed',status:'completed',result:{activated:true}}},
+  ]
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[card],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:variables?.after===0?history:[]}
+    return {run:card,currentItem:null,jobs:[]}
+  })
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  render(<WebApp/> )
+  expect(await screen.findByText('Accepted')).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'Inspect latest optimization event'}))
+  expect(screen.getByText('The human explanation must be retained in this optimizer context')).toBeVisible()
+  expect(screen.getByText('Prefer knowledge-base research')).toBeVisible()
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
+test('a classifier-specific deep link restores the matching history on initial load',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=b')
+  render(<WebApp/> )
+  expect(await screen.findByRole('combobox',{name:'Inspect classifier'})).toHaveValue('b')
+  expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/live/timeline?revision=0&classifier_id=b')
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
+test('changing the inspected classifier survives a remount and changing views',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations')
+  render(<WebApp/> )
+  fireEvent.change(await screen.findByRole('combobox',{name:'Inspect classifier'}),{target:{value:'b'}})
+  await waitFor(()=>expect(new URLSearchParams(window.location.hash.slice(1)).get('classifier')).toBe('b'))
+  cleanup()
+  render(<WebApp/> )
+  expect(await screen.findByRole('combobox',{name:'Inspect classifier'})).toHaveValue('b')
+  fireEvent.click(screen.getByRole('button',{name:'Label items'}))
+  await screen.findByRole('button',{name:'Prepare next item'})
+  fireEvent.click(screen.getByRole('button',{name:'Timeline'}))
+  await waitFor(()=>expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/live/timeline?revision=0&classifier_id=b'))
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
+test('browser navigation restores the first or another classifier without pushing a new route',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=b')
+  render(<WebApp/> )
+  await screen.findByRole('combobox',{name:'Inspect classifier'})
+  for(const classifier of ['a','b']){
+    window.history.replaceState(null,'',`#run=live&view=timeline&section=optimizations&classifier=${classifier}`)
+    const push=vi.spyOn(window.history,'pushState')
+    fireEvent(window,new PopStateEvent('popstate'))
+    await waitFor(()=>expect(screen.getByRole('combobox',{name:'Inspect classifier'})).toHaveValue(classifier))
+    expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src',`/runs/live/timeline?revision=0&classifier_id=${classifier}`)
+    expect(push).not.toHaveBeenCalled()
+    push.mockRestore()
+  }
+})
+
+test('an unknown classifier link is replaced with a valid default without loading unrelated history',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=other-run-classifier')
+  const push=vi.spyOn(window.history,'pushState')
+  render(<WebApp/> )
+  expect(await screen.findByRole('combobox',{name:'Inspect classifier'})).toHaveValue('a')
+  await waitFor(()=>expect(new URLSearchParams(window.location.hash.slice(1)).has('classifier')).toBe(false))
+  expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/live/timeline?revision=0&classifier_id=a')
+  expect(push).not.toHaveBeenCalled()
+  push.mockRestore()
+  fireEvent.click(screen.getByRole('button',{name:'Label items'}))
+  await screen.findByRole('button',{name:'Prepare next item'})
+  expect(new URLSearchParams(window.location.hash.slice(1)).has('classifier')).toBe(false)
+})
+
 test('scorecard feedback recovery uses the original job through its dedicated API mutation',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
   const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
@@ -79,9 +169,34 @@ test('new run setup is a dismissible drawer and preserves unsent labeling feedba
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
+test('inspecting a replay and returning through browser history restores unsent labels and explanations',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'unsent',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[live,replay],capabilities:{liveEnabled:true,itemCount:250}}
+    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('events('))return {events:[]}
+    return {run:variables?.id==='live'?live:replay,currentItem:variables?.id==='live'?shown:null,jobs:[]}
+  })
+  render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Topic: exclude'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Topic'),{target:{value:'The original human explanation'}})
+  fireEvent.click(screen.getByRole('button',{name:'Run history'}))
+  fireEvent.click(screen.getByRole('button',{name:/Existing optimization replay.*cycles/}))
+  expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()
+  expect(screen.queryByLabelText('Explanation for Topic')).toBeNull()
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  fireEvent(window,new PopStateEvent('popstate'))
+  expect(await screen.findByRole('button',{name:'Topic: exclude'})).toHaveAttribute('aria-pressed','true')
+  expect(screen.getByLabelText('Explanation for Topic')).toHaveValue('The original human explanation')
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 test('opening the workspace shows the existing optimization timeline instead of an empty landing page',async()=>{
   render(<WebApp />)
   expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()
+  expect(screen.queryByText('No recorded cycles yet.')).toBeNull()
+  expect(screen.queryByLabelText('Cyclotron run timeline')).toBeNull()
   expect(screen.getByText('Cyclotron')).toHaveClass('cyclotron-brand')
   expect(screen.getByText('SELF-ALIGNING DECISION MODEL HARNESS')).toHaveClass('cyclotron-tagline')
   const title=screen.getByText('Cyclotron')
@@ -151,12 +266,11 @@ test('the narrow navigation uses a descriptive full-viewport menu instead of a s
   render(<WebApp />)
   fireEvent.click(await screen.findByRole('button',{name:'Open main menu'}))
   const menu=screen.getByRole('dialog',{name:'Navigate Cyclotron'})
-  expect(document.body).not.toHaveAttribute('data-scroll-locked')
-  const standardHeader=screen.getByTestId('main-application-header')
-  expect(within(standardHeader).getByText('Cyclotron')).toBeVisible()
-  expect(within(standardHeader).getByText('SELF-ALIGNING DECISION MODEL HARNESS')).toBeVisible()
-  expect(within(standardHeader).getByRole('button',{name:'Close main menu'})).toBeVisible()
-  expect(within(menu).queryByTestId('mobile-navigation-header')).toBeNull()
+  expect(document.body).toHaveAttribute('data-scroll-locked')
+  expect(within(menu).getByText('Cyclotron')).toBeVisible()
+  expect(within(menu).getByText('SELF-ALIGNING DECISION MODEL HARNESS')).toBeVisible()
+  expect(within(menu).getByRole('button',{name:'Close main menu'})).toBeVisible()
+  expect(screen.queryByRole('navigation',{name:'Main navigation'})).toBeNull()
   expect(within(menu).getByText('Define the related classifiers that share one decision-model request.')).toBeVisible()
   expect(within(menu).getByText('Browse source items, decisions, and human labels across scorecards.')).toBeVisible()
   expect(within(menu).getByText('Run, compare, and inspect live or replayed flywheel experiments.')).toBeVisible()
@@ -243,6 +357,32 @@ test('label submission responds immediately and does not claim queued votes are 
   acknowledge({submitCommand:{id:'vote',kind:'label',status:'pending',result:null}})
   expect(await screen.findByText('1 label received · waiting to record')).toBeVisible()
   expect(screen.queryByText(/Labels recorded/)).toBeNull()
+})
+
+test('retrying an unconfirmed label after remount recovers the original command identity',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'shown',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
+  let attempts=0
+  vi.mocked(graphql).mockImplementation(async query=>{
+    if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    if(query.includes('submitCommand')){
+      if(++attempts===1)throw new Error('Acknowledgement lost')
+      return {submitCommand:{id:'same-job',kind:'label',status:'pending',result:null}}
+    }
+    return {run:live,currentItem:shown,jobs:[]}
+  })
+  const first=render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Topic: exclude'}))
+  fireEvent.click(screen.getByRole('button',{name:'Submit feedback'}))
+  await screen.findByText('Label submission needs attention')
+  first.unmount()
+  render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Submit feedback'}))
+  await screen.findByText('1 label received · waiting to record')
+  const submissions=vi.mocked(graphql).mock.calls.filter(([query])=>query.includes('submitCommand'))
+  expect(submissions).toHaveLength(2)
+  expect(submissions[1][1]).toEqual(submissions[0][1])
 })
 
 test('labeling uses the focused app layout with history and activity drawers without restarting',async()=>{

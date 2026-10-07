@@ -19,10 +19,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c1ed8c51-4feb-4824-ba5d-3e143ec0b81f",
+      "author": "home",
+      "text": "Narrow/short viewport verification exposed ~24px drawer close targets. Close and shared drawer footer buttons now have explicit 44px minimum targets, wrapping footer actions and safe-area top/bottom padding. Browser measured ~43.994px rounding for Close/Save, both inside a 1025x625 CSS viewport (820x500 browser override at existing zoom), no document scroll. Full-screen narrow menu checked at 487px CSS width with no document overflow and modal focus wrapping. Screenshots var/web/mobile-navigation-focus-proof.jpg and short-viewport-drawer-proof.jpg. No labels or model calls. Physical-iPad keyboard/safe-area and full timeline gesture acceptance remain unverified; issue remains open.",
+      "created_at": "2026-10-07T23:10:41.269933Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "7bdb29a3-0077-4881-8a80-c3d50a822667",
+      "author": "home",
+      "text": "Playback acceptance slice: fixed Reset zoom restoring only a four-cycle window. Fit all cycles now restores the complete recorded range after deep zoom. Regression specs failed before the fix; 23 trace specs and all 153 UI tests pass, and UI builds. Live-disabled synthetic workspace browser check confirms zoom buttons, Fit, Next, paired exact decision request/response, and Play advancing the visible pointer through cycle 3. No human votes or paid calls. Physical iPad pinch/scroll and broad workspace acceptance remain open.",
+      "created_at": "2026-10-07T23:17:31.197670Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-07T15:49:01.642757Z",
+  "updated_at": "2026-10-07T23:17:31.197794Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

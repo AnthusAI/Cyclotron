@@ -38,7 +38,7 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-5 py-3"><div><CardTitle className="text-base">Decision timeline</CardTitle><p id="navigation-hint" className="mt-1 text-xs text-muted-foreground">Horizontal scroll: pan · vertical scroll: rows</p></div><div className="flex items-center gap-1">
               <Button id="zoom-in" variant="outline" size="icon" aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
               <Button id="zoom-out" variant="outline" size="icon" aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
-              <Button id="fit-all" variant="outline" size="sm" title="Return to a four-cycle view"><ChevronsLeftRight /> Reset zoom</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
+              <Button id="fit-all" variant="outline" size="sm" title="Show the entire recorded run"><ChevronsLeftRight /> Fit all cycles</Button><Button id="show-inspector" variant="secondary" size="sm" hidden><PanelRight /> Show details</Button>
             </div></CardHeader>
             <Separator />
             <div className="flex flex-wrap items-center gap-2 px-5 py-3"><Button id="show-history" variant="secondary" size="sm">Recorded review history</Button><Button id="show-run" variant="outline" size="sm">This optimization run</Button></div>

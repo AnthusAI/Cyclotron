@@ -56,9 +56,22 @@ An optional `scorecard_revision=<revision>` restores a read-only historical
 definition. `scorecardClassifiers` accepts the same optional revision and resolves
 the exact pinned classifier names, questions and ordered classes—not the latest
 catalog versions. Historical inspection has no edit controls; activation remains
-an explicit “Use this definition” action. A classifier edit lists all active
+an explicit “Use this definition” action. Missing revisions and failed history
+requests show an explicit status rather than loading indefinitely. The revision
+selector retains the requested revision; no nested classifier query or activation
+control is shown for an unavailable definition. “Return to active definition”
+changes navigation only, and browser Back restores the requested revision.
+A classifier edit lists all active
 scorecard definitions affected by saving it and explains that joint requests can
 affect their other classifiers while existing runs remain unchanged.
+
+Unsent multi-classifier votes and explanations are stored in browser session
+storage under their immutable prediction presentation. Inspecting another run
+and returning restores that presentation's draft, without recording feedback or
+starting model work. The draft hook also isolates presentations when the reviewer
+changes items without remounting, and ignores delayed updates from an old item.
+Malformed or unavailable browser storage does not prevent labeling. Drafts are
+local to the browser session; they are not saved human labels or server records.
 
 `scorecardDefinitionComparison` compares an active and inspected definition
 directionally. The read-only comparison drawer shows name changes, added/removed
@@ -69,9 +82,43 @@ definition performs better; performance comparison requires matched evaluation.
 
 Labeling and timeline are viewport-sized app layouts. Run history opens in a
 left drawer; live optimizer activity opens in a right drawer. Opening either
-drawer does not restart a cycle or make model calls. Ordinary vertical scroll
+drawer does not restart a cycle or make model calls. Narrow-screen navigation
+uses a full-viewport modal with the current workspace marked accessibly. The
+menu traps keyboard focus, hides background controls, and restores its trigger
+on Escape. Drawers also restore their external opener when it is still mounted.
+Close controls and drawer footer buttons have explicit 44-pixel minimum touch
+targets; drawer headers and footers include safe-area padding. Drawer content
+scrolls independently of its pinned header and actions. Ordinary vertical scroll
 navigates content; horizontal scroll pans the timeline; pinch and zoom buttons
-control timeline scale. There is no separate fullscreen mode.
+control timeline scale. **Fit all cycles** restores the entire recorded range
+after zooming, rather than a fixed window around the selected event. Previous,
+Next and Play advance through recorded events; playback makes no model calls.
+There is no separate fullscreen mode.
+
+The labeling workspace has a compact **Flywheel activity** summary, separate
+from acknowledgement that feedback was saved. It names the classifier and stage,
+then shows the latest recorded optimizer, validation, evaluation, ML fitting or
+selection phase. A response received is not an accepted change. Routine no-op
+trigger checks remain in the drawer without hiding the last optimization outcome.
+Paused and failed work is explicit; the UI does not retry it. **Inspect activity**
+opens that event and its correlated model request/response, using stored step
+and classifier identities rather than substituting a nearby call.
+
+The activity inspector also shows **Before** and **After** for the same recorded
+optimization step: applied rubric, main/supporting questions and class order,
+example membership, dynamic elements, and raw passthrough versus learned ML
+features/calibration. A proposed rubric is not substituted for the applied
+snapshot. Example cards resolve labels and text only from that step's recorded
+optimizer training context; missing content stays explicitly unavailable. Older
+steps without matching snapshots do not borrow another step's configuration.
+
+Live event connections resume from the last delivered sequence and discard
+duplicates. Closed-connection frames cannot change the active cursor. A missing
+acknowledgement, transport error or unexpectedly ended subscription reconnects
+the read-only stream; it does not resubmit labels or retry model work. Leaving
+the view cancels both connection and retry timers. Existing authentication/access
+denials stop automatic retries and are shown in the stream status. Job state is
+recovered independently through the normal API polling.
 
 ### Reproduce calibration playback without paid calls
 
@@ -97,6 +144,13 @@ third sample. Seek backward to restore an earlier curve. **Play** follows these
 same recorded events. **Inspect classifier** switches to the other independent
 history, whose opposite labels produce a different curve. Snapshot provenance
 retains the prediction and feedback event IDs and identifies decision passthrough.
+
+The selected history is part of the app URL: `classifier=<classifier-id>` in
+the hash selects a member of the run's frozen scorecard. Reload, Back/Forward,
+and switching between labeling and timeline retain this selection. Unknown
+classifier IDs are removed from the URL and the run's first classifier is used;
+they never load another run's history. Opening or changing this view does not
+submit feedback or start model work.
 
 Replay creation uses `createReplay` with an explicitly authorized request budget,
 source run and scorecard definition. It freezes source trace labels and comments
@@ -125,6 +179,23 @@ Matched raw/calibrated comparisons exclude passthrough predictions. Mixed-versio
 rolling curves are not estimates of current-model held-out calibration. Playback
 uses only snapshots recorded at or before its cursor; missing older evidence is
 shown as unavailable rather than reconstructed from future state.
+
+An active human review stays bound to the prediction originally reviewed.
+Correcting its label or explanation refreshes its position in the latest-200
+window, but cannot substitute a later retrospective score, probability vector,
+or model version. Retraction releases that binding for a fresh review. Undo's
+explicit saved-prediction reuse restores the original binding even if other
+scores for that item were recorded meanwhile. All classifier references are
+resolved before retraction; missing or mismatched provenance is an error, not
+permission to borrow another output. Previously recorded snapshots stay immutable.
+
+Open **Snapshot provenance** under a confidence curve to inspect the recorded
+samples. Each sample identifies its item, prediction and feedback event IDs,
+model version, and whether the output came from a calibrated ML head or raw
+decision passthrough. Expand a head sample to see its recorded calibration
+method, fit origin, temperature, and trusted training-item IDs. Missing legacy
+fields say “not recorded.” These disclosures read the immutable snapshot;
+opening them does not fit a model, re-score an item, or make a provider call.
 
 Label-only predictions still contribute to recall, precision and accuracy.
 Calibration, Brier and log loss use only recorded complete probability vectors;
@@ -171,12 +242,18 @@ cache entries are retained but are not reused under the new identity: the next
 request is a cache miss and still requires the normal live-call permissions and
 request ceiling. Do not relabel or migrate those old answers to a new server.
 
-Laya's standalone decision adapter remains available, but the default workspace
-rejects Laya scorecard optimization until a verified full-context protocol exists.
-It does not silently run Jev or discard examples. Unknown providers also reject
-in the default server; custom hosts can inject their own model factory and
-explicit provider/model identifiers. This is not a claim of completed
-three-provider workspace evaluation.
+The default workspace also accepts `laya`, using the optional local Laya package.
+Its adapter sends the complete structured scorecard state and all scoped
+questions, including rubrics, actual labeled examples, and dynamic inputs.
+Conservative token-budget checks reject oversized state, questions, or options
+before inference instead of relying on Laya's internal truncation. Reported
+response truncation is also rejected and remains visible in the trace.
+Install and load the optional package and checkpoint before live use. Offline
+transport and lifecycle tests prove the wiring; they do not demonstrate that
+Laya uses few-shot context effectively or establish real-model accuracy.
+Unknown providers reject in the default server; custom hosts can inject their
+own model factory and explicit provider/model identifiers. There is no silent
+Jev fallback and no completed three-provider experiment claim.
 
 ## Correct a recorded scorecard label
 
@@ -243,8 +320,36 @@ label-submission, replay and optimization jobs, since those can incur new model
 calls. It also refuses recovery while other run work is pending or while that
 run's scorecard edition is inactive. No automatic paid retry is introduced.
 
-The labeling UI still needs its scorecard correction/undo editor. These commands
-are the application interface, not a claim that this UI is complete.
+The scorecard labeling UI offers **Edit recorded feedback** and **Undo item
+labels** in right-hand drawers. Opening either drawer makes no changes. The
+correction editor sends only changed labels or explanations and retains the
+original expected feedback identity, so a concurrent update cannot silently
+replace the vote being edited. Inherited source feedback remains read-only;
+frozen replay runs do not offer editing controls.
+
+Closing the correction drawer, switching reviewed items, reloading the page, or
+leaving and returning to the run retains unsaved edits in browser session storage,
+scoped by run. Completing a correction discards only that item's draft, not drafts
+for other items. Stored snapshots are validated before use; unavailable storage
+does not prevent editing but cannot provide reload durability. These local drafts
+are not saved labels and do not transfer to another browser or device.
+
+If saved feedback changes after editing began, Save is disabled and the old draft
+is retained. **Discard draft and load saved feedback** explicitly replaces it with
+the current recorded vote; only a new human edit can then submit a correction.
+The server still checks the expected feedback identity for races after that check.
+Queued commands show pending feedback; failed or interrupted
+correction/undo commands expose **Recover feedback command** for explicit recovery
+of the original command, not a new paid retry.
+
+If any run-command acknowledgement is lost, the app retains the command ID and
+complete intent (run, command kind and payload) in browser session storage. An
+explicit retry of the same intent, including after reload, asks the API for the
+original job instead of creating duplicate work. This journal never executes
+commands by itself. Acknowledged submissions leave the journal; a subsequent
+deliberate command receives a fresh ID. Changed labels, explanations, targets or
+command kinds are different intents. With storage unavailable, this protection
+lasts only while the current app instance stays open; it does not span devices.
 
 ## Paired output comparison
 
@@ -308,6 +413,14 @@ The worker never opens a learning session for that job. Its exchanges and result
 are acknowledged through the same GraphQL trace API, with durable event identities
 for safe re-delivery. Source runs and active editions remain unchanged. Interrupted
 or failed jobs do not automatically retry paid requests.
+
+The app sends a stable `requestId` with initial comparison approval. SQLite
+commits that identity, authorization, frozen inputs and job atomically. If the
+acknowledgement is lost, retrying unchanged controls returns the original run,
+including after restart or later source changes; it does not queue another job.
+Changing endpoints, preflight or ceiling starts a new approval identity. Reusing
+an identity with different authorization is rejected. API clients should also
+send `requestId` for this guarantee; legacy calls without it create new runs.
 
 No paid evaluation starts from the preflight query, navigation, or saving a
 definition. “Compare runs” opens a drawer with endpoint selection and a read-only

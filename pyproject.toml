@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
+dev = ["decision-flywheel[reviewer]", "pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
 tools = [
     "build>=1.2",
     "kanbus==0.33.0",
@@ -19,6 +19,7 @@ tools = [
 ]
 jev = ["typesafe-sdk>=0.7,<0.8", "python-dotenv>=1,<2"]
 optimizer = ["openai>=1.40,<3", "python-dotenv>=1,<2"]
+litellm-optimizer = ["litellm>=1.81,<2", "python-dotenv>=1,<2"]
 laya = ["laya"]
 kev = ["httpx>=0.27"]
 retrieval = ["numpy>=1.26"]

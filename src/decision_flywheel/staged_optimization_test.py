@@ -10,6 +10,24 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
 
 
+def test_changed_original_prediction_evidence_does_not_reuse_a_completed_optimizer_stage(tmp_path):
+    from dataclasses import replace
+    calls = []
+    def complete(messages):
+        calls.append(messages)
+        return OptimizerReply('{"rubric":"Existing","rationale":"Keep criteria"}', 'fake')
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK, rubric='Existing'),
+                             FakeModel(), OptimizerAgent(complete))
+    kwargs = dict(protected=(), propensities={r.item.id:1. for r in TRAIN}, min_development_per_class=1)
+    asyncio.run(optimize_stage(wheel, 'rubric', TRAIN, DEV, **kwargs))
+    asyncio.run(optimize_stage(wheel, 'rubric', TRAIN, DEV, **kwargs))
+    assert len(calls) == 1
+    informed = tuple(replace(row, initial_answer_value=row.label) for row in TRAIN)
+    asyncio.run(optimize_stage(wheel, 'rubric', informed, DEV, **kwargs))
+    assert len(calls) == 2
+    wheel.close()
+
+
 def test_provisional_rubric_recency_cannot_override_a_secondary_accuracy_guard(tmp_path):
     from .selection_policy import SelectionPolicy
     from .flywheel import FittedClassifier

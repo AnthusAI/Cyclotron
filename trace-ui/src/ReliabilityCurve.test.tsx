@@ -4,6 +4,14 @@ import '@testing-library/jest-dom/vitest'
 import {ReliabilityCurve,PlaybackCalibration} from './ReliabilityCurve'
 afterEach(cleanup)
 
+it('does not call an unavailable matched head calibration error perfect reliability',()=>{
+  const empty={count:0,ece:null,bins:[]}
+  render(<ReliabilityCurve curve={{...empty,matched_head_comparison:{raw:empty,calibrated:empty}}}/> )
+  fireEvent.click(screen.getByText('Matched ML calibration comparison'))
+  expect(screen.getByText(/raw ECE — → calibrated ECE —/)).toBeVisible()
+  expect(screen.queryByText(/raw ECE 0.0%/)).toBeNull()
+})
+
 it('explains missing probabilities without presenting unobserved confidence as calibration evidence',()=>{
   render(<ReliabilityCurve curve={{count:0,missing_probability_count:3,ece:null,bins:[]}}/> )
   expect(screen.getByText(/3 reviewed predictions have no probability vector/)).toBeVisible()

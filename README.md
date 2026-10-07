@@ -81,9 +81,9 @@ React components.
 
 ## What Cyclotron adds around a decision model
 
-<img src="docs/diagrams/cyclotron-harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
+<img src="docs/diagrams/harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
 
-[Open the interactive diagram](docs/diagrams/cyclotron-harness.html) · [Read its Archify specification](.archify/architecture-cyclotron-20261007-120000/harness.json)
+[Editable D2 source](docs/diagrams/harness.d2)
 
 The diagram separates two jobs that must not be confused:
 
@@ -91,6 +91,10 @@ The diagram separates two jobs that must not be confused:
   examples, and classifier questions.
 - The **ML fitter** learns numerical feature weights and confidence calibration
   only from trusted labels. The optimizer cannot write those numbers.
+
+The active version keeps context, fitted head, calibration, requests, and
+evidence together. A candidate becomes active only when its configured
+evaluation accepts it.
 
 ## Scorecards: many classifiers, one request
 
@@ -103,11 +107,12 @@ Cyclotron can place all compatible classifier contexts in one decision-model
 request. The target item appears once. Each classifier context stays scoped to
 that classifier. Returned answers map back to the correct classifier, where its
 own ML head makes the final prediction. A human can label several classifiers for
-the same item in one review.
+the same item in one review. Usage is counted once, and the complete request is
+cached by its full fingerprint.
 
-<img src="docs/diagrams/cyclotron-scorecards.svg" alt="A versioned scorecard holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
+<img src="docs/diagrams/scorecards.svg" alt="A versioned scorecard holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
 
-[Open the interactive diagram](docs/diagrams/cyclotron-scorecards.html) · [Read its Archify specification](.archify/architecture-cyclotron-20261007-120000/scorecards.json)
+[Editable D2 source](docs/diagrams/scorecards.d2)
 
 Changing a classifier creates a new classifier revision and an affected
 scorecard revision. A run retains the scorecard revision and learned checkpoints
@@ -354,12 +359,52 @@ passing tests does not establish live-model quality or improvement.
 | --- | --- |
 | Human votes, comments, skip, and undo | Available in the reviewer |
 | Fixed example selection | Optimizer proposes a list; code validates it and measures the candidate |
-| LLM analysis of feedback | Injected optimizer interface; opt-in OpenAI transport |
+| LLM analysis of feedback | Injected optimizer interface; opt-in OpenAI or LiteLLM transport |
 | Rubric and classification-task changes | Validated structured proposals, applied to the actual request |
 | Feature conversion and ML fit | Connected to the core; trusted fitting and out-of-fold calibration |
 | Candidate evaluation and promotion | Same-development Brier comparison; incumbent retained on failure |
 | Optimizer and Jev inspection | Actual local prompts, replies, tool calls, request state/questions and answers |
 | Live performance | Must be measured; no guaranteed improvement |
+
+### Optimizer transports
+
+The scorecard editor's **Optimizer transport** selects `openai` (the existing
+default) or `litellm`. For the latter, install
+`pip install -e '.[litellm-optimizer]'`, then set the optimizer model to a
+LiteLLM provider-qualified identifier, such as `anthropic/your-model` or
+`ollama/your-model`. Configure credentials through the server environment or its
+gitignored `.env`, never through scorecard settings. Runs pin the transport and
+model; editing a definition does not change an existing run. The native optimizer
+and its proposal validation stay the same—this is not DSPy. Both transports
+retain returned usage and tool calls, count failed attempts against the call
+ceiling, and disable hidden retries. Models must support JSON-object output;
+unsupported output settings fail rather than silently being dropped. See
+[LiteLLM's input parameters](https://docs.litellm.ai/docs/completion/input) and
+[JSON output documentation](https://docs.litellm.ai/docs/completion/json_mode).
+
+The terminal reviewer and arXiv replay, verification, question-measurement,
+control-comparison, and optimizer-trace scripts accept the same
+`--optimizer-transport openai|litellm` and `--optimizer-model` options.
+OpenAI remains the default for existing workflows. Choosing a transport does
+not authorize collection: the existing `--confirm-live` and request ceilings
+still apply. Frozen preflight metadata records the selected transport; use a
+new output directory when changing a frozen protocol.
+
+The Rich reviewer's integrated `--live-flywheel` mode also supports
+`--decisions-provider jev|kev|laya`. When `--decisions-model` is omitted, it uses
+the selected provider's default (`jev-1.13.0`, `kev-latest`, or `convaiinnovations/laya`), rather than
+sending a Jev identifier to Kev. Kev calls the local endpoint on port 8009;
+install the `kev` extra and start the server separately. Both providers use
+the same feedback, feature, fitting, calibration, and trace interfaces.
+The legacy `--live-jev` artifact mode remains Jev-only and rejects another
+provider before opening a review database or constructing a client.
+Laya loads the selected local checkpoint through the optional `laya` extra.
+Its structured-state transport carries scoped rubrics, labeled examples, and all
+classifier questions in one call. This enables context experiments, not a claim
+that Laya has demonstrated few-shot improvements. Inputs over the conservative
+checkpoint token budget fail explicitly; provider-reported truncation is rejected.
+Use a checkpoint with enough room for the complete scorecard, or reduce context
+explicitly. There is no silent truncation or provider fallback.
 
 ## Terms
 
@@ -385,10 +430,7 @@ Use these terms with the same meaning throughout the system.
 
 ## The classifier at the center of the flywheel
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/classifier-dark.png">
-  <img src="docs/diagrams/classifier-light.png" alt="The LLM optimizer adjusts the rubric, few-shot example collection, and element classification tasks in the decision-model request. The returned main and element answers become features for the custom ML model.">
-</picture>
+<img src="docs/diagrams/classifier.svg" alt="The LLM optimizer adjusts the rubric, few-shot example collection, and element classification tasks in the decision-model request. The returned main and element answers become features for the custom ML model.">
 
 [Editable D2 source](docs/diagrams/classifier.d2)
 
@@ -549,10 +591,7 @@ The system needs examples of both labels before it can learn their difference.
 
 ## Analyze feedback and improve the system
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/improvement-dark.png">
-  <img src="docs/diagrams/improvement-light.png" alt="Human feedback guides the LLM optimizer to revise the rubric, few-shot example collection, and element classification tasks. Code validates the changes, collects features, retrains the custom ML model, and evaluates promotion. Prompts, responses, and measured results are recorded.">
-</picture>
+<img src="docs/diagrams/improvement.svg" alt="Human feedback guides the LLM optimizer to revise the rubric, few-shot example collection, and element classification tasks. Code validates the changes, collects features, retrains the custom ML model, and evaluates promotion. Prompts, responses, and measured results are recorded.">
 
 [Editable D2 source](docs/diagrams/improvement.d2)
 
@@ -597,10 +636,7 @@ Optimization of extraction rules for longer articles is deferred.
 
 ## Separate learning from evaluation
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/evaluation-dark.png">
-  <img src="docs/diagrams/evaluation-light.png" alt="Training records feed rubric analysis, example selection, and ML fitting. Development labels compare candidates. Ongoing audit and permanent holdout labels independently score saved classifier versions and never enter learning.">
-</picture>
+<img src="docs/diagrams/evaluation.svg" alt="Training records feed rubric analysis, example selection, and ML fitting. Development labels compare candidates. Ongoing audit and permanent holdout labels independently score saved classifier versions and never enter learning.">
 
 [Editable D2 source](docs/diagrams/evaluation.d2)
 
@@ -785,6 +821,17 @@ Reusable applications explicitly supply this context with
 The generic library does not search another application's feedback store or
 silently extract audit comments. Explanation changes invalidate optimizer-stage
 cache keys, so the next discovery call receives the changed context.
+
+Eligible training records can also carry `LabeledItem.initial_answer_value`:
+the original prediction shown before human feedback. The optimizer receives this
+answer, the current trusted label, the explanation, and whether they agree.
+Missing predictions remain unknown. Workspace sessions and the local reviewer
+read this evidence from recorded feedback and presentations; they do not re-score
+old items to invent it. Corrections retain the original prediction. This diagnostic
+field is separate from demonstration context and does not enter decision-model
+examples. Changed prediction evidence changes optimization cache keys, not fitted
+training labels or decision-response cache keys. Audit and held-out records remain
+excluded from this per-item briefing.
 
 ### Drive and observe one stage
 
@@ -1290,7 +1337,8 @@ endpoint-audit scripts accept `--trace-api-url` and `--trace-api-run-id` to reco
 their new events through the API. Offline exports remain available separately.
 
 This first workspace supports one reviewer at a time. It has no user accounts.
-LAN access requires `FLYWHEEL_WEB_TOKEN` and a private bind address. Provider keys
+LAN access requires `FLYWHEEL_WEB_TOKEN` unless the operator explicitly selects
+`--allow-unauthenticated-lan` for a trusted local network. Provider keys
 stay on the server. The local database contains private article text and feedback;
 do not publish it with the repository.
 
@@ -1302,6 +1350,19 @@ do not publish it with the repository.
 `DecisionFlywheel` owns `predict`, `improve`, `reconcile_feedback`, `history` and `close`.
 `ReviewerFlywheel` is a thin article-record adapter; the terminal has no fitting or promotion logic.
 `improve_example_list` and `search_context_policies` compare example policies.
+With `objective="brier"`, context search uses all returned class probabilities
+and minimizes label-averaged multiclass Brier. If any response or matching legacy
+checkpoint lacks probabilities, the default policy ranks **all** trials by
+accuracy instead. `ObjectiveFallbackResult` records `requested_objective="brier"`,
+effective `objective="accuracy"`, `fallback_reason`, and affected trial names.
+Complete probability vectors are never invented, and accuracy scores are never
+compared directly with Brier scores. Reusing label-only checkpoints makes no
+additional model calls. Malformed probability vectors still fail validation.
+Use `missing_probabilities="incomplete"` to require Brier evidence: label-only
+checkpoints then need a budgeted request, and missing distributions cannot win.
+`improve_example_list` keeps this strict policy for probability-based promotion.
+Accuracy and macro-F1 result formats remain unchanged. Call accounting is bound
+to the selected missing-probability policy as well as the search inputs.
 The connected `examples` stage also measures individual same-class example swaps
 once it has an incumbent list. It keeps the rubric, supporting questions, example
 count, display slots, and learned head fixed during these comparisons. By default
@@ -1334,7 +1395,9 @@ See [TypeSafe's model limits and alias policy](https://docs.typesafe.ai/models).
 Jev, Kev, and Laya have separate adapters.
 Provider-specific behavior belongs in an adapter.
 Use `[jev]`, `[kev]`, or `[laya]` to install the corresponding optional dependencies.
-The Laya adapter does not claim support for labeled context examples.
+Laya transports labeled context in structured state; its effectiveness must be
+measured for the selected checkpoint and task. The adapter guards against context
+truncation rather than silently losing rubric, examples, or target evidence.
 Request counters include attempted calls and failures.
 Returned token use is different from an estimated context size.
 
@@ -1348,12 +1411,9 @@ The explanations use short sentences, active verbs, and the technical names defi
 They follow the writing approach in [ASD-STE100](https://www.asd-ste100.org/STE_faq.html).
 A full dictionary conformity review has not been completed.
 
-Archify generates the diagrams from saved JSON specifications.
-The HTML files support interactive inspection and export.
-The SVG files provide static images for this README.
-The editable D2 sources are linked below each diagram. Render each source with
-`d2 --layout elk --theme 0 --pad 30 --scale 2` for light mode, or use theme `200`
-for dark mode. The PNGs above are the README display artifacts.
+The diagrams are D2 sources in [docs/diagrams](docs/diagrams/README.md).
+Run `make diagrams` to render each source to one SVG that follows the reader's
+light or dark appearance. CI fails when a committed SVG does not match its source.
 
 Kanbus stores project tasks in Git.
 Semantic Release uses conventional commits to produce releases.

@@ -6,7 +6,7 @@ import math
 
 from .classification_metrics import classification_metrics
 from .feature_bank import FeatureBank, probability_diagnostics, question_id
-from .flywheel import _hash, _json
+from .flywheel import _hash, _json, track_answer_dependencies
 
 
 def rank_question(classes, options, rows, *, propensities=None):
@@ -86,6 +86,7 @@ def select_window(training, classes, limit):
     return tuple(row for row in training if row.item.id in ids)
 
 
+@track_answer_dependencies
 async def measure_questions(wheel, training, questions, *, protected, propensities, limit=200,
                             retry_interrupted=False):
     wheel._validate_partitions(training, (), protected, propensities)
@@ -100,10 +101,11 @@ async def measure_questions(wheel, training, questions, *, protected, propensiti
         definitions[question["name"]] = question
     config = baseline.apply({"tasks": list(definitions.values())}, training)
     key = _hash({"context": config.briefing_state(), "window": wheel._evidence(window),
+                 "model_context": wheel.model_context(config, training),
                  "pool": wheel._evidence(training), "protected": sorted(item.id for item in protected),
                  "limit": limit, "ranking": "soft-contingency-oof-v1", "propensities": propensities})
     wheel.db.execute("CREATE TABLE IF NOT EXISTS question_measurements (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
-    saved = wheel.db.execute("SELECT status,payload FROM question_measurements WHERE id=?", (key,)).fetchone()
+    key, saved = wheel.cached_artifact('question_measurements', 'id', key)
     if saved and saved[0] == "complete":
         return json.loads(saved[1])
     if saved and not retry_interrupted:
@@ -144,6 +146,7 @@ async def measure_questions(wheel, training, questions, *, protected, propensiti
               "by_class": {label: sum(row.label == label for row in window) for label in config.task.labels},
               "window_ids": [row.item.id for row in window], "context_version": config.fingerprint,
               "baseline_version": baseline.fingerprint, "rankings": rankings, "promoted": False,
+              "answer_dependencies": wheel.collected_answer_dependencies(),
               "selection_policy": "chronological recent window with backward three-per-class reserve"}
     with wheel.db:
         wheel.db.execute("UPDATE question_measurements SET status='complete',payload=? WHERE id=?", (_json(report), key))

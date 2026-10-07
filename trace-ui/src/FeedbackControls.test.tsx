@@ -1,13 +1,74 @@
 import {afterEach,expect,test,vi} from 'vitest'
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
-import {FeedbackControls} from './FeedbackControls'
+import {FeedbackControls as Controls} from './FeedbackControls'
+import type {ComponentProps} from 'react'
 import type {TraceEvent} from './graphql'
 
-afterEach(cleanup)
+const FeedbackControls=(props:Omit<ComponentProps<typeof Controls>,'runId'>&{runId?:string})=><Controls runId="test-run" {...props}/>
+afterEach(()=>{cleanup();sessionStorage.clear()})
 const classifiers=[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]
 const events:TraceEvent[]=[{sequence:1,sourceId:'vote',payload:{kind:'human-feedback',action:'submitted',classifier_id:'a',feedback:{id:'vote:a',item_id:'paper',final_answer_value:'yes',edit_comment_value:'Original reason',review_provenance:'interactive-human-vote'}}}]
 const completed={id:'job',kind:'correct',status:'completed',result:{corrected:'paper'}}
+
+test('leaving a run and returning restores the unsent correction with its original feedback identity',async()=>{
+  const submit=vi.fn().mockResolvedValue(completed)
+  const props={classifiers,events,busy:false,jobs:[],onSubmit:submit,onResume:vi.fn()}
+  const first=render(<FeedbackControls {...props}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'My durable unsent correction'}})
+  first.unmount()
+  const other=render(<FeedbackControls {...props} runId="other-run"/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('Original reason')
+  other.unmount()
+  render(<FeedbackControls {...props}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('My durable unsent correction')
+  expect(submit).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'Save correction'}))
+  await waitFor(()=>expect(submit.mock.calls[0][1].labels[0]).toEqual({classifier_id:'a',label:'yes',comment:'My durable unsent correction',expected_feedback_id:'vote:a'}))
+})
+
+test('closing and reopening a correction retains its unsaved explanation and original vote identity',async()=>{
+  const submit=vi.fn().mockResolvedValue(completed)
+  render(<FeedbackControls classifiers={classifiers} events={events} busy={false} jobs={[]} onSubmit={submit} onResume={vi.fn()}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'My unsaved explanation'}})
+  fireEvent.click(screen.getByRole('button',{name:'Close Edit recorded feedback'}))
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('My unsaved explanation')
+  expect(submit).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'Save correction'}))
+  await waitFor(()=>expect(submit).toHaveBeenCalledWith('correct',{item_id:'paper',labels:[{classifier_id:'a',label:'yes',comment:'My unsaved explanation',expected_feedback_id:'vote:a'}]}))
+})
+
+test('switching reviewed items preserves separate correction drafts without changing their expected identities',async()=>{
+  const second={sequence:2,sourceId:'second',payload:{...events[0].payload,feedback:{...(events[0].payload.feedback as object),id:'second:a',item_id:'second',edit_comment_value:'Second reason'}}}
+  render(<FeedbackControls classifiers={classifiers} events={[...events,second]} busy={false} jobs={[]} onSubmit={vi.fn()} onResume={vi.fn()}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'Second draft'}})
+  fireEvent.change(screen.getByLabelText('Reviewed item'),{target:{value:'paper'}})
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'First draft'}})
+  fireEvent.change(screen.getByLabelText('Reviewed item'),{target:{value:'second'}})
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('Second draft')
+  fireEvent.change(screen.getByLabelText('Reviewed item'),{target:{value:'paper'}})
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('First draft')
+})
+
+test('completing one correction does not discard an unsaved draft for another item',async()=>{
+  const second={sequence:2,sourceId:'second',payload:{...events[0].payload,feedback:{...(events[0].payload.feedback as object),id:'second:a',item_id:'second',edit_comment_value:'Second reason'}}}
+  const submit=vi.fn().mockResolvedValue(completed)
+  render(<FeedbackControls classifiers={classifiers} events={[...events,second]} busy={false} jobs={[]} onSubmit={submit} onResume={vi.fn()}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'Second unsaved explanation'}})
+  fireEvent.change(screen.getByLabelText('Reviewed item'),{target:{value:'paper'}})
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'First corrected explanation'}})
+  fireEvent.click(screen.getByRole('button',{name:'Save correction'}))
+  await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull())
+  fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('Second unsaved explanation')
+})
 
 test('correction sends the changed label and explanation with the exact current feedback identity',async()=>{
   const submit=vi.fn().mockResolvedValue(completed)
@@ -45,8 +106,14 @@ test('a concurrent feedback update cannot silently replace the identity of an op
   fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
   fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'My pending edit'}})
   rerender(<FeedbackControls {...props} events={[...events,{sequence:2,sourceId:'other-edit',payload:{...events[0].payload,feedback:{...(events[0].payload.feedback as object),id:'other:a',edit_comment_value:'Someone else changed this'}}}]}/>)
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('My pending edit')
+  expect(screen.getByRole('button',{name:'Save correction'})).toBeDisabled()
+  expect(submit).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'Discard draft and load saved feedback'}))
+  expect(screen.getByLabelText('Explanation for Relevance')).toHaveValue('Someone else changed this')
+  fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'Reviewed against the new vote'}})
   fireEvent.click(screen.getByRole('button',{name:'Save correction'}))
-  await waitFor(()=>expect(submit.mock.calls[0][1].labels[0].expected_feedback_id).toBe('vote:a'))
+  await waitFor(()=>expect(submit.mock.calls[0][1].labels[0].expected_feedback_id).toBe('other:a'))
 })
 
 test('inherited source feedback is read only and frozen replay has no editing controls',()=>{

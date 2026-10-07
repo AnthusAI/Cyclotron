@@ -1,0 +1,269 @@
+{
+  "class_counts": {
+    "06b3f241-174c-4a94-97e9-d7f575af1fea": {
+      "exclude": 15,
+      "include": 1
+    },
+    "3c06fe40-ac0f-4f30-82ea-293ff07838df": {
+      "exclude": 16,
+      "include": 0
+    },
+    "knowledge-base-inclusion": {
+      "exclude": 14,
+      "include": 2
+    }
+  },
+  "classifiers": {
+    "06b3f241-174c-4a94-97e9-d7f575af1fea": {
+      "f1": {
+        "accuracy": 0.9375,
+        "actual_positive_count": 1,
+        "brier": 0.08291250000000001,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 14,
+            "include": 1
+          },
+          "include": {
+            "exclude": 0,
+            "include": 1
+          }
+        },
+        "count": 16,
+        "decision_model_comparison": {
+          "final": {
+            "accuracy": 0.9375,
+            "brier": 0.08291250000000001,
+            "ece": 0.07687499999999996,
+            "precision": 0.5,
+            "recall": 1
+          },
+          "raw": {
+            "accuracy": 0.9375,
+            "brier": 0.08291250000000001,
+            "ece": 0.07687499999999996,
+            "precision": 0.5,
+            "recall": 1
+          }
+        },
+        "ece": 0.07687499999999996,
+        "f1": 0.6666666666666666,
+        "precision": 0.5,
+        "predicted_positive_count": 2,
+        "recall": 1
+      },
+      "recall_accuracy": {
+        "accuracy": 0.9375,
+        "actual_positive_count": 1,
+        "brier": 0.15225413500809476,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 15,
+            "include": 0
+          },
+          "include": {
+            "exclude": 1,
+            "include": 0
+          }
+        },
+        "count": 16,
+        "decision_model_comparison": {
+          "final": {
+            "accuracy": 0.9375,
+            "brier": 0.15225413500809476,
+            "ece": 0.16653794291360624,
+            "precision": null,
+            "recall": 0
+          },
+          "raw": {
+            "accuracy": 0.9375,
+            "brier": 0.0780625,
+            "ece": 0.05187499999999995,
+            "precision": 0.5,
+            "recall": 1
+          }
+        },
+        "ece": 0.16653794291360624,
+        "f1": 0,
+        "precision": null,
+        "predicted_positive_count": 0,
+        "recall": 0
+      }
+    },
+    "3c06fe40-ac0f-4f30-82ea-293ff07838df": {
+      "f1": {
+        "accuracy": 1,
+        "actual_positive_count": 0,
+        "brier": 0.0091125,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 16,
+            "include": 0
+          },
+          "include": {
+            "exclude": 0,
+            "include": 0
+          }
+        },
+        "count": 16,
+        "decision_model_comparison": {
+          "final": {
+            "accuracy": 1,
+            "brier": 0.0091125,
+            "ece": 0.016875,
+            "precision": null,
+            "recall": null
+          },
+          "raw": {
+            "accuracy": 1,
+            "brier": 0.0091125,
+            "ece": 0.016875,
+            "precision": null,
+            "recall": null
+          }
+        },
+        "ece": 0.016875,
+        "f1": null,
+        "precision": null,
+        "predicted_positive_count": 0,
+        "recall": null
+      },
+      "recall_accuracy": {
+        "accuracy": 0.9375,
+        "actual_positive_count": 0,
+        "brier": 0.05445,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 15,
+            "include": 1
+          },
+          "include": {
+            "exclude": 0,
+            "include": 0
+          }
+        },
+        "count": 16,
+        "decision_model_comparison": {
+          "final": {
+            "accuracy": 0.9375,
+            "brier": 0.05445,
+            "ece": 0.04125,
+            "precision": 0,
+            "recall": null
+          },
+          "raw": {
+            "accuracy": 0.9375,
+            "brier": 0.05445,
+            "ece": 0.04125,
+            "precision": 0,
+            "recall": null
+          }
+        },
+        "ece": 0.04125,
+        "f1": 0,
+        "precision": 0,
+        "predicted_positive_count": 1,
+        "recall": null
+      }
+    },
+    "knowledge-base-inclusion": {
+      "f1": {
+        "accuracy": 0.875,
+        "actual_positive_count": 2,
+        "brier": 0.18334999999999999,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 13,
+            "include": 1
+          },
+          "include": {
+            "exclude": 1,
+            "include": 1
+          }
+        },
+        "count": 16,
+        "decision_model_comparison": {
+          "final": {
+            "accuracy": 0.875,
+            "brier": 0.18334999999999999,
+            "ece": 0.11125000000000007,
+            "precision": 0.5,
+            "recall": 0.5
+          },
+          "raw": {
+            "accuracy": 0.875,
+            "brier": 0.18334999999999999,
+            "ece": 0.11125000000000007,
+            "precision": 0.5,
+            "recall": 0.5
+          }
+        },
+        "ece": 0.11125000000000007,
+        "f1": 0.5,
+        "precision": 0.5,
+        "predicted_positive_count": 2,
+        "recall": 0.5
+      },
+      "recall_accuracy": {
+        "accuracy": 0.9375,
+        "actual_positive_count": 2,
+        "brier": 0.049725000000000005,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 14,
+            "include": 0
+          },
+          "include": {
+            "exclude": 1,
+            "include": 1
+          }
+        },
+        "count": 16,
+        "decision_model_comparison": {
+          "final": {
+            "accuracy": 0.9375,
+            "brier": 0.049725000000000005,
+            "ece": 0.05875000000000002,
+            "precision": 1,
+            "recall": 0.5
+          },
+          "raw": {
+            "accuracy": 0.9375,
+            "brier": 0.049725000000000005,
+            "ece": 0.05875000000000002,
+            "precision": 1,
+            "recall": 0.5
+          }
+        },
+        "ece": 0.05875000000000002,
+        "f1": 0.6666666666666666,
+        "precision": 1,
+        "predicted_positive_count": 1,
+        "recall": 0.5
+      }
+    }
+  },
+  "comparison_run_id": "4e2de625-ab63-4271-9c79-6fa5309b2b56",
+  "limitations": [
+    "16 matched items; insufficient evidence to establish a winner",
+    "Protected positive counts are 1, 2 and 0; undefined metrics remain null"
+  ],
+  "new_requests": 32,
+  "plan_fingerprint": "f71a3fcb6fd28c3fd9632f048880d1e2e625da137bd8f50ae69606b97449c8c4",
+  "replay_runs": {
+    "f1": "764466bd-dda5-4820-be3d-625e1d22d3fc",
+    "recall_accuracy": "25804ab2-b027-4853-bfa2-e1a8e50dbd94"
+  },
+  "requests": 32,
+  "sample_count": 16,
+  "scope": "diagnostic protected matched endpoints; no fitting or optimization on protected items",
+  "status": "completed",
+  "output_record_count": 96,
+  "classifier_names": {
+    "06b3f241-174c-4a94-97e9-d7f575af1fea": "Anthus",
+    "knowledge-base-inclusion": "Knowledge Bases",
+    "3c06fe40-ac0f-4f30-82ea-293ff07838df": "Threat Intelligence"
+  },
+  "positive_class": "include",
+  "negative_class": "exclude"
+}

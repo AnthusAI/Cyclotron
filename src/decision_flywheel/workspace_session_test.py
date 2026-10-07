@@ -9,7 +9,8 @@ from .observability import StepFailed
 from .flywheel_test import agent
 
 
-def test_a_sibling_change_refits_features_in_the_joint_context_before_the_next_prediction(tmp_path):
+@pytest.mark.parametrize('change', ['sibling_context', 'training_response', 'legacy_fit'])
+def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_prediction(tmp_path, change):
     from dataclasses import replace
     from .workspace_session import freeze_configuration
     from .candidate_fitting import fit_candidate
@@ -40,7 +41,21 @@ def test_a_sibling_change_refits_features_in_the_joint_context_before_the_next_p
             propensities={r.item.id:1. for r in TRAIN},validation_status='evaluated'))
         wheel._activate(fitted)
         sibling=session.wheels['b']
-        sibling._activate(replace(sibling.active,config=replace(sibling.active.config,rubric='New sibling criteria')))
+        if change == 'sibling_context':
+            sibling._activate(replace(sibling.active,config=replace(sibling.active.config,rubric='New sibling criteria')))
+        elif change == 'training_response':
+            from .decision_cache import CacheOptions
+            asyncio.run(session.shared.adapter('b').classify_with_cache_options(sibling.active.config,
+                TRAIN[0].item, TRAIN, cache_options=CacheOptions('refresh')))
+        else:
+            import json
+            from dataclasses import asdict
+            from .flywheel import _restore
+            legacy = asdict(wheel.active)
+            legacy.pop('answer_dependencies')
+            wheel.active = _restore(legacy)
+            with wheel.db:
+                wheel.db.execute("UPDATE runtime_state SET value=? WHERE key='active'", (json.dumps(legacy),))
         shown=asyncio.run(session.prepare())
         assert shown['item']['id']=='new'
         assert all(set(configs)=={'a','b'} for configs,_ in model.requests)
@@ -78,7 +93,11 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
     shown = asyncio.run(session.prepare())
     asyncio.run(session.feedback({'item_id': item_id, 'presentation_id': shown['prediction']['presentation_id'],
         'labels': [{'classifier_id': cid, 'label': 'yes'} for cid in ('a', 'b')]}, 'vote'))
+    reviewed_predictions={cid:next(e for e in wheel.history(100000) if e['kind']=='prediction')['event_id']
+                          for cid,wheel in session.wheels.items()}
     for wheel in session.wheels.values():
+        wheel._emit({'kind':'prediction','target_id':item_id,'label':'no',
+            'probabilities':{'yes':.05,'no':.95},'version':'retrospective-fixture'})
         train, dev, _ = session.partitions(wheel.initial.task.name)
         wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Old learned guidance'),
             training_evidence=wheel._evidence(train), development_evidence=wheel._evidence(dev)))
@@ -93,6 +112,8 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
     session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
     result = session.undo_feedback('undo')
     assert result['undone'] == item_id
+    assert {e['classifier_id']:e['prediction_event_id'] for e in events
+            if e['kind']=='displayed-prediction-reused'}==reviewed_predictions
     assert store.item_labels('items', item_id, 1) == []
     assert store.item_results('items', item_id, 1)[0]['payload'] == shown['prediction']
     assert asyncio.run(session.prepare())['prediction'] == shown['prediction']
@@ -109,6 +130,10 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
         assert all(session.partitions(cid)[0][0].label == 'no' for cid in ('a', 'b'))
         assert len([e for e in events if e['kind'] == 'human-feedback' and e['action'] == 'retracted']) == 2
         assert model.calls == 1
+        for cid in ('a','b'):
+            metrics=next(e['metrics'] for e in reversed(events) if e['kind']=='cycle-metrics' and e['classifier_id']==cid)
+            assert metrics['accuracy']==0
+            assert metrics['calibration']['samples'][0]['prediction_event_id']==reviewed_predictions[cid]
     finally:
         session.close()
 
@@ -151,11 +176,22 @@ def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_
         session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'no',
             'expected_feedback_id': 'stale-vote'}]}, 'stale')
     assert wheel.history(100000) == original_history
+    original_prediction=next(e for e in original_history if e['kind']=='prediction')
+    # A retrospective score is not the prediction the labeler reviewed.
+    wheel._emit({'kind':'prediction','target_id':item_id,'label':'no',
+        'probabilities':{'yes':.05,'no':.95},'version':'retrospective-fixture',
+        'decision_model_label':'no','decision_model_probabilities':{'yes':.05,'no':.95}})
     result = session.correct_feedback(payload, 'correction')
     assert result['corrected'] == item_id
     assert wheel.active.config.rubric == '' and wheel.active.fingerprint != previous
     assert session.partitions('a')[0][0].label == 'no'
     assert session.partitions('a')[0][0].context['human_feedback'] == 'Correct explanation'
+    assert session.partitions('a')[0][0].initial_answer_value == 'yes'
+    from .optimizer_agent import FeedbackBriefing
+    feedback = FeedbackBriefing.build(wheel.initial.task, session.partitions('a')[0],
+        current={}, protected=session.partitions('a')[2]).payload['feedback'][0]
+    assert feedback['initial_answer_value'] == 'yes'
+    assert feedback['prediction_matches_label'] is False
     assert session.partitions('b')[0][0].label == 'yes'
     assert wheel.optimizer_context['human_explanations'] == ['Correct explanation']
     assert all(e == original_history[index] for index, e in enumerate(wheel.history(100000)[:len(original_history)]))
@@ -165,12 +201,15 @@ def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_
     session = WorkspaceSession(store, run, tmp_path / 'run', model, agent([]), events.append)
     try:
         assert session.correct_feedback(payload, 'correction') == result
+        assert session.partitions('a')[0][0].initial_answer_value == 'yes'
         assert len(session.wheels['a'].history(100000)) == before
         with pytest.raises(ValueError, match='different content'):
             session.correct_feedback({'item_id': item_id, 'labels': [{'classifier_id': 'a', 'label': 'yes',
                 'expected_feedback_id': 'vote:a'}]}, 'correction')
         metrics = next(e['metrics'] for e in reversed(events) if e['kind'] == 'cycle-metrics' and e['classifier_id'] == 'a')
         assert metrics['count'] == 1 and metrics['accuracy'] == 0
+        assert metrics['calibration']['samples'][0]['prediction_event_id']==original_prediction['event_id']
+        assert metrics['calibration']['ece']==pytest.approx(.8)
         # An explanation-only edit must also invalidate inferred guidance.
         wheel = session.wheels['a']; train, dev, _ = session.partitions('a')
         wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric='Inferred guidance'),

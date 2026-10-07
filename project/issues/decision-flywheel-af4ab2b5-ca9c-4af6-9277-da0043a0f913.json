@@ -37,10 +37,46 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "248efba6-b924-4755-adc9-19863160c6ae",
+      "author": "home",
+      "text": "Recall plus accuracy guard replay completed all 85 items and its final replay-next exhaustion command returned finished=true; 255 predictions, 255 labels, 29 optimization events. F1 replay has begun, with same frozen corpus and source history. API cycle-metrics at the end report PREQUENTIAL results, in recall/precision/accuracy order: Anthus 4/8 positives recalled, 4/13 predicted positives correct, 72/85 overall correct (50.0%, 30.8%, 84.7%); Knowledge Bases 3/5, 3/3, 83/85 (60.0%, 100%, 97.6%); Threat Intelligence 4/6, 4/6, 81/85 (66.7%, 66.7%, 95.3%). These are chronological learning-stream measurements, not frozen protected endpoint performance or evidence that one objective wins. All three metrics are recorded in API cycle-metrics with probability/calibration data. Discovered worker run status stays ready after finished=true; a failing restart/replay spec reproduces this and a generic-runtime/scorecard/legacy status fix is under regression. Do not restart the deployed server during this paired pilot; deploy new cache/status fixes after both trajectories finish so their loaded implementation remains matched.",
+      "created_at": "2026-10-07T20:47:07.239613Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "f6d74cf6-05b0-4108-a087-c9f9b3653e77",
+      "author": "home",
+      "text": "Verification skill guided a production-browser trace check of the completed recall/accuracy replay. Selecting prediction event 24 opened recorded decision request 21 and response 22, including actual joint state, target metadata/text, all three classifier questions and empty early examples/rubrics; Response tab showed actual answers/probabilities. Browser error log was empty. Screenshot: var/web/objective-pilot-decision-exchange-proof.png (private, not committed). Read-only frozen endpoint audit confirmed the final Anthus learned head matches the final complete joint feature context. F1 still running; interim preflight sees only 8 protected matched items and is not approved or executed. Recompute once all 85 F1 items finish. No labels, source history, or active scorecard selection were changed by browser inspection.",
+      "created_at": "2026-10-07T20:53:36.876542Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "a01af647-bc5c-48f7-b5d1-59f3c8f14e2e",
+      "author": "home",
+      "text": "Prepared an API-only protected-comparison continuation waiting on the exact F1 replay. It requires final replay-next finished=true, no pending/running/failed/interrupted work, exactly 85 cycles and 255 labels; then recomputes and requires the preregistered 16 protected samples and 32-request upper bound before createMatchedComparison confirmation. Comparison ceiling is exactly 32 decision attempts, no optimizer calls and no automatic paid retries. It polls the resulting matched-evaluate job and stops on any failed/interrupted job. No protected calls have been made at this note time. Live runner handle is session 16338; original sequential replay runner remains session 71290. If a polling transport error occurs, inspect authoritative API jobs before any resubmission; do not start a duplicate comparison.",
+      "created_at": "2026-10-07T20:54:38.667061Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "5946c50a-3f7f-4ac4-8bf0-ece1d16dacb9",
+      "author": "home",
+      "text": "Both frozen 85-item replays and the protected comparison are complete. Completed comparison run 4e2de625-ab63-4271-9c79-6fa5309b2b56, job 516e25bf-aec8-45f0-97da-3582d23ae26d, matched 16 protected targets with exactly 32 provider requests and 96 classifier output records. No fitting or optimization occurred on the protected set. In recall/precision/accuracy order, recall-plus-accuracy versus F1: Anthus 0%/unavailable/93.75% versus 100%/50%/93.75%; Knowledge Bases 50%/100%/93.75% versus 50%/50%/87.5%; Threat Intelligence unavailable/0%/93.75% versus unavailable/unavailable/100%. Positive counts are 1/2/0, so this is an inconclusive diagnostic pilot, not an objective winner. Anthus recall/accuracy final-head Brier was 0.152254 versus raw decision-model Brier 0.078063 on identical protected targets, a regression requiring investigation rather than a claimed ML benefit. Reporting and completed-comparison browser acceptance remain before closing this task. Original human labeling history remains unchanged.",
+      "created_at": "2026-10-07T21:00:14.079444Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T20:24:23.179077Z",
-  "updated_at": "2026-10-07T20:37:14.801908Z",
+  "updated_at": "2026-10-07T21:00:14.079538Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

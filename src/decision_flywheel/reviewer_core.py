@@ -37,5 +37,6 @@ def reviewer_labeled_items(feedback: Iterable[LearningFeedback],
     items = []
     for row in feedback:
         context = {"human_feedback": row.comment} if row.comment else {}
-        items.append(LabeledItem(reviewer_item(article_for(row.article_id)), row.label, "trusted", context))
+        items.append(LabeledItem(reviewer_item(article_for(row.article_id)), row.label, "trusted", context,
+                                 initial_answer_value=row.initial_answer_value))
     return tuple(sorted(items, key=lambda row: row.item.id))

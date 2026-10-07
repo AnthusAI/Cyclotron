@@ -32,7 +32,7 @@ class ScorecardDefinitions:
         existing=db.execute('SELECT definition_revision FROM run_scorecard_definitions WHERE run_id=?',(run_id,)).fetchone()
         if existing:return existing[0]
         refs=[{'id':c['id'],'revision':c['revision']} for c in config['classifiers']]
-        settings={key:config[key] for key in ('decisions_provider','decisions_model','optimizer_model','selection_policy','seed','optimize_every','rubric_changes_every') if key in config}
+        settings={key:config[key] for key in ('decisions_provider','decisions_model','optimizer_model','optimizer_transport','selection_policy','seed','optimize_every','rubric_changes_every') if key in config}
         pinned=config.get('scorecard_definition_revision')
         if pinned is not None:
             found=db.execute('SELECT revision,classifiers FROM scorecard_definitions WHERE id=? AND revision=?',(identifier,pinned)).fetchone()

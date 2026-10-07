@@ -104,6 +104,7 @@ class LearningFeedback:
     article_id: str
     label: str
     comment: str | None
+    initial_answer_value: str | None = None
 
 
 class ReviewStore:
@@ -404,7 +405,12 @@ class ReviewStore:
         labels = []
         for article_id, event in self._active_actions().items():
             if event.action == "vote" and self.assignment_for(article_id) == "train":
-                labels.append(LearningFeedback(article_id, event.label, event.comment))
+                presentation = self._connection.execute(
+                    "SELECT predicted_label FROM presentations WHERE id = ? AND article_id = ?",
+                    (event.presentation_id, article_id),
+                ).fetchone() if event.presentation_id is not None else None
+                labels.append(LearningFeedback(article_id, event.label, event.comment,
+                    presentation["predicted_label"] if presentation is not None else None))
         return tuple(sorted(labels, key=lambda item: item.article_id))
 
     def hard_learning_example_ids(self) -> tuple[str, ...]:

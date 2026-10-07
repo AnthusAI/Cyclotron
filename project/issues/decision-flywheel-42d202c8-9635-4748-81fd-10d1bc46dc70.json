@@ -46,10 +46,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "461b7f7c-5a09-440a-9091-f2e5978db51f",
+      "author": "home",
+      "text": "Fixed two calibration display failures: unavailable matched-head ECE now remains unavailable instead of showing 0.0%, and raw/final reliability graphs now show supported single-bin points with counts/confidence/correctness tooltips and an observed-correctness axis label. Specs were written first and failed before implementation; all 109 UI tests, production build, focused lint, and diff checks pass. Verified the three-cycle synthetic API workspace at an 820x1180 browser viewport: both coincident output points remain visible; no browser errors. No production votes or paid requests changed. Actual physical-iPad and dark-mode labeling-space acceptance remains open. Also observed the outer compact cycle summary saying no recorded cycles despite the embedded timeline showing three; investigate that event projection separately rather than fabricate missing history. Experiment reports remain out of scope.",
+      "created_at": "2026-10-07T21:52:50.494051Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "4eb5782a-78c5-4c94-8b01-547fc2bf3b97",
+      "author": "home",
+      "text": "Replaced raw JSON calibration provenance with a reusable structured disclosure. Each recorded sample shows item, output source, model version, prediction/feedback event IDs, calibration method, OOF fit origin, temperature and expandable trusted training IDs. Missing legacy provenance stays unavailable; malformed records are disclosed, not guessed. The bounded sample list is keyboard-scrollable without nested training-list scrolling. Specs first: observed three failures before implementation; 113 UI tests pass, production build and focused lint pass. Browser verified the separate synthetic SQLite/API run raw passthrough and the existing read-only Knowledge Bases diagnostic history calibrated head at 820x1180: prediction event 1331, temperature 1.020, out_of_fold and 32 training IDs match SQLite. No browser warnings/errors, no model calls or votes. Screenshot var/web/calibration-provenance-tablet-proof.jpg. React and verification skills guided accessibility and stored-snapshot-to-browser acceptance. Physical-iPad/dark labeling-space acceptance remains open; no experiment report.",
+      "created_at": "2026-10-07T22:21:55.703367Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-07T18:29:30.505880Z",
+  "updated_at": "2026-10-07T22:21:55.703456Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

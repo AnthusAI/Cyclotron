@@ -61,7 +61,7 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
         assert wheel.active.head is not None
         assert store.current_label(articles[-2].id) == "include"
         shown = store.presentations_for(articles[-2].id)[-1]
-        assert shown.predictor_kind == "jev:flywheel-warmup"
+        assert shown.predictor_kind == "decision:flywheel-warmup"
         assert store.events_for(articles[-2].id)[0].comment == "Practical and useful"
         transcript = output.getvalue()
         assert "The human prefers practical papers" in transcript

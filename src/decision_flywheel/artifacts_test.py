@@ -37,6 +37,16 @@ def _frozen_result():
     ))
 
 
+def test_a_fallback_artifact_names_accuracy_instead_of_mislabeling_it_as_brier():
+    result = asyncio.run(search_context_policies(
+        TASK, POOL, DEVELOPMENT, ScriptedModel(), (TrialSpec(RandomBalanced(seed=5), 1),),
+        max_model_calls=2, objective="brier", model_fingerprint="fake-model-v1"))
+    document = json.loads(create_artifact(TASK, POOL, "revision", result))
+    assert document["development"]["objective_name"] == "accuracy"
+    assert document["development"]["objective"] == 1.
+    assert load_artifact(json.dumps(document), TASK, POOL, "revision").development_objective == 1.
+
+
 def test_a_frozen_winner_round_trips_without_text_and_reproduces_context_ids_for_a_new_target():
     serialized = create_artifact(TASK, POOL, "pool-revision-1", _frozen_result())
     artifact = load_artifact(serialized, TASK, list(reversed(POOL)), "pool-revision-1")

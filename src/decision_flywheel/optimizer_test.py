@@ -365,17 +365,107 @@ def test_a_label_only_checkpoint_entry_is_re_asked_under_the_brier_objective():
     model = ProbabilityModel()
     result = asyncio.run(search_context_policies(
         TASK, CANDIDATES, DEVELOPMENT, model, _trials(), max_model_calls=10, objective="brier",
-        checkpoint=checkpoint))
+        checkpoint=checkpoint, missing_probabilities="incomplete"))
     assert len(model.calls) == 4 and result.winner.trial_name == "good"
 
 
 def test_a_brier_trial_without_probabilities_is_incomplete_and_cannot_win():
     result = asyncio.run(search_context_policies(
         TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(omit_probabilities=True), _trials(),
-        max_model_calls=10, objective="brier"))
+        max_model_calls=10, objective="brier", missing_probabilities="incomplete"))
     assert {trial.status for trial in result.trials} == {"incomplete"}
     assert result.trials[0].failure_reasons == ("missing-probabilities",)
     assert result.winner is None
+
+
+def test_label_only_checkpoints_fall_back_to_accuracy_without_paid_rescoring():
+    from dataclasses import asdict
+    checkpoint = {}
+    original = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ScriptedModel(), _trials(), max_model_calls=10,
+        checkpoint=checkpoint))
+    model = ScriptedModel()
+    result = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, model, _trials(), max_model_calls=0,
+        objective="brier", checkpoint=checkpoint))
+    assert model.calls == []
+    assert result.objective == "accuracy"
+    assert result.requested_objective == "brier"
+    assert result.fallback_reason == "missing-probabilities"
+    assert result.fallback_trials == ("bad", "good")
+    assert [t.objective for t in result.trials] == [t.objective for t in original.trials]
+    assert result.winner.trial_name == "good"
+    assert all(d.from_checkpoint for trial in result.trials for d in trial.decisions)
+    assert "requested_objective" in asdict(result)
+    assert "requested_objective" not in asdict(original)
+
+
+def test_one_missing_distribution_changes_the_whole_search_to_accuracy_not_mixed_scores():
+    class MixedModel(ProbabilityModel):
+        async def decide(self, task, target, context):
+            if any("bad" in row.item.id for row in context):
+                self.calls.append(target.id)
+                return DecisionResult("no")
+            return await super().decide(task, target, context)
+    checkpoint = {}
+    model = MixedModel()
+    result = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, model, _trials(), max_model_calls=4,
+        objective="brier", checkpoint=checkpoint))
+    assert len(model.calls) == 4
+    assert result.objective == "accuracy" and result.fallback_trials == ("bad",)
+    assert {trial.trial_name:trial.objective for trial in result.trials} == {"bad":.5,"good":1.}
+    assert result.winner.trial_name == "good"
+    replay = MixedModel()
+    repeated = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, replay, _trials(), max_model_calls=0,
+        objective="brier", checkpoint=checkpoint))
+    assert replay.calls == [] and repeated.fallback_reason == "missing-probabilities"
+    assert [t.objective for t in repeated.trials] == [.5,1.]
+
+
+def test_fallback_never_turns_an_exhausted_call_budget_into_a_complete_winner():
+    result = asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ScriptedModel(), _trials(), max_model_calls=1,
+        objective="brier"))
+    assert result.objective == "accuracy"
+    assert result.winner is None
+    assert result.model_calls_attempted == 1
+    assert "call-budget-exhausted" in result.trials[0].failure_reasons
+
+
+def test_multiclass_brier_uses_all_returned_class_probabilities():
+    task = DecisionTask("topics", ("a","b","c"), "Choose a topic")
+    development = [LabeledItem(Item("one",{"text":"First"}),"a"),
+                   LabeledItem(Item("two",{"text":"Second"}),"b")]
+    class ThreeClassModel(ProbabilityModel):
+        async def decide(self, task, target, context):
+            return DecisionResult("a",{"a":.7,"b":.2,"c":.1}) if target.id == "one" else DecisionResult("b",{"a":.1,"b":.6,"c":.3})
+    candidates = [LabeledItem(Item("candidate",{"text":"Training example"}),"a")]
+    result = asyncio.run(search_context_policies(task, candidates, development, ThreeClassModel(),
+        [TrialSpec(MarkerPolicy("good"),0)], max_model_calls=2, objective="brier"))
+    assert result.objective == "brier"
+    assert result.winner.objective == pytest.approx((.14+.26)/6)
+
+
+def test_call_accounting_cannot_be_reused_under_a_different_missing_probability_policy():
+    checkpoint, accounting = {}, {}
+    asyncio.run(search_context_policies(TASK, CANDIDATES, DEVELOPMENT, ProbabilityModel(), _trials(),
+        max_model_calls=4, objective="brier", missing_probabilities="incomplete",
+        checkpoint=checkpoint, call_accounting=accounting))
+    model = ProbabilityModel()
+    with pytest.raises(ValueError, match="search fingerprint"):
+        asyncio.run(search_context_policies(TASK, CANDIDATES, DEVELOPMENT, model, _trials(),
+            max_model_calls=4, objective="brier", checkpoint=checkpoint, call_accounting=accounting))
+    assert model.calls == []
+
+
+def test_an_unknown_missing_probability_policy_is_rejected_before_model_calls():
+    model = ProbabilityModel()
+    with pytest.raises(ValueError, match="missing_probabilities"):
+        asyncio.run(search_context_policies(TASK, CANDIDATES, DEVELOPMENT, model, _trials(),
+            max_model_calls=4, objective="brier", missing_probabilities="guess"))
+    assert model.calls == []
 
 
 @pytest.mark.parametrize("entry", [{"label": "yes", "probabilities": {"yes": 1.2, "no": -0.2}},

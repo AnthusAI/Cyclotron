@@ -12,5 +12,7 @@ def decision_adapter(config):
         from .kev import KevAdapter,KevConfiguration
         return KevAdapter(configuration=KevConfiguration(model=model))
     if provider=='laya':
-        raise ValueError('Laya workspace optimization is unsupported: the adapter lacks a verified full-context scorecard protocol')
+        from .laya import LayaAdapter,LayaConfiguration
+        return LayaAdapter.from_default(configuration=LayaConfiguration(model_id=model,
+            revision=config.get('decisions_revision')))
     raise ValueError('unsupported decision provider; inject an application model factory for custom providers')

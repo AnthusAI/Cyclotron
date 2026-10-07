@@ -19,7 +19,9 @@ export function ModelComparison({comparison,classes}:{comparison?:DecisionModelC
     <svg viewBox="0 0 240 155" role="img" aria-label="Raw decision model versus final classifier calibration" className="w-full max-w-xs">
       <path d="M30 10V125H230 M30 125L230 10" fill="none" stroke="currentColor" opacity=".25"/>
       {outputs.map(({name,metrics,color})=><polyline key={name} points={metrics.calibration.bins.filter(bin=>bin.count&&bin.mean_confidence!=null&&bin.accuracy!=null).map(bin=>`${30+200*bin.mean_confidence!},${125-115*bin.accuracy!}`).join(' ')} fill="none" stroke={color} strokeWidth="2"><title>{name}</title></polyline>)}
+      {outputs.map(({name,metrics,color},outputIndex)=>metrics.calibration.bins.map((bin,index)=>bin.count>0&&bin.mean_confidence!=null&&bin.accuracy!=null?<circle key={`${name}-${index}`} cx={30+200*bin.mean_confidence} cy={125-115*bin.accuracy} r={outputIndex===0?4.5:2.5} fill={outputIndex===0?'none':color} stroke={color} strokeWidth="2"><title>{name}: {bin.count} predictions · confidence {Math.round(bin.mean_confidence*100)}% · correct {Math.round(bin.accuracy*100)}%</title></circle>:null))}
       <text x="100" y="149" fontSize="10" fill="currentColor">Confidence →</text>
+      <text x="37" y="10" fontSize="9" fill="currentColor">Observed correctness</text>
     </svg>
     {outputs.map(({name,metrics,color})=><p key={name} className="text-xs" style={{color}}>{name}: ECE {percent(metrics.calibration.ece)} · Brier {metrics.calibration.brier?.toFixed(3)??'—'} · {metrics.calibration.count} probability vectors</p>)}
     <p className="text-xs">Final − raw: ECE change {signed(delta(comparison.raw.calibration.ece,comparison.final.calibration.ece))} · Brier change {signed(delta(comparison.raw.calibration.brier,comparison.final.calibration.brier),1,'')}</p>

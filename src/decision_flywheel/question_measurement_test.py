@@ -11,6 +11,37 @@ from .models import Item, LabeledItem
 QUESTION = {"name": "practical", "instructions": "Is this practical?", "labels": ["yes", "no"]}
 
 
+def test_question_measurements_are_not_reused_after_a_sibling_changes_the_shared_context(tmp_path):
+    from dataclasses import replace
+    from .shared_decisions import SharedDecisions
+    from .batched_classification import BatchedAnswers
+    class Model(FakeModel):
+        async def classify_many(self, configs, target, training, **kwargs):
+            answers = {}
+            for cid, config in configs.items():
+                answers[cid] = (await self.classify(config, target, training[cid], **kwargs)).answers
+            return BatchedAnswers(answers, self.model_identity, None, 1)
+    model = Model()
+    config = ClassifierConfig(TASK)
+    shared = SharedDecisions(tmp_path/'shared.sqlite', model, max_requests=30, observer=lambda _: None)
+    shared.bind_context({'a': config, 'b': config}, {'a': TRAIN, 'b': TRAIN})
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'), agent([]))
+    kwargs = dict(protected=tuple(row.item for row in DEV), propensities={row.item.id: 1. for row in TRAIN})
+    try:
+        first = asyncio.run(measure_questions(wheel, TRAIN, [QUESTION], **kwargs))
+        calls = shared.requests
+        assert asyncio.run(measure_questions(wheel, TRAIN, [QUESTION], **kwargs)) == first
+        assert shared.requests == calls
+        shared.bind_context({'a': config, 'b': replace(config, rubric='New sibling rubric')},
+                            {'a': TRAIN, 'b': TRAIN})
+        second = asyncio.run(measure_questions(wheel, TRAIN, [QUESTION], **kwargs))
+        assert second['measurement_fingerprint'] != first['measurement_fingerprint']
+        assert shared.requests == calls + len(TRAIN)
+    finally:
+        wheel.close()
+        shared.close()
+
+
 def test_backfill_preserves_current_rubric_and_examples_and_never_promotes_a_classifier(tmp_path):
     class Recording(FakeModel):
         requests = []

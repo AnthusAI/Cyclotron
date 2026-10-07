@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
-from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
+from decision_flywheel.adapters.optimizer_transport import optimizer_transport
+from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.flywheel import DecisionFlywheel
 from decision_flywheel.optimizer_agent import OptimizerAgent
@@ -26,6 +27,7 @@ def main(argv=None):
     parser.add_argument("--max-optimizer-calls", type=int, default=2)
     parser.add_argument("--development-limit", type=int, default=6)
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
+    parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--confirm-live", action="store_true")
@@ -37,7 +39,7 @@ def main(argv=None):
     if not args.database.is_file():
         parser.error("existing rated database required")
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
-    transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+    transport = optimizer_transport(vars(args))
     def observe(event):
         if event["kind"] in {"optimizer-request", "optimizer-response", "fit-started", "fit-completed",
                              "candidate-evaluated", "promoted", "candidate-rejected", "round-failed", "features-failed"}:
@@ -48,7 +50,7 @@ def main(argv=None):
         original_feedback = store.learning_feedback()
         wheel = DecisionFlywheel(args.runtime, ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport),
             observer=observe, max_requests=args.max_requests,
-            redact=tuple(os.environ.get(key, "") for key in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
+            redact=credential_values(os.environ))
         try:
             client = ReviewerFlywheel(store, wheel)
             training, all_development, protected = client.partitions()

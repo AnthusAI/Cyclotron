@@ -9,6 +9,25 @@ import pytest
 from .trace_artifact import render_trace
 
 
+def test_fit_all_restores_the_entire_recorded_range_after_deep_zoom():
+    if not shutil.which('node'):
+        pytest.skip('Node is needed for viewer interaction spec')
+    code=re.findall(r'<script>(.*?)</script>',render_trace([]),re.S)[-1]
+    controls=code[code.index('function setView('):code.index('// Capture before vis-timeline:')]
+    harness="""
+const assert=require('node:assert/strict');
+const maximum=12000,minimumWindow=4;
+const elements={};const el=id=>elements[id]??(elements[id]={});
+const timeline={window:[6500,6504],getWindow(){return {start:this.window[0],end:this.window[1]}},setWindow(start,end){this.window=[start,end]}};
+CONTROLS
+el('fit-all').onclick();assert.deepEqual(timeline.window,[0,12000]);
+el('zoom-in').onclick();assert.deepEqual(timeline.window,[3000,9000]);
+el('fit-all').onclick();assert.deepEqual(timeline.window,[0,12000]);
+""".replace('CONTROLS',controls)
+    result=subprocess.run(['node','-e',harness],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+
+
 def test_playback_dispatches_only_recorded_model_comparisons_at_or_before_the_cursor():
     if not shutil.which('node'):
         pytest.skip('Node is needed for viewer interaction spec')

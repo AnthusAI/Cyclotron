@@ -5,7 +5,7 @@ import hashlib
 import json
 import unicodedata
 from collections.abc import MutableMapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal, Mapping
 
 from .budget import ContextBudget, build_context_plan
@@ -15,6 +15,7 @@ from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledIt
 
 
 Objective = Literal["accuracy", "macro-f1", "brier"]
+MissingProbabilityPolicy = Literal["accuracy", "incomplete"]
 TrialStatus = Literal["completed", "incomplete", "not-run"]
 FailureReason = Literal["context-infeasible", "model-failure", "call-budget-exhausted",
                         "missing-probabilities"]
@@ -97,6 +98,15 @@ class OptimizationResult:
     checkpoint_entries: int
 
 
+@dataclass(frozen=True)
+class ObjectiveFallbackResult(OptimizationResult):
+    """All trial scores share the effective objective; the requested one is retained."""
+
+    requested_objective: Objective
+    fallback_reason: str
+    fallback_trials: tuple[str, ...]
+
+
 async def search_context_policies(
     task: DecisionTask,
     candidates: Sequence[LabeledItem],
@@ -106,7 +116,8 @@ async def search_context_policies(
     *,
     max_model_calls: int,
     objective: Objective = "accuracy",
-    checkpoint: MutableMapping[str, dict[str, str]] | None = None,
+    missing_probabilities: MissingProbabilityPolicy = "accuracy",
+    checkpoint: MutableMapping[str, dict[str, Any]] | None = None,
     call_accounting: MutableMapping[str, int | str] | None = None,
     model_fingerprint: str | None = None,
     protected_ids: Sequence[str] = (),
@@ -129,15 +140,22 @@ async def search_context_policies(
     ``objective="brier"`` scores the provider's probability distributions (the
     label-averaged multi-class Brier score, which for two labels is the familiar
     binary Brier score); lower is better, so the winner is the lowest score.  A
-    trial whose model returns no distribution is incomplete and cannot win.
+    missing distribution switches the entire search to accuracy by default.
+    Every completed trial is re-scored from its recorded labels, without model
+    calls. The result records the requested objective, reason and affected trials.
+    ``missing_probabilities="incomplete"`` instead makes such a trial incomplete
+    and unable to win; use that strict mode for probability-quality promotion.
 
     ``checkpoint`` is caller-owned and serializable: each entry is a hash key
     mapped to ``{"label": canonical_label}``, plus ``"probabilities"`` when the
-    objective is Brier.  Under Brier a label-only entry is re-asked.  Its key includes model identity,
+    objective is Brier. Label-only entries are reused under accuracy fallback;
+    strict mode re-asks them for probabilities. Its key includes model identity,
     the task contract, and the complete serialized request fingerprint, which
     includes the ordered context and target.  A checkpoint hit therefore reuses
     a response only for an identical effective request, never by policy name.
     """
+    if missing_probabilities not in {"accuracy", "incomplete"}:
+        raise ValueError("missing_probabilities must be 'accuracy' or 'incomplete'")
     _validate_search_inputs(task, candidates, development, trials, max_model_calls,
                             objective, protected_ids, protected_text_hashes)
     resolved_label_order = _resolve_presentation_label_order(task, presentation_label_order)
@@ -147,12 +165,12 @@ async def search_context_policies(
     search_fingerprint = _search_fingerprint(
         task.fingerprint, candidate_pool_fingerprint, development_split_fingerprint,
         resolved_model_fingerprint, trials, objective, max_model_calls, display_order,
-        order_seed, resolved_label_order,
+        order_seed, resolved_label_order, missing_probabilities,
     )
     prior_attempted = _read_call_accounting(call_accounting, search_fingerprint)
     if prior_attempted > max_model_calls:
         raise ValueError("call accounting already exceeds max_model_calls")
-    store: MutableMapping[str, dict[str, str]] = checkpoint if checkpoint is not None else {}
+    store: MutableMapping[str, dict[str, Any]] = checkpoint if checkpoint is not None else {}
     attempted = succeeded = 0
     results: list[TrialResult] = []
     _emit(event_sink, "round-started", None, None, attempted, succeeded)
@@ -185,7 +203,7 @@ async def search_context_policies(
                     decisions.append(DecisionHistory(development_item.item.id, key, prediction, True))
                     _emit(event_sink, "decision-reused", spec.trial_name, key, attempted, succeeded)
                     continue
-                if probabilities is not None:
+                if probabilities is not None or missing_probabilities == "accuracy":
                     decisions.append(DecisionHistory(development_item.item.id, key, prediction, True,
                                                      probabilities))
                     _emit(event_sink, "decision-reused", spec.trial_name, key, attempted, succeeded)
@@ -216,6 +234,10 @@ async def search_context_policies(
                 decisions.append(DecisionHistory(development_item.item.id, key, prediction, False))
                 continue
             if result.probabilities is None:
+                if missing_probabilities == "accuracy":
+                    store[key] = {"label": prediction}
+                    decisions.append(DecisionHistory(development_item.item.id, key, prediction, False))
+                    continue
                 complete = False
                 failures += 1
                 reasons.append("missing-probabilities")
@@ -224,7 +246,9 @@ async def search_context_policies(
             store[key] = {"label": prediction, "probabilities": probabilities}
             decisions.append(DecisionHistory(development_item.item.id, key, prediction, False, probabilities))
 
-        score = _score(task, development, decisions, objective) if complete else None
+        trial_objective = ("accuracy" if objective == "brier" and any(
+            row.probabilities is None for row in decisions) else objective)
+        score = _score(task, development, decisions, trial_objective) if complete else None
         results.append(TrialResult(
             trial_name=spec.trial_name,
             policy_metadata=spec.policy.metadata,
@@ -243,13 +267,20 @@ async def search_context_policies(
         _emit(event_sink, "trial-completed" if complete else "trial-incomplete", spec.trial_name,
               None, attempted, succeeded)
 
+    fallback_trials = tuple(trial.trial_name for trial in results if any(
+        row.probabilities is None for row in trial.decisions)) if objective == "brier" and missing_probabilities == "accuracy" else ()
+    effective_objective = "accuracy" if fallback_trials else objective
+    if fallback_trials:
+        results = [replace(trial, objective=_score(task, development, trial.decisions, "accuracy"))
+                   if trial.status == "completed" else trial for trial in results]
     completed = [trial for trial in results if trial.status == "completed"]
-    sign = -1 if objective == "brier" else 1
+    sign = -1 if effective_objective == "brier" else 1
     provisional_best = (max(completed, key=lambda trial: (sign * trial.objective, trial.trial_name))
                         if completed else None)
     winner = provisional_best if len(completed) == len(results) else None
-    result = OptimizationResult(
-        objective=objective,
+    result_type = ObjectiveFallbackResult if fallback_trials else OptimizationResult
+    result = result_type(
+        objective=effective_objective,
         model_fingerprint=resolved_model_fingerprint,
         task_fingerprint=task.fingerprint,
         candidate_pool_fingerprint=candidate_pool_fingerprint,
@@ -263,6 +294,8 @@ async def search_context_policies(
         provisional_best=provisional_best,
         winner=winner,
         checkpoint_entries=len(store),
+        **({"requested_objective": objective, "fallback_reason": "missing-probabilities",
+            "fallback_trials": fallback_trials} if fallback_trials else {}),
     )
     _emit(event_sink, "round-completed", None, None, attempted, succeeded)
     return result
@@ -406,6 +439,7 @@ def _search_fingerprint(
     display_order: str,
     order_seed: int,
     presentation_label_order: tuple[str, ...],
+    missing_probabilities: MissingProbabilityPolicy = "incomplete",
 ) -> str:
     """Bind cumulative call accounting to all objective-defining inputs."""
     declared_trials = [
@@ -432,6 +466,8 @@ def _search_fingerprint(
         "order_seed": order_seed,
         "presentation_label_order": presentation_label_order,
         "task_fingerprint": task_fingerprint,
+        **({"missing_probabilities": missing_probabilities}
+           if objective == "brier" and missing_probabilities != "incomplete" else {}),
     })
 
 

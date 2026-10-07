@@ -53,9 +53,14 @@ class FeedbackBriefing:
             if row.item.id in seen:
                 raise ValueError("optimizer training IDs must be unique")
             seen.add(row.item.id)
+            initial = (task.validate_label(row.initial_answer_value)
+                       if row.initial_answer_value is not None else None)
             feedback.append({"id": row.item.id, "values": dict(row.item.values),
                              "label": task.validate_label(row.label),
-                             "comment": row.context.get("human_feedback")})
+                             "comment": row.context.get("human_feedback"),
+                             "initial_answer_value": initial,
+                             "prediction_matches_label": (initial == task.validate_label(row.label)
+                                                          if initial is not None else None)})
         return cls(_json({"task": {"name": task.name, "labels": task.labels,
                                    "instructions": task.instructions},
                           "current": dict(current), "feedback": feedback,
@@ -79,6 +84,10 @@ inferring the rubric or proposing questions. Do not reduce the rubric to a list
 of topics copied from positive abstracts. Explain which human explanations support
 your changes, and distinguish stated preferences from uncertain extrapolations.
 These explanations do not supply extra item labels or justify claims of accuracy.
+Each feedback record may include initial_answer_value, the prediction shown before
+the human vote, and prediction_matches_label. Use disagreements and explanations
+to diagnose missing criteria. Null means no recorded prediction; do not guess one.
+These historical predictions describe earlier configurations, not current accuracy.
 Three independent controls are available: rubric (main decision criteria),
 example_ids (a fixed ordered subset of training examples), and tasks (additional
 classification questions whose probabilities become features for a numerical

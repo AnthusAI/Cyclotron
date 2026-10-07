@@ -1,6 +1,5 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
-import {createPortal} from 'react-dom'
-import {Activity, History, Menu, Plus, RefreshCw, Undo2, X} from 'lucide-react'
+import {Activity, History, Plus, RefreshCw, Undo2} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Card,CardContent,CardHeader,CardTitle} from '@/components/ui/card'
 import {Input} from '@/components/ui/input'
@@ -14,14 +13,17 @@ import {ScorecardCatalog} from './ScorecardCatalog'
 import {MultiLabelCard,type BatchItem} from './MultiLabelCard'
 import {ClassifierMetrics,type MetricClassifier} from './ClassifierMetrics'
 import {SubmissionFeedback,type LabelSubmission} from './SubmissionFeedback'
-import {requestId} from './requestId'
 import {ScorecardVersions} from './ScorecardVersions'
 import {ReplayControls} from './ReplayControls'
+import {PendingCommandIds} from './commandIdentity'
 import {ExchangeDetail} from './ExchangeDetail'
 import {CyclotronBrand} from './CyclotronBrand'
 import {MatchedComparison,MatchedComparisonResult,type ComparisonResult} from './MatchedComparison'
 import {ComparisonResume} from './ComparisonResume'
 import {FeedbackControls} from './FeedbackControls'
+import {OptimizationStatus,latestOptimizationActivity} from './OptimizationStatus'
+import {MobileNavigation} from './MobileNavigation'
+import {navigationItems} from './navigation'
 export {TraceDetail} from './TraceDetail'
 
 type Run={id:string;name:string;mode:string;status:string;createdAt:string;config:{input_mode?:string;scorecard_id?:string;selection_policy?:{primary:string;secondary?:string};max_requests?:number;backfill_count?:number;classifiers?:MetricClassifier[]};counts:{cycles:number;predictions:number;labels:number;optimizations:number}}
@@ -30,29 +32,6 @@ const RUNS='{runs{id name mode status createdAt config counts} capabilities{live
 const DETAILS='query($id:ID!){run(runId:$id){id name mode status createdAt config counts} currentItem(runId:$id) jobs(runId:$id){id kind status result}}'
 const locationState=()=>new URLSearchParams(window.location.hash.slice(1))
 const routeSection=()=>{const value=locationState().get('section');return value==='classifiers'||value==='scorecards'?'scorecards':value==='items'?'items':'optimizations'}
-const navigationItems=[
-  {id:'scorecards',label:'Scorecards',description:'Define the related classifiers that share one decision-model request.'},
-  {id:'items',label:'Item lists',description:'Browse source items, decisions, and human labels across scorecards.'},
-  {id:'optimizations',label:'Optimizations',description:'Run, compare, and inspect live or replayed flywheel experiments.'},
-] as const
-
-function MobileNavigation({section,onNavigate}:{section:typeof navigationItems[number]['id'];onNavigate:(section:typeof navigationItems[number]['id'])=>void}){
-  const [open,setOpen]=useState(false)
-  useEffect(()=>{
-    if(!open)return
-    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')setOpen(false)}
-    window.addEventListener('keydown',closeOnEscape)
-    return()=>window.removeEventListener('keydown',closeOnEscape)
-  },[open])
-  return <>
-    <Button variant="ghost" size="icon" className="sm:hidden" aria-label={open?'Close main menu':'Open main menu'} aria-expanded={open} onClick={()=>setOpen(previous=>!previous)}>{open?<X/>:<Menu/>}</Button>
-    {open?createPortal(<section role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title" aria-describedby="mobile-navigation-description" className="mobile-navigation-panel fixed inset-0 z-40 flex flex-col bg-background">
-      <h2 id="mobile-navigation-title" className="sr-only">Navigate Cyclotron</h2>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5"><p id="mobile-navigation-description" className="text-sm leading-relaxed text-muted-foreground">Choose a workspace. Each view keeps its own context and returns here without restarting a session.</p><nav aria-label="Mobile navigation" className="mt-8 grid gap-3" >{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'outline'} className="h-auto min-h-24 items-start justify-start whitespace-normal px-5 py-4 text-left" onClick={()=>{onNavigate(item.id);setOpen(false)}}><span><span className="block text-base font-semibold">{item.label}</span><span className="mt-1 block text-sm font-normal leading-relaxed text-muted-foreground">{item.description}</span></span></Button>)}</nav></div>
-    </section>,document.body):null}
-  </>
-}
-
 function LabelCard(props:{current:CurrentItem;busy:boolean;onSubmit:(kind:string,payload:Record<string,unknown>)=>void;classifiers?:MetricClassifier[];events?:TraceEvent[];footer?:ReactNode}){
   if('classifiers' in props.current.prediction){
     const current=props.current as unknown as BatchItem
@@ -81,6 +60,7 @@ export function RunTimeline({runId,revision,classifierId}:{runId:string;revision
 }
 
 export function WebApp(){
+  const [commandIds]=useState(()=>new PendingCommandIds())
   const [section,setSection]=useState<'scorecards'|'items'|'optimizations'>(routeSection)
   const [runs,setRuns]=useState<Run[]>([]),[selected,setSelected]=useState(()=>locationState().get('run')??''),[run,setRun]=useState<Run|null>(null)
   const [current,setCurrent]=useState<CurrentItem|null>(null),[jobs,setJobs]=useState<Job[]>([]),[events,setEvents]=useState<TraceEvent[]>([])
@@ -98,10 +78,13 @@ export function WebApp(){
   const [classifierIds,setClassifierIds]=useState<string[]>([]),[itemList,setItemList]=useState('')
   const [sessionScorecard,setSessionScorecard]=useState('')
   const [sessionMode,setSessionMode]=useState<'interactive'|'replay'>('interactive'),[replaySource,setReplaySource]=useState('')
-  const [timelineClassifier,setTimelineClassifier]=useState('')
+  const [timelineClassifier,setTimelineClassifier]=useState(()=>locationState().get('classifier')??'')
+  const timelineClassifiers=run?.id===selected?run.config.classifiers:undefined
+  const invalidTimelineClassifier=!!timelineClassifiers&&!!timelineClassifier&&!timelineClassifiers.some(classifier=>classifier.id===timelineClassifier)
+  const resolvedTimelineClassifier=timelineClassifiers?.find(classifier=>classifier.id===timelineClassifier)?.id??timelineClassifiers?.[0]?.id??''
   const firstRoute=useRef(true)
   useEffect(()=>{
-    const restore=()=>{const route=locationState();setSection(routeSection());setSelected(route.get('run')??'');setView(route.get('view')==='label'?'label':'timeline')}
+    const restore=()=>{const route=locationState();setSection(routeSection());setSelected(route.get('run')??'');setView(route.get('view')==='label'?'label':'timeline');setTimelineClassifier(route.get('classifier')??'')}
     window.addEventListener('popstate',restore);window.addEventListener('hashchange',restore)
     return()=>{window.removeEventListener('popstate',restore);window.removeEventListener('hashchange',restore)}
   },[])
@@ -119,19 +102,22 @@ export function WebApp(){
   },[])
   useEffect(()=>{
     const route=new URLSearchParams(window.location.hash.slice(1))
+    if(invalidTimelineClassifier)setTimelineClassifier('')
     route.set('run',selected);route.set('view',view);route.set('section',section)
+    if(timelineClassifier&&!invalidTimelineClassifier)route.set('classifier',timelineClassifier)
+    else route.delete('classifier')
     const hash=`#${route}`
     if((selected||section!=='optimizations')&&window.location.hash!==hash){
-      if(firstRoute.current)window.history.replaceState(null,'',hash)
+      if(firstRoute.current||invalidTimelineClassifier)window.history.replaceState(null,'',hash)
       else window.history.pushState(null,'',hash)
     }
     firstRoute.current=false
-  },[selected,view,section])
+  },[selected,view,section,timelineClassifier,invalidTimelineClassifier])
   useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh])
   useEffect(()=>{
     if(!selected||section!=='optimizations'){setRun(null);return}
     let cancelled=false,unsubscribe:(()=>void)|undefined
-    setRun(null);setEvents([]);setDetail(null);setCurrent(null);setJobs([]);setStream('Connecting');setTimelineClassifier('')
+    setRun(null);setEvents([]);setDetail(null);setCurrent(null);setJobs([]);setStream('Connecting')
     const load=async()=>{
       if(view==='timeline'){
         const result=await graphql<{run:{eventCursor:number}}>('query($id:ID!){run(runId:$id){eventCursor}}',{id:selected})
@@ -165,8 +151,11 @@ export function WebApp(){
     setSending(true);setError('')
     if(kind==='label')setSubmission({runId:selected,count:Array.isArray(payload.labels)?payload.labels.length:1})
     else setSubmission(null)
-    try{const result=await graphql<{submitCommand:Job}>('mutation($id:ID!,$request:String!,$kind:String!,$payload:JSON!){submitCommand(runId:$id,requestId:$request,kind:$kind,payload:$payload){id kind status result}}',
-      {id:selected,request:requestId(),kind,payload})
+    try{const identity=commandIds.identity(selected,kind,payload)
+      const result=await graphql<{submitCommand:Job}>('mutation($id:ID!,$request:String!,$kind:String!,$payload:JSON!){submitCommand(runId:$id,requestId:$request,kind:$kind,payload:$payload){id kind status result}}',
+      {id:selected,request:identity,kind,payload})
+      if(typeof result.submitCommand?.id!=='string')throw new Error('Command acknowledgement unavailable')
+      commandIds.acknowledge(identity)
       setJobs(previous=>[result.submitCommand,...previous])
       if(kind==='label')setSubmission(previous=>previous?{...previous,jobId:result.submitCommand.id}:null)
       if(kind==='skip')setCurrent(null)
@@ -189,7 +178,7 @@ export function WebApp(){
       await refresh();setSelected(created.id);setCreating(false);setView(sessionMode==='replay'?'timeline':'label')
     }catch(e){setError((e as Error).message)}finally{setSending(false)}
   }
-  const recent=events.filter(event=>['optimizer-request','optimizer-response','decision-request','decision-response','fit-completed','candidate-evaluated','optimization-stage-completed','trigger-check','optimization-stage-started','optimization-stage-failed','human-feedback','cycle-metrics'].includes(String(event.payload.kind))).filter(event=>activityFilter==='all'||activityFilter==='optimizer'&&String(event.payload.kind).startsWith('optimizer-')||activityFilter==='decision'&&String(event.payload.kind).startsWith('decision-')).slice(-40).reverse()
+  const recent=events.filter(event=>latestOptimizationActivity([event])||['decision-request','decision-response','human-feedback','cycle-metrics'].includes(String(event.payload.kind))).filter(event=>activityFilter==='all'||activityFilter==='optimizer'&&String(event.payload.kind).startsWith('optimizer-')||activityFilter==='decision'&&String(event.payload.kind).startsWith('decision-')).slice(-40).reverse()
   return <div data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
 <header data-testid="main-application-header" className="app-header flex items-center justify-between gap-3 border-b border-border bg-background px-5 py-3"><CyclotronBrand /><nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
     {section!=='optimizations'?(section==='scorecards'?<ScorecardCatalog/>:<Catalog section="items" />):
@@ -201,7 +190,7 @@ export function WebApp(){
         {!runs.length?<p className="text-xs leading-relaxed text-muted-foreground">No runs yet. Import a recording through the API or create a live run.</p>:null}
       </AppDrawer>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4">
-        {run?.config.classifiers?.length?<div className="flex items-center gap-3"><Label htmlFor="timeline-classifier">Inspect classifier</Label><NativeSelect id="timeline-classifier" value={timelineClassifier} onChange={event=>setTimelineClassifier(event.target.value)}><NativeSelectOption value="">{run.config.classifiers[0].name}</NativeSelectOption>{run.config.classifiers.slice(1).map(classifier=><NativeSelectOption key={classifier.id} value={classifier.id}>{classifier.name}</NativeSelectOption>)}</NativeSelect><p className="text-xs text-muted-foreground">Each classifier has its own learning history.</p></div>:null}
+        {timelineClassifiers?.length?<div className="flex items-center gap-3"><Label htmlFor="timeline-classifier">Inspect classifier</Label><NativeSelect id="timeline-classifier" value={resolvedTimelineClassifier} onChange={event=>setTimelineClassifier(event.target.value)}>{timelineClassifiers.map(classifier=><NativeSelectOption key={classifier.id} value={classifier.id}>{classifier.name}</NativeSelectOption>)}</NativeSelect><p className="text-xs text-muted-foreground">Each classifier has its own learning history.</p></div>:null}
         <AppDrawer title="New optimization run" side="right" open={creating} onOpenChange={setCreating}><Card><CardHeader><CardTitle className="text-base">Classifiers and items for this session</CardTitle></CardHeader><CardContent className="space-y-3"><Label htmlFor="session-mode">Session type</Label><NativeSelect id="session-mode" value={sessionMode} onChange={event=>setSessionMode(event.target.value as typeof sessionMode)}><NativeSelectOption value="interactive">Interactive labeling</NativeSelectOption><NativeSelectOption value="replay">Replay existing feedback</NativeSelectOption></NativeSelect>{sessionMode==='replay'?<><Label htmlFor="replay-source">Source run</Label><NativeSelect id="replay-source" value={replaySource} onChange={event=>setReplaySource(event.target.value)}><NativeSelectOption value="">Choose source feedback</NativeSelectOption>{runs.filter(row=>row.config.classifiers?.length&&row.counts.labels>0).map(row=><NativeSelectOption key={row.id} value={row.id}>{row.name}</NativeSelectOption>)}</NativeSelect></>:null}<Label htmlFor="session-scorecard">Scorecard</Label><NativeSelect id="session-scorecard" value={sessionScorecard} onChange={event=>setSessionScorecard(event.target.value)}><NativeSelectOption value="">Independent classifiers (legacy)</NativeSelectOption>{catalog.scorecardDefinitions?.map(card=><NativeSelectOption key={card.id} value={card.id}>{card.name} · revision {card.revision}</NativeSelectOption>)}</NativeSelect><Label htmlFor="session-list">Item list</Label><NativeSelect id="session-list" value={itemList} onChange={event=>setItemList(event.target.value)}><NativeSelectOption value="">Legacy arXiv session</NativeSelectOption>{catalog.itemLists.map(list=><NativeSelectOption key={list.id} value={list.id}>{list.name} · {list.count} items</NativeSelectOption>)}</NativeSelect>{itemList&&!sessionScorecard?<fieldset className="space-y-2"><legend className="mb-2 text-sm font-medium">Classifiers (shared request)</legend>{catalog.classifiers.map(classifier=><Label key={classifier.id} className="flex gap-2"><input type="checkbox" checked={classifierIds.includes(classifier.id)} onChange={event=>setClassifierIds(previous=>event.target.checked?[...previous,classifier.id]:previous.filter(id=>id!==classifier.id))} />{classifier.name}</Label>)}{!classifierIds.length?<p className="text-sm text-muted-foreground">Select at least one classifier before creating the session.</p>:null}</fieldset>:null}</CardContent></Card>
         <Card className="gap-2"><CardHeader><CardTitle className="text-base">{sessionMode==='replay'?'Start a fresh replay':'Start an interactive run'}</CardTitle></CardHeader><CardContent className="flex flex-wrap items-end gap-3"><div className="space-y-1"><Label htmlFor="run-name">Name</Label><Input id="run-name" value={name} onChange={event=>setName(event.target.value)} placeholder="Recall / accuracy experiment" /></div><div className="space-y-1"><Label htmlFor="run-objective">Objective</Label><NativeSelect id="run-objective" value={objective} onChange={event=>setObjective(event.target.value)}><NativeSelectOption value="inherit">Scorecard / application defaults</NativeSelectOption><NativeSelectOption value="f1">F1 (configured positive class)</NativeSelectOption><NativeSelectOption value="recall">Recall / accuracy guard</NativeSelectOption><NativeSelectOption value="accuracy">Accuracy</NativeSelectOption></NativeSelect></div><div className="w-28 space-y-1"><Label htmlFor="max-requests">Request limit</Label><Input id="max-requests" type="number" min={1} value={maxRequests} onChange={event=>setMaxRequests(Number(event.target.value))} /></div><div className="w-28 space-y-1"><Label htmlFor="max-optimizer">Optimizer limit</Label><Input id="max-optimizer" type="number" min={1} value={maxOptimizer} onChange={event=>setMaxOptimizer(Number(event.target.value))} /></div><Label className="flex items-center gap-2"><input type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)} />Authorize paid calls within these limits</Label><Button disabled={sending||!confirmed||(sessionMode==='replay'&&(!replaySource||!sessionScorecard))||!name.trim()||(itemList?(!sessionScorecard&&!classifierIds.length):capabilities.itemCount===0)} onClick={create}>Create run</Button></CardContent></Card></AppDrawer>
         {error?<div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">{error}</div>:null}
@@ -213,8 +202,9 @@ export function WebApp(){
         <div className="shrink-0"><Button variant="outline" size="sm" disabled={!capabilities.liveEnabled||busy} onClick={()=>setComparisonOpen(true)}>Compare runs</Button></div>
         {comparisonOpen?<MatchedComparison runs={runs.filter(row=>row.config.classifiers?.length)} initialRunId={run.id} onClose={()=>setComparisonOpen(false)} onCreated={id=>{setComparisonOpen(false);setSelected(id);setView('timeline');void refresh().catch(e=>setError(e.message))}} />:null}
         {view==='label'&&!run.config.classifiers?.length?<ClassifierMetrics classifiers={[{id:'legacy',name:'Classifier',config:{classes:[{label:'include',role:'positive'}]}}]} events={events} compact />:null}
-        {view==='label'&&run.config.classifiers?.length?<FeedbackControls key={run.id} classifiers={run.config.classifiers} events={events} jobs={jobs} busy={busy} replay={run.config.input_mode==='replay'} onSubmit={submit} onResume={resumeFeedback}/>:null}
-          {run.config.input_mode==='comparison'?<MatchedComparisonResult key={run.id} runId={run.id} status={jobs[0]?.status??run.status} result={jobs.find(job=>job.kind==='matched-evaluate'&&job.status==='completed')?.result as ComparisonResult|undefined} />:view==='timeline'?<div className="flex min-h-0 flex-1 flex-col gap-2"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Click a cycle or event to inspect its request, response, and configuration.</p><Button variant="outline" size="sm" onClick={()=>setRevision(events.at(-1)?.sequence??0)}><RefreshCw />Load latest events</Button></div><RunTimeline key={selected} runId={selected} revision={run.config.input_mode==='replay'?(jobs.find(job=>job.kind==='replay-next'&&job.status==='completed')?.id??revision):revision} classifierId={timelineClassifier||undefined} /></div>:
+        {view==='label'?<OptimizationStatus events={events} classifiers={run.config.classifiers??[]} jobs={jobs} onInspect={event=>{setDetail(event);setActivityOpen(true)}}/>:null}
+        {view==='label'&&run.config.classifiers?.length?<FeedbackControls key={run.id} runId={run.id} classifiers={run.config.classifiers} events={events} jobs={jobs} busy={busy} replay={run.config.input_mode==='replay'} onSubmit={submit} onResume={resumeFeedback}/>:null}
+          {run.config.input_mode==='comparison'?<MatchedComparisonResult key={run.id} runId={run.id} status={jobs[0]?.status??run.status} result={jobs.find(job=>job.kind==='matched-evaluate'&&job.status==='completed')?.result as ComparisonResult|undefined} />:view==='timeline'?<div className="flex min-h-0 flex-1 flex-col gap-2"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Click a cycle or event to inspect its request, response, and configuration.</p><Button variant="outline" size="sm" onClick={()=>setRevision(events.at(-1)?.sequence??0)}><RefreshCw />Load latest events</Button></div><RunTimeline key={selected} runId={selected} revision={run.config.input_mode==='replay'?(jobs.find(job=>job.kind==='replay-next'&&job.status==='completed')?.id??revision):revision} classifierId={resolvedTimelineClassifier||undefined} /></div>:
           <div data-labeling-content className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]"><section className="space-y-3"><div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>submit('prepare')}>{current?'Refresh prediction':'Prepare next item'}</Button>{!run.config.classifiers?.length?<Button variant="outline" disabled={busy} onClick={()=>submit('undo')}><Undo2 />Undo last review</Button>:null}</div>{current?<LabelCard key={current.prediction.presentation_id} current={current} busy={busy} onSubmit={submit} classifiers={run.config.classifiers} events={events} footer={submission?.runId===selected?<SubmissionFeedback submission={submission} jobs={jobs} compact />:run.config.backfill_count && run.counts.cycles<=run.config.backfill_count?<p className="text-xs text-muted-foreground">Historical item {run.counts.cycles} of {run.config.backfill_count} · Provide missing labels</p>:null} />:<Card><CardContent><p className="text-sm text-muted-foreground">{busy?'Processing this cycle. Events stream on the right.':'Prepare an item to get its prediction before voting.'}</p></CardContent></Card>}{jobs[0]?.status==='failed'||jobs[0]?.status==='interrupted'?<p role="alert" className="text-sm text-destructive">Last command {jobs[0].status}. State retained; no automatic paid retry.</p>:null}</section><AppDrawer title="Optimizer activity" side="right" open={activityOpen} onOpenChange={setActivityOpen}><div className="flex items-center gap-2 text-sm font-semibold"><Activity className="size-4" />Live engine activity</div><Label htmlFor="activity-type">Activity type</Label><NativeSelect id="activity-type" value={activityFilter} onChange={e=>{setActivityFilter(e.target.value);setDetail(null)}}><NativeSelectOption value="all">All activity</NativeSelectOption><NativeSelectOption value="optimizer">Optimizer calls</NativeSelectOption><NativeSelectOption value="decision">Decision calls</NativeSelectOption></NativeSelect>{!detail?recent.map(event=><button key={event.sequence} onClick={()=>setDetail(event)} className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-left text-xs"><span className="capitalize">{String(event.payload.kind).replaceAll('-',' ')}</span><span className="font-mono text-muted-foreground">{String(event.payload.cycle_number??'')}</span></button>):null}{detail?<><Button variant="outline" onClick={()=>setDetail(null)}>Back to activity</Button><ExchangeDetail event={detail} events={events} /></>:<p className="text-xs text-muted-foreground">Select a streamed model request or response to inspect its exact content.</p>}</AppDrawer></div>}
         </>:selected?<RunWorkspaceSkeleton/>:<div className="flex flex-1 items-center justify-center"><div className="max-w-sm text-center"><h1 className="text-xl font-semibold">A history you can inspect</h1><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a recorded run, or start a new labeling session. Every optimization exchange is stored by the API.</p></div></div>}
       </main>

@@ -177,10 +177,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "42132de9-1cb6-4f00-bde4-201ad4cde3b0",
+      "author": "home",
+      "text": "Real diagnostic replay revealed an end-of-input lifecycle defect: finished=true was acknowledged but run history still said ready. Extended the chronological restart/replay regression to require completed status; it failed on existing code. Worker now marks completed only for explicit boolean runtime exhaustion in the injected runtime, scorecard compatibility path, and legacy path. Added generic runtime coverage for true/false/nonboolean values; ordinary commands stay ready. Focused worker/runtime suite: 30 passed. Full suite running. Live server remains unchanged until the ongoing paired study ends; no source labels edited.",
+      "created_at": "2026-10-07T20:47:08.376552Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "734b937f-fde9-4aa5-ba4e-e2e7106ebef6",
+      "author": "home",
+      "text": "Initial protected-comparison creation now supports durable approval identities through UI, GraphQL, worker and SQLite. Lost acknowledgements and concurrent duplicate submissions recover one frozen run/job; authorization drift rejects. Retry after restart returns the original snapshot despite later source changes, without rescheduling paid work. Legacy API calls without requestId remain explicitly documented as non-idempotent. Regressions failed before implementation. 804 Python and 154 UI specs pass; production build and focused lint pass. Browser on isolated synthetic workspace verified preflight balance and one recorded authorization/job; model factory guard intentionally failed execution without any provider contact. Real workspace had no pending/running jobs, was backed up before restart to deploy the compatible API. No real labels changed. Broad tablet/dark and full-story acceptance remain open; experiment reports deferred.",
+      "created_at": "2026-10-07T23:22:35.296266Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T18:18:35.517077Z",
+  "updated_at": "2026-10-07T23:22:35.296402Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

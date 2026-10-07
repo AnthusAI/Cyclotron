@@ -18,6 +18,27 @@ def _article(number: int = 1) -> Article:
     )
 
 
+def test_learning_feedback_uses_the_recorded_presentation_and_keeps_audits_sealed(tmp_path):
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="test",
+                        rolling_audit_rate=0, final_audit_rate=0)
+    store.import_articles([_article()])
+    shown = store.record_prediction("arxiv-1", "exclude", .8, "fake", "a" * 64, 0)
+    store.record_vote("arxiv-1", "include", comment="Useful", presentation_id=shown.id)
+    assert store.learning_feedback()[0].initial_answer_value == "exclude"
+    store.close()
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="test",
+                        rolling_audit_rate=0, final_audit_rate=0)
+    assert store.learning_feedback()[0].initial_answer_value == "exclude"
+    store.close()
+    audit = ReviewStore(tmp_path / "audit.sqlite3", study_seed="test",
+                        rolling_audit_rate=1, final_audit_rate=0)
+    audit.import_articles([_article()])
+    shown = audit.record_prediction("arxiv-1", "exclude", .8, "fake", "a" * 64, 0)
+    audit.record_vote("arxiv-1", "include", comment="Sealed", presentation_id=shown.id)
+    assert audit.learning_feedback() == ()
+    audit.close()
+
+
 def test_a_review_assignment_is_deterministic_and_never_requires_a_model(tmp_path):
     path = tmp_path / "reviews.sqlite3"
     first = ReviewStore(path, study_seed="demo-seed", rolling_audit_rate=.2, final_audit_rate=.1)

@@ -3,7 +3,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime,timezone
 
-from .flywheel import _hash, _json
+from .flywheel import _hash, _json, track_answer_dependencies
 from .optimizer_agent import FeedbackBriefing
 from .question_measurement import measure_questions
 from .candidate_fitting import fit_candidate
@@ -15,6 +15,7 @@ def _example_experiments(wheel, training, development):
     reports=[]
     for payload, in wheel.db.execute("SELECT payload FROM example_measurements WHERE status='complete' ORDER BY rowid DESC"):
         report=json.loads(payload)
+        if report.get('answer_dependencies') is None or not wheel.answer_dependencies_current(report['answer_dependencies']):continue
         if any(current_train.get(k)!=v for k,v in report.get('training_evidence',{}).items()) or any(current_dev.get(k)!=v for k,v in report.get('development_evidence',{}).items()):continue
         if not report.get('development_evidence'):continue
         summary={key:report[key] for key in ('baseline_fingerprint','scope','effect_scope','by_class')}
@@ -39,6 +40,7 @@ def stage_briefing(wheel, stage, training, development, protected):
         human_explanations=wheel.optimizer_context["human_explanations"])
 
 
+@track_answer_dependencies
 async def optimize_stage(wheel, stage, training, development, *, protected, propensities,
                          limit=200, retry_interrupted=False, min_development_per_class=20,
                          train_after_questions=True, max_example_trials=8):
@@ -77,11 +79,15 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     key_data['selection_policy']=asdict(wheel.selection_policy) if wheel.selection_policy else None
     key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
+    predictions = {row.item.id: row.initial_answer_value for row in training
+                   if row.initial_answer_value is not None}
+    if predictions:
+        key_data["initial_answers"] = predictions
     key_data["train_after_questions"] = train_after_questions
     if stage=='examples':key_data['max_example_trials']=max_example_trials
     key = _hash(key_data)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS optimization_stages (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
-    saved = wheel.db.execute("SELECT status,payload FROM optimization_stages WHERE id=?", (key,)).fetchone()
+    key, saved = wheel.cached_artifact('optimization_stages', 'id', key)
     if saved and saved[0] == "complete":
         result = json.loads(saved[1])
         if stage == "questions" and train_after_questions:
@@ -138,6 +144,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 'validation_status':'insufficient-evidence' if not wheel.active.config.rubric.strip() else 'invalid-proposal',
                 'reason':'no usable rubric proposed; active configuration retained and future feedback may trigger another attempt',
                 'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
+                'answer_dependencies':wheel.collected_answer_dependencies(),
                 'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
         with wheel.db:
             wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?",(_json(result),key))
@@ -194,6 +201,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             measurements={}
             if min(counts.values())>0:
                 now=datetime.now(timezone.utc)
+                wheel.reconcile_model_context(training)
                 measurements={'incumbent':await wheel._score(wheel.active,development,training,now),
                               'candidate':await wheel._score(candidate,development,training,now)}
             previous=wheel.active.config.briefing_state()
@@ -225,6 +233,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             result = await wheel.improve(training, development, protected=protected, propensities=propensities,
                 candidate_proposal=proposal, retry_interrupted=retry_interrupted, require_recall_safeguards=True)
     result = {**result, "stage": stage, 'proposal':proposal,
+              'answer_dependencies':wheel.collected_answer_dependencies(),
               'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
               'basis_context_version':key_data['context'], 'proposal_training_evidence':key_data['training'],
               "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"]}
@@ -237,7 +246,9 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         if result.get('activated') or result.get("promoted") or result.get("classifier_training", {}).get("promoted"):
             # Restart after this stage's own promotion must not rediscover the
             # same feedback merely because this stage changed the active context.
+            alias, _ = wheel.cached_artifact('optimization_stages', 'id',
+                _hash({**key_data, "context": wheel.active.config.fingerprint}))
             wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'complete', ?)",
-                (_hash({**key_data, "context": wheel.active.config.fingerprint}), _json(result)))
+                (alias, _json(result)))
     wheel._emit({"kind": "optimization-stage-completed", **result})
     return result
