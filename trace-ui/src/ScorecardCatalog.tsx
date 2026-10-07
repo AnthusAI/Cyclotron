@@ -19,7 +19,7 @@ export function ScorecardCatalog(){
     if(window.location.hash!==hash)window.history.pushState(null,'',hash)
     setSelectedValue(id)
   }
-  const [names,setNames]=useState<Record<string,string>>({})
+  const [revisionNames,setRevisionNames]=useState<Record<string,string>>({})
   const [classifiers,setClassifiers]=useState<CatalogClassifier[]>([]),[editing,setEditing]=useState(false)
   const [versions,setVersions]=useState<Definition[]>([]),[inspected,setInspected]=useState<number|null>(routeRevision)
   const [comparing,setComparing]=useState(false)
@@ -32,10 +32,20 @@ export function ScorecardCatalog(){
     window.addEventListener('popstate',restore);window.addEventListener('hashchange',restore)
     return()=>{window.removeEventListener('popstate',restore);window.removeEventListener('hashchange',restore)}
   },[])
-  const refresh=()=>graphql<{scorecardDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{scorecardDefinitions classifiers}').then(result=>{setCards(result.scorecardDefinitions);setClassifiers(result.classifiers??[]);setNames(Object.fromEntries((result.classifiers??[]).map(row=>[row.id,row.name])))}).catch(e=>setError(e.message))
-  useEffect(()=>{let cancelled=false;graphql<{scorecardDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{scorecardDefinitions classifiers}').then(result=>{if(!cancelled){setCards(result.scorecardDefinitions);setClassifiers(result.classifiers??[]);setNames(Object.fromEntries((result.classifiers??[]).map(row=>[row.id,row.name])))}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[])
+  const refresh=()=>graphql<{scorecardDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{scorecardDefinitions classifiers}').then(result=>{setCards(result.scorecardDefinitions);setClassifiers(result.classifiers??[])}).catch(e=>setError(e.message))
+  useEffect(()=>{let cancelled=false;graphql<{scorecardDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{scorecardDefinitions classifiers}').then(result=>{if(!cancelled){setCards(result.scorecardDefinitions);setClassifiers(result.classifiers??[])}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[])
+  useEffect(()=>{
+    let cancelled=false
+    const known=Object.fromEntries(classifiers.map(row=>[`${row.id}:${row.revision}`,row.name]))
+    const missing=[...new Set(cards.flatMap(card=>card.classifiers.filter(ref=>!known[`${ref.id}:${ref.revision}`]&&!revisionNames[`${ref.id}:${ref.revision}`]).map(ref=>ref.id)))]
+    if(missing.length)void Promise.all(missing.map(id=>graphql<{classifierVersions:CatalogClassifier[]}>('query($id:ID!){classifierVersions(classifierId:$id)}',{id}))).then(results=>{
+      if(!cancelled)setRevisionNames(previous=>({...previous,...Object.fromEntries(results.flatMap(result=>(result.classifierVersions??[]).map(row=>[`${row.id}:${row.revision}`,row.name])))}))
+    }).catch(e=>{if(!cancelled)setError(e.message)})
+    return()=>{cancelled=true}
+  },[cards,classifiers,revisionNames])
   useEffect(()=>{setVersions([]);if(!selected)return;let cancelled=false;graphql<{scorecardDefinitionVersions:Definition[]}>('query($id:ID!){scorecardDefinitionVersions(scorecardId:$id)}',{id:selected}).then(result=>{if(!cancelled)setVersions(result.scorecardDefinitionVersions??[])}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[selected,cards])
   const card=cards.find(row=>row.id===selected)
+  const names={...revisionNames,...Object.fromEntries(classifiers.map(row=>[`${row.id}:${row.revision}`,row.name]))}
   const historical=versions.find(row=>row.revision===inspected)
   const readOnly=inspected!==null&&inspected!==card?.revision
   return <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -47,6 +57,6 @@ export function ScorecardCatalog(){
       <div className="flex shrink-0 flex-wrap gap-2 px-5">{!readOnly?<Button variant="outline" onClick={()=>setEditing(true)}>Edit scorecard</Button>:null}<NativeSelect aria-label="Inspect scorecard revision" value={inspected??card.revision} onChange={e=>inspectRevision(Number(e.target.value))}>{versions.map(row=><NativeSelectOption key={row.revision} value={row.revision}>Revision {row.revision}{row.revision===card.revision?' · active definition':''}</NativeSelectOption>)}</NativeSelect></div>
       {readOnly?<div className="shrink-0 space-y-2 px-5 pt-3"><p className="text-xs text-muted-foreground">Read-only historical definition. Existing runs and learned checkpoints are unchanged.</p>{historical?<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>setComparing(true)}>Compare with active definition</Button><Button onClick={async()=>{try{await graphql('mutation($id:ID!,$revision:Int!){activateScorecardDefinition(scorecardId:$id,revision:$revision)}',{id:card.id,revision:historical.revision});await refresh()}catch(e){setError((e as Error).message)}}}>Use this definition</Button></div>:<p role="status">Loading scorecard revision…</p>}</div>:null}
       <Catalog key={`${card.id}:${inspected??card.revision}`} section="classifiers" scorecardId={card.id} scorecardRevision={inspected??card.revision} readOnly={readOnly} onChanged={refresh}/>
-    </>:<div className="grid gap-4 overflow-y-auto p-5 lg:grid-cols-2">{cards.map(row=><Card key={row.id}><CardHeader><CardTitle>{row.name}</CardTitle><p className="text-xs text-muted-foreground">Revision {row.revision}</p></CardHeader><CardContent><ul className="mb-4 space-y-1 text-sm">{row.classifiers.map(ref=><li key={ref.id}>{names[ref.id]??ref.id} · classifier revision {ref.revision}</li>)}</ul><Button onClick={()=>setSelected(row.id)}>View classifiers</Button></CardContent></Card>)}{!cards.length?<p>No scorecards configured yet.</p>:null}</div>}
+    </>:<div className="grid gap-4 overflow-y-auto p-5 lg:grid-cols-2">{cards.map(row=><Card key={row.id}><CardHeader><CardTitle>{row.name}</CardTitle><p className="text-xs text-muted-foreground">Revision {row.revision}</p></CardHeader><CardContent><ul className="mb-4 space-y-1 text-sm">{row.classifiers.map(ref=><li key={ref.id}>{names[`${ref.id}:${ref.revision}`]??ref.id} · classifier revision {ref.revision}</li>)}</ul><Button onClick={()=>setSelected(row.id)}>View classifiers</Button></CardContent></Card>)}{!cards.length?<p>No scorecards configured yet.</p>:null}</div>}
   </section>
 }
