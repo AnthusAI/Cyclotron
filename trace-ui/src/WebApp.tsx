@@ -13,9 +13,9 @@ import {ScorecardCatalog} from './ScorecardCatalog'
 import {MultiLabelCard,type BatchItem} from './MultiLabelCard'
 import {ClassifierMetrics,type MetricClassifier} from './ClassifierMetrics'
 import {SubmissionFeedback,type LabelSubmission} from './SubmissionFeedback'
-import {requestId} from './requestId'
 import {ScorecardVersions} from './ScorecardVersions'
 import {ReplayControls} from './ReplayControls'
+import {PendingCommandIds} from './commandIdentity'
 import {ExchangeDetail} from './ExchangeDetail'
 import {CyclotronBrand} from './CyclotronBrand'
 import {MatchedComparison,MatchedComparisonResult,type ComparisonResult} from './MatchedComparison'
@@ -60,6 +60,7 @@ export function RunTimeline({runId,revision,classifierId}:{runId:string;revision
 }
 
 export function WebApp(){
+  const [commandIds]=useState(()=>new PendingCommandIds())
   const [section,setSection]=useState<'scorecards'|'items'|'optimizations'>(routeSection)
   const [runs,setRuns]=useState<Run[]>([]),[selected,setSelected]=useState(()=>locationState().get('run')??''),[run,setRun]=useState<Run|null>(null)
   const [current,setCurrent]=useState<CurrentItem|null>(null),[jobs,setJobs]=useState<Job[]>([]),[events,setEvents]=useState<TraceEvent[]>([])
@@ -150,8 +151,11 @@ export function WebApp(){
     setSending(true);setError('')
     if(kind==='label')setSubmission({runId:selected,count:Array.isArray(payload.labels)?payload.labels.length:1})
     else setSubmission(null)
-    try{const result=await graphql<{submitCommand:Job}>('mutation($id:ID!,$request:String!,$kind:String!,$payload:JSON!){submitCommand(runId:$id,requestId:$request,kind:$kind,payload:$payload){id kind status result}}',
-      {id:selected,request:requestId(),kind,payload})
+    try{const identity=commandIds.identity(selected,kind,payload)
+      const result=await graphql<{submitCommand:Job}>('mutation($id:ID!,$request:String!,$kind:String!,$payload:JSON!){submitCommand(runId:$id,requestId:$request,kind:$kind,payload:$payload){id kind status result}}',
+      {id:selected,request:identity,kind,payload})
+      if(typeof result.submitCommand?.id!=='string')throw new Error('Command acknowledgement unavailable')
+      commandIds.acknowledge(identity)
       setJobs(previous=>[result.submitCommand,...previous])
       if(kind==='label')setSubmission(previous=>previous?{...previous,jobId:result.submitCommand.id}:null)
       if(kind==='skip')setCurrent(null)

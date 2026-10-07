@@ -359,6 +359,32 @@ test('label submission responds immediately and does not claim queued votes are 
   expect(screen.queryByText(/Labels recorded/)).toBeNull()
 })
 
+test('retrying an unconfirmed label after remount recovers the original command identity',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'shown',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
+  let attempts=0
+  vi.mocked(graphql).mockImplementation(async query=>{
+    if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    if(query.includes('submitCommand')){
+      if(++attempts===1)throw new Error('Acknowledgement lost')
+      return {submitCommand:{id:'same-job',kind:'label',status:'pending',result:null}}
+    }
+    return {run:live,currentItem:shown,jobs:[]}
+  })
+  const first=render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Topic: exclude'}))
+  fireEvent.click(screen.getByRole('button',{name:'Submit feedback'}))
+  await screen.findByText('Label submission needs attention')
+  first.unmount()
+  render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Submit feedback'}))
+  await screen.findByText('1 label received · waiting to record')
+  const submissions=vi.mocked(graphql).mock.calls.filter(([query])=>query.includes('submitCommand'))
+  expect(submissions).toHaveLength(2)
+  expect(submissions[1][1]).toEqual(submissions[0][1])
+})
+
 test('labeling uses the focused app layout with history and activity drawers without restarting',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
   render(<WebApp />)

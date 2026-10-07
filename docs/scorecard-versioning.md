@@ -333,6 +333,15 @@ Queued commands show pending feedback; failed or interrupted
 correction/undo commands expose **Recover feedback command** for explicit recovery
 of the original command, not a new paid retry.
 
+If any run-command acknowledgement is lost, the app retains the command ID and
+complete intent (run, command kind and payload) in browser session storage. An
+explicit retry of the same intent, including after reload, asks the API for the
+original job instead of creating duplicate work. This journal never executes
+commands by itself. Acknowledged submissions leave the journal; a subsequent
+deliberate command receives a fresh ID. Changed labels, explanations, targets or
+command kinds are different intents. With storage unavailable, this protection
+lasts only while the current app instance stays open; it does not span devices.
+
 ## Paired output comparison
 
 Each new cycle-metrics snapshot includes a matched comparison of the raw main
