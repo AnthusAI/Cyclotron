@@ -340,6 +340,12 @@ Failed or interrupted attempts require separate `retry_failed=True` permission;
 refresh alone does not authorize retrying an ambiguous paid call. Request ceilings
 still apply. Cache events are available in the normal trace. These options control
 decision collection, not optimizer calls or replay of completed optimization rounds.
+Shared adapters receive the same cache options. Refresh recollects the complete
+joint request and advances its durable answer generation. Sibling outer caches
+then read the new generation instead of stale answers. Previous batch responses
+remain in SQLite history, including when a refresh fails. Adapter authors can
+implement `classify_with_cache_options(..., cache_options)` to propagate these
+controls through another cache layer without changing ordinary `classify` callers.
 There is no automatic expiration or approximate-text reuse.
 Offline tests cover this connected path. A successful paid live demonstration is a separate verification step;
 passing tests does not establish live-model quality or improvement.

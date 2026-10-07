@@ -401,7 +401,9 @@ class DecisionFlywheel:
         self._emit({"kind": "features-requested", "target_id": target.id, "request_fingerprint": key,
                     "requests": self.requests, "ceiling": self.max_requests})
         try:
-            batch = await self.model.classify(config, target, training, now=now, event_sink=self._emit)
+            collect = getattr(self.model, 'classify_with_cache_options', None)
+            batch = (await collect(config, target, training, now=now, event_sink=self._emit, cache_options=options)
+                     if collect else await self.model.classify(config, target, training, now=now, event_sink=self._emit))
             # Validate full coverage before committing a reusable cache entry.
             self._features(config, batch)
         except Exception as error:
@@ -410,6 +412,18 @@ class DecisionFlywheel:
             self._emit({"kind": "features-failed", "target_id": target.id, "error_type": type(error).__name__})
             raise RuntimeError("decision feature request failed; see recorded error type") from None
         with self.db:
+            if identity:
+                current_key = _hash({"model": identity(config, target, training, now=now), "request": request})
+                if current_key != key:
+                    # Shared refresh advances the durable answer generation.
+                    # Retain the old answer under its old identity, not a
+                    # pending alias that poisons subsequent reuse.
+                    if row:
+                        self.db.execute("UPDATE runtime_answers SET status=?,payload=? WHERE key=?", (*row,key))
+                    else:
+                        self.db.execute("DELETE FROM runtime_answers WHERE key=?", (key,))
+                    key = current_key
+                    self.db.execute("INSERT OR REPLACE INTO runtime_answers VALUES (?, 'pending', NULL)", (key,))
             self.db.execute("UPDATE runtime_answers SET status='complete',payload=? WHERE key=?",
                             (_json(asdict(batch)), key))
         self._emit({"kind": "features-completed", "target_id": target.id, "model": batch.model,

@@ -7,6 +7,68 @@ from .batched_classification import BatchedAnswers
 from .decision_cache import CacheOptions
 
 
+def test_explicit_refresh_recollects_the_joint_request_and_updates_all_child_caches(tmp_path):
+    from datetime import datetime,timezone
+    from .flywheel import DecisionFlywheel
+    from .optimizer_agent import OptimizerAgent
+    class Model:
+        model_identity='fake';calls=0
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.calls+=1
+            positive=self.calls==1
+            return BatchedAnswers({name:{'decision':DecisionResult('yes' if positive else 'no',
+                {'yes':.8 if positive else .2,'no':.2 if positive else .8})} for name in configs},'fake',None,1)
+    def no_optimizer(_):raise AssertionError('cache verification does not optimize')
+    config=ClassifierConfig(DecisionTask('main',('yes','no'),'Choose'));target=Item('one',{'text':'Text'})
+    now=datetime(2026,1,1,tzinfo=timezone.utc);model=Model()
+    events=[]
+    shared=SharedDecisions(tmp_path/'cache.sqlite',model,max_requests=2,observer=events.append)
+    shared.bind_context({'a':config,'b':config},{'a':[],'b':[]})
+    wheels={cid:DecisionFlywheel(tmp_path/(cid+'.sqlite'),config,shared.adapter(cid),OptimizerAgent(no_optimizer),max_requests=5) for cid in ('a','b')}
+    try:
+        for wheel in wheels.values():assert asyncio.run(wheel.predict(target,[],now=now)).label=='yes'
+        refreshed=asyncio.run(wheels['a'].predict(target,[],now=now,cache_options=CacheOptions('refresh')))
+        assert refreshed.label=='no' and model.calls==2
+        assert asyncio.run(wheels['b'].predict(target,[],now=now)).label=='no'
+        assert asyncio.run(wheels['a'].predict(target,[],now=now)).label=='no'
+        assert model.calls==2
+        refresh=next(event for event in events if event.get('cache_policy')=='refresh')
+        assert refresh['generation']==2 and refresh['cached'] is False
+        history=shared.db.execute('SELECT payload FROM batch_history').fetchall()
+        assert any('"yes"' in row[0] for row in history if row[0])
+    finally:
+        for wheel in wheels.values():wheel.close()
+        shared.close()
+
+
+def test_a_failed_shared_refresh_requires_explicit_retry_and_keeps_the_old_answer(tmp_path):
+    from datetime import datetime,timezone
+    from .flywheel import DecisionFlywheel
+    from .optimizer_agent import OptimizerAgent
+    class Model:
+        model_identity='fake';calls=0
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.calls+=1
+            if self.calls==2:raise RuntimeError('synthetic transport failure')
+            return BatchedAnswers({name:{'decision':DecisionResult('yes',{'yes':.8,'no':.2})}
+                for name in configs},'fake',None,1)
+    def no_optimizer(_):raise AssertionError('cache verification does not optimize')
+    model=Model();config=ClassifierConfig(DecisionTask('main',('yes','no'),'Choose'))
+    target=Item('one',{'text':'Text'});now=datetime(2026,1,1,tzinfo=timezone.utc)
+    shared=SharedDecisions(tmp_path/'cache.sqlite',model,max_requests=3,observer=lambda _:None)
+    shared.bind_context({'a':config},{'a':[]})
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',config,shared.adapter('a'),OptimizerAgent(no_optimizer),max_requests=5)
+    try:
+        asyncio.run(wheel.predict(target,[],now=now))
+        with pytest.raises(RuntimeError):asyncio.run(wheel.predict(target,[],now=now,cache_options=CacheOptions('refresh')))
+        with pytest.raises(RuntimeError):asyncio.run(wheel.predict(target,[],now=now))
+        assert model.calls==2
+        assert asyncio.run(wheel.predict(target,[],now=now,cache_options=CacheOptions('reuse',retry_failed=True))).label=='yes'
+        assert model.calls==3
+        assert shared.db.execute('SELECT COUNT(*) FROM batch_history WHERE status="complete"').fetchone()[0]==1
+    finally:wheel.close();shared.close()
+
+
 def test_candidate_feature_collection_keeps_the_sibling_scorecard_context(tmp_path):
     from dataclasses import replace
     class Model:

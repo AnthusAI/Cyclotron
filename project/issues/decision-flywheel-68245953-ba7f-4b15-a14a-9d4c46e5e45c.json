@@ -118,10 +118,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "54eed13c-54ac-4294-b2cb-9d036969cc8c",
+      "author": "home",
+      "text": "Completed shared cache option propagation. A refresh now recollects the entire joint provider request rather than returning the cached batch; durable per-request answer generations invalidate sibling outer caches. Previous batch responses/statuses remain in batch_history. Failed refresh cannot silently retry and explicit retry_failed reaches the underlying batch guard; physical request ceilings remain in force. Observer events expose generation, cache_policy, and retry_failed, and child exchanges expose shared_answer_generation. New fake-model specs reproduced the refresh bug, verify both sibling outputs update without extra calls, and verify failure history/explicit retry. Full regression: 734 Python specs and 102 UI tests pass; build and lint complete (existing lint warnings remain). Concurrent flat-interface changes are integrated in develop as 5a6a526. Remaining acceptance includes how explicit refresh of already-fitted training answers invalidates derived fitting/selection caches; do not claim that refresh alone recalculates all learned artifacts.",
+      "created_at": "2026-10-07T20:16:39.925939Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T20:08:47.306363Z",
+  "updated_at": "2026-10-07T20:16:39.926025Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
