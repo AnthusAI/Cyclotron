@@ -90,6 +90,14 @@ snapshot. Example cards resolve labels and text only from that step's recorded
 optimizer training context; missing content stays explicitly unavailable. Older
 steps without matching snapshots do not borrow another step's configuration.
 
+Live event connections resume from the last delivered sequence and discard
+duplicates. Closed-connection frames cannot change the active cursor. A missing
+acknowledgement, transport error or unexpectedly ended subscription reconnects
+the read-only stream; it does not resubmit labels or retry model work. Leaving
+the view cancels both connection and retry timers. Existing authentication/access
+denials stop automatic retries and are shown in the stream status. Job state is
+recovered independently through the normal API polling.
+
 ### Reproduce calibration playback without paid calls
 
 Create a new **empty, separate** fixture directory. This script refuses an
