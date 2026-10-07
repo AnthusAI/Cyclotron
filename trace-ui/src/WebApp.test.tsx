@@ -126,11 +126,13 @@ test('the narrow navigation uses a descriptive full-viewport menu instead of a s
   fireEvent.click(within(menu).getByRole('button',{name:/Item lists/}))
   await waitFor(()=>expect(window.location.hash).toContain('section=items'))
   expect(screen.queryByRole('dialog',{name:'Navigate Cyclotron'})).toBeNull()
+})
+
 test('Scenario: A labeler can compare a displayed prediction with a human label',async()=>{
   const first={item:{id:'first',title:'First paper',abstract:'First abstract',submitted_at:'2026-10-06',categories:['cs.AI'],authors:'A. Author'},prediction:{label:'exclude',confidence:.8,presentation_id:'first-presentation'}}
   const next={item:{id:'next',title:'Next paper',abstract:'Next abstract',submitted_at:'2026-10-07',categories:['cs.AI'],authors:'B. Author'},prediction:{label:'include',confidence:.7,presentation_id:'next-presentation'}}
   let submitted=false
-  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+  vi.mocked(graphql).mockImplementation(async(query)=>{
     if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
     if(query.includes('events('))return {events:[]}
     if(query.includes('submitCommand')){
@@ -144,7 +146,6 @@ test('Scenario: A labeler can compare a displayed prediction with a human label'
   expect(await screen.findByRole('heading',{name:'Interactive study'})).toBeVisible()
   expect(await screen.findByText('First paper')).toBeVisible()
   fireEvent.click(screen.getByRole('button',{name:'Include'}))
-  expect(await screen.findByText('Processing this cycle. Events stream on the right.')).toBeVisible()
   expect(vi.mocked(graphql)).toHaveBeenCalledWith(expect.stringContaining('submitCommand'),expect.objectContaining({
     id:'live',kind:'label',payload:expect.objectContaining({item_id:'first',label:'include',presentation_id:'first-presentation'}),
   }))

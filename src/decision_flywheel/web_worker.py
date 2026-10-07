@@ -19,15 +19,30 @@ from .feedback_trigger import learning_feedback
 
 
 class WebWorker:
-    def __init__(self, store, directory, *, sink_factory, model_factory, articles=(), allow_live=False, redact=()):
+    def __init__(self, store, directory, *, sink_factory=None, model_factory=None,
+                 articles=(), allow_live=False, redact=(), runtime=None):
+        """Run API commands without making the worker own an application domain.
+
+        ``runtime`` is the application seam: an article reviewer, another item
+        source, or a future host can compose the reusable core and translate
+        command results into item updates.  The legacy reviewer path remains
+        the default until the scorecard workspace is moved behind the same
+        seam; it must not change active study behaviour during that migration.
+        """
         self.store, self.directory = store, Path(directory)
         self.sink_factory, self.model_factory = sink_factory, model_factory
         self.articles, self.allow_live, self.redact = tuple(articles), allow_live, tuple(redact)
+        self.runtime = runtime
         self.sessions, self.sinks = {}, {}
         self.stopping = Event()
         self.thread = None
 
     def create_run(self, name, config):
+        if self.runtime is not None:
+            if not self.allow_live:
+                raise ValueError('live collection is not enabled')
+            normalized = self.runtime.normalize_run_config(config, self.articles)
+            return self.store.create_run(name, 'live', normalized, items=self.articles)
         config,items=self._run_inputs(config)
         return self.store.create_run(name,'live',config,items=items)
 
@@ -169,19 +184,28 @@ class WebWorker:
         for reviewer in self.sessions.values():
             # Shutdown is not a completed review. An open cycle remains visible
             # as incomplete, rather than inventing a completion event.
-            if hasattr(reviewer,'wheels'):reviewer.close()
+            if self.runtime is not None:reviewer.close()
+            elif hasattr(reviewer,'wheels'):reviewer.close()
             else:
                 reviewer.core.close()
                 reviewer.store.close()
         self.sessions.clear()
 
-    def session(self, run_id):
+    def _runtime_session(self, run_id):
         if run_id in self.sessions:
             return self.sessions[run_id]
         run = self.store.run(run_id)
         config = run['config']
         if run['mode'] != 'live' or not self.allow_live:
             raise ValueError('run is read-only')
+        if self.runtime is not None:
+            session = self.runtime.open_session(
+                run_id, config, self.store.items(run_id), self.store.current_item(run_id),
+            )
+            if not hasattr(session, 'close') or not hasattr(session, 'abort') or not hasattr(session, 'current_cycle'):
+                raise ValueError('workspace runtime returned an invalid session')
+            self.sessions[run_id] = session
+            return session
         directory = self.directory / run_id
         directory.mkdir(parents=True,exist_ok=True)
         if 'classifiers' in config:
@@ -212,6 +236,9 @@ class WebWorker:
         self.sessions[run_id], self.sinks[run_id] = reviewer, sink
         return reviewer
 
+    # Kept for existing application callers while the API boundary migrates.
+    session = _runtime_session
+
     def process(self, job):
         run_id = job['run_id']
         self.store.set_status(run_id,'working')
@@ -223,7 +250,22 @@ class WebWorker:
                 return
             if any(key != run_id and value.current_cycle is not None for key,value in self.sessions.items()):
                 raise ValueError('finish the current review before operating another live run')
-            reviewer = self.session(run_id)
+            reviewer = self._runtime_session(run_id)
+            if self.runtime is not None:
+                command = self.runtime.execute(reviewer, job['kind'], job['payload'],
+                                               self.store.current_item(run_id), self.store.run(run_id)['config'])
+                for update in command.updates:
+                    changes = {}
+                    if update.prediction is not None:
+                        changes['prediction'] = update.prediction
+                    if update.reviewed is not None:
+                        changes['reviewed'] = update.reviewed
+                    self.store.update_item(run_id, update.item_id, **changes)
+                self.store.finish_command(job['id'], 'completed', dict(command.result))
+                self.store.set_status(run_id, 'ready')
+                if job['kind'] in ('label', 'skip'):
+                    self.store.command(run_id, f"after-feedback:{job['id']}", 'prepare', {})
+                return
             if hasattr(reviewer,'wheels'):
                 config=self.store.run(run_id)['config']
                 reviewer.config=config
@@ -314,6 +356,12 @@ class WebWorker:
             self.store.set_status(run_id,'failed')
             if run_id in self.sessions:
                 reviewer = self.sessions[run_id]
+                if self.runtime is not None:
+                    try:
+                        reviewer.abort(error)
+                    except Exception:
+                        pass
+                    return
                 if hasattr(reviewer,'wheels'):return
                 cycle, reviewer.current_cycle = reviewer.current_cycle, None
                 if cycle and cycle.token is not None:
