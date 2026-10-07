@@ -37,10 +37,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "133b3713-9ab3-446f-a57e-7dce159d4805",
+      "author": "home",
+      "text": "Integrated ScorecardRuntime into the API worker path. Frozen scorecard runs now open through the runtime seam, dispatch prepare/label/skip/optimization/replay commands there, preserve the shared request cache and independent classifier wheels, and keep existing durable recovery semantics. New fake-client spec proves two classifier outputs come from one shared model request and a worker routes frozen scorecards through that runtime. Focused scorecard/worker/core specs: 32 passed; full UI suite/build: 89 UI tests and production build passed. Pushed in 06163e6. Remaining: finish generalizing run-input/replay construction behind the same runtime contract.",
+      "created_at": "2026-10-07T18:18:18.177920Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T14:54:53.956155Z",
+  "updated_at": "2026-10-07T18:18:35.062739Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
