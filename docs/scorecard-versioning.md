@@ -163,7 +163,13 @@ The read-only `matchedRunPreflight` query selects at most 200 shared items with
 matching pinned item content, classifier definitions, and protected human labels.
 It rejects legacy runs without the recorded protection protocol or a checkpoint
 event boundary. Any item previously exposed as learnable feedback in either run
-is excluded. Selection favors recent items and stratifies by the first common
+is excluded. Duplicate structured values are compared after Unicode NFC and
+whitespace normalization of string values; other field values and case are
+preserved. This is not semantic deduplication or a guessed source-specific text
+projection. Missing previously learned content rejects preflight because its
+duplicates cannot be checked. The plan records the exclusion policy; an older
+approval with different rules requires a fresh preflight and comparison.
+Selection favors recent items and stratifies by the first common
 classifier; counts for every classifier are disclosed, not assumed balanced.
 
 The reusable `evaluate_matched_runs` executor restores each exact frozen head and

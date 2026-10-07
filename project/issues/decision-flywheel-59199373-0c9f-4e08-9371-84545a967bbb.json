@@ -132,10 +132,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "38035305-0be1-439f-9659-f02c95e2f316",
+      "author": "home",
+      "text": "Protected preflight now excludes previously learned duplicate structured content after Unicode NFC/whitespace normalization, including learned labels later retracted. It refuses missing learned content in the endpoint that saw it, rather than treating the other endpoint version as evidence. Plan pins explicit content-exclusion policy, so changed rules invalidate old approval instead of silently resuming under a weaker firewall. Documented limits: case/non-string fields preserved, no semantic/source-specific text matching claim. Eighteen focused no-network preflight/evaluator/GraphQL resume specs pass. Browser and broader acceptance remain open; no real labels/paid calls changed.",
+      "created_at": "2026-10-07T17:57:15.463088Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T17:54:53.137039Z",
+  "updated_at": "2026-10-07T17:57:15.463181Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

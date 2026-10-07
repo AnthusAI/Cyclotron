@@ -29,6 +29,29 @@ def test_mismatched_items_labels_and_previously_learnable_votes_are_excluded():
     assert plan['excluded_count']==3
 
 
+def test_normalized_duplicate_learning_content_is_excluded_even_after_retraction():
+    before,after=source('before'),source('after')
+    for endpoint in (before,after):
+        endpoint['items'][0]['values']={'title':'Caf\u00e9','text':'one two'}
+    before['items'].append({'id':'learned-copy','revision':1,'fingerprint':'different-id','values':{'title':'Cafe\u0301','text':' one\n  two '}})
+    before['events'].extend([
+        {'sequence':5,'payload':{'kind':'human-feedback','classifier_id':'topic','action':'submitted','assignment':'training','feedback':{'item_id':'learned-copy','final_answer_value':'no'}}},
+        {'sequence':6,'payload':{'kind':'human-feedback','classifier_id':'topic','action':'retracted','feedback':{'item_id':'learned-copy','final_answer_value':'no'}}}])
+    plan=plan_matched_runs(before,after)
+    assert '0' not in plan['item_ids']
+    assert plan['sample_count']==3
+    assert plan['content_exclusion_policy']=='unicode-nfc-and-whitespace-normalized-structured-values-v1'
+
+
+def test_missing_previously_learned_item_content_cannot_be_claimed_clean():
+    before,after=source('before'),source('after')
+    before['events'].append({'sequence':5,'payload':{'kind':'human-feedback','classifier_id':'topic','action':'submitted','assignment':'training','feedback':{'item_id':'missing','final_answer_value':'yes'}}})
+    # The other endpoint's version is not evidence of what the first one learned.
+    after['items'].append({'id':'missing','revision':1,'fingerprint':'missing','values':{'text':'some other content'}})
+    with pytest.raises(ValueError,match='learnable item content'):
+        plan_matched_runs(before,after)
+
+
 def test_unknown_historical_protection_protocol_is_not_claimed_clean():
     before,after=source('before'),source('after');before['config'].pop('evaluation_protocol')
     with pytest.raises(ValueError,match='protection protocol'):plan_matched_runs(before,after)

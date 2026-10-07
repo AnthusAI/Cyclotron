@@ -2,11 +2,20 @@
 from collections import Counter
 import hashlib
 import json
+import unicodedata
 from .feedback_trigger import PROTECTED_ASSIGNMENTS
 
 
 def fingerprint(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+
+def normalized_content(value):
+    """Compare structured content conservatively, without guessing source fields."""
+    if isinstance(value,str):return ' '.join(unicodedata.normalize('NFC',value).split())
+    if isinstance(value,dict):return {key:normalized_content(item) for key,item in value.items()}
+    if isinstance(value,list):return [normalized_content(item) for item in value]
+    return value
 
 
 def reviewed(source):
@@ -35,13 +44,15 @@ def plan_matched_runs(before,after,*,limit=200):
     items={side:{row['id']:row for row in source['items']} for side,source in (('before',before),('after',after))}
     votes_before,unsafe_before=reviewed(before);votes_after,unsafe_after=reviewed(after)
     unsafe=unsafe_before|unsafe_after
-    unsafe_texts={fingerprint(row['values']) for rows in items.values() for identifier,row in rows.items() if identifier in unsafe}
+    if unsafe_before-set(items['before']) or unsafe_after-set(items['after']):
+        raise ValueError('previously learnable item content is unavailable; cannot verify duplicate exclusion')
+    unsafe_texts={fingerprint(normalized_content(row['values'])) for rows in items.values() for identifier,row in rows.items() if identifier in unsafe}
     eligible=[];excluded=0
     for identifier,item in items['after'].items():
         original=items['before'].get(identifier)
         same=original and (item['revision'],item['fingerprint'],item['values'])==(original['revision'],original['fingerprint'],original['values'])
         labels={};order=0
-        if same and identifier not in unsafe and fingerprint(item['values']) not in unsafe_texts:
+        if same and identifier not in unsafe and fingerprint(normalized_content(item['values'])) not in unsafe_texts:
             for cid in common:
                 a=votes_before.get((identifier,cid));b=votes_after.get((identifier,cid))
                 if not a or not b or a[0]!=b[0] or a[1] not in PROTECTED_ASSIGNMENTS or b[1] not in PROTECTED_ASSIGNMENTS:break
@@ -67,6 +78,7 @@ def plan_matched_runs(before,after,*,limit=200):
                     'source_event_cursor':max((row['sequence'] for row in source['events']),default=0)}
                for side,source in (('before',before),('after',after))}
     plan={'scope':'matched protected items; joint requests retain all endpoint classifiers; no fitting or promotion',
+          'content_exclusion_policy':'unicode-nfc-and-whitespace-normalized-structured-values-v1',
           'endpoints':endpoints,'classifier_ids':common,'sampling_classifier_id':anchor,'limit':limit,
           'item_ids':[row[1] for row in selected],
           'items':[{'id':row[1],'revision':items['after'][row[1]]['revision'],'fingerprint':items['after'][row[1]]['fingerprint'],'labels':row[2]} for row in selected],
