@@ -1,10 +1,17 @@
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import {afterEach,expect,test,vi} from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import {MatchedComparison,MatchedComparisonResult} from './MatchedComparison'
 import {graphql} from './graphql'
 vi.mock('./graphql',()=>({graphql:vi.fn()}))
 afterEach(()=>{cleanup();vi.clearAllMocks()})
+test('endpoint support follows that endpoint pinned class ordering',()=>{
+  const metrics={class_config:[{label:'include',role:'positive'},{label:'exclude',role:'negative'}],per_class:{exclude:{count:2},include:{count:1}}}
+  render(<MatchedComparisonResult status="completed" result={{sample_count:3,classifiers:{topic:{before:metrics,after:metrics}}}} />)
+  const support=within(screen.getByRole('region',{name:'before evaluation support'}))
+  fireEvent.click(support.getByText('F1, sample support and uncertainty'))
+  expect(support.getAllByRole('rowheader').map(row=>row.textContent)).toEqual(['include','exclude'])
+})
 const runs=[{id:'before',name:'Before'},{id:'after',name:'After'}]
 test('comparison preflight makes no paid mutation and requires explicit approval',async()=>{
   vi.mocked(graphql).mockImplementation(async query=>query.includes('createMatchedComparison')?{createMatchedComparison:{id:'comparison'}}:{matchedRunPreflight:{fingerprint:'frozen',sample_count:10,request_upper_bound:20,class_counts:{topic:{yes:5,no:5}},excluded_count:2}})

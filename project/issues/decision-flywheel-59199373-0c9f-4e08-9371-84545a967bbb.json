@@ -168,10 +168,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "8bf19c77-9dda-45ba-b1ba-0d0f33059dc5",
+      "author": "home",
+      "text": "Browser acceptance completed for F1/support/uncertainty through a fresh API-owned matched-evaluate job, GraphQLTraceSink, SQLite and production UI on isolated fake-model fixture. Found serialized metric dictionaries were alphabetically ordering class support; fixed UI to use endpoint pinned class_config order (positive first), with component and report integration specs. Current valid report has no console errors; screenshot var/web/f1-support-browser-proof.png. Initial incorrectly configured test fixture was replaced, not production data. Build passed; UI regression rerunning. Real labels and paid calls unchanged. Verification and React skills guided actual boundary check and derived-only ordering. Tablet/dark, browser resume, full interactive/replay and objective comparison acceptance remain open.",
+      "created_at": "2026-10-07T18:18:35.516986Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T18:05:45.626694Z",
+  "updated_at": "2026-10-07T18:18:35.517077Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

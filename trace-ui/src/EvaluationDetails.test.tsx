@@ -18,3 +18,8 @@ test('older reports do not invent missing uncertainty',()=>{
   fireEvent.click(screen.getByText('F1, sample support and uncertainty'))
   expect(screen.getByText('Accuracy interval: not recorded')).toBeVisible()
 })
+test('keeps configured class order even when stored metric keys were sorted',()=>{
+  render(<EvaluationDetails metrics={{per_class:{exclude:{count:2},include:{count:1}}}} classes={[{label:'include'},{label:'exclude'}]} />)
+  fireEvent.click(screen.getByText('F1, sample support and uncertainty'))
+  expect(screen.getAllByRole('rowheader').map(row=>row.textContent)).toEqual(['include','exclude'])
+})
