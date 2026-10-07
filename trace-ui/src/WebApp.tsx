@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
-import {Activity, History, Plus, RefreshCw, Undo2} from 'lucide-react'
+import {Dialog} from 'radix-ui'
+import {Activity, History, Menu, Plus, RefreshCw, Undo2, X} from 'lucide-react'
 import {Button} from '@/components/ui/button'
 import {Card,CardContent,CardHeader,CardTitle} from '@/components/ui/card'
 import {Input} from '@/components/ui/input'
@@ -28,6 +29,25 @@ const RUNS='{runs{id name mode status createdAt config counts} capabilities{live
 const DETAILS='query($id:ID!){run(runId:$id){id name mode status createdAt config counts} currentItem(runId:$id) jobs(runId:$id){id kind status result}}'
 const locationState=()=>new URLSearchParams(window.location.hash.slice(1))
 const routeSection=()=>{const value=locationState().get('section');return value==='classifiers'||value==='scorecards'?'scorecards':value==='items'?'items':'optimizations'}
+const navigationItems=[
+  {id:'scorecards',label:'Scorecards',description:'Define the related classifiers that share one decision-model request.'},
+  {id:'items',label:'Item lists',description:'Browse source items, decisions, and human labels across scorecards.'},
+  {id:'optimizations',label:'Optimizations',description:'Run, compare, and inspect live or replayed flywheel experiments.'},
+] as const
+
+function MobileNavigation({section,onNavigate}:{section:typeof navigationItems[number]['id'];onNavigate:(section:typeof navigationItems[number]['id'])=>void}){
+  const [open,setOpen]=useState(false)
+  return <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Trigger asChild><Button variant="ghost" size="icon" className="sm:hidden" aria-label="Open main menu"><Menu/></Button></Dialog.Trigger>
+    <Dialog.Portal>
+      <Dialog.Overlay className="fixed inset-0 z-50 bg-background"/>
+      <Dialog.Content className="fixed inset-0 z-50 flex flex-col bg-background p-5" aria-describedby="mobile-navigation-description">
+        <div className="flex items-start justify-between gap-4"><div><Dialog.Title className="font-heading text-2xl font-semibold">Navigate Cyclotron</Dialog.Title><Dialog.Description id="mobile-navigation-description" className="mt-1 text-sm leading-relaxed text-muted-foreground">Choose a workspace. Each view keeps its own context and returns here without restarting a session.</Dialog.Description></div><Dialog.Close asChild><Button variant="ghost" size="icon" aria-label="Close main menu"><X/></Button></Dialog.Close></div>
+        <nav aria-label="Mobile navigation" className="mt-8 grid gap-3" >{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'outline'} className="h-auto min-h-24 items-start justify-start whitespace-normal px-5 py-4 text-left" onClick={()=>{onNavigate(item.id);setOpen(false)}}><span><span className="block text-base font-semibold">{item.label}</span><span className="mt-1 block text-sm font-normal leading-relaxed text-muted-foreground">{item.description}</span></span></Button>)}</nav>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>
+}
 
 function LabelCard(props:{current:CurrentItem;busy:boolean;onSubmit:(kind:string,payload:Record<string,unknown>)=>void;classifiers?:MetricClassifier[];events?:TraceEvent[];footer?:ReactNode}){
   if('classifiers' in props.current.prediction){
@@ -151,7 +171,7 @@ export function WebApp(){
   }
   const recent=events.filter(event=>['optimizer-request','optimizer-response','decision-request','decision-response','fit-completed','candidate-evaluated','optimization-stage-completed','trigger-check','optimization-stage-started','optimization-stage-failed','human-feedback','cycle-metrics'].includes(String(event.payload.kind))).filter(event=>activityFilter==='all'||activityFilter==='optimizer'&&String(event.payload.kind).startsWith('optimizer-')||activityFilter==='decision'&&String(event.payload.kind).startsWith('decision-')).slice(-40).reverse()
   return <div data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
-<header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3"><CyclotronBrand /><nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{(['scorecards','items','optimizations'] as const).map(value=><Button key={value} variant={section===value?'secondary':'ghost'} onClick={()=>setSection(value)}>{value==='items'?'Item lists':value==='scorecards'?'Scorecards':'Optimizations'}</Button>)}</nav><NativeSelect aria-label="Navigation" className="sm:hidden" value={section} onChange={e=>setSection(e.target.value as typeof section)}><NativeSelectOption value="scorecards">Scorecards</NativeSelectOption><NativeSelectOption value="items">Item lists</NativeSelectOption><NativeSelectOption value="optimizations">Optimizations</NativeSelectOption></NativeSelect></header>
+<header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3"><CyclotronBrand /><nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
     {section!=='optimizations'?(section==='scorecards'?<ScorecardCatalog/>:<Catalog section="items" />):
     <div className="flex min-h-0 flex-1">
       <AppDrawer title="Run history" open={historyOpen} onOpenChange={setHistoryOpen}><div className="flex items-center justify-between"><p className="flex items-center gap-2 text-sm font-semibold"><History className="size-4" />Run history</p><Button variant="ghost" size="icon" aria-label="Refresh run history" onClick={()=>refresh().catch(e=>setError(e.message))}><RefreshCw /></Button></div><Button variant="outline" disabled={!capabilities.liveEnabled} onClick={()=>{setCreating(!creating);setHistoryOpen(false)}}><Plus />New run</Button>

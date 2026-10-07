@@ -108,6 +108,26 @@ test('scorecard navigation has its own route and responds to browser history cha
   expect(await screen.findByRole('heading',{name:live.name})).toBeVisible()
 })
 
+test('the narrow navigation uses a descriptive full-viewport menu instead of a select menu',async()=>{
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('{classifiers itemLists}'))return {classifiers:[],itemLists:[]}
+    if(query.includes('capabilities'))return {runs:[live,replay],capabilities:{liveEnabled:true,itemCount:250}}
+    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('events('))return {events:[]}
+    return {run:variables?.id==='live'?live:replay,currentItem:null,jobs:[]}
+  })
+  render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Open main menu'}))
+  const menu=screen.getByRole('dialog',{name:'Navigate Cyclotron'})
+  expect(within(menu).getByText('Define the related classifiers that share one decision-model request.')).toBeVisible()
+  expect(within(menu).getByText('Browse source items, decisions, and human labels across scorecards.')).toBeVisible()
+  expect(within(menu).getByText('Run, compare, and inspect live or replayed flywheel experiments.')).toBeVisible()
+  expect(screen.queryByRole('combobox',{name:'Navigation'})).toBeNull()
+  fireEvent.click(within(menu).getByRole('button',{name:/Item lists/}))
+  await waitFor(()=>expect(window.location.hash).toContain('section=items'))
+  expect(screen.queryByRole('dialog',{name:'Navigate Cyclotron'})).toBeNull()
+})
+
 test('the timeline shows loading feedback instead of a blank panel until it has loaded',()=>{
   render(<RunTimeline runId="replay" revision={0} />)
   expect(screen.getByText('Loading timeline…')).toBeVisible()
