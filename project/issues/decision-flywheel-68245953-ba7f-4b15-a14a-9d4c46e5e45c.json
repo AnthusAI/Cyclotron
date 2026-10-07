@@ -172,10 +172,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "e87a528f-5581-4317-9f66-0e805862a442",
+      "author": "home",
+      "text": "Deployed be99630 and the prior response-dependency/cache/status fixes on the same trusted-LAN workspace URL, port 8782. Revalidated zero pending/running jobs before graceful replacement of PID 8868; replacement PID 36031 started successfully, session 30242. Verification skill guided browser/API/SQLite checks: existing Anthus v2 missing-label session reconnects, retains item arxiv:2501.01350 and presentation 9b75d218-c7ab-4bd7-ad36-680de2f8aedd, with its original three recorded labels and Cyberian Gallery awaiting human input. Browser errors empty. Stored counts unchanged across restart and view: item_feedback 255, retractions 0, replay_feedback 765, web_events 39405; run remains 1 cycle, 4 predictions, 0 labels, 0 optimizations. No provider jobs or labels were created by verification. Frontend bundles from the other session were preserved, not rebuilt or committed. Broader provider and versioned-app acceptance remains open.",
+      "created_at": "2026-10-07T21:18:38.964125Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T21:16:57.308812Z",
+  "updated_at": "2026-10-07T21:18:38.964207Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
