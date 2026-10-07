@@ -60,10 +60,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c2db3f52-ff41-4547-b611-4c10be4e1c1a",
+      "author": "home",
+      "text": "Rebased the core/application-boundary work on current develop and integrated it. WebWorker now accepts an injected application runtime for normalized configuration, session lifecycle, command execution, durable item updates, feedback preparation, and failure aborts; legacy scorecard handling remains unchanged during migration. Added executable BDD contracts for headless core, application runtime delegation, complete observable feedback loop, restart/correction invalidation, and browser bundle behavior. Verified 665 Python specs (split only for command timeout), 84 UI specs, and production build. Pushed develop at 171aa1d.",
+      "created_at": "2026-10-07T18:11:41.097991Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.857422Z",
-  "updated_at": "2026-10-07T17:46:48.702470Z",
+  "updated_at": "2026-10-07T18:11:41.098099Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
