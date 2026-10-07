@@ -1,0 +1,82 @@
+{
+  "id": "decision-flywheel-814a43a6-542c-449a-96a6-94f7c35304e6",
+  "title": "Replace Classifiers navigation with Scorecards and nested classifier editors",
+  "description": "Top-level navigation: Scorecards, Item lists, Optimizations. Scorecards list shows names, active revisions and classifier membership; scorecard detail lists ordered classifiers and opens their configuration/history. Support creating a scorecard, adding an existing classifier or a new classifier, binary/multiclass classes with configurable order and positive/negative roles, editing as a new revision and explicit version activation. Show impact of classifier edits on affected scorecard versions and joint requests. Keep existing session/run selection in deep links; do not accidentally start paid runs on navigation. Save/Cancel must remain reachable in a bounded editor footer with scrollable form body at narrow/iPad viewports. Acceptance: browser and component tests navigate, edit Knowledge Bases, save a new version, inspect old versions, and retain in-progress label drafts when opening/closing navigation.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-11361b59-1ce5-4865-a56a-c947021d548a",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "65ceed03-4d77-4496-a401-5ad1b6f055a7",
+      "author": "home",
+      "text": "Scorecards top navigation and nested pinned classifier configuration implemented; browser verified Anthus v2 contains all four classifiers and opens their correct revisions. UI suite 36 passing. Still open: scorecard creation/membership/reordering, revision comparison/activation UI, complete deep-link behavior and responsive editor acceptance. Current live session preserved; no human votes fabricated or paid model runs initiated.",
+      "created_at": "2026-10-07T15:40:49.931159Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "758227e9-3c40-4fe1-a200-9482eb719614",
+      "author": "home",
+      "text": "Added scorecard creation, ordered membership add/remove/reorder, immutable rename/settings preservation, historical definition inspection and explicit activation UI. Existing classifier editor remains nested under the selected pinned scorecard. New live sessions can select and pin scorecard definition revisions. Further acceptance: create-new-classifier within membership workflow, deep-link/back navigation and unsaved-draft recovery across run switching.",
+      "created_at": "2026-10-07T15:49:01.122352Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "e5d7d134-43ac-41f4-841a-37a5f2e472bd",
+      "author": "home",
+      "text": "Implemented new-classifier creation inside a scorecard draft with ordered binary/multiclass labels and optional positive role. Returned classifier revision is pinned into membership; saving the scorecard publishes an immutable revision without starting paid work. Added component regression for this workflow. Navigation now uses section=scorecards and accepts legacy section=classifiers links. Remaining acceptance: historical classifier history UI and responsive save checks, full scorecard deep links.",
+      "created_at": "2026-10-07T16:13:37.208307Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "0660bcd3-bb4a-4ace-a80a-8cc8da7a628c",
+      "author": "home",
+      "text": "Added classifierVersions GraphQL query and read-only classifier history drawer. Old names/questions/ordered classes remain immutable; Edit from this revision opens a draft without mutation. Component tests cover inspection and copying, backend tests cover ordered immutable history. Real browser inspected Knowledge Bases revisions 4 and 1 without saving or paid calls. Full verification: 620 Python tests, 53 UI tests, production builds pass. Remaining acceptance includes narrow-screen editing/save and explicit affected-scorecard impact presentation.",
+      "created_at": "2026-10-07T16:31:04.206315Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "9eae182e-69e9-4270-ae5b-16aab306ea9e",
+      "author": "home",
+      "text": "Historical scorecard inspection now resolves exact pinned classifier revisions through scorecardClassifiers(revision), showing original names/questions/classes with edit controls removed. Definition URLs preserve scorecard_revision across reload. Classifier edit drafts list all affected active scorecard definitions and shared-request implications. Browser verified Anthus v1 is read-only, switching to v2 restores editing, Knowledge Bases impact lists Anthus v2; tablet 1024x768 Save changes is on screen and Cancel leaves data unchanged. Remaining: explicit revision comparison and broader narrow/keyboard/draft acceptance.",
+      "created_at": "2026-10-07T16:35:43.733108Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "947276f4-c6b6-47ba-b41d-ee3f6c6e1b2c",
+      "author": "home",
+      "text": "Implemented shared run-default controls in the immutable scorecard editor: model identifiers, seed, rubric transition cadence, other-stage label cadence, primary/secondary objectives, secondary regression guard and score floor. Unknown extension settings are preserved. API rejects invalid executable settings before publishing. Run creation defaults to inherited policy rather than silently overriding it. Fake integration proves per-classifier positive labels and frozen existing-run settings; browser verifies Anthus editor Save scorecard remains visible at 1024x768. Cancel used, no live settings or labels changed. Remaining issue acceptance: wider keyboard/dark/draft checks and provider-selection UX.",
+      "created_at": "2026-10-07T17:13:00.966424Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:53:59.760123Z",
+  "updated_at": "2026-10-07T17:13:00.966519Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

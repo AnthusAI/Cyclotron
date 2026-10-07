@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-d5931a9a-c9ef-4c38-8bb3-2fdd7666bba3",
+  "title": "Attribute example usefulness through controlled matched swaps",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "946eecf4-9765-4a0b-abf8-4f438b2c1b34",
+      "author": "home",
+      "text": "Implemented native bounded one-example, same-class swaps in the connected examples stage, with fixed rubric/questions/count/order/head during measurement. Matched development scoring records raw decision and final-head metrics, individual question probability shifts, full added/removed example content and explanations. Defaults: 8 swaps and <=200 development items per configuration, cache-aware request preflight, durable resume, retained ideas remeasured with new labels. Prior eligible summaries reach optimizer with development exposure explicitly recorded; changed/repartitioned evidence excluded. Protected audit untouched. Existing initial seeding and downstream fitter/promotion safeguards remain. No live model calls were made for this implementation.",
+      "created_at": "2026-10-06T19:01:55.975728Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T18:57:41.047122Z",
+  "updated_at": "2026-10-06T19:01:56.336238Z",
+  "closed_at": "2026-10-06T19:01:56.336126Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

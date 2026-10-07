@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0e030a16-775a-47b4-b7a6-1895d26f8028",
+  "issue_id": "decision-flywheel-a4a62a12-1c56-44b9-98eb-850bff62f0cd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T18:23:35.009Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Scale timeline symbols with visible event slot width",
+    "description": "Shrink event icons and content padding when zoomed out; restore close-up size when zoomed in. Recompute on range and viewport size changes; preserve metric lane geometry and item selection. Verify generated bundle and browser measurements at overview and close-up scales.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

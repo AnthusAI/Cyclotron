@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "5ca8e9ff-b8da-4fc7-82d6-24f3e2d5b1ae",
+  "issue_id": "decision-flywheel-8f25c192-5a60-52d7-bfed-12adc0238a30",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-05T21:56:53.218Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Scope\n\nShip a small offline walkthrough and explicit live interfaces around the native, provider-neutral Decision Flywheel optimizer. Do not add DSPy dependencies, bridges, or optimization paths.\n\n## Definition of done\n\nDocumented local workflow, reproducible fixtures, release-ready package, and evidence links for native optimization; no optional DSPy integration is in scope.",
+        "to": "Native provider-neutral APIs, documented offline workflow and client integration; no DSPy. Completion includes usable prediction/feedback/optimization APIs, inspectable actual prompts/replies/tool calls and active classifier versions, verified via decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88. Do not equate an optimize-save-decide component walkthrough with a working feedback loop."
+      }
+    }
+  }
+}

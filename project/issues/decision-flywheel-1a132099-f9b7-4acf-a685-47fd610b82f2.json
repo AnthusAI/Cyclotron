@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-1a132099-f9b7-4acf-a685-47fd610b82f2",
+  "title": "Configure primary and secondary selection objectives across native flywheel stages",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3ab5b9d5-d361-46a4-b5e5-098ec76def9c",
+      "author": "home",
+      "text": "Implemented provider-neutral SelectionPolicy: primary/secondary accuracy, precision, recall, F1 and probability metrics; explicit positive class or macro aggregation; secondary no-regression default and optional floor. Wired runtime, staged rubric/refinement, example swaps and ML selection including raw-decision candidate. Persisted restart policy and policy-aware selection caches; unchanged request cache survives objective changes. Trace inspector exposes objective scores/reasons. Reviewer/replay CLI and README documented. 552 offline tests pass; no live model requests or changes to prior replay results.",
+      "created_at": "2026-10-06T20:09:37.293266Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T20:06:18.811387Z",
+  "updated_at": "2026-10-06T20:09:37.706541Z",
+  "closed_at": "2026-10-06T20:09:37.706467Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

@@ -1,0 +1,50 @@
+{
+  "id": "decision-flywheel-af4ab2b5-ca9c-4af6-9277-da0043a0f913",
+  "title": "Compare recall with accuracy guard against F1 using frozen labels and matched partitions after web workspace verification",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e32c59e5-8901-4372-bef3-1b06801905f4",
+      "author": "home",
+      "text": "Inspected actual API-owned data before launching the objective comparison. The legacy three-classifier run fe9e2b07-523a-42c4-af18-2fc0f5543ad0 has 85 fully labeled items; Anthus definition revision 1 matches its classifier revisions. The four-classifier backfill has zero completed items. Fixed a setup defect where saved classifier policies silently overrode an explicit run objective: explicit run policies now apply to effective classifier policies without editing definitions. New specs prove recall/accuracy versus F1 replay configs differ while frozen items, labels, comments, source history, and protection protocol match. Recorded the complete pilot plan in docs/objective-comparison-plan.md before paid collection. Current protected set has 16 items; positive counts across the three classifiers are 1/2/0. Development positive counts are 2/0/1, so two classifiers cannot clear the current coverage floor. Planned run must be labeled diagnostic and cannot establish an all-classifier winner or invent missing recall. No live replay launched yet; original labels and active scorecard unchanged.",
+      "created_at": "2026-10-07T20:26:46.030637Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "d2612c9e-222b-419e-90fe-4b7342fe4936",
+      "author": "home",
+      "text": "Objective setup and frozen endpoint safeguards verified: all 737 Python specs pass. Explicit objective overrides preserve saved definitions; two replay configs keep identical frozen labels/comments/items and differ in effective policies. Frozen head/provider/joint-context mismatch is rejected for both endpoints before either makes calls. The preregistered diagnostic pilot uses Anthus definition 1, fixed arxiv-web-v1 seed and cadences, and ceilings of 1000 decision attempts/100 optimizer calls per replay. Plan remains docs/objective-comparison-plan.md. No pilot has executed yet; coverage limitations remain disclosed.",
+      "created_at": "2026-10-07T20:30:43.592858Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "b381a4ac-fd9b-42b8-8da3-09fd343d6cef",
+      "author": "home",
+      "text": "Live diagnostic comparison is now running through the GraphQL API on the deployed backend. Recall plus accuracy guard run: 25804ab2-b027-4853-bfa2-e1a8e50dbd94. F1 run: 764466bd-dda5-4820-be3d-625e1d22d3fc. Both freeze the same 85 source items, human labels and explanations under Anthus definition revision 1; ceilings remain 1000 decision attempts and 100 optimizer calls per run. Sequential orchestrator uses stable objective-pilot-cycle command IDs and stops on failed/interrupted jobs without automatic paid retry. Verified live progress: first replay completed 30 cycles without reported warnings and queued cycle 33. Original interactive labeling history remains unchanged. Neither replay nor the protected endpoint comparison is complete; no winner claimed.",
+      "created_at": "2026-10-07T20:37:14.801832Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T20:24:23.179077Z",
+  "updated_at": "2026-10-07T20:37:14.801908Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

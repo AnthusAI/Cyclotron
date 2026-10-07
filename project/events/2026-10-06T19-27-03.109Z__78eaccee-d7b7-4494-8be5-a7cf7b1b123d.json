@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "78eaccee-d7b7-4494-8be5-a7cf7b1b123d",
+  "issue_id": "decision-flywheel-f6c7155c-e651-4ac4-851e-fb05d305a2b0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T19:27:03.109Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Keep a fitted compatible ML head active through context optimization and trace its confidence",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

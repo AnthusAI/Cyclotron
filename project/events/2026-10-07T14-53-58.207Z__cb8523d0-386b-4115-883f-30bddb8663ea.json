@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cb8523d0-386b-4115-883f-30bddb8663ea",
+  "issue_id": "decision-flywheel-11361b59-1ce5-4865-a56a-c947021d548a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:53:58.207Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Define immutable scorecard and classifier revisions with safe migration",
+    "description": "Scope: first-class Scorecard and Classifier identities, separately immutable revisions. A scorecard revision pins ordered classifier revision references plus shared request/provider configuration and optimization policies; learned runtime checkpoints are distinct from editable definition revisions. Any classifier change creates a classifier revision and a new affected scorecard revision; never mutate old snapshots. Runs pin scorecard revision; predictions, human feedback and metrics identify classifier definition revision and actual learned configuration fingerprint. Define membership removal, renaming, reorder and multiple scorecard reuse semantics. GraphQL exposes create/read/edit-as-new-revision, revision comparison and explicit active revision selection. SQLite migration must preserve old runs, labels, comments and source provenance, be idempotent and transactional. Acceptance: tests prove edit isolation, joint-request cache invalidation, atomic membership updates, old-run readability and restoration of an old scorecard without overwriting newer history. Audit existing scorecards.py/catalog implementation before extending it; do not equate run numbering with the entire version model.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

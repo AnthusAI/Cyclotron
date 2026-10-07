@@ -1,0 +1,46 @@
+{
+  "id": "decision-flywheel-67d2339e-07ed-4215-8582-0dfb0f30be68",
+  "title": "Validate rubric, example-list and decision-task proposals",
+  "description": "## Behavior and acceptance\nStructured proposals independently support rubric edits, fixed example-list edits, and add/update/remove decision tasks with question wording and answer options. Include rationale and versioned diffs. Current datetime is an allowlisted programmatic dynamic element, not arbitrary generated code. Validate capabilities and complete state/question context budget. Retrieval and input filtering deferred.\nScenario: valid edits change the actual request; malformed edits and attempts to set weights/provenance are rejected without changing the incumbent.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-1dae1dbe-c750-41d3-8512-490741d22e15",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "64704aee-8019-429c-8b21-6a395eda6bd0",
+      "author": "home",
+      "text": "Implementation progress: ClassifierConfig validates independent rubric/example-list/classification-task edits, rejects weights/arbitrary dynamic elements, constructs combined state/questions with target exclusion and explicit timezone-aware current_datetime. Ten offline specs pass. Whole suite: 364 passed. Not yet wired into Jev batch answer collection, feature generation, fitting or reviewer; this is not a working demo claim.",
+      "created_at": "2026-10-05T22:02:47.964422Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    }
+  ],
+  "created_at": "2026-10-05T21:56:01.282413Z",
+  "updated_at": "2026-10-05T22:02:47.964447Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

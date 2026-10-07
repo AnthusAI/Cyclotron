@@ -17,21 +17,32 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "d4e5598a-5feb-4e54-bf20-d902f4191959",
+      "author": "home",
+      "text": "Completion retained for head-fitting component guards only. Reviewer-triggered feature regeneration/refitting and serving through the trained head are tracked in decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88.",
+      "created_at": "2026-10-05T21:56:53.453076Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Board Reconciliation"
+      }
+    }
+  ],
   "created_at": "2026-09-30T18:08:27.958093Z",
-  "updated_at": "2026-09-30T19:54:17.625561Z",
+  "updated_at": "2026-10-05T21:56:53.453094Z",
   "closed_at": "2026-09-30T19:54:17.625459Z",
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {
-    "source": "shared",
-    "project_label": "decision-flywheel"
-  },
   "agent": {
     "platform": "codex",
     "model": "GPT-6",
-    "name": "Flywheel Planning",
-    "settings": {}
+    "name": "Flywheel Planning"
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

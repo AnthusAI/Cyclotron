@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eeb0a279-b210-4afe-aa80-1aaba9006c41",
+  "issue_id": "decision-flywheel-1a132099-f9b7-4acf-a685-47fd610b82f2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T20:06:18.811Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Configure primary and secondary selection objectives across native flywheel stages",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

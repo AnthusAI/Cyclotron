@@ -1,0 +1,152 @@
+{
+  "id": "decision-flywheel-68245953-ba7f-4b15-a14a-9d4c46e5e45c",
+  "title": "Coordinate multiple classifiers in shared decision requests and independent flywheel sessions",
+  "description": "Use catalog classifier revisions and source-neutral item lists for live/replay sessions. Batch compatible classifiers in one decision request with scoped rubric/examples/questions and mapped outputs. Maintain independent heads, feedback and trigger/optimization state. Cache complete shared requests; count usage once. Connect catalog labels/explanations to optimization without future-label leakage. Existing arXiv worker is not completion of this general coordinator.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f8bff1ed-196e-4f02-bf67-7c9d0dbcc66b",
+      "author": "home",
+      "text": "Implemented classifier/item-list revisioned catalog, independent per-classifier item feedback and corrections, GraphQL API and navigation/labeling screens. Imported 250 saved arXiv articles through external chronological idempotent updater; no provider calls. Added native Jev classify_many transport with scoped rubric/examples/questions, mapped outputs and usage counted once. Remaining: general worker/coordinator, connecting catalog labels into learning, complete-request cache, attaching live/replay run configurations and migrating historical label provenance (do not silently reuse across new classifier revisions). No fresh optimization study executed.",
+      "created_at": "2026-10-06T21:41:08.250793Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "f1b9065c-364e-421f-b40d-e2fb312ad06f",
+      "author": "home",
+      "text": "Implemented source-neutral WorkspaceSession using existing DecisionFlywheel per classifier; full-batch durable cache and run-wide request ceiling; shared Jev predictions, independent labels/comments and learning triggers; classifier-filtered timelines and stored item results. Fake GraphQL integration and restart specs pass. Browser verified classifier navigation and interactive setup; real Jev prediction shown in run 67c0390b-05aa-4bce-af2c-687f0bf0c532, request inspector opened, no human votes fabricated. Initial worker command failed before any batch attempt; direct retry prepared successfully and restarted API worker recovered current prediction without another model call. Added safe code-location diagnostics for future failures. Remaining: in-app replay launch, correction/learning rollback, extended multi-classifier learning-round integration verification.",
+      "created_at": "2026-10-06T22:01:35.763633Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "6adfdc1e-10eb-4bed-8dfe-69d8dd2ab2f4",
+      "author": "home",
+      "text": "Planning update: epic flywheele0 now owns scorecard-first navigation, immutable scorecard/classifier revisions, permanent viewport app layouts, history/activity drawers, calibration snapshots and playback, and end-to-end acceptance. Existing implementation is retained as partial groundwork; do not mark this complete from draft code or imported historical traces. No further implementation or live reruns during this planning turn.",
+      "created_at": "2026-10-07T14:54:53.956085Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "133b3713-9ab3-446f-a57e-7dce159d4805",
+      "author": "home",
+      "text": "Integrated ScorecardRuntime into the API worker path. Frozen scorecard runs now open through the runtime seam, dispatch prepare/label/skip/optimization/replay commands there, preserve the shared request cache and independent classifier wheels, and keep existing durable recovery semantics. New fake-client spec proves two classifier outputs come from one shared model request and a worker routes frozen scorecards through that runtime. Focused scorecard/worker/core specs: 32 passed; full UI suite/build: 89 UI tests and production build passed. Pushed in 06163e6. Remaining: finish generalizing run-input/replay construction behind the same runtime contract.",
+      "created_at": "2026-10-07T18:18:18.177920Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "d4e3845d-f88a-4529-b6ba-0bd89e3886a1",
+      "author": "home",
+      "text": "Moved the remaining scorecard setup from WebWorker into ScorecardRuntime: frozen scorecard/item configuration and replay creation now have one application owner along with shared-request command dispatch. The worker only selects the runtime and manages durable jobs. Full offline verification passed: 672 Python specs, including scorecard/replay/worker behavior contracts. Pushed in a572f59.",
+      "created_at": "2026-10-07T18:22:02.535210Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "0545f02b-c5e2-49d4-9660-73edc0d5048a",
+      "author": "home",
+      "text": "Implemented Kev classify/classify_many on the existing System One HTTP contract. One full scorecard request carries scoped rubrics, actual labeled examples and all feature questions; answers/probabilities/usage and exact request/response bindings remain observable. No hidden retry. Fake GraphQL/worker integration proves two classifiers share one physical Kev call and the trace projections share one request fingerprint. Fixed scorecard runtime dropping decisions_provider from inherited settings; new runs pin provider/model, explicit provider overrides cannot inherit another provider model. Default server now dispatches Jev or local Kev explicitly; unknown/Laya scorecard providers reject rather than silently using Jev. Laya standalone adapter remains, full-context Laya scorecard optimization is not claimed complete. React skill guided atomic provider/model editing; browser/API/SQLite verification saved a separate fixture definition revision with Kev and no residual Jev model. No browser errors; narrow Save visible, screenshot var/web/provider-settings-browser-proof.png. 92 UI tests/build pass; full Python regression rerunning. Real workspace idle at 175 completed/2 failed jobs, no labels or paid calls changed; server runtime deployment not yet restarted. Wider acceptance and Laya protocol/evaluation work remain open.",
+      "created_at": "2026-10-07T18:47:33.092253Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "2f16c182-186b-4249-9092-e928801cccb5",
+      "author": "home",
+      "text": "Final regression: 710 Python tests and 92 UI tests pass; production build passes. Pushed provider dispatch implementation as 907f830 on develop. Gracefully stopped the exact verified idle server (no pending/running jobs), confirmed terminal shutdown/PID removal, then restarted the same LAN URL/database/options with current integrated source. Read-only HTTP/GraphQL health checks pass; job counts stay 175 completed/2 failed. User browser tab was not reloaded, production labels/paid calls unchanged. Laya full-context support and remaining acceptance stay open.",
+      "created_at": "2026-10-07T18:50:28.273372Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "c202d872-ea22-4ce5-b407-d9c04eb4e20a",
+      "author": "home",
+      "text": "Fixed a cache isolation gap for custom Jev/Kev endpoints: the configured model identity now includes an opaque SHA-256 endpoint suffix. Default identities remain compatible; trailing slashes are equivalent, and URL details are not disclosed by the identity. Older custom-server cached answers remain stored but are not silently reused under the new identity. New adapter specs reproduced the collision before the fix; a real SharedDecisions SQLite spec with fake Kev transports verifies separate answers across servers and cache reuse when returning to the original server. Focused tests pass; full regression in progress. No production votes, paid calls, or server process changed.",
+      "created_at": "2026-10-07T19:00:57.755793Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "95aa3315-32d0-44ea-ac41-30b0d77d09ec",
+      "author": "home",
+      "text": "Final verification for endpoint-aware cache identities: all 713 Python tests pass, including the cross-server durable joint-cache regression. No network or credentials used in the specs. Documentation records compatibility and safe cache-miss behavior for historical custom-server answers. Remaining scorecard/Laya/acceptance work remains open.",
+      "created_at": "2026-10-07T19:01:23.910982Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "978d9556-0825-4dd5-ab5f-d12184213c22",
+      "author": "home",
+      "text": "Found and reproduced a shared-request cache defect: prepared child answers survived later batch-scope changes, while the engine fingerprint used the most recent global batch identity. Added specs for scope changes, identity stability before/after execution, sibling-rubric changes, and engine-level solo/joint separation. Prepared children now belong only to the latest batch; the engine uses an optional request-specific cache_identity adapter hook. Durable complete-batch cache remains reusable; old ambiguous engine entries are not reused under shared-answer-v2 keys. Five shared-cache specs and 14 focused coordinator/cache specs pass; full regression running. This does not yet prove that numerical heads trained from solo feature requests transfer safely to joint inference: joint-context feature provenance and sibling-change head invalidation/refitting remain a required acceptance gap. Explicit refresh propagation through shared adapter also needs verification.",
+      "created_at": "2026-10-07T19:56:40.754720Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "c4136b59-ef0d-4415-8b39-f44aaa7216b5",
+      "author": "home",
+      "text": "Implemented pinned sibling context for candidate feature collection and inference. Heads now persist a stable feature-context identity (provider, classifier configs, and actual selected example records); context-aware adapters expose this through feature_context_identity. Changed sibling context invalidates only the head, preserving learned rubric/examples/questions. Workspace attempts bounded classifier refits inside the next item cycle, records shared-context-change triggers, and never serves an incompatible head. Round/stage/training caches include context identity. Specs verify candidate requests retain siblings, candidate answers cannot contaminate later baseline requests, stale-head invalidation preserves rubric, restart prediction rejects old context, and a real multi-wheel preparation refits before prediction within the same cycle. Focused specs pass; final full regression in progress. Production replay/objective comparisons and explicit shared refresh propagation remain unverified.",
+      "created_at": "2026-10-07T20:06:42.230256Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "5874bb54-c97e-4c96-9f1d-d430b97dbbd5",
+      "author": "home",
+      "text": "Final numerical/context regression: 731 Python specs pass after the bound-context candidate/baseline isolation fix. Added a clickable head-invalidated marker to the ML optimization lane; all 11 timeline/playback specs pass. The old head is never applied after a context change, even on restart, and its rubric remains intact. Complete final suite is running with the added timeline spec. No production labels or provider calls were changed by verification.",
+      "created_at": "2026-10-07T20:08:47.306272Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "54eed13c-54ac-4294-b2cb-9d036969cc8c",
+      "author": "home",
+      "text": "Completed shared cache option propagation. A refresh now recollects the entire joint provider request rather than returning the cached batch; durable per-request answer generations invalidate sibling outer caches. Previous batch responses/statuses remain in batch_history. Failed refresh cannot silently retry and explicit retry_failed reaches the underlying batch guard; physical request ceilings remain in force. Observer events expose generation, cache_policy, and retry_failed, and child exchanges expose shared_answer_generation. New fake-model specs reproduced the refresh bug, verify both sibling outputs update without extra calls, and verify failure history/explicit retry. Full regression: 734 Python specs and 102 UI tests pass; build and lint complete (existing lint warnings remain). Concurrent flat-interface changes are integrated in develop as 5a6a526. Remaining acceptance includes how explicit refresh of already-fitted training answers invalidates derived fitting/selection caches; do not claim that refresh alone recalculates all learned artifacts.",
+      "created_at": "2026-10-07T20:16:39.925939Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "9844f2fb-49b7-4de4-be34-0db767b167fa",
+      "author": "home",
+      "text": "Added a failing regression spec for a qualified fitted candidate whose sibling classifier changes the joint request before promotion. The old code incorrectly promoted that stale head. Promotion now checks the measured candidate feature-context identity against the current complete joint context and refuses stale measurements before activating anything. Numerical and raw-decision trials both persist their measured context. Focused shared-request, classifier-training and flywheel suite: 37 passing specs. This closes the delayed-promotion gap, not the separate unverified refresh-to-derived-fit-cache dependency audit. Running full regression before integration.",
+      "created_at": "2026-10-07T20:38:30.837705Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T21:39:41.885072Z",
+  "updated_at": "2026-10-07T20:38:30.837791Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

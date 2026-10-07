@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a0497308-04b6-49a8-a863-4640e76f9308",
+  "issue_id": "decision-flywheel-678d1333-e8e8-4e80-a46b-d80222363450",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:11.068Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Verify and document the versioned scorecard app end to end",
+    "description": "Acceptance milestone covering migration, GraphQL contracts, restart/idempotency, interactive and replay cycles, joint requests, immutable labels/explanations, version comparison/revert, reachable classifier Save buttons, drawers and full-viewport tablet UX. All automated tests fake clients/no keys; browser test real deployed local app in desktop and iPad-sized viewports with no fabricated human votes. Verify timeline requests/responses and calibration snapshots through API/storage/UI, and Play/seek/zoom/pan. Preserve existing Anthus v1/v2 data; document what is implemented versus remaining. Publish concise usage/model/versioning/metrics/calibration semantics and operator recovery instructions. No promise calibration or accuracy always improves; compare on matched eligible evidence. User live labeling remains resumable and no paid run begins merely to view UI.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

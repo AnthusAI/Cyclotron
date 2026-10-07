@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "title": "Run and expose the complete reusable flywheel in the arXiv reviewer",
+  "description": "## Milestone\nA human can rate real arXiv items and observe the reusable library improving its classifier. Three independent adjustable request parts: state.rubric, fixed labeled examples, and decision-element classification questions/options. Main and element answers become features for a trained ML head. One decision-model request per item when supported, containing the complete state and questions. Retrieval and input-filter optimization are deferred.\n\n## End-to-end acceptance\nGiven eligible labels and explanations and an incumbent classifier\nWhen a feedback round runs\nThen the optimizer proposes a traceable change, code validates it, the decision model produces all required candidate features, the head is fitted on trusted training labels, the candidate is compared on development data, and a version is promoted or rejected\nAnd the reviewer exposes prompts, replies/tool calls, changes, fitting and measured results\nAnd a restart preserves the active version, labels and event history.\n\nCompletion requires a fake-client cross-module test plus an explicitly authorized bounded live demonstration; passing component tests alone is insufficient. Native provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-05T21:56:01.048538Z",
+  "updated_at": "2026-10-05T21:59:01.850567Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

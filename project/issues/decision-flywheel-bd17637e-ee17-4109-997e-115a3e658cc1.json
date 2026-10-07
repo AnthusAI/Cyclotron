@@ -1,0 +1,55 @@
+{
+  "id": "decision-flywheel-bd17637e-ee17-4109-997e-115a3e658cc1",
+  "title": "Show live optimizer activity through an inspectable app panel",
+  "description": "During labeling show a compact status of trigger checks, queued/running optimization, ML fit, completion or error without covering article/vote controls. Open a right drawer/panel for live activity; drill into exact optimizer request with full trusted-label explanations, response/tool calls, decision request/response with actual example text and labels, before/after rubric/questions/examples/head, candidate evaluation and promotion/rejection reason. Use provider-neutral names, not Luna-specific UI. API cursor subscriptions update without reload; reconnect deduplicates events and recovers current job state. Feedback-save acknowledgement is separate from optimization completion; do not leave UI disabled or silently retry paid calls. Acceptance: fake GraphQL/UI cycle shows each phase and precise exchanges; mobile status/drawer remains readable; submitting labels responds immediately and eventual errors are actionable.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-0049a23a-7dc0-4dcc-980f-9548e6e67be0",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "8123ea6d-c225-41b4-9e10-e8a2bc365533",
+      "author": "home",
+      "text": "Live activity now has a right drawer independent of labeling layout; retains exact event inspector and expands recent activity to triggers, stage starts/failures, labels and metrics. No fullscreen toggle remains. Remaining: structured per-stage status, paired exchanges and full context inspector acceptance, reconnect/recovery fixture verification.",
+      "created_at": "2026-10-07T15:49:02.683222Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "f9198a75-5a6c-4fc7-ac53-447e51899cf6",
+      "author": "home",
+      "text": "Live activity inspector now pairs requests/responses using durable classifier, step and briefing identities. Selecting an optimizer response shows its full prompt/context and tool calls, not another classifiers nearby request. Decision inspection filters target+cycle+step. Exact cached decision requests displayed separately; missing correlation explicitly unavailable. Three regression tests added. Remaining: real browser acceptance on recorded multi-round events and richer before/after summaries.",
+      "created_at": "2026-10-07T16:13:38.606105Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "33cd24d6-fbeb-45db-8980-f76d0b3cd700",
+      "author": "home",
+      "text": "Browser acceptance against the real recorded three-classifier session: selecting latest optimizer response (cycle 81) rendered its paired full system/user request plus response/tool calls. User context contains 47 feedback items and one human_explanations entry. Added activity-type filter to reach optimizer exchanges despite newer decision traffic and drill-down replaces the list with Back to activity rather than burying details below 40 rows. No model calls or human labels during verification. Evidence screenshot var/web/paired-optimizer-exchange.png. Remaining: before/after structured summaries and broader tablet acceptance.",
+      "created_at": "2026-10-07T16:19:52.939750Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:06.171698Z",
+  "updated_at": "2026-10-07T16:19:52.939837Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

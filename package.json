@@ -1,0 +1,33 @@
+{
+  "name": "cyclotron",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Shared Cyclotron web components and brand tokens.",
+  "files": [
+    "trace-ui/src/components/ui",
+    "trace-ui/src/components/lab-metrics.tsx",
+    "trace-ui/src/lib/utils.ts",
+    "trace-ui/src/styles/shared.css",
+    "trace-ui/tailwind-preset.ts"
+  ],
+  "exports": {
+    "./components/ui/*": "./trace-ui/src/components/ui/*.tsx",
+    "./components/lab-metrics": "./trace-ui/src/components/lab-metrics.tsx",
+    "./lib/utils": "./trace-ui/src/lib/utils.ts",
+    "./styles/shared.css": "./trace-ui/src/styles/shared.css",
+    "./tailwind-preset": "./trace-ui/tailwind-preset.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/oxanium": "^5.3.0",
+    "@fontsource-variable/roboto": "^5.3.0",
+    "@fontsource/blinker": "^5.3.0",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.4.0",
+    "lucide-react": "^1.52.0",
+    "radix-ui": "^1.7.0"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "react-dom": ">=19"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "id": "decision-flywheel-e3dc848a-8a87-4c91-b05d-63836444c814",
+  "title": "Regenerate features, fit the head and evaluate candidate promotion",
+  "description": "## Behavior and acceptance\nRun the main decision plus element tasks through the adapter; map real answer probabilities to named numerical features. On task changes regenerate missing/stale training and development features with complete fingerprints. Fit only trusted full-coverage labels with recorded propensity weighting; calibrate out of fold. Compare incumbent/candidate on the same development records with a preregistered rule, retain or promote a complete versioned bundle, and reload predictions identically. Never fit or select on audit/scoreboard.\nScenario: a changed task triggers feature regeneration and refitting; failed/incomplete candidate leaves incumbent active; optimizer cannot supply weights.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-67d2339e-07ed-4215-8582-0dfb0f30be68",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "9286c99d-7050-4b96-acc9-bc3c75cf4add",
+      "author": "home",
+      "text": "Core integration now implemented in flywheel.py: validated structural proposals -> full probability features -> existing trusted propensity-weighted fit_learned_head with OOF calibration -> same-development Brier comparison -> durable promotion/rejection. SQLite persists active config/head, private events, complete-answer caches, and completed/pending round guards. Fake-client specs cover promotion, restored serving, corrected-label invalidation, protected splits and missing propensity refusal. This is offline evidence, not live demo completion. Reviewer client/CLI wiring and bounded live verification remain.",
+      "created_at": "2026-10-05T22:14:14.835748Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    },
+    {
+      "id": "24aafc82-6c67-47ee-91df-804bcb736bdb",
+      "author": "home",
+      "text": "Implemented label-independent balanced evaluation: per-class recall/count/Brier and descriptive Wilson recall intervals; natural and equal-class summaries on identical fixed dev records; promotion defaults to balanced Brier. Missing/under-minimum class coverage waits before paid optimizer calls (reviewer floor two dev examples per class). Optional equal-class training combines inverse review propensities with equal total class influence; recomputed independently per OOF fit, natural OOF calibration weights retained. Policies included in round cache keys and training provenance. CLI and make expose separate evaluation/training policies. Synthetic multi-class/imbalance/missing-class/OOF/UI/cache specs cover the new behavior; no new live calls or rating mutations.",
+      "created_at": "2026-10-05T23:17:55.960410Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    },
+    {
+      "id": "d7c00614-bd3e-40f1-90f0-b1b77a2f8384",
+      "author": "home",
+      "text": "Implementing native isolated-control scheduler after user identified optional/bundled feature discovery as misalignment. Three explicit discovery calls, one each for rubric/example_ids/tasks; strict single-control schema. Every candidate is fit/tested against the same frozen incumbent and identical balanced development items; only best qualifying candidate promoted afterward. Persistent idea/cycle tables retain failures, include historical bundled ideas without falsely labeling their old outcomes as isolated tests, avoid unchanged-feedback discovery, and reserve periodic retry priority for overdue ideas. Reviewer delegates to this core scheduling path and shows control-level events. Bounded frozen-data live experiment preflight:227-request upper bound,3 optimizer calls, equal-class head fitting fixed across all three comparisons; private fresh runtime, live labels untouched.",
+      "created_at": "2026-10-05T23:54:12.363922Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    },
+    {
+      "id": "69ecdbf1-f688-4bf4-9e8d-6b2c58a8c6fb",
+      "author": "home",
+      "text": "Completed real isolated-control experiment on frozen 87-vote snapshot. Three separate GPT-6 Luna discoveries and ML fits share one empty incumbent. Actual usage: 219 Jev calls, 3 optimizer calls. Development Brier: baseline 0.5795; rubric 0.9327; examples 0.3920; supporting questions 0.9169. Examples-only promoted inside separate experiment runtime. Independent balanced audit improved 2/4 to 4/4; sample too small for a general accuracy claim. All ideas retained. Scheduler periodically revisits older ideas with changed feedback, preserves completed controls across interrupted restarts, and never repeats unchanged completed evidence. Offline suite: 417 passed. Combination trials remain deferred. Reviewer requires restart to use updated scheduler; no live database or active live classifier was replaced.",
+      "created_at": "2026-10-06T00:01:11.424574Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    }
+  ],
+  "created_at": "2026-10-05T21:56:01.403113Z",
+  "updated_at": "2026-10-06T00:01:11.424601Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

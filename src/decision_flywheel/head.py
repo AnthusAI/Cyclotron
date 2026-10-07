@@ -136,6 +136,7 @@ class HeadProvenance:
     policy_fingerprint: str
     context_artifact_fingerprint: str
     source_model_provenance: str
+    training_class_weighting: str = "natural"
 
 
 @dataclass(frozen=True)
@@ -185,7 +186,7 @@ class LearnedHead:
 def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_features: Sequence[str],
                      development_ids: Sequence[str], scoreboard_ids: Sequence[str], scorecard_fingerprint: str,
                      policy_fingerprint: str, context_artifact_fingerprint: str, source_model_provenance: str,
-                     folds: int = 3) -> LearnedHead:
+                     folds: int = 3, training_class_weighting: str = "natural") -> LearnedHead:
     """Fit numbers on trusted train rows; dev and scoreboard remain ID-only firewalls."""
     names = tuple(declared_features)
     if not names or len(set(names)) != len(names) or any(not isinstance(name, str) or not name for name in names):
@@ -207,13 +208,16 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
     if len(set(labels)) != len(task.labels) or any(labels.count(label) < 2 for label in task.labels):
         raise ValueError("each task label needs at least two training rows for out-of-fold coverage")
     normalizers, matrix = _normalise_matrix(raw_matrix, names)
-    weights = _inverse_propensity_weights(propensities)
-    oof = _out_of_fold(task.labels, names, training_ids, raw_matrix, labels, propensities, weights, folds)
+    weights = _training_weights(propensities, labels, training_class_weighting)
+    # Calibration represents the review-selection-corrected natural label
+    # distribution, not the artificially equalized training distribution.
+    oof = _out_of_fold(task.labels, names, training_ids, raw_matrix, labels, propensities,
+                       _inverse_propensity_weights(propensities), folds, training_class_weighting)
     calibration = calibrate(oof)
     fitted = _fit(task.labels, names, matrix, labels, weights)
     provenance = HeadProvenance(training_ids, tuple(development_ids), tuple(scoreboard_ids), tuple(weights),
                                 scorecard_fingerprint, policy_fingerprint, context_artifact_fingerprint,
-                                source_model_provenance)
+                                source_model_provenance, training_class_weighting)
     # Include the complete text-free provenance, not merely the resulting
     # coefficients. Different task, selection, context, or source-model
     # contracts can happen to yield identical numerical parameters.
@@ -231,6 +235,7 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
         "training_ids": training_ids,
         "training_labels": tuple(labels),
         "training_propensities": tuple(propensities),
+        "training_class_weighting": training_class_weighting,
         "training_values": raw_matrix,
         "weights": fitted,
     })
@@ -308,6 +313,19 @@ def _inverse_propensity_weights(propensities: Sequence[float]) -> list[float]:
     return result
 
 
+def _training_weights(propensities, labels, weighting):
+    if weighting not in ("natural", "equal_class"):
+        raise ValueError("unknown training class weighting")
+    weights = _inverse_propensity_weights(propensities)
+    if len(weights) != len(labels):
+        raise ValueError("training labels and propensities must have equal lengths")
+    if weighting == "natural":
+        return weights
+    totals = {label: math.fsum(w for w, actual in zip(weights, labels) if actual == label)
+              for label in set(labels)}
+    return [w * len(weights) / (len(totals) * totals[label]) for w, label in zip(weights, labels)]
+
+
 def _fit(classes: Sequence[str], names: tuple[str, ...], matrix, labels, weights, *, epochs: int = 400,
          learning_rate: float = 0.15) -> dict[str, dict[str, float]]:
     parameters = {label: {"intercept": 0.0, **{name: 0.0 for name in names}} for label in classes}
@@ -328,7 +346,7 @@ def _fit(classes: Sequence[str], names: tuple[str, ...], matrix, labels, weights
 
 
 def _out_of_fold(classes, names, item_ids, matrix, labels, propensities, calibration_weights,
-                 folds: int) -> OutOfFoldPredictions:
+                 folds: int, training_class_weighting: str = "natural") -> OutOfFoldPredictions:
     fold_by_index: dict[int, int] = {}
     for label in classes:
         indices = [index for index, actual in enumerate(labels) if actual == label]
@@ -351,7 +369,8 @@ def _out_of_fold(classes, names, item_ids, matrix, labels, propensities, calibra
         # Weight each fitting partition from its own propensities. A held-out
         # item's selection probability must not affect the model scoring it.
         fitted = _fit(classes, names, train_matrix, list(training_labels),
-                      _inverse_propensity_weights([propensities[index] for index in train]))
+                      _training_weights([propensities[index] for index in train], training_labels,
+                                        training_class_weighting))
         for index, held_row in zip(held, held_matrix):
             outputs[index] = tuple(fitted[label]["intercept"] + sum(fitted[label][name] * held_row[name]
                                                                        for name in names) for label in classes)

@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .context import FixedExampleList, PrototypeBalanced, RandomBalanced, input_hash
+from .events import EventSink
 from .models import DecisionModel, DecisionTask, Item, LabeledItem
 from .optimizer import Objective, OptimizationResult, TrialSpec, search_context_policies
 
@@ -169,6 +170,7 @@ async def improve_example_list(
     protected_text_hashes: Sequence[str] = (),
     display_order: str = "canonical",
     presentation_label_order: Sequence[str] | None = None,
+    event_sink: EventSink | None = None,
 ) -> ExampleListImprovement:
     """Challenge the incumbent list once; return the list to serve next."""
     protected = set(protected_ids)
@@ -188,6 +190,7 @@ async def improve_example_list(
         model_fingerprint=model_fingerprint, protected_ids=protected_ids,
         protected_text_hashes=protected_text_hashes, display_order=display_order,
         presentation_label_order=presentation_label_order,
+        event_sink=event_sink,
     )
     lists = dict(plan.trials)
     results = {trial.trial_name: trial for trial in optimization.trials}

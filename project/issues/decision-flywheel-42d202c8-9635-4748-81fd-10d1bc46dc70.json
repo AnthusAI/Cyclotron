@@ -1,0 +1,59 @@
+{
+  "id": "decision-flywheel-42d202c8-9635-4748-81fd-10d1bc46dc70",
+  "title": "Visualize calibration evolution in labeling and timeline playback",
+  "description": "Each classifier card exposes a space-efficient confidence reliability graph alongside Recall, Precision, Accuracy (always that order). Show predicted confidence on x-axis, observed correctness on y-axis, perfect diagonal, bin support and calibration error with uncertainty caveats; distinguish calibrated head from raw decision passthrough. Timeline current position/Next/Previous/Play selects the latest recorded per-classifier snapshot at or before that point, never future snapshots. Curve updates visually as labels and optimizations progress; allow inspection of snapshot/window/head provenance and matched before/after calibration where available. Older history lacking snapshots says unavailable, no synthetic backfill presented as recorded evidence. Use light/dark system styling and accessible graph summary/tooltips. Acceptance: fixture playback crosses multiple cycles and proves curves change at correct events, reverse seeking restores prior curve, classifier filter works and no model calls occur during playback; iPad graph does not steal labeling space.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-34c14344-569a-4758-8390-c6460c8cac3f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-0049a23a-7dc0-4dcc-980f-9548e6e67be0",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "7d4aa0da-e43a-4db7-936c-eaaa8aa85ea2",
+      "author": "home",
+      "text": "Playback curve listens to current position snapshots at or before selected event; frontend spec proves forward/back seeking clears future curves. Live cards show source counts, Brier/log loss, matched calibration comparison and optional provenance. Remaining: rendered multiple-cycle browser verification and classifier-filter snapshot scope tests.",
+      "created_at": "2026-10-07T15:57:50.222461Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "0eac5638-b1e4-46a6-979c-f88ded351324",
+      "author": "home",
+      "text": "Added matched raw decision-model versus final-classifier recall, precision, accuracy and overlaid calibration in labeling cards and playback. Cycle snapshots pin class roles; playback replaces snapshots on reverse seek and reports unavailable older history. Offline UI regression covers clearing future comparison on reverse seek. Remaining: deployed multicycle browser acceptance, classifier filtering, and tablet graph layout.",
+      "created_at": "2026-10-07T17:03:07.582510Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "28dd9265-868a-4d90-9daf-07a3bb72ac2b",
+      "author": "home",
+      "text": "Added reproducible seed_calibration_playback.py with a separate empty-workspace guard, three real API/worker cycles, two independent classifiers and fake synchronous Jev transport. Two no-network specs verify shared call count, immutable per-cycle calibration counts/ECE/provenance, independent labels and refusal to touch an existing workspace. Browser verified Play updates curves, cycle-three prediction retains two reviewed samples until its metrics event, reverse seeking restores one sample and then unavailable, and Inspect classifier selects the independent Practicality history (final ECE 36.7% vs Relevance 63.3%). No current-page console errors; screenshot var/web/calibration-playback-browser-proof.png. Verification skill guided API/SQLite-to-browser checks. This fixture is UI evidence, not optimization improvement evidence. Actual iPad/dark graph-space acceptance remains open; no real labels or paid model calls changed.",
+      "created_at": "2026-10-07T18:29:30.505788Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:09.411751Z",
+  "updated_at": "2026-10-07T18:29:30.505880Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

@@ -1,0 +1,132 @@
+"""Durable complete-request batch cache and a run-wide paid-attempt ceiling."""
+from dataclasses import asdict
+from datetime import datetime, timezone
+import hashlib
+import json
+import sqlite3
+from .batched_classification import batch_request
+from .classifier_config import ClassifiedAnswers
+from .decision_cache import CacheOptions, CacheMiss
+from .models import DecisionResult
+
+
+def key(value):
+    return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',', ':'),allow_nan=False).encode()).hexdigest()
+
+
+def feature_context_identity(model_identity,configs,training):
+    """Stable provenance for fitting and frozen endpoint validation."""
+    context={}
+    for name,definition in configs.items():
+        pool={row.item.id:row for row in training[name]}
+        context[name]={'configuration':definition.fingerprint,
+            'examples':[asdict(pool[item_id]) for item_id in definition.example_ids]}
+    return model_identity+':shared-features-v1:'+key(context)
+
+
+class SharedDecisions:
+    def __init__(self,path,model,*,max_requests,observer):
+        self.model,self.max_requests,self.observer=model,max_requests,observer
+        self.db=sqlite3.connect(path)
+        self.db.executescript('CREATE TABLE IF NOT EXISTS batches(key TEXT PRIMARY KEY,status TEXT,payload TEXT); CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY,key TEXT);')
+        self.db.execute('CREATE TABLE IF NOT EXISTS batch_history(id INTEGER PRIMARY KEY,key TEXT,generation INTEGER,status TEXT,payload TEXT)')
+        self.prepared={};self.identity='unprepared'
+        self.context_configs={};self.context_training={}
+
+    def bind_context(self,configs,training):
+        """Pin siblings for all candidate and inference feature requests."""
+        if not configs or set(configs)!=set(training):
+            raise ValueError('every classifier needs its own explicit training pool')
+        self.context_configs=dict(configs)
+        self.context_training={name:tuple(rows) for name,rows in training.items()}
+        self.prepared={}
+
+    def scope(self,identifier,config,training):
+        return ({**self.context_configs,identifier:config},
+                {**self.context_training,identifier:tuple(training)})
+
+    @property
+    def requests(self): return self.db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0]
+
+    def close(self): self.db.close()
+
+    def generation(self,fingerprint):
+        return max(1,self.db.execute('SELECT COUNT(*) FROM attempts WHERE key=?',(fingerprint,)).fetchone()[0])
+
+    async def prepare(self,configs,target,training,*,now=None,options=None):
+        # Prepared children belong to exactly one complete batch. A later
+        # scope must not silently retain answers from its predecessor.
+        self.prepared={}
+        options=options or CacheOptions()
+        now=now or datetime.now(timezone.utc)
+        request,_=batch_request(configs,target,training,now=now)
+        fingerprint=key({'model':self.model.model_identity,'request':request})
+        self.identity=fingerprint
+        row=self.db.execute('SELECT status,payload FROM batches WHERE key=?',(fingerprint,)).fetchone()
+        if options.policy=='cache_only' and (not row or row[0]!='complete'): raise CacheMiss('complete batch not cached')
+        if row and row[0]!='complete' and not options.retry_failed: raise RuntimeError('explicit retry required for interrupted batch')
+        cached=bool(row and row[0]=='complete' and options.policy!='refresh')
+        if cached:
+            payload=json.loads(row[1])
+        else:
+            if self.requests>=self.max_requests: raise RuntimeError('run decision request ceiling reached')
+            with self.db:
+                if row:
+                    self.db.execute('INSERT INTO batch_history(key,generation,status,payload) VALUES (?,?,?,?)',
+                        (fingerprint,self.generation(fingerprint),row[0],row[1]))
+                self.db.execute('INSERT INTO attempts(key) VALUES (?)',(fingerprint,))
+                self.db.execute('INSERT OR REPLACE INTO batches VALUES (?,"pending",NULL)',(fingerprint,))
+            exchanges=[]
+            try:
+                result=await self.model.classify_many(configs,target,training,now=now,event_sink=exchanges.append)
+                if set(result.answers)!=set(configs): raise ValueError('batch missing a classifier')
+                from .flywheel import DecisionFlywheel
+                for identifier,config in configs.items():
+                    DecisionFlywheel._features(config,ClassifiedAnswers(result.answers[identifier],result.model,None,result.latency_ms))
+                payload={'result':asdict(result),'exchanges':exchanges}
+                with self.db:self.db.execute('UPDATE batches SET status="complete",payload=? WHERE key=?',(json.dumps(payload,allow_nan=False),fingerprint))
+            except Exception:
+                with self.db:self.db.execute('UPDATE batches SET status="failed" WHERE key=?',(fingerprint,))
+                raise
+        self.observer({'kind':'shared-decision-batch','request_fingerprint':fingerprint,'classifier_ids':list(configs),
+                       'cached':cached,'usage':None if cached else payload['result']['usage'],'requests':self.requests,
+                       'generation':self.generation(fingerprint),'cache_policy':options.policy,'retry_failed':options.retry_failed})
+        self.prepared_scope=(dict(configs),{cid:tuple(rows) for cid,rows in training.items()})
+        for identifier,config in configs.items():
+            child=key({'classifier':identifier,'request':config.request(target,training[identifier],now=now)})
+            self.prepared[child]=(payload,identifier,fingerprint,self.generation(fingerprint))
+        return payload,now
+
+    def adapter(self,identifier):
+        shared=self
+        class Adapter:
+            @property
+            def model_identity(self):return shared.model.model_identity+':shared-v1:'+shared.identity
+            def cache_identity(self,config,target,training,*,now=None):
+                child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
+                if child in shared.prepared and not shared.context_configs:
+                    fingerprint=shared.prepared[child][2]
+                else:
+                    configs,pools=shared.scope(identifier,config,training)
+                    request,_=batch_request(configs,target,pools,now=now)
+                    fingerprint=key({'model':shared.model.model_identity,'request':request})
+                return shared.model.model_identity+':shared-answer-v3:'+fingerprint+':'+str(shared.generation(fingerprint))
+            def feature_context_identity(self,config,training):
+                configs,pools=shared.scope(identifier,config,training)
+                return feature_context_identity(shared.model.model_identity,configs,pools)
+            async def classify(self,config,target,training,*,now=None,event_sink=None):
+                return await self.classify_with_cache_options(config,target,training,now=now,event_sink=event_sink,cache_options=CacheOptions())
+            async def classify_with_cache_options(self,config,target,training,*,now=None,event_sink=None,cache_options):
+                child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
+                expected=self.cache_identity(config,target,training,now=now)
+                prepared=shared.prepared.get(child)
+                if cache_options.policy=='refresh' or not prepared or expected!=shared.model.model_identity+':shared-answer-v3:'+prepared[2]+':'+str(prepared[3]):
+                    configs,pools=(shared.prepared_scope if prepared and not shared.context_configs else shared.scope(identifier,config,training))
+                    await shared.prepare(configs,target,pools,now=now,options=cache_options)
+                payload,_,fingerprint,_=shared.prepared[child]
+                for exchange in payload['exchanges']:
+                    if event_sink:event_sink({**exchange,'shared_request_fingerprint':fingerprint,
+                        'shared_answer_generation':shared.generation(fingerprint),'usage':None,'shared_exchange':True})
+                raw=payload['result']
+                return ClassifiedAnswers({name:DecisionResult(**answer) for name,answer in raw['answers'][identifier].items()},raw['model'],None,raw['latency_ms'])
+        return Adapter()

@@ -11,20 +11,25 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
 tools = [
     "build>=1.2",
     "kanbus==0.33.0",
     "python-semantic-release>=10,<11",
 ]
 jev = ["typesafe-sdk>=0.7,<0.8", "python-dotenv>=1,<2"]
+optimizer = ["openai>=1.40,<3", "python-dotenv>=1,<2"]
 laya = ["laya"]
 kev = ["httpx>=0.27"]
 retrieval = ["numpy>=1.26"]
 openai-embeddings = ["openai>=1.40", "python-dotenv>=1,<2"]
+reviewer = ["rich>=13,<15", "huggingface_hub>=0.24,<2", "requests>=2.31,<3"]
+web = ["fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "uvicorn[standard]>=0.30,<1", "httpx>=0.27,<1", "python-dotenv>=1,<2"]
 
 [project.scripts]
 decision-flywheel-demo = "decision_flywheel.demo:main"
+decision-flywheel-review = "decision_flywheel.reviewer:main"
+decision-flywheel-web = "decision_flywheel.web_server:main"
 
 [tool.semantic_release]
 branch = "main"
@@ -39,6 +44,9 @@ changelog_file = "CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+decision_flywheel = ["vendor/vis-timeline/*.txt", "vendor/vis-timeline/*.md", "vendor/vis-timeline/styles/*.css", "vendor/vis-timeline/standalone/umd/*.js", "vendor/trace-ui/*.js", "vendor/trace-ui/*.css", "vendor/trace-ui/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["src", "tests"]

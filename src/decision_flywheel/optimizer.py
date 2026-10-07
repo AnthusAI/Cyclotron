@@ -10,6 +10,7 @@ from typing import Any, Literal, Mapping
 
 from .budget import ContextBudget, build_context_plan
 from .context import ContextPolicy, PolicyMetadata
+from .events import EventSink, FlywheelEvent
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
 
 
@@ -113,6 +114,7 @@ async def search_context_policies(
     display_order: str = "canonical",
     order_seed: int = 0,
     presentation_label_order: Sequence[str] | None = None,
+    event_sink: EventSink | None = None,
 ) -> OptimizationResult:
     """Search declared trials only against trusted, disjoint development labels.
 
@@ -153,7 +155,9 @@ async def search_context_policies(
     store: MutableMapping[str, dict[str, str]] = checkpoint if checkpoint is not None else {}
     attempted = succeeded = 0
     results: list[TrialResult] = []
+    _emit(event_sink, "round-started", None, None, attempted, succeeded)
     for spec in trials:
+        _emit(event_sink, "trial-started", spec.trial_name, None, attempted, succeeded)
         decisions: list[DecisionHistory] = []
         failures = 0
         reasons: list[FailureReason] = []
@@ -179,10 +183,12 @@ async def search_context_policies(
                 prediction, probabilities = _checkpoint_entry(task, cached)
                 if objective != "brier":
                     decisions.append(DecisionHistory(development_item.item.id, key, prediction, True))
+                    _emit(event_sink, "decision-reused", spec.trial_name, key, attempted, succeeded)
                     continue
                 if probabilities is not None:
                     decisions.append(DecisionHistory(development_item.item.id, key, prediction, True,
                                                      probabilities))
+                    _emit(event_sink, "decision-reused", spec.trial_name, key, attempted, succeeded)
                     continue
             if prior_attempted + attempted >= max_model_calls:
                 complete = False
@@ -191,6 +197,7 @@ async def search_context_policies(
 
             attempted += 1
             _write_call_accounting(call_accounting, prior_attempted + attempted, search_fingerprint)
+            _emit(event_sink, "decision-requested", spec.trial_name, key, attempted, succeeded)
             try:
                 result = task.validate_result(await model.decide(task, development_item.item, plan.examples))
                 prediction = result.label
@@ -200,8 +207,10 @@ async def search_context_policies(
                 complete = False
                 failures += 1
                 reasons.append("model-failure")
+                _emit(event_sink, "decision-failed", spec.trial_name, key, attempted, succeeded)
                 break
             succeeded += 1
+            _emit(event_sink, "decision-completed", spec.trial_name, key, attempted, succeeded)
             if objective != "brier":
                 store[key] = {"label": prediction}
                 decisions.append(DecisionHistory(development_item.item.id, key, prediction, False))
@@ -231,13 +240,15 @@ async def search_context_policies(
             failure_count=failures,
             failure_reasons=tuple(reasons),
         ))
+        _emit(event_sink, "trial-completed" if complete else "trial-incomplete", spec.trial_name,
+              None, attempted, succeeded)
 
     completed = [trial for trial in results if trial.status == "completed"]
     sign = -1 if objective == "brier" else 1
     provisional_best = (max(completed, key=lambda trial: (sign * trial.objective, trial.trial_name))
                         if completed else None)
     winner = provisional_best if len(completed) == len(results) else None
-    return OptimizationResult(
+    result = OptimizationResult(
         objective=objective,
         model_fingerprint=resolved_model_fingerprint,
         task_fingerprint=task.fingerprint,
@@ -253,6 +264,14 @@ async def search_context_policies(
         winner=winner,
         checkpoint_entries=len(store),
     )
+    _emit(event_sink, "round-completed", None, None, attempted, succeeded)
+    return result
+
+
+def _emit(sink: EventSink | None, event_type: str, trial_name: str | None,
+          request_fingerprint: str | None, attempted: int, succeeded: int) -> None:
+    if sink is not None:
+        sink(FlywheelEvent(event_type, trial_name, request_fingerprint, attempted, succeeded))
 
 
 def _validate_search_inputs(
@@ -363,10 +382,17 @@ def _checkpoint_entry(task: DecisionTask, value: object) -> tuple[str, dict[str,
 def _split_fingerprint(task: DecisionTask, rows: Sequence[LabeledItem]) -> str:
     """Hash an order-independent split manifest without retaining source text."""
     manifest = sorted(
-        (row.item.id, task.validate_label(row.label), _text_hash(task, row.item))
+        (row.item.id, task.validate_label(row.label), _text_hash(task, row.item),
+         _context_hash(row.context))
         for row in rows
     )
     return _fingerprint(manifest)
+
+
+def _context_hash(context: Mapping[str, str]) -> str:
+    """Bind cache and split provenance to demo-only context without retaining it."""
+    encoded = json.dumps(dict(context), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _search_fingerprint(

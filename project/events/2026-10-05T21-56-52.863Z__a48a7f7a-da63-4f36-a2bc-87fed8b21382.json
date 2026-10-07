@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "a48a7f7a-da63-4f36-a2bc-87fed8b21382",
+  "issue_id": "decision-flywheel-18962dc7-b421-5a9e-b17e-70fd3567ca2d",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-05T21:56:52.863Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Generalize the existing feedback flywheel",
+        "to": "Extract reusable feedback, head-fitting and scripted steering components"
+      },
+      "description": {
+        "from": "## Scope\n\nExtract the reusable feedback, learned decision head, and human steering boundaries from Jev-Flywheel while keeping the new library small and readable.\n\n## Definition of done\n\nPlexus-compatible feedback vocabulary, trusted fitting, out-of-fold calibration, and versioned human-approved edits work with a fake provider-neutral model.",
+        "to": "Completed component extraction: trusted feedback vocabulary, guarded numerical fitting, out-of-fold calibration, scripted validated steering and lineage. This historical epic is NOT completion of the live integrated flywheel. Live rubric/task/example optimization, connected refitting and reviewer observability are tracked under decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88. Retain closed component stories; integration must reuse them, not create a second flywheel."
+      }
+    }
+  }
+}

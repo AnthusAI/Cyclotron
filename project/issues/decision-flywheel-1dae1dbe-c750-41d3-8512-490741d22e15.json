@@ -1,0 +1,38 @@
+{
+  "id": "decision-flywheel-1dae1dbe-c750-41d3-8512-490741d22e15",
+  "title": "Brief the live optimizer from trusted feedback and explanations",
+  "description": "## Behavior and acceptance\nProvide an injectable live optimizer interface with a scripted fake. Briefing includes eligible training item content/metadata, trusted votes and comments, errors, current rubric/tasks/examples and version. Do not send audit or scoreboard content, labels, errors or metrics to the optimizer.\nScenario: a vote with an explanation reaches the optimizer briefing; protected partition records do not. Inadequate class coverage is reported as waiting for labels, not silently declared successful optimization.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9aef43fd-3484-405b-95bc-4fe34e78ebe5",
+      "author": "home",
+      "text": "Implementation progress: optimizer_agent.py now snapshots actual trusted training text/metadata, labels, explanation comments and current classifier configuration; excludes protected IDs and normalized-text matches; injected completion callable exposes exact prompts/replies/tool calls/model usage with safe failure diagnostics. Eight offline specs pass. Not complete: application live-client setup and durable UI transcript integration remain. No paid calls.",
+      "created_at": "2026-10-05T22:02:47.946517Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation"
+      }
+    }
+  ],
+  "created_at": "2026-10-05T21:56:01.163176Z",
+  "updated_at": "2026-10-05T22:02:47.946543Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "7699deff-04ef-4f87-8f03-c9d4b3541784",
+  "issue_id": "decision-flywheel-e64ca536-7cb7-4eea-b576-896fd3023690",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-06T18:28:23.963Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Replace Configuration changes lane with collapsible Configuration group containing Changes and Classifications. Count main decision plus active supporting questions from recorded snapshots at cycle start and activation; do not count unpromoted hypotheses. Both markers open recorded configuration details. Current recording remains at one because numerical selection chose the main-only classifier over retained-question trials. Verify increasing-count synthetic fixture and actual browser selection.",
+        "to": "Configuration group now contains Changes and Classifications lanes. Counts reflect recorded active snapshots at cycle starts and activation events; either marker opens configuration details. Full recording audit: question trials were rejected at cycle 40, but retained questions were selected at cycle 80. Subsequent Jev requests in cycles 81-87 contain decision plus knowledge_clarification_curation_enhancement and memory_system_focus, so active count increases from 1 to 3. Browser verified selecting count opens matching snapshot; synthetic specs verify 1-to-3 count and selection routing. 511 Python tests pass."
+      }
+    }
+  }
+}

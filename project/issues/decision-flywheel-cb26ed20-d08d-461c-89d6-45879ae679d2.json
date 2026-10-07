@@ -1,0 +1,90 @@
+{
+  "id": "decision-flywheel-cb26ed20-d08d-461c-89d6-45879ae679d2",
+  "title": "Prove the complete reusable flywheel through the reviewer interface",
+  "description": "## Behavior and acceptance\nCross-module fake-client acceptance exercises vote/comment -> live-interface briefing -> rubric/examples/task proposal -> validated request -> regenerated features -> trained head -> development comparison -> promotion/rejection -> client-visible events, then restart and correction. Prove zero network calls and protected-data exclusion. Integration may not import proof-of-concept orchestration from Jev-Flywheel. A separate explicitly authorized live verification records actual model/usage and bounded requests without claiming guaranteed improvement.\nScenario: every stage is observable, the served prediction uses the trained head, and restart preserves lineage.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "home",
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-e3dc848a-8a87-4c91-b05d-63836444c814",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-ceaa245b-e160-4ba3-adb6-199031599d24",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-7fc3c046-c2b8-4eec-9a41-22b82a5932d1",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "c7b9b73d-7f72-4716-ae0f-635ca7ffcb46",
+      "author": "home",
+      "text": "User authorized real retrospective replay from scratch: snapshot existing human votes/comments via read-only SQLite backup; fresh rubric/examples/tasks/head and separate runtime. Preserve vote arrival order; fixed protected audit pool; recent-balanced evaluation chooses newest rows per class and walks backward for scarce labels without using future votes or moving learned rows into audit. Missing classes report insufficient coverage. Separate fixed balanced scoreboard curve aids across-version comparison. Frozen v2 plan: 87 eligible votes, 65 train, four dev, 18 protected audit pool, final selected audit two per class; checkpoints20/40/60/80/87; worst-case345 Jev requests, at most five optimizer calls. Offline suite411 passed; live replay launched with those ceilings, outcome pending. Existing live labels/runtime untouched.",
+      "created_at": "2026-10-05T23:28:37.269764Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation",
+        "settings": {}
+      }
+    },
+    {
+      "id": "6448dc27-0db5-4919-ac72-b36faa868580",
+      "author": "home",
+      "text": "Real replay completed:79 Jev attempts,1 returned gpt-6-luna response (23764 returned total tokens), no provider errors. Empty start fixed balanced audit1/4 correct; early recent-balanced audit unavailable until both classes arrived. Existing development coverage gate postponed optimization at20/40/60/80 labels; one actual proposal at87. Agent inferred knowledge-systems/work rubric and seven examples, no supporting tasks. Fitted candidate got2/4 development correct but equal-class Brier worsened0.5663 ->0.9967913484 (Include recall0/2); correctly rejected, active head remained absent, fixed audit stayed1/4. This is not a successful multi-step optimization curve; exposes restrictive delayed coverage and unsuccessful candidate. All records private under var/arxiv-replay-v2; live DB untouched.411 offline specs passed, including recent-first backfill, disjointness, delayed feedback, and read-only/no-network preflight. Public code/docs prepared; no label/comment/paper text published.",
+      "created_at": "2026-10-05T23:31:40.156059Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Flywheel Implementation",
+        "settings": {}
+      }
+    },
+    {
+      "id": "ab4acf5e-89e4-41bf-93e5-fed6b9f3bca6",
+      "author": "home",
+      "text": "Behavior-first core/application boundary is now implemented in worktree branch behavior-core-boundary. Added executable Gherkin contract (tests/features/complete_feedback_loop.feature): scripted, zero-network feedback -> optimizer proposal -> decision requests/responses -> feature regeneration -> fitted/prompted head -> restart persistence; corrected trusted label invalidates the dependent fit. Also added frontend Gherkin-backed GraphQL label submission coverage and made the browser-bundle test work in fresh worktrees. Verification: 588 Python tests and 19 Vitest tests pass. Commits: a459909, 7b32380, 891febd, 26f4d3b.",
+      "created_at": "2026-10-07T17:46:48.702338Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "c2db3f52-ff41-4547-b611-4c10be4e1c1a",
+      "author": "home",
+      "text": "Rebased the core/application-boundary work on current develop and integrated it. WebWorker now accepts an injected application runtime for normalized configuration, session lifecycle, command execution, durable item updates, feedback preparation, and failure aborts; legacy scorecard handling remains unchanged during migration. Added executable BDD contracts for headless core, application runtime delegation, complete observable feedback loop, restart/correction invalidation, and browser bundle behavior. Verified 665 Python specs (split only for command timeout), 84 UI specs, and production build. Pushed develop at 171aa1d.",
+      "created_at": "2026-10-07T18:11:41.097991Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-05T21:56:01.857422Z",
+  "updated_at": "2026-10-07T18:11:41.098099Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e0113359-2cc5-446e-ac5d-8e497b279609",
+  "issue_id": "decision-flywheel-d5ba1497-7a57-4b16-b104-88e29ef7b4b1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T19:10:15.711Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Show whether rubric optimizer ran and changed active rubric",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

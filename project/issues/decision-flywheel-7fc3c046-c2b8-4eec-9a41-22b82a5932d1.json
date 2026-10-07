@@ -1,0 +1,99 @@
+{
+  "id": "decision-flywheel-7fc3c046-c2b8-4eec-9a41-22b82a5932d1",
+  "title": "Resume optimization safely after restarts and corrected labels",
+  "description": "## Behavior and acceptance\nDurably version votes, comments, assignments, predictions made before voting, bundles, jobs and events. Undo/correct invalidates dependent candidates/features/fits as appropriate; preserve history and immutable historical prediction scores. Resume interrupted work idempotently with cached complete fingerprints and recorded usage, no duplicate paid calls. Handle stable source IDs/content revisions without overwriting labeled items.\nScenario: interruption and restart yields the same active bundle; corrected label cannot leave a dependent fit silently current.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-e3dc848a-8a87-4c91-b05d-63836444c814",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "9535aaa4-b9fa-4b2b-81bd-96d5db5bb52f",
+      "author": "home",
+      "text": "Implemented scorecard runtime correction command using existing core reconciliation, not a second flywheel. Explicit correct payload targets one or more classifier labels with expected_feedback_id stale-edit protection. Catalog votes, original predictions and historical events remain immutable; corrections append traced cycles, update explanations, invalidate dependent guidance/features/head, record new metrics/calibration and checkpoint the scorecard. Protected audit assignments stay protected; frozen replay labels cannot be edited. Correction makes no paid calls. Restart/trace-ack-loss specs prove idempotent recovery, explanation-only invalidation and independent classifier state; fake GraphQL/worker test proves correction ingestion and changed metrics through the API. Fixed unique-item trigger counting and legacy worker command fallthrough that could interpret unsupported commands as undo. Remaining: scorecard correction/undo UI, catalog retraction semantics and wider end-to-end acceptance. Full regression running; no production votes or running server changed.",
+      "created_at": "2026-10-07T19:15:03.785239Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "0ef8dcd7-e318-4577-b724-908019aa3c62",
+      "author": "home",
+      "text": "Final verification: 718 Python tests pass. Scorecard correction API/runtime, immutable history, protected-label firewall, stale-edit checks, independent label state and trace-ack-loss recovery are covered by offline fake-client specs. Correction/undo editor and catalog retractions remain unfinished; do not close this story based on backend implementation. No live session deployment or human label mutation was performed.",
+      "created_at": "2026-10-07T19:16:00.530159Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "6efe2312-f3d6-4d24-94c6-e3ecbdce7adf",
+      "author": "home",
+      "text": "Added the scorecard undo backend and append-only catalog retractions. Undo retracts local active classifier labels for the most recently labeled item, invalidates dependent learning through core reconciliation, updates metrics/calibration, checkpoints, and reopens the same saved prediction with explicit reuse trace references. No new decision/optimizer calls. Superseded old votes never resurface. Backfill source labels remain immutable; frozen replay undo rejects. Durable undo-plan/retraction/completion events support explicit recovery after trace acknowledgement loss. Offline tests prove two-classifier undo/relabel across restart with one total fake request, source-label protection in backfill, catalog tombstone persistence/idempotency/stale-retraction rejection, and worker/API trace integration. Full regression in progress. Correction/undo UI and broader acceptance remain open; production data/server untouched.",
+      "created_at": "2026-10-07T19:26:05.478478Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "d18f6a64-6d3e-4075-b619-5c72dee7f3c7",
+      "author": "home",
+      "text": "Closed the backend recovery gap as part of undo work: resumeFeedbackCommand explicitly requeues only failed/interrupted scorecard correction or undo jobs with their original identities/payloads, preserves prior failure result in trace history, rejects paid-capable command kinds, busy runs and inactive editions, and is idempotent. Fake GraphQL integration loses the retraction acknowledgement after API storage, restarts WebWorker, resumes that same job via GraphQL, and verifies one retraction and one total model call. UI recovery/correction/undo controls still remain acceptance work; full regression rerunning after this addition.",
+      "created_at": "2026-10-07T19:30:03.785995Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "dc3a3644-c0e3-4bb7-b38a-ce1feb30f2f0",
+      "author": "home",
+      "text": "Recovery guard specs also verify that another pending run command blocks requeue, inactive editions cannot be reactivated through recovery, and a job cannot be recovered through a different run ID. Current undo API semantics are item-level local-label retraction, not restoration of superseded values; documented explicitly. Completed full regression passed 721 tests before the final guard spec was added; focused WebStore suite including that guard passes. Final all-tests rerun is active. UI work remains deliberately open.",
+      "created_at": "2026-10-07T19:32:15.863131Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "98a54446-c4ea-4e7a-ba1b-7a149ada9310",
+      "author": "home",
+      "text": "Final regression: all 722 Python tests pass for scorecard undo, catalog retractions and explicit non-paid API command recovery. Ready for frontend correction/undo/recovery controls and browser acceptance. Production session/database remain unchanged; backend has not been redeployed during this turn.",
+      "created_at": "2026-10-07T19:33:04.498162Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "d7ca2aa9-fb87-4528-9399-818578579d2f",
+      "author": "home",
+      "text": "Connected scorecard feedback correction, explicit undo confirmation, and original-command recovery to the GraphQL UI. Five component specs cover explanations, stale edits, inherited labels, replay restrictions, and recovery; WebApp verifies the dedicated resume mutation. Disposable browser proof saved a label/explanation correction and undid both local labels, reopening the original 80% prediction. SQLite retained seven feedback rows and recorded two retractions; no real labels or paid models were used. Integrated backend suite: 724 passing specs. UI suite/build being rechecked with concurrent mobile navigation and loading-shell edits. End-to-end production deployment acceptance remains open.",
+      "created_at": "2026-10-07T19:50:09.747051Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-05T21:56:01.731995Z",
+  "updated_at": "2026-10-07T19:50:09.747148Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

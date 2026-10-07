@@ -1,0 +1,44 @@
+{
+  "id": "decision-flywheel-d5ba1497-7a57-4b16-b104-88e29ef7b4b1",
+  "title": "Show whether rubric optimizer ran and changed active rubric",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c80365a2-837d-44dd-8852-9a8a5a481420",
+      "author": "home",
+      "text": "Replaced rubric event counts with recorded LLM-call and active rubric change status. Cell selection opens the optimizer exchange and actual before/after rubric. Tests cover rejected proposals, changed active rubric, running requests, and missing snapshots. Python: 525 passed. Browser verified cycle 6 shows Ran \u00b7 Changed, full optimizer request and before/after rubric. No live model calls.",
+      "created_at": "2026-10-06T19:10:35.729132Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "839db0be-32fd-4df3-9d19-39e6236b9796",
+      "author": "home",
+      "text": "Follow-up: rubric row is now text-free full-cycle blocks. Green means recorded acceptance/activation; grey means a call without acceptance; no call has no block. Tooltip and click details preserve ran/changed status and model exchange. Verified green empty-content cell in browser; regression specs distinguish acceptance from merely proposing a change.",
+      "created_at": "2026-10-06T19:12:39.846105Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T19:10:15.710989Z",
+  "updated_at": "2026-10-06T19:12:39.846182Z",
+  "closed_at": "2026-10-06T19:10:36.183030Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

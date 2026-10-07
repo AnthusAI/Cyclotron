@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from dataclasses import dataclass
+from hashlib import sha256
 from numbers import Real
 import time
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
+from ..classifier_config import ClassifiedAnswers, ClassifierConfig
 
 
 @dataclass(frozen=True)
@@ -29,7 +32,11 @@ class JevConfiguration:
 
     @property
     def model_identity(self) -> str:
-        return f"jev:{self.model}"
+        identity = f"jev:{self.model}"
+        if self.base_url is not None:
+            endpoint = self.base_url.rstrip('/')
+            identity += ":endpoint-" + sha256(endpoint.encode('utf-8')).hexdigest()
+        return identity
 
 
 class JevAdapter:
@@ -77,7 +84,7 @@ class JevAdapter:
             task.validate_label(example.label)
         state = {
             "labeled_examples": [
-                {"text": example.item.values[task.input_field], "label": example.label}
+                {"text": example.item.values[task.input_field], "label": example.label, **dict(example.context)}
                 for example in context
             ],
             "target": {"text": target.values[task.input_field]},
@@ -95,6 +102,59 @@ class JevAdapter:
             answer.get("confidence"),
         )
         return task.validate_result(result)
+
+    async def classify(self, config: ClassifierConfig, target: Item,
+                       training: Sequence[LabeledItem], *, now: datetime | None = None,
+                       event_sink: Callable[[dict], None] | None = None) -> ClassifiedAnswers:
+        """Ask the main decision and every discovered element in one SDK request."""
+        request = config.request(target, training, now=now)
+        questions = {name: {"type": detail["type"], "instructions": detail["instructions"],
+                            "criteria": {label: None for label in detail["options"]}}
+                     for name, detail in request["questions"].items()}
+        observe = event_sink or (lambda event: None)
+        observe({"kind": "decision-request", "target_id": target.id, "model": self.model_identity,
+                 "state": request["state"], "questions": questions})
+        started = time.perf_counter()
+        response = await asyncio.to_thread(self.client.system_one, state=request["state"], questions=questions)
+        raw = _mapping(getattr(response, "answers", {}))
+        observe({"kind": "decision-response", "target_id": target.id,
+                 "answers": {name: _mapping(value) for name, value in raw.items()},
+                 "model": _string_or_none(getattr(response, "model", None)),
+                 "usage": _numeric_usage(getattr(response, "usage", None))})
+        model = _string_or_none(getattr(response, "model", None))
+        tasks = {"decision": config.task, **{task.name: task for task in config.tasks}}
+        answers = {}
+        for name, task in tasks.items():
+            answer = _mapping(raw.get(name))
+            answers[name] = task.validate_result(DecisionResult(
+                answer["choice"], answer.get("probabilities"), model=model,
+                confidence=answer.get("confidence")))
+        return ClassifiedAnswers(answers, model, _numeric_usage(getattr(response, "usage", None)),
+                                 round((time.perf_counter() - started) * 1000, 2))
+
+    async def classify_many(self, configurations, target, training, *, now=None, event_sink=None,
+                            max_request_bytes=32000):
+        """One transport request; each classifier keeps its own context and answer group."""
+        from ..batched_classification import batch_request, BatchedAnswers
+        request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes)
+        questions = {key:{'type':detail['type'],'instructions':detail['instructions'],
+                          'criteria':{label:None for label in detail['options']}} for key,detail in request['questions'].items()}
+        observe = event_sink or (lambda event:None)
+        bindings = {key:{'classifier_id':identifier,'question':local_name,'configuration_fingerprint':configurations[identifier].fingerprint}
+                    for key,(identifier,local_name,_) in identities.items()}
+        observe({'kind':'decision-request','target_id':target.id,'model':self.model_identity,
+                 'state':request['state'],'questions':questions,'question_bindings':bindings})
+        started = time.perf_counter()
+        response = await asyncio.to_thread(self.client.system_one,state=request['state'],questions=questions)
+        raw = _mapping(getattr(response,'answers',{}))
+        model, usage = _string_or_none(getattr(response,'model',None)), _numeric_usage(getattr(response,'usage',None))
+        observe({'kind':'decision-response','target_id':target.id,'answers':{key:_mapping(value) for key,value in raw.items()},
+                 'model':model,'usage':usage,'question_bindings':bindings})
+        groups = {identifier:{} for identifier in configurations}
+        for key,(identifier,local_name,task) in identities.items():
+            answer = _mapping(raw.get(key))
+            groups[identifier][local_name] = task.validate_result(DecisionResult(answer['choice'],answer.get('probabilities'),model=model,confidence=answer.get('confidence')))
+        return BatchedAnswers(groups,model,usage,round((time.perf_counter()-started)*1000,2))
 
 
 def _mapping(value: Any) -> dict[str, Any]:

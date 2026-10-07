@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8c66dba7-35a2-47e9-b1ce-9da1678bd99a",
+  "issue_id": "decision-flywheel-bd17637e-ee17-4109-997e-115a3e658cc1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:06.171Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Show live optimizer activity through an inspectable app panel",
+    "description": "During labeling show a compact status of trigger checks, queued/running optimization, ML fit, completion or error without covering article/vote controls. Open a right drawer/panel for live activity; drill into exact optimizer request with full trusted-label explanations, response/tool calls, decision request/response with actual example text and labels, before/after rubric/questions/examples/head, candidate evaluation and promotion/rejection reason. Use provider-neutral names, not Luna-specific UI. API cursor subscriptions update without reload; reconnect deduplicates events and recovers current job state. Feedback-save acknowledgement is separate from optimization completion; do not leave UI disabled or silently retry paid calls. Acceptance: fake GraphQL/UI cycle shows each phase and precise exchanges; mobile status/drawer remains readable; submitting labels responds immediately and eventual errors are actionable.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

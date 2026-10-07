@@ -3,7 +3,8 @@ import json
 
 import pytest
 
-from .artifacts import ArtifactValidationError, create_artifact, load_artifact
+from .artifacts import (ArtifactValidationError, create_artifact,
+                        load_artifact, load_compatible_fixed_incumbent)
 from .budget import ContextBudget
 from .context import PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
@@ -45,8 +46,10 @@ def test_a_frozen_winner_round_trips_without_text_and_reproduces_context_ids_for
 
     assert plan.example_ids == ("no-1", "yes-1")
     assert document["pool"]["items"] == [
-        {"id": "no-1", "input_hash": document["pool"]["items"][0]["input_hash"], "label": "no"},
-        {"id": "yes-1", "input_hash": document["pool"]["items"][1]["input_hash"], "label": "yes"},
+        {"id": "no-1", "input_hash": document["pool"]["items"][0]["input_hash"],
+         "context_hash": document["pool"]["items"][0]["context_hash"], "label": "no"},
+        {"id": "yes-1", "input_hash": document["pool"]["items"][1]["input_hash"],
+         "context_hash": document["pool"]["items"][1]["context_hash"], "label": "yes"},
     ]
     assert "demonstration" not in serialized
     assert "never-persist" not in serialized
@@ -226,3 +229,42 @@ def test_a_fixed_example_list_winner_scored_by_brier_round_trips_and_keeps_its_r
     assert artifact.context_for(Item("new", {"text": "new target"})).example_ids == ("no-1", "yes-1")
     assert artifact.context_for(pool[0].item).example_ids == ("no-1", "yes-2")
     assert "demonstration" not in serialized
+
+
+def test_a_frozen_fixed_list_can_be_reused_as_the_next_round_incumbent_when_new_labels_arrive():
+    from .context import FixedExampleList
+
+    pool = POOL + [
+        LabeledItem(Item("yes-2", {"text": "yes reserve demonstration"}), "yes"),
+        LabeledItem(Item("no-2", {"text": "no reserve demonstration"}), "no"),
+    ]
+    fixed = FixedExampleList.from_items(TASK, pool[:2], pool[2:])
+    result = asyncio.run(search_context_policies(
+        TASK, pool, DEVELOPMENT, ScriptedModel(), (TrialSpec(fixed, 1),),
+        max_model_calls=2, model_fingerprint="fake-model-v1"))
+    serialized = create_artifact(TASK, pool, "r1", result)
+    expanded = pool + [
+        LabeledItem(Item("yes-3", {"text": "a later yes label"}), "yes"),
+        LabeledItem(Item("no-3", {"text": "a later no label"}), "no"),
+    ]
+
+    incumbent = load_compatible_fixed_incumbent(serialized, TASK, expanded)
+
+    assert incumbent == fixed
+
+
+def test_a_reused_incumbent_refuses_when_a_prior_demonstration_was_undone_or_changed():
+    from .context import FixedExampleList
+
+    pool = POOL + [
+        LabeledItem(Item("yes-2", {"text": "yes reserve demonstration"}), "yes"),
+        LabeledItem(Item("no-2", {"text": "no reserve demonstration"}), "no"),
+    ]
+    fixed = FixedExampleList.from_items(TASK, pool[:2], pool[2:])
+    result = asyncio.run(search_context_policies(
+        TASK, pool, DEVELOPMENT, ScriptedModel(), (TrialSpec(fixed, 1),),
+        max_model_calls=2, model_fingerprint="fake-model-v1"))
+    serialized = create_artifact(TASK, pool, "r1", result)
+
+    with pytest.raises(ArtifactValidationError, match="no longer matches"):
+        load_compatible_fixed_incumbent(serialized, TASK, pool[1:])

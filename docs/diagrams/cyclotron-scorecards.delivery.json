@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4608f6d5-a3f5-4d5a-b9ad-17ff77afca62",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/home/Projects/Decision-Flywheel/.archify/architecture-cyclotron-20261007-120000/scorecards.json",
+  "output": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/cyclotron-scorecards.html",
+  "specification": {
+    "sha256": "b69ae7d3e350d2a1a879e1a232aaa082a51322018620b6f7e7a8580c49608a11",
+    "bytes": 3194
+  },
+  "artifact": {
+    "sha256": "6864cd4718a3ff4b145e7ae7bdd60121e882b02c1ced015cbd9a527547231e59",
+    "bytes": 761411
+  }
+}

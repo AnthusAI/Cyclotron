@@ -1,0 +1,32 @@
+{
+  "id": "decision-flywheel-0049a23a-7dc0-4dcc-980f-9548e6e67be0",
+  "title": "Make full-viewport labeling and timeline the permanent app layouts",
+  "description": "Replace regular versus fullscreen branches with one viewport-sized single-page shell. Remove fullscreen entry/exit buttons and redundant page layouts. Keep compact persistent app navigation and bounded content panels, no document-level scrolling; only intended panels scroll. Labeling retains large readable item text, horizontal classifier cards when needed, per-card metrics below labeling controls, confidence visualization, optional explanations, persistent bottom-left status and bottom-right Skip/Submit. Timeline fills available pane with its inspector closable; pinch zoom only, horizontal pan and ordinary vertical scrolling remain distinct; mouse zoom buttons and Fit remain reachable. Responsive desktop/iPad portrait/landscape, safe-area and on-screen keyboard behavior. Acceptance: no clipped actions, unintended page scroll or hidden item content; label draft retained across drawers; timeline zoom/pan/play/click cursor still work. Reuse successful existing fullscreen CSS rather than redesign from scratch.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "efb76ac6-bbd2-4b57-b3c9-7b97585c77d7",
+      "author": "home",
+      "text": "Removed both labeling and timeline fullscreen controls and the separate native/fallback fullscreen state. Focused labeling CSS is now the normal viewport layout. History is a left Radix dialog drawer; optimizer activity a right dialog drawer, with accessible titles, focus trap, Escape/backdrop/close. Browser verified 1280x720 and tablet 768x1024: no document overflow; Skip/Submit remain within viewport. Existing item restored without provider calls or human labels. Still needs narrower/keyboard checks and full timeline/browser regression acceptance.",
+      "created_at": "2026-10-07T15:49:01.642676Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:02.930667Z",
+  "updated_at": "2026-10-07T15:49:01.642757Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

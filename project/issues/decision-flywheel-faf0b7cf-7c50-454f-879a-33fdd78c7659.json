@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-faf0b7cf-7c50-454f-879a-33fdd78c7659",
+  "title": "Render one timeline cell per cycle and row with agreement backgrounds",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "018e92b2-0910-4ca3-a155-4997260835b1",
+      "author": "home",
+      "text": "Changed operational projection to a single shared x-position per cycle. Each row aggregates recorded events into one full-width cycle cell; model predictions and human labels use green match, red disagreement, grey unreviewed backgrounds without circle icons. Cell drill-down preserves every request/response and event; count cells show final configuration for that cycle. Verified prediction exchange and optimizer context through browser. No model calls or source recording changes.",
+      "created_at": "2026-10-06T18:52:06.467709Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-06T18:51:23.551919Z",
+  "updated_at": "2026-10-06T18:52:06.844657Z",
+  "closed_at": "2026-10-06T18:52:06.844575Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

@@ -1,0 +1,50 @@
+{
+  "id": "decision-flywheel-11361b59-1ce5-4865-a56a-c947021d548a",
+  "title": "Define immutable scorecard and classifier revisions with safe migration",
+  "description": "Scope: first-class Scorecard and Classifier identities, separately immutable revisions. A scorecard revision pins ordered classifier revision references plus shared request/provider configuration and optimization policies; learned runtime checkpoints are distinct from editable definition revisions. Any classifier change creates a classifier revision and a new affected scorecard revision; never mutate old snapshots. Runs pin scorecard revision; predictions, human feedback and metrics identify classifier definition revision and actual learned configuration fingerprint. Define membership removal, renaming, reorder and multiple scorecard reuse semantics. GraphQL exposes create/read/edit-as-new-revision, revision comparison and explicit active revision selection. SQLite migration must preserve old runs, labels, comments and source provenance, be idempotent and transactional. Acceptance: tests prove edit isolation, joint-request cache invalidation, atomic membership updates, old-run readability and restoration of an old scorecard without overwriting newer history. Audit existing scorecards.py/catalog implementation before extending it; do not equate run numbering with the entire version model.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "29960343-9f58-408d-9d20-961282b3cc17",
+      "author": "home",
+      "text": "Implemented and tested independent immutable scorecard definitions, ordered pinned classifier revisions, idempotent legacy-run-edition migration, edit propagation across active containing scorecards, explicit definition activation, fingerprints and GraphQL query/mutation surface. Existing runs remain untouched. Full Python suite: 610 passing. Still open: pin newly created runs directly to definition revisions, reconcile definition activation versus run-edition activation semantics, and complete runtime provenance integration; not closing this issue.",
+      "created_at": "2026-10-07T15:40:48.735700Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "a72a3662-6c6d-4e2c-812d-5f651d212203",
+      "author": "home",
+      "text": "Added pure directional definition comparison and scorecardDefinitionComparison GraphQL query resolving exact pinned classifier versions. Comparisons preserve member order, additions/removals, changed classifier revisions, names and shared setting changes; unset differs from explicit null. Read-only UI drawer compares active to inspected revision without activation or model calls. Browser verified Anthus v2 to v1 shows Cyberian Gallery removed, original question/classes/roles and no shared-setting changes. Definition differences explicitly are not performance evidence. Remaining runtime/migration acceptance and matched protected performance comparison are not claimed complete.",
+      "created_at": "2026-10-07T16:47:15.159085Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "e07b99c2-7100-4ca9-ade8-ba2c424ae4a1",
+      "author": "home",
+      "text": "Shared definition settings now validate executable defaults before immutable publication. Cadence controls and selection policies flow into frozen new-run configuration; existing runs are unchanged after later settings revisions. Legacy run-definition registration now retains optimization and rubric cadences instead of dropping them. Existing mapped historical definitions remain immutable. Tests cover invalid-save atomicity, no provider construction at run creation, shared policy resolution for classifier-specific positive labels, and retained trigger settings.",
+      "created_at": "2026-10-07T17:14:02.779353Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:53:58.207265Z",
+  "updated_at": "2026-10-07T17:14:02.779462Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

@@ -1,0 +1,4 @@
+[
+  {"label": "include", "role": "positive"},
+  {"label": "exclude", "role": "negative"}
+]

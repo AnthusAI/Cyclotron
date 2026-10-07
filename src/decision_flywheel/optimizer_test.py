@@ -99,6 +99,26 @@ def test_optimizer_replays_checkpointed_successes_without_duplicate_model_calls(
     assert all("positive development" not in str(value) for value in checkpoint.values())
 
 
+def test_optimizer_emits_text_free_live_events_for_trials_requests_and_cache_reuse():
+    events = []
+    checkpoint = {}
+    asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ScriptedModel(), _trials(), max_model_calls=10,
+        checkpoint=checkpoint, event_sink=events.append,
+    ))
+    replay_events = []
+    asyncio.run(search_context_policies(
+        TASK, CANDIDATES, DEVELOPMENT, ScriptedModel(), _trials(), max_model_calls=10,
+        checkpoint=checkpoint, event_sink=replay_events.append,
+    ))
+
+    assert [event.event_type for event in events][0] == "round-started"
+    assert "decision-requested" in [event.event_type for event in events]
+    assert [event.event_type for event in events][-1] == "round-completed"
+    assert "decision-reused" in [event.event_type for event in replay_events]
+    assert all("development" not in str(event).casefold() for event in events + replay_events)
+
+
 def test_optimizer_counts_failed_attempts_and_does_not_freeze_incomplete_trials():
     result = asyncio.run(search_context_policies(
         TASK, CANDIDATES, DEVELOPMENT, ScriptedModel(fail=True), _trials(), max_model_calls=1,

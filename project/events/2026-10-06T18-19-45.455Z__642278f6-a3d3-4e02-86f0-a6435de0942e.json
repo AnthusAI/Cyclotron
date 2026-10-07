@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "642278f6-a3d3-4e02-86f0-a6435de0942e",
+  "issue_id": "decision-flywheel-366c1ad4-ba33-40d9-8ffb-c9e71aef3c0b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T18:19:45.455Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Trigger rubric optimization on every second human-label transition",
+    "description": "Default rubric trigger counts class-to-class changes in either direction. First transition does not fire; second does. Repeated labels and skips do not count. Derive state from durable feedback for restart safety and omit retracted votes. Trace count, threshold, previous/current labels and causal linkage. Keep other optimization and fitting schedules separate; update operational replay preflight ceilings. Verify fake-client operational replay and unit specs; preserve old recordings.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

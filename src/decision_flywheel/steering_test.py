@@ -6,7 +6,7 @@ from .context import RandomBalanced
 from .feedback import Element, Feature, FeedbackItem, LABEL_SOURCE_FINAL, Scorecard
 from .head import HeadRow, fit_learned_head
 from .models import DecisionTask
-from .steering import ScriptedMockManager, run_steering_round
+from .steering import ScriptedMockManager, run_steering_round, steering_observations
 
 
 HASH = "a" * 64
@@ -21,6 +21,7 @@ def _scripted_factory(manager):
     """The analyst can only be built with the installed scripted client."""
     def parse(briefing):
         assert briefing.developer_ids == ("train-1",)
+        assert "current_datetime" in briefing.dynamic_element_instruction
         return json.loads(manager.next_reply())
 
     return parse
@@ -57,6 +58,27 @@ def test_a_scripted_analyst_is_built_with_the_installed_mock_and_only_human_acce
     assert outcome.promoted and outcome.accepted and outcome.scorecard.version == 2
     assert fitted[0][2] == ("tone", "clarity")
     assert outcome.history[-1].decision == "promoted"
+
+
+def test_an_accepted_datetime_proposal_becomes_an_allowlisted_dynamic_scorecard_element():
+    outcome = run_steering_round(
+        _scorecard(), RandomBalanced(3), analyst_factory=_scripted_factory,
+        mock_manager=ScriptedMockManager([json.dumps({"add_programmatic_element": {"kind": "current_datetime"}})]),
+        developer_ids=("train-1",), developer_hashes=(HASH,), protected_ids=(), protected_hashes=(),
+        human_accept=lambda proposal: proposal.add_programmatic_element == "current_datetime",
+        development_objective=lambda candidate, policy, refit: .8, incumbent_development_objective=.7,
+        numerical_fitter=lambda candidate, policy, features: _head_for(candidate, policy, features),
+    )
+
+    element = outcome.scorecard.elements[-1]
+    assert outcome.promoted
+    assert (element.key, element.question_type, element.feature_names) == (
+        "current_datetime", "programmatic_datetime", ("current_datetime",)
+    )
+    features, activity = steering_observations(outcome)
+    assert [feature.key for feature in features] == ["tone", "current_datetime"]
+    assert activity[0].feature_key == "current_datetime"
+    assert activity[0].status == "promoted"
 
 
 def test_rejected_or_disallowed_proposals_preserve_rollback_lineage_and_cannot_write_numbers():

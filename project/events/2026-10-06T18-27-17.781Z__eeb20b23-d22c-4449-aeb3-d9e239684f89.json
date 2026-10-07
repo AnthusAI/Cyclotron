@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eeb20b23-d22c-4449-aeb3-d9e239684f89",
+  "issue_id": "decision-flywheel-e64ca536-7cb7-4eea-b576-896fd3023690",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-06T18:27:17.781Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Show active classification counts and configuration changes in separate lanes",
+    "description": "Replace Configuration changes lane with collapsible Configuration group containing Changes and Classifications. Count main decision plus active supporting questions from recorded snapshots at cycle start and activation; do not count unpromoted hypotheses. Both markers open recorded configuration details. Current recording remains at one because numerical selection chose the main-only classifier over retained-question trials. Verify increasing-count synthetic fixture and actual browser selection.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

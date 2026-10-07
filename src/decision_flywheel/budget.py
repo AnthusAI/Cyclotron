@@ -219,7 +219,8 @@ def _serialize_request(task: DecisionTask, target: Item,
     task.validate_target(target)
     state = {
         "labeled_examples": [
-            {"text": _text(example.item, task), "label": task.validate_label(example.label)}
+            {"text": _text(example.item, task), "label": task.validate_label(example.label),
+             **dict(example.context)}
             for example in examples
         ],
         "target": {"text": _text(target, task)},

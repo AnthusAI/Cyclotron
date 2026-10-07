@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "37d46084-cdcd-42d9-978b-37f176286d72",
+  "issue_id": "decision-flywheel-ceaa245b-e160-4ba3-adb6-199031599d24",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-05T21:56:01.580Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Expose optimizer transcripts and classifier lifecycle to client applications",
+    "description": "## Behavior and acceptance\nPublic API/events expose latest optimizer prompts, responses and tool calls, rationale/diffs, active rubric/tasks/example IDs/features, feature freshness, fit start/end, row counts, metrics, candidate comparison and promotion/rejection/wait/failure. Client consumes core events rather than duplicating orchestration. Local transcripts preserve useful feedback but are private and redacted for secrets; public summaries are text-free. Show observed behavior, not hidden chain-of-thought.\nScenario: a fake round yields inspectable prompt/reply and complete lifecycle; unavailable phases display not run, never implied success.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-5",
+      "name": "Flywheel Board Reconciliation"
+    }
+  }
+}

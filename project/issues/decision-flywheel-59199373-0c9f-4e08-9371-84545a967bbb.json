@@ -1,0 +1,190 @@
+{
+  "id": "decision-flywheel-59199373-0c9f-4e08-9371-84545a967bbb",
+  "title": "Unify interactive and replay runs under pinned scorecard versions",
+  "description": "Interactive sessions and replay studies use the same engine, scorecard revision, cycle/event contract and API-owned SQLite logging. Adding Cyberian Gallery creates a new scorecard edition; old classifier labels/comments remain immutable, request new missing labels for previously reviewed items before unseen items. Replay learning starts from an explicitly recorded empty or selected initial checkpoint, never future labels/examples; process feedback chronologically after prediction. Re-optimize the entire new scorecard from the beginning when requested, with separate per-classifier heads/triggers and one compatible joint decision request. Persist replay input snapshot, parameters, dataset/list revision and lineage. Version comparison distinguishes descriptive latest-200 metrics from matched protected evaluation; switching active edition must be explicit and non-destructive. Acceptance: fake end-to-end tests verify no cycle-one label leakage, retained explanations, restored restart state, missing-label priority and independent original-version metrics; UI exposes active vs inspected version. No automatic paid replay.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-11361b59-1ce5-4865-a56a-c947021d548a",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "9556482f-73d5-45e2-9c62-07d5acc97b3f",
+      "author": "home",
+      "text": "Implemented createReplay GraphQL authorization gate and worker replay-next command using the same WorkspaceSession engine. Frozen source trace labels/comments matched to all classifier revisions; no future context at cycle one, no catalog-label duplication, fresh heads/context, parameter ceilings retained. UI offers replay creation source, Step/Run/Pause controls, failure stop. Fake end-to-end test verifies one shared model call, saved explanation and calibration snapshot. Separate run-to-definition mapping prevents run-edition/configuration-revision collision. Remaining: replay progress/live timeline refresh, matched comparison reports, restart/idempotency and browser creation/control acceptance.",
+      "created_at": "2026-10-07T15:57:50.743347Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "e9e505fb-88f8-494c-a928-b57d7778dfe5",
+      "author": "home",
+      "text": "Replay run history entries now open the timeline, with automatic refresh after each completed replay-next job. Replay creation now atomically commits frozen source items, feedback and initial trace; duplicate feedback rollback spec proves no partial run is retained. Fake-client replay tests still pass. Remaining: restart/pause acceptance and protected matched-version comparison.",
+      "created_at": "2026-10-07T16:13:39.232278Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "4134ed4f-3c56-47f1-8c2f-b4899697ce91",
+      "author": "home",
+      "text": "Added fake API/engine integration covering two chronological replay cycles across worker restart: one shared request per item, empty first-cycle context, retained frozen explanations despite later source correction, matching prediction/feedback cycle IDs, metrics counts 1 then 2, no duplicate catalog labels and finished step makes no extra model call. Fixed unfinished cycle recovery after feedback already reached the durable engine: metrics and cycle closure now occur without repeating prediction/optimization. UI regressions prove pause stops after current cycle and failure clearing cannot restart automatic playback. Full 626 Python / 59 UI tests and builds pass. Remaining acceptance: protected matched-version comparison and browser replay creation/control checks.",
+      "created_at": "2026-10-07T16:43:16.501596Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "91839a34-c359-4fc4-9c91-c4313aa1a07e",
+      "author": "home",
+      "text": "Implemented read-only matchedRunPreflight and frozen matched_run_evaluation executor. Preflight caps shared protected targets at 200, pins checkpoint/event boundaries, excludes historically learnable targets, and discloses per-class counts. Executor preserves all joint endpoint outputs, restores frozen heads without fitting/promotion, uses training-only checkpoint-bound examples/comments, fixes evaluation datetime across durable cache resumes, and requires a sufficient request ceiling before calls. Fake tests prove cache reuse, source-drift rejection, incomplete-checkpoint rejection, and no-call ceiling rejection. Full Python suite: 656 passed; subsequent focused GraphQL/evaluator check: 17 passed. Remaining: API-owned approved comparison jobs, durable result history, and web comparison controls; no paid evaluation performed.",
+      "created_at": "2026-10-07T17:23:48.704772Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "92bb723c-a178-4df0-a05e-b109e3d00ee7",
+      "author": "home",
+      "text": "Added explicitly confirmed createMatchedComparison GraphQL mutation and atomic API-owned frozen comparison input/job storage. Worker branches before learning-session construction; comparison runs are recorded/read-only and do not activate editions. Production GraphQLTraceSink path now has durable event IDs and acknowledged exchange/result ingestion, tested with in-process GraphQL transport. Integration tests verify no learning session, no calls during creation, later source changes cannot alter frozen inputs, no source-run mutation, stale approval/insufficient ceilings reject without partial runs, and label commands reject comparison runs. Focused 20 tests pass. UI execution controls/result presentation and explicit interrupted-job resume controls remain; no live model calls made.",
+      "created_at": "2026-10-07T17:27:05.221706Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "1960731a-4cbe-49d2-aafa-8f45032d0ef9",
+      "author": "home",
+      "text": "Additional production-path verification: comparison integration uses GraphQLTraceSink with in-process GraphQL ingestion rather than a permissive append-only fake. Found and fixed missing durable event identity. Added acknowledgement-failure/resume test: one paid response survives API failure and explicit executor resume uses cache, with total eight calls rather than nine; durable events retain IDs/timestamps. Remaining UI and controlled interrupted-job resume integration are still open.",
+      "created_at": "2026-10-07T17:28:00.975562Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "42e9a6b1-0949-41bb-beee-6dd846d59f32",
+      "author": "home",
+      "text": "Added Compare runs drawer with endpoint selection, read-only protected preflight, disclosed sample/class counts, explicit paid approval and request ceiling. Endpoint changes invalidate prior approval; tests prove no paid mutation from preflight. Comparison jobs now render separately with Recall/Precision/Accuracy, ECE/Brier and per-endpoint reliability curves. 68 UI tests passed; production build passed; lint reports existing warnings. Browser verified real-history preflight rejection (no joint checkpoint) without calls, and complete result rendering through GraphQL/SQLite using a separate OFFLINE FIXTURE database/fake models. Real workspace unchanged at 175 completed/2 failed jobs. Verification and React skills informed API-to-UI and stale-approval checks. Remaining: controlled interrupted-job resume, per-sample request/response drilldown, macro-role presentation and tablet/dark acceptance. No paid evaluation or human label fabricated in production.",
+      "created_at": "2026-10-07T17:32:17.491487Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "8ebac299-c86d-49d1-8e43-8044bef3626f",
+      "author": "home",
+      "text": "Implemented per-target matched-evaluation traces with full joint state/questions, all response answers, actual item, protected scoring labels, final predictions, provider exchanges and checkpoint/request fingerprints. Result records link to durable event IDs. Added read-only matchedEvaluationTarget GraphQL query and item Inspect drawer; no fetch/model work until selection, older missing trace links are not reconstructed. Predictions table includes human/raw/final answers and disagreement filter. Browser verified real UI\u2192GraphQL\u2192SQLite\u2192item drawer on isolated offline fixture with fake calls and no console errors. Full 661 Python / 71 UI tests passed; production build passed. Skills: React prevented stale detail updates and verification checked full read-only flow. Real labels/jobs unchanged; no paid calls. Controlled comparison resume and macro-role/tablet/dark acceptance remain open.",
+      "created_at": "2026-10-07T17:37:02.038375Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "a77b3ae8-34da-4056-aeb9-31970bcc6f96",
+      "author": "home",
+      "text": "Implemented resumeMatchedComparison authorization, atomic idempotent resume queueing, immutable frozen source retention, separate failed-call retry opt-in, and audit event for renewed authority. Completed/busy runs reject new resume work; identical request IDs return original jobs while altered content rejects. Operating ceiling cannot decrease, and executor now enforces one combined attempt ceiling across both endpoint caches (failed attempts count). Specs prove failed call stays stopped by default; authorized retries exhaust eight attempts without overspending, then ceiling nine completes with one new call; original inputs preserved. Resume UI uses stable submission identity on lost acknowledgements and renewed paid checkbox; controls integrated for failed/interrupted comparison history. Full 664 Python / 73 UI tests and production build passed; focused post-change store tests pass. React skill guided submission identity and disabled-state handling. No real labels or paid calls altered. Browser resume acceptance, macro class-role metrics and tablet/dark verification remain open.",
+      "created_at": "2026-10-07T17:41:36.432288Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "4d750b8e-2709-472a-9af1-01184571cf96",
+      "author": "home",
+      "text": "Protected comparison metrics now explicitly choose positive-versus-rest for configured positive roles, or a macro average across all configured classes when there are no positive roles. Undefined class recall/precision is not guessed or dropped from the average; result metadata and UI identify unsupported classes. Added pure aggregation specs, fake-model endpoint integration spec, and UI disclosure spec. Focused 17 Python and 5 UI tests pass; production build passes. Historical artifacts are unchanged. Browser resume acceptance, tablet/dark verification and broader acceptance audit remain open.",
+      "created_at": "2026-10-07T17:49:01.603290Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "19291509-b27d-4cb6-bbf6-28c8c422239d",
+      "author": "home",
+      "text": "Browser verification: real older interactive run loads classifier cards and honestly reports no paired raw/final snapshot rather than reconstructing one. Separate offline fixture served through actual FastAPI/GraphQL/SQLite renders completed comparison metrics/calibration, and Inspect opens selected full state/questions plus response and protected scoring labels. No browser errors; no real votes or paid calls. Screenshot saved privately at var/web/comparison-browser-proof.png. Viewport override did not produce the requested tablet dimensions (observed 1280x960), so tablet acceptance remains unproven. Found and fixed legacy records with absent human labels being colored wrong and treated as disagreements; regression spec passes (6 UI specs), build passes. Resume, dark/tablet, and live updated comparison snapshot acceptance remain open.",
+      "created_at": "2026-10-07T17:51:23.980454Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "c134942a-3367-4482-80fd-1cdcd209676e",
+      "author": "home",
+      "text": "Fixed live/playback raw-versus-final metric role handling: full ordered class roles now travel with cursor snapshots, and a shared pure UI calculation measures all positive classes as one positive-versus-rest group. Neutral macro metrics include every declared class and preserve undefined support; incomplete multi-positive confusion matrices do not invent rates. Pure and card integration specs pass; 81 UI tests and 12 focused Python playback/class-role tests pass. Build passed after explicit TypeScript class-role annotation. React skill guided shared derived calculations and listener cleanup. Concurrent branding/WebApp edits are preserved; generated bundles are left for integration because they include those other-session edits. Broader browser/real-data acceptance remains open.",
+      "created_at": "2026-10-07T17:53:34.285130Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "84dc68df-0ee7-4dab-bc9f-028bb5cde56f",
+      "author": "home",
+      "text": "Added production-path GraphQL resume integration across a fresh SQLite store and worker restart. Fake model completes one call then fails the next; unconfirmed resume rejects without queueing, confirmed cache-only resume reuses completed result but refuses failed retry, separately authorized retry completes with exactly nine total attempts/seven new attempts. Duplicate authorization returns same job; eight unique endpoint/target traces remain after retries. Source histories and frozen inputs are unchanged. Real GraphQLTraceSink ingestion is used throughout, with in-process transport and no network/keys. Eleven focused comparison tests pass. Browser resume controls, dark/tablet verification and full user-story acceptance remain open; no real labels or paid calls changed.",
+      "created_at": "2026-10-07T17:54:53.136912Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "38035305-0be1-439f-9659-f02c95e2f316",
+      "author": "home",
+      "text": "Protected preflight now excludes previously learned duplicate structured content after Unicode NFC/whitespace normalization, including learned labels later retracted. It refuses missing learned content in the endpoint that saw it, rather than treating the other endpoint version as evidence. Plan pins explicit content-exclusion policy, so changed rules invalidate old approval instead of silently resuming under a weaker firewall. Documented limits: case/non-string fields preserved, no semantic/source-specific text matching claim. Eighteen focused no-network preflight/evaluator/GraphQL resume specs pass. Browser and broader acceptance remain open; no real labels/paid calls changed.",
+      "created_at": "2026-10-07T17:57:15.463088Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "9d40811e-590d-48e0-b3c2-7ef5576250f5",
+      "author": "home",
+      "text": "Protected comparison reports now aggregate raw decision output versus final outer classifier per endpoint, not only per-item raw answers. Shared compare_outputs calculation also powers live latest-200 snapshots, pairs probability eligibility on both sides, records scope and accuracy/ECE/Brier deltas. UI disclosures preserve configured class roles and show final-minus-raw Recall/Precision/Accuracy percentage-point differences and calibration curves/deltas. Browser verified freshly recorded offline fixture through API/SQLite; no console errors, screenshot var/web/protected-raw-final-proof.png. 672 Python / 83 UI tests and build pass. React skill guided shared component/derived values; verification skill checked actual report flow. No real labels/paid calls altered. Wider interactive/replay, tablet/dark and objective-comparison acceptance remains open.",
+      "created_at": "2026-10-07T18:01:27.054547Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "e9d255b7-26ce-4792-97ee-d1d9bd450d79",
+      "author": "home",
+      "text": "Added per-class F1/predicted counts, macro F1 with explicit missing-support handling, and Wilson 95% descriptive accuracy reference intervals in reusable classification metrics. Positive-versus-rest F1 aggregates all configured positives. Protected result UI adds collapsed F1/support/uncertainty details without changing primary Recall\u2192Precision\u2192Accuracy order. Specs cover tiny samples, empty records, multiple positives, missing class support and unavailable historical intervals. 85 UI tests and build pass; 22 focused Python metrics/evaluator specs pass; full Python suite running. Selection-policy audit confirmed recall cannot violate secondary accuracy guardrails (11 existing specs pass). Interval is explicitly not selection/design-adjusted or a paired effect claim. Real jobs remain 175 completed/2 failed, no pending/running; no labels or paid calls changed. Browser acceptance for these new details remains open.",
+      "created_at": "2026-10-07T18:05:35.883577Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "e1f76018-27ae-4d6a-b5e8-34eb59ffd9db",
+      "author": "home",
+      "text": "Full Python regression completed: 675 passed. UI regression: 85 passed; production build passed. F1/support/uncertainty delivery remains pending browser acceptance, not declared complete.",
+      "created_at": "2026-10-07T18:05:45.626413Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "8bf19c77-9dda-45ba-b1ba-0d0f33059dc5",
+      "author": "home",
+      "text": "Browser acceptance completed for F1/support/uncertainty through a fresh API-owned matched-evaluate job, GraphQLTraceSink, SQLite and production UI on isolated fake-model fixture. Found serialized metric dictionaries were alphabetically ordering class support; fixed UI to use endpoint pinned class_config order (positive first), with component and report integration specs. Current valid report has no console errors; screenshot var/web/f1-support-browser-proof.png. Initial incorrectly configured test fixture was replaced, not production data. Build passed; UI regression rerunning. Real labels and paid calls unchanged. Verification and React skills guided actual boundary check and derived-only ordering. Tablet/dark, browser resume, full interactive/replay and objective comparison acceptance remain open.",
+      "created_at": "2026-10-07T18:18:35.516986Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-07T14:54:01.329358Z",
+  "updated_at": "2026-10-07T18:18:35.517077Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

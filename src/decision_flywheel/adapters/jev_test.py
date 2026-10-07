@@ -12,6 +12,57 @@ TARGET = Item("target", {"text": "target text"})
 CONTEXT = [LabeledItem(Item("demo", {"text": "demo text"}), "yes")]
 
 
+def test_jev_cache_identity_separates_custom_servers_without_disclosing_endpoint_details():
+    first = JevConfiguration(base_url="https://first.example/private-token")
+    second = JevConfiguration(base_url="https://second.example/private-token")
+    assert first.model_identity != second.model_identity
+    assert first.model_identity != JevConfiguration().model_identity
+    assert first.model_identity == JevConfiguration(base_url=first.base_url + "/").model_identity
+    assert "first.example" not in first.model_identity
+    assert "private-token" not in first.model_identity
+    assert JevConfiguration().model_identity == "jev:jev-latest"
+
+
+def test_a_complete_classifier_request_asks_all_feature_questions_in_one_jev_call():
+    from ..classifier_config import ClassifierConfig
+    class Client:
+        calls = 0
+        def system_one(self, *, state, questions):
+            self.calls += 1
+            self.state, self.questions = state, questions
+            return SimpleNamespace(answers={key: {"choice": "yes", "probabilities": {"yes": .8, "no": .2}}
+                                            for key in questions}, model="fake", usage={"input_tokens": 42})
+    client = Client()
+    config = ClassifierConfig(TASK, rubric="Practical work", example_ids=("demo",),
+                              tasks=(DecisionTask("practical", ("yes", "no"), "Is this practical?"),))
+    batch = asyncio.run(JevAdapter(client).classify(config, TARGET, CONTEXT))
+    assert client.calls == 1
+    assert client.state["rubric"] == "Practical work"
+    assert set(client.questions) == {"decision", "practical"}
+    assert client.questions["practical"]["criteria"] == {"yes": None, "no": None}
+    assert "options" not in client.questions["practical"]
+    assert batch.answers["decision"].probabilities == {"yes": .8, "no": .2}
+    assert batch.usage == {"input_tokens": 42}
+    assert all(answer.usage is None for answer in batch.answers.values())
+
+
+def test_inspection_records_the_exact_provider_bound_state_questions_and_answers():
+    from ..classifier_config import ClassifierConfig
+    events = []
+    class Client:
+        def system_one(self, *, state, questions):
+            self.state, self.questions = state, questions
+            return SimpleNamespace(answers={"decision": {"choice": "yes", "probabilities": {"yes": .7, "no": .3}}},
+                                   model="fake", usage={"input_tokens": 4})
+    client = Client()
+    asyncio.run(JevAdapter(client).classify(ClassifierConfig(TASK), TARGET, [], event_sink=events.append))
+    assert events[0]["kind"] == "decision-request"
+    assert events[0]["state"] == client.state
+    assert events[0]["questions"] == client.questions
+    assert events[1]["kind"] == "decision-response"
+    assert events[1]["answers"]["decision"]["probabilities"]["yes"] == .7
+
+
 class FakeJevClient:
     def system_one(self, *, state, questions, **kwargs):
         self.calls = getattr(self, "calls", 0) + 1
@@ -66,3 +117,16 @@ def test_a_jev_adapter_rejects_bad_context_before_calling_the_client():
         asyncio.run(JevAdapter(client).decide(TASK, TARGET, bad))
 
     assert not hasattr(client, "calls")
+
+
+def test_a_jev_adapter_sends_generic_demo_context_only_with_labeled_examples():
+    client = FakeJevClient()
+    contextual = [LabeledItem(Item("demo", {"text": "demo text"}), "yes",
+                               context={"human_feedback": "This is useful."})]
+
+    asyncio.run(JevAdapter(client).decide(TASK, TARGET, contextual))
+
+    assert client.state["labeled_examples"] == [
+        {"text": "demo text", "label": "yes", "human_feedback": "This is useful."}
+    ]
+    assert client.state["target"] == {"text": "target text"}

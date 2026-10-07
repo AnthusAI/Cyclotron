@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "be61663f-5c9f-4c6f-a1a4-cc6a81b898ea",
+  "issue_id": "decision-flywheel-42d202c8-9635-4748-81fd-10d1bc46dc70",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-07T14:54:09.411Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Visualize calibration evolution in labeling and timeline playback",
+    "description": "Each classifier card exposes a space-efficient confidence reliability graph alongside Recall, Precision, Accuracy (always that order). Show predicted confidence on x-axis, observed correctness on y-axis, perfect diagonal, bin support and calibration error with uncertainty caveats; distinguish calibrated head from raw decision passthrough. Timeline current position/Next/Previous/Play selects the latest recorded per-classifier snapshot at or before that point, never future snapshots. Curve updates visually as labels and optimizations progress; allow inspection of snapshot/window/head provenance and matched before/after calibration where available. Older history lacking snapshots says unavailable, no synthetic backfill presented as recorded evidence. Use light/dark system styling and accessible graph summary/tooltips. Acceptance: fixture playback crosses multiple cycles and proves curves change at correct events, reverse seeking restores prior curve, classifier filter works and no model calls occur during playback; iPad graph does not steal labeling space.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e041c0d2-c31a-4707-966b-f617607b431e",
+    "labels": []
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "71a3db92-4b9e-4c34-9bb5-c56897343e5e",
+  "issue_id": "decision-flywheel-df19d04e-64e9-45f9-8b42-d29d5d4090ac",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-05T21:56:55.495Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "3d908e27-23aa-4a5c-88b8-8dc39fc09b9e",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-5",
+      "name": "Flywheel Board Reconciliation"
+    }
+  }
+}
