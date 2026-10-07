@@ -1,11 +1,9 @@
+@import "./styles/shared.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/geist-mono/wght.css";
-@import "@fontsource/blinker/600.css";
-@import "@fontsource-variable/roboto";
-@import "@fontsource-variable/oxanium";
 
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
@@ -159,86 +157,6 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 @media(max-width:1000px){.workspace {grid-template-columns:minmax(0,1fr) 280px}}
 @media(max-width:700px){.workspace {grid-template-columns:minmax(0,1fr)}#inspector {position:absolute;inset:0 0 0 auto;width:min(360px,100%);z-index:10;box-shadow:-8px 0 24px #0002}.explorer-main {padding:8px}.app-shell > header {padding:8px 16px}.explorer-main h1 {font-size:18px}.explorer-main > :first-child p {display:none}}
 
-/* Flat, polarity-consistent interface */
-:root {
-    --background: oklch(0.985 0.004 326);
-    --foreground: oklch(0.18 0.014 326);
-    --card: oklch(0.955 0.009 326);
-    --card-foreground: oklch(0.18 0.014 326);
-    --popover: oklch(0.93 0.014 326);
-    --popover-foreground: oklch(0.18 0.014 326);
-    --primary: oklch(0.87 0.045 290);
-    --primary-foreground: oklch(0.18 0.014 326);
-    --secondary: oklch(0.92 0.014 326);
-    --secondary-foreground: oklch(0.18 0.014 326);
-    --muted: oklch(0.89 0.012 326);
-    --muted-foreground: oklch(0.39 0.026 326);
-    --accent: oklch(0.83 0.055 290);
-    --accent-foreground: oklch(0.18 0.014 326);
-    --destructive: oklch(0.46 0.16 28);
-    --border: transparent;
-    --input: oklch(0.91 0.012 326);
-    --ring: transparent;
-    --success: oklch(0.87 0.08 150);
-    --success-foreground: oklch(0.18 0.03 150);
-    --danger-surface: oklch(0.9 0.07 28);
-    --danger-foreground: oklch(0.26 0.08 28);
-    --chart-1: oklch(0.865 0.012 325.68);
-    --chart-2: oklch(0.542 0.034 322.5);
-    --chart-3: oklch(0.435 0.029 321.78);
-    --chart-4: oklch(0.364 0.029 323.89);
-    --chart-5: oklch(0.263 0.024 320.12);
-    --radius: 0.45rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0.008 326);
-    --sidebar-primary: oklch(0.212 0.019 322.12);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.96 0.003 325.6);
-    --sidebar-accent-foreground: oklch(0.212 0.019 322.12);
-    --sidebar-border: oklch(0.922 0.005 325.62);
-    --sidebar-ring: oklch(0.711 0.019 323.02);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.17 0.014 326);
-    --foreground: oklch(0.94 0.008 326);
-    --card: oklch(0.22 0.018 326);
-    --card-foreground: oklch(0.94 0.008 326);
-    --popover: oklch(0.27 0.024 326);
-    --popover-foreground: oklch(0.94 0.008 326);
-    --primary: oklch(0.34 0.07 290);
-    --primary-foreground: oklch(0.94 0.008 326);
-    --secondary: oklch(0.29 0.025 326);
-    --secondary-foreground: oklch(0.94 0.008 326);
-    --muted: oklch(0.26 0.02 326);
-    --muted-foreground: oklch(0.74 0.018 326);
-    --accent: oklch(0.39 0.08 290);
-    --accent-foreground: oklch(0.94 0.008 326);
-    --destructive: oklch(0.72 0.16 28);
-    --border: transparent;
-    --input: oklch(0.3 0.024 326);
-    --ring: transparent;
-    --success: oklch(0.34 0.08 150);
-    --success-foreground: oklch(0.94 0.01 150);
-    --danger-surface: oklch(0.34 0.08 28);
-    --danger-foreground: oklch(0.94 0.01 28);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
-  }
-}
-
 @layer base {
   body {
     @apply bg-background text-foreground;
@@ -248,19 +166,6 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
     }
 }
 
-body *,
-body *::before,
-body *::after {
-  border:0!important;
-  outline:0!important;
-  box-shadow:none!important;
-  background-image:none!important;
-}
-
-body :focus-visible {
-  background-color:var(--accent)!important;
-  color:var(--accent-foreground)!important;
-}
 /* Focused labeling is the normal app layout, not a separate fullscreen mode. */
 [data-labeling-view="true"] main > div:first-child:has(#timeline-classifier) { display:none; }
 [data-labeling-view="true"] main { padding:8px 16px; gap:6px; }

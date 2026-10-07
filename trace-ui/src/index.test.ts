@@ -24,8 +24,9 @@ test('the Cyclotron mark uses the subtitle width instead of a fixed empty grid c
 })
 
 test('the application chrome uses flat surface tiers instead of borders, outlines, shadows, or gradients',()=>{
-  const css=readFileSync('src/index.css','utf8')
+  const css=readFileSync('src/styles/shared.css','utf8')
+  expect(readFileSync('src/index.css','utf8')).toContain('@import "./styles/shared.css"')
   expect(css).toContain('/* Flat, polarity-consistent interface */')
-  expect(css).toMatch(/body \*,\nbody \*::before,\nbody \*::after \{[^}]*border:0!important[^}]*outline:0!important[^}]*box-shadow:none!important[^}]*background-image:none!important/s)
-  expect(css).toMatch(/body :focus-visible \{[^}]*background-color:var\(--accent\)!important[^}]*color:var\(--accent-foreground\)!important/s)
+  expect(css).toMatch(/body \*,\nbody \*::before,\nbody \*::after \{[^}]*border:\s*0 !important[^}]*outline:\s*0 !important[^}]*box-shadow:\s*none !important[^}]*background-image:\s*none !important/s)
+  expect(css).toMatch(/body :focus-visible \{[^}]*background-color:\s*var\(--accent\) !important[^}]*color:\s*var\(--accent-foreground\) !important/s)
 })
