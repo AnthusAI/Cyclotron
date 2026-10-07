@@ -69,10 +69,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "71d229df-9ceb-4229-abfb-7fff7b52ac91",
+      "author": "home",
+      "text": "Hardened scorecard revision inspection: history is scoped to the selected scorecard; missing revisions and failed requests have explicit recoverable states, no invalid nested classifier query/edit/activation controls, and the selector retains the requested revision. Return to active definition and browser Back are navigation-only. Two regression specs plus 138 passing UI tests, production build and focused lint. Verified real Anthus revision-999 recovery and Back in an isolated browser tab; no mutations, labels, or paid calls. Broader tablet/draft-preservation acceptance remains open.",
+      "created_at": "2026-10-07T22:53:22.943228Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:53:59.760123Z",
-  "updated_at": "2026-10-07T17:13:00.966519Z",
+  "updated_at": "2026-10-07T22:53:22.943313Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

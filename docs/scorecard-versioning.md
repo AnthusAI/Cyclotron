@@ -56,7 +56,12 @@ An optional `scorecard_revision=<revision>` restores a read-only historical
 definition. `scorecardClassifiers` accepts the same optional revision and resolves
 the exact pinned classifier names, questions and ordered classes—not the latest
 catalog versions. Historical inspection has no edit controls; activation remains
-an explicit “Use this definition” action. A classifier edit lists all active
+an explicit “Use this definition” action. Missing revisions and failed history
+requests show an explicit status rather than loading indefinitely. The revision
+selector retains the requested revision; no nested classifier query or activation
+control is shown for an unavailable definition. “Return to active definition”
+changes navigation only, and browser Back restores the requested revision.
+A classifier edit lists all active
 scorecard definitions affected by saving it and explains that joint requests can
 affect their other classifiers while existing runs remain unchanged.
 
