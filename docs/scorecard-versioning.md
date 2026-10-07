@@ -98,6 +98,13 @@ same recorded events. **Inspect classifier** switches to the other independent
 history, whose opposite labels produce a different curve. Snapshot provenance
 retains the prediction and feedback event IDs and identifies decision passthrough.
 
+The selected history is part of the app URL: `classifier=<classifier-id>` in
+the hash selects a member of the run's frozen scorecard. Reload, Back/Forward,
+and switching between labeling and timeline retain this selection. Unknown
+classifier IDs are removed from the URL and the run's first classifier is used;
+they never load another run's history. Opening or changing this view does not
+submit feedback or start model work.
+
 Replay creation uses `createReplay` with an explicitly authorized request budget,
 source run and scorecard definition. It freezes source trace labels and comments
 for items labeled for every selected classifier at the same definition revision.

@@ -18,6 +18,74 @@ beforeEach(()=>{
 })
 afterEach(()=>{cleanup();sessionStorage.clear();vi.clearAllMocks()})
 
+function classifiedRunFixture(){
+  const card={...live,config:{classifiers:[
+    {id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}},
+    {id:'b',name:'Practicality',config:{classes:[{label:'yes'},{label:'no'}]}},
+  ]}}
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('capabilities'))return {runs:[card],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    return {run:card,currentItem:null,jobs:[]}
+  })
+}
+
+test('a classifier-specific deep link restores the matching history on initial load',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=b')
+  render(<WebApp/> )
+  expect(await screen.findByRole('combobox',{name:'Inspect classifier'})).toHaveValue('b')
+  expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/live/timeline?revision=0&classifier_id=b')
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
+test('changing the inspected classifier survives a remount and changing views',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations')
+  render(<WebApp/> )
+  fireEvent.change(await screen.findByRole('combobox',{name:'Inspect classifier'}),{target:{value:'b'}})
+  await waitFor(()=>expect(new URLSearchParams(window.location.hash.slice(1)).get('classifier')).toBe('b'))
+  cleanup()
+  render(<WebApp/> )
+  expect(await screen.findByRole('combobox',{name:'Inspect classifier'})).toHaveValue('b')
+  fireEvent.click(screen.getByRole('button',{name:'Label items'}))
+  await screen.findByRole('button',{name:'Prepare next item'})
+  fireEvent.click(screen.getByRole('button',{name:'Timeline'}))
+  await waitFor(()=>expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/live/timeline?revision=0&classifier_id=b'))
+  expect(vi.mocked(graphql).mock.calls.every(([q])=>!q.includes('mutation'))).toBe(true)
+})
+
+test('browser navigation restores the first or another classifier without pushing a new route',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=b')
+  render(<WebApp/> )
+  await screen.findByRole('combobox',{name:'Inspect classifier'})
+  for(const classifier of ['a','b']){
+    window.history.replaceState(null,'',`#run=live&view=timeline&section=optimizations&classifier=${classifier}`)
+    const push=vi.spyOn(window.history,'pushState')
+    fireEvent(window,new PopStateEvent('popstate'))
+    await waitFor(()=>expect(screen.getByRole('combobox',{name:'Inspect classifier'})).toHaveValue(classifier))
+    expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src',`/runs/live/timeline?revision=0&classifier_id=${classifier}`)
+    expect(push).not.toHaveBeenCalled()
+    push.mockRestore()
+  }
+})
+
+test('an unknown classifier link is replaced with a valid default without loading unrelated history',async()=>{
+  classifiedRunFixture()
+  window.history.replaceState(null,'','#run=live&view=timeline&section=optimizations&classifier=other-run-classifier')
+  const push=vi.spyOn(window.history,'pushState')
+  render(<WebApp/> )
+  expect(await screen.findByRole('combobox',{name:'Inspect classifier'})).toHaveValue('a')
+  await waitFor(()=>expect(new URLSearchParams(window.location.hash.slice(1)).has('classifier')).toBe(false))
+  expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/live/timeline?revision=0&classifier_id=a')
+  expect(push).not.toHaveBeenCalled()
+  push.mockRestore()
+  fireEvent.click(screen.getByRole('button',{name:'Label items'}))
+  await screen.findByRole('button',{name:'Prepare next item'})
+  expect(new URLSearchParams(window.location.hash.slice(1)).has('classifier')).toBe(false)
+})
+
 test('scorecard feedback recovery uses the original job through its dedicated API mutation',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
   const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
