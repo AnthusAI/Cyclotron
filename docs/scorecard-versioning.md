@@ -287,6 +287,15 @@ remain excluded. The affected classifier records a new latest-200 metrics and
 calibration snapshot against its original pre-vote prediction. Other classifier
 labels remain unchanged, and a new scorecard checkpoint records the active state.
 
+The reusable Rich reviewer also sends only eligible training explanations by
+default, matching the web session's firewall. Its optimizer prompt includes
+training article metadata, trusted labels, comments, and recorded pre-vote answers
+with disagreement indicators; absent predictions remain unknown. Programmatic
+callers can explicitly enable `include_protected_guidance=True` for preference
+exploration, but that permanently marks the runtime's evaluation context as
+exposed. It cannot be presented as independent evaluation afterward. Historical
+runs made with the former permissive default are not retroactively declared clean.
+
 Correction itself makes no model calls and does not automatically optimize.
 The next normal prediction uses the reconciled state; an explicit optimization
 command can rebuild it sooner. Explicit recovery after a lost trace/API

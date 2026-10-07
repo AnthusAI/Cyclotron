@@ -65,14 +65,14 @@ def test_reviewer_feedback_is_partitioned_without_exposing_audit_votes(tmp_path)
     store.close()
 
 
-def test_web_guidance_can_exclude_protected_comments_as_well_as_protected_labels(tmp_path):
+def test_default_reviewer_guidance_excludes_protected_comments_as_well_as_protected_labels(tmp_path):
     store = ReviewStore(tmp_path / 'reviews.sqlite',study_seed='fixture')
     articles = tuple(Article(str(i),'Paper',f'Text {i}','2026-10-06',('cs.AI',)) for i in range(40))
     store.import_articles(articles)
     for article in articles:
         store.record_vote(article.id,'include',comment=f'Explanation {article.id}')
     core = DecisionFlywheel(tmp_path / 'core.sqlite',ClassifierConfig(reviewer_task()),FakeModel(),agent([]))
-    reviewer = ReviewerFlywheel(store,core,include_protected_guidance=False)
+    reviewer = ReviewerFlywheel(store,core)
     training, development, protected = reviewer.partitions()
     context = reviewer.sync_optimizer_context()
     assert set(context['human_explanations']) == {f'Explanation {row.item.id}' for row in training}
@@ -81,7 +81,44 @@ def test_web_guidance_can_exclude_protected_comments_as_well_as_protected_labels
     store.close()
 
 
-def test_reviewer_passes_all_active_explanations_without_protected_item_text_or_labels(tmp_path):
+def test_default_live_reviewer_prompt_contains_training_metadata_errors_and_explanations_only(tmp_path):
+    import json
+    from .optimizer_agent import OptimizerAgent,OptimizerReply
+    store=ReviewStore(tmp_path/'reviews.sqlite',study_seed='fixture')
+    articles=tuple(Article(str(i),f'Paper {i}',f'Unique abstract {i}','2026-10-06',('cs.AI',),
+        authors=f'Author {i}',journal_ref=f'Journal {i}') for i in range(40))
+    store.import_articles(articles)
+    for article in articles:
+        shown=store.record_prediction(article.id,'exclude',.8,'fake','a'*64,0)
+        store.record_vote(article.id,'include' if int(article.id)%2 else 'exclude',
+            comment=f'Explanation {article.id}',presentation_id=shown.id)
+    sent=[]
+    def complete(messages):
+        sent.append(messages)
+        return OptimizerReply('{"rationale":"Use trusted feedback","rubric":"Prefer useful research"}','fake')
+    core=DecisionFlywheel(tmp_path/'core.sqlite',ClassifierConfig(reviewer_task()),FakeModel(),OptimizerAgent(complete))
+    try:
+        reviewer=ReviewerFlywheel(store,core)
+        training,development,protected=reviewer.partitions()
+        result=reviewer.improve()
+        assert len(sent)==1
+        prompt=json.loads(sent[0][-1]['content'])
+        assert {row['id'] for row in prompt['feedback']}=={row.item.id for row in training}
+        assert set(prompt['human_explanations'])=={f'Explanation {row.item.id}' for row in training}
+        for row in prompt['feedback']:
+            assert row['initial_answer_value']=='exclude'
+            assert row['prediction_matches_label']==(row['label']=='exclude')
+            assert row['comment']==f"Explanation {row['id']}"
+            assert f"Authors: Author {row['id']}" in row['values']['text']
+            assert f"Published as: Journal {row['id']}" in row['values']['text']
+        assert not {row.item.id for row in development}.intersection(row['id'] for row in prompt['feedback'])
+        assert not {item.id for item in protected}.intersection(row['id'] for row in prompt['feedback'])
+        assert result['evaluation_independent_of_optimizer_context']
+    finally:
+        core.close();store.close()
+
+
+def test_explicit_protected_guidance_is_visible_and_invalidates_independent_evaluation(tmp_path):
     import json
     from .optimizer_agent import OptimizerAgent, OptimizerReply
     store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
@@ -94,7 +131,7 @@ def test_reviewer_passes_all_active_explanations_without_protected_item_text_or_
         prompts.append(json.loads(messages[-1]["content"]))
         return OptimizerReply('{"rationale":"Use explanations","rubric":"Updated preferences"}', "fake")
     core = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), OptimizerAgent(complete))
-    reviewer = ReviewerFlywheel(store, core)
+    reviewer = ReviewerFlywheel(store, core,include_protected_guidance=True)
     result = reviewer.improve()
     assert len(prompts[0]["human_explanations"]) == 40
     _, development, protected = reviewer.partitions()

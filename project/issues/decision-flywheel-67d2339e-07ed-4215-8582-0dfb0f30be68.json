@@ -22,25 +22,38 @@
       "text": "Implementation progress: ClassifierConfig validates independent rubric/example-list/classification-task edits, rejects weights/arbitrary dynamic elements, constructs combined state/questions with target exclusion and explicit timezone-aware current_datetime. Ten offline specs pass. Whole suite: 364 passed. Not yet wired into Jev batch answer collection, feature generation, fitting or reviewer; this is not a working demo claim.",
       "created_at": "2026-10-05T22:02:47.964422Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
+    },
+    {
+      "id": "ce4c27eb-29dd-4e86-9008-41d2aef25bd9",
+      "author": "home",
+      "text": "Current proposal audit found a remaining advertised-capability mismatch: OptimizerAgent instructions invite dynamic_elements:[current_datetime], and ClassifierConfig validates/applies it, but optimize_stage rejects every key except its assigned control. The actual staged loop therefore cannot accept that advertised dynamic input. Keep this story open. Next: define the independent-stage ownership for request-time dynamic inputs, make its optimizer instructions and validation agree, prove approved current_datetime reaches actual provider requests under complete-context budgets, and prevent one stage silently changing another control. Retrieval/input filtering remain deferred. No provider calls or source-label changes.",
+      "created_at": "2026-10-07T23:41:19.001276Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.282413Z",
-  "updated_at": "2026-10-05T22:02:47.964447Z",
+  "updated_at": "2026-10-07T23:41:19.001352Z",
   "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
-  },
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
 }
