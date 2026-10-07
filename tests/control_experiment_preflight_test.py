@@ -19,7 +19,7 @@ def test_experiment_preflight_counts_individual_trials_without_constructing_prov
     def forbidden(*args, **kwargs):
         raise AssertionError("preflight must not construct paid providers")
     monkeypatch.setattr(module.JevAdapter, "from_environment", forbidden)
-    monkeypatch.setattr(module.OpenAIOptimizer, "from_environment", forbidden)
+    monkeypatch.setattr(module, "optimizer_transport", forbidden)
     output = tmp_path / "output"
     assert module.main(["--snapshot", str(snapshot), "--output", str(output), "--max-feature-trials", "3"]) == 0
     protocol = json.loads(capsys.readouterr().out)

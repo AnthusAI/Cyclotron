@@ -8,7 +8,8 @@ from pathlib import Path
 import sqlite3
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
-from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
+from decision_flywheel.adapters.optimizer_transport import optimizer_transport
+from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.flywheel import DecisionFlywheel
 from decision_flywheel.optimizer_agent import OptimizerAgent
@@ -31,6 +32,7 @@ def main(argv=None):
     parser.add_argument("--max-requests", type=int, default=500)
     parser.add_argument("--max-optimizer-calls", type=int, default=5)
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
+    parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
     parser.add_argument('--context-validation-floor',type=int,default=20)
     parser.add_argument('--evaluation-samples',type=int,default=200)
     parser.add_argument('--rubric-recency-allowance',type=float,default=2.)
@@ -81,6 +83,7 @@ def main(argv=None):
         'optimize_every': args.batch_size, 'retrain_every': args.batch_size,
         'stages': ['rubric', 'questions', 'examples'],
         'decisions_model': args.decisions_model, 'optimizer_model': args.optimizer_model,
+        'optimizer_transport': args.optimizer_transport,
         'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
         'context_validation_floor':args.context_validation_floor,'cold_start_policy':'provisional-working-rubric',
         'evaluation_policy':asdict(evaluation_policy),
@@ -89,9 +92,16 @@ def main(argv=None):
     }
     path = args.output / "manifest.json"
     encoded = json.dumps(manifest, indent=2)
-    if path.exists() and json.loads(path.read_text()) != json.loads(encoded):
-        parser.error("frozen replay plan differs; choose a new output directory")
-    path.write_text(encoded+"\n")
+    if path.exists():
+        saved=json.loads(path.read_text())
+        # Before transport selection existed, this application used OpenAI.
+        # Compare that effective default without rewriting the frozen artifact.
+        execution={**saved.get('execution',{})}
+        execution.setdefault('optimizer_transport','openai')
+        if {**saved,'execution':execution} != json.loads(encoded):
+            parser.error("frozen replay plan differs; choose a new output directory")
+    else:
+        path.write_text(encoded+"\n")
     counts = lambda rows: {label: sum(row.label == label for row in rows) for label in reviewer_task().labels}
     transition_count=sum(left.label != right.label for left,right in zip(plan.ordered,plan.ordered[1:]))
     rubric_rounds=transition_count//args.rubric_changes_every
@@ -113,7 +123,7 @@ def main(argv=None):
     if runtime.exists():
         parser.error("a live replay already exists; use a new output directory rather than silently restart it")
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
-    transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+    transport = optimizer_transport(vars(args))
     sink = GraphQLTraceSink(args.trace_api_url,args.trace_api_run_id,token=os.environ.get('FLYWHEEL_WEB_TOKEN')) if args.trace_api_url else None
     def observe(event):
         if sink:
@@ -133,7 +143,7 @@ def main(argv=None):
                              context_validation_floor=args.context_validation_floor,
                              evaluation_policy=evaluation_policy,
                              selection_policy=selection_policy,
-                             redact=tuple(os.environ.get(k, "") for k in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
+                             redact=credential_values(os.environ))
     def checkpoint(report):
         (args.output / "results.json").write_text(json.dumps(report, indent=2)+"\n")
         if args.operational:

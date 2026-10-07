@@ -377,6 +377,14 @@ unsupported output settings fail rather than silently being dropped. See
 [LiteLLM's input parameters](https://docs.litellm.ai/docs/completion/input) and
 [JSON output documentation](https://docs.litellm.ai/docs/completion/json_mode).
 
+The terminal reviewer and arXiv replay, verification, question-measurement,
+control-comparison, and optimizer-trace scripts accept the same
+`--optimizer-transport openai|litellm` and `--optimizer-model` options.
+OpenAI remains the default for existing workflows. Choosing a transport does
+not authorize collection: the existing `--confirm-live` and request ceilings
+still apply. Frozen preflight metadata records the selected transport; use a
+new output directory when changing a frozen protocol.
+
 ## Terms
 
 Use these terms with the same meaning throughout the system.

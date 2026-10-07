@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 
 from decision_flywheel import ClassifierConfig, DecisionFlywheel, OptimizerAgent
-from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
+from decision_flywheel.adapters.optimizer_transport import optimizer_transport
+from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.reviewer_core import reviewer_task
 from decision_flywheel.reviewer_flywheel import ReviewerFlywheel
 from decision_flywheel.reviewer_store import ReviewStore
@@ -16,7 +17,7 @@ from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.trace_artifact import render_trace
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--confirm-live', action='store_true')
@@ -24,7 +25,9 @@ def main():
     parser.add_argument('--min-development-per-class', type=int, default=20,
                         help='lower values are exploratory only, on this private copy')
     parser.add_argument('--decisions-model', default='jev-1.13.0')
-    args = parser.parse_args()
+    parser.add_argument('--optimizer-model', default='gpt-6-luna')
+    parser.add_argument('--optimizer-transport', choices=('openai', 'litellm'), default='openai')
+    args = parser.parse_args(argv)
     args.output.mkdir(parents=True, exist_ok=False)
     reviews, runtime = args.output / 'reviews.sqlite3', args.output / 'runtime.sqlite3'
     backup(Path('var/reviewer.sqlite3'), reviews)
@@ -45,11 +48,11 @@ def main():
     with ReviewStore(reviews, study_seed=metadata['study_seed'],
                      rolling_audit_rate=float(metadata['rolling_audit_rate']),
                      final_audit_rate=float(metadata['final_audit_rate'])) as store:
-        optimizer = OpenAIOptimizer.from_environment(model='gpt-6-luna', max_calls=1) if args.confirm_live else forbidden
+        optimizer = optimizer_transport({**vars(args),'max_optimizer_calls':1}) if args.confirm_live else forbidden
         model = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model)) if args.confirm_live and args.max_requests else CachedOnlyModel()
         wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), model, OptimizerAgent(optimizer),
             max_requests=max(1,args.max_requests),
-            redact=tuple(os.environ.get(key,'') for key in ('OPENAI_API_KEY','TYPESAFE_API_KEY')))
+            redact=credential_values(os.environ))
         try:
             reviewer = ReviewerFlywheel(store, wheel)
             reviewer.sync_optimizer_context()

@@ -169,6 +169,30 @@ def test_live_flywheel_requires_confirmation_before_constructing_clients(monkeyp
         main(["--live-flywheel"])
 
 
+def test_live_reviewer_routes_the_selected_optimizer_model_and_ceiling_without_using_openai(tmp_path, monkeypatch):
+    from .reviewer import main
+    from .reviewer_store import ReviewStore
+    from .adapters.litellm_optimizer import LiteLLMOptimizer
+    from .adapters.openai_optimizer import OpenAIOptimizer
+    path=tmp_path/'reviews.sqlite3'
+    with ReviewStore(path,study_seed='arxiv-review-v1') as store:
+        store.import_articles([Article('paper','Title','Abstract','2026-10-07',('cs.AI',))])
+    class SelectedTransport(Exception):pass
+    calls=[]
+    def selected(**kwargs):
+        calls.append(kwargs)
+        raise SelectedTransport()
+    def forbidden(**kwargs):
+        pytest.fail('OpenAI must not be constructed for a LiteLLM run')
+    monkeypatch.setattr(LiteLLMOptimizer,'from_environment',selected)
+    monkeypatch.setattr(OpenAIOptimizer,'from_environment',forbidden)
+    monkeypatch.setattr('decision_flywheel.reviewer.JevAdapter.from_environment',lambda **kwargs:object())
+    with pytest.raises(SelectedTransport):
+        main(['--database',str(path),'--live-flywheel','--confirm-live','--optimizer-transport','litellm',
+              '--optimizer-model','ollama/fake','--max-optimizer-calls','7'])
+    assert calls==[{'model':'ollama/fake','max_calls':7}]
+
+
 def test_jsonl_import_accepts_only_title_abstract_records_with_explicit_metadata(tmp_path):
     path = tmp_path / "articles.jsonl"
     path.write_text(json.dumps({"id": "arxiv-1", "title": "A title", "abstract": "An abstract",

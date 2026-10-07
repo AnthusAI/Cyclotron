@@ -39,10 +39,37 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "b6281344-7ff0-45db-bbb9-1074bdcbeb59",
+      "author": "home",
+      "text": "Extended optimizer transport selection through the Rich reviewer and all five arXiv replay/verification/measurement/control/trace scripts. All accept --optimizer-transport openai|litellm and route through the same lazy factory; OpenAI defaults and explicit confirmation gates remain. Protocol/preflight manifests retain transport identity. Non-OpenAI credential redaction now reaches these runtime traces. Specs verify call-free help on all six entry points, actual reviewer LiteLLM model/ceiling selection with OpenAI forbidden, and replay preflight freezing transport while preserving all source labels/comments and constructing no clients. Static undefined-name/unused-import checks pass. Full Python suite in progress; no paid calls, production edits, or experiment reports.",
+      "created_at": "2026-10-07T21:40:31.833858Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "79c142be-49a5-4d9b-96a8-8eec6d9401e7",
+      "author": "home",
+      "text": "Regression follow-up: preflight guards now forbid the shared optimizer factory instead of a removed OpenAI-only import. Existing OpenAI preflight manifests without a transport field remain resumable under their historical effective default; their original bytes are never rewritten. Changing the transport against a frozen protocol is rejected before provider construction. Replay and staged question-measurement specs prove this behavior and preserve source database bytes. Focused CLI/preflight suite: 10 passing; full suite rerun in progress.",
+      "created_at": "2026-10-07T21:41:48.930420Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "b1857ff4-7449-4db7-9c78-20ee5d7b2dba",
+      "author": "home",
+      "text": "Final verification for CLI transport integration: all 773 Python specs pass with only the 16 existing pytest-bdd deprecation warnings. Static undefined-name/unused-import checks and scoped whitespace checks pass. No provider calls, production-server restart, labels, scorecard changes, or experiment reports occurred. Broader provider-neutral app and versioned UI acceptance remains open.",
+      "created_at": "2026-10-07T21:42:41.248778Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-09-30T18:08:33.870714Z",
-  "updated_at": "2026-10-07T21:36:59.846308Z",
+  "updated_at": "2026-10-07T21:42:41.248862Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

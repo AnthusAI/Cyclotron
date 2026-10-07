@@ -8,9 +8,10 @@ from pathlib import Path
 from datetime import datetime, timezone
 import sqlite3
 
-from decision_flywheel import ClassifierConfig, DecisionFlywheel, OptimizerAgent, classification_metrics
+from decision_flywheel import ClassifierConfig, DecisionFlywheel, OptimizerAgent
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
-from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
+from decision_flywheel.adapters.optimizer_transport import optimizer_transport
+from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.control_scheduler import ControlScheduler
 from decision_flywheel.replay import plan_replay
 from decision_flywheel.reviewer_core import reviewer_task, reviewer_labeled_items
@@ -26,6 +27,7 @@ def main(argv=None):
     parser.add_argument("--max-optimizer-calls", type=int, default=3)
     parser.add_argument("--max-feature-trials", type=int, default=3)
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
+    parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
     parser.add_argument("--training-class-weighting", choices=("natural", "equal_class"), default="equal_class")
@@ -50,6 +52,7 @@ def main(argv=None):
                 "feature_trial_ceiling": args.max_feature_trials, "trial_upper_bound": trial_upper,
                 "training_class_weighting": args.training_class_weighting, "promotion_metric": "balanced_brier",
                 "optimizer_model": args.optimizer_model, "decisions_model": args.decisions_model,
+                "optimizer_transport": args.optimizer_transport,
                 "request_upper_bound": upper, "optimizer_upper_bound": 3}
     print(json.dumps({key: value for key, value in protocol.items() if key != "plan"}), flush=True)
     if not args.confirm_live:
@@ -62,7 +65,7 @@ def main(argv=None):
         parser.error("this experiment already exists; do not silently rerun paid calls")
     (args.output / "protocol.json").write_text(json.dumps(protocol, indent=2)+"\n")
     adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
-    transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+    transport = optimizer_transport(vars(args))
     def observe(event):
         if event["kind"] == "optimizer-response":
             print(json.dumps({"event": "optimizer-response", "model": event["model"],
@@ -75,7 +78,7 @@ def main(argv=None):
     wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport),
                              max_requests=args.max_requests, training_class_weighting=args.training_class_weighting,
                              min_evaluation_per_class=2, observer=observe,
-                             redact=tuple(os.environ.get(k, "") for k in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
+                             redact=credential_values(os.environ))
     async def run():
         before = await wheel._score(wheel.active, evaluation, plan.training, datetime.now(timezone.utc))
         result = await wheel.improve_controls(plan.training, plan.development,

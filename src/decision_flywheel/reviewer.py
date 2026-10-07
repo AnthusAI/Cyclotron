@@ -19,6 +19,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .adapters.jev import JevAdapter, JevConfiguration
+from .credential_redaction import credential_values
 from .artifacts import load_artifact
 from .example_list import plan_example_list_round
 from .events import FlywheelEvent, JsonlEventStream
@@ -478,6 +479,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--runtime-database", type=Path,
                         help="private persistent flywheel state and actual request/reply transcripts")
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
+    parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
     parser.add_argument("--decisions-provider", choices=("jev",), default="jev",
                         help="decision adapter; the connected reviewer currently supports Jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
@@ -519,14 +521,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not store.articles():
             parser.error("supply --articles for a new review database")
         if args.live_flywheel:
-            from .adapters.openai_optimizer import OpenAIOptimizer
+            from .adapters.optimizer_transport import optimizer_transport
             adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
-            transport = OpenAIOptimizer.from_environment(model=args.optimizer_model, max_calls=args.max_optimizer_calls)
+            transport = optimizer_transport(vars(args))
             console = Console()
             console.print(Text(f"Paid live mode: at most {args.max_live_requests} Jev requests and "
                                f"{args.max_optimizer_calls} optimizer requests in this session. "
                                f"Decisions: {args.decisions_provider}/{args.decisions_model}. "
-                               f"Optimizer: {args.optimizer_model}."))
+                               f"Optimizer: {args.optimizer_transport}/{args.optimizer_model}."))
             def observe(event):
                 kind = event["kind"]
                 if kind == "decision-request":
@@ -573,7 +575,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 selection_policy=selection_policy,
                 training_class_weighting=args.training_class_weighting,
                 min_evaluation_per_class=args.min_evaluation_per_class,
-                redact=tuple(os.environ.get(key, "") for key in ("OPENAI_API_KEY", "TYPESAFE_API_KEY")))
+                redact=credential_values(os.environ))
             try:
                 run_review_session(store, console, flywheel=ReviewerFlywheel(store, runtime,
                                    stage=args.optimization_stage, retrospective_limit=args.retrospective_limit,
