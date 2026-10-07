@@ -4,7 +4,7 @@ import json
 import pytest
 
 from .models import DecisionTask, Item, LabeledItem
-from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
+from .optimizer_agent import DisabledOptimizer, FeedbackBriefing, OptimizerAgent, OptimizerReply
 
 
 TASK = DecisionTask("include", ("include", "exclude"), "Should this item be included?")
@@ -102,3 +102,9 @@ def test_briefings_snapshot_mutable_input_and_have_stable_fingerprints():
     row.item.values["text"] = "changed"
     assert first.payload["feedback"][0]["values"]["text"] == "Recent research"
     assert first.fingerprint == briefing().fingerprint
+
+
+def test_a_disabled_optimizer_refuses_structural_work_without_a_provider_call():
+    optimizer = DisabledOptimizer()
+    with pytest.raises(RuntimeError, match="optimizer is disabled"):
+        optimizer.propose(None)

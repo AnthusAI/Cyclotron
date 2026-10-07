@@ -102,7 +102,7 @@ class DecisionFlywheel:
     """
 
     def __init__(self, database: str | Path, initial: ClassifierConfig, model: FeatureModel,
-                 optimizer: OptimizerAgent, *, observer: Callable[[dict], None] | None = None,
+                 optimizer: OptimizerAgent | None = None, *, observer: Callable[[dict], None] | None = None,
                  max_requests: int = 100, max_request_bytes: int = 32000,
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
                  training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
@@ -145,6 +145,9 @@ class DecisionFlywheel:
             CREATE TABLE IF NOT EXISTS runtime_answer_history (id INTEGER PRIMARY KEY, key TEXT NOT NULL, status TEXT NOT NULL, payload TEXT);
             CREATE TABLE IF NOT EXISTS runtime_rounds (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
         """)
+        if optimizer is None:
+            from .optimizer_agent import DisabledOptimizer
+            optimizer = DisabledOptimizer()
         self.initial, self.model, self.optimizer = initial, model, optimizer
         self._step_context = ContextVar("flywheel_step", default={})
         self._cycle_context = ContextVar("flywheel_cycle", default={})

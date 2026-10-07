@@ -151,3 +151,27 @@ class OptimizerAgent:
         if not isinstance(proposal, dict):
             raise ValueError("optimizer reply must be a JSON object")
         return proposal
+
+
+class DisabledOptimizer:
+    """A safe default for prediction-only, headless applications.
+
+    A flywheel can classify and emit events before an application is ready to
+    authorize structural optimization.  This object keeps that path explicit:
+    prediction works, while an attempt to optimize fails before a provider call.
+    """
+
+    enabled = False
+
+    def __init__(self, *, observer: Callable[[dict], None] | None = None):
+        self.observer = observer or (lambda event: None)
+
+    @staticmethod
+    def _disabled() -> RuntimeError:
+        return RuntimeError("optimizer is disabled; inject OptimizerAgent to optimize")
+
+    def request_messages(self, briefing: FeedbackBriefing) -> list[dict[str, str]]:
+        raise self._disabled()
+
+    def propose(self, briefing: FeedbackBriefing) -> dict:
+        raise self._disabled()

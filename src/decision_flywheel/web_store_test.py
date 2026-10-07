@@ -1,4 +1,5 @@
 """The web API owns durable, isolated run history."""
+import json
 import pytest
 from .web_store import WebStore
 
@@ -94,3 +95,14 @@ def test_replay_creation_commits_its_items_feedback_and_initial_trace_as_one_tra
     assert store.items(run['id'])[0]['id']=='item'
     assert store.inherited_labels(run['id'],'item')[0]['comment']=='Reason'
     assert store.events(run['id'])[0]['payload']['kind']=='replay-created'
+def test_a_review_status_update_does_not_erase_the_prediction_that_was_shown(tmp_path):
+    store = WebStore(tmp_path / 'web.sqlite')
+    run = store.create_run('A', 'live', {}, items=[{'id': 'item'}])
+    prediction = {'label': 'include', 'presentation_id': 'shown'}
+    store.update_item(run['id'], 'item', prediction=prediction)
+    store.update_item(run['id'], 'item', reviewed=True)
+    with store.connect() as db:
+        row = db.execute('SELECT prediction,reviewed FROM web_items WHERE run_id=? AND id=?',
+                         (run['id'], 'item')).fetchone()
+    assert json.loads(row['prediction']) == prediction
+    assert row['reviewed'] == 1

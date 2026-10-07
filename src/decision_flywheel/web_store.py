@@ -10,6 +10,9 @@ from .scorecards import Scorecards
 from .scorecard_definitions import ScorecardDefinitions
 
 
+_UNSET = object()
+
+
 def encode(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
@@ -240,10 +243,27 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
             row = db.execute('SELECT * FROM web_items WHERE run_id=? AND reviewed=0 AND prediction IS NOT NULL ORDER BY rowid LIMIT 1', (run_id,)).fetchone()
         return {'item':json.loads(row['payload']), 'prediction':json.loads(row['prediction'])} if row else None
 
-    def update_item(self, run_id, item_id, *, prediction=None, reviewed=False):
+    def update_item(self, run_id, item_id, *, prediction=_UNSET, reviewed=_UNSET):
+        """Apply only the fields the runtime explicitly changed.
+
+        A command that records human feedback must not erase the prediction that
+        was shown to that human. A command that prepares a prediction must not
+        guess a review status.
+        """
+        assignments, values = [], []
+        if prediction is not _UNSET:
+            assignments.append('prediction=?')
+            values.append(encode(prediction) if prediction is not None else None)
+        if reviewed is not _UNSET:
+            if type(reviewed) is not bool:
+                raise ValueError('reviewed must be a boolean')
+            assignments.append('reviewed=?')
+            values.append(reviewed)
+        if not assignments:
+            return
         with self.connect() as db:
-            cursor = db.execute('UPDATE web_items SET prediction=?,reviewed=? WHERE run_id=? AND id=?',
-                               (encode(prediction) if prediction else None, reviewed, run_id,item_id))
+            cursor = db.execute(f"UPDATE web_items SET {','.join(assignments)} WHERE run_id=? AND id=?",
+                               (*values, run_id, item_id))
             if cursor.rowcount != 1:
                 raise ValueError('unknown item')
 

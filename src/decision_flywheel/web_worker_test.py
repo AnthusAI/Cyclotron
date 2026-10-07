@@ -288,7 +288,7 @@ def test_failed_api_ingestion_marks_work_failed_without_a_paid_model_call(tmp_pa
     worker = WebWorker(store,tmp_path / 'runs',articles=[asdict(Article('paper','Title','Abstract','2026-10-06',('cs.AI',)))],
         allow_live=True,sink_factory=lambda _:lambda event:None,model_factory=lambda _: (FakeModel(),agent([])))
     run = worker.create_run('API failure', {})
-    reviewer = worker.session(run['id'])
+    reviewer = worker._runtime_session(run['id']).reviewer
     def unavailable(event):
         raise RuntimeError('API unavailable')
     reviewer.core.observer = unavailable

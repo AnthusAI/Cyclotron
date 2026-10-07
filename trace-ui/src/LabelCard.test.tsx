@@ -5,7 +5,7 @@ import {LabelCard} from './LabelCard'
 
 afterEach(cleanup)
 
-test('the labeler sees metadata and prediction and can attach the critical explanation',()=>{
+test('Scenario: A labeler can compare a displayed prediction with a human label',()=>{
   const submit=vi.fn()
   render(<LabelCard current={{item:{id:'paper',title:'Knowledge access',abstract:'A useful research abstract',submitted_at:'2026-10-06',categories:['cs.AI'],authors:'A. Author',journal_ref:'Journal 2'},prediction:{label:'exclude',confidence:.8,presentation_id:'shown'}}} busy={false} onSubmit={submit} />)
   expect(screen.getByText('A. Author')).toBeVisible()

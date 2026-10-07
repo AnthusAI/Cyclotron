@@ -15,7 +15,7 @@ from .run_ledger import (FeatureActivity, FeatureDefinition, FlywheelRound, Flyw
                          JsonlRunLedger, TrialActivity, feedback_fingerprint)
 from .steering import steering_observations
 from .classifier_config import ClassifierConfig
-from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
+from .optimizer_agent import DisabledOptimizer, FeedbackBriefing, OptimizerAgent, OptimizerReply
 from .flywheel import DecisionFlywheel, FittedClassifier
 from .evaluation_policy import EvaluationPolicy
 from .selection_policy import SelectionPolicy
@@ -41,7 +41,7 @@ __all__ = [
     "measure_questions", "rank_question", "select_window",
     "train_classifier",
     "measure_example_swaps", "plan_swaps",
-    "ClassifierConfig", "DecisionFlywheel", "FittedClassifier", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply", "classification_metrics",
+    "ClassifierConfig", "DecisionFlywheel", "DisabledOptimizer", "FittedClassifier", "FeedbackBriefing", "OptimizerAgent", "OptimizerReply", "classification_metrics",
     "ReplayPlan", "plan_replay", "recent_balanced", "run_replay",
     "ClassifierBundle", "ContextBudget", "ContextPlan", "DecisionModel", "DecisionResult", "DecisionTask",
     "DeployableArtifact", "ExampleListImprovement", "FixedExampleList", "Item", "LabeledItem", "ModelCapabilities", "OptimizationResult",

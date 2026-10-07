@@ -17,6 +17,66 @@ and measures candidates before it changes what is active. It records the
 requests, responses, feedback, versions, and measurements so a run can be
 inspected later. It does not promise that every change improves a classifier.
 
+## Use the core library without the workspace
+
+The FastAPI/GraphQL workspace is an optional application. The core library does
+not need FastAPI, GraphQL, React, or a running web server. An application gives
+`DecisionFlywheel` a provider adapter and can observe its structured events.
+With no optimizer, the flywheel supports prediction and tracing only. It refuses
+an optimization request before it can make a provider call.
+
+<!-- core-quickstart:start -->
+```python
+import asyncio
+
+from decision_flywheel import ClassifierConfig, DecisionFlywheel
+from decision_flywheel.classifier_config import ClassifiedAnswers
+from decision_flywheel.models import DecisionResult, DecisionTask, Item
+
+
+class ScriptedModel:
+    """Replace this with JevAdapter, KevAdapter, LayaAdapter, or your adapter."""
+    model_identity = "scripted-v1"
+
+    async def classify(self, config, target, training, *, now=None, event_sink=None):
+        answer = DecisionResult("include", {"include": 0.8, "exclude": 0.2})
+        return ClassifiedAnswers({"decision": answer}, self.model_identity, {}, 0)
+
+
+task = DecisionTask("library", ("include", "exclude"), "Should this item be included?")
+wheel = DecisionFlywheel("local.sqlite3", ClassifierConfig(task), ScriptedModel())
+prediction = asyncio.run(wheel.predict(Item("item-1", {"text": "A useful paper"}), ()))
+print(prediction.label, prediction.confidence)  # include 0.8
+print(wheel.history()[-1]["kind"])             # prediction
+wheel.close()
+```
+<!-- core-quickstart:end -->
+
+To enable structural optimization, inject an `OptimizerAgent` with an
+application-owned completion callable. The core remains provider-neutral. The
+adapter, storage choice, and event consumer are application decisions.
+
+### Boundary rules
+
+- `decision_flywheel` core modules contain model-neutral tasks, context,
+  fitting, optimization, caching, and event contracts.
+- The optional web application persists those contracts in its own SQLite store
+  and presents them through GraphQL and React. It does not fit models or make
+  optimization decisions in the browser.
+- `WebWorker` is an API command runner. It depends on an injected
+  `WorkspaceRuntime`; `ArticleReviewRuntime` is the optional arXiv adapter.
+  A scorecard workspace can implement the same runtime contract without adding
+  article-review imports to the worker or the core. The runtime owns command
+  semantics and returns explicit item updates; the worker only persists them,
+  streams events, and records failures.
+- Provider adapters translate between the core contracts and Jev, Kev, Laya, or
+  another decision-model API.
+
+Executable Gherkin contracts live in `tests/features/` for the Python core and
+`trace-ui/features/` for browser behavior. Python scenarios run with
+`pytest-bdd`; component behavior remains covered by Vitest tests beside the
+React components.
+
 ## What Cyclotron adds around a decision model
 
 <img src="docs/diagrams/cyclotron-harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
