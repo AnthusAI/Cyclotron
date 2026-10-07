@@ -1,0 +1,64 @@
+# Shared Cyclotron diagram conventions. Import with `...@_cyclotron`.
+#
+# Classes name a role, not a colour. render.mjs colours each role from
+# _cyclotron.css in light and dark mode, so these classes set only shape,
+# weight, and line style.
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 0
+    dark-theme-id: 200
+    pad: 24
+  }
+}
+
+classes: {
+  # Nodes
+  step: {
+    style: {border-radius: 8; stroke-width: 1; font-size: 15}
+  }
+  llm: {
+    style: {border-radius: 8; stroke-width: 1; font-size: 15}
+  }
+  ml: {
+    style: {border-radius: 8; stroke-width: 1; font-size: 15}
+  }
+  model: {
+    style: {border-radius: 8; stroke-width: 1; font-size: 15}
+  }
+  human: {
+    style: {border-radius: 8; stroke-width: 1; font-size: 15}
+  }
+  store: {
+    shape: cylinder
+    style: {stroke-width: 1; font-size: 15}
+  }
+  outcome: {
+    style: {border-radius: 8; stroke-width: 1; font-size: 15}
+  }
+  group: {
+    style: {border-radius: 12; stroke-width: 1; font-size: 14; bold: true}
+  }
+  spacer: {
+    style: {opacity: 0}
+  }
+  note: {
+    shape: text
+    style: {font-size: 14}
+  }
+
+  # Connections
+  flow: {
+    style: {stroke-width: 2; font-size: 13}
+  }
+  proposal: {
+    style: {stroke-width: 2; font-size: 13}
+  }
+  learning: {
+    style: {stroke-width: 2; font-size: 13}
+  }
+  evidence: {
+    style: {stroke-width: 1; stroke-dash: 4; font-size: 13}
+  }
+}

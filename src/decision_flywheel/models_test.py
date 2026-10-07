@@ -3,7 +3,7 @@ import pytest
 from .models import DecisionResult, DecisionTask, Item
 
 
-def test_a_task_normalizes_labels_the_way_plexus_evaluation_does():
+def test_a_task_normalizes_labels_the_way_primus_evaluation_does():
     task = DecisionTask("sentiment", ("positive", "negative"), "Choose one.")
 
     assert task.labels == ("positive", "negative")

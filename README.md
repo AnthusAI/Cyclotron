@@ -81,9 +81,9 @@ React components.
 
 ## What Cyclotron adds around a decision model
 
-<img src="docs/diagrams/cyclotron-harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
+<img src="docs/diagrams/harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
 
-[Open the interactive diagram](docs/diagrams/cyclotron-harness.html) · [Read its Archify specification](.archify/architecture-cyclotron-20261007-120000/harness.json)
+[Editable D2 source](docs/diagrams/harness.d2)
 
 The diagram separates two jobs that must not be confused:
 
@@ -91,6 +91,10 @@ The diagram separates two jobs that must not be confused:
   examples, and classifier questions.
 - The **ML fitter** learns numerical feature weights and confidence calibration
   only from trusted labels. The optimizer cannot write those numbers.
+
+The active version keeps context, fitted head, calibration, requests, and
+evidence together. A candidate becomes active only when its configured
+evaluation accepts it.
 
 ## Scorecards: many classifiers, one request
 
@@ -103,11 +107,12 @@ Cyclotron can place all compatible classifier contexts in one decision-model
 request. The target item appears once. Each classifier context stays scoped to
 that classifier. Returned answers map back to the correct classifier, where its
 own ML head makes the final prediction. A human can label several classifiers for
-the same item in one review.
+the same item in one review. Usage is counted once, and the complete request is
+cached by its full fingerprint.
 
-<img src="docs/diagrams/cyclotron-scorecards.svg" alt="A versioned scorecard holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
+<img src="docs/diagrams/scorecards.svg" alt="A versioned scorecard holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
 
-[Open the interactive diagram](docs/diagrams/cyclotron-scorecards.html) · [Read its Archify specification](.archify/architecture-cyclotron-20261007-120000/scorecards.json)
+[Editable D2 source](docs/diagrams/scorecards.d2)
 
 Changing a classifier creates a new classifier revision and an affected
 scorecard revision. A run retains the scorecard revision and learned checkpoints
@@ -425,10 +430,7 @@ Use these terms with the same meaning throughout the system.
 
 ## The classifier at the center of the flywheel
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/classifier-dark.png">
-  <img src="docs/diagrams/classifier-light.png" alt="The LLM optimizer adjusts the rubric, few-shot example collection, and element classification tasks in the decision-model request. The returned main and element answers become features for the custom ML model.">
-</picture>
+<img src="docs/diagrams/classifier.svg" alt="The LLM optimizer adjusts the rubric, few-shot example collection, and element classification tasks in the decision-model request. The returned main and element answers become features for the custom ML model.">
 
 [Editable D2 source](docs/diagrams/classifier.d2)
 
@@ -589,10 +591,7 @@ The system needs examples of both labels before it can learn their difference.
 
 ## Analyze feedback and improve the system
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/improvement-dark.png">
-  <img src="docs/diagrams/improvement-light.png" alt="Human feedback guides the LLM optimizer to revise the rubric, few-shot example collection, and element classification tasks. Code validates the changes, collects features, retrains the custom ML model, and evaluates promotion. Prompts, responses, and measured results are recorded.">
-</picture>
+<img src="docs/diagrams/improvement.svg" alt="Human feedback guides the LLM optimizer to revise the rubric, few-shot example collection, and element classification tasks. Code validates the changes, collects features, retrains the custom ML model, and evaluates promotion. Prompts, responses, and measured results are recorded.">
 
 [Editable D2 source](docs/diagrams/improvement.d2)
 
@@ -637,10 +636,7 @@ Optimization of extraction rules for longer articles is deferred.
 
 ## Separate learning from evaluation
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/evaluation-dark.png">
-  <img src="docs/diagrams/evaluation-light.png" alt="Training records feed rubric analysis, example selection, and ML fitting. Development labels compare candidates. Ongoing audit and permanent holdout labels independently score saved classifier versions and never enter learning.">
-</picture>
+<img src="docs/diagrams/evaluation.svg" alt="Training records feed rubric analysis, example selection, and ML fitting. Development labels compare candidates. Ongoing audit and permanent holdout labels independently score saved classifier versions and never enter learning.">
 
 [Editable D2 source](docs/diagrams/evaluation.d2)
 
@@ -1415,12 +1411,9 @@ The explanations use short sentences, active verbs, and the technical names defi
 They follow the writing approach in [ASD-STE100](https://www.asd-ste100.org/STE_faq.html).
 A full dictionary conformity review has not been completed.
 
-Archify generates the diagrams from saved JSON specifications.
-The HTML files support interactive inspection and export.
-The SVG files provide static images for this README.
-The editable D2 sources are linked below each diagram. Render each source with
-`d2 --layout elk --theme 0 --pad 30 --scale 2` for light mode, or use theme `200`
-for dark mode. The PNGs above are the README display artifacts.
+The diagrams are D2 sources in [docs/diagrams](docs/diagrams/README.md).
+Run `make diagrams` to render each source to one SVG that follows the reader's
+light or dark appearance. CI fails when a committed SVG does not match its source.
 
 Kanbus stores project tasks in Git.
 Semantic Release uses conventional commits to produce releases.
