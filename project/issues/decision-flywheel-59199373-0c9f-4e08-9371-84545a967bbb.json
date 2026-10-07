@@ -114,10 +114,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "c134942a-3367-4482-80fd-1cdcd209676e",
+      "author": "home",
+      "text": "Fixed live/playback raw-versus-final metric role handling: full ordered class roles now travel with cursor snapshots, and a shared pure UI calculation measures all positive classes as one positive-versus-rest group. Neutral macro metrics include every declared class and preserve undefined support; incomplete multi-positive confusion matrices do not invent rates. Pure and card integration specs pass; 81 UI tests and 12 focused Python playback/class-role tests pass. Build passed after explicit TypeScript class-role annotation. React skill guided shared derived calculations and listener cleanup. Concurrent branding/WebApp edits are preserved; generated bundles are left for integration because they include those other-session edits. Broader browser/real-data acceptance remains open.",
+      "created_at": "2026-10-07T17:53:34.285130Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T17:51:23.980560Z",
+  "updated_at": "2026-10-07T17:53:34.285224Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

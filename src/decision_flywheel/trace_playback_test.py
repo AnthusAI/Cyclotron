@@ -26,7 +26,7 @@ const window={dispatchEvent:event=>delivered[event.name]=event.detail};
 function dispatch(){DISPATCH}
 dispatch();
 assert.equal(delivered['flywheel-model-comparison-position'].Topic.comparison.count,1);
-assert.equal(delivered['flywheel-model-comparison-position'].Topic.positive,'yes');
+assert.deepEqual(delivered['flywheel-model-comparison-position'].Topic.classes,[{label:'yes',role:'positive'}]);
 position=2;dispatch();assert.equal(delivered['flywheel-model-comparison-position'].Topic.comparison.count,2);
 position=0;dispatch();assert.deepEqual(delivered['flywheel-model-comparison-position'],{});
 """.replace('DISPATCH',dispatch)

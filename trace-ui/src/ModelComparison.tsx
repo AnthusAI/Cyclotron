@@ -1,19 +1,18 @@
 import type {CalibrationCurve} from './ReliabilityCurve'
 import {useEffect,useState} from 'react'
+import {metricRates,type ClassRole,type RateMetrics} from './metricRates'
 
-type OutputMetrics={accuracy:number|null;per_class:Record<string,{recall:number|null;precision:number|null}>;calibration:CalibrationCurve}
+type OutputMetrics=RateMetrics&{accuracy:number|null;calibration:CalibrationCurve}
 export type DecisionModelComparison={count:number;missing_raw_count:number;missing_paired_probability_count?:number;raw:OutputMetrics;final:OutputMetrics}
 const percent=(value:number|null)=>value==null?'—':`${(value*100).toFixed(1)}%`
-export function ModelComparison({comparison,positive}:{comparison?:DecisionModelComparison;positive?:string}){
+export function ModelComparison({comparison,classes}:{comparison?:DecisionModelComparison;classes?:ClassRole[]}){
   if(!comparison?.count)return <p className="text-xs text-muted-foreground">No matched raw decision-model and final-classifier predictions recorded yet.</p>
   const outputs=[{name:'Raw decision model',metrics:comparison.raw,color:'#3b82f6'},{name:'Final classifier',metrics:comparison.final,color:'#22c55e'}]
-  const metric=(metrics:OutputMetrics,key:'recall'|'precision')=>{
-    if(positive)return metrics.per_class[positive]?.[key]??null
-    const values=Object.values(metrics.per_class).map(row=>row[key])
-    return values.length&&values.every(value=>value!=null)?values.reduce<number>((sum,value)=>sum+(value??0),0)/values.length:null
-  }
+  const config=classes
+  const metric=(metrics:OutputMetrics,key:'recall'|'precision')=>metricRates(metrics,config)[key]
   return <div className="space-y-3">
     <p className="text-xs text-muted-foreground">Same {comparison.count} reviewed items · pre-vote predictions · not held-out.</p>
+    <p className="text-xs text-muted-foreground">Recall and precision: {config?.some(row=>row.role==='positive')?`positive versus rest (${config.filter(row=>row.role==='positive').map(row=>row.label).join(', ')})`:'macro average across classes'}.</p>
     <table className="w-full text-xs tabular-nums"><thead><tr>{['Output','Recall','Precision','Accuracy'].map(label=><th scope="col" key={label} className="text-left font-medium p-1">{label}</th>)}</tr></thead><tbody>{outputs.map(({name,metrics,color})=><tr key={name}><th scope="row" className="text-left font-medium p-1" style={{color}}>{name}</th>{[metric(metrics,'recall'),metric(metrics,'precision'),metrics.accuracy].map((value,index)=><td key={index} className="p-1">{percent(value)}</td>)}</tr>)}</tbody></table>
     <svg viewBox="0 0 240 155" role="img" aria-label="Raw decision model versus final classifier calibration" className="w-full max-w-xs">
       <path d="M30 10V125H230 M30 125L230 10" fill="none" stroke="currentColor" opacity=".25"/>
@@ -28,7 +27,7 @@ export function ModelComparison({comparison,positive}:{comparison?:DecisionModel
 }
 
 export function PlaybackModelComparison(){
-  const [snapshots,setSnapshots]=useState<Record<string,{comparison:DecisionModelComparison;positive?:string}>>({})
+  const [snapshots,setSnapshots]=useState<Record<string,{comparison:DecisionModelComparison;classes?:ClassRole[]}>>({})
   useEffect(()=>{
     const update=(event:Event)=>setSnapshots((event as CustomEvent<typeof snapshots>).detail)
     window.addEventListener('flywheel-model-comparison-position',update)

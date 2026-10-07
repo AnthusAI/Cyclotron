@@ -523,7 +523,7 @@ function draw(){
  const modelComparisons={};
  for(let i=0;i<=position&&i<events.length;i++)if(events[i].kind==='cycle-metrics'&&events[i].metrics?.decision_model_comparison){
   const config=events[i].class_config||classConfig;
-  modelComparisons[events[i].classifier_id||'Classifier']={comparison:events[i].metrics.decision_model_comparison,positive:config.find(row=>row.role==='positive')?.label};
+  modelComparisons[events[i].classifier_id||'Classifier']={comparison:events[i].metrics.decision_model_comparison,classes:config};
  }
  window.dispatchEvent(new CustomEvent('flywheel-model-comparison-position',{detail:modelComparisons}));
  el('status').textContent=event?`${event.cycle_number?'Cycle '+event.cycle_number+' · ':''}Event ${event.event_id} · ${event.kind} · ${event.step_stage||(event.cycle_id?'item processing':'legacy/unscoped')} · ${event.status||event.reason||''}`:'No recorded events';
