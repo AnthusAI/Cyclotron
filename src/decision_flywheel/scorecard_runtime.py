@@ -164,9 +164,16 @@ class ScorecardRuntime:
             raise ValueError("scorecard runtime requires a frozen scorecard configuration")
         model, optimizer = self.model_factory(config)
         run = {"id": run_id, "config": dict(config)}
+        observer = self.sink_factory(run_id)
+        configure_batch = getattr(observer, "set_batch_size", None)
+        if configure_batch is not None:
+            # The API accepts at most 200 events per durable append.  Flushes
+            # happen in execute(), so a completed command never leaves a
+            # buffered trace behind.
+            configure_batch(200)
         workspace = WorkspaceSession(
             self.store, run, self.directory / run_id, model, optimizer,
-            self.sink_factory(run_id), redact=self.redact,
+            observer, redact=self.redact,
         )
         return ScorecardSession(workspace)
 
@@ -190,36 +197,41 @@ class ScorecardRuntime:
             transport = getattr(wheel.optimizer, "complete", None)
             if hasattr(transport, "max_calls"):
                 transport.max_calls = config["max_optimizer_calls"]
-        if kind == "prepare":
-            return RuntimeCommand(await workspace.prepare())
-        if kind == "label":
-            if not request_id:
-                raise ValueError("scorecard feedback needs a command identity")
-            return RuntimeCommand(await workspace.feedback(payload, request_id))
-        if kind == "skip":
-            return RuntimeCommand(workspace.skip(payload))
-        if kind == "correct":
-            if not request_id:
-                raise ValueError("scorecard correction needs a command identity")
-            return RuntimeCommand(workspace.correct_feedback(payload, request_id))
-        if kind == "undo":
-            if payload or not request_id:
-                raise ValueError("scorecard undo needs an empty payload and a command identity")
-            return RuntimeCommand(workspace.undo_feedback(request_id))
-        if kind == "optimize":
-            return RuntimeCommand(await workspace.resume_optimization())
-        if kind == "replay-next":
-            if config.get("input_mode") != "replay":
-                raise ValueError("this run is not a replay")
-            shown = await workspace.prepare()
-            if shown.get("finished"):
-                return RuntimeCommand(shown)
-            return RuntimeCommand(await workspace.feedback({
-                "item_id": shown["item"]["id"],
-                "presentation_id": shown["prediction"]["presentation_id"],
-                "labels": [],
-            }, f"replay:{shown['item']['id']}"))
-        raise ValueError("use catalog label correction; automatic learning rollback is not supported")
+        try:
+            if kind == "prepare":
+                return RuntimeCommand(await workspace.prepare())
+            if kind == "label":
+                if not request_id:
+                    raise ValueError("scorecard feedback needs a command identity")
+                return RuntimeCommand(await workspace.feedback(payload, request_id))
+            if kind == "skip":
+                return RuntimeCommand(workspace.skip(payload))
+            if kind == "correct":
+                if not request_id:
+                    raise ValueError("scorecard correction needs a command identity")
+                return RuntimeCommand(workspace.correct_feedback(payload, request_id))
+            if kind == "undo":
+                if payload or not request_id:
+                    raise ValueError("scorecard undo needs an empty payload and a command identity")
+                return RuntimeCommand(workspace.undo_feedback(request_id))
+            if kind == "optimize":
+                return RuntimeCommand(await workspace.resume_optimization())
+            if kind == "replay-next":
+                if config.get("input_mode") != "replay":
+                    raise ValueError("this run is not a replay")
+                shown = await workspace.prepare()
+                if shown.get("finished"):
+                    return RuntimeCommand(shown)
+                return RuntimeCommand(await workspace.feedback({
+                    "item_id": shown["item"]["id"],
+                    "presentation_id": shown["prediction"]["presentation_id"],
+                    "labels": [],
+                }, f"replay:{shown['item']['id']}"))
+            raise ValueError("use catalog label correction; automatic learning rollback is not supported")
+        finally:
+            flush = getattr(workspace.observer, "flush", None)
+            if flush is not None:
+                flush()
 
 
 def run_scorecard_command(runtime: ScorecardRuntime, session: ScorecardSession, kind: str,

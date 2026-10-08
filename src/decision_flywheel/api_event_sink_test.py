@@ -30,3 +30,14 @@ def test_completed_comparison_is_published_through_the_same_api():
     sink.complete({'comparison': {'before': {'accuracy':.5}, 'after': {'accuracy':.8}}})
     assert calls[0]['variables']['run'] == 'run'
     assert calls[0]['variables']['summary']['comparison']['after']['accuracy'] == .8
+
+
+def test_buffered_sink_preserves_event_order_and_uses_one_bounded_ingestion_request():
+    calls=[]
+    sink=GraphQLTraceSink('unused','run',batch_size=3,transport=lambda body:
+        calls.append(body) or {'data':{'ingestEvents':[{'sequence':4},{'sequence':5},{'sequence':6}]}})
+    for source in ('first','second','third'):
+        sink.ingest(source,{'kind':'cycle-metrics','source':source})
+    assert len(calls)==1
+    assert [row['sourceId'] for row in calls[0]['variables']['events']]==['first','second','third']
+    assert [row['payload']['source'] for row in calls[0]['variables']['events']]==['first','second','third']

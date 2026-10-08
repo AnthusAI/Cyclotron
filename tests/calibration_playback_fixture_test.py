@@ -108,6 +108,10 @@ def test_scripted_activity_records_real_worker_learning_phases_without_paid_clie
             for event in requests}=={'rubric','example_ids','tasks'}
     assert any(json.loads(event['messages'][-1]['content'])['human_explanations'] for event in requests)
     assert any(event.get('tool_calls') for event in events if event['kind']=='optimizer-response')
+    # The fixture sends every engine event through the real GraphQL endpoint,
+    # but a scorecard command flushes bounded ordered batches rather than one
+    # HTTP/SQLite transaction per emitted event.
+    assert result['trace_requests'] * 10 < len(events)
     current=store.current_item(result['run_id'])
     assert current['item']['id']=='fixture-41'
     assert store.item_labels('fixture-items','fixture-41',1)==[]

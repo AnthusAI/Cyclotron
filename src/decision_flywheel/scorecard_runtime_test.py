@@ -131,8 +131,9 @@ def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_
     lose_undo_ack = [False]
     def trace(body):
         response = client.post('/graphql', json=body).json()
-        event = body['variables']['events'][0]['payload']
-        if lose_undo_ack[0] and event['kind'] == 'human-feedback' and event.get('action') == 'retracted':
+        events = [row['payload'] for row in body['variables'].get('events', [])]
+        if lose_undo_ack[0] and any(event['kind'] == 'human-feedback' and event.get('action') == 'retracted'
+                                    for event in events):
             lose_undo_ack[0] = False
             return {'errors': [{'message': 'Synthetic acknowledgement loss'}]}
         return response

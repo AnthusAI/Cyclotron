@@ -62,7 +62,12 @@ def build_fixture(directory, *, pending_item=False, optimizer_activity=False):
         for i in range(1,reviews+1+int(pending_item))])
     model=FakeDecisionClient()
     with TestClient(create_app(store)) as client:
-        sink=lambda run:GraphQLTraceSink('offline',run,transport=lambda body:client.post('/graphql',json=body).json())
+        trace_requests=0
+        def trace_transport(body):
+            nonlocal trace_requests
+            trace_requests+=1
+            return client.post('/graphql',json=body).json()
+        sink=lambda run:GraphQLTraceSink('offline',run,transport=trace_transport)
         worker=WebWorker(store,directory/'runs',allow_live=True,sink_factory=sink,
             model_factory=lambda _: (JevAdapter(model),OptimizerAgent(scripted_optimizer if optimizer_activity else no_optimizer)))
         try:
@@ -83,7 +88,8 @@ def build_fixture(directory, *, pending_item=False, optimizer_activity=False):
                 worker.process(store.claim_command())
                 while command:=store.claim_command():
                     worker.process(command)
-            return {'run_id':run['id'],'database':str(directory/'workspace.sqlite3'),'model_calls':model.calls}
+            return {'run_id':run['id'],'database':str(directory/'workspace.sqlite3'),'model_calls':model.calls,
+                    'trace_requests':trace_requests}
         finally:
             worker.close()
 
