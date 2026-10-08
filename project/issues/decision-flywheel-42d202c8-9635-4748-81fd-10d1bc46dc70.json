@@ -91,10 +91,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d6b92d2b-d5c7-4fb7-a5f3-0ccff84c79ec",
+      "author": "home",
+      "text": "System appearance acceptance is unresolved: macOS reports dark=true, but the connected in-app browser reports dark=false and renders the light palette even after an authorized appearance toggle and reload. Original appearance restored. No other normal browser is connected. Do not count this as actual dark calibration rendering proof; existing light/API/playback evidence remains valid. Device acceptance checklist is now documented; no production data or calls changed.",
+      "created_at": "2026-10-08T02:33:24.286600Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-08T01:50:24.528020Z",
+  "updated_at": "2026-10-08T02:33:24.286745Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

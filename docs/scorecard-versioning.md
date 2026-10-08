@@ -621,3 +621,35 @@ synthetic feedback and watch the command acknowledgement and activity status.
 The fake decision probabilities deliberately do not establish model quality.
 No mode loads provider credentials or constructs a paid client. Seeding this
 larger fixture takes longer because the real numerical fits run locally.
+
+### Device acceptance: what still needs a real device
+
+Automated specs and desktop browser viewport overrides do not prove iPad touch,
+software-keyboard, or nonzero safe-area behavior. Keep those checks separate
+from engine acceptance. A screenshot of a tablet-sized desktop viewport is not
+evidence of a physical iPad test.
+
+For a label-free device check, open an existing run and inspect its timeline.
+For checks that select answers or type comments, use the separate synthetic
+fixture above; do not submit test votes into a real labeling session. The
+fixture binds to loopback by default. Do not assume its printed loopback URL
+is reachable from an iPad or change network exposure without approval.
+
+| Check | Expected behavior |
+| --- | --- |
+| Portrait and landscape | The app stays within the viewport; article, classifier controls and bottom actions remain reachable. Only designated panels scroll. |
+| Keyboard open | Focus an explanation field. The field remains visible; scrolling the card reaches its contents. Dismissing the keyboard restores the layout without losing the draft. |
+| Safe areas | Navigation and bottom actions do not sit underneath the home indicator or a display cutout. Test with actual nonzero insets. |
+| Draft and drawers | Select a class and type a comment, open and close history/activity, then confirm the unsent draft remains. |
+| Touch timeline navigation | One-finger drag pans; two-finger pinch zooms. Ordinary vertical scrolling does not zoom. Fit returns to the entire run after a deep zoom. |
+| Playback and inspection | Select a cell, then Next/Previous/Play. The current pointer follows that position; the detail pane shows the selected cycle's recorded exchanges, not future context. |
+| System appearance | In light and dark system appearance, check the shell, timeline, inspector and both calibration series. There is deliberately no app theme switch. |
+
+Record the actual device/browser, orientation, observed viewport and result.
+Do not infer a pass from the presence of a CSS rule or from changing a system
+setting alone. In particular, a connected browser can report light
+`prefers-color-scheme` even when macOS is dark. The in-app browser did so during
+the acceptance check on 2026-10-08, including after a system appearance change
+and page reload. That check does **not** verify dark rendering; use a browser
+that actually reports dark preference. The original system appearance was
+restored, and no production labels or model calls were changed.

@@ -78,10 +78,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "50ec30fe-d15b-4444-a406-6fde4019578f",
+      "author": "home",
+      "text": "Documented an explicit physical-device acceptance checklist in docs/scorecard-versioning.md: portrait/landscape, software keyboard, nonzero safe areas, drawer draft retention, touch pan/pinch, playback and exchange inspection. These remain unverified on a physical iPad. macOS system dark mode was confirmed and restored after an authorized temporary appearance toggle, but the only connected in-app browser reported prefers-color-scheme dark=false even after reload. No alternative normal browser is connected. This is an observability blocker, not proof the app dark styling fails or passes. No production labels/model calls changed. Task remains in progress.",
+      "created_at": "2026-10-08T02:33:23.785931Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T02:16:05.512760Z",
+  "updated_at": "2026-10-08T02:33:23.786024Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
