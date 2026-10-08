@@ -78,10 +78,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d50b7ae8-65ca-4015-bfae-a18d84cb6cd0",
+      "author": "home",
+      "text": "Fixed labeling-card order to use the run pinned scorecard classifier sequence rather than alphabetically serialized response keys. Regression failed first; 165 UI specs, production build and focused lint pass. Test preserves legacy/unconfigured outputs, proves vote/comment identity survives reordering, and checks submission sequence follows configured order. Browser on isolated fake-model SQLite/API workspace shows Relevance then Practicality, matching saved run configuration; reload retained a synthetic unsubmitted Relevance vote/comment on the same classifier. No console warnings/errors, server errors, provider calls or recorded new labels (fixture catalog still 6). Proof var/web/pinned-card-order-proof.png. React guidance kept order derived rather than mirrored state. Wider scorecard acceptance remains open.",
+      "created_at": "2026-10-08T00:44:55.693338Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:53:59.760123Z",
-  "updated_at": "2026-10-07T22:53:22.943313Z",
+  "updated_at": "2026-10-08T00:44:55.693418Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

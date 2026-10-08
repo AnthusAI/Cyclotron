@@ -8,6 +8,10 @@ revision and new definitions for active scorecards containing that classifier.
 Existing runs do not change. Definition activation changes the configuration for
 future runs, not which historical run accepts feedback.
 
+Labeling cards follow the classifier order pinned in the run, not the order of
+keys in a serialized prediction. Votes and explanations remain keyed by classifier
+identity, so changing display order cannot transfer a draft to another classifier.
+
 Run editions are a separate history: each immutable edition points to one
 optimization run and its frozen classifier definitions. Classifier definitions
 retain their own revision numbers. Runtime checkpoints

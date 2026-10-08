@@ -21,15 +21,20 @@ export function MultiLabelCard({current,names,busy,onSubmit,classifiers=[],event
   const setLabels=(update:(previous:Record<string,string>)=>Record<string,string>)=>setDraft(previous=>({...previous,labels:update(previous.labels)}))
   const setComments=(update:(previous:Record<string,string>)=>Record<string,string>)=>setDraft(previous=>({...previous,comments:update(previous.comments)}))
   const {item,prediction}=current
+  const outputs=new Map(Object.entries(prediction.classifiers))
+  // Serialized response objects have no display-order contract. Use the pinned
+  // scorecard order, retaining unconfigured outputs for legacy presentations.
+  const orderedIds=[...new Set([...classifiers.map(classifier=>classifier.id),...outputs.keys()])].filter(id=>outputs.has(id))
+  const orderedOutputs=orderedIds.map(id=>[id,outputs.get(id)!] as const)
   const recorded=new Map(prediction.recorded_labels?.map(row=>[row.classifier_id,row]))
-  const choices=Object.keys(prediction.classifiers).filter(id=>labels[id]).map(id=>({classifier_id:id,label:labels[id],comment:comments[id]??''}))
-  const missingHistorical=recorded.size>0&&Object.keys(prediction.classifiers).some(id=>!recorded.has(id)&&!labels[id])
+  const choices=orderedIds.filter(id=>labels[id]).map(id=>({classifier_id:id,label:labels[id],comment:comments[id]??''}))
+  const missingHistorical=recorded.size>0&&orderedIds.some(id=>!recorded.has(id)&&!labels[id])
   return <Card className="labeling-card"><CardHeader><CardTitle>{String(item.values.title??item.id)}</CardTitle></CardHeader><CardContent className="labeling-card-content space-y-5">
     <div className="labeling-reading">
     <p className="labeling-article whitespace-pre-wrap text-lg leading-relaxed">{String(item.values.abstract??item.values.text??'')}</p>
     <p className="text-xs text-muted-foreground">{String(item.values.submitted_at??'')} · {String(item.values.authors??'')} · {Array.isArray(item.values.categories)?item.values.categories.join(', '):''}</p>
     </div>
-    <fieldset disabled={busy} aria-busy={busy} className="classifier-feedback-strip">{Object.entries(prediction.classifiers).map(([id,result])=><section key={id} className="label-classifier space-y-2 rounded-lg border border-border p-3"><h3 className="font-medium">{names[id]??id}</h3>
+    <fieldset disabled={busy} aria-busy={busy} className="classifier-feedback-strip">{orderedOutputs.map(([id,result])=><section key={id} className="label-classifier space-y-2 rounded-lg border border-border p-3"><h3 className="font-medium">{names[id]??id}</h3>
       <div className="prediction-choices"><div role="group" aria-label={`${names[id]??id} classification`} className="prediction-buttons">{result.classes.map((label,index)=>{
         const predicted=label===result.label,selected=(recorded.get(id)?.label??labels[id])===label
         return <Button key={label} variant="outline" disabled={busy||recorded.has(id)} className="label-choice min-h-12 flex-1 flex-col gap-0.5 px-3 py-2" aria-label={`${names[id]??id}: ${label}${predicted?`, predicted ${Math.round(result.confidence*100)}%`:''}`} aria-pressed={selected} data-predicted={predicted} data-agreement={selected?(predicted?'correct':'incorrect'):'unselected'} onClick={()=>setLabels(previous=>({...previous,[id]:previous[id]===label?'':label}))}>
