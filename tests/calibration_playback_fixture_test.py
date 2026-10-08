@@ -88,3 +88,26 @@ def test_fake_confidence_stays_a_valid_probability_when_browser_checks_make_many
         probabilities=client.system_one(questions={'q':{}}).answers['q']['probabilities']
         assert all(0<=value<=1 for value in probabilities.values())
         assert sum(probabilities.values())==pytest.approx(1)
+
+
+def test_scripted_activity_records_real_worker_learning_phases_without_paid_clients(tmp_path,monkeypatch):
+    from decision_flywheel.web_store import WebStore
+    module=fixture_script()
+    monkeypatch.setattr(module.JevAdapter,'from_environment',lambda *a,**k:pytest.fail('paid client forbidden'))
+    result=module.build_fixture(tmp_path,pending_item=True,optimizer_activity=True)
+    store=WebStore(tmp_path/'workspace.sqlite3')
+    events=[row['payload'] for row in store.all_events(result['run_id'])]
+    kinds={event['kind'] for event in events}
+    assert len([event for event in events if event['kind']=='human-feedback' and event['action']=='submitted'])==80
+    assert {'optimizer-request','optimizer-response','fit-started','fit-completed','candidate-evaluated'}<=kinds
+    assert not kinds.intersection({'round-failed','step-failed','optimization-stage-failed'})
+    assert all(job['status']=='completed' for job in store.jobs(result['run_id']))
+    requests=[event for event in events if event['kind']=='optimizer-request']
+    import json
+    assert {json.loads(event['messages'][-1]['content'])['current']['control_under_test']
+            for event in requests}=={'rubric','example_ids','tasks'}
+    assert any(json.loads(event['messages'][-1]['content'])['human_explanations'] for event in requests)
+    assert any(event.get('tool_calls') for event in events if event['kind']=='optimizer-response')
+    current=store.current_item(result['run_id'])
+    assert current['item']['id']=='fixture-41'
+    assert store.item_labels('fixture-items','fixture-41',1)==[]

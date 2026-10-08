@@ -83,14 +83,31 @@
         "name": "App acceptance",
         "settings": {}
       }
+    },
+    {
+      "id": "0544d307-e937-461c-a4ba-7cf449667418",
+      "author": "home",
+      "text": "Added an explicitly scripted, fake-only optimizer-activity fixture: forty alternating reviews per classifier through the real API/SQLite/worker, all three independent context controls, exact requests/responses/tool-call evidence, fitting and candidate evaluation. No provider credentials or paid clients. Regression forbids paid factory, verifies 80 submitted labels, all three control scopes, explanations, fits, completed jobs and a pending unlabelled item. Browser acceptance found and fixed final-item acknowledgement disappearing: completed sessions now retain saved-label feedback, show Session complete and remove Prepare next item. Failing-first UI spec; 168 UI tests/build passed, 852 Python tests passed. Actual isolated browser submission immediately showed waiting-to-record, then 2 labels recorded / Your feedback is saved / Session complete; no console errors, all 86 fixture commands completed, append-only undo preserved (84 feedback records, 2 retractions). Screenshot var/web/scripted-activity-completion-proof.png. Broader real-time phase/tablet acceptance remains open; fixture probabilities are not model-quality evidence.",
+      "created_at": "2026-10-08T01:11:31.949840Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "App acceptance",
+        "settings": {}
+      }
     }
   ],
   "created_at": "2026-10-07T14:54:06.171698Z",
-  "updated_at": "2026-10-08T01:00:54.390169Z",
+  "updated_at": "2026-10-08T01:11:43.098388Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

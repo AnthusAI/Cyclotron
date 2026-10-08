@@ -574,3 +574,16 @@ height and scrolls internally; article reading and the bottom review actions
 retain their own space. This mode uses the same synthetic-data safeguards.
 The classifier panel is a named Tab stop. With it focused, Page Down/Page Up
 scroll expanded details inside that panel rather than the app page.
+
+Add `--optimizer-activity --pending-item` in a new fixture directory to exercise
+the learning lifecycle as well. This mode records forty alternating synthetic
+reviews per classifier through the same API/worker, with cadence-triggered
+example/question optimization and transition-triggered rubric refinement. The
+optimizer is a local scripted callable; its recorded tool calls are fixture
+data, not executed external tools. Numerical fitting and candidate selection
+use the real library. A forty-first item remains ready for interactive labeling.
+Inspect the trigger, request, response, fit and evaluation events, then submit
+synthetic feedback and watch the command acknowledgement and activity status.
+The fake decision probabilities deliberately do not establish model quality.
+No mode loads provider credentials or constructs a paid client. Seeding this
+larger fixture takes longer because the real numerical fits run locally.

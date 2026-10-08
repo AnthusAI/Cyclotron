@@ -403,6 +403,27 @@ test('retrying an unconfirmed label after remount recovers the original command 
   expect(submissions[1][1]).toEqual(submissions[0][1])
 })
 
+test('the last item keeps its saved-feedback acknowledgement and shows a completed session',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  let submitted=false
+  const shown={item:{id:'last',values:{title:'Last paper'}},prediction:{presentation_id:'last-shown',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
+  const completed={id:'last-vote',kind:'label',status:'completed',result:{}}
+  vi.mocked(graphql).mockImplementation(async query=>{
+    if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    if(query.includes('submitCommand')){submitted=true;return {submitCommand:completed}}
+    return {run:{...live,status:submitted?'completed':'ready'},currentItem:submitted?null:shown,jobs:submitted?[completed]:[]}
+  })
+  render(<WebApp />)
+  fireEvent.click(await screen.findByRole('button',{name:'Topic: exclude'}))
+  fireEvent.click(screen.getByRole('button',{name:'Submit feedback'}))
+  await screen.findByText('Session complete',{}, {timeout:2500})
+  expect(screen.getByText('1 label recorded')).toBeVisible()
+  expect(screen.getByText('Your feedback is saved.')).toBeVisible()
+  expect(screen.queryByRole('button',{name:'Prepare next item'})).toBeNull()
+  expect(vi.mocked(graphql).mock.calls.filter(([query])=>query.includes('mutation'))).toHaveLength(1)
+})
+
 test('labeling uses the focused app layout with history and activity drawers without restarting',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
   render(<WebApp />)
