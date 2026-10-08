@@ -98,8 +98,15 @@ def main(argv=None):
     if sha256(args.operational_corpus) != args.operational_sha256:
         raise ValueError("operational corpus hash mismatch")
     labels = frozen_labels(args.operational_corpus)
+    protocol_path=args.study_output / "protocol.json"
+    if protocol_path.exists():
+        modes_to_export=tuple(json.loads(protocol_path.read_text()).get("modes", ()))
+    else:
+        modes_to_export=tuple(path.name for path in args.study_output.iterdir() if path.is_dir())
+    if not modes_to_export:
+        raise ValueError("study output has no declared scenario modes")
     modes = {}
-    for mode in ("all", "reject_half", "casual_ten_percent"):
+    for mode in modes_to_export:
         database = args.study_output / mode / "runtime.sqlite3"
         if database.exists():
             modes[mode] = temporal(predictions(database, labels))
