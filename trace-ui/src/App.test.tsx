@@ -4,9 +4,11 @@ import '@testing-library/jest-dom/vitest'
 import {App} from './App'
 
 afterEach(cleanup)
+const first={cycle:1,count:1,probabilityCount:1,recall:0,precision:null,accuracy:0,ece:.8,brier:.6}
+const outcomes=[{id:'a',classes:[],first,latest:{...first,cycle:85,count:85,accuracy:.8}}]
 
 test('collapsed run statistics show the summary counts on the disclosure line',()=>{
-  render(<App counts={{predictions:85,labels:80,optimizations:12,events:400}} />)
+  render(<App outcomes={outcomes} counts={{predictions:85,labels:80,optimizations:12,events:400}} />)
   const summary=screen.getByText('Run statistics').closest('summary')!
   expect(summary).toHaveTextContent('85 predictions')
   expect(summary).toHaveTextContent('80 labels')
@@ -35,7 +37,7 @@ test('expanded statistics lead with matched before and after metrics and undefin
 })
 
 test('the explorer exposes accessible timeline controls without a redundant legend',()=>{
-  render(<App counts={{predictions:135,labels:132,optimizations:1,events:503}} />)
+  render(<App outcomes={outcomes} counts={{predictions:135,labels:132,optimizations:1,events:503}} />)
   expect(screen.getByRole('button',{name:'Zoom in'})).toBeVisible()
   expect(screen.getByRole('button',{name:'Fit all cycles'})).toBeVisible()
   expect(screen.getByRole('button',{name:'Fit all cycles'})).toHaveAttribute('title','Show the entire recorded run')
@@ -61,13 +63,19 @@ test('a shadcn checkbox notifies the existing offline filter controller',()=>{
 })
 
 test('run statistics are collapsed initially and there is no theme control',()=>{
-  render(<App counts={{predictions:135,labels:132,optimizations:1,events:503}} />)
+  render(<App outcomes={outcomes} counts={{predictions:135,labels:132,optimizations:1,events:503}} />)
   const summary=screen.getByText('Run statistics').closest('summary')!
   expect(summary.closest('details')).not.toHaveAttribute('open')
   expect(screen.queryByRole('button',{name:'Toggle color theme'})).toBeNull()
   fireEvent.click(summary)
   // Native details owns disclosure state, without re-rendering the trace controller.
   expect(summary.tagName).toBe('SUMMARY')
+})
+
+test('counts alone do not offer an empty outcome disclosure',()=>{
+  render(<App counts={{predictions:85,labels:85,optimizations:12,events:400}} />)
+  expect(document.querySelector('details.run-statistics')).toBeNull()
+  expect(screen.getByText(/Outcome metrics not recorded/)).toBeVisible()
 })
 
 test('the embedded explorer keeps timeline controls but does not repeat the app header',()=>{

@@ -105,10 +105,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "ba7ab9f9-8b12-4a38-a6d4-ece04af2ce69",
+      "author": "home",
+      "text": "Removed redundant expanded counts. Run statistics now lead with same-item raw decision model versus final classifier recall, precision, accuracy, ECE and Brier deltas, calibration support and optional curve details. Recorded first/latest review-window trend is secondary and explicitly not causal or matched optimization evidence (first snapshot in this run has only one label). Counts alone no longer enable an empty expander. Added failing-first specs, 191 UI specs pass; browser verification in progress. No optimization calls or feedback changes.",
+      "created_at": "2026-10-08T16:17:12.172593Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T15:58:57.303373Z",
+  "updated_at": "2026-10-08T16:17:12.172671Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
