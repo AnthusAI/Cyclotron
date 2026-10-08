@@ -107,6 +107,11 @@ def onboarding_all_then_half(*, seed='editorial-onboarding-a'):
                                  FeedbackPhase(None,{'publish':.5,'reject':.5})),seed,'first-50-all-then-half')
 
 
+def onboarding_first_hundred_then_half(*, seed='editorial-onboarding-c'):
+    return PhasedFeedbackPolicy((FeedbackPhase(100,{'publish':1.,'reject':1.}),
+                                 FeedbackPhase(None,{'publish':.5,'reject':.5})),seed,'first-100-all-then-half')
+
+
 def onboarding_publish_priority_taper(*, seed='editorial-onboarding-b'):
     return PhasedFeedbackPolicy((FeedbackPhase(50,{'publish':1.,'reject':.5}),
                                  FeedbackPhase(None,{'publish':.5,'reject':.25})),seed,'publish-priority-taper')

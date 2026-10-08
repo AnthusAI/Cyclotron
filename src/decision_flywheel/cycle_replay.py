@@ -9,10 +9,17 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                            stages=('rubric','questions','examples'), min_evaluation_per_class=2,
                            on_cycle=None, rubric_changes_every=2, feedback_policy=None, negative_label=None,
                            max_rubric_optimizations=None, initial_training=(), initial_development=(),
-                           resume=False, retry_failed_requests=False):
+                           resume=False, retry_failed_requests=False,
+                           rubric_trigger_basis='label_transitions'):
     from .feedback_trigger import LabelTransitionTrigger
-    rubric_trigger = LabelTransitionTrigger(rubric_changes_every) if rubric_changes_every is not None and 'rubric' in stages else None
-    scheduled_stages = tuple(stage for stage in stages if not rubric_trigger or stage != 'rubric')
+    if rubric_trigger_basis not in {'label_transitions','revealed_feedback_count'}:
+        raise ValueError('rubric_trigger_basis must be label_transitions or revealed_feedback_count')
+    rubric_trigger = (LabelTransitionTrigger(rubric_changes_every)
+                      if rubric_changes_every is not None and 'rubric' in stages and rubric_trigger_basis=='label_transitions'
+                      else None)
+    feedback_rubric_trigger = bool(rubric_changes_every is not None and 'rubric' in stages and
+                                   rubric_trigger_basis=='revealed_feedback_count')
+    scheduled_stages = tuple(stage for stage in stages if not (rubric_trigger or feedback_rubric_trigger) or stage != 'rubric')
     if any(type(value) is not int or value<1 for value in (optimize_every,retrain_every,min_evaluation_per_class)):
         raise ValueError('cycle cadences and coverage must be positive integers')
     if not stages or any(stage not in {'rubric','questions','examples'} for stage in stages):
@@ -38,7 +45,9 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
     if len(rows_by_id)!=len(plan.ordered):
         raise ValueError('operational replay requires unique item IDs')
     report={'protocol':plan.manifest(wheel.initial.task),'cycles':[], 'feedback_policy':policy.manifest(negative_label)}
-    report['rubric_trigger'] = {'policy':'label-transitions','every':rubric_changes_every} if rubric_trigger else {'policy':'feedback-cadence','every':optimize_every}
+    report['rubric_trigger'] = ({'policy':'label-transitions','every':rubric_changes_every}
+                                if rubric_trigger else {'policy':'revealed-feedback-count','every':rubric_changes_every}
+                                if feedback_rubric_trigger else {'policy':'feedback-cadence','every':optimize_every})
     optimization_number=0
     rubric_optimizations=0
     eligible_count=0
@@ -129,6 +138,19 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                 cycle.check_trigger('rubric',**check)
                 if check['due'] and (max_rubric_optimizations is None or rubric_optimizations < max_rubric_optimizations):
                     outcomes.append(await wheel.step('rubric',train,dev,trigger='label-transitions',**kwargs))
+                    rubric_optimizations += 1
+            elif feedback_rubric_trigger:
+                prior_due=any(event.get('kind')=='trigger-evaluated' and event.get('stage')=='rubric' and
+                              event.get('details',{}).get('policy')=='revealed-feedback-count' and
+                              event.get('details',{}).get('feedback_count')==eligible_count
+                              for event in wheel.history(100000))
+                due=eligible and eligible_count%rubric_changes_every==0 and not prior_due
+                cycle.check_trigger('rubric',due=due,
+                    reason='revealed feedback cadence reached' if due else 'revealed feedback cadence not reached',
+                    details={'policy':'revealed-feedback-count','threshold':rubric_changes_every,
+                             'feedback_count':eligible_count})
+                if due and (max_rubric_optimizations is None or rubric_optimizations < max_rubric_optimizations):
+                    outcomes.append(await wheel.step('rubric',train,dev,trigger='revealed-feedback-count',**kwargs))
                     rubric_optimizations += 1
             if scheduled_stages:
                 stage=scheduled_stages[optimization_number%len(scheduled_stages)]

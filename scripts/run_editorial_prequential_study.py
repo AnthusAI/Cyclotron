@@ -12,7 +12,7 @@ from decision_flywheel.models import DecisionTask, Item, LabeledItem
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.replay import ReplayPlan
 from decision_flywheel.replay_feedback_policy import (ReplayFeedbackPolicy, onboarding_all_then_half,
-    onboarding_publish_priority_taper)
+    onboarding_publish_priority_taper, onboarding_first_hundred_then_half)
 from decision_flywheel.trace_artifact import read_trace, render_trace
 
 DEFAULT_MODES=('all','reject_half','casual_ten_percent')
@@ -60,6 +60,7 @@ def policy_for(mode, seed):
     if mode in {'all','reject_half','casual_ten_percent'}: return ReplayFeedbackPolicy(mode,seed)
     if mode=='first_50_all_then_half': return onboarding_all_then_half(seed=seed)
     if mode=='publish_priority_taper': return onboarding_publish_priority_taper(seed=seed)
+    if mode=='first_100_all_then_half': return onboarding_first_hundred_then_half(seed=seed)
     raise ValueError(f'unknown feedback mode: {mode}')
 
 def build_plan(task, operational, seed):
@@ -115,15 +116,16 @@ async def main_async(args):
         transport=OpenAIOptimizer.from_environment(model=args.model,max_calls=remaining_optimizers)
         wheel=DecisionFlywheel(out/'runtime.sqlite3',ClassifierConfig(task,BASELINE_RUBRIC),adapter,OptimizerAgent(transport),max_requests=remaining_decisions)
         try:
-            report=await run_cycle_replay(wheel,plan,optimize_every=200,retrain_every=200,stages=('rubric',),rubric_changes_every=20,
-              feedback_policy=policy_for(mode,args.seed),negative_label='reject',max_rubric_optimizations=remaining_optimizers,
+            report=await run_cycle_replay(wheel,plan,optimize_every=200,retrain_every=200,stages=('rubric',),
+              feedback_policy=policy_for(mode,args.seed),negative_label='reject',max_rubric_optimizations=(args.max_rubric_optimizations or remaining_optimizers),
               initial_training=bootstrap[:8],initial_development=bootstrap[8:12],resume=args.resume and current['completed_cycles']>0,
-              retry_failed_requests=args.retry_failed_requests)
+              retry_failed_requests=args.retry_failed_requests,rubric_changes_every=args.rubric_changes_every,
+              rubric_trigger_basis=args.rubric_trigger_basis)
             prior=(out/'results.json')
             if report.get('resumed_from_cycles') and prior.exists():
                 old_cycles=json.loads(prior.read_text()).get('cycles',[])
                 report['cycles']=[*old_cycles,*report['cycles']]
-            report['disclosure']={'operational_items':400,'feedback_revealed':sum(event['kind']=='human-feedback' for event in wheel.history(100000)),
+            report['disclosure']={'operational_items':400,'feedback_revealed':sum(x['feedback_selected'] for x in report['cycles']),
               'dev_role_items':len(plan.development),'scoreboard_role_items':0}
             (out/'results.json').write_text(json.dumps(report,indent=2)+'\n'); events=read_trace(out/'runtime.sqlite3')
             (out/'playback.html').write_text(render_trace(events,class_config=[{'label':'publish','role':'positive'},{'label':'reject','role':'negative'}]))
@@ -133,7 +135,7 @@ async def main_async(args):
       lock.unlink(missing_ok=True)
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--max-rubric-optimizations',type=int); p.add_argument('--rubric-changes-every',type=int,default=20); p.add_argument('--rubric-trigger-basis',choices=('label_transitions','revealed_feedback_count'),default='label_transitions'); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
     if not args.modes or len(set(args.modes))!=len(args.modes): p.error('--modes must be a non-empty unique comma-separated list')
     asyncio.run(main_async(args))
 if __name__=='__main__': main()

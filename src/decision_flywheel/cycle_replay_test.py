@@ -100,3 +100,56 @@ def test_replay_can_resume_a_completed_prefix_without_repaying_predictions(tmp_p
     assert sum(event['kind']=='features-requested' for event in wheel.history(10000))==len(ordered)
     assert sum(event['kind']=='cycle-completed' for event in wheel.history(10000))==len(ordered)
     wheel.close()
+
+
+def test_revealed_feedback_trigger_uses_exact_counts_with_partial_feedback(tmp_path):
+    from .replay_feedback_policy import FeedbackSelection
+    class EveryOther:
+        def select(self, *, cycle_number, **kwargs):
+            return FeedbackSelection(cycle_number%2==0, .5 if cycle_number%2==0 else 0., .5)
+        def manifest(self, negative_label): return {'mode':'every-other','negative_label':negative_label}
+    plan=plan_replay(TASK,rows(),seed='feedback-count',batch_size=100)
+    wheel=DecisionFlywheel(tmp_path/'feedback-count.sqlite',ClassifierConfig(TASK),FakeModel(),
+                           OptimizerAgent(lambda _:OptimizerReply('{}','fake')),max_requests=2000)
+    attempted=[]
+    async def recorded_step(stage, *args, **kwargs):
+        attempted.append(stage)
+        return {'status':'completed','stage':stage}
+    wheel.step=recorded_step
+    asyncio.run(run_cycle_replay(wheel,plan,optimize_every=100,retrain_every=100,stages=('rubric',),
+        rubric_changes_every=2,rubric_trigger_basis='revealed_feedback_count',feedback_policy=EveryOther(),
+        negative_label='exclude',max_rubric_optimizations=2))
+    events=wheel.history(100000)
+    due=[event for event in events if event['kind']=='trigger-evaluated' and event['stage']=='rubric' and event['due']]
+    assert [event['details']['feedback_count'] for event in due][:2]==[2,4]
+    assert attempted==['rubric','rubric']
+    assert all(event['details']['policy']=='revealed-feedback-count' for event in due)
+    wheel.close()
+
+
+def test_revealed_feedback_trigger_resumes_without_duplicate_attempt(tmp_path):
+    from .replay_feedback_policy import FeedbackSelection
+    class EveryOther:
+        def select(self, *, cycle_number, **kwargs):
+            return FeedbackSelection(cycle_number%2==0, .5 if cycle_number%2==0 else 0., .5)
+        def manifest(self, negative_label): return {'mode':'every-other','negative_label':negative_label}
+    plan=plan_replay(TASK,rows(),seed='feedback-resume',batch_size=100)
+    path=tmp_path/'feedback-resume.sqlite'
+    def wheel(limit):
+        value=DecisionFlywheel(path,ClassifierConfig(TASK),FakeModel(),OptimizerAgent(lambda _:OptimizerReply('{}','fake')),max_requests=limit)
+        async def step(*args, **kwargs): return {'status':'completed'}
+        value.step=step
+        return value
+    first=wheel(2)
+    try:
+        asyncio.run(run_cycle_replay(first,plan,optimize_every=100,retrain_every=100,stages=('rubric',),
+            rubric_changes_every=2,rubric_trigger_basis='revealed_feedback_count',feedback_policy=EveryOther(),negative_label='exclude'))
+    except RuntimeError: pass
+    first.close()
+    second=wheel(200)
+    asyncio.run(run_cycle_replay(second,plan,optimize_every=100,retrain_every=100,stages=('rubric',),
+        rubric_changes_every=2,rubric_trigger_basis='revealed_feedback_count',feedback_policy=EveryOther(),negative_label='exclude',
+        max_rubric_optimizations=1,resume=True))
+    due=[event for event in second.history(100000) if event['kind']=='trigger-evaluated' and event['stage']=='rubric' and event['due']]
+    assert [event['details']['feedback_count'] for event in due].count(2)==1
+    second.close()
