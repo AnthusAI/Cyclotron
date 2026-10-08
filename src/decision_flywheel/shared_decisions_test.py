@@ -7,6 +7,77 @@ from .batched_classification import BatchedAnswers
 from .decision_cache import CacheOptions
 
 
+@pytest.mark.parametrize('example_ids', [(), ('target',)])
+def test_shared_no_context_models_allow_zero_effective_examples_with_a_training_pool(tmp_path, example_ids):
+    from .models import ModelCapabilities, LabeledItem
+    class Model:
+        model_identity = 'fake'
+        capabilities = ModelCapabilities(supports_labeled_context=False)
+        calls = 0
+        async def classify_many(self, configs, *args, **kwargs):
+            self.calls += 1
+            return BatchedAnswers({cid:{'decision':DecisionResult('yes', {'yes':.8,'no':.2})}
+                for cid in configs}, 'fake', {}, 1)
+    target = Item('target', {'text':'New'})
+    config = ClassifierConfig(DecisionTask('topic', ('yes','no'), 'Relevant?'), example_ids=example_ids)
+    pool = (LabeledItem(target, 'yes'),)
+    model = Model()
+    shared = SharedDecisions(tmp_path/'shared.sqlite', model, max_requests=5, observer=lambda _:None)
+    asyncio.run(shared.prepare({'a':config,'b':config}, target, {'a':pool,'b':pool}))
+    assert model.calls == shared.requests == 1
+    assert shared.adapter('a').capabilities == model.capabilities
+    shared.close()
+
+
+def test_shared_requests_reject_unsupported_sibling_examples_before_reserving_an_attempt(tmp_path):
+    from .models import ModelCapabilities, LabeledItem
+    class Model:
+        model_identity = 'fake-no-context'
+        capabilities = ModelCapabilities(supports_labeled_context=False)
+        calls = 0
+        async def classify_many(self, *args, **kwargs):
+            self.calls += 1
+            raise AssertionError('unsupported request reached provider')
+    task = DecisionTask('topic', ('yes','no'), 'Relevant?')
+    configs = {'a':ClassifierConfig(task), 'b':ClassifierConfig(task, example_ids=('demo',))}
+    pools = {'a':(), 'b':(LabeledItem(Item('demo', {'text':'Example'}), 'yes'),)}
+    model = Model()
+    shared = SharedDecisions(tmp_path/'shared.sqlite', model, max_requests=5, observer=lambda _:None)
+    shared.bind_context(configs, pools)
+    with pytest.raises(ValueError, match='labeled context'):
+        asyncio.run(shared.prepare(configs, Item('target', {'text':'New'}), pools))
+    assert model.calls == shared.requests == 0
+    with pytest.raises(ValueError, match='labeled context'):
+        asyncio.run(shared.adapter('a').classify(configs['a'], Item('target', {'text':'New'}), pools['a']))
+    assert model.calls == shared.requests == 0
+    shared.close()
+
+
+def test_a_prepared_batch_does_not_bypass_a_changed_declared_context_capability(tmp_path):
+    from .models import ModelCapabilities, LabeledItem
+    class Model:
+        model_identity = 'fake'
+        capabilities = ModelCapabilities()
+        calls = 0
+        async def classify_many(self, configs, *args, **kwargs):
+            self.calls += 1
+            return BatchedAnswers({cid:{'decision':DecisionResult('yes', {'yes':.8,'no':.2})}
+                for cid in configs}, 'fake', {}, 1)
+    task = DecisionTask('topic', ('yes','no'), 'Relevant?')
+    configs = {'a':ClassifierConfig(task), 'b':ClassifierConfig(task, example_ids=('demo',))}
+    pools = {'a':(), 'b':(LabeledItem(Item('demo', {'text':'Example'}), 'yes'),)}
+    target = Item('target', {'text':'New'})
+    model = Model()
+    shared = SharedDecisions(tmp_path/'shared.sqlite', model, max_requests=5, observer=lambda _:None)
+    shared.bind_context(configs, pools)
+    asyncio.run(shared.prepare(configs, target, pools))
+    model.capabilities = ModelCapabilities(supports_labeled_context=False)
+    with pytest.raises(ValueError, match='labeled context'):
+        asyncio.run(shared.adapter('a').classify(configs['a'], target, pools['a']))
+    assert model.calls == shared.requests == 1
+    shared.close()
+
+
 @pytest.mark.parametrize('restart', [False, True])
 def test_refreshing_a_used_training_answer_invalidates_the_head_and_preserves_the_rubric(tmp_path, restart):
     from datetime import datetime, timezone

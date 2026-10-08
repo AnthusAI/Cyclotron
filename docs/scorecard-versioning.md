@@ -323,6 +323,9 @@ declared labeled-context capability against the effective demonstrations in that
 request. A training pool alone does not make a request few-shot, and an example
 excluded because it is the target does not count as transmitted context. An
 unsupported few-shot request fails before reserving or calling the provider.
+The shared-request coordinator checks every classifier scope, including sibling
+examples, and rechecks prepared answers before reuse. Its per-classifier adapters
+expose the underlying provider's declared capabilities rather than hiding them.
 
 Correction itself makes no model calls and does not automatically optimize.
 The next normal prediction uses the reconciled state; an explicit optimization

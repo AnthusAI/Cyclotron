@@ -53,6 +53,12 @@ class SharedDecisions:
     def generation(self,fingerprint):
         return max(1,self.db.execute('SELECT COUNT(*) FROM attempts WHERE key=?',(fingerprint,)).fetchone()[0])
 
+    def validate_capabilities(self,request):
+        capabilities=getattr(self.model,'capabilities',None)
+        if capabilities is not None:
+            for scope in request['state']['classifiers'].values():
+                capabilities.validate_context(scope['examples'])
+
     async def prepare(self,configs,target,training,*,now=None,options=None):
         # Prepared children belong to exactly one complete batch. A later
         # scope must not silently retain answers from its predecessor.
@@ -60,6 +66,7 @@ class SharedDecisions:
         options=options or CacheOptions()
         now=now or datetime.now(timezone.utc)
         request,_=batch_request(configs,target,training,now=now)
+        self.validate_capabilities(request)
         fingerprint=key({'model':self.model.model_identity,'request':request})
         self.identity=fingerprint
         row=self.db.execute('SELECT status,payload FROM batches WHERE key=?',(fingerprint,)).fetchone()
@@ -101,6 +108,8 @@ class SharedDecisions:
         shared=self
         class Adapter:
             @property
+            def capabilities(self):return getattr(shared.model,'capabilities',None)
+            @property
             def model_identity(self):return shared.model.model_identity+':shared-v1:'+shared.identity
             def request_fingerprint(self,config,target,training,*,now=None):
                 child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
@@ -130,8 +139,11 @@ class SharedDecisions:
                 child=key({'classifier':identifier,'request':config.request(target,training,now=now)})
                 expected=self.cache_identity(config,target,training,now=now)
                 prepared=shared.prepared.get(child)
+                configs,pools=(shared.prepared_scope if prepared and not shared.context_configs else shared.scope(identifier,config,training))
+                if getattr(shared.model,'capabilities',None) is not None:
+                    request,_=batch_request(configs,target,pools,now=now)
+                    shared.validate_capabilities(request)
                 if cache_options.policy=='refresh' or not prepared or expected!=shared.model.model_identity+':shared-answer-v3:'+prepared[2]+':'+str(prepared[3]):
-                    configs,pools=(shared.prepared_scope if prepared and not shared.context_configs else shared.scope(identifier,config,training))
                     await shared.prepare(configs,target,pools,now=now,options=cache_options)
                 payload,_,fingerprint,_=shared.prepared[child]
                 for exchange in payload['exchanges']:
