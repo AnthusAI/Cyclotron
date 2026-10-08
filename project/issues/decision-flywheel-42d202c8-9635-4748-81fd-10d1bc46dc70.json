@@ -64,10 +64,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "4869d89c-0ed3-4a12-a25b-bcd965e6f5ed",
+      "author": "home",
+      "text": "Added a shared Calibration bins disclosure to individual and paired raw/final curves: recorded mean confidence, observed correctness and support are readable without hover. Native collapsed details preserve default labeling space; the bounded table region supports keyboard focus and horizontal overflow on narrow inspectors. Specs first reproduced two missing-disclosure failures; all 163 UI specs, production build and focused lint pass. Browser at 820x1180 verified Enter opens the disclosure after playback to cycle three, with 60/70/80 percent confidence and 100/0/0 percent correctness, one sample each, matching SQLite and ECE 63.3 percent. No browser warnings/errors, no votes or paid calls. Proof: var/web/calibration-bins-tablet-proof.png. React and verification skills guided accessible disclosure and API/snapshot-to-browser checks. Physical-iPad and dark-mode labeling-space acceptance remain open; this is technology evidence, not an experiment report.",
+      "created_at": "2026-10-08T00:24:09.869363Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-07T22:21:55.703456Z",
+  "updated_at": "2026-10-08T00:24:09.869490Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

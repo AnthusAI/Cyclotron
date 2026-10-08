@@ -1,4 +1,5 @@
 import type {CalibrationCurve} from './ReliabilityCurve'
+import {CalibrationBins} from './CalibrationBins'
 import {useEffect,useState} from 'react'
 import {metricRates,type ClassRole,type RateMetrics} from './metricRates'
 
@@ -23,6 +24,7 @@ export function ModelComparison({comparison,classes}:{comparison?:DecisionModelC
       <text x="100" y="149" fontSize="10" fill="currentColor">Confidence →</text>
       <text x="37" y="10" fontSize="9" fill="currentColor">Observed correctness</text>
     </svg>
+    <CalibrationBins outputs={outputs.map(({name,metrics})=>({name,bins:metrics.calibration.bins}))}/>
     {outputs.map(({name,metrics,color})=><p key={name} className="text-xs" style={{color}}>{name}: ECE {percent(metrics.calibration.ece)} · Brier {metrics.calibration.brier?.toFixed(3)??'—'} · {metrics.calibration.count} probability vectors</p>)}
     <p className="text-xs">Final − raw: ECE change {signed(delta(comparison.raw.calibration.ece,comparison.final.calibration.ece))} · Brier change {signed(delta(comparison.raw.calibration.brier,comparison.final.calibration.brier),1,'')}</p>
     <p className="text-xs text-muted-foreground">Lower ECE and Brier are better. Diagonal: perfect calibration. Small samples are noisy.</p>

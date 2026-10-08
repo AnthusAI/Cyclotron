@@ -4,6 +4,23 @@ import '@testing-library/jest-dom/vitest'
 import {ReliabilityCurve,PlaybackCalibration} from './ReliabilityCurve'
 afterEach(cleanup)
 
+it('makes supported calibration bins readable without hover while keeping them collapsed initially',()=>{
+  render(<ReliabilityCurve curve={{count:3,ece:.2,bins:[
+    {count:0,mean_confidence:null,accuracy:null},
+    {count:3,mean_confidence:.8,accuracy:1},
+  ]}}/> )
+  const toggle=screen.getByText('Calibration bins')
+  expect(toggle.closest('details')).not.toHaveAttribute('open')
+  fireEvent.click(toggle)
+  expect(screen.getByRole('table',{name:'Calibration bin details'})).toBeVisible()
+  expect(screen.getAllByRole('columnheader').map(node=>node.textContent)).toEqual([
+    'Output','Mean confidence','Observed correctness','Samples'])
+  expect(screen.getByRole('cell',{name:'80.0%'})).toBeVisible()
+  expect(screen.getByRole('cell',{name:'100.0%'})).toBeVisible()
+  expect(screen.getByRole('cell',{name:'3'})).toBeVisible()
+  expect(screen.getAllByRole('row')).toHaveLength(2)
+})
+
 it('does not call an unavailable matched head calibration error perfect reliability',()=>{
   const empty={count:0,ece:null,bins:[]}
   render(<ReliabilityCurve curve={{...empty,matched_head_comparison:{raw:empty,calibrated:empty}}}/> )

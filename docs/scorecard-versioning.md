@@ -193,6 +193,12 @@ rolling curves are not estimates of current-model held-out calibration. Playback
 uses only snapshots recorded at or before its cursor; missing older evidence is
 shown as unavailable rather than reconstructed from future state.
 
+Calibration graphs include a collapsed **Calibration bins** disclosure. It shows
+mean confidence, observed correctness, and support for each populated bin without
+requiring hover. The same component serves individual and raw/final curves; its
+native summary supports touch and keyboard interaction. Empty or missing bins
+are not shown as measurements. Details remain collapsed to preserve labeling space.
+
 An active human review stays bound to the prediction originally reviewed.
 Correcting its label or explanation refreshes its position in the latest-200
 window, but cannot substitute a later retrospective score, probability vector,
