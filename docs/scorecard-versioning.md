@@ -318,6 +318,12 @@ not delete its retained hypothesis, so later feedback can justify another trial.
 Request ceilings still apply to the search; interrupted work requires explicit
 recovery rather than automatic paid retries.
 
+Before prediction or fitting sends a request, the core checks an adapter's
+declared labeled-context capability against the effective demonstrations in that
+request. A training pool alone does not make a request few-shot, and an example
+excluded because it is the target does not count as transmitted context. An
+unsupported few-shot request fails before reserving or calling the provider.
+
 Correction itself makes no model calls and does not automatically optimize.
 The next normal prediction uses the reconciled state; an explicit optimization
 command can rebuild it sooner. Explicit recovery after a lost trace/API

@@ -3,7 +3,7 @@
   "title": "Validate rubric, example-list and decision-task proposals",
   "description": "## Behavior and acceptance\nStructured proposals independently support rubric edits, fixed example-list edits, and add/update/remove decision tasks with question wording and answer options. Include rationale and versioned diffs. Current datetime is an allowlisted programmatic dynamic element, not arbitrary generated code. Validate capabilities and complete state/question context budget. Retrieval and input filtering deferred.\nScenario: valid edits change the actual request; malformed edits and attempts to set weights/provenance are rejected without changing the incumbent.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -56,11 +56,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "dbe8e6a0-199c-4459-b4e5-a9f5505f2f06",
+      "author": "home",
+      "text": "Acceptance audit complete. ClassifierConfig validates isolated rubric/example/task add-update-remove proposals, rationale, immutable parent fingerprints and request construction; forbidden weights, provenance, calibration, arbitrary dynamic code, malformed tasks and ineligible examples cannot mutate the incumbent. New adapter-bound specs verify each independent edit changes the exact Jev state/questions, retains unrelated controls and preserves the parent. Staged and numerical lifecycle specs prove UTC datetime proposal evaluation/promotion/restart, wording/answer-option revision feature regeneration, actual winning removal requests, retained ideas and isolated controls. Complete-byte-budget rejection occurs before provider calls. The audit found and fixed the core capability guard: declared no-context adapters now reject effective demonstrations before reservation/call while zero-shot and target-excluded context still work. Existing proposal-validated events retain rationale plus before/candidate versioned configuration for diffs. All 832 offline Python specs pass; no paid calls or real-label changes. Retrieval/filtering remain explicitly deferred; broader reviewer, frontend observability and application acceptance remain separate open milestones.",
+      "created_at": "2026-10-08T00:02:45.788496Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.282413Z",
-  "updated_at": "2026-10-07T23:53:47.098981Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T00:02:45.925082Z",
+  "closed_at": "2026-10-08T00:02:45.924950Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

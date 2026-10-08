@@ -458,6 +458,9 @@ class DecisionFlywheel:
         if not isinstance(options, CacheOptions):
             raise ValueError("cache_options must be CacheOptions")
         request = config.request(target, training, now=now)
+        capabilities = getattr(self.model, 'capabilities', None)
+        if capabilities is not None:
+            capabilities.validate_context(request['state']['examples'])
         serialized = _json(request)
         if len(serialized.encode()) > self.max_request_bytes:
             raise ValueError("complete decision request exceeds the configured byte safety ceiling")

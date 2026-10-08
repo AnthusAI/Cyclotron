@@ -49,6 +49,7 @@ def test_a_proposal_changes_all_three_parts_and_preserves_the_parent_version():
 
 
 @pytest.mark.parametrize("proposal", [{"weights": [1]}, {"example_ids": ["unknown"]},
+                                     {"provenance": {}}, {"calibration": {"temperature": 1}},
                                      {"example_ids": ["yes", "yes"]}, {"rubric": 123},
                                      {"dynamic_elements": ["execute_python"]},
                                      {"tasks": [{"name": "decision", "instructions": "x", "labels": ["y", "n"]}]}])
