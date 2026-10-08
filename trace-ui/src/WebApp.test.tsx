@@ -210,6 +210,27 @@ test('inspecting a replay and returning through browser history restores unsent 
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
+test('history opens scoped to the inspected scorecard and marks its current run without mutations',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  const scoped={...live,config:{scorecard_id:'card'}}
+  const other={...replay,config:{scorecard_id:'other'}}
+  vi.mocked(graphql).mockImplementation(async(query)=>{
+    if(query.includes('capabilities'))return {runs:[scoped,other],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[{id:'card',name:'Current card',revision:1},{id:'other',name:'Other card',revision:1}]}
+    if(query.includes('events('))return {events:[]}
+    return {run:scoped,currentItem:null,jobs:[]}
+  })
+  render(<WebApp/> )
+  fireEvent.click(await screen.findByRole('button',{name:'Run history'}))
+  const drawer=screen.getByRole('dialog',{name:'Run history'})
+  await waitFor(()=>expect(within(drawer).getByRole('combobox',{name:'Scorecard filter'})).toHaveValue('card'))
+  expect(within(drawer).getByRole('button',{name:/Interactive study.*cycles/})).toHaveAttribute('aria-current','true')
+  expect(within(drawer).queryByRole('button',{name:/Existing optimization replay.*cycles/})).toBeNull()
+  fireEvent.change(within(drawer).getByRole('combobox',{name:'Scorecard filter'}),{target:{value:''}})
+  expect(within(drawer).getByRole('button',{name:/Existing optimization replay.*cycles/})).not.toHaveAttribute('aria-current')
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 test('opening the workspace shows the existing optimization timeline instead of an empty landing page',async()=>{
   render(<WebApp />)
   expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()

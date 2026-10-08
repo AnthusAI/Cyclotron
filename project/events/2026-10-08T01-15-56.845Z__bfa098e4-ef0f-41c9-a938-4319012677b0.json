@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "bfa098e4-ef0f-41c9-a938-4319012677b0",
+  "issue_id": "decision-flywheel-68399731-c9a4-4381-bc5b-b0346abec0f9",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-08T01:15:56.845Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "d7816404-4f90-4451-a280-67948cf2a4b5",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-5",
+      "name": "Navigation acceptance"
+    }
+  }
+}

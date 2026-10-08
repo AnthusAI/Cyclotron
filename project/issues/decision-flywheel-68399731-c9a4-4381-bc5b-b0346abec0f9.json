@@ -82,14 +82,31 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d7816404-4f90-4451-a280-67948cf2a4b5",
+      "author": "home",
+      "text": "Tablet browser acceptance on isolated API/SQLite fake-model workspace: entered an unsent vote/explanation, inspected another replay from the left history drawer, returned via native browser Back, and retained both. Navigating to scorecard configuration and reloading also retains that draft. Historical definition revision 1 displays original classifier revision/question with explicit read-only text and no Edit configuration controls; Back restores active revision 3 without activation. No page overflow at reported CSS 1025x1475; no console errors; seeded feedback remains 6 and jobs remain 7 completed, no new model commands. Found/fixed remaining history gap: opening now scopes to current run scorecard (user may explicitly choose All scorecards), and inspected run has aria-current. Regression failed first, then all 169 UI tests/build pass; focused lint has only four existing effect warnings. Escape restores Run history opener focus and draft. Evidence var/web/tablet-cross-run-draft-proof.png, tablet-readonly-definition-proof.png, scoped-history-proof.png. React guidance kept scope selection in opener event and run-current derived, no synchronization effect added. Learned-version activation/inspection distinction remains to audit before full closure.",
+      "created_at": "2026-10-08T01:15:56.845528Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Navigation acceptance",
+        "settings": {}
+      }
     }
   ],
   "created_at": "2026-10-07T14:54:04.550216Z",
-  "updated_at": "2026-10-07T23:10:40.749975Z",
+  "updated_at": "2026-10-08T01:15:56.845613Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }
