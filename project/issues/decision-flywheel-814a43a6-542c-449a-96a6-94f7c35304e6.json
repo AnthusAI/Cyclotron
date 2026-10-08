@@ -3,7 +3,7 @@
   "title": "Replace Classifiers navigation with Scorecards and nested classifier editors",
   "description": "Top-level navigation: Scorecards, Item lists, Optimizations. Scorecards list shows names, active revisions and classifier membership; scorecard detail lists ordered classifiers and opens their configuration/history. Support creating a scorecard, adding an existing classifier or a new classifier, binary/multiclass classes with configurable order and positive/negative roles, editing as a new revision and explicit version activation. Show impact of classifier edits on affected scorecard versions and joint requests. Keep existing session/run selection in deep links; do not accidentally start paid runs on navigation. Save/Cancel must remain reachable in a bounded editor footer with scrollable form body at narrow/iPad viewports. Acceptance: browser and component tests navigate, edit Knowledge Bases, save a new version, inspect old versions, and retain in-progress label drafts when opening/closing navigation.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -96,11 +96,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "bfdc00b3-631f-4b85-8f61-44bfee209e7c",
+      "author": "home",
+      "text": "Completed final narrow editor/activation acceptance on the isolated fake-model API workspace: CSS viewport 487x800, Save scorecard at y742..786 with 44px height, no document overflow (document equals viewport). Historical definition remains read-only until explicit Use this definition; activated revision 1, inspected revision 2 with exact preserved question, then explicitly restored revision 2. No browser errors, no model work; fixture remains 6 labels / 7 jobs / 4 learned checkpoints. Prior evidence covers saving classifier/scorecard revisions, exact comparison, affected scorecards, ordered membership/new-classifier configuration, provider controls, deep links and draft retention. Screenshot var/web/narrow-safe-shell-proof.png. Physical-device keyboard testing remains a broader shell acceptance concern, not a missing scorecard editor feature.",
+      "created_at": "2026-10-08T01:37:10.490966Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:53:59.760123Z",
-  "updated_at": "2026-10-08T01:33:53.320854Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:37:10.623792Z",
+  "closed_at": "2026-10-08T01:37:10.623723Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

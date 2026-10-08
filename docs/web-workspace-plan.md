@@ -66,6 +66,10 @@ inactive edition is read-only; activation is a separate, explicit action.
 Scorecard and nested classifier controls use at least 44-pixel touch targets on
 narrow screens or coarse-pointer devices. The settings editor scrolls its fields
 while keeping its Save and Cancel footer visible.
+The viewport shell reserves the device's safe-area insets on all four sides.
+App and exported playback pages use `viewport-fit=cover`; native zoom is not
+disabled. Device keyboard and gesture checks complement the automated layout
+specs; a desktop browser with zero insets does not prove physical notch behavior.
 
 `scripts/update_arxiv_items.py` is an external example importer. It refreshes a
 local SQLite mirror from normalized or raw arXiv JSONL and upserts chronological

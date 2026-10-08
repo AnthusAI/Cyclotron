@@ -64,7 +64,7 @@ h1,h2,h3,h4,h5,h6,[data-slot="card-title"],.font-heading {font-family:'Blinker',
 .cyclotron-brand {font-family:'Blinker',sans-serif;font-size:1.5rem;font-weight:600;line-height:1.2}
 .cyclotron-cycle-mark {display:flex;align-items:center;justify-content:center;min-width:0}
 .cyclotron-tagline {grid-column:1 / -1;width:max-content;max-width:100%;font-family:'Blinker',sans-serif;font-size:.625rem;font-weight:400;letter-spacing:.08em;line-height:1.3;color:var(--muted-foreground)}
-.app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
 .app-shell > header {flex-shrink:0}
 .app-header {--app-header-height:4.625rem;position:relative;z-index:50}
 .explorer-main {display:flex;flex-direction:column;flex:1;min-height:0}

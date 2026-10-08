@@ -398,7 +398,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.get('/',response_class=HTMLResponse)
     async def index():
-        return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"></div><script src="{asset_url("web.js")}"></script></body></html>'
+        return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"></div><script src="{asset_url("web.js")}"></script></body></html>'
 
     @app.get('/runs/{run_id}/timeline',response_class=HTMLResponse)
     async def timeline(run_id: str, classifier_id: str | None = None):

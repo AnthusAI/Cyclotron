@@ -7,6 +7,13 @@ from .web_api import create_app
 from .web_store import WebStore
 
 
+def test_the_app_viewport_exposes_device_safe_areas_without_disabling_zoom(tmp_path):
+    response=TestClient(create_app(WebStore(tmp_path/'db'))).get('/')
+    assert response.status_code==200
+    assert 'viewport-fit=cover' in response.text
+    assert 'user-scalable=no' not in response.text
+
+
 def test_labeling_access_explains_inactive_editions_without_changing_recorded_state(tmp_path):
     store=WebStore(tmp_path/'db')
     for key in ('old','new'):

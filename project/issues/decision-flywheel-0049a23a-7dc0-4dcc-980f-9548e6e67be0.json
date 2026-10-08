@@ -55,14 +55,31 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "0a292ef6-aac2-4ebd-8cac-2071d54b1db5",
+      "author": "home",
+      "text": "Safe-area audit found only drawers reserved device insets; main shell did not. Added border-box shell inset padding and viewport-fit=cover consistently in FastAPI, static playback and development HTML, without disabling native zoom. Three new specs failed before implementation; 176 UI tests/build pass. Browser isolated fake workspace at CSS487x800 confirms no document overflow and reachable 44px save footer, actual environment reports zero safe-area insets so nonzero physical inset behavior is not claimed. Full Python suite running. Real labels and provider calls untouched; broader timeline/device acceptance remains open.",
+      "created_at": "2026-10-08T01:37:11.021912Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "App acceptance",
+        "settings": {}
+      }
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T00:48:05.755683Z",
+  "updated_at": "2026-10-08T01:37:11.021993Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }
