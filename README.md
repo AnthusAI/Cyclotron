@@ -1245,7 +1245,7 @@ not a claim that the concept is invalid or that training separation proves succe
 
 The first acceptance milestone is an auditable single-feature comparison from the
 feature bank through real Jev answers, ML fitting, and a visible development result.
-Combination search follows after that path is verified. No DSPy, retrieval, or
+Explicit bounded combination trials are available below. No DSPy, retrieval, or
 long-document input-filter optimization is added by this plan.
 
 Explicit group trials are now available in the numerical classifier stage. Choose

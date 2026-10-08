@@ -533,7 +533,7 @@ function draw(){
  if(event&&stepPositions.has(String(position))){
   const point=new Date(stepPositions.get(String(position)));
   currentStep=ordered.findIndex(record=>record.key===String(position));
-  if(!cursorAdded){timeline.addCustomTime(point,'playback');cursorAdded=true;}
+  if(!cursorAdded){timeline.addCustomTime(point,'playback');timeline.setCustomTimeTitle('','playback');cursorAdded=true;}
   else timeline.setCustomTime(point,'playback');
   revealPointer(point);
  }
@@ -769,7 +769,7 @@ function inspectSource(index,pause=true){
  el('inspector').scrollTop=0;
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  const source=reviewHistory[index],row=source.record;
- const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
+ const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');timeline.setCustomTimeTitle('','playback');cursorAdded=true;}
  currentStep=ordered.findIndex(record=>record.key==='source:'+index);
  revealPointer(point);
  el('status').textContent=`Step ${Math.floor(point.valueOf()/1000)+1}/${projection.steps.length} · original reviewer record`;

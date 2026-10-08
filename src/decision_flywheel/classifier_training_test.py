@@ -12,6 +12,91 @@ def forbidden(_):
     raise AssertionError("fitting must not invoke the optimizer")
 
 
+def test_a_winning_group_is_served_with_both_confidence_features_and_restored_after_restart(tmp_path):
+    from .feature_bank import FeatureBank
+    from .models import DecisionResult, Item, LabeledItem
+    from .classifier_config import ClassifiedAnswers
+    from .selection_policy import SelectionPolicy
+
+    class TwoFactorModel(FakeModel):
+        async def classify(self, config, target, training, **kwargs):
+            self.calls += 1
+            answers = {'decision': DecisionResult('exclude', {'include': .5, 'exclude': .5})}
+            for task in config.tasks:
+                p = .95 if target.values[task.name] else .05
+                answers[task.name] = DecisionResult('yes' if p > .5 else 'no', {'yes': p, 'no': 1-p})
+            return ClassifiedAnswers(answers, 'fake-two-factor', {'tokens': 0}, 0)
+
+    def rows(prefix, counts):
+        return tuple(LabeledItem(Item(f'{prefix}-{a}-{b}-{i}', {'text': f'{prefix} {a} {b} {i}',
+            'a': a, 'b': b}), 'include' if a and b else 'exclude')
+            for (a, b), count in counts for i in range(count))
+
+    training = rows('train', [((False, False), 4), ((False, True), 4),
+                              ((True, False), 4), ((True, True), 12)])
+    development = rows('dev', [((False, False), 6), ((False, True), 7),
+                                ((True, False), 7), ((True, True), 20)])
+    config = ClassifierConfig(TASK, rubric='Frozen', example_ids=(training[0].item.id, training[-1].item.id))
+    path = tmp_path/'wheel.sqlite'
+    model = TwoFactorModel()
+    wheel = DecisionFlywheel(path, config, model, OptimizerAgent(forbidden), max_requests=500,
+                            selection_policy=SelectionPolicy('f1', positive_class='include'))
+    keys = [FeatureBank(wheel.db).register({'name': name, 'instructions': name+'?', 'labels': ['yes', 'no']},
+        rationale='Independent training idea', evidence={}) for name in ('a', 'b')]
+    kwargs = dict(protected=(Item('sealed', {'text':'not for selection'}),),
+        propensities={row.item.id:1. for row in training}, feature_groups=(tuple(keys),),
+        max_group_configurations=3)
+    result = asyncio.run(train_classifier(wheel, training, development, **kwargs))
+    assert result['development_counts'] == {'include':20, 'exclude':20}
+    assert result['promoted'] and result['selected']['feature_experiment']['kind'] == 'combination'
+    assert result['selected']['candidate']['per_class']['include']['recall'] == 1.
+    assert {'a/yes', 'b/yes'} <= set(wheel.active.head.feature_names)
+    assert wheel.active.head.calibration.fit_on == 'out_of_fold'
+    assert wheel.active.config.rubric == 'Frozen' and wheel.active.config.example_ids == config.example_ids
+    version = wheel.active.fingerprint
+    predictions = [asyncio.run(wheel.predict(row.item, training)) for row in development]
+    assert all(prediction.label == row.label for prediction, row in zip(predictions, development))
+    calls = model.calls
+    wheel.close()
+    restored = DecisionFlywheel(path, config, model, OptimizerAgent(forbidden), max_requests=500)
+    try:
+        assert restored.active.fingerprint == version
+        assert asyncio.run(restored.predict(development[0].item, training)) == predictions[0]
+        assert model.calls == calls
+    finally:
+        restored.close()
+
+
+def test_group_trials_pause_at_the_request_ceiling_and_require_explicit_restart_authorization(tmp_path):
+    import pytest
+    from .feature_bank import FeatureBank
+    from .observability import RequestBudgetExhausted
+    model = FakeModel()
+    config = ClassifierConfig(TASK)
+    path = tmp_path/'wheel.sqlite'
+    wheel = DecisionFlywheel(path, config, model, OptimizerAgent(forbidden), max_requests=24)
+    keys = [FeatureBank(wheel.db).register({'name': name, 'instructions': name+'?', 'labels': ['yes', 'no']},
+        rationale='Retained', evidence={}) for name in ('practical', 'other')]
+    kwargs = dict(protected=(), propensities={row.item.id:1. for row in TRAIN},
+        min_development_per_class=1, apply_promotion=False,
+        feature_groups=(tuple(keys),), max_group_configurations=3)
+    with pytest.raises(RequestBudgetExhausted):
+        asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs))
+    assert model.calls == 24 and wheel.active.config == config
+    assert wheel.db.execute("SELECT status FROM classifier_training").fetchone()[0] == 'pending'
+    wheel.close()
+    restored = DecisionFlywheel(path, config, model, OptimizerAgent(forbidden), max_requests=100)
+    try:
+        waiting = asyncio.run(train_classifier(restored, TRAIN, DEV, **kwargs))
+        assert 'interrupted' in waiting['reason'] and model.calls == 24
+        result = asyncio.run(train_classifier(restored, TRAIN, DEV, retry_interrupted=True, **kwargs))
+        assert len([trial for trial in result['trials'] if trial.get('feature_experiment')]) == 6
+        assert model.calls == 32  # completed single-factor and ablation requests are reused
+        assert not result['promoted'] and restored.active.config == config
+    finally:
+        restored.close()
+
+
 def test_explicit_groups_and_their_ablations_freeze_context_and_resume_without_repeating_requests(tmp_path):
     from .feature_bank import FeatureBank
     from .models import Item

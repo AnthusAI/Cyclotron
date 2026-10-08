@@ -3,7 +3,7 @@
   "title": "Engineer and test individual decision features before classifier promotion",
   "description": "Replacement plan agreed 2026-10-05: independent stages for few-shot experimentation, continuous main-rubric refinement, and question discovery. Do not run all controls as one automatic winner-selection cycle. Question measurement freezes CURRENT rubric/example list/existing questions, adds one question or wording revision, and retroactively re-scores a configurable eligible human-feedback window, default cap 200. Actual available N and per-class counts must be visible; retain scarce-class coverage while favoring recency. All questions get matched full-request answers/probabilities under the frozen context; other features may have longer histories but rank on a common window. Cache full state/question fingerprint and track feedback/context versions, usage, coverage, resumable progress. Never mix answers from different context versions as one matched trial. Human final-decision labels are the alignment target; supporting-question outputs are model-derived features, not ground truth for those questions. Direct agreement only for semantically matching final-label options; otherwise descriptive class-conditional probabilities and out-of-fold learned question-answer-to-final-label mapping, including inverse or multiclass relationships. Report raw/class-balanced alignment, majority baseline, missingness/counts and uncertainty. Agreement with model main answer is secondary, not human alignment. Retrospective feature ranking is discovery evidence, not deployment accuracy; do not gate admission on a four-item holdout comparison or claim cap200 guarantees adequate minority data. Keep protected audits/scoreboard untouched, preserve roles, omit target label/comment and own example from request. Retain concepts/revisions and rerun with new feedback/context. Downstream head refit and adequately supported promotion are distinct; combinations/ablations later. Reusable library owns separate-stage orchestration, bank/backfill/ranking/events; Rich displays stage, context versions, backfill progress, optimizer/decision exchanges, rank evidence and fits. Specs first with fakes and no DSPy. Implementation status: separate rubric/example/question stages, bounded cached matched-window backfill/ranking, and retained-question-to-head wiring are implemented. Remaining work is broader independent validation and the later combinations/ablations exploration; do not reinterpret historical four-label trials as deployment evidence.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -89,11 +89,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "b229a468-4b13-438f-9af4-ddda66bf4d38",
+      "author": "home",
+      "text": "Acceptance now covers an actual winning two-factor combination through numerical fitting, promotion, calibrated served predictions and restart cache reuse. Default development floor is exercised with 40 balanced synthetic development items (20/class), not relaxed four-label selection. Both confidence features appear in the deployed head, rubric/examples stay fixed, OOF calibration provenance persists. Separate request-budget test stops exactly at 24 fake calls, retains pending ledger and incumbent, rejects implicit restart, then explicitly completes at 32 total by reusing completed single-factor/ablation answers. Cross-provider lifecycle specs previously cover Jev/Kev/Laya shared request context, feature revisions, stale-head refit and restart. All feature engineering technology mechanisms are implemented and offline-verified; independent real-data experiments and reports are not claimed.",
+      "created_at": "2026-10-08T02:15:34.979813Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T00:06:48.486680Z",
-  "updated_at": "2026-10-08T02:09:48.492053Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T02:15:35.440828Z",
+  "closed_at": "2026-10-08T02:15:35.440711Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
