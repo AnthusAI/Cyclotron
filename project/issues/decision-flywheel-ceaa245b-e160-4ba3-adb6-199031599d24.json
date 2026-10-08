@@ -3,7 +3,7 @@
   "title": "Expose optimizer transcripts and classifier lifecycle to client applications",
   "description": "## Behavior and acceptance\nPublic API/events expose latest optimizer prompts, responses and tool calls, rationale/diffs, active rubric/tasks/example IDs/features, feature freshness, fit start/end, row counts, metrics, candidate comparison and promotion/rejection/wait/failure. Client consumes core events rather than duplicating orchestration. Local transcripts preserve useful feedback but are private and redacted for secrets; public summaries are text-free. Show observed behavior, not hidden chain-of-thought.\nScenario: a fake round yields inspectable prompt/reply and complete lifecycle; unavailable phases display not run, never implied success.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,12 @@
       "text": "Owner clarification: inspection must include exact provider-bound Jev requests (state plus every question/criteria), actual structured answers, usage and feature mappings, not only fingerprints. Persist privately with secret redaction; reviewer adds a Jev-request inspection command alongside optimizer transcripts and ML fit lifecycle. Current core pipeline and durable state pass fake-client integration tests; reviewer wiring remains in progress.",
       "created_at": "2026-10-05T22:13:50.512996Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -34,10 +36,12 @@
       "text": "Implemented the connected Rich reviewer with O optimizer messages/replies/tools, J exact provider-bound Jev state/questions/answers, F active rubric/examples/tasks/features, and G a measured round. Added regression preventing a pending new optimizer prompt from being paired with an older reply. Live display excludes sealed final-audit scoring. Removed uncommitted optimizer restrictions introduced from a disputed interpretation of the knowledge-base factor; historical proposal remains untouched. Paid smoke evidence remains 60 Jev attempts and one optimizer attempt, with a fitted promoted head; no additional paid calls or human-rating edits during this follow-up.",
       "created_at": "2026-10-05T22:36:35.786052Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -46,10 +50,12 @@
       "text": "Final inspection check: F now exposes exact main and supporting classification instructions/options and enabled dynamic elements, not just names. Regression preserves paper subject about knowledge bases as distinct from the inclusion decision; no inferred topical preference is hard-coded into the optimizer. 392 offline specs pass. Saved bounded live verification contains proposal, 60 provider request/response pairs, trusted numerical fit, development comparison, promotion and subsequent prediction. Reviewer is ready to resume existing human ratings; source revision pinning and broader evaluation remain separate unfinished study work.",
       "created_at": "2026-10-05T22:39:47.747322Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -58,10 +64,12 @@
       "text": "User-facing failure diagnosed from live local records: latest optimizer request has no response and its round is pending; no reviewer process currently exists. Prior UI silently retained older promotion. Historical displayed agreement is 45/82 (54.9%) across versions, with no current-version rolling-audit score. Implemented explicit round-interrupted event and paid-confirmed R retry of that round (failed decision requests still protected), request/reply counts, historical versus current-version audit labels, exact provider-neutral CLI flags decisions-provider/decisions-model, and renamed misleading model-refresh count to prediction versions seen. No paid calls or ratings changed for this diagnosis. Connected full-request provider support remains Jev only, explicitly documented; Kev/Laya are not silently claimed as wired.",
       "created_at": "2026-10-05T22:47:54.107500Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -70,10 +78,12 @@
       "text": "Implemented explicit persisted human-explanation context, exact optimizer preview and actual prompt/reply/tool-call traces, cursor-based durable events, single-stage budgeted driver, feedback revision events, complete fit inputs/head outputs and reviewer lifecycle integration. Protected explanations are explicit guidance and mark evaluation independence false. Added standard decision cache options: reuse default, cache_only without new decision calls, refresh preserving historical answers; failed/pending paid attempts require separate retry_failed permission. 462 offline fake-client specs pass. No paid calls made in this implementation; future web visualization remains a consumer of these APIs.",
       "created_at": "2026-10-06T11:46:01.397522Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -82,10 +92,12 @@
       "text": "Ran actual GPT-6-Luna rubric discovery on a private snapshot with zero new decision calls. Verified sent messages exactly match preview: 60 trusted training feedback rows plus all five separate human explanations. Actual response explicitly references knowledge-base management, curation, structured extraction, retrieval and memory systems, while still inferring additional interests from examples. Proposal retained, not promoted: development coverage Include 2, Exclude 25 versus normal floor20/class. Source reviewer unchanged; no accuracy improvement claimed; exposed guidance marks evaluation independence false. Usage: 20621 prompt tokens, 1035 completion tokens. Reproducible opt-in trace script added; private full prompts/replies remain gitignored.",
       "created_at": "2026-10-06T12:20:27.226692Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -94,25 +106,43 @@
       "text": "Added reusable offline trace artifact exporter with event stepping, round jumps and play/pause over a chosen range. Self-contained private HTML exposes exact recorded prompts/replies/decision requests/fits, measured incumbent/candidate comparisons and accuracy deltas. New step/activation events capture complete classifier configuration and learned head; missing older snapshots and unmeasured steps are explicitly labeled. Export reads SQLite read-only and never invokes models. 465 offline specs pass including 1200-event export and script-injection escaping. Exported actual saved rubric trace privately. Desktop browser blocks local file URLs, so visual browser verification was not completed; no workaround attempted.",
       "created_at": "2026-10-06T12:38:34.706005Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
+      }
+    },
+    {
+      "id": "35ed8fee-fbe9-4aeb-8bd9-e4633fcb6613",
+      "author": "home",
+      "text": "Core observability acceptance verified on current develop. observability_test proves exact optimizer preview equals sent messages, tool calls are preserved, durable cursor replay survives restart, single-stage stepping stops before fitting, and budget pause/resume retains cached request evidence. api_event_sink_test verifies full actual state/examples reach API ingestion with stable event identity and failed acknowledgement cannot silently fall back to files. Provider lifecycle tests cover Jev/Kev/Laya wire requests/responses, probability features, fit inputs/head output, OOF provenance and measured promotion in one operational cycle. run_ledger_test validates text-free public records and freshness. UI ExchangeDetail/TraceDetail tests verify full human explanation context, request plus response and tools on selection, correct classifier/step/target correlation, and explicit absence rather than a substituted nearby exchange. OptimizationChange and OptimizationStatus distinguish before/after snapshots, accepted/no-change/waiting/failed/paused and response-awaiting-validation. Fresh targeted verification: 40 backend and 17 UI tests pass. Secret-redaction and active-question inspection are also covered by existing full-regression specs. Closing this reusable event/transcript contract; broader live-activity and app/timeline acceptance stories remain open. No hidden reasoning, experiment report, paid calls or production labels.",
+      "created_at": "2026-10-08T00:57:00.202761Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Technology acceptance",
+        "settings": {}
       }
     }
   ],
   "created_at": "2026-10-05T21:56:01.580145Z",
-  "updated_at": "2026-10-06T12:38:34.706036Z",
-  "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
-  },
+  "updated_at": "2026-10-08T00:57:00.718886Z",
+  "closed_at": "2026-10-08T00:57:00.718778Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
 }
