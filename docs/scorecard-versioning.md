@@ -572,3 +572,5 @@ item predicted but unlabeled. Open **Label items** and expand a classifier's
 calibration curve. The classifier strip is bounded to half the available card
 height and scrolls internally; article reading and the bottom review actions
 retain their own space. This mode uses the same synthetic-data safeguards.
+The classifier panel is a named Tab stop. With it focused, Page Down/Page Up
+scroll expanded details inside that panel rather than the app page.

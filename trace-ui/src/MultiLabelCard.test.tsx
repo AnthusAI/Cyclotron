@@ -4,6 +4,15 @@ import '@testing-library/jest-dom/vitest'
 import {MultiLabelCard} from './MultiLabelCard'
 afterEach(()=>{cleanup();sessionStorage.clear()})
 
+it('provides a named keyboard focus target for the scrollable classifier feedback panel',()=>{
+  const current={item:{id:'one',values:{text:'Paper'}},prediction:{presentation_id:'focus',classifiers:{a:{label:'yes',confidence:.8,classes:['yes','no']}}}}
+  render(<MultiLabelCard current={current} names={{a:'Library'}} busy={false} onSubmit={vi.fn()}/>)
+  const panel=screen.getByRole('group',{name:'Classifier feedback'})
+  expect(panel).toHaveAttribute('tabindex','0')
+  panel.focus()
+  expect(panel).toHaveFocus()
+})
+
 it('shows pinned scorecard order instead of response key order without moving votes between classifiers',()=>{
   const result={label:'yes',confidence:.8,classes:['yes','no']}
   const current={item:{id:'one',values:{text:'Paper'}},prediction:{presentation_id:'ordered',classifiers:{a:result,b:result,c:result}}}

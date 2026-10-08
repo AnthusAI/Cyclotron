@@ -46,10 +46,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "16ada33c-65cd-4fe5-9b32-04d14de203db",
+      "author": "home",
+      "text": "Completed native keyboard access for the bounded classifier feedback strip: named fieldset group plus tabindex=0, no custom global key handlers or mutable scroll state. Regression failed first; 166 UI specs pass, production build and focused lint pass. Browser fake-only workspace verified PageDown focus on Classifier feedback and internal scrollTop 156.25 while documentTop remained 0; PageUp reversed to 2.5 during native scrolling. Reading retained 216px and footer bottom 882 stayed inside 900px viewport. Browser console and server errors absent; no submitted labels or paid calls. Proof var/web/keyboard-classifier-scroll-proof.png. Provider selector audit confirmed Jev/Kev/Laya and model-reset behavior already exist, no duplicate implementation. Remaining broader dark/safe-area/timeline acceptance stays open.",
+      "created_at": "2026-10-08T00:48:05.755578Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-07T23:59:15.323659Z",
+  "updated_at": "2026-10-08T00:48:05.755683Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

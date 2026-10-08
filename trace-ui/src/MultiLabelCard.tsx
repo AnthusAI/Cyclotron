@@ -34,7 +34,7 @@ export function MultiLabelCard({current,names,busy,onSubmit,classifiers=[],event
     <p className="labeling-article whitespace-pre-wrap text-lg leading-relaxed">{String(item.values.abstract??item.values.text??'')}</p>
     <p className="text-xs text-muted-foreground">{String(item.values.submitted_at??'')} · {String(item.values.authors??'')} · {Array.isArray(item.values.categories)?item.values.categories.join(', '):''}</p>
     </div>
-    <fieldset disabled={busy} aria-busy={busy} className="classifier-feedback-strip">{orderedOutputs.map(([id,result])=><section key={id} className="label-classifier space-y-2 rounded-lg border border-border p-3"><h3 className="font-medium">{names[id]??id}</h3>
+    <fieldset disabled={busy} aria-busy={busy} aria-label="Classifier feedback" tabIndex={0} className="classifier-feedback-strip">{orderedOutputs.map(([id,result])=><section key={id} className="label-classifier space-y-2 rounded-lg border border-border p-3"><h3 className="font-medium">{names[id]??id}</h3>
       <div className="prediction-choices"><div role="group" aria-label={`${names[id]??id} classification`} className="prediction-buttons">{result.classes.map((label,index)=>{
         const predicted=label===result.label,selected=(recorded.get(id)?.label??labels[id])===label
         return <Button key={label} variant="outline" disabled={busy||recorded.has(id)} className="label-choice min-h-12 flex-1 flex-col gap-0.5 px-3 py-2" aria-label={`${names[id]??id}: ${label}${predicted?`, predicted ${Math.round(result.confidence*100)}%`:''}`} aria-pressed={selected} data-predicted={predicted} data-agreement={selected?(predicted?'correct':'incorrect'):'unselected'} onClick={()=>setLabels(previous=>({...previous,[id]:previous[id]===label?'':label}))}>
