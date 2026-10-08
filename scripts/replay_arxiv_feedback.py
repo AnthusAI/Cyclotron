@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
+from decision_flywheel.adapters.openai_decision import OpenAIDecisionAdapter, OpenAIDecisionConfiguration
 from decision_flywheel.adapters.optimizer_transport import optimizer_transport
 from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.classifier_config import ClassifierConfig
@@ -20,6 +21,7 @@ from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_tas
 from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.selection_policy import add_selection_arguments, selection_from_arguments
 from decision_flywheel.api_event_sink import GraphQLTraceSink
+from decision_flywheel.replay_feedback_policy import ReplayFeedbackPolicy
 
 
 def main(argv=None):
@@ -38,8 +40,11 @@ def main(argv=None):
     parser.add_argument('--rubric-recency-allowance',type=float,default=2.)
     parser.add_argument('--rubric-recency-decay-per-class',type=int,default=20)
     parser.add_argument('--rubric-changes-every',type=int,default=2)
-    parser.add_argument("--decisions-provider", choices=("jev",), default="jev")
+    parser.add_argument("--decisions-provider", choices=("jev", "openai"), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
+    parser.add_argument('--feedback-policy',choices=('all','reject_half','casual_ten_percent'),default='all')
+    parser.add_argument('--negative-label')
+    parser.add_argument('--calibration-method',choices=('auto','temperature','isotonic'),default='auto')
     parser.add_argument("--confirm-live", action="store_true")
     parser.add_argument('--operational',action='store_true',help='predict before each vote, trace item cycles and separate triggered stages')
     parser.add_argument('--trace-api-url',help='GraphQL endpoint for acknowledged trace logging')
@@ -47,6 +52,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if bool(args.trace_api_url) != bool(args.trace_api_run_id):
         parser.error('trace API URL and run ID must be specified together')
+    if args.operational and args.feedback_policy != 'all' and not args.negative_label:
+        parser.error('--negative-label is required for a selective feedback policy')
     from dataclasses import asdict
     from decision_flywheel import EvaluationPolicy
     try:
@@ -77,12 +84,19 @@ def main(argv=None):
         active = store._active_actions()
         ordered = tuple(items[key] for key in sorted(items, key=lambda key: (active[key].created_at, key)))
         plan = plan_replay(reviewer_task(), ordered, seed=args.seed, batch_size=args.batch_size)
+    if args.negative_label:
+        try:
+            reviewer_task().validate_label(args.negative_label)
+        except ValueError as error:
+            parser.error(str(error))
     manifest = plan.manifest(reviewer_task())
     manifest['execution'] = {
         'mode': 'operational' if args.operational else 'batch',
         'optimize_every': args.batch_size, 'retrain_every': args.batch_size,
         'stages': ['rubric', 'questions', 'examples'],
         'decisions_model': args.decisions_model, 'optimizer_model': args.optimizer_model,
+        'decisions_provider': args.decisions_provider, 'feedback_policy': args.feedback_policy,
+        'negative_label': args.negative_label, 'calibration_method': args.calibration_method,
         'optimizer_transport': args.optimizer_transport,
         'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
         'context_validation_floor':args.context_validation_floor,'cold_start_policy':'provisional-working-rubric',
@@ -122,7 +136,10 @@ def main(argv=None):
     runtime = args.output / "runtime.sqlite3"
     if runtime.exists():
         parser.error("a live replay already exists; use a new output directory rather than silently restart it")
-    adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
+    if args.decisions_provider == 'jev':
+        adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
+    else:
+        adapter = OpenAIDecisionAdapter.from_environment(configuration=OpenAIDecisionConfiguration(model=args.decisions_model))
     transport = optimizer_transport(vars(args))
     sink = GraphQLTraceSink(args.trace_api_url,args.trace_api_run_id,token=os.environ.get('FLYWHEEL_WEB_TOKEN')) if args.trace_api_url else None
     def observe(event):
@@ -143,7 +160,7 @@ def main(argv=None):
                              context_validation_floor=args.context_validation_floor,
                              evaluation_policy=evaluation_policy,
                              selection_policy=selection_policy,
-                             redact=credential_values(os.environ))
+                             redact=credential_values(os.environ), calibration_method=args.calibration_method)
     def checkpoint(report):
         (args.output / "results.json").write_text(json.dumps(report, indent=2)+"\n")
         if args.operational:
@@ -159,7 +176,8 @@ def main(argv=None):
     try:
         if args.operational:
             report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=args.batch_size,
-                retrain_every=args.batch_size,on_cycle=checkpoint,rubric_changes_every=args.rubric_changes_every))
+                retrain_every=args.batch_size,on_cycle=checkpoint,rubric_changes_every=args.rubric_changes_every,
+                feedback_policy=ReplayFeedbackPolicy(args.feedback_policy,args.seed),negative_label=args.negative_label))
             print(json.dumps({'complete':'stopped_reason' not in report,'cycles':len(report['cycles']),
                               'jev_attempts':wheel.requests,'optimizer_attempts':transport.calls}),flush=True)
             return int('stopped_reason' in report)

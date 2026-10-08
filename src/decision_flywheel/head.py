@@ -100,19 +100,50 @@ class OutOfFoldPredictions:
 class Calibration:
     temperature: float
     fit_on: str = "out_of_fold"
+    method: str = "temperature"
+    selection_reason: str = "explicit temperature scaling"
+    isotonic_knots: tuple[tuple[float, float], ...] = ()
 
     def __post_init__(self) -> None:
         if self.fit_on != "out_of_fold":
             raise ValueError("calibration accepts out-of-fold predictions only")
         if _finite_number("temperature", self.temperature) <= 0:
             raise ValueError("temperature must be a positive finite number")
+        if self.method not in {'temperature','isotonic'}:
+            raise ValueError("calibration method must be temperature or isotonic")
+        if self.method == 'isotonic' and not self.isotonic_knots:
+            raise ValueError("isotonic calibration needs fitted knots")
 
 
-def calibrate(predictions: OutOfFoldPredictions) -> Calibration:
+def _isotonic_knots(scores, labels, weights):
+    blocks=[]
+    for score,target,weight in sorted(zip(scores, labels, weights), key=lambda row: row[0]):
+        blocks.append([score,score,target*weight,weight])
+        while len(blocks)>1 and blocks[-2][2]/blocks[-2][3] > blocks[-1][2]/blocks[-1][3]:
+            right=blocks.pop(); left=blocks.pop(); blocks.append([left[0],right[1],left[2]+right[2],left[3]+right[3]])
+    return tuple(((left+right)/2,total/weight) for left,right,total,weight in blocks)
+
+
+def _isotonic_probability(knots, score):
+    for knot,value in knots:
+        if score <= knot: return value
+    return knots[-1][1]
+
+
+def calibrate(predictions: OutOfFoldPredictions, *, method: str = 'auto') -> Calibration:
     """Fit one propensity-weighted multiclass temperature from structural OOF proof."""
     if not isinstance(predictions, OutOfFoldPredictions):
         raise ValueError("calibration accepts out-of-fold predictions only")
 
+    if method not in {'auto','temperature','isotonic'}:
+        raise ValueError("calibration method must be auto, temperature, or isotonic")
+    # Isotonic needs substantial independent evidence.  ``auto`` is selected
+    # by a deterministic held-out split of the already OOF rows; it is not a
+    # threshold that silently promotes the more flexible calibrator.
+    eligible_isotonic = len(predictions.labels) >= 100 and len(predictions.classes) == 2 and len(set(predictions.labels)) == 2
+    chosen = 'isotonic' if method == 'isotonic' else 'temperature'
+    if chosen == 'isotonic' and (len(predictions.classes) != 2 or len(set(predictions.labels)) != 2):
+        raise ValueError('isotonic calibration needs two classes with both labels represented')
     def loss(temperature: float) -> float:
         total = 0.0
         total_weight = 0.0
@@ -123,7 +154,31 @@ def calibrate(predictions: OutOfFoldPredictions) -> Calibration:
         return total / total_weight
 
     temperature = min((0.5 + step / 100 for step in range(151)), key=lambda value: (loss(value), value))
-    return Calibration(temperature)
+    if method == 'auto' and eligible_isotonic:
+        positive=predictions.classes[0]
+        held=[i for i,item_id in enumerate(predictions.item_ids) if int(hashlib.sha256(item_id.encode()).hexdigest()[:8],16)%5 == 0]
+        fit=[i for i in range(len(predictions.labels)) if i not in held]
+        if len(held) >= 20 and {predictions.labels[i] for i in held} == set(predictions.classes) and {predictions.labels[i] for i in fit} == set(predictions.classes):
+            knots=_isotonic_knots([_softmax(predictions.logits[i],1.)[0] for i in fit],
+                [float(predictions.labels[i] == positive) for i in fit],[predictions.weights[i] for i in fit])
+            isotonic_brier=sum(predictions.weights[i]*(_isotonic_probability(knots,_softmax(predictions.logits[i],1.)[0])-float(predictions.labels[i] == positive))**2 for i in held)/sum(predictions.weights[i] for i in held)
+            temperature_brier=sum(predictions.weights[i]*(_softmax(predictions.logits[i],temperature)[0]-float(predictions.labels[i] == positive))**2 for i in held)/sum(predictions.weights[i] for i in held)
+            if isotonic_brier + .005 < temperature_brier:
+                chosen='isotonic'
+                auto_reason=f'auto: held-out OOF Brier improved from {temperature_brier:.6f} to {isotonic_brier:.6f}'
+            else:
+                auto_reason=f'auto: retained temperature; held-out OOF Brier {temperature_brier:.6f} vs isotonic {isotonic_brier:.6f}'
+        else:
+            auto_reason='auto: retained temperature; deterministic OOF holdout lacked class coverage'
+    elif method == 'auto':
+        auto_reason='auto: retained temperature; insufficient binary OOF evidence'
+    if chosen == 'temperature':
+        reason = 'explicit temperature scaling' if method == 'temperature' else auto_reason
+        return Calibration(temperature, method='temperature', selection_reason=reason)
+    positive = predictions.classes[0]
+    knots=_isotonic_knots([_softmax(logits,1.)[0] for logits in predictions.logits],
+        [float(label == positive) for label in predictions.labels],predictions.weights)
+    return Calibration(temperature, method='isotonic', selection_reason='explicit isotonic challenger' if method == 'isotonic' else auto_reason, isotonic_knots=knots)
 
 
 @dataclass(frozen=True)
@@ -176,7 +231,12 @@ class LearnedHead:
         return dict(zip(self.classes, _softmax(self._logits(values), 1.0)))
 
     def probabilities(self, values: Mapping[str, float]) -> dict[str, float]:
-        return dict(zip(self.classes, _softmax(self._logits(values), self.calibration.temperature)))
+        probabilities=_softmax(self._logits(values), self.calibration.temperature)
+        if self.calibration.method == 'temperature': return dict(zip(self.classes, probabilities))
+        raw=_softmax(self._logits(values), 1.)[0]
+        calibrated=_isotonic_probability(self.calibration.isotonic_knots,raw)
+        calibrated=max(0.,min(1.,calibrated))
+        return {self.classes[0]:calibrated,self.classes[1]:1-calibrated}
 
     def predict(self, values: Mapping[str, float]) -> str:
         probabilities = self.probabilities(values)
@@ -186,7 +246,7 @@ class LearnedHead:
 def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_features: Sequence[str],
                      development_ids: Sequence[str], scoreboard_ids: Sequence[str], scorecard_fingerprint: str,
                      policy_fingerprint: str, context_artifact_fingerprint: str, source_model_provenance: str,
-                     folds: int = 3, training_class_weighting: str = "natural") -> LearnedHead:
+                     folds: int = 3, training_class_weighting: str = "natural", calibration_method: str = 'auto') -> LearnedHead:
     """Fit numbers on trusted train rows; dev and scoreboard remain ID-only firewalls."""
     names = tuple(declared_features)
     if not names or len(set(names)) != len(names) or any(not isinstance(name, str) or not name for name in names):
@@ -213,7 +273,7 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
     # distribution, not the artificially equalized training distribution.
     oof = _out_of_fold(task.labels, names, training_ids, raw_matrix, labels, propensities,
                        _inverse_propensity_weights(propensities), folds, training_class_weighting)
-    calibration = calibrate(oof)
+    calibration = calibrate(oof, method=calibration_method)
     fitted = _fit(task.labels, names, matrix, labels, weights)
     provenance = HeadProvenance(training_ids, tuple(development_ids), tuple(scoreboard_ids), tuple(weights),
                                 scorecard_fingerprint, policy_fingerprint, context_artifact_fingerprint,
@@ -222,7 +282,8 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
     # coefficients. Different task, selection, context, or source-model
     # contracts can happen to yield identical numerical parameters.
     refitted = _fingerprint({
-        "calibration": calibration.temperature,
+        "calibration": {"method": calibration.method, "temperature": calibration.temperature,
+                        "knots": calibration.isotonic_knots, "reason": calibration.selection_reason},
         "context_artifact": context_artifact_fingerprint,
         "development_ids": tuple(development_ids),
         "features": names,
