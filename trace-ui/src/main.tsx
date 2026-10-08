@@ -3,6 +3,7 @@ import {flushSync} from 'react-dom'
 import './index.css'
 import {App, type RunComparison} from './App.tsx'
 import {Circle, CirclePlus, CircleMinus, CirclePlay} from 'lucide-react'
+import {recordedOutcomeWindows} from './recordedOutcomes'
 
 const read=(id:string):Record<string,unknown>[]=>JSON.parse(document.getElementById(id)?.textContent||'[]')
 const events=read('recording'),history=read('review-history')
@@ -15,7 +16,8 @@ const counts={
 // The DOM adapter initializes after this synchronous shell mount, exactly once.
 const comparison=JSON.parse(document.getElementById('run-comparison')?.textContent||'null') as RunComparison|null
 const options=JSON.parse(document.getElementById('workspace-options')?.textContent||'{}')
-flushSync(()=>createRoot(document.getElementById('root')!).render(<App counts={counts} comparison={comparison} embedded={options.embedded===true} />))
+const outcomes=recordedOutcomeWindows(events,JSON.parse(document.getElementById('class-config')?.textContent||'[]'))
+flushSync(()=>createRoot(document.getElementById('root')!).render(<App counts={counts} comparison={comparison} outcomes={outcomes} embedded={options.embedded===true} />))
 const iconHost=document.createElement('div');iconHost.hidden=true;document.body.append(iconHost)
 flushSync(()=>createRoot(iconHost).render(<>
   <span id="icon-circle"><Circle strokeWidth={3} /></span>

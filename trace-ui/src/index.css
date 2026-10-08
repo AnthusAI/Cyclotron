@@ -65,7 +65,7 @@ h1,h2,h3,h4,h5,h6,[data-slot="card-title"],.font-heading {font-family:'Blinker',
 .app-header {--app-header-height:3rem;position:relative;z-index:50}
 .explorer-main {display:flex;flex-direction:column;flex:1;min-height:0}
 .explorer-main > :not(.workspace) {flex-shrink:0}
-.run-statistics {max-height:160px;overflow:auto}
+.run-statistics {max-height:min(320px,40vh);overflow:auto}
 .workspace {position:relative;display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:8px;align-items:stretch}
 .timeline-controls {flex-shrink:0}
 .run-workspace > :not(:last-child) {flex-shrink:0}

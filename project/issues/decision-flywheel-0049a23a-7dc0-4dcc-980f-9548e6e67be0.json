@@ -105,10 +105,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "ba7ab9f9-8b12-4a38-a6d4-ece04af2ce69",
+      "author": "home",
+      "text": "Removed redundant expanded counts. Run statistics now lead with same-item raw decision model versus final classifier recall, precision, accuracy, ECE and Brier deltas, calibration support and optional curve details. Recorded first/latest review-window trend is secondary and explicitly not causal or matched optimization evidence (first snapshot in this run has only one label). Counts alone no longer enable an empty expander. Added failing-first specs, 191 UI specs pass; browser verification in progress. No optimization calls or feedback changes.",
+      "created_at": "2026-10-08T16:17:12.172593Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "520df6eb-df59-49ab-9397-6a8f7790bafa",
+      "author": "home",
+      "text": "Final browser verification: expanded disclosure shows same 85 reviewed items, raw/final recall62.5%, precision27.8%, accuracy81.2%, ECE9.8%/9.5%, Brier0.219/0.221 with signed deltas and support. The first-label historical trend is secondary and collapsed, not a headline optimization claim. Calibration curves/details remain available. Screenshot var/web/run-outcome-statistics-proof.png, browser warnings/errors empty. 191 UI specs and production build pass after integrating latest develop changes; generated CSS rebuilt to resolve asset-only merge conflicts. No model calls or feedback changes; user tab remains collapsed to preserve timeline space.",
+      "created_at": "2026-10-08T16:18:29.029552Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T15:58:57.303373Z",
+  "updated_at": "2026-10-08T16:18:29.029641Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

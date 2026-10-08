@@ -11,11 +11,13 @@ import {PlaybackCalibration} from './ReliabilityCurve'
 import {PlaybackModelComparison} from './ModelComparison'
 import {CyclotronBrand} from './CyclotronBrand'
 import {LabMetrics} from './components/lab-metrics'
+import {RunOutcomes} from './RunOutcomes'
+import type {OutcomeWindow} from './recordedOutcomes'
 
 export type Counts={predictions:number;labels:number;optimizations:number;events:number}
 type Endpoint={accuracy:number|null;precision:number|null;recall:number|null}
 export type RunComparison={scope:string;sample_count:number;class_counts:Record<string,number>;before:Endpoint;after:Endpoint}
-export function App({counts,comparison,embedded=false}:{counts:Counts;comparison?:RunComparison|null;embedded?:boolean}) {
+export function App({counts,comparison,outcomes=[],embedded=false}:{counts:Counts;comparison?:RunComparison|null;outcomes?:OutcomeWindow[];embedded?:boolean}) {
   return <>
     <div className="app-shell">
       {!embedded&&<header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
@@ -24,14 +26,13 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
       </header>}
       <main className={`explorer-main w-full gap-1 ${embedded?'p-0':'p-2'}`}>
         {!embedded&&<div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>}
-        <details className="run-statistics text-muted-foreground">
+        {comparison||outcomes.length?<details className="run-statistics text-muted-foreground">
           <summary className="cursor-pointer text-xs font-medium"><span>Run statistics</span><span className="ml-2 font-normal">{counts.predictions} predictions · {counts.labels} labels · {counts.optimizations} optimizer calls</span></summary>
           {comparison
             ? <div className="mt-3"><LabMetrics metrics={([['Recall','recall'],['Precision','precision'],['Accuracy','accuracy']] as const).map(([name,key])=>({name,before:comparison.before[key],after:comparison.after[key]}))} /></div>
-            : <p className="mt-3 text-xs text-muted-foreground">Matched comparison not recorded</p>}
+            : <RunOutcomes windows={outcomes}/>}
           {comparison&&<p className="mt-2 text-xs leading-relaxed">{comparison.scope} · {comparison.sample_count} items · {Object.entries(comparison.class_counts).map(([label,count])=>`${label}: ${count}`).join(' · ')}. Precision and recall use the configured positive class. Small class counts make these estimates uncertain; undefined means no applicable denominator.</p>}
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">{([['Predictions',counts.predictions],['Human feedback',counts.labels],['Optimizer requests',counts.optimizations],['Events',counts.events]] as const).map(([label,count])=><span key={label}>{label}: <span className="font-mono">{count}</span></span>)}</div>
-        </details>
+        </details>:<p className="text-xs text-muted-foreground"><span>Run statistics</span> · {counts.predictions} predictions · {counts.labels} labels · Outcome metrics not recorded</p>}
         <div id="workspace" className="workspace">
           <Card className="timeline-pane gap-0 overflow-hidden py-0">
             <div aria-label="Timeline controls" className="timeline-controls flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-2 py-1">
