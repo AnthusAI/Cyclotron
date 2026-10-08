@@ -65,7 +65,10 @@ export function WebApp(){
   const [runs,setRuns]=useState<Run[]>([]),[selected,setSelected]=useState(()=>locationState().get('run')??''),[run,setRun]=useState<Run|null>(null)
   const [current,setCurrent]=useState<CurrentItem|null>(null),[jobs,setJobs]=useState<Job[]>([]),[events,setEvents]=useState<TraceEvent[]>([])
   const [view,setView]=useState<'timeline'|'label'>(()=>locationState().get('view')==='label'?'label':'timeline'),[detail,setDetail]=useState<TraceEvent|null>(null),[revision,setRevision]=useState(0)
-  const [error,setError]=useState(''),[stream,setStream]=useState('Connecting'),[sending,setSending]=useState(false)
+  const [failure,setFailure]=useState({message:'',runId:'',section:''})
+  const error=failure.runId===selected&&failure.section===section?failure.message:''
+  const setError=useCallback((message:string)=>setFailure({message,runId:selected,section}),[selected,section])
+  const [stream,setStream]=useState('Connecting'),[sending,setSending]=useState(false)
   const [submission,setSubmission]=useState<LabelSubmission|null>(null)
   const [historyOpen,setHistoryOpen]=useState(false),[activityOpen,setActivityOpen]=useState(false)
   const [comparisonOpen,setComparisonOpen]=useState(false)
@@ -93,7 +96,7 @@ export function WebApp(){
     setSessionScorecard(previous=>previous||value.scorecardDefinitions?.[0]?.id||'')
     setItemList(previous=>previous||value.itemLists[0]?.id||'')
     setClassifierIds(previous=>previous.length?previous:value.classifiers.slice(0,1).map(classifier=>classifier.id))
-  }).catch(e=>setError(e.message))},[creating,historyOpen])
+  }).catch(e=>setError(e.message))},[creating,historyOpen,setError])
   const refresh=useCallback(async()=>{
     const result=await graphql<{runs:Run[];capabilities:{liveEnabled:boolean;itemCount:number}}>(RUNS)
     setRuns(result.runs);setCapabilities(result.capabilities)
@@ -113,7 +116,7 @@ export function WebApp(){
     }
     firstRoute.current=false
   },[selected,view,section,timelineClassifier,invalidTimelineClassifier])
-  useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh])
+  useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh,setError])
   useEffect(()=>{
     if(!selected||section!=='optimizations'){setRun(null);return}
     let cancelled=false,unsubscribe:(()=>void)|undefined
@@ -142,7 +145,7 @@ export function WebApp(){
     }
     state();const timer=setInterval(state,1000)
     return ()=>{cancelled=true;unsubscribe?.();clearInterval(timer)}
-  },[selected,section,view])
+  },[selected,section,view,setError])
   const submittedJob=jobs.find(job=>job.id===submission?.jobId)
   const awaitingLabels=submission?.runId===selected&&!submission.unconfirmed&&
     (!submittedJob||['pending','running'].includes(submittedJob.status))

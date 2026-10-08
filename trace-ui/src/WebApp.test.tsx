@@ -30,6 +30,24 @@ function classifiedRunFixture(){
   })
 }
 
+test('moving to a valid run clears an old load error without submitting commands',async()=>{
+  const missing={...live,id:'missing',name:'Unavailable run'}
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[missing,live],capabilities:{liveEnabled:true,itemCount:1}}
+    if(variables?.id==='missing')throw new Error('unknown run')
+    if(query.includes('events('))return {events:[]}
+    return {run:live,currentItem:null,jobs:[]}
+  })
+  window.history.replaceState(null,'','#run=missing&view=label&section=optimizations')
+  render(<WebApp/> )
+  expect(await screen.findByText('unknown run')).toBeVisible()
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  fireEvent(window,new PopStateEvent('popstate'))
+  await screen.findByRole('heading',{name:'Interactive study'})
+  expect(screen.queryByText('unknown run')).toBeNull()
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 test('labeling exposes recorded optimizer completion and opens the full correlated exchange',async()=>{
   const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
   const scope={classifier_id:'a',step_id:'rubric-one',step_stage:'rubric'}

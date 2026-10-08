@@ -69,10 +69,24 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "54d3d157-8ebf-42df-aece-a5658efbeb9f",
+      "author": "home",
+      "text": "Tablet activity acceptance found and fixed a real stale-error bug: an invalid run load left unknown run visible after navigating to a valid recording. Added a failing-first WebApp regression; failure state is now scoped to run/section and rendered only in that workspace, with callback dependencies explicit and no new state-clearing effect. 167 UI tests and production build pass; focused oxlint has only four existing set-state-in-effect warnings, no new hook warnings. Read-only browser check on actual saved diagnostic pilot, requested tablet viewport (reported CSS viewport 1025x1475), opens optimizer filter and selects cycle81 response: full system/user context, response and tools present; no horizontal overflow or console errors; close returns to workspace with no alert/dialog. Screenshot private var/web/tablet-activity-exchange-proof.png. No model calls, votes, prepare commands or production mutations. Broader live phase/recovery/tablet acceptance remains open; this is a concrete navigation fix, not an experiment report.",
+      "created_at": "2026-10-08T01:00:54.390044Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "App acceptance",
+        "settings": {}
+      }
     }
   ],
   "created_at": "2026-10-07T14:54:06.171698Z",
-  "updated_at": "2026-10-07T22:47:39.058102Z",
+  "updated_at": "2026-10-08T01:00:54.390169Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
