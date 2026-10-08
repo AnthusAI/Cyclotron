@@ -63,6 +63,9 @@ relationship before consulting the original configuration. This lets the initial
 run and later editions appear together without rewriting a frozen run snapshot.
 Search and the explicit All scorecards filter remain available. Inspecting an
 inactive edition is read-only; activation is a separate, explicit action.
+Scorecard and nested classifier controls use at least 44-pixel touch targets on
+narrow screens or coarse-pointer devices. The settings editor scrolls its fields
+while keeping its Save and Cancel footer visible.
 
 `scripts/update_arxiv_items.py` is an external example importer. It refreshes a
 local SQLite mirror from normalized or raw arXiv JSONL and upserts chronological

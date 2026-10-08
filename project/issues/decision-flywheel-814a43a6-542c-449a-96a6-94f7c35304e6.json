@@ -87,14 +87,26 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "7fb5e7b9-d0b5-4e10-b76e-831964b92204",
+      "author": "home",
+      "text": "Editor acceptance on isolated fake-model API/SQLite workspace: changed a classifier question through Save changes, confirmed classifier revision 2 and new revisions of both affected scorecards, inspected revision 1 with original question and no edit controls, and compared exact old/new questions in the definition comparison drawer. No model commands or human labels added; fixture remains 6 labels, 7 jobs, 4 checkpoints. Responsive browser found 25px save buttons; added scoped 44px minimums for narrow/coarse-pointer scorecard controls, failing-first coverage, 175 UI tests/build pass and focused lint clean. Browser measured Save changes and bounded Save scorecard footer at 44px, both visible in CSS 960x900 viewport; scrolling fields have 988px content without hiding footer. No console errors. Proof var/web/touch-classifier-editor-proof.png and touch-scorecard-editor-proof.png. Decision provider and optimizer transport controls are present. Combined earlier component/API and browser evidence covers membership, immutable revisions, impact, deep links and draft retention; keep open for final narrow mobile editor/activation check rather than claim physical iPad acceptance.",
+      "created_at": "2026-10-08T01:33:53.320781Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:53:59.760123Z",
-  "updated_at": "2026-10-08T00:44:55.693418Z",
+  "updated_at": "2026-10-08T01:33:53.320854Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

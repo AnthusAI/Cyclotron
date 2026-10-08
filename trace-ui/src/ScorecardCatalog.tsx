@@ -51,7 +51,7 @@ export function ScorecardCatalog(){
   const readOnly=inspected!==null&&inspected!==card?.revision
   const historyResolved=history?.scorecardId===selected
   const available=inspected===null||inspected===card?.revision||!!historical
-  return <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+  return <section className="scorecard-workspace flex min-h-0 flex-1 flex-col overflow-hidden">
     {comparing&&card&&historical?<ScorecardComparison scorecardId={card.id} beforeRevision={card.revision} afterRevision={historical.revision} onClose={()=>setComparing(false)}/>:null}
     <div className="shrink-0 space-y-3 p-5"><div className="flex items-center justify-between"><h1 className="text-xl font-semibold">Scorecards</h1>{!editing?<Button onClick={()=>{setSelected('');setEditing(true)}}>New scorecard</Button>:null}</div>{error?<p role="alert">{error}</p>:null}
       {card?<div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={()=>setSelected('')}>All scorecards</Button><h2>{historical?.name??(readOnly?'Scorecard':card.name)} · revision {inspected??card.revision}</h2><p className="text-xs text-muted-foreground">Classifier edits create new scorecard definitions; running sessions keep their pinned versions.</p></div>:null}

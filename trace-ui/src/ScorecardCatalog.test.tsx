@@ -6,6 +6,15 @@ import {graphql} from './graphql'
 vi.mock('./graphql',()=>({graphql:vi.fn()}))
 afterEach(()=>{cleanup();vi.clearAllMocks();window.history.replaceState(null,'','/')})
 
+it('keeps scorecard and nested classifier controls in the touch-sized workspace',async()=>{
+  vi.mocked(graphql).mockResolvedValue({scorecardDefinitions:[],classifiers:[]})
+  render(<ScorecardCatalog/> )
+  const create=screen.getByRole('button',{name:'New scorecard'})
+  expect(create.closest('section')).toHaveClass('scorecard-workspace')
+  fireEvent.click(create)
+  expect(screen.getByRole('button',{name:'Save scorecard'}).closest('section')).toHaveClass('scorecard-workspace')
+})
+
 it('an unavailable revision stops loading and does not query or edit an unrelated classifier definition',async()=>{
   window.history.replaceState(null,'','/#section=scorecards&scorecard=card&scorecard_revision=999')
   const current={id:'card',name:'Current card',revision:2,classifiers:[]}
