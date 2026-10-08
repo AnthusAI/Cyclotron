@@ -91,6 +91,13 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
         with self.connect() as db:
             return [self._run(r) for r in db.execute('SELECT * FROM web_runs ORDER BY rowid DESC')]
 
+    def run_scorecard_id(self, run_id):
+        """Resolve current family membership without rewriting a run snapshot."""
+        with self.connect() as db:
+            row=db.execute('SELECT r.config,v.scorecard_id FROM web_runs r LEFT JOIN scorecard_versions v ON v.run_id=r.id WHERE r.id=?',(run_id,)).fetchone()
+        if row is None:raise ValueError('unknown run')
+        return row['scorecard_id'] or json.loads(row['config']).get('scorecard_id')
+
     def labeling_access(self, run_id):
         """Describe existing command eligibility without authorizing any work."""
         with self.connect() as db:

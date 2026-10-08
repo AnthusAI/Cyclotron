@@ -57,6 +57,13 @@ command identity. Recovery cannot resume paid-capable commands, interleave with
 pending work, or reactivate an inactive edition. See
 [scorecard versioning](scorecard-versioning.md) for the API and storage contract.
 
+Run history defaults to the inspected run's scorecard family. GraphQL
+`Run.scorecardId` resolves that membership from the persisted scorecard-version
+relationship before consulting the original configuration. This lets the initial
+run and later editions appear together without rewriting a frozen run snapshot.
+Search and the explicit All scorecards filter remain available. Inspecting an
+inactive edition is read-only; activation is a separate, explicit action.
+
 `scripts/update_arxiv_items.py` is an external example importer. It refreshes a
 local SQLite mirror from normalized or raw arXiv JSONL and upserts chronological
 pages through GraphQL. A Hugging Face JSONL download resolves and records an

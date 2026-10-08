@@ -30,6 +30,11 @@ class Run:
     config: JSON
 
     @strawberry.field
+    async def scorecard_id(self,info:strawberry.Info)->strawberry.ID|None:
+        identifier=await asyncio.to_thread(info.context['store'].run_scorecard_id,str(self.id))
+        return strawberry.ID(identifier) if identifier is not None else None
+
+    @strawberry.field
     async def labeling_access(self,info:strawberry.Info)->JSON:
         return await asyncio.to_thread(info.context['store'].labeling_access,str(self.id))
 

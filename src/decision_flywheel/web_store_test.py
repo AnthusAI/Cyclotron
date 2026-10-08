@@ -4,6 +4,22 @@ import pytest
 from .web_store import WebStore
 
 
+def test_run_scorecard_identity_uses_version_membership_before_immutable_configuration(tmp_path):
+    store=WebStore(tmp_path/'db')
+    for key in ('old','new'):
+        store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('list','List')
+    config={'classifiers':[store.classifier('old')],'item_list_id':'list','seed':'seed','scorecard_id':'original-definition'}
+    run=store.create_run('Original','live',config)
+    assert store.run_scorecard_id(run['id'])=='original-definition'
+    edition=store.extend_scorecard(run['id'],['new'],name='Family')
+    assert store.run_scorecard_id(run['id'])==edition['config']['scorecard_id']
+    assert store.run(run['id'])['config']==config
+    independent=store.create_run('Independent','recorded',{})
+    assert store.run_scorecard_id(independent['id']) is None
+    with pytest.raises(ValueError,match='unknown run'):store.run_scorecard_id('missing')
+
+
 def test_explicit_feedback_recovery_requeues_only_non_paid_scorecard_commands_and_preserves_failure_history(tmp_path):
     store = WebStore(tmp_path / 'workspace.sqlite')
     run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})

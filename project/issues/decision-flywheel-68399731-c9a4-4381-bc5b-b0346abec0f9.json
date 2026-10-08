@@ -3,7 +3,7 @@
   "title": "Integrate run history and navigation with accessible slide-out drawers",
   "description": "Provide a left slide-out history drawer for optimization runs/interactive sessions and edition history, scoped to selected scorecard with search/filter and active/inspected distinction. Keep it closed during focused labeling by default; do not permanently consume labeling width. Provide app-level navigation accessible at narrow sizes, deep links and browser back/forward preserving selected scorecard/run/view. Drawer opening is local UI state, not a run mutation; retain current item, pending job and unsaved comments/labels on close or navigation cancellation. Focus management, Escape, backdrop dismissal, accessible names and touch targets. Acceptance: open history, inspect another run, return to active session with drafts intact; tablet overlay never obscures unreachable dismiss/actions; inactive editions clearly read-only until explicitly activated.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -110,11 +110,20 @@
         "name": "Edition acceptance",
         "settings": {}
       }
+    },
+    {
+      "id": "770222e0-b5f9-4c51-8088-ab4473f48d06",
+      "author": "home",
+      "text": "Completed final history-family gap: computed GraphQL Run.scorecardId uses persisted scorecard_versions membership before immutable configuration, and UI filters by that canonical identity. Failing-first store/API/UI regressions; 35 focused Python and 174 UI tests, build pass; focused lint has four pre-existing effect warnings only. Browser verified child and original run both appear under OFFLINE EDITIONS, selecting original retains same family scope and active edition distinction; no console errors. Fixture unchanged at 6 labels / 7 jobs / 4 checkpoints. Production unchanged at 255 labels / 0 retractions / 39405 events / 348 completed and 2 failed jobs, no active work. Screenshot var/web/canonical-family-history-proof.png. Prior comments cover tablet cross-run drafts, browser Back, historical-definition read-only, Escape/focus return and explicit learned-edition activation. Documentation updated; broader app acceptance remains in separate issues.",
+      "created_at": "2026-10-08T01:30:24.678941Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:04.550216Z",
-  "updated_at": "2026-10-08T01:23:20.154183Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:30:24.803186Z",
+  "closed_at": "2026-10-08T01:30:24.803097Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

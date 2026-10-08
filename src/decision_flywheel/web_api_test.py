@@ -16,7 +16,7 @@ def test_labeling_access_explains_inactive_editions_without_changing_recorded_st
     added=store.extend_scorecard(parent['id'],['new'],name='Versions')
     recorded=store.create_run('Recording','recorded',{})
     client=TestClient(create_app(store))
-    query='query($id:ID!){run(runId:$id){labelingAccess config}}'
+    query='query($id:ID!){run(runId:$id){labelingAccess scorecardId config}}'
     def access(run):
         result=client.post('/graphql',json={'query':query,'variables':{'id':run['id']}}).json()
         assert 'errors' not in result
@@ -24,6 +24,8 @@ def test_labeling_access_explains_inactive_editions_without_changing_recorded_st
     assert access(parent)['labelingAccess']=={'allowed':False,'reason':'Activate this scorecard version before continuing labeling.'}
     assert access(added)['labelingAccess']=={'allowed':True,'reason':None}
     assert access(recorded)['labelingAccess']=={'allowed':False,'reason':'Recorded runs are read-only.'}
+    assert access(parent)['scorecardId']==access(added)['scorecardId']==added['config']['scorecard_id']
+    assert access(recorded)['scorecardId'] is None
     store.activate_scorecard_version(added['config']['scorecard_id'],1)
     assert access(parent)['labelingAccess']=={'allowed':True,'reason':None}
     assert access(parent)['config']==parent['config']

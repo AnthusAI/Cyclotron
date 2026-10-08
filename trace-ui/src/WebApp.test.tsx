@@ -250,6 +250,29 @@ test('an inactive learned edition explains read-only labeling before a submissio
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
+test('scorecard history includes an original run whose family was recorded without rewriting its configuration',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  const child={...live,scorecardId:'family',config:{scorecard_id:'family'}}
+  const parent={...replay,name:'Original family run',scorecardId:'family',config:{}}
+  const other={...replay,id:'other',name:'Unrelated run',scorecardId:'other',config:{scorecard_id:'other'}}
+  vi.mocked(graphql).mockImplementation(async(query,variables)=>{
+    if(query.includes('capabilities'))return {runs:[child,parent,other],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[{id:'family',name:'Family',revision:2},{id:'other',name:'Other',revision:1}]}
+    if(query.includes('events('))return {events:[]}
+    return {run:variables?.id==='replay'?parent:child,currentItem:null,jobs:[]}
+  })
+  render(<WebApp/> )
+  fireEvent.click(await screen.findByRole('button',{name:'Run history'}))
+  const drawer=screen.getByRole('dialog',{name:'Run history'})
+  expect(within(drawer).getByRole('button',{name:/Original family run.*cycles/})).toBeVisible()
+  expect(within(drawer).queryByRole('button',{name:/Unrelated run.*cycles/})).toBeNull()
+  fireEvent.click(within(drawer).getByRole('button',{name:/Original family run.*cycles/}))
+  expect(await screen.findByRole('heading',{name:'Original family run'})).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'Run history'}))
+  await waitFor(()=>expect(screen.getByRole('combobox',{name:'Scorecard filter'})).toHaveValue('family'))
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 test('opening the workspace shows the existing optimization timeline instead of an empty landing page',async()=>{
   render(<WebApp />)
   expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()
