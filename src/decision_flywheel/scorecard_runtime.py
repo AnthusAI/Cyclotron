@@ -98,11 +98,13 @@ class ScorecardRuntime:
         values['optimizer_transport']=validate_optimizer_transport(values.get('optimizer_transport','openai'))
         values["evaluation_protocol"] = "protected-feedback-v1"
         values = freeze_configuration(self.store, values,selection_policy_override='selection_policy' in config)
-        items: list[dict] = []
-        offset = 0
-        while page := self.store.list_items(values["item_list_id"], after=offset):
-            items.extend(page)
-            offset += len(page)
+        # The catalog can refresh while a run is being created. Resolve the
+        # immutable references we just froze, never enumerate "latest" again.
+        items = [
+            {**self.store.item_revision(values["item_list_id"], row["id"], row["revision"]),
+             "revision": row["revision"], "fingerprint": row["fingerprint"]}
+            for row in values["item_revisions"]
+        ]
         return values, items
 
     def create_run(self, name: str, config: Mapping[str, object]) -> dict:

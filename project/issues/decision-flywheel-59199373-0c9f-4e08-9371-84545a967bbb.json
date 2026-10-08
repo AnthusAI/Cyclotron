@@ -195,10 +195,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "74cf261d-29b0-4f93-ab36-a411ec066f96",
+      "author": "home",
+      "text": "Run-input pinning fix: a specs-first regression reproduces a catalog refresh after the item manifest freezes but before run persistence. Previously the runtime re-enumerated latest items, so revisions and extra articles could disagree with its recorded manifest. Run creation now resolves only immutable item revisions from that manifest. Focused runtime/session/worker specs: 38 passed. No live provider calls, label changes, or experiment report. Broader run/recovery acceptance remains open.",
+      "created_at": "2026-10-08T00:09:00.379470Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-07T23:22:35.296402Z",
+  "updated_at": "2026-10-08T00:09:00.379571Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

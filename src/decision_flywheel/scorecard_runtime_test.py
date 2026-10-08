@@ -11,6 +11,30 @@ from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
 
 
+def test_a_catalog_refresh_during_run_creation_cannot_replace_frozen_items(tmp_path, monkeypatch):
+    from . import scorecard_runtime
+    store=WebStore(tmp_path/'workspace.sqlite')
+    store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('papers','Papers')
+    store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Original paper'}}])
+    original=store.list_items('papers')[0]
+    def refresh_after_freezing(*args, **kwargs):
+        frozen=freeze_configuration(*args, **kwargs)
+        store.upsert_list_items('papers',[
+            {'id':'paper','occurred_at':'2026-01-02','values':{'text':'Revised paper'}},
+            {'id':'later','occurred_at':'2026-01-03','values':{'text':'New paper'}},
+        ])
+        return frozen
+    monkeypatch.setattr(scorecard_runtime,'freeze_configuration',refresh_after_freezing)
+    def forbidden(*args):raise AssertionError('freezing must not construct a provider')
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=forbidden,sink_factory=forbidden)
+    run=runtime.create_run('Pinned items',{'classifier_ids':['topic'],'item_list_id':'papers'})
+    assert store.items(run['id'])==[original]
+    assert run['config']['item_revisions']==[
+        {'id':'paper','revision':original['revision'],'fingerprint':original['fingerprint']}]
+    assert store.list_items('papers')[0]['values']['text']=='Revised paper'
+
+
 def test_a_run_pins_its_optimizer_transport_even_when_the_scorecard_later_changes(tmp_path):
     store=WebStore(tmp_path/'workspace.sqlite')
     classifier=store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
