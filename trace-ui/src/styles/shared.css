@@ -4,6 +4,8 @@
 
 /* Flat, polarity-consistent interface */
 :root {
+  --calibration-final: #15803d;
+  --calibration-raw: #1d4ed8;
   --background: oklch(0.985 0.004 326);
   --foreground: oklch(0.18 0.014 326);
   --card: oklch(0.955 0.009 326);
@@ -44,6 +46,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --calibration-final: #4ade80;
+    --calibration-raw: #60a5fa;
     --background: oklch(0.17 0.014 326);
     --foreground: oklch(0.94 0.008 326);
     --card: oklch(0.22 0.018 326);

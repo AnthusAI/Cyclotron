@@ -231,14 +231,26 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "74d128a2-71ff-45c5-9178-3dcf3e0e3e8c",
+      "author": "home",
+      "text": "Current browser edition inspection acceptance on isolated fake API: Version 2 displays Inspecting inactive version, requires explicit Use this version, and disables Prepare next item / feedback edits. Compare version metrics preserves Version 1 Relevance 100/33/33 and Practicality 100/67/67 with three labels each; new Synthetic Gallery has unavailable metrics and zero labels. UI discloses latest-200 descriptive metrics are not a matched held-out comparison. Returning to Version 1 retains pending fixture-4, four cycles/six labels and active status; no warnings/errors. No activation, labels or model commands performed. Wider protected-comparison resume browser and dark/tablet acceptance remain open.",
+      "created_at": "2026-10-08T01:50:24.911996Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-08T00:36:56.046246Z",
+  "updated_at": "2026-10-08T01:50:24.912065Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

@@ -10,7 +10,7 @@ const delta=(before:number|null|undefined,after:number|null|undefined)=>before==
 const signed=(value:number|null,scale=100,suffix=' pp')=>value==null?'—':`${value<0?'−':value>0?'+':''}${(Math.abs(value)*scale).toFixed(scale===100?1:3)}${suffix}`
 export function ModelComparison({comparison,classes}:{comparison?:DecisionModelComparison;classes?:ClassRole[]}){
   if(!comparison?.count)return <p className="text-xs text-muted-foreground">No matched raw decision-model and final-classifier predictions recorded yet.</p>
-  const outputs=[{name:'Raw decision model',metrics:comparison.raw,color:'#3b82f6'},{name:'Final classifier',metrics:comparison.final,color:'#22c55e'}]
+  const outputs=[{name:'Raw decision model',metrics:comparison.raw,color:'var(--calibration-raw)'},{name:'Final classifier',metrics:comparison.final,color:'var(--calibration-final)'}]
   const config=classes
   const metric=(metrics:OutputMetrics,key:'recall'|'precision')=>metricRates(metrics,config)[key]
   return <div className="space-y-3">

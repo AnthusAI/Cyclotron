@@ -10,8 +10,8 @@ export function ReliabilityCurve({curve}:{curve?:CalibrationCurve}){
   return <div className="space-y-1">
     <svg viewBox="0 0 240 155" role="img" aria-label="Confidence calibration curve" className="w-full max-w-xs">
       <path d="M30 10V125H230 M30 125L230 10" fill="none" stroke="currentColor" opacity=".25" />
-      <polyline points={points.map(bin=>`${30+200*bin.mean_confidence!},${125-115*bin.accuracy!}`).join(' ')} fill="none" stroke="#22c55e" strokeWidth="2" />
-      {points.map((bin,i)=><circle key={i} cx={30+200*bin.mean_confidence!} cy={125-115*bin.accuracy!} r="3" fill="#22c55e"><title>{bin.count} predictions · confidence {Math.round(bin.mean_confidence!*100)}% · correct {Math.round(bin.accuracy!*100)}%</title></circle>)}
+      <polyline points={points.map(bin=>`${30+200*bin.mean_confidence!},${125-115*bin.accuracy!}`).join(' ')} fill="none" stroke="var(--calibration-final)" strokeWidth="2" />
+      {points.map((bin,i)=><circle key={i} cx={30+200*bin.mean_confidence!} cy={125-115*bin.accuracy!} r="3" fill="var(--calibration-final)"><title>{bin.count} predictions · confidence {Math.round(bin.mean_confidence!*100)}% · correct {Math.round(bin.accuracy!*100)}%</title></circle>)}
       <text x="100" y="149" fontSize="10" fill="currentColor">Confidence →</text>
       <text x="37" y="10" fontSize="9" fill="currentColor">Observed correctness</text>
       <text x="3" y="12" fontSize="9" fill="currentColor">100%</text><text x="10" y="125" fontSize="9" fill="currentColor">0%</text>

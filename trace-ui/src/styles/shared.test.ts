@@ -1,6 +1,15 @@
 import {readFileSync} from "node:fs";
 import {expect, test} from "vitest";
 
+test('calibration uses darker light mode ink and brighter dark mode ink without a theme control',()=>{
+  const css=readFileSync('src/styles/shared.css','utf8')
+  const [light,dark]=css.split('@media (prefers-color-scheme: dark)')
+  expect(light).toContain('--calibration-final: #15803d')
+  expect(light).toContain('--calibration-raw: #1d4ed8')
+  expect(dark).toContain('--calibration-final: #4ade80')
+  expect(dark).toContain('--calibration-raw: #60a5fa')
+})
+
 test("the shared brand stylesheet keeps light and dark surfaces polarity consistent", () => {
   const css = readFileSync("src/styles/shared.css", "utf8");
   expect(css).toContain("--primary-foreground: oklch(0.18");

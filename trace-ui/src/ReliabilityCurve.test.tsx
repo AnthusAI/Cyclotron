@@ -4,6 +4,12 @@ import '@testing-library/jest-dom/vitest'
 import {ReliabilityCurve,PlaybackCalibration} from './ReliabilityCurve'
 afterEach(cleanup)
 
+it('uses the system theme calibration color for both the curve and supported points',()=>{
+  const {container}=render(<ReliabilityCurve curve={{count:1,ece:.2,bins:[{count:1,mean_confidence:.8,accuracy:1}]}}/> )
+  expect(container.querySelector('polyline')).toHaveAttribute('stroke','var(--calibration-final)')
+  expect(container.querySelector('circle')).toHaveAttribute('fill','var(--calibration-final)')
+})
+
 it('makes supported calibration bins readable without hover while keeping them collapsed initially',()=>{
   render(<ReliabilityCurve curve={{count:3,ece:.2,bins:[
     {count:0,mean_confidence:null,accuracy:null},

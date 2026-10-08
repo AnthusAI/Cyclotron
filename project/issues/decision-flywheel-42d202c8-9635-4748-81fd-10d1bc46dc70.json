@@ -82,14 +82,26 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "19827fd7-6e5b-48b4-9c7d-ef3a34906865",
+      "author": "home",
+      "text": "Replaced hardcoded bright calibration colors with shared system-theme tokens: darker green/blue in light mode, brighter green/blue under prefers-color-scheme dark. Three specs failed before implementation; all 180 UI specs, production build and focused lint pass. Actual isolated GraphQL/SQLite labeling browser resolves curve and point to rgb(21,128,61), preserves recorded count 3 / ECE 63.3%, and has no warnings/errors. Screenshot var/web/calibration-theme-ink-proof.png. React review found no new state/effects or fetching. The iframe color-scheme QA wrapper did NOT alter the child matchMedia preference; explicitly not dark-render evidence. Actual dark rendering remains unverified; no OS appearance change, paid calls or production labels. Verification skill guided saved-data-to-browser checks.",
+      "created_at": "2026-10-08T01:50:24.527948Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-08T00:42:06.347689Z",
+  "updated_at": "2026-10-08T01:50:24.528020Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }
