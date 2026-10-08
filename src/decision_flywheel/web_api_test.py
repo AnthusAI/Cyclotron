@@ -91,6 +91,31 @@ def test_scorecard_definition_api_preserves_pinned_members_without_starting_runs
     assert store.runs()==[]
 
 
+def test_graphql_restores_an_old_definition_without_replacing_history_or_starting_model_work(tmp_path):
+    store=WebStore(tmp_path/'db')
+    for cid in ('a','b'):
+        store.save_classifier(cid,cid,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    original=store.save_scorecard_definition('card','Original',[{'id':'a','revision':1},{'id':'b','revision':1}],{})
+    newer=store.save_scorecard_definition('card','Newer',[{'id':'b','revision':1}],{})
+    client=TestClient(create_app(store))
+    query='mutation($revision:Int!){activateScorecardDefinition(scorecardId:"card",revision:$revision)}'
+    restored=client.post('/graphql',json={'query':query,'variables':{'revision':1}}).json()
+    assert 'errors' not in restored
+    assert restored['data']['activateScorecardDefinition']==original
+    result=client.post('/graphql',json={'query':'{scorecardDefinitions scorecardDefinitionVersions(scorecardId:"card") scorecardClassifiers(scorecardId:"card") runs{id}}'}).json()
+    assert 'errors' not in result
+    assert result['data']['scorecardDefinitions']==[original]
+    assert result['data']['scorecardDefinitionVersions']==[original,newer]
+    assert [row['id'] for row in result['data']['scorecardClassifiers']]==['a','b']
+    assert result['data']['runs']==[]
+    invalid=client.post('/graphql',json={'query':query,'variables':{'revision':999}}).json()
+    assert invalid['errors']
+    assert store.scorecard_definition('card')==original
+    assert store.scorecard_definition_versions('card')==[original,newer]
+    with store.connect() as db:
+        assert db.execute('SELECT COUNT(*) FROM web_jobs').fetchone()[0]==0
+
+
 def test_replay_creation_requires_confirmation_before_any_service_call(tmp_path):
     from types import SimpleNamespace
     calls=[]

@@ -3,7 +3,7 @@
   "title": "Define immutable scorecard and classifier revisions with safe migration",
   "description": "Scope: first-class Scorecard and Classifier identities, separately immutable revisions. A scorecard revision pins ordered classifier revision references plus shared request/provider configuration and optimization policies; learned runtime checkpoints are distinct from editable definition revisions. Any classifier change creates a classifier revision and a new affected scorecard revision; never mutate old snapshots. Runs pin scorecard revision; predictions, human feedback and metrics identify classifier definition revision and actual learned configuration fingerprint. Define membership removal, renaming, reorder and multiple scorecard reuse semantics. GraphQL exposes create/read/edit-as-new-revision, revision comparison and explicit active revision selection. SQLite migration must preserve old runs, labels, comments and source provenance, be idempotent and transactional. Acceptance: tests prove edit isolation, joint-request cache invalidation, atomic membership updates, old-run readability and restoration of an old scorecard without overwriting newer history. Audit existing scorecards.py/catalog implementation before extending it; do not equate run numbering with the entire version model.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -64,11 +64,29 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d8a3f68e-4829-4d2b-92cb-0ad416589e93",
+      "author": "home",
+      "text": "Requirement-by-requirement backend acceptance audit: immutable independent scorecard/classifier definitions and monotonic history are covered by scorecard_definitions_test; rename/remove/reorder/restore plus editing after restoration preserve all newer definitions. Multi-scorecard classifier edit propagation and invalid-save atomicity are covered there. New true pre-definition SQLite fixtures prove transactional migration rollback, idempotent successful migration, and preservation of exact runs, items, votes, explanation comments, provenance and original prediction traces. web_api_test now exercises GraphQL activation of an old definition, ordered members/history reads, unknown-revision refusal, and zero model jobs. scorecard_runtime_test and workspace_session_test prove runtime pins survive edits/restarts with explicit trace/prediction revision provenance. shared_decisions_test and scorecards_test prove complete joint-context cache invalidation and learned checkpoint changes. These acceptance files pass together: 74 specs. Browser/tablet usability and protected performance comparisons remain tracked separately; no experiment report or live paid run is included.",
+      "created_at": "2026-10-08T00:18:01.006908Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "02df9ea0-ab6f-40b3-9d61-ab2edcf84114",
+      "author": "home",
+      "text": "Closed after the requirement-by-requirement backend audit recorded above and 845 passing offline Python specs. Immutable definitions, runtime pinning/provenance, joint-context invalidation, transaction-safe migration with exact feedback preservation, monotonic restore/edit history and GraphQL restoration are verified. No claim is made that separate UI/tablet/run-comparison issues are complete.",
+      "created_at": "2026-10-08T00:18:40.886770Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:53:58.207265Z",
-  "updated_at": "2026-10-08T00:15:34.079839Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T00:18:41.191366Z",
+  "closed_at": "2026-10-08T00:18:41.191266Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

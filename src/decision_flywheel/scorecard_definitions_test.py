@@ -61,6 +61,81 @@ def test_existing_run_editions_migrate_idempotently_without_rewriting_runs(tmp_p
     assert len(WebStore(path).scorecard_definition_versions(identifier))==2
 
 
+def legacy_editions(store, *, invalid_pin=False):
+    """Build an isolated database with the pre-definition edition schema."""
+    import json
+    classifier(store,'a');classifier(store,'b')
+    store.save_item_list('list','List')
+    store.upsert_list_items('list',[{'id':'paper','occurred_at':'2026-01-01',
+        'values':{'text':'Original abstract'},'provenance':{'source':'synthetic fixture'}}])
+    items=store.list_items('list')
+    first=store.create_run('Old run','live',{'classifiers':[store.classifier('a')],'item_list_id':'list'},items=items)
+    config={'classifiers':[store.classifier('a'),store.classifier('b')],'item_list_id':'list'}
+    second=store.create_run('New run','live',config,items=items)
+    store.label_item('a',1,'list','paper',1,'yes','Keep this exact explanation','vote')
+    store.append_event(first['id'],'prediction',{'kind':'prediction','classifier_id':'a','target_id':'paper',
+        'label':'yes','version':'synthetic-original','probabilities':{'yes':.8,'no':.2}})
+    with store.connect() as db:
+        db.execute('INSERT INTO scorecards VALUES (?,?,?)',('legacy','Legacy',2))
+        for revision,run in enumerate((first,second),1):
+            db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)',
+                ('legacy',revision,run['id'],first['id'] if revision==2 else None,run['created_at']))
+        # This fixture alone predates all three tables. No production data is touched.
+        for table in ('run_scorecard_definitions','scorecard_catalog','scorecard_definitions'):
+            db.execute(f'DROP TABLE {table}')
+        if invalid_pin:
+            db.execute('UPDATE web_runs SET config=? WHERE id=?',
+                (json.dumps({**config,'scorecard_definition_revision':999}),second['id']))
+    second=store.run(second['id'])
+    return first,second
+
+
+def test_pre_definition_databases_migrate_without_changing_votes_explanations_items_or_traces(tmp_path):
+    path=tmp_path/'legacy.sqlite';store=WebStore(path)
+    runs=legacy_editions(store)
+    before=[(store.run(run['id']),store.items(run['id']),store.all_events(run['id'])) for run in runs]
+    votes=store.item_labels('list','paper',1)
+    reopened=WebStore(path)
+    assert reopened.scorecard_definition('legacy')['classifiers']==[{'id':'a','revision':1},{'id':'b','revision':1}]
+    definitions=reopened.scorecard_definition_versions('legacy')
+    assert len(definitions)==2
+    for _ in range(2):
+        reopened=WebStore(path)
+        assert reopened.scorecard_definition_versions('legacy')==definitions
+        assert [(reopened.run(run['id']),reopened.items(run['id']),reopened.all_events(run['id'])) for run in runs]==before
+        assert reopened.item_labels('list','paper',1)==votes
+        assert [reopened.run_scorecard_definition(run['id'])['revision'] for run in runs]==[1,2]
+
+
+def test_an_invalid_legacy_pin_rolls_back_all_migrated_definitions_before_retry(tmp_path):
+    import sqlite3
+    path=tmp_path/'legacy.sqlite';store=WebStore(path)
+    runs=legacy_editions(store,invalid_pin=True)
+    with pytest.raises(ValueError,match='unknown scorecard definition'):WebStore(path)
+    with sqlite3.connect(path) as db:
+        assert db.execute('SELECT COUNT(*) FROM scorecard_definitions').fetchone()[0]==0
+        assert db.execute('SELECT COUNT(*) FROM run_scorecard_definitions').fetchone()[0]==0
+        assert db.execute('SELECT COUNT(*) FROM scorecard_catalog').fetchone()[0]==0
+    assert store.run(runs[0]['id'])==runs[0]
+    assert store.run(runs[1]['id'])==runs[1]
+    assert store.item_labels('list','paper',1)[0]['comment']=='Keep this exact explanation'
+
+
+def test_restoring_and_editing_old_membership_appends_history_without_replacing_newer_definitions(tmp_path):
+    store=WebStore(tmp_path/'db')
+    for key in ('a','b','c'):classifier(store,key)
+    first=store.save_scorecard_definition('card','Original',[{'id':'a','revision':1},{'id':'b','revision':1}],{})
+    second=store.save_scorecard_definition('card','Reordered',[{'id':'b','revision':1},{'id':'a','revision':1}],{})
+    third=store.save_scorecard_definition('card','Removed A',[{'id':'b','revision':1}],{})
+    store.activate_scorecard_definition('card',first['revision'])
+    store.save_classifier('a','A changed',{'question':'New criteria','classes':[{'label':'yes'},{'label':'no'}]})
+    fourth=store.scorecard_definition('card')
+    assert fourth['revision']==4 and fourth['name']=='Original'
+    assert fourth['classifiers']==[{'id':'a','revision':2},{'id':'b','revision':1}]
+    assert store.scorecard_definition_versions('card')==[first,second,third,fourth]
+    assert store.classifier('a',1)['config']['question']=='Choose'
+
+
 def test_run_definition_registration_retains_shared_trigger_cadences(tmp_path):
     store=WebStore(tmp_path/'db');classifier(store,'a');classifier(store,'b')
     store.save_item_list('list','List')
