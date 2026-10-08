@@ -331,7 +331,8 @@ test('opening the workspace shows the existing optimization timeline instead of 
   expect(screen.queryByText('Decision Flywheel')).toBeNull()
   expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/replay/timeline?revision=0')
   expect(screen.queryByText('Local · GraphQL · SQLite')).toBeNull()
-  expect(screen.getByText(/87 cycles · 87 labels · 11 optimizer calls/)).toBeVisible()
+  expect(screen.queryByText(/87 cycles · 87 labels · 11 optimizer calls/)).toBeNull()
+  expect(screen.getByTitle('Event stream: Connecting')).toHaveTextContent('completed')
 })
 
 test('a selected run keeps the workspace shape with a skeleton while its details load',async()=>{

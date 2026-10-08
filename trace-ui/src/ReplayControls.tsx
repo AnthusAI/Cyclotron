@@ -11,6 +11,7 @@ export function ReplayControls({busy,finished,failed=false,readOnly=false,onAdva
     issued.current=true;onAdvance()
   },[playing,busy,finished,failed,readOnly,onAdvance])
   const stopped=finished||failed||readOnly
+  if(finished)return <span className="text-xs text-muted-foreground">Replay complete</span>
   return <div className="flex shrink-0 flex-wrap items-center gap-2">
     <Button variant="outline" disabled={busy||finished||readOnly} onClick={onAdvance}>Step replay</Button>
     <Button disabled={finished||failed||readOnly} onClick={()=>{issued.current=false;setPlaying(value=>!value)}}>{playing&&!stopped?'Pause replay':'Run replay'}</Button>

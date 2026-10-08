@@ -25,7 +25,7 @@ export function App({counts,comparison,embedded=false}:{counts:Counts;comparison
       <main className={`explorer-main w-full gap-1 ${embedded?'p-0':'p-2'}`}>
         {!embedded&&<div className="flex items-start justify-between gap-4"><div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">Observability / recorded history</p><h1 className="text-2xl font-semibold tracking-tight">Run explorer</h1><p className="mt-1 text-sm text-muted-foreground">Follow predictions, human feedback, and each optimization experiment.</p></div><Badge variant="secondary" className="mt-6"><Activity className="size-3" /> Recorded session</Badge></div>}
         <details className="run-statistics text-muted-foreground">
-          <summary className="cursor-pointer text-xs font-medium">Run statistics</summary>
+          <summary className="cursor-pointer text-xs font-medium"><span>Run statistics</span><span className="ml-2 font-normal">{counts.predictions} predictions · {counts.labels} labels · {counts.optimizations} optimizer calls</span></summary>
           {comparison
             ? <div className="mt-3"><LabMetrics metrics={([['Recall','recall'],['Precision','precision'],['Accuracy','accuracy']] as const).map(([name,key])=>({name,before:comparison.before[key],after:comparison.after[key]}))} /></div>
             : <p className="mt-3 text-xs text-muted-foreground">Matched comparison not recorded</p>}
