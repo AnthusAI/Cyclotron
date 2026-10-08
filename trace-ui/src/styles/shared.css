@@ -99,3 +99,9 @@ body :focus-visible {
   background-color: var(--accent) !important;
   color: var(--accent-foreground) !important;
 }
+
+/* Cyclotron logo (CyclotronBrand): wordmark, cycle mark, and tagline */
+.cyclotron-brand-layout {display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto;width:fit-content;max-width:calc(100vw - 6rem)}
+.cyclotron-brand {font-family:'Blinker',sans-serif;font-size:1.5rem;font-weight:600;line-height:1.2}
+.cyclotron-cycle-mark {display:flex;align-items:center;justify-content:center;min-width:0}
+.cyclotron-tagline {grid-column:1 / -1;width:max-content;max-width:100%;font-family:'Blinker',sans-serif;font-size:.625rem;font-weight:400;letter-spacing:.08em;line-height:1.3;color:var(--muted-foreground)}
