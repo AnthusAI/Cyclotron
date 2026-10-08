@@ -553,3 +553,11 @@ see the complete joint request, response and saved explanation. An empty or
 single-class history must still render all configured class filters, without
 inventing labels or metric support. Stop the fixture server when finished; keep
 these synthetic records separate from a real labeling workspace.
+
+To check pause, click **Run replay** and then **Pause replay** while a cycle is
+working. The current cycle completes; no next cycle should start. Reload must
+leave the run paused at its saved cycle. Click **Run replay** again to finish
+the remaining cycles. The three-item fixture finishes quickly, so a pause click
+after completion does not prove pause behavior. Catalog feedback remains the
+original six labels: replay records their use in its own trace, not duplicate
+human votes in the catalog.
