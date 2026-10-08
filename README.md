@@ -126,9 +126,19 @@ They define the work that the library must support.
 They do not prove that the current reviewer runs all these steps.
 
 The live reviewer now calls the reusable `DecisionFlywheel` core.
-The core analyzes eligible votes and comments, validates proposals, collects Jev features,
+The core analyzes eligible votes and comments, validates proposals, collects decision-model features,
 fits and calibrates the ML head, compares development results, and promotes or rejects a version.
 Private SQLite records preserve the active version, request cache, and actual transcripts.
+
+Offline integration specs exercise explanations, validated proposals, regenerated
+features, out-of-fold calibration, served learned predictions, restart cache reuse,
+and correction invalidation. The provider lifecycle spec runs the same contract
+against fake Jev, Kev, and Laya transports. These prove the technology path, not
+classifier quality or guaranteed improvement on a real dataset:
+
+```bash
+pytest tests/complete_feedback_loop_behavior_test.py tests/live_review_flow_test.py tests/provider_feature_lifecycle_test.py
+```
 
 Export a private, offline debugging recording:
 

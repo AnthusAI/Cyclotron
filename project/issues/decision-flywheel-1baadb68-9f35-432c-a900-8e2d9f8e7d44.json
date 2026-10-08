@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-1baadb68-9f35-432c-a900-8e2d9f8e7d44",
   "title": "Engineer and test individual decision features before classifier promotion",
-  "description": "Replacement plan agreed 2026-10-05: independent stages for few-shot experimentation, continuous main-rubric refinement, and question discovery. Do not run all controls as one automatic winner-selection cycle. Question measurement freezes CURRENT rubric/example list/existing questions, adds one question or wording revision, and retroactively re-scores a configurable eligible human-feedback window, default cap 200. Actual available N and per-class counts must be visible; retain scarce-class coverage while favoring recency. All questions get matched full-request answers/probabilities under the frozen context; other features may have longer histories but rank on a common window. Cache full state/question fingerprint and track feedback/context versions, usage, coverage, resumable progress. Never mix answers from different context versions as one matched trial. Human final-decision labels are the alignment target; supporting-question outputs are model-derived features, not ground truth for those questions. Direct agreement only for semantically matching final-label options; otherwise descriptive class-conditional probabilities and out-of-fold learned question-answer-to-final-label mapping, including inverse or multiclass relationships. Report raw/class-balanced alignment, majority baseline, missingness/counts and uncertainty. Agreement with model main answer is secondary, not human alignment. Retrospective feature ranking is discovery evidence, not deployment accuracy; do not gate admission on a four-item holdout comparison or claim cap200 guarantees adequate minority data. Keep protected audits/scoreboard untouched, preserve roles, omit target label/comment and own example from request. Retain concepts/revisions and rerun with new feedback/context. Downstream head refit and adequately supported promotion are distinct; combinations/ablations later. Reusable library owns separate-stage orchestration, bank/backfill/ranking/events; Rich displays stage, context versions, backfill progress, optimizer/decision exchanges, rank evidence and fits. Specs first with fakes and no DSPy. Existing implementation is individual-question trials within the older combined scheduler; replacement stage/backfill functionality is NOT implemented yet. First replacement milestone: bounded cached backfill and matched-window rank of one new question under active context.",
+  "description": "Replacement plan agreed 2026-10-05: independent stages for few-shot experimentation, continuous main-rubric refinement, and question discovery. Do not run all controls as one automatic winner-selection cycle. Question measurement freezes CURRENT rubric/example list/existing questions, adds one question or wording revision, and retroactively re-scores a configurable eligible human-feedback window, default cap 200. Actual available N and per-class counts must be visible; retain scarce-class coverage while favoring recency. All questions get matched full-request answers/probabilities under the frozen context; other features may have longer histories but rank on a common window. Cache full state/question fingerprint and track feedback/context versions, usage, coverage, resumable progress. Never mix answers from different context versions as one matched trial. Human final-decision labels are the alignment target; supporting-question outputs are model-derived features, not ground truth for those questions. Direct agreement only for semantically matching final-label options; otherwise descriptive class-conditional probabilities and out-of-fold learned question-answer-to-final-label mapping, including inverse or multiclass relationships. Report raw/class-balanced alignment, majority baseline, missingness/counts and uncertainty. Agreement with model main answer is secondary, not human alignment. Retrospective feature ranking is discovery evidence, not deployment accuracy; do not gate admission on a four-item holdout comparison or claim cap200 guarantees adequate minority data. Keep protected audits/scoreboard untouched, preserve roles, omit target label/comment and own example from request. Retain concepts/revisions and rerun with new feedback/context. Downstream head refit and adequately supported promotion are distinct; combinations/ablations later. Reusable library owns separate-stage orchestration, bank/backfill/ranking/events; Rich displays stage, context versions, backfill progress, optimizer/decision exchanges, rank evidence and fits. Specs first with fakes and no DSPy. Implementation status: separate rubric/example/question stages, bounded cached matched-window backfill/ranking, and retained-question-to-head wiring are implemented. Remaining work is broader independent validation and the later combinations/ablations exploration; do not reinterpret historical four-label trials as deployment evidence.",
   "type": "story",
   "status": "in_progress",
   "priority": 1,
@@ -17,10 +17,12 @@
       "text": "First implementation milestone complete, verified offline: persistent individual feature bank with stable definition IDs, same-name wording lineage, training-evidence fingerprints, retained trial history and proposed/measured/deferred/deployed inspection. Scheduler admits questions independently and fits up to three single-question additions or wording revisions per cycle, preserving other deployed questions and one common incumbent; rubric/example trials stay isolated. Numerical fits emit class-conditional training-probability diagnostics before fitting, never generalization claims. Request-time datetime is frozen across comparisons and persisted for restart. Completed discovery is checkpointed, unchanged evidence cached, explicit per-cycle feature cap supported. Rich H shows bank definitions, signal and outcomes; core exposes feature_bank and max_feature_trials. Specs first; 427 offline tests pass including reviewer integration, budgets, lineage, malformed probabilities and partition safety. New paid collection NOT run. Preflight on frozen 87-vote snapshot: up to five fits, ceiling 373 Jev requests / 3 Luna calls; one-feature option is 227 / 3. Historical grouped-question results are not relabeled as individual trials. Combination/ablation search remains future work; story remains in progress.",
       "created_at": "2026-10-06T00:18:03.779081Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -29,10 +31,12 @@
       "text": "Completed bounded live individual-feature experiment on frozen feedback. All five trials now have development results against one empty incumbent: Brier baseline 0.5691, rubric 0.5552, examples 0.4052, knowledge clarification/curation 0.8212, memory systems 0.4548, research-literature information work 0.5025. Memory and literature each independently qualified (3/4 agreement versus baseline 2/4); examples remained best and promoted only in separate experiment runtime. All feature ideas retained. Literature initially failed on diagnostic probability-sum tolerance (0.99 accepted by existing decision validator); regression spec fixes shared tolerance without renormalizing. Original failure preserved, recovery copied runtime and reused training cache; only four new development calls, no optimizer call, within original ceiling. Total actual usage 357 Jev / 3 Luna. Audit examples-only 4/4 versus baseline 1/4; four previously reused retrospective audit items are not reliable general accuracy. Live reviewer unchanged. 429 offline specs pass. Next: combinations and ablations, more positive feedback, no audit-guided tuning. Full text-free lab notes in evaluations repository.",
       "created_at": "2026-10-06T00:25:53.809727Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -41,10 +45,12 @@
       "text": "User replaced the optimization design after challenging the four-item evaluation. README and issue description now explicitly supersede the combined cycle: separate example/rubric/question stages; question measurement uses active context and retrospective eligible window cap200; rank alignment to human final decisions with semantic mapping for other question labels. No code or live run changed in this planning step. Historical trial outcomes remain recorded, not reinterpreted as strong evidence.",
       "created_at": "2026-10-06T00:36:29.482153Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -53,10 +59,12 @@
       "text": "Replacement staged/backfill milestone implemented and exercised live. optimize_stage independently runs rubric, examples or questions; reviewer auto rubric cadence only, N question backfill, X examples, H inspect; old bundled T retry removed. Current-context measurement freezes rubric/eight-example list/questions and backfills matched eligible training window max200, preserves all protected/development roles, excludes target label/comment/self-example, caches full requests. Recent-window backward scarce-class reserve, true counts, natural/balanced alignment, majority baseline, OOF soft-contingency mapping supporting inverse/multiclass options with inverse-propensity/equal-class fold-local weights; reports explicitly conditional retrospective discovery, not independent pipeline CV/deployed accuracy. Feature/answer histories and exact optimizer exchanges visible. Stage ledger reuses persisted replies and caches on explicit retry; UI failures do not terminate review or echo secrets. Rubric/example proposals retained before promotion, staged coverage floor20/class configurable; question stage no development gate. Real run frozen from actual live runtime used60 items (6 Include54Exclude), current rubric8examplesexisting inclusion task. New scope factor OOF47/60 balanced73.1%; interest-area48/60 balanced59.3%; existing inclusion56/60 balanced96.3%. Majority54/60 raw but50% balanced. Exactly60 Jev/1 Luna; metadata-interface failure recovered from recorded reply before any Jev calls, no extra optimizer call. Live reviewer/head unchanged. 444 offline tests pass. Combination/ablation and feature-set deployment stage remain future work; story stays in progress. Full text-free notes in evaluations.",
       "created_at": "2026-10-06T01:07:20.839082Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     },
     {
@@ -65,25 +73,29 @@
       "text": "2026-10-06: closed measured-question-to-head wiring gap. New provider-neutral train_classifier phase compares current vs current-plus-retained question features under fixed rubric/examples, natural vs equal-class fitting, full trusted feature coverage and OOF calibration. Question discovery invokes numerical phase; reviewer M retrains without optimizer and classifier stage supports cadence. Persistent trials, selected artifacts and restart aliases; normal gate20 development/class remains. Numerical promotion lower balanced Brier plus non-decreasing balanced accuracy and no per-class recall regression; same safeguards enabled for staged rubric/example candidates. Real frozen existing-label experiment: train60 (6 Include54Exclude), dev27 (2 Include25Exclude), zero final-audit use and zero optimizer calls. Exactly27 new Jev requests,106765 input6308 output tokens. Best retained-question/equal-class candidate dev26/27, balanced75%, Include1/2 Exclude25/25, balancedBrier0.4461 vs existing0.7755/50%balanced. Explicit exploratory floor2 with no live deployment. Private saved candidate exercised via actual predict API26/27 with zero additional requests. This is development selection, not final accuracy; positive N2 is insufficient to claim working well. Live source databases unchanged. Story remains in progress for broader independent validation and feature ablations.",
       "created_at": "2026-10-06T10:24:23.015569Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
     }
   ],
   "created_at": "2026-10-06T00:06:48.486680Z",
-  "updated_at": "2026-10-06T10:24:23.015598Z",
+  "updated_at": "2026-10-08T01:43:37.080168Z",
   "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-5",
-    "name": "Flywheel Implementation"
-  },
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Implementation",
+    "settings": {}
+  },
+  "agent_assignment": null
 }
