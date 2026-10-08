@@ -1,6 +1,13 @@
 """Specs for explicit ordered class roles and positive-class measurements."""
 import pytest
 from .trace_classification import class_configuration, positive_metrics, running_metric_series, comparison_metrics
+
+
+def test_declared_classes_are_preserved_before_each_class_has_appeared_in_history():
+    config=[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}]
+    assert class_configuration([],config)==config
+    assert class_configuration(['yes'],config)==config
+    with pytest.raises(ValueError):class_configuration(['unexpected'],config)
 from .classification_metrics import classification_metrics
 
 

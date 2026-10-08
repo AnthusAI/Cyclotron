@@ -38,3 +38,31 @@ def test_fixture_generation_refuses_to_merge_synthetic_labels_into_an_existing_w
     with pytest.raises(ValueError,match='new empty fixture directory'):
         fixture_script().build_fixture(tmp_path)
     assert sentinel.read_bytes()==b'existing workspace must stay untouched'
+
+
+def test_the_offline_browser_workspace_enables_replay_using_only_injected_fake_models(tmp_path,monkeypatch):
+    from fastapi.testclient import TestClient
+    module=fixture_script()
+    def forbidden(*args,**kwargs):raise AssertionError('offline acceptance must never construct a paid model')
+    monkeypatch.setattr(module.JevAdapter,'from_environment',forbidden)
+    app,fixture=module.create_offline_app(tmp_path,port=8785)
+    with TestClient(app) as client:
+        result=client.post('/graphql',json={'query':'{capabilities{liveEnabled} runs{id}}'}).json()
+        assert result['data']['capabilities']['liveEnabled'] is True
+        assert result['data']['runs'][0]['id']==fixture['run_id']
+        worker=app.state.offline_worker
+        run=worker.create_replay('OFFLINE REPLAY',fixture['run_id'],{'scorecard_id':'fixture-scorecard'})
+        assert run['config']['input_mode']=='replay'
+        model,_=worker.model_factory(run['config'])
+        answer=model.client.system_one(state={'target':{'text':'Synthetic item 2; not research data.'}},
+            questions={'q0':{},'q1':{}})
+        assert answer.model=='offline-fixture'
+        assert set(answer.answers)=={'q0','q1'}
+
+
+def test_offline_browser_serving_refuses_an_existing_database_before_modifying_it(tmp_path):
+    sentinel=tmp_path/'workspace.sqlite3'
+    sentinel.write_bytes(b'leave real work alone')
+    with pytest.raises(ValueError,match='new empty fixture directory'):
+        fixture_script().create_offline_app(tmp_path,port=8785)
+    assert sentinel.read_bytes()==b'leave real work alone'

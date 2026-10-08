@@ -7,6 +7,19 @@ from .web_api import create_app
 from .web_store import WebStore
 
 
+def test_a_live_timeline_renders_before_all_declared_classes_have_been_observed(tmp_path):
+    store=WebStore(tmp_path/'db')
+    definition=store.save_classifier('topic','Topic',{'question':'Choose',
+        'classes':[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}]})
+    run=store.create_run('Partial history','live',{'classifiers':[definition]})
+    client=TestClient(create_app(store))
+    url=f"/runs/{run['id']}/timeline?classifier_id=topic"
+    assert client.get(url).status_code==200
+    store.append_event(run['id'],'one-prediction',{'event_id':1,'kind':'prediction',
+        'classifier_id':'topic','target_id':'paper','label':'yes','probabilities':{'yes':.6,'no':.4}})
+    assert client.get(url).status_code==200
+
+
 def test_matched_preflight_query_is_read_only_and_does_not_start_service_work(tmp_path):
     from types import SimpleNamespace
     store=WebStore(tmp_path/'db');calls=[]

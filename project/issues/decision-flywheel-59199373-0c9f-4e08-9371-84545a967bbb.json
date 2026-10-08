@@ -213,10 +213,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "f7c78ef8-67c1-4e33-8b39-df1a7c8324bd",
+      "author": "home",
+      "text": "Offline browser acceptance now has a reproducible fake-only GraphQL/SQLite server with a pinned two-classifier scorecard and synthetic labels, refusing existing workspaces. Browser verified replay creation at zero cycles, Step, reload at one cycle, Run to completion, exact joint request/response and retained explanations. Acceptance exposed a real timeline HTTP 500 on empty/single-class histories; specs failed first, then class configuration validation was fixed to preserve unseen declared classes while rejecting unknown observations. Rechecked empty and one-class timeline/reload in browser with no server errors. 849 Python specs pass. Real labels and provider credits untouched; no experiment report. Pause browser proof and wider responsive/dark acceptance remain open.",
+      "created_at": "2026-10-08T00:34:15.948829Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-08T00:11:22.498555Z",
+  "updated_at": "2026-10-08T00:34:15.948916Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

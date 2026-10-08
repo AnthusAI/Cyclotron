@@ -38,6 +38,8 @@ def build_fixture(directory):
     for identifier in ('relevance','practicality'):
         store.save_classifier(identifier,identifier.title(),{'question':'Does this synthetic item qualify?',
             'classes':[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}]})
+    store.save_scorecard_definition('fixture-scorecard','Synthetic scorecard',
+        [{'id':identifier,'revision':1} for identifier in ('relevance','practicality')],{})
     store.save_item_list('fixture-items','Synthetic playback items')
     store.upsert_list_items('fixture-items',[{'id':f'fixture-{i}','occurred_at':f'2026-01-0{i}',
         'values':{'text':f'Synthetic item {i}; not research data.'}} for i in range(1,4)])
@@ -47,7 +49,7 @@ def build_fixture(directory):
         worker=WebWorker(store,directory/'runs',allow_live=True,sink_factory=sink,
             model_factory=lambda _: (JevAdapter(model),OptimizerAgent(no_optimizer)))
         try:
-            run=worker.create_run('OFFLINE FIXTURE — calibration playback',{'classifier_ids':['relevance','practicality'],
+            run=worker.create_run('OFFLINE FIXTURE — calibration playback',{'scorecard_id':'fixture-scorecard',
                 'item_list_id':'fixture-items','seed':'calibration-playback-v1','optimize_every':100,'rubric_changes_every':100})
             store.command(run['id'],'prepare-1','prepare',{})
             worker.process(store.claim_command())
@@ -65,11 +67,37 @@ def build_fixture(directory):
             worker.close()
 
 
+def create_offline_app(directory, *, port):
+    """Serve interactive/replay acceptance through the real API, with no paid adapters."""
+    if type(port) is not int or not 1024<=port<=65535:
+        raise ValueError('choose an unprivileged local port')
+    fixture=build_fixture(directory)
+    directory=Path(directory)
+    store=WebStore(directory/'workspace.sqlite3')
+    client=FakeDecisionClient()
+    endpoint=f'http://127.0.0.1:{port}/graphql'
+    worker=WebWorker(store,directory/'runs',allow_live=True,
+        sink_factory=lambda run:GraphQLTraceSink(endpoint,run),
+        model_factory=lambda _: (JevAdapter(client),OptimizerAgent(no_optimizer)))
+    app=create_app(store,service=worker)
+    app.state.offline_worker=worker
+    return app,fixture
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--serve',action='store_true',help='Serve an isolated fake-model browser workspace')
+    parser.add_argument('--port',type=int,default=8785)
     args=parser.parse_args()
-    print(json.dumps(build_fixture(args.output)))
+    if args.serve:
+        import uvicorn
+        app,fixture=create_offline_app(args.output,port=args.port)
+        print(json.dumps({**fixture,'url':f"http://127.0.0.1:{args.port}/#run={fixture['run_id']}&view=timeline&section=optimizations",
+                          'models':'FAKE ONLY — synthetic labels, no provider credentials'}),flush=True)
+        uvicorn.run(app,host='127.0.0.1',port=args.port,workers=1,access_log=False)
+    else:
+        print(json.dumps(build_fixture(args.output)))
 
 
 if __name__=='__main__':

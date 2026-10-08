@@ -10,7 +10,9 @@ def class_configuration(labels, config=None):
         not isinstance(row.get('label'), str) or row.get('role') not in ('positive','negative','neutral') for row in config):
         raise ValueError('class configuration must be an ordered list of labels with positive, negative, or neutral roles')
     declared = [row['label'] for row in config]
-    if len(set(declared)) != len(declared) or set(declared) != set(labels):
+    # A live recording can be empty or contain only some configured classes.
+    # Keep the declared order and roles without inventing observations.
+    if len(set(declared)) != len(declared) or not set(labels).issubset(declared):
         raise ValueError('class configuration must cover each recorded class exactly once')
     return [{'label':row['label'], 'role':row['role']} for row in config]
 

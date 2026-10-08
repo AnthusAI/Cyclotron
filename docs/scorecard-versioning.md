@@ -528,3 +528,28 @@ calls, then approve and resume. If the submission acknowledgement is lost, submi
 again without changing the controls: the same submission identity prevents a
 second queued job. Changing the ceiling or retry option requires new approval.
 You do not need to recreate the comparison or rerun completed requests.
+
+## Offline browser acceptance
+
+To exercise replay creation and playback without provider credentials, use a new,
+empty fixture directory:
+
+```bash
+.venv/bin/python scripts/seed_calibration_playback.py --output /tmp/cyclotron-offline-check --serve --port 8785
+```
+
+The command refuses an existing workspace database. It creates synthetic items,
+labels and a versioned two-classifier scorecard, then serves the real UI and
+GraphQL/SQLite worker on loopback only. Decision clients are injected fakes;
+optimizer calls are forbidden. This is a technology acceptance fixture, not an
+experiment or evidence of model quality. Its authorization checkbox exercises
+the normal UI gate but cannot enable a paid provider in this fixture.
+
+Open the printed URL, choose **Run history → New run → Replay existing
+feedback**, select the fixture source, and create a replay. Check that it starts
+at zero cycles, **Step replay** records one cycle, reload preserves that position,
+and **Run replay** finishes all three. Inspect prediction and feedback markers to
+see the complete joint request, response and saved explanation. An empty or
+single-class history must still render all configured class filters, without
+inventing labels or metric support. Stop the fixture server when finished; keep
+these synthetic records separate from a real labeling workspace.
