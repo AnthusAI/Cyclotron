@@ -117,6 +117,11 @@ imported history alone does not prove a newly executed replay.
   triggers, human feedback, fit results, and metrics use this path. No separate
   trace export file is required. Internal engine state/cache is not the app's
   event source. A reusable API sink supports other applications and runners.
+- Labeling shows recorded optimization phases as events arrive. Inspect activity
+  opens the correlated full request, response, tool calls, and applied before/after
+  snapshots. A proposed rubric is not an applied rubric. Routine no-op trigger
+  checks do not hide the last outcome. Saved-label acknowledgement is separate
+  from optimization success; failed commands stay stopped until explicit recovery.
 - Label submission creates a durable command. A single worker serializes each
   run's cycles. The API remains available while model calls run. Predictions
   precede labels; triggered optimization completes before the next prediction.

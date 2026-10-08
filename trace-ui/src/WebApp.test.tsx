@@ -1,8 +1,8 @@
 import {afterEach,beforeEach,expect,test,vi} from 'vitest'
-import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react'
+import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import {RunTimeline,WebApp} from './WebApp'
-import {graphql,subscribeEvents} from './graphql'
+import {graphql,subscribeEvents,type TraceEvent} from './graphql'
 
 vi.mock('./graphql',()=>({graphql:vi.fn(),subscribeEvents:vi.fn(()=>()=>{})}))
 const live={id:'live',name:'Interactive study',mode:'live',status:'ready',createdAt:'2026-10-06',config:{selection_policy:{primary:'f1'}},counts:{cycles:1,predictions:1,labels:0,optimizations:0}}
@@ -29,6 +29,43 @@ function classifiedRunFixture(){
     return {run:card,currentItem:null,jobs:[]}
   })
 }
+
+test('streamed learning phases update labeling and retain exact exchanges and applied snapshots',async()=>{
+  classifiedRunFixture()
+  let receive:((event:TraceEvent)=>void)|undefined
+  vi.mocked(subscribeEvents).mockImplementationOnce((_id,_cursor,onEvent)=>{receive=onEvent;return()=>{receive=undefined}})
+  window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+  render(<WebApp/> )
+  await waitFor(()=>expect(receive).toBeDefined())
+  const scope={classifier_id:'a',step_id:'rubric-stream',step_stage:'rubric',cycle_id:'cycle-one'}
+  const config={task:{name:'decision',instructions:'Include?',labels:['yes','no']},tasks:[],example_ids:[],dynamic_elements:[],rubric:''}
+  const emit=(sequence:number,payload:Record<string,unknown>)=>act(()=>receive!({sequence,sourceId:String(sequence),payload:{...scope,...payload}}))
+  const phases:[Record<string,unknown>,string][]=[
+    [{kind:'trigger-evaluated',due:true},'Trigger fired · stage queued'],
+    [{kind:'step-started',classifier_snapshot:{config,head:null}},'Optimization started'],
+    [{kind:'optimizer-request',messages:[{role:'user',content:'Human explanation: I include knowledge-base research, not all AI papers.'}]},'Optimizer request sent'],
+    [{kind:'optimizer-response',content:'Focus on knowledge-base research.',tool_calls:[{name:'propose_rubric',arguments:{rubric:'Knowledge-base research'}}]},'Response received · validation pending'],
+    [{kind:'proposal-validated'},'Proposal validated · evaluation pending'],
+    [{kind:'candidate-evaluated'},'Candidate evaluated · selection pending'],
+    [{kind:'step-completed',status:'completed',result:{activated:true,reason:'Explicit early learning policy'},classifier_snapshot:{config:{...config,rubric:'Knowledge-base research'},head:null}},'Accepted'],
+  ]
+  phases.forEach(([payload,status],index)=>{emit(index+1,payload);expect(screen.getByText(status)).toBeVisible()})
+  fireEvent.click(screen.getByRole('button',{name:'Inspect latest optimization event'}))
+  expect(screen.getByText('Human explanation: I include knowledge-base research, not all AI papers.')).toBeVisible()
+  expect(screen.getByText('Focus on knowledge-base research.')).toBeVisible()
+  expect(within(screen.getByRole('region',{name:'Before optimization'})).getByText('Empty rubric')).toBeVisible()
+  expect(within(screen.getByRole('region',{name:'After optimization'})).getByText('Knowledge-base research')).toBeVisible()
+  const tools=screen.getByText('Tool calls')
+  fireEvent.click(tools)
+  expect(within(tools.closest('details')!).getByText(/propose_rubric/)).toBeVisible()
+  emit(8,{kind:'fit-started',step_stage:'classifier',step_id:'head-stream'})
+  expect(screen.getByText('ML fitting started')).toBeVisible()
+  emit(9,{kind:'fit-completed',step_stage:'classifier',step_id:'head-stream'})
+  expect(screen.getByText('ML fit completed · selection pending')).toBeVisible()
+  emit(10,{kind:'step-completed',step_stage:'classifier',step_id:'head-stream',status:'completed',result:{promoted:false}})
+  expect(screen.getByText('Completed · no change accepted')).toBeVisible()
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
 
 test('moving to a valid run clears an old load error without submitting commands',async()=>{
   const missing={...live,id:'missing',name:'Unavailable run'}

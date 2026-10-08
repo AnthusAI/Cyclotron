@@ -3,7 +3,7 @@
   "title": "Show live optimizer activity through an inspectable app panel",
   "description": "During labeling show a compact status of trigger checks, queued/running optimization, ML fit, completion or error without covering article/vote controls. Open a right drawer/panel for live activity; drill into exact optimizer request with full trusted-label explanations, response/tool calls, decision request/response with actual example text and labels, before/after rubric/questions/examples/head, candidate evaluation and promotion/rejection reason. Use provider-neutral names, not Luna-specific UI. API cursor subscriptions update without reload; reconnect deduplicates events and recovers current job state. Feedback-save acknowledgement is separate from optimization completion; do not leave UI disabled or silently retry paid calls. Acceptance: fake GraphQL/UI cycle shows each phase and precise exchanges; mobile status/drawer remains readable; submitting labels responds immediately and eventual errors are actionable.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -97,11 +97,20 @@
         "name": "App acceptance",
         "settings": {}
       }
+    },
+    {
+      "id": "da67d575-c3ed-4e8f-9816-baed4ab3e383",
+      "author": "home",
+      "text": "Completed whole-app streamed-phase acceptance: new WebApp test receives events through the subscription seam, renders trigger/queued, start, optimizer request, response awaiting validation, proposal validation, evaluation, accepted rubric, ML fitting, fit completed and no-change outcome; exact explanation-bearing prompt, response, tool call and applied before/after snapshots remain inspectable, with zero command mutations. All 177 UI tests pass, focused lint clean. Existing fake API/SQLite/worker fixture covers actual all-stage cycles and precise recorded exchanges; prior browser proofs cover saved-label acknowledgement, full paired exchanges, tablet readable drawer, no stale alerts, completion and controls. Existing seven transport specs prove cursor reconnect/dedup/auth/error/cleanup; submission specs distinguish save from optimization errors and never claim unconfirmed feedback saved. Original task acceptance is satisfied; broader physical-device/layout acceptance remains in its own task. Documentation updated. No real labels or paid calls during this verification.",
+      "created_at": "2026-10-08T01:41:02.018601Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:06.171698Z",
-  "updated_at": "2026-10-08T01:11:43.098388Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:41:02.135926Z",
+  "closed_at": "2026-10-08T01:41:02.135841Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
