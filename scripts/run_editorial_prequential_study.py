@@ -123,7 +123,7 @@ async def main_async(args):
             if report.get('resumed_from_cycles') and prior.exists():
                 old_cycles=json.loads(prior.read_text()).get('cycles',[])
                 report['cycles']=[*old_cycles,*report['cycles']]
-            report['disclosure']={'operational_items':400,'feedback_revealed':sum(x['feedback_selected'] for x in report['cycles']),
+            report['disclosure']={'operational_items':400,'feedback_revealed':sum(event['kind']=='human-feedback' for event in wheel.history(100000)),
               'dev_role_items':len(plan.development),'scoreboard_role_items':0}
             (out/'results.json').write_text(json.dumps(report,indent=2)+'\n'); events=read_trace(out/'runtime.sqlite3')
             (out/'playback.html').write_text(render_trace(events,class_config=[{'label':'publish','role':'positive'},{'label':'reject','role':'negative'}]))
