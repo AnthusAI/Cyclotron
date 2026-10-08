@@ -18,6 +18,11 @@ beforeEach(()=>{
 })
 afterEach(()=>{cleanup();sessionStorage.clear();vi.clearAllMocks()})
 
+test('the timeline frame fills its bounded pane instead of using an intrinsic iframe height',()=>{
+  render(<RunTimeline runId="recorded" revision={0} />)
+  expect(screen.getByTitle('Run timeline and event inspector')).toHaveClass('absolute','inset-0','h-full','w-full')
+})
+
 function classifiedRunFixture(){
   const card={...live,config:{classifiers:[
     {id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}},
@@ -326,7 +331,8 @@ test('opening the workspace shows the existing optimization timeline instead of 
   expect(screen.queryByText('Decision Flywheel')).toBeNull()
   expect(screen.getByTitle('Run timeline and event inspector')).toHaveAttribute('src','/runs/replay/timeline?revision=0')
   expect(screen.queryByText('Local · GraphQL · SQLite')).toBeNull()
-  expect(screen.getByText(/87 cycles · 87 labels · 11 optimizer calls/)).toBeVisible()
+  expect(screen.queryByText(/87 cycles · 87 labels · 11 optimizer calls/)).toBeNull()
+  expect(screen.getByTitle('Event stream: Connecting')).toHaveTextContent('completed')
 })
 
 test('a selected run keeps the workspace shape with a skeleton while its details load',async()=>{

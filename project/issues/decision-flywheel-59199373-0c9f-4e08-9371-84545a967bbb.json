@@ -3,7 +3,7 @@
   "title": "Unify interactive and replay runs under pinned scorecard versions",
   "description": "Interactive sessions and replay studies use the same engine, scorecard revision, cycle/event contract and API-owned SQLite logging. Adding Cyberian Gallery creates a new scorecard edition; old classifier labels/comments remain immutable, request new missing labels for previously reviewed items before unseen items. Replay learning starts from an explicitly recorded empty or selected initial checkpoint, never future labels/examples; process feedback chronologically after prediction. Re-optimize the entire new scorecard from the beginning when requested, with separate per-classifier heads/triggers and one compatible joint decision request. Persist replay input snapshot, parameters, dataset/list revision and lineage. Version comparison distinguishes descriptive latest-200 metrics from matched protected evaluation; switching active edition must be explicit and non-destructive. Acceptance: fake end-to-end tests verify no cycle-one label leakage, retained explanations, restored restart state, missing-label priority and independent original-version metrics; UI exposes active vs inspected version. No automatic paid replay.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -267,11 +267,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "1fa044f6-0540-4147-9ff2-1d9f307a20e7",
+      "author": "home",
+      "text": "Requirement audit completed for the pinned interactive/replay engine milestone. Current 88 fake-only store/worker/runtime/session/catalog/definition/protected-comparison specs pass: immutable input revisions and source comments, empty first-cycle context, chronological feedback, missing-classifier backfill before new items, shared requests with independent heads, restart/idempotency and explicit activation/comparison approval. Existing browser evidence in this issue covers create/Step/Run/Pause/reload, active versus inspected editions, protected comparison recovery and exact request/response inspection. Production exhaustion repair is deployed with unchanged feedback/events/jobs. Closing this engine/versioning task; actual device and dark rendering checks remain explicitly open in layout0049, calibration42d and end-to-end678d, not claimed passed.",
+      "created_at": "2026-10-08T02:33:22.555655Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-08T02:25:27.702532Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T02:33:23.078035Z",
+  "closed_at": "2026-10-08T02:33:23.077934Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

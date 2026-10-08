@@ -4,6 +4,15 @@ import '@testing-library/jest-dom/vitest'
 import {ReplayControls} from './ReplayControls'
 afterEach(cleanup)
 
+it('a completed replay uses one compact status instead of disabled run controls and pause instructions',()=>{
+  const advance=vi.fn()
+  render(<ReplayControls busy={false} finished onAdvance={advance}/>)
+  expect(screen.getByText('Replay complete')).toBeVisible()
+  expect(screen.queryByRole('button')).toBeNull()
+  expect(screen.queryByText(/Pause takes effect/)).toBeNull()
+  expect(advance).not.toHaveBeenCalled()
+})
+
 it('an inactive version stops replay without pretending to process and requires a fresh start after activation',()=>{
   const advance=vi.fn()
   const {rerender}=render(<ReplayControls busy={false} finished={false} onAdvance={advance}/>)

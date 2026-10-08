@@ -78,10 +78,37 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "50ec30fe-d15b-4444-a406-6fde4019578f",
+      "author": "home",
+      "text": "Documented an explicit physical-device acceptance checklist in docs/scorecard-versioning.md: portrait/landscape, software keyboard, nonzero safe areas, drawer draft retention, touch pan/pinch, playback and exchange inspection. These remain unverified on a physical iPad. macOS system dark mode was confirmed and restored after an authorized temporary appearance toggle, but the only connected in-app browser reported prefers-color-scheme dark=false even after reload. No alternative normal browser is connected. This is an observability blocker, not proof the app dark styling fails or passes. No production labels/model calls changed. Task remains in progress.",
+      "created_at": "2026-10-08T02:33:23.785931Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "023ce9a2-566b-4f19-b39a-f47b80a66b52",
+      "author": "home",
+      "text": "User physical-iPad review confirms light and dark mode work, but reports excessive gutters/header space. Compacted app header, combined run controls, merged embedded timeline toolbars, removed nested gutter/width cap, reduced panel gap/inspector/footer padding and made iframe explicitly fill its bounded pane. Two specs failed before implementation;182 UI specs/build pass. Actual browser frame at CSS1600x900 is x6.99 y124.01 w1586.02 h768.99, ending6.99px from bottom; tablet override CSS1025x1475 also ends6.99px from bottom, inner panels fill frame. Zoom button changes cycle range; browser warnings/errors empty. No model calls or labels changed. User needs to review compact layout on iPad; other device checks remain open.",
+      "created_at": "2026-10-08T11:24:59.647321Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "4dc9a29f-c2a6-47ab-b6b3-f49ab30306fb",
+      "author": "home",
+      "text": "Further user-requested density pass: timeline counts now share the Run statistics disclosure summary rather than a duplicate metadata row; run title/status/actions are inline, and completed replay controls become a compact status without disabled buttons or pause instructions. Playback details share the footer row and expand to full width when opened. New specs failed before implementation;184 UI specs and build pass. Browser at1180x820 confirms iframe top101.18 bottom813 (7px bottom gutter), summary expansion/collapse and no console warnings/errors. Screenshot var/web/compact-summary-layout-proof.png. Found prior server no longer listening, confirmed348 completed2 failed0 active jobs and restarted same authorized LAN server without optimization. User tab refreshed; no votes or model calls.",
+      "created_at": "2026-10-08T15:58:57.303266Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T02:16:05.512760Z",
+  "updated_at": "2026-10-08T15:58:57.303373Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
