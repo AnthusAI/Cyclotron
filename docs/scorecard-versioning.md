@@ -194,6 +194,13 @@ its metrics without repeating prediction or optimization. Already completed
 cycles stay complete. Source-label edits after replay creation cannot change its
 frozen input labels or explanations.
 
+An explicit boolean `finished: true` result and its completed command commit
+the run's completed status together. On startup, the API repairs older stale
+ready/working statuses only when the latest command is successful and records
+that exact exhaustion result. Newer pending, interrupted or failed work prevents
+the repair. This updates lifecycle status only: it does not replay a cycle,
+rewrite labels or traces, retry a provider call, or change a frozen configuration.
+
 Calibration snapshots use the same latest 200 unique human-reviewed pre-vote
 predictions as live metrics. Ten fixed confidence bins retain support, observed
 accuracy and mean confidence, with ECE, multiclass Brier and log loss. Snapshot

@@ -274,6 +274,13 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
     def finish_command(self, job_id, status, result):
         with self.connect() as db:
             db.execute('UPDATE web_jobs SET status=?,result=? WHERE id=?', (status,encode(result),job_id))
+            if status == 'completed' and isinstance(result, dict) and result.get('finished') is True:
+                # Exhaustion is a durable runtime result, not a second commit
+                # which can be lost after acknowledging the completed command.
+                db.execute("""UPDATE web_runs SET status='completed' WHERE mode='live'
+                    AND id=(SELECT run_id FROM web_jobs WHERE id=? AND rowid=(
+                        SELECT MAX(newer.rowid) FROM web_jobs newer WHERE newer.run_id=web_jobs.run_id))""",
+                    (job_id,))
 
     def recover_interrupted(self):
         with self.connect() as db:
@@ -281,6 +288,14 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
             # submission queued. Running work may have made paid calls or
             # partial changes and must not be retried automatically.
             db.execute("UPDATE web_jobs SET status='interrupted' WHERE status='running'")
+            # Repair older split commits only from the latest successful command.
+            # Newer pending, interrupted or failed work must remain visible.
+            db.execute("""UPDATE web_runs SET status='completed' WHERE mode='live'
+                AND status IN ('ready','working') AND EXISTS (
+                    SELECT 1 FROM web_jobs job WHERE job.run_id=web_runs.id
+                    AND job.rowid=(SELECT MAX(latest.rowid) FROM web_jobs latest WHERE latest.run_id=web_runs.id)
+                    AND job.status='completed' AND json_valid(job.result)
+                    AND json_type(job.result,'$.finished')='true')""")
 
     def current_item(self, run_id):
         self.run(run_id)

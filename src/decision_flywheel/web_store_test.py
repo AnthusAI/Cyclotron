@@ -4,6 +4,66 @@ import pytest
 from .web_store import WebStore
 
 
+def test_exhaustion_and_its_completed_command_commit_the_run_status_together(tmp_path):
+    store = WebStore(tmp_path/'web.sqlite')
+    run = store.create_run('Replay', 'live', {'input_mode':'replay'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.set_status(run['id'], 'working')
+    store.finish_command(job['id'], 'completed', {'finished':True})
+    assert store.run(run['id'])['status'] == 'completed'
+    assert store.jobs(run['id'])[0]['result'] == {'finished':True}
+
+
+def test_startup_recovers_a_durable_exhaustion_result_without_replaying_or_rewriting_evidence(tmp_path):
+    path = tmp_path/'web.sqlite'
+    store = WebStore(path)
+    run = store.create_run('Replay', 'live', {'input_mode':'replay','frozen':'unchanged'})
+    store.append_event(run['id'], 'feedback', {'kind':'human-feedback','comment':'Preserve me'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.finish_command(job['id'], 'completed', {'finished':True})
+    store.set_status(run['id'], 'ready')  # a pre-fix record or crash between old commits
+    jobs, events = store.jobs(run['id']), store.all_events(run['id'])
+    restored = WebStore(path)
+    restored.recover_interrupted()
+    assert restored.run(run['id'])['status'] == 'completed'
+    assert restored.run(run['id'])['config'] == run['config']
+    assert restored.jobs(run['id']) == jobs and restored.all_events(run['id']) == events
+    assert restored.claim_command() is None
+    restored.recover_interrupted()
+    assert restored.jobs(run['id']) == jobs and restored.all_events(run['id']) == events
+
+
+@pytest.mark.parametrize('value,status', [(False,'completed'), (1,'completed'),
+    ('true','completed'), (None,'completed'), (True,'failed'), (True,'interrupted')])
+def test_recovery_does_not_infer_exhaustion_from_nonboolean_or_unsuccessful_results(tmp_path, value, status):
+    store = WebStore(tmp_path/'web.sqlite')
+    run = store.create_run('Replay', 'live', {'input_mode':'replay'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.finish_command(job['id'], status, {'finished':value})
+    store.recover_interrupted()
+    assert store.run(run['id'])['status'] == 'ready'
+
+
+@pytest.mark.parametrize('later_status', ['pending','running','failed'])
+def test_old_exhaustion_cannot_hide_newer_pending_interrupted_or_failed_work(tmp_path, later_status):
+    store = WebStore(tmp_path/'web.sqlite')
+    run = store.create_run('Replay', 'live', {'input_mode':'replay'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.finish_command(job['id'], 'completed', {'finished':True})
+    store.set_status(run['id'], 'ready')
+    later = store.command(run['id'], 'later', 'prepare', {})
+    if later_status != 'pending':
+        store.claim_command()
+        if later_status == 'failed': store.finish_command(later['id'], 'failed', {})
+    store.recover_interrupted()
+    assert store.run(run['id'])['status'] == 'ready'
+    assert store.jobs(run['id'])[0]['status'] == ('interrupted' if later_status == 'running' else later_status)
+
+
 def test_run_scorecard_identity_uses_version_membership_before_immutable_configuration(tmp_path):
     store=WebStore(tmp_path/'db')
     for key in ('old','new'):

@@ -249,10 +249,28 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "6f62be09-9f33-4cdd-9149-9d9435a65f43",
+      "author": "home",
+      "text": "Final acceptance audit found both already-exhausted objective replays still ready although their latest completed job records finished:true. Added eleven failing-first store regressions: atomic job/exhaustion status commit, idempotent startup reconciliation preserving configuration/jobs/events, strict boolean result validation, and newer pending/running/failed work precedence. Implemented narrow lifecycle repair in existing startup recovery, without new schema/events or provider execution. Focused store/worker/runtime suite40 passed; full suite running. This repairs a real recorded-state inconsistency rather than restarting the study. Deployment pending idle check and SQLite backup.",
+      "created_at": "2026-10-08T02:21:48.750507Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "1d2f938d-a705-4e30-8da3-bf3f30c3c905",
+      "author": "home",
+      "text": "Deployed after895 passing Python tests and verified idle production worker (348 completed2 failed0 active). Backup var/web/before-exhaustion-recovery-20261008.sqlite3 taken first. Startup now correctly displays both85-cycle objective replays as completed; actual browser shows255 labels,33 optimizer calls and disabled replay controls with Replay complete. Browser warnings/errors empty. Exact pre/post comparisons confirm all255 feedback rows,0 retractions,39405 events,350 jobs and765 frozen replay-feedback rows are identical. Only lifecycle statuses repaired; no new labels, jobs, provider calls or fabricated events. Screenshot var/web/completed-replay-recovery-proof.png. Remaining app/device/dark acceptance is still open.",
+      "created_at": "2026-10-08T02:25:27.702455Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:01.329358Z",
-  "updated_at": "2026-10-08T01:58:38.066840Z",
+  "updated_at": "2026-10-08T02:25:27.702532Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

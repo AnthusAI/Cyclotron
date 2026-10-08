@@ -3,23 +3,38 @@
   "title": "Run and expose the complete reusable flywheel in the arXiv reviewer",
   "description": "## Milestone\nA human can rate real arXiv items and observe the reusable library improving its classifier. Three independent adjustable request parts: state.rubric, fixed labeled examples, and decision-element classification questions/options. Main and element answers become features for a trained ML head. One decision-model request per item when supported, containing the complete state and questions. Retrieval and input-filter optimization are deferred.\n\n## End-to-end acceptance\nGiven eligible labels and explanations and an incumbent classifier\nWhen a feedback round runs\nThen the optimizer proposes a traceable change, code validates it, the decision model produces all required candidate features, the head is fitted on trusted training labels, the candidate is compared on development data, and a version is promoted or rejected\nAnd the reviewer exposes prompts, replies/tool calls, changes, fitting and measured results\nAnd a restart preserves the active version, labels and event history.\n\nCompletion requires a fake-client cross-module test plus an explicitly authorized bounded live demonstration; passing component tests alone is insufficient. Native provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-e9e02429-a60a-4747-adb3-93cab7ec4314",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "46510271-52d8-42e5-b733-2125dc1af3a2",
+      "author": "home",
+      "text": "Requirement-by-requirement technology audit complete. All child stories are closed, including independent staged feature trials, retained revisions/combinations, and reviewer lifecycle. Current reviewer_flywheel specs cover trusted explanations/metadata, protected-comment firewall, independent cadence and restart. Cross-module complete_feedback_loop and shared_provider_lifecycle specs prove proposal->validated full requests->probability features->OOF fit->development promotion/rejection->served head->restart/correction, with Jev/Kev/Laya injected transports. Existing explicitly approved private live artifact var/arxiv-replay-v2/runtime.sqlite3 has one actual gpt-6-luna request/reply (23764 returned tokens),79 decision request/reply pairs,65-row OOF fit, development evaluation and rejection, plus26 predictions. That historical four-development-label trial demonstrates execution only, not classifier quality; current default coverage floors remain intact. UI transcript/activity and exact decision exchanges were separately browser verified. No new paid demonstration or experiment report is required or claimed. Remaining tablet/dark app acceptance is owned by the scorecard SPA issues.",
+      "created_at": "2026-10-08T02:22:34.351125Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
   "created_at": "2026-10-05T21:56:01.048538Z",
-  "updated_at": "2026-10-05T21:59:01.850567Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T02:22:35.045056Z",
+  "closed_at": "2026-10-08T02:22:35.044806Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": {
     "platform": "codex",
     "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
   },
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {}
+  "agent_assignment": null
 }
