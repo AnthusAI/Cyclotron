@@ -61,6 +61,15 @@ class WorkspaceSession:
 
     def emit(self,identifier,event):
         event={**event,'classifier_id':identifier}
+        # Definition revisions belong to the application, not the provider-
+        # neutral learning engine. Always use this run's immutable pins.
+        definition=next((row for row in self.config['classifiers'] if row['id']==identifier),None)
+        if definition:
+            event['classifier_revision']=definition['revision']
+        else:
+            event['classifier_revisions']={row['id']:row['revision'] for row in self.config['classifiers']}
+        for key in ('scorecard_id','scorecard_definition_revision','scorecard_definition_fingerprint'):
+            if key in self.config:event[key]=self.config[key]
         if hasattr(self.observer,'ingest'):
             # Transport sequence is durable across restarts, independent of classifier event IDs.
             source=f'classifier:{identifier}:{event["event_id"]}' if 'event_id' in event else f'transport:{uuid4()}'
@@ -152,8 +161,10 @@ class WorkspaceSession:
             cycle=wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
             try:
                 result=await wheel.predict(target,training[identifier],now=now)
-                name=next(c['name'] for c in self.config['classifiers'] if c['id']==identifier)
-                predictions[identifier]={**asdict(result),'name':name,'version':wheel.active.fingerprint,'classes':list(wheel.initial.task.labels)}
+                definition=next(c for c in self.config['classifiers'] if c['id']==identifier)
+                predictions[identifier]={**asdict(result),'name':definition['name'],
+                    'classifier_revision':definition['revision'],
+                    'version':wheel.active.fingerprint,'classes':list(wheel.initial.task.labels)}
                 cycle.suspend()
             except Exception as error:
                 cycle.__exit__(type(error),error,None);raise

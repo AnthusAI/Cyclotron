@@ -20,6 +20,13 @@ the run's articles from those immutable revisions, not from another latest-list
 query. A concurrent import cannot shift page offsets or replace frozen content.
 Later imports remain available for new runs without altering existing runs.
 
+Application trace events carry their pinned classifier revision and scorecard
+definition revision and fingerprint. Shared transport events identify all pinned
+classifier revisions. Displayed predictions carry the classifier revision plus
+the actual learned configuration fingerprint (`version`). These are distinct:
+definition edits affect future runs, while learning changes a run's configuration.
+Older recorded events are not rewritten to add metadata they did not capture.
+
 Adding a classifier creates a new edition. No learned state is copied. Previously
 reviewed items come first. For each item, all classifiers predict before the
 original labels and explanations are replayed. The human supplies missing labels.
