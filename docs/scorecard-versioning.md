@@ -14,6 +14,12 @@ retain their own revision numbers. Runtime checkpoints
 store the complete joint classifier state, including fitted ML heads, with a
 content fingerprint. Complete decision requests retain their own cache keys.
 
+Run creation takes one SQLite read snapshot of item-list membership and latest
+content revisions. It records those exact references in the manifest and loads
+the run's articles from those immutable revisions, not from another latest-list
+query. A concurrent import cannot shift page offsets or replace frozen content.
+Later imports remain available for new runs without altering existing runs.
+
 Adding a classifier creates a new edition. No learned state is copied. Previously
 reviewed items come first. For each item, all classifiers predict before the
 original labels and explanations are replayed. The human supplies missing labels.

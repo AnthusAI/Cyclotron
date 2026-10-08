@@ -11,6 +11,22 @@ from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
 
 
+def test_freezing_a_run_does_not_assemble_a_manifest_from_changing_catalog_pages(tmp_path, monkeypatch):
+    store=WebStore(tmp_path/'workspace.sqlite')
+    store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('papers','Papers')
+    items=[{'id':f'{index:03d}','occurred_at':'2026-01-01','values':{'text':str(index)}}
+           for index in range(205)]
+    store.upsert_list_items('papers',items[:200])
+    store.upsert_list_items('papers',items[200:])
+    def forbidden(*args,**kwargs):raise AssertionError('latest pages are not a consistent snapshot')
+    monkeypatch.setattr(store,'list_items',forbidden)
+    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=forbidden,sink_factory=forbidden)
+    run=runtime.create_run('Snapshot',{'classifier_ids':['topic'],'item_list_id':'papers'})
+    assert [row['id'] for row in store.items(run['id'])]==[row['id'] for row in items]
+    assert len(run['config']['item_revisions'])==205
+
+
 def test_a_catalog_refresh_during_run_creation_cannot_replace_frozen_items(tmp_path, monkeypatch):
     from . import scorecard_runtime
     store=WebStore(tmp_path/'workspace.sqlite')

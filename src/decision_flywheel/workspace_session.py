@@ -20,8 +20,7 @@ def freeze_configuration(store,config,*,selection_policy_override=False):
     if not ids or len(set(ids))!=len(ids): raise ValueError('choose distinct classifiers')
     revisions=config.pop('classifier_revisions',{})
     config['classifiers']=[store.classifier(identifier,revisions.get(identifier)) for identifier in ids]
-    items=[];offset=0
-    while page:=store.list_items(config['item_list_id'],after=offset):items.extend(page);offset+=len(page)
+    items=store.snapshot_items(config['item_list_id'])
     if not items: raise ValueError('item list is empty')
     config['item_revisions']=[{'id':row['id'],'revision':row['revision'],'fingerprint':row['fingerprint']} for row in items]
     config['class_config']=config['classifiers'][0]['config']['classes']
