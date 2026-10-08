@@ -66,3 +66,25 @@ def test_offline_browser_serving_refuses_an_existing_database_before_modifying_i
     with pytest.raises(ValueError,match='new empty fixture directory'):
         fixture_script().create_offline_app(tmp_path,port=8785)
     assert sentinel.read_bytes()==b'leave real work alone'
+
+
+def test_the_labeling_fixture_keeps_a_pending_prediction_after_three_calibration_snapshots(tmp_path):
+    from decision_flywheel.web_store import WebStore
+    result=fixture_script().build_fixture(tmp_path,pending_item=True)
+    store=WebStore(tmp_path/'workspace.sqlite3')
+    current=store.current_item(result['run_id'])
+    assert current['item']['id']=='fixture-4'
+    assert result['model_calls']==4
+    for classifier in ('relevance','practicality'):
+        metrics=[row['payload'] for row in store.all_events(result['run_id'])
+                 if row['payload'].get('kind')=='cycle-metrics' and row['payload'].get('classifier_id')==classifier]
+        assert [event['metrics']['calibration']['count'] for event in metrics]==[1,2,3]
+    assert store.item_labels('fixture-items','fixture-4',1)==[]
+
+
+def test_fake_confidence_stays_a_valid_probability_when_browser_checks_make_many_requests():
+    client=fixture_script().FakeDecisionClient()
+    for _ in range(20):
+        probabilities=client.system_one(questions={'q':{}}).answers['q']['probabilities']
+        assert all(0<=value<=1 for value in probabilities.values())
+        assert sum(probabilities.values())==pytest.approx(1)

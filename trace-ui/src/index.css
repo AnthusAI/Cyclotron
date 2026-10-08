@@ -194,6 +194,8 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .labeling-card, .labeling-card-content { min-width:0; max-width:100%; }
 .classifier-feedback-strip { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(260px,1fr); gap:12px; overflow-x:auto; min-width:0; width:100%; max-width:100%; padding-bottom:6px; overscroll-behavior-x:contain; scroll-snap-type:x proximity; }
 .classifier-feedback-strip > section { scroll-snap-align:start; }
+/* Expanded graphs must not collapse the article or push actions off screen. */
+[data-labeling-view="true"] .classifier-feedback-strip { max-height:50%; flex-shrink:1; min-height:0; overflow-y:auto; }
 .classifier-metrics[data-embedded="true"] { background:var(--muted); padding:8px; }
 .classifier-metrics[data-embedded="true"] > div { display:block; }
 .classifier-metrics[data-embedded="true"] [data-slot="card"] { border:0; background:transparent; padding:0; box-shadow:none; }

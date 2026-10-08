@@ -561,3 +561,10 @@ the remaining cycles. The three-item fixture finishes quickly, so a pause click
 after completion does not prove pause behavior. Catalog feedback remains the
 original six labels: replay records their use in its own trace, not duplicate
 human votes in the catalog.
+
+Add `--pending-item` to the fixture command to test labeling-space behavior.
+It saves three reviews and their calibration snapshots, then leaves a fourth
+item predicted but unlabeled. Open **Label items** and expand a classifier's
+calibration curve. The classifier strip is bounded to half the available card
+height and scrolls internally; article reading and the bottom review actions
+retain their own space. This mode uses the same synthetic-data safeguards.

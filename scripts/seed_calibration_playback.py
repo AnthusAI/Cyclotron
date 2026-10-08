@@ -18,7 +18,7 @@ class FakeDecisionClient:
 
     def system_one(self,**request):
         self.calls+=1
-        confidence=.5+self.calls/10
+        confidence=min(.9,.5+self.calls/10)
         return SimpleNamespace(answers={key:{'choice':'yes','probabilities':{'yes':confidence,'no':1-confidence}}
                                        for key in request['questions']},model='offline-fixture',usage={'tokens':0})
 
@@ -27,7 +27,7 @@ def no_optimizer(_):
     raise AssertionError('playback fixture must not run an optimizer')
 
 
-def build_fixture(directory):
+def build_fixture(directory, *, pending_item=False):
     directory=Path(directory)
     directory.mkdir(parents=True,exist_ok=True)
     # Refuse to seed an existing workspace: never merge synthetic labels into
@@ -42,7 +42,7 @@ def build_fixture(directory):
         [{'id':identifier,'revision':1} for identifier in ('relevance','practicality')],{})
     store.save_item_list('fixture-items','Synthetic playback items')
     store.upsert_list_items('fixture-items',[{'id':f'fixture-{i}','occurred_at':f'2026-01-0{i}',
-        'values':{'text':f'Synthetic item {i}; not research data.'}} for i in range(1,4)])
+        'values':{'text':f'Synthetic item {i}; not research data.'}} for i in range(1,5 if pending_item else 4)])
     model=FakeDecisionClient()
     with TestClient(create_app(store)) as client:
         sink=lambda run:GraphQLTraceSink('offline',run,transport=lambda body:client.post('/graphql',json=body).json())
@@ -67,11 +67,11 @@ def build_fixture(directory):
             worker.close()
 
 
-def create_offline_app(directory, *, port):
+def create_offline_app(directory, *, port, pending_item=False):
     """Serve interactive/replay acceptance through the real API, with no paid adapters."""
     if type(port) is not int or not 1024<=port<=65535:
         raise ValueError('choose an unprivileged local port')
-    fixture=build_fixture(directory)
+    fixture=build_fixture(directory,pending_item=pending_item)
     directory=Path(directory)
     store=WebStore(directory/'workspace.sqlite3')
     client=FakeDecisionClient()
@@ -88,16 +88,17 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--serve',action='store_true',help='Serve an isolated fake-model browser workspace')
+    parser.add_argument('--pending-item',action='store_true',help='Keep a fourth item ready for labeling after three reviews')
     parser.add_argument('--port',type=int,default=8785)
     args=parser.parse_args()
     if args.serve:
         import uvicorn
-        app,fixture=create_offline_app(args.output,port=args.port)
+        app,fixture=create_offline_app(args.output,port=args.port,pending_item=args.pending_item)
         print(json.dumps({**fixture,'url':f"http://127.0.0.1:{args.port}/#run={fixture['run_id']}&view=timeline&section=optimizations",
                           'models':'FAKE ONLY — synthetic labels, no provider credentials'}),flush=True)
         uvicorn.run(app,host='127.0.0.1',port=args.port,workers=1,access_log=False)
     else:
-        print(json.dumps(build_fixture(args.output)))
+        print(json.dumps(build_fixture(args.output,pending_item=args.pending_item)))
 
 
 if __name__=='__main__':
