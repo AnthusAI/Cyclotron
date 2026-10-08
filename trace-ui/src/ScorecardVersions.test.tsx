@@ -16,3 +16,23 @@ test('version comparison preserves recall precision accuracy order and supports 
   await waitFor(()=>expect(screen.queryByRole('button',{name:'Use this version'})).toBeNull())
   expect(vi.mocked(graphql).mock.calls.at(-1)?.[1]).toEqual({id:'scorecard',revision:1})
 })
+
+test('inspecting another learned version is navigation only and clearly differs from activation',async()=>{
+  vi.mocked(graphql).mockImplementation(async query=>query.includes('scorecardVersions')?{scorecardVersions:[{revision:1,run_id:'old',classifiers:[],metrics:{}},{revision:2,run_id:'new',classifiers:[],metrics:{}}]}:{scorecards:[{id:'card',name:'Card',active_revision:2,versions:[{revision:1,run_id:'old'},{revision:2,run_id:'new'}]}]})
+  const select=vi.fn()
+  const {rerender}=render(<ScorecardVersions runId="new" onSelect={select} busy={false}/> )
+  expect(await screen.findByText('Active version')).toBeVisible()
+  fireEvent.change(screen.getByRole('combobox',{name:'Scorecard version'}),{target:{value:'old'}})
+  expect(select).toHaveBeenCalledWith('old')
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+  rerender(<ScorecardVersions runId="old" onSelect={select} busy={false}/> )
+  expect(await screen.findByText('Inspecting inactive version')).toBeVisible()
+  expect(await screen.findByRole('button',{name:'Use this version'})).toBeEnabled()
+})
+
+test('an unavailable learned edition does not offer activation with an undefined revision',async()=>{
+  vi.mocked(graphql).mockImplementation(async query=>query.includes('scorecardVersions')?{scorecardVersions:[]}:{scorecards:[{id:'card',name:'Card',active_revision:2,versions:[{revision:1,run_id:'old'}]}]})
+  render(<ScorecardVersions runId="old" onSelect={()=>{}} busy={false}/> )
+  expect(await screen.findByText('This learned version is unavailable.')).toBeVisible()
+  expect(screen.queryByRole('button',{name:'Use this version'})).toBeNull()
+})

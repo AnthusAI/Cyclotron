@@ -231,6 +231,25 @@ test('history opens scoped to the inspected scorecard and marks its current run 
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
+test('an inactive learned edition explains read-only labeling before a submission can be attempted',async()=>{
+  window.history.replaceState(null,'','#run=live&view=label')
+  const inactive={...live,labelingAccess:{allowed:false,reason:'Activate this scorecard version before continuing labeling.'}}
+  const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'shown',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
+  vi.mocked(graphql).mockImplementation(async query=>{
+    if(query.includes('capabilities'))return {runs:[inactive],capabilities:{liveEnabled:true,itemCount:1}}
+    if(query.includes('events('))return {events:[]}
+    return {run:inactive,currentItem:shown,jobs:[]}
+  })
+  render(<WebApp/> )
+  expect(await screen.findByText('Activate this scorecard version before continuing labeling.')).toBeVisible()
+  expect(screen.getByRole('button',{name:'Topic: exclude'})).toBeDisabled()
+  expect(screen.getByRole('button',{name:'Skip item'})).toBeDisabled()
+  expect(screen.getByRole('button',{name:'Refresh prediction'})).toBeDisabled()
+  expect(screen.getByRole('button',{name:'Submit feedback'})).toBeDisabled()
+  expect(screen.queryByText('Working')).toBeNull()
+  expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
+})
+
 test('opening the workspace shows the existing optimization timeline instead of an empty landing page',async()=>{
   render(<WebApp />)
   expect(await screen.findByRole('heading',{name:replay.name})).toBeVisible()

@@ -91,6 +91,18 @@ class WebStore(WorkspaceCatalog,Scorecards,ScorecardDefinitions):
         with self.connect() as db:
             return [self._run(r) for r in db.execute('SELECT * FROM web_runs ORDER BY rowid DESC')]
 
+    def labeling_access(self, run_id):
+        """Describe existing command eligibility without authorizing any work."""
+        with self.connect() as db:
+            run=db.execute('SELECT mode FROM web_runs WHERE id=?',(run_id,)).fetchone()
+            if run is None:raise ValueError('unknown run')
+            if run['mode']!='live':
+                return {'allowed':False,'reason':'Recorded runs are read-only.'}
+            edition=db.execute('SELECT v.revision,s.active_revision FROM scorecard_versions v JOIN scorecards s ON s.id=v.scorecard_id WHERE v.run_id=?',(run_id,)).fetchone()
+            if edition and edition['revision']!=edition['active_revision']:
+                return {'allowed':False,'reason':'Activate this scorecard version before continuing labeling.'}
+        return {'allowed':True,'reason':None}
+
     def counts(self, run_id):
         run=self.run(run_id)
         with self.connect() as db:

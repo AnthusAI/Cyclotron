@@ -7,6 +7,30 @@ from .web_api import create_app
 from .web_store import WebStore
 
 
+def test_labeling_access_explains_inactive_editions_without_changing_recorded_state(tmp_path):
+    store=WebStore(tmp_path/'db')
+    for key in ('old','new'):
+        store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('list','Items')
+    parent=store.create_run('Original','live',{'classifiers':[store.classifier('old')],'item_list_id':'list','seed':'seed'})
+    added=store.extend_scorecard(parent['id'],['new'],name='Versions')
+    recorded=store.create_run('Recording','recorded',{})
+    client=TestClient(create_app(store))
+    query='query($id:ID!){run(runId:$id){labelingAccess config}}'
+    def access(run):
+        result=client.post('/graphql',json={'query':query,'variables':{'id':run['id']}}).json()
+        assert 'errors' not in result
+        return result['data']['run']
+    assert access(parent)['labelingAccess']=={'allowed':False,'reason':'Activate this scorecard version before continuing labeling.'}
+    assert access(added)['labelingAccess']=={'allowed':True,'reason':None}
+    assert access(recorded)['labelingAccess']=={'allowed':False,'reason':'Recorded runs are read-only.'}
+    store.activate_scorecard_version(added['config']['scorecard_id'],1)
+    assert access(parent)['labelingAccess']=={'allowed':True,'reason':None}
+    assert access(parent)['config']==parent['config']
+    assert store.jobs(parent['id'])==[]
+    assert store.all_events(parent['id'])==[]
+
+
 def test_a_live_timeline_renders_before_all_declared_classes_have_been_observed(tmp_path):
     store=WebStore(tmp_path/'db')
     definition=store.save_classifier('topic','Topic',{'question':'Choose',

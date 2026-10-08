@@ -30,6 +30,10 @@ class Run:
     config: JSON
 
     @strawberry.field
+    async def labeling_access(self,info:strawberry.Info)->JSON:
+        return await asyncio.to_thread(info.context['store'].labeling_access,str(self.id))
+
+    @strawberry.field
     async def event_cursor(self,info:strawberry.Info)->int:
         return await asyncio.to_thread(info.context['store'].event_cursor,str(self.id))
 

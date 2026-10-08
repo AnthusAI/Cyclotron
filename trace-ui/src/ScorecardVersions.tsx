@@ -23,14 +23,16 @@ export function ScorecardVersions({runId,onSelect,busy}:{runId:string;onSelect:(
   },[runId])
   if(!scorecard)return null
   const selected=versions.find(version=>version.run_id===runId)
+  if(!selected)return <section aria-label="Scorecard versions"><p role="status">This learned version is unavailable.</p></section>
   return <section aria-label="Scorecard versions" className="shrink-0 space-y-2">
     <div className="flex flex-wrap items-center gap-2 text-sm"><strong>{scorecard.name}</strong>
+      <span className="text-xs text-muted-foreground">{selected.revision===scorecard.active_revision?'Active version':'Inspecting inactive version'}</span>
       <NativeSelect aria-label="Scorecard version" value={runId} onChange={event=>onSelect(event.target.value)} disabled={busy||saving}>
         {versions.map(version=><NativeSelectOption key={version.run_id} value={version.run_id}>Version {version.revision}{version.revision===scorecard.active_revision?' · active':''}</NativeSelectOption>)}
       </NativeSelect>
-      {selected?.revision!==scorecard.active_revision?<Button size="sm" variant="outline" disabled={busy||saving} onClick={async()=>{
+      {selected.revision!==scorecard.active_revision?<Button size="sm" variant="outline" disabled={busy||saving} onClick={async()=>{
         setSaving(true);setError('')
-        try{await graphql('mutation($id:ID!,$revision:Int!){activateScorecardVersion(scorecardId:$id,revision:$revision){id}}',{id:scorecard.id,revision:selected?.revision});setScorecard({...scorecard,active_revision:selected!.revision})}catch(e){setError((e as Error).message)}finally{setSaving(false)}
+        try{await graphql('mutation($id:ID!,$revision:Int!){activateScorecardVersion(scorecardId:$id,revision:$revision){id}}',{id:scorecard.id,revision:selected.revision});setScorecard({...scorecard,active_revision:selected.revision})}catch(e){setError((e as Error).message)}finally{setSaving(false)}
       }}>Use this version</Button>:null}
     </div>
     <details className="text-xs" onToggle={event=>{if(event.currentTarget.open)void graphql<{scorecardVersions:Version[]}>('query($id:ID!){scorecardVersions(scorecardId:$id)}',{id:scorecard.id}).then(result=>setVersions(result.scorecardVersions)).catch(e=>setError((e as Error).message))}}><summary className="cursor-pointer text-muted-foreground">Compare version metrics</summary>

@@ -44,6 +44,14 @@ queue. Unseen items follow the historical cohort. The source run and its cached
 responses remain intact. Reverting changes the active edition, not recorded data.
 Inactive editions reject new commands until explicitly activated.
 
+`Run.labelingAccess` describes that existing gate without starting work. The
+labeling view displays its reason and disables votes, corrections, prediction
+refresh and replay controls while inspection remains available. An inactive
+edition is not a running job: its controls do not say "Submitting" or
+"Processing". Explicit activation updates access on the normal state refresh;
+it does not create labels, requests or fitted checkpoints. A stopped replay
+requires a new Run action after activation rather than restarting itself.
+
 The version selector can inspect either edition. **Use this version** activates
 the selected edition. **Compare version metrics** shows Recall, Precision,
 Accuracy, and label counts. These are rolling prediction-before-feedback metrics
