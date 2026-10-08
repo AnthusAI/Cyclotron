@@ -1,4 +1,6 @@
-import {RefreshCwWide} from '@/components/ui/refresh-cw-wide'
+import {RefreshCwWide} from './components/ui/refresh-cw-wide'
+
+/** The Cyclotron logo: wordmark, wide cycle mark, and tagline. Shared with the marketing site. */
 
 export function CyclotronBrand(){
   return <div data-testid="cyclotron-brand-layout" className="cyclotron-brand-layout shrink-0 text-foreground">

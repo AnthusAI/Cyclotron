@@ -26,7 +26,7 @@ test('cycle background bands use shading without vertical boundary strokes',()=>
 })
 
 test('the Cyclotron mark uses the subtitle width instead of a fixed empty grid column',()=>{
-  const css=readFileSync('src/index.css','utf8')
+  const css=readFileSync('src/styles/shared.css','utf8')
   const layout=css.match(/\.cyclotron-brand-layout\s*\{([^}]+)\}/)
   expect(layout?.[1]).toContain('width:fit-content')
   expect(layout?.[1]).not.toContain('width:17rem')
