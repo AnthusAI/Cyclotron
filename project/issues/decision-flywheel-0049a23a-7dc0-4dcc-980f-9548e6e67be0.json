@@ -114,10 +114,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "520df6eb-df59-49ab-9397-6a8f7790bafa",
+      "author": "home",
+      "text": "Final browser verification: expanded disclosure shows same 85 reviewed items, raw/final recall62.5%, precision27.8%, accuracy81.2%, ECE9.8%/9.5%, Brier0.219/0.221 with signed deltas and support. The first-label historical trend is secondary and collapsed, not a headline optimization claim. Calibration curves/details remain available. Screenshot var/web/run-outcome-statistics-proof.png, browser warnings/errors empty. 191 UI specs and production build pass after integrating latest develop changes; generated CSS rebuilt to resolve asset-only merge conflicts. No model calls or feedback changes; user tab remains collapsed to preserve timeline space.",
+      "created_at": "2026-10-08T16:18:29.029552Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T16:17:12.172671Z",
+  "updated_at": "2026-10-08T16:18:29.029641Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
