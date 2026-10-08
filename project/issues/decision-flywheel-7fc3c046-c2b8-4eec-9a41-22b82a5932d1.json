@@ -3,7 +3,7 @@
   "title": "Resume optimization safely after restarts and corrected labels",
   "description": "## Behavior and acceptance\nDurably version votes, comments, assignments, predictions made before voting, bundles, jobs and events. Undo/correct invalidates dependent candidates/features/fits as appropriate; preserve history and immutable historical prediction scores. Resume interrupted work idempotently with cached complete fingerprints and recorded usage, no duplicate paid calls. Handle stable source IDs/content revisions without overwriting labeled items.\nScenario: interruption and restart yields the same active bundle; corrected label cannot leave a dependent fit silently current.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -87,11 +87,25 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "860b3dd3-8852-4ef2-b935-1e7f999e9923",
+      "author": "home",
+      "text": "Restart/correction technology acceptance is complete. Existing browser evidence in this issue proves correction and undo through the disposable API; fresh acceptance rerun passes 101 backend specs across workspace session, worker, store, API, reviewer store and core runtime, plus 35 UI specs across FeedbackControls, commandIdentity and WebApp. Tests assert original pre-vote prediction/calibration lineage after correction, explanation-only invalidation, retained immutable history, append-only retractions, restarted acknowledgement-loss recovery with one model call, and independent classifier feedback. UI tests assert run/item-scoped durable drafts, stale identity blocking, explicit original-job recovery and no recovery for paid optimizer jobs. Catalog content revisions preserve old labels; frozen replay and inherited feedback remain protected. Corrected obsolete web-workspace-plan prose that still claimed undo was unavailable. This closes the specified restart/correction behavior, not all app milestones or experimental performance. No production ratings or model calls were made.",
+      "created_at": "2026-10-08T00:55:35.836383Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "Technology acceptance",
+        "settings": {}
+      }
     }
   ],
   "created_at": "2026-10-05T21:56:01.731995Z",
-  "updated_at": "2026-10-07T23:27:50.655642Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T00:55:36.323354Z",
+  "closed_at": "2026-10-08T00:55:36.323245Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

@@ -41,10 +41,21 @@ drive the corresponding classifier's learning triggers through API-recorded
 cycles. Tests cover shared calls, restart reuse, independent feedback, and
 GraphQL trace ingestion. The old arXiv adapter remains for existing runs.
 
-Labels saved directly in the catalog do not trigger session learning. Automatic
-learning rollback after label corrections is not implemented; general sessions
-reject undo rather than claim to reverse a trained model. Existing runs freeze
-their item queue: refreshed lists supply new runs, not silently changed history.
+Labels saved directly in the catalog do not trigger session learning. Interactive
+scorecard sessions support corrections and item-level undo through durable API
+commands. Corrections retain the original prediction and append feedback history;
+dependent inferred guidance and fitted heads are invalidated. Undo retracts local
+labels and reopens the saved prediction without calling either model. It does not
+restore a superseded label or erase prior exposure. Inherited source labels and
+frozen replay feedback remain read-only. Existing runs freeze their item queue:
+refreshed lists supply new runs, not silently changed history.
+
+The correction drawer retains unsent drafts by run and item. A stale feedback
+identity blocks submission until the human reloads the saved feedback. Failed or
+interrupted correction/undo commands offer explicit recovery with the original
+command identity. Recovery cannot resume paid-capable commands, interleave with
+pending work, or reactivate an inactive edition. See
+[scorecard versioning](scorecard-versioning.md) for the API and storage contract.
 
 `scripts/update_arxiv_items.py` is an external example importer. It refreshes a
 local SQLite mirror from normalized or raw arXiv JSONL and upserts chronological
@@ -74,8 +85,10 @@ API traces. Creating a replay is atomic and makes no provider calls; advancing i
 does, within explicitly approved budgets. The timeline refreshes on completed
 replay cycles. Offline restart/pause specs verify chronological replay across
 restart, frozen explanations and no automatic continuation after failure. Browser
-replay control acceptance and matched protected-version comparison remain delivery
-work; imported history is not evidence that those checks passed.
+replay controls have also been exercised against a disposable fake-model API:
+step, run, pause, reload and explicit resume preserve completed cycles and labels.
+This is technology acceptance, not experimental evidence for classifier quality;
+imported history alone does not prove a newly executed replay.
 
 - React and existing shadcn components provide the single-page workspace.
 - FastAPI serves the app. Strawberry provides GraphQL queries, mutations, and
