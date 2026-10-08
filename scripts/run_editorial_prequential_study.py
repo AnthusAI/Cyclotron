@@ -85,7 +85,7 @@ async def main_async(args):
         for key,value in {'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,
                           'decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls}.items():
             if old.get(key)!=value: raise ValueError(f'--resume protocol mismatch for {key}')
-        if old.get('modes')!=args.modes: raise ValueError('--resume protocol mismatch for modes')
+        if tuple(old.get('modes',()))!=args.modes: raise ValueError('--resume protocol mismatch for modes')
         if any(event_counts(args.output/mode/'runtime.sqlite3')['unfinished_cycles'] for mode in args.modes):
             raise RuntimeError('a mode has an unfinished cycle; wait for its owning process to reach a terminal state')
     else:
@@ -117,7 +117,8 @@ async def main_async(args):
         try:
             report=await run_cycle_replay(wheel,plan,optimize_every=200,retrain_every=200,stages=('rubric',),rubric_changes_every=20,
               feedback_policy=policy_for(mode,args.seed),negative_label='reject',max_rubric_optimizations=remaining_optimizers,
-              initial_training=bootstrap[:8],initial_development=bootstrap[8:12],resume=args.resume and current['completed_cycles']>0)
+              initial_training=bootstrap[:8],initial_development=bootstrap[8:12],resume=args.resume and current['completed_cycles']>0,
+              retry_failed_requests=args.retry_failed_requests)
             prior=(out/'results.json')
             if report.get('resumed_from_cycles') and prior.exists():
                 old_cycles=json.loads(prior.read_text()).get('cycles',[])
@@ -132,7 +133,7 @@ async def main_async(args):
       lock.unlink(missing_ok=True)
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
     if not args.modes or len(set(args.modes))!=len(args.modes): p.error('--modes must be a non-empty unique comma-separated list')
     asyncio.run(main_async(args))
 if __name__=='__main__': main()

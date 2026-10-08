@@ -9,7 +9,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                            stages=('rubric','questions','examples'), min_evaluation_per_class=2,
                            on_cycle=None, rubric_changes_every=2, feedback_policy=None, negative_label=None,
                            max_rubric_optimizations=None, initial_training=(), initial_development=(),
-                           resume=False):
+                           resume=False, retry_failed_requests=False):
     from .feedback_trigger import LabelTransitionTrigger
     rubric_trigger = LabelTransitionTrigger(rubric_changes_every) if rubric_changes_every is not None and 'rubric' in stages else None
     scheduled_stages = tuple(stage for stage in stages if not rubric_trigger or stage != 'rubric')
@@ -22,6 +22,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
         raise ValueError('operational replay requires a fresh empty runtime')
     if max_rubric_optimizations is not None and (type(max_rubric_optimizations) is not int or max_rubric_optimizations < 1):
         raise ValueError('max_rubric_optimizations must be a positive integer or None')
+    if type(retry_failed_requests) is not bool:
+        raise ValueError('retry_failed_requests must be boolean')
     policy=feedback_policy or ReplayFeedbackPolicy()
     if not callable(getattr(policy,'select',None)) or not callable(getattr(policy,'manifest',None)):
         raise ValueError('feedback_policy must expose select() and manifest()')
@@ -84,7 +86,11 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
         train=tuple(value for value in revealed_rows if roles[value.item.id]=='training')
         dev=tuple(value for value in revealed_rows if roles[value.item.id]=='development')
         with wheel.cycle(row.item,reason='historical-feedback-replay') as cycle:
-            result=await wheel.predict(row.item,train)
+            if retry_failed_requests:
+                from .decision_cache import CacheOptions
+                result=await wheel.predict(row.item,train,cache_options=CacheOptions(retry_failed=True))
+            else:
+                result=await wheel.predict(row.item,train)
             selection=policy.select(item_id=row.item.id,predicted_label=result.label,negative_label=negative_label,
                                     cycle_number=index+1)
             selected=selection.selected
