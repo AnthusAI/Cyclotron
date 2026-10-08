@@ -1248,6 +1248,34 @@ feature bank through real Jev answers, ML fitting, and a visible development res
 Combination search follows after that path is verified. No DSPy, retrieval, or
 long-document input-filter optimization is added by this plan.
 
+Explicit group trials are now available in the numerical classifier stage. Choose
+retained question IDs from `wheel.feature_bank()`; the library does not choose
+groups from audit data or start a combinatorial search automatically:
+
+```python
+result = await wheel.step(
+    "classifier", training, development,
+    protected=protected, propensities=propensities,
+    feature_groups=((first_question_id, second_question_id),),
+    max_group_configurations=3,
+    trigger="explicit-feature-group",
+)
+```
+
+This plans the pair and its two leave-one-question-out ablations. It freezes the
+current rubric and examples and compares each candidate with the same incumbent
+on the same development items, with natural and equal-class training weights.
+The ceiling counts additional group configurations, not provider requests;
+the existing request ceiling still applies. An oversized plan is rejected rather
+than silently truncated. The default development coverage floor remains 20 per
+class. These are selection measurements, not an independent accuracy claim.
+
+Trials record exact additions, removals and wording revisions, weighting, scores,
+and answer dependencies. The `feature-group-trial-completed` events appear in the
+ML optimization lane. Completed work survives restart; changed feedback or
+context permits a fresh trial. Losing ideas remain in the feature bank. Calls
+without `feature_groups` preserve the existing behavior and cache identity.
+
 The reusable interface is `await wheel.improve_controls(..., max_feature_trials=3)`
 and `wheel.feature_bank()` for model-free inspection. The ceiling bounds attempted
 individual questions, not discoveries: untried questions remain available for later

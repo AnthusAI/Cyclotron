@@ -12,6 +12,66 @@ def forbidden(_):
     raise AssertionError("fitting must not invoke the optimizer")
 
 
+def test_explicit_groups_and_their_ablations_freeze_context_and_resume_without_repeating_requests(tmp_path):
+    from .feature_bank import FeatureBank
+    from .models import Item
+    class RecordingModel(FakeModel):
+        def __init__(self):
+            super().__init__()
+            self.configs = []
+        async def classify(self, config, target, training, **kwargs):
+            self.configs.append((config, target.id))
+            return await super().classify(config, target, training, **kwargs)
+    model = RecordingModel()
+    config = ClassifierConfig(TASK, rubric='Fixed criteria', example_ids=('t0', 't1'))
+    path = tmp_path/'wheel.sqlite'
+    wheel = DecisionFlywheel(path, config, model, OptimizerAgent(forbidden))
+    keys = [FeatureBank(wheel.db).register({'name': name, 'instructions': name+'?', 'labels': ['yes', 'no']},
+        rationale='Retained training-only idea', evidence='training-only') for name in ('practical', 'other')]
+    kwargs = dict(protected=(Item('audit', {'text':'never show protected evidence'}),),
+        propensities={row.item.id: 1. for row in TRAIN}, min_development_per_class=1,
+        apply_promotion=False, feature_groups=(tuple(keys),), max_group_configurations=3)
+    result = asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs))
+    grouped = [trial for trial in result['trials'] if trial.get('feature_experiment')]
+    assert len(grouped) == 6  # three configurations, two numerical weightings
+    assert {trial['feature_experiment']['kind'] for trial in grouped} == {'combination', 'ablation'}
+    assert all(trial['incumbent'] == grouped[0]['incumbent'] for trial in grouped)
+    assert all(candidate.rubric == config.rubric and candidate.example_ids == config.example_ids
+               for candidate, _ in model.configs)
+    assert not any(target == 'audit' for _, target in model.configs)
+    assert wheel.active.config == config and not result['promoted']
+    assert {entry['id'] for entry in wheel.feature_bank()} == set(keys)
+    assert len([event for event in wheel.history(10000) if event['kind']=='feature-group-trial-completed']) == 6
+    calls = model.calls
+    assert asyncio.run(train_classifier(wheel, TRAIN, DEV, **kwargs)) == result
+    assert model.calls == calls
+    wheel.close()
+    restored = DecisionFlywheel(path, config, model, OptimizerAgent(forbidden))
+    try:
+        assert asyncio.run(train_classifier(restored, TRAIN, DEV, **kwargs)) == result
+        assert model.calls == calls
+    finally:
+        restored.close()
+
+
+def test_an_over_budget_group_plan_is_rejected_before_any_provider_or_optimizer_call(tmp_path):
+    import pytest
+    from .feature_bank import FeatureBank
+    model = FakeModel()
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK), model, OptimizerAgent(forbidden))
+    keys = [FeatureBank(wheel.db).register({'name':name, 'instructions':name+'?', 'labels':['yes','no']},
+        rationale='Retained', evidence={}) for name in ('practical','other')]
+    try:
+        with pytest.raises(ValueError, match='configuration ceiling'):
+            asyncio.run(train_classifier(wheel, TRAIN, DEV, protected=(),
+                propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1,
+                feature_groups=(tuple(keys),), max_group_configurations=2))
+        assert model.calls == 0
+        assert not any(event['kind']=='classifier-training-started' for event in wheel.history())
+    finally:
+        wheel.close()
+
+
 def test_a_retained_wording_revision_is_evaluated_deployed_and_restored_with_new_features(tmp_path):
     from dataclasses import replace
     from .feature_bank import FeatureBank

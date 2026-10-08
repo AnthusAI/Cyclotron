@@ -1,6 +1,15 @@
 from .trace_timeline import timeline_data
 
 
+def test_feature_group_trials_are_clickable_in_the_ml_optimization_lane():
+    event = {'kind': 'feature-group-trial-completed', 'stage': 'classifier',
+             'created_at': '2026-10-07T12:00:00Z',
+             'feature_experiment': {'kind': 'ablation', 'omitted_id': 'retained-question'}}
+    item = timeline_data([event])['items'][0]
+    assert item['group'] == 'classifier' and item['event_index'] == 0
+    assert item['content'] == 'Feature ablation trial'
+
+
 def test_a_stale_head_is_inspectable_in_the_ml_optimization_lane():
     event={'kind':'head-invalidated','created_at':'2026-10-07T12:00:00Z',
         'reason':'decision feature context changed','previous_model_context':'old','model_context':'new'}

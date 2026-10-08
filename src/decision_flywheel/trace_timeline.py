@@ -39,6 +39,9 @@ def timeline_data(events):
             group,label='evaluation','Running prediction agreement'
         elif kind == 'classifier-training-completed':
             group,label='classifier','ML candidate selection'
+        elif kind == 'feature-group-trial-completed':
+            group = 'classifier'
+            label = 'Feature ' + event['feature_experiment']['kind'] + ' trial'
         elif kind == 'head-invalidated':
             group,label='classifier','ML head invalidated'
         elif kind == 'human-feedback':

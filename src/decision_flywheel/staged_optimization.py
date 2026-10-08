@@ -44,12 +44,16 @@ def stage_briefing(wheel, stage, training, development, protected):
 @track_answer_dependencies
 async def optimize_stage(wheel, stage, training, development, *, protected, propensities,
                          limit=200, retry_interrupted=False, min_development_per_class=20,
-                         train_after_questions=True, max_example_trials=8):
+                         train_after_questions=True, max_example_trials=8,
+                         feature_groups=(), max_group_configurations=8):
+    if feature_groups and stage != "classifier":
+        raise ValueError("feature groups are supported only by the classifier stage")
     if stage == "classifier":
         from .classifier_training import train_classifier
         return await train_classifier(wheel, training, development, protected=protected,
             propensities=propensities, min_development_per_class=min_development_per_class,
-            retry_interrupted=retry_interrupted)
+            retry_interrupted=retry_interrupted, feature_groups=feature_groups,
+            max_group_configurations=max_group_configurations)
     controls = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}
     if stage not in controls:
         raise ValueError("stage must be rubric, examples or questions")

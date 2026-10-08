@@ -10,6 +10,41 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
 
 
+def test_an_explicit_feature_group_runs_through_the_inspectable_numerical_step_only(tmp_path):
+    from .feature_bank import FeatureBank
+    def forbidden(_):
+        raise AssertionError('group experiments must not call the optimizer')
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden))
+    keys = [FeatureBank(wheel.db).register({'name':name,'instructions':name+'?','labels':['yes','no']},
+        rationale='Feedback concept', evidence={}) for name in ('practical','other')]
+    try:
+        result = asyncio.run(wheel.step('classifier', TRAIN, DEV, protected=(),
+            propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1,
+            feature_groups=(tuple(keys),), max_group_configurations=3, trigger='explicit-feature-group'))
+        assert result['status'] == 'completed'
+        assert len(result['result']['feature_group_plan']) == 3
+        events = [event for event in wheel.history(10000) if event['kind']=='feature-group-trial-completed']
+        assert len(events) == 6 and all(event['step_id'] == result['step_id'] for event in events)
+        assert all(event['step_stage'] == 'classifier' for event in events)
+    finally:
+        wheel.close()
+
+
+@pytest.mark.parametrize('stage',['rubric','examples','questions'])
+def test_other_stages_cannot_silently_run_feature_group_experiments(tmp_path, stage):
+    def forbidden(_):
+        raise AssertionError('invalid mixed stages must not reach the optimizer')
+    model = FakeModel()
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK), model, OptimizerAgent(forbidden))
+    try:
+        with pytest.raises(ValueError, match='classifier stage'):
+            asyncio.run(optimize_stage(wheel, stage, TRAIN, DEV, protected=(),
+                propensities={row.item.id:1. for row in TRAIN}, feature_groups=(('one','two'),)))
+        assert model.calls == 0
+    finally:
+        wheel.close()
+
+
 def test_question_discovery_can_test_datetime_alone_and_send_it_in_actual_requests(tmp_path):
     from dataclasses import replace
     from datetime import datetime
