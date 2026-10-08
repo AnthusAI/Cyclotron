@@ -18,6 +18,11 @@ beforeEach(()=>{
 })
 afterEach(()=>{cleanup();sessionStorage.clear();vi.clearAllMocks()})
 
+test('the timeline frame fills its bounded pane instead of using an intrinsic iframe height',()=>{
+  render(<RunTimeline runId="recorded" revision={0} />)
+  expect(screen.getByTitle('Run timeline and event inspector')).toHaveClass('absolute','inset-0','h-full','w-full')
+})
+
 function classifiedRunFixture(){
   const card={...live,config:{classifiers:[
     {id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}},

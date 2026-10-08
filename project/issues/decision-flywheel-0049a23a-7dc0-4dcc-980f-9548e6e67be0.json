@@ -87,10 +87,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "023ce9a2-566b-4f19-b39a-f47b80a66b52",
+      "author": "home",
+      "text": "User physical-iPad review confirms light and dark mode work, but reports excessive gutters/header space. Compacted app header, combined run controls, merged embedded timeline toolbars, removed nested gutter/width cap, reduced panel gap/inspector/footer padding and made iframe explicitly fill its bounded pane. Two specs failed before implementation;182 UI specs/build pass. Actual browser frame at CSS1600x900 is x6.99 y124.01 w1586.02 h768.99, ending6.99px from bottom; tablet override CSS1025x1475 also ends6.99px from bottom, inner panels fill frame. Zoom button changes cycle range; browser warnings/errors empty. No model calls or labels changed. User needs to review compact layout on iPad; other device checks remain open.",
+      "created_at": "2026-10-08T11:24:59.647321Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T02:33:23.786024Z",
+  "updated_at": "2026-10-08T11:24:59.647414Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

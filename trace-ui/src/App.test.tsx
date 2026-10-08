@@ -5,6 +5,15 @@ import {App} from './App'
 
 afterEach(cleanup)
 
+test('the embedded explorer uses its whole frame without a second outer gutter or width cap',()=>{
+  render(<App embedded counts={{predictions:0,labels:0,optimizations:0,events:0}} />)
+  const main=document.querySelector('main')!
+  expect(main).toHaveClass('p-0')
+  expect(main.className).not.toContain('max-w-')
+  expect(document.querySelector('[aria-label="Timeline controls"]')).toContainElement(screen.getByRole('button',{name:'Zoom in'}))
+  expect(document.querySelector('[aria-label="Timeline controls"]')).toContainElement(screen.getByRole('combobox',{name:'Partition'}))
+})
+
 test('expanded statistics lead with matched before and after metrics and undefined precision is not zero',()=>{
   render(<App counts={{predictions:87,labels:87,optimizations:11,events:2000}} comparison={{scope:'Matched protected audit',sample_count:18,class_counts:{include:2,exclude:16},before:{accuracy:.5,precision:null,recall:0},after:{accuracy:.75,precision:.5,recall:1}}} />)
   expect(screen.getByText('Accuracy')).toBeInTheDocument()

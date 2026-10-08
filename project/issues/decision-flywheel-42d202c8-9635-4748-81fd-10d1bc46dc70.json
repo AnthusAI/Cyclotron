@@ -100,10 +100,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "70e1d7dd-a2c7-4bf9-9acf-b07f6c43e75d",
+      "author": "home",
+      "text": "User confirms actual iPad light and dark mode both work on2026-10-08. That supersedes the connected in-app browser appearance blocker; physical dark support is no longer unverified. Current feedback identifies inefficient timeline/inspector gutters and header density, addressed in layout0049. Calibration playback/bin/provenance evidence remains unchanged; no data/model calls altered.",
+      "created_at": "2026-10-08T11:25:00.169889Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-08T02:33:24.286745Z",
+  "updated_at": "2026-10-08T11:25:00.169978Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
