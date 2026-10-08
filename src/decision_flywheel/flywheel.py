@@ -119,7 +119,7 @@ class DecisionFlywheel:
 
     def __init__(self, database: str | Path, initial: ClassifierConfig, model: FeatureModel,
                  optimizer: OptimizerAgent | None = None, *, observer: Callable[[dict], None] | None = None,
-                 max_requests: int = 100, max_request_bytes: int = 32000,
+                 max_requests: int = 100, max_request_bytes: int = 32000, calibration_method: str = 'auto',
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
                  training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
                  cache_options=None, context_validation_floor: int = 20, evaluation_policy=None, selection_policy=None):
@@ -139,10 +139,13 @@ class DecisionFlywheel:
             raise ValueError("cache_options must be CacheOptions")
         if evaluation_weighting not in ("natural", "equal_class") or training_class_weighting not in ("natural", "equal_class"):
             raise ValueError("unknown evaluation or training class weighting")
+        if calibration_method not in ('auto','temperature','isotonic'):
+            raise ValueError('calibration_method must be auto, temperature, or isotonic')
         if type(min_evaluation_per_class) is not int or min_evaluation_per_class < 1:
             raise ValueError("minimum evaluation coverage must be positive")
         self.evaluation_weighting = evaluation_weighting
         self.training_class_weighting = training_class_weighting
+        self.calibration_method = calibration_method
         self.min_evaluation_per_class = min_evaluation_per_class
         if type(context_validation_floor) is not int or context_validation_floor<1:
             raise ValueError('context validation floor must be positive')
@@ -559,7 +562,9 @@ class DecisionFlywheel:
                     "ml_features": values if self.active.head else None,
                     "uncalibrated_probabilities": self.active.head.uncalibrated_probabilities(values) if self.active.head else None,
                     "calibration_temperature": self.active.head.calibration.temperature if self.active.head else None,
-                    "calibration_provenance": {"method":"temperature","fit_on":self.active.head.calibration.fit_on,
+                    "calibration_provenance": {"method":self.active.head.calibration.method,"fit_on":self.active.head.calibration.fit_on,
+                                               "selection_reason":self.active.head.calibration.selection_reason,
+                                               "isotonic_knots":self.active.head.calibration.isotonic_knots,
                                                "training_ids":list(self.active.head.provenance.training_ids)} if self.active.head else None,
                     "validation_status": self.active.validation_status,
                     "model": result.model, "usage": result.usage, "latency_ms": result.latency_ms})

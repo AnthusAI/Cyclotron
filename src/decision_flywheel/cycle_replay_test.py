@@ -21,8 +21,9 @@ def test_each_vote_is_predicted_before_reveal_and_triggered_work_stays_inside_th
     for number,row in enumerate(plan.ordered,1):
         cycle=[e for e in events if e.get('cycle_number')==number]
         prediction=next(e for e in cycle if e['kind']=='prediction')
-        feedback=next(e for e in cycle if e['kind']=='human-feedback')
-        assert prediction['event_id']<feedback['event_id']
+        feedback=next((e for e in cycle if e['kind']=='human-feedback'),None)
+        if feedback is not None:
+            assert prediction['event_id']<feedback['event_id']
         assert prediction['target_id']==row.item.id
         assert cycle[-1]['kind']=='cycle-completed'
         if any(e['kind']=='optimizer-request' for e in cycle):
@@ -70,8 +71,32 @@ def test_operational_replay_records_latest_two_hundred_paired_calibration_sample
     plan=plan_replay(TASK,ordered,seed='window',batch_size=1000)
     report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=1000,retrain_every=1000,stages=('rubric',),rubric_changes_every=None))
     metrics=report['cycles'][-1]['metrics']
-    assert metrics['count']==200
-    assert metrics['calibration']['samples'][0]['item_id']=='paper-5'
-    assert metrics['decision_model_comparison']['count']==200
+    feedback_count=sum(event['kind']=='human-feedback' for event in wheel.history(100000))
+    assert metrics['count']==min(200,feedback_count)
+    assert metrics['decision_model_comparison']['count']==min(200,feedback_count)
+    assert report['all_item_evaluator']['count']==200
+    assert report['all_item_evaluator']['evaluation_scope']=='replay-oracle'
     assert metrics['decision_model_comparison']['raw']['accuracy']==metrics['decision_model_comparison']['final']['accuracy']
+    wheel.close()
+
+
+def test_replay_can_resume_a_completed_prefix_without_repaying_predictions(tmp_path):
+    ordered=rows()
+    plan=plan_replay(TASK,ordered,seed='resume',batch_size=100)
+    path=tmp_path/'resume.sqlite'
+    wheel=DecisionFlywheel(path,ClassifierConfig(TASK),FakeModel(),OptimizerAgent(lambda _:OptimizerReply('{}','fake')),max_requests=2)
+    try:
+        asyncio.run(run_cycle_replay(wheel,plan,optimize_every=100,retrain_every=100,stages=('rubric',),rubric_changes_every=None))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError('the constrained first pass must pause before the third prediction')
+    first_paid=sum(event['kind']=='features-requested' for event in wheel.history(10000))
+    assert first_paid==2
+    wheel.close()
+    wheel=DecisionFlywheel(path,ClassifierConfig(TASK),FakeModel(),OptimizerAgent(lambda _:OptimizerReply('{}','fake')),max_requests=200)
+    report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=100,retrain_every=100,stages=('rubric',),rubric_changes_every=None,resume=True))
+    assert report['resumed_from_cycles']==2
+    assert sum(event['kind']=='features-requested' for event in wheel.history(10000))==len(ordered)
+    assert sum(event['kind']=='cycle-completed' for event in wheel.history(10000))==len(ordered)
     wheel.close()

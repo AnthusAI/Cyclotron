@@ -37,6 +37,20 @@ def test_equal_class_training_weights_balance_total_influence_and_keep_selection
         _training_weights([1.], ["red"], "unsupported")
 
 
+def test_auto_calibration_is_sparse_safe_and_explicit_isotonic_remains_available():
+    small=fit_learned_head(TASK,_rows(),declared_features=("signal",),development_ids=(),scoreboard_ids=(),
+        scorecard_fingerprint=HASH,policy_fingerprint=HASH,context_artifact_fingerprint=HASH,source_model_provenance='fake')
+    large=fit_learned_head(TASK,tuple(_row(i,"approve" if i%2 else "reject") for i in range(120)),declared_features=("signal",),development_ids=(),scoreboard_ids=(),
+        scorecard_fingerprint=HASH,policy_fingerprint=HASH,context_artifact_fingerprint=HASH,source_model_provenance='fake')
+    isotonic=fit_learned_head(TASK,tuple(_row(i,"approve" if i%2 else "reject") for i in range(120)),declared_features=("signal",),development_ids=(),scoreboard_ids=(),
+        scorecard_fingerprint=HASH,policy_fingerprint=HASH,context_artifact_fingerprint=HASH,source_model_provenance='fake',calibration_method='isotonic')
+    assert small.calibration.method == 'temperature'
+    assert large.calibration.method == 'temperature'
+    assert 'held-out OOF' in large.calibration.selection_reason
+    assert isotonic.calibration.method == 'isotonic'
+    assert isotonic.calibration.isotonic_knots
+
+
 def test_each_out_of_fold_fit_balances_its_own_classes_while_calibration_keeps_natural_weights(monkeypatch):
     from . import head
     rows = tuple(_row(i, "approve" if i < 3 else "reject", propensity=.5 if i == 0 else 1.)

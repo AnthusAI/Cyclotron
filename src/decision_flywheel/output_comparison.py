@@ -7,7 +7,7 @@ from .calibration_metrics import reliability_curve
 def compare_outputs(classes, records, *, limit=200, scope='reviewed-pre-vote'):
     if type(limit) is not int or not 1<=limit<=200:
         raise ValueError('comparison window must be between one and 200')
-    if scope not in ('reviewed-pre-vote','protected-matched'):
+    if scope not in ('reviewed-pre-vote','protected-matched','replay-oracle'):
         raise ValueError('unknown output comparison scope')
     classes=tuple(classes);unique=OrderedDict()
     for record in records:
@@ -19,7 +19,9 @@ def compare_outputs(classes, records, *, limit=200, scope='reviewed-pre-vote'):
             'item_ids':[row['item_id'] for row in paired],
             'missing_paired_probability_count':sum(not valid for valid in eligible),
             'evaluation_scope':scope,
-            'scope':'same protected matched targets; frozen versions; no fitting' if scope=='protected-matched' else 'same latest reviewed pre-vote items; descriptive, not held-out'}
+            'scope':('same protected matched targets; frozen versions; no fitting' if scope=='protected-matched' else
+                     'post-run replay oracle; labels are not emitted to the learner' if scope=='replay-oracle' else
+                     'same latest reviewed pre-vote items; descriptive, not held-out')}
     for side,label_key,probability_key in (('raw','decision_model_label','decision_model_probabilities'),('final','label','probabilities')):
         metrics=recent_reviewed_metrics(classes,[(row['item_id'],row['actual_label'],row[label_key],row.get(probability_key)) for row in paired],limit=limit)
         metrics['calibration']=reliability_curve(classes,[row['actual_label'] for row in paired],

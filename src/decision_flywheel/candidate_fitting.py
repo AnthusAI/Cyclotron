@@ -7,7 +7,7 @@ from .head import HeadRow, fit_learned_head
 
 
 async def fit_candidate(wheel, config, training, development, *, protected,
-                        propensities, validation_status, now=None):
+                        propensities, validation_status, now=None, calibration_method=None):
     from .flywheel import FittedClassifier, _hash
     from .feature_bank import probability_diagnostics
     wheel._validate_partitions(training, development, protected, propensities)
@@ -48,7 +48,8 @@ async def fit_candidate(wheel, config, training, development, *, protected,
         scorecard_fingerprint=config.fingerprint, policy_fingerprint=_hash(config.example_ids),
         context_artifact_fingerprint=config.fingerprint,
         source_model_provenance=wheel.model_context(config, training),
-        training_class_weighting=wheel.training_class_weighting)
+        training_class_weighting=wheel.training_class_weighting,
+        calibration_method=calibration_method or getattr(wheel, 'calibration_method', 'auto'))
     candidate = FittedClassifier(config, head, wheel._evidence(training),
                                 wheel._evidence(development), validation_status, tuple(dependencies))
     wheel._emit({'kind':'fit-completed','features':list(head.feature_names),'head':asdict(head),
