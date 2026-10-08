@@ -3,7 +3,7 @@
   "title": "Coordinate multiple classifiers in shared decision requests and independent flywheel sessions",
   "description": "Use catalog classifier revisions and source-neutral item lists for live/replay sessions. Batch compatible classifiers in one decision request with scoped rubric/examples/questions and mapped outputs. Maintain independent heads, feedback and trigger/optimization state. Cache complete shared requests; count usage once. Connect catalog labels/explanations to optimization without future-label leakage. Existing arXiv worker is not completion of this general coordinator.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -235,11 +235,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "fba9ec9b-2b54-4e77-a07c-1d5a444c395c",
+      "author": "home",
+      "text": "Completed shared adapter/coordinator lifecycle acceptance with nine cross-module cases across actual Jev, Kev and Laya adapters, each using an injected no-network wire client. Two scoped classifier contexts persist rubric and real examples; the supporting practical question reaches decision/include and practical/yes head features. Sibling rubric change, refreshed consumed training answer and legacy missing provenance each invalidate and refit within the next prediction cycle. Fitted confidence equals the calibrated output vector, OOF provenance is retained, physical attempts equal fake wire calls and token use is counted once. Restart restores the pending presentation/head without another call. Full Python suite: 865 passed with 16 existing pytest-bdd warnings. Combined with prior independent feedback/correction, API ingestion, capabilities, protected partitions and replay specs, the general coordinator requirements in this task are met. Optional real checkpoint installation/performance is not claimed; this task validates the reusable contract, not an experiment. Operator test command is documented in docs/web-workspace-plan.md.",
+      "created_at": "2026-10-08T01:58:37.244408Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-08T00:05:30.081401Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:58:37.669389Z",
+  "closed_at": "2026-10-08T01:58:37.669284Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

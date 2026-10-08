@@ -543,6 +543,25 @@ You do not need to recreate the comparison or rerun completed requests.
 
 ## Offline browser acceptance
 
+To exercise a failed protected comparison through the browser, use a separate
+empty directory:
+
+```bash
+.venv/bin/python scripts/seed_comparison_recovery.py --output /tmp/cyclotron-comparison-check --port 8785
+```
+
+This loopback-only fixture uses an injected fake decision client and synthetic
+protected labels. It deliberately fails the second of eight endpoint/target
+requests after caching the first response. It never loads provider credentials.
+Open the printed URL and set the total ceiling to 9. Authorize resume without
+enabling failed-call retry: the comparison must stop again, without another
+model call. Then separately enable failed-call retry and renew approval. It
+finishes with nine total attempts and seven new attempts, not a repeated first
+response. The original frozen source histories remain unchanged. Inspect an
+individual result to see the full request, response, and paired provider
+exchanges. Reload preserves the completed report. These perfect synthetic
+answers test recovery and observability, not model quality or calibration gains.
+
 To exercise replay creation and playback without provider credentials, use a new,
 empty fixture directory:
 

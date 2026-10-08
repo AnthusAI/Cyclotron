@@ -41,6 +41,22 @@ drive the corresponding classifier's learning triggers through API-recorded
 cycles. Tests cover shared calls, restart reuse, independent feedback, and
 GraphQL trace ingestion. The old arXiv adapter remains for existing runs.
 
+The shared lifecycle is also checked through the actual Jev, Kev, and Laya
+adapter wire contracts with injected clients:
+
+```bash
+.venv/bin/pytest tests/shared_provider_lifecycle_test.py -q
+```
+
+Each case uses two scoped classifiers, a supporting question, a calibrated
+learned head, and real coordinator caches. Sibling rubric changes, refreshed
+training answers, and legacy heads without response provenance cause a bounded
+refit before the next joint prediction. The tests check full confidence vectors,
+consumed feature columns, one-time transport usage, preserved rubric/examples,
+same-cycle invalidation, and restart reuse without recollection. This verifies
+the reusable transport/coordinator contract; it does not install optional local
+checkpoints or demonstrate their predictive quality.
+
 Labels saved directly in the catalog do not trigger session learning. Interactive
 scorecard sessions support corrections and item-level undo through durable API
 commands. Corrections retain the original prediction and append feedback history;
