@@ -3,7 +3,7 @@
   "title": "Ship a status widget that renders cyclotron-status/v1 as a strip or a card",
   "description": "An embeddable view of what the cyclotron is doing now (export path cyclotron/components/cyclotron-status). Props: status (cyclotron-status/v1), variant 'strip'|'card', onOverride?. Strip example: Version 13 · agrees 86% · says 84% sure, right 86% · reviewing 1 in 4: audit accuracy met target. Card adds precision, recall, the calibration curve, the last change, and the override control. No backend client; ClassifierMetrics keeps working for the console. Ordering: after the status shape and the review-rate program.\n\nAcceptance criteria:\n- Renders from a fixture snapshot with no network; empty and onboarding states read sensibly.\n- Shows the review rate, its reason, and any override with its expiry.\n- Calibration is shown as says-sure versus is-right with the gap in points; Brier and ECE do not appear.\n- Vitest covers strip, card, empty and override states.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,9 +19,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "4ced3dba-dcce-4eae-b8c4-e602ef06a513",
+      "author": "home",
+      "text": "Landed on feat/status-widget (stacked on feat/review-control): trace-ui/src/components/cyclotron-status.tsx (CyclotronStatusView, variant strip or card, onOverride), exported as cyclotron/components/cyclotron-status, and the type as cyclotron/cyclotron-status. Recall, precision and accuracy carry the glossary subtitles; calibration reads 'Says N%, right M%' with the gap in points; the review rate shows state (mark and word), rate, reason, override with setter and expiry, next step and weekly reviews; last change reads as a version change, a minor refit, or a dropped candidate. Unmeasured values say 'Not measured yet'. Styles in styles/shared.css. 7 Vitest specs.",
+      "created_at": "2026-10-09T16:00:03.357816Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:17.441293Z",
-  "updated_at": "2026-10-09T14:51:46.277059Z",
+  "updated_at": "2026-10-09T16:00:03.357839Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
