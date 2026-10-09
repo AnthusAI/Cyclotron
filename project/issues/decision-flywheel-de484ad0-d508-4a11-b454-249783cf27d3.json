@@ -23,9 +23,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f92b3efb-2de4-488a-b53a-8bbf93d5c174",
+      "author": "home",
+      "text": "Engine part for Papyrus's recording on feat/sdk-usage: the SDK now records model usage per decision (paid shared decision-model requests from decide and from learning during a review; optimizer calls from their optimizer-response events), Cyclotron.usage(prices, window) returns the run_usage.usage_by_window shape per window of decisions, and Cyclotron.decision_log() lists decisions in order with their active reviews. Specs: embedded_usage_test.py (3) and a docs sample. Papyrus builds the editorial-run fixture from these (PPY-54957abe). Gap noted: a paid request that fails is counted by SharedDecisions' attempt ceiling but reports no usage.",
+      "created_at": "2026-10-09T17:25:22.244821Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:30.340670Z",
-  "updated_at": "2026-10-09T14:51:46.363048Z",
+  "updated_at": "2026-10-09T17:25:22.244847Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

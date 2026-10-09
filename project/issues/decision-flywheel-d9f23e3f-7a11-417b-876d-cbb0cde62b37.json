@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-d9f23e3f-7a11-417b-876d-cbb0cde62b37",
+  "title": "Review-rate windows count labels, not decisions",
+  "description": "Candidate fix, pending the experiments in the 'Longer editorial runs and review-rate heuristics' epic (decision-flywheel-8db070d7). Do not build until those results are in.\n\nReasoning from the review-rate implementation (decision-flywheel-a81068b4): the program checks its conditions every window of 100 decisions and needs at least 20 reviewed confident decisions in a window. As the rate drops, a fixed decision window holds fewer reviews: about 50 at 50%, about 25 at 25%, and about 10 at the 10% floor, so near the lower rates the program often holds for lack of evidence instead of measuring. A window measured in reviewed confident decisions (for example, check after every 40 such reviews) keeps the evidence per check constant at every rate and makes the time between checks grow naturally as review gets lighter.\n\nAcceptance criteria:\n- ReviewProgram can define its window in reviewed confident decisions; the decision-count window stays available for comparison.\n- Status reports the next check as reviews still needed, in words.\n- Specs show the program steps down from 25% without stalling when accuracy and calibration hold.\n- The experiments' recorded results justify the choice of default.",
+  "type": "task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T16:03:25.429172Z",
+  "updated_at": "2026-10-09T16:03:25.466345Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

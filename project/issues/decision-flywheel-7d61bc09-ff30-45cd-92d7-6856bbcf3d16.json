@@ -3,16 +3,24 @@
   "title": "Define and export the routing metrics: mistakes caught in the least-confident N percent, and promised-versus-actual at a threshold",
   "description": "Add two recorded metrics per window to the exporter: (a) for N in 10, 15, 20, 25, 30 percent, the share of that window's mistakes that fall in the least-confident N percent; (b) for thresholds 0.75 to 0.95 in steps of 0.05, how many items are auto-approved, their mean stated confidence (promised), their actual accuracy (got), and whole-system accuracy with reviewed items counted as right. Compute for both the decision model's raw confidence and the cyclotron's. These are the numbers the marketing site's rule pictogram uses; today the site computes them itself from cycles. Acceptance: the fixture carries them; the site reads them instead of recomputing; specs pin the 400-cycle values (before 100 approved, 52 right; after 74 approved, 63 right at 0.80).\n\nAdded 2026-10-09 (Ryan): the marketing site will state how little the model calls cost, so every recording carries measured usage and cost. Per 100-cycle window and in total: decision-model requests with input, cached-input and output tokens; optimizer calls with their tokens; and USD at list prices. Exported under a usage block per window and a usage_total, with the list-price basis and its source in the attribution (Jev: $0.042 per million input tokens, output free, TypeSafe's published price; other engines from engines.yaml in Hard-Decisions; models not listed there state their provider's published price and the date read). Compute the same for the existing 400-cycle recording from its runtime events so the site can state that run's cost now. Acceptance adds: the fixture carries usage per window and usage_total with the price basis; a spec pins the 400-cycle totals (1,152 decision requests, 998,301 input and 28,792 output tokens; 8 optimizer calls, 804,912 input and 5,140 output tokens).\n\nAdded 2026-10-09 (Ryan): the marketing site will state how little the model calls cost, so every recording carries measured usage and cost. Per 100-cycle window and in total: decision-model requests with input, cached-input and output tokens; optimizer calls with their tokens; and USD at list prices. Exported under a usage block per window and a usage_total, with the list-price basis and its source in the attribution (Jev: $0.042 per million input tokens, output free, TypeSafe's published price; other engines from engines.yaml in Hard-Decisions; models not listed there state their provider's published price and the date read). Compute the same for the existing 400-cycle recording from its runtime events so the site can state that run's cost now. Acceptance adds: the fixture carries usage per window and usage_total with the price basis; a spec pins the 400-cycle totals (1,152 decision requests, 998,301 input and 28,792 output tokens; 8 optimizer calls, 804,912 input and 5,140 output tokens).",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "b1ada6db-45eb-4e32-b12c-31a5a4a9fdf2",
+      "author": "home",
+      "text": "Engine side done on feat/editorial-routing-metrics (stacked on feat/editorial-study-scripts). routing_metrics.py: per window, mistakes caught in the least-confident 10/15/20/25/30 percent (ties at the cut credited in proportion, since the decision model's confidence is mostly tied at 0.95; tied count recorded) and the auto-approve rule at 0.75-0.95 (approved, promised, approved right, got, to reviewers, whole-system right with reviewed items counted right), for the decision model's own label and confidence and for the cyclotron's. run_usage.py: per-100-cycle and total requests, input/cached/output tokens and USD at list prices, plus wall-clock. scripts/export_editorial_run_fixture.py ports Cyclotron-web's extractor: --schema-version 1 regenerates editorial-run-v1.json byte for byte from /private/tmp/cyclotron-editorial-study-v1; schema 2 adds windows[] (metrics, routing, optimizer events, model calls, wall clock, usage), usage_total, and attribution.price_basis (gpt-4.1-mini $0.40/$0.10 cached/$1.60 per M, developers.openai.com, read 2026-10-09; Jev $0.042 input, output free, TypeSafe). Pinned 400-cycle values: before 100 approved, 52 right; after 74 approved, 63 right, 26 to reviewers, 89 whole system; lowest 15% of the last window holds 24.8% of its 18 mistakes. Cost of the 400-cycle all run: 1,152 decision calls (998,301 in, 28,792 out), 8 optimizer calls (804,912 in, 5,140 out), $0.78, 56 minutes; reject_half $0.12, casual_ten_percent $0.11. Remaining for the site (Cyclotron-web, task 7): read windows[].routing and usage instead of recomputing in rule-gate-data.ts.",
+      "created_at": "2026-10-09T16:22:19.999510Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.392432Z",
-  "updated_at": "2026-10-09T16:00:49.327943Z",
+  "updated_at": "2026-10-09T16:22:19.999537Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

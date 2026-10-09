@@ -256,3 +256,15 @@ def test_a_promoted_version_reaches_subscribers_and_the_status(tmp_path):
     assert status.version == promoted[-1]["version"]
     assert status.last_change.kind in ("promoted", "refit")
     assert latest.version == status.version
+
+
+def test_a_seed_rubric_starts_the_classifier_and_is_fixed_when_the_store_is_created(tmp_path):
+    seed = "Include sources about defending AI systems; exclude vendor marketing."
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), seed_rubrics={"relevant": seed}) as cyclotron:
+        assert cyclotron.wheels["relevant"].active.config.rubric == seed
+        run(cyclotron.decide(item("ref-1")))
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), seed_rubrics={"relevant": "A later doctrine."}) as cyclotron:
+        assert cyclotron.wheels["relevant"].active.config.rubric == seed
+        assert cyclotron.status().version == 1
+    with pytest.raises(ValueError, match="seed_rubrics"):
+        Cyclotron.open(tmp_path / "d", DEFINITION, Model(), seed_rubrics={"other": "x"})

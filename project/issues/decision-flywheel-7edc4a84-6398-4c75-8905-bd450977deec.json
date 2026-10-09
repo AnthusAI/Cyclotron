@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-7edc4a84-6398-4c75-8905-bd450977deec",
+  "title": "Recurring explanations become candidate classifiers",
+  "description": "Future work, not to be built yet (Ryan, 2026-10-09). When reviewers keep giving the same explanation, that reason is a question the cyclotron should be asking. Detect recurring explanations and propose them, through the existing LLM optimizer proposal path, as a new classifier or an extra classifier question for a person to approve. Never an automatic change.\n\nAcceptance criteria:\n- A proposal names the recurring explanation, the number of reviews that gave it, the window it was measured over, and example review ids; nothing is proposed below a configured minimum count.\n- The proposal is offered as either an extra question for an existing classifier or a new classifier in the cyclotron, with the evidence counts for each label.\n- A person approves or dismisses it; approval goes through the existing candidate measurement and promotion rules (or definition versions, decision-flywheel-ade3088c, for a new classifier); dismissal is remembered so the same proposal is not repeated without new evidence.\n- No classifier, question, rubric or review rate changes without that approval.\n- subscribe() reports proposed, approved and dismissed events; status() names an open proposal.",
+  "type": "task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T16:40:53.053573Z",
+  "updated_at": "2026-10-09T16:40:53.110659Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

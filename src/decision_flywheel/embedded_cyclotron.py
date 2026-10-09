@@ -28,7 +28,7 @@ import io
 import os
 import tarfile
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -38,19 +38,27 @@ from uuid import uuid4
 
 from .calibration_history import reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
-from .cyclotron_status import CyclotronStatus, ReviewRate, VersionTracker, initial_snapshot, status_from_flywheel
+from .cyclotron_status import (FULL_REVIEW, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
+                              initial_snapshot, status_from_flywheel)
 from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel
 from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions,
                             learn_from_review, record_cycle_metrics, review_role)
 from .models import DecisionTask, Item
 from .selection_policy import SelectionPolicy
+from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, current_rate,
+                             expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
 from .shared_decisions import SharedDecisions
 
-SELECTED_BY = ("program", "reviewer")
+SELECTED_BY = REASONS
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
-FULL_REVIEW_REASON = "Every decision is reviewed until a review-rate program is configured."
+FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
+
+
+def _usage_counts(usage) -> tuple[int, int, int]:
+    from .run_usage import _usage
+    return _usage(usage)
 
 
 def _json(value) -> str:
@@ -116,10 +124,16 @@ class CyclotronDefinition:
 
 @dataclass(frozen=True)
 class ReviewSelection:
-    """Whether a decision goes to a reviewer, why, and with what probability."""
+    """Whether a decision goes to a reviewer, why, and with what probability.
+
+    ``reason`` is ``program`` (low confidence or sampled at the review rate),
+    ``audit`` (the random audit share), or None when the decision is not sent
+    to review. ``detail`` says the same in words.
+    """
     selected: bool
-    reason: str
+    reason: str | None
     propensity: float
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -169,14 +183,20 @@ class Decision:
                                       "version": r.version, "fingerprint": r.fingerprint}
                                 for cid, r in self.results.items()},
                 "review": {"selected": self.review.selected, "reason": self.review.reason,
-                           "propensity": self.review.propensity}}
+                           "propensity": self.review.propensity, "detail": self.review.detail}}
 
     @classmethod
     def from_json(cls, value) -> "Decision":
         return cls(value["decisionId"], value["itemId"], value["createdAt"],
                    {cid: ClassifierDecision(cid, r["label"], r["confidence"], r["probabilities"], r["version"],
                                             r["fingerprint"]) for cid, r in value["classifiers"].items()},
-                   ReviewSelection(**value["review"]))
+                   _selection(value["review"]))
+
+
+def _selection(value: Mapping[str, Any]) -> ReviewSelection:
+    if "detail" not in value:  # decisions saved before the review-rate program
+        return ReviewSelection(value["selected"], "program", value["propensity"], value["reason"])
+    return ReviewSelection(value["selected"], value["reason"], value["propensity"], value["detail"])
 
 
 @dataclass(frozen=True)
@@ -250,12 +270,20 @@ class Cyclotron:
 
     def __init__(self, directory, definition: CyclotronDefinition, model, optimizer=None, *,
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
-                 lease=None):
+                 lease=None, review_program: ReviewProgram | None = ReviewProgram(),
+                 seed_rubrics: Mapping[str, str] | None = None):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
             raise ValueError("max_requests must be a positive integer")
-        self.definition, self.optimizer = definition, optimizer
+        if review_program is not None and not isinstance(review_program, ReviewProgram):
+            raise ValueError("review_program must be a ReviewProgram or None")
+        seed_rubrics = dict(seed_rubrics or {})
+        if set(seed_rubrics) - {spec.id for spec in definition.classifiers} or any(
+                not isinstance(text, str) for text in seed_rubrics.values()):
+            raise ValueError("seed_rubrics maps classifier ids to rubric text")
+        self.seed_rubrics = seed_rubrics
+        self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -285,6 +313,9 @@ class Cyclotron:
             CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,
                 classifier TEXT NOT NULL, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+                source TEXT);
         """)
         saved = self.db.execute("SELECT value FROM meta WHERE key='definition'").fetchone()
         if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
@@ -292,8 +323,9 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO meta VALUES ('definition', ?)",
                             (_json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}),))
+        self._batches: list[tuple[int, int, int]] = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
-                                      observer=lambda event: None)
+                                      observer=self._on_batch)
         # The shared ceiling counts every attempt in the store's lifetime; this
         # open authorizes max_requests more.
         self.shared.max_requests = self.shared.requests + max_requests
@@ -305,13 +337,30 @@ class Cyclotron:
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"]
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task), self.shared.adapter(spec.id), optimizer,
+                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id)), self.shared.adapter(spec.id), optimizer,
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
         self._sync()
+
+    def _seed(self, classifier: str) -> str:
+        """The first rubric for a classifier: fixed when its store is first opened.
+
+        The seed is not part of the definition, so an application can derive it
+        from its own parameters (for example a publication's doctrine). Later
+        changes to those parameters do not rewrite a store's rubric; the LLM
+        optimizer owns it from then on.
+        """
+        key = f"seed_rubric:{classifier}"
+        row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        if row is not None:
+            return json.loads(row[0])
+        seed = self.seed_rubrics.get(classifier, "")
+        with self.db:
+            self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(seed)))
+        return seed
 
     @classmethod
     def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> "Cyclotron":
@@ -341,10 +390,16 @@ class Cyclotron:
     # Decide ---------------------------------------------------------------
 
     async def decide(self, item: Item) -> Decision:
-        """Decide one item. An unchanged item keeps its decision; no model call is repeated."""
+        """Decide one item and say whether it goes to review.
+
+        A decision a person may have seen is stable: an unchanged item keeps
+        its decision, label and confidence until it is reviewed or a new
+        version (not an ML model refit) is promoted. No model call is repeated.
+        """
         async with self._lock:
             if not isinstance(item, Item):
                 raise ValueError("decide needs an Item")
+            self._batches = []
             for spec in self.definition.classifiers:
                 spec.task.validate_target(item)
             self._sync()
@@ -353,9 +408,9 @@ class Cyclotron:
             if latest is not None:
                 state, decision = latest
                 unchanged = self._item_fingerprint(decision.decision_id) == fingerprint
-                current = all(decision.results[cid].fingerprint == wheel.active.fingerprint
-                              for cid, wheel in self.wheels.items())
-                if unchanged and (state == "reviewed" or current):
+                same_version = all(decision.results[cid].version == self.versions[cid].version
+                                   for cid in self.wheels)
+                if unchanged and (state == "reviewed" or same_version):
                     return decision
                 if state == "open":
                     self._close_waiting_cycles(item.id, decision.decision_id, "superseded by a new decision")
@@ -369,20 +424,237 @@ class Cyclotron:
             results, _ = await decide_with_shared_context(self.wheels, self.shared, item, self._partitions,
                                                           now=datetime.now(timezone.utc))
             self._sync()
-            decision = Decision(str(uuid4()), item.id, _now(), {
+            decision_id = str(uuid4())
+            confidences = [result.confidence for result in results.values()]
+            confidence = None if any(c is None for c in confidences) else min(confidences)
+            selection = self._select(item.id, confidence)
+            decision = Decision(decision_id, item.id, _now(), {
                 cid: ClassifierDecision(cid, result.label, result.confidence,
                                         dict(result.probabilities) if result.probabilities else None,
                                         self.versions[cid].version, self.wheels[cid].active.fingerprint)
-                for cid, result in results.items()}, ReviewSelection(True, FULL_REVIEW_REASON, 1.0))
+                for cid, result in results.items()},
+                ReviewSelection(selection.selected, selection.reason, selection.propensity, selection.detail))
+            if not selection.selected:
+                # Nobody is asked; close the waiting cycles so nothing reads as pending.
+                for wheel in self.wheels.values():
+                    cycle = wheel.resume_cycle(item)
+                    if cycle is not None:
+                        wheel._emit({"kind": "review-not-requested", "target_id": item.id, "decision_id": decision_id,
+                                     "propensity": selection.propensity, "detail": selection.detail})
+                        cycle.__exit__(None, None, None)
             self._insert_decision(decision, fingerprint)
             return decision
+
+    # Review rate ----------------------------------------------------------
+
+    def _select(self, item_id: str, confidence: float | None):
+        """Advance the review-rate program to this decision, then choose.
+
+        The random draw is keyed by the item and the decision's position, so a
+        store replays the same selections; it never reads a label.
+        """
+        from .review_program import Selection
+        if self.program is None:
+            return Selection(True, "program", 1.0, FULL_REVIEW_DETAIL)
+        now = datetime.now(timezone.utc)
+        state = self._program_state()
+        events = []
+        if state.override and not Override(**state.override).active(now):
+            expired = Override(**state.override)
+            state.override = None
+            events.append(self._rate_event(state, now, f"The manual rate of {round(expired.rate * 100)}% set by "
+                                                       f"{expired.set_by} expired."))
+        state, raised = raise_for_version(self.program, state, self._primary_version())
+        if raised:
+            events.append(self._rate_event(state, now, state.reason))
+        decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+        while state.checked_windows < decided // self.program.window:
+            window = state.checked_windows + 1
+            evidence = window_evidence(self.program, self._window_reviews(window), self._gap_points())
+            state, change = check_window(self.program, state, evidence)
+            if change:
+                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window))
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
+            appended = [self._append(event) for event in events]
+        for event in appended:
+            self.observer(event)
+        return select(self.program, current_rate(self.program, state, now), key=f"{item_id}:{decided + 1}",
+                      confidence=confidence)
+
+    def set_review_rate(self, rate: float, *, set_by: str, expires_at: datetime | None = None) -> None:
+        """An operator override of the review rate, with an optional expiry.
+
+        Low-confidence decisions and the audit share are still reviewed.
+        """
+        if self.program is None:
+            raise ValueError("this cyclotron has no review-rate program")
+        if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not 0 <= rate <= 1:
+            raise ValueError("rate must be between zero and one")
+        if not isinstance(set_by, str) or not set_by.strip():
+            raise ValueError("an override needs the person who set it")
+        if expires_at is not None and (expires_at.tzinfo is None or expires_at <= datetime.now(timezone.utc)):
+            raise ValueError("expiry must be a future, timezone-aware time")
+        state = self._program_state()
+        state.override = {"rate": float(rate), "expires_at": expires_at.isoformat() if expires_at else None,
+                          "set_by": set_by, "set_at": _now()}
+        now = datetime.now(timezone.utc)
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
+            event = self._append(self._rate_event(state, now, f"Manual rate of {round(rate * 100)}% set by {set_by}."))
+        self.observer(event)
+
+    def clear_review_rate(self, *, set_by: str) -> None:
+        """End an operator override; the program's own rate applies again."""
+        state = self._program_state()
+        if not state.override:
+            return
+        state.override = None
+        now = datetime.now(timezone.utc)
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
+            event = self._append(self._rate_event(state, now, f"Manual rate cleared by {set_by}."))
+        self.observer(event)
+
+    def _program_state(self) -> ProgramState:
+        row = self.db.execute("SELECT value FROM meta WHERE key='review_program_state'").fetchone()
+        return ProgramState.from_json(json.loads(row[0]) if row else None)
+
+    def _rate_event(self, state: ProgramState, now: datetime, reason: str, **details) -> dict:
+        return {"kind": "review-rate-changed", "state": state_name(self.program, state, now),
+                "rate": current_rate(self.program, state, now), "reason": reason, **details}
+
+    def _primary(self) -> ClassifierSpec:
+        return self.definition.classifiers[0]
+
+    def _primary_version(self) -> int:
+        return self.versions[self._primary().id].version
+
+    def _gap_points(self) -> int | None:
+        spec = self._primary()
+        return status_from_flywheel(self.wheels[spec.id], cyclotron_id=self.definition.id,
+                                    positive_label=spec.positive_label,
+                                    window=self.program.calibration_window).calibration.gap_points
+
+    def _window_reviews(self, window: int) -> list[dict]:
+        """Program and audit reviews of the decisions in one finished window."""
+        cid = self._primary().id
+        size = self.program.window
+        rows = []
+        for decision_id, payload in self.db.execute(
+                "SELECT id,payload FROM decisions ORDER BY rowid LIMIT ? OFFSET ?", (size, (window - 1) * size)):
+            review = self._active_review(decision_id, cid)
+            if review is None or review.selected_by not in ("program", "audit"):
+                continue
+            result = json.loads(payload)["classifiers"][cid]
+            rows.append({"confidence": result["confidence"], "decision": result["label"], "label": review.label})
+        return rows
+
+    def _review_rate_status(self) -> ReviewRate:
+        if self.program is None:
+            return FULL_REVIEW
+        now = datetime.now(timezone.utc)
+        state = self._program_state()
+        override = Override(**state.override) if state.override else None
+        active = override is not None and override.active(now)
+        decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+        until = self.program.window - decided % self.program.window
+        week_ago = (now - timedelta(days=7)).isoformat()
+        confidences = []
+        for (payload,) in self.db.execute("SELECT payload FROM decisions"):
+            decision = json.loads(payload)
+            if decision["createdAt"] >= week_ago:
+                values = [r["confidence"] for r in decision["classifiers"].values()]
+                confidences.append(None if None in values else min(values))
+        rate = current_rate(self.program, state, now)
+        return ReviewRate(state_name(self.program, state, now), rate,
+                          (f"Manual rate of {round(override.rate * 100)}% set by {override.set_by}."
+                           if active else state.reason),
+                          audit_floor=self.program.audit_share, confidence_threshold=self.program.confidence_threshold,
+                          override=ReviewRateOverride(override.rate, override.expires_at, override.set_by, override.set_at)
+                          if active else None,
+                          next_check_after_decisions=until,
+                          next_step=next_step(self.program, state, decisions_until_check=until, now=now),
+                          expected_reviews_per_week=expected_reviews(self.program, rate, confidences))
 
     def _insert_decision(self, decision: Decision, fingerprint: str) -> None:
         with self.db:
             self.db.execute("INSERT INTO decisions VALUES (?,?,?,?,?)",
                             (decision.decision_id, decision.item_id, fingerprint, "open", _json(decision.to_json())))
+            self._record_batches(decision.decision_id)
             event = self._append({"kind": "decision", "decision": decision.to_json()})
         self.observer(event)
+
+    def _on_batch(self, event: Mapping[str, Any]) -> None:
+        """A paid shared decision-model request; cached answers cost nothing."""
+        if event.get("kind") == "shared-decision-batch" and not event.get("cached"):
+            self._batches.append(_usage_counts(event.get("usage")))
+
+    def _record_batches(self, decision_id: str) -> None:
+        """Attribute the paid requests of this call to its decision (caller's transaction)."""
+        for prompt, cached, output in self._batches:
+            self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
+                            " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+        self._batches = []
+
+    def usage(self, prices: Mapping[str, Mapping[str, float]], *, window: int = 100) -> dict[str, Any]:
+        """Measured model usage and list-price cost per window of decisions, and in total.
+
+        ``prices`` gives ``decision_model`` and ``optimizer`` list prices in USD
+        per million tokens (``input_usd_per_mtok``, optional
+        ``cached_input_usd_per_mtok``, ``output_usd_per_mtok``). Window 1 holds
+        decisions 1 to ``window`` in the order they were made; a decision-model
+        request made while reviewing or learning counts toward the decision it
+        served. The shape matches ``run_usage.usage_by_window``.
+        """
+        from .run_usage import _block, _empty
+        if type(window) is not int or window < 1:
+            raise ValueError("window must be a positive integer")
+        if set(prices) != {"decision_model", "optimizer"}:
+            raise ValueError("prices must give decision_model and optimizer list prices")
+        position = {decision_id: index for index, (decision_id,) in
+                    enumerate(self.db.execute("SELECT id FROM decisions ORDER BY rowid"))}
+        times = [json.loads(payload)["createdAt"] for (payload,) in self.db.execute("SELECT payload FROM decisions ORDER BY rowid")]
+        windows: dict[int, dict] = {}
+        total = {"decision_model": _empty(), "optimizer": _empty()}
+        for decision_id, model, prompt, cached, output in self.db.execute(
+                "SELECT decision_id,model,input_tokens,cached_input_tokens,output_tokens FROM usage ORDER BY id"):
+            index = position.get(decision_id)
+            targets = [total[model]]
+            if index is not None:
+                targets.append(windows.setdefault(index // window, {"decision_model": _empty(), "optimizer": _empty()})[model])
+            for counts in targets:
+                counts["requests"] += 1
+                counts["input_tokens"] += prompt
+                counts["cached_input_tokens"] += cached
+                counts["output_tokens"] += output
+        blocks = []
+        for index in range((len(times) + window - 1) // window):
+            first, last = index * window, min(len(times), (index + 1) * window) - 1
+            models = windows.get(index, {"decision_model": _empty(), "optimizer": _empty()})
+            blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
+                           **_block(models, prices, times[first], times[last])})
+        return {"window_size": window, "windows": blocks,
+                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices)}
+
+    def decision_log(self) -> list[dict[str, Any]]:
+        """Every decision in the order it was made, with its item values, state and active reviews (for recordings)."""
+        rows = []
+        values = self._item_values()
+        for number, (decision_id, state, payload) in enumerate(
+                self.db.execute("SELECT id,state,payload FROM decisions ORDER BY rowid").fetchall(), start=1):
+            reviews = {}
+            for cid in self.specs:
+                review = self._active_review(decision_id, cid)
+                last = self._last_review_kind(decision_id, cid)
+                if review is not None:
+                    reviews[cid] = review.to_json()
+                elif last == "no-label":
+                    reviews[cid] = {"kind": "no-label"}
+            decision = json.loads(payload)
+            rows.append({"n": number, "state": state, "decision": decision, "item": values.get(decision["itemId"], {}),
+                         "reviews": reviews})
+        return rows
 
     def decision(self, decision_id: str) -> Decision:
         row = self.db.execute("SELECT payload FROM decisions WHERE id=?", (decision_id,)).fetchone()
@@ -394,25 +666,33 @@ class Cyclotron:
 
     async def review(self, decision_id: str, label: str | None, *, classifier: str | None = None,
                      explanation: str | None = None, reason_code: str | None = None, reviewer: str | None = None,
-                     selected_by: str = "program", review_id: str | None = None) -> Review:
+                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False) -> Review:
         """Record a reviewer's label for a decision.
 
         The first label for a decision teaches the cyclotron; a later label is
         a correction. ``label=None`` records a review without a label (for
         example a duplicate), which closes the decision without teaching.
-        ``selected_by="reviewer"`` marks a review the reviewer chose to make:
-        it trains the ML model but never counts as alignment or audit evidence.
+        ``selected_by`` says who chose to review it: ``program`` or ``audit``
+        (the decision was sent to review; the default when it was) or
+        ``reviewer`` (a person chose it; the default when it was not sent). A
+        reviewer's own choice trains the ML model but never counts as
+        alignment or audit evidence.
         Pass the application's own ``review_id`` to make resubmission safe.
         """
         async with self._lock:
             self._sync()
+            self._batches = []
             decision = self.decision(decision_id)
             cid = self._classifier(decision, classifier)
             wheel, spec = self.wheels[cid], self.specs[cid]
             if label is not None:
                 label = spec.task.validate_label(label)
+            if selected_by is None:
+                selected_by = decision.review.reason if decision.review.selected else "reviewer"
             if selected_by not in SELECTED_BY:
                 raise ValueError(f"selected_by must be one of {SELECTED_BY}")
+            if selected_by != "reviewer" and not decision.review.selected and not _replay:
+                raise ValueError("this decision was not sent to review; a review of it is selected_by='reviewer'")
             for name, value in (("explanation", explanation), ("reason_code", reason_code), ("reviewer", reviewer)):
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f"{name} must be text")
@@ -439,7 +719,7 @@ class Cyclotron:
             elif active is None:
                 cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
                 try:
-                    propensity = decision.review.propensity if selected_by == "program" else 1.0
+                    propensity = decision.review.propensity if selected_by != "reviewer" else 1.0
                     wheel.record_feedback_event(FeedbackItem(
                         review_id, target.id, cid, initial_answer_value=decision.results[cid].label,
                         final_answer_value=label, edit_comment_value=explanation, label_source=LABEL_SOURCE_VETTED,
@@ -468,6 +748,8 @@ class Cyclotron:
                     wheel._emit({"kind": "feedback-correction-completed", "feedback_id": review_id,
                                  "target_id": target.id, "previous_feedback_id": prior["id"]})
             self._sync()
+            with self.db:
+                self._record_batches(decision_id)
             return replace(self._review(review_id), optimization_warnings=tuple(warnings))
 
     async def undo_review(self, decision_id: str, *, classifier: str | None = None,
@@ -512,7 +794,7 @@ class Cyclotron:
 
     # Status, events and labels -------------------------------------------
 
-    def status(self, classifier: str | None = None, *, review_rate: ReviewRate | None = None) -> CyclotronStatus:
+    def status(self, classifier: str | None = None) -> CyclotronStatus:
         """The cyclotron-status/v1 snapshot for one classifier. No model call."""
         if classifier is None:
             if len(self.specs) != 1:
@@ -520,7 +802,7 @@ class Cyclotron:
             classifier = next(iter(self.specs))
         spec = self.specs[classifier]
         return status_from_flywheel(self.wheels[classifier], cyclotron_id=self.definition.id,
-                                    positive_label=spec.positive_label, review_rate=review_rate)
+                                    positive_label=spec.positive_label, review_rate=self._review_rate_status())
 
     def subscribe(self, after: int = 0, limit: int = 100) -> dict[str, Any]:
         """Committed cyclotron events after a cursor, oldest first.
@@ -562,8 +844,8 @@ class Cyclotron:
             decision = await self.decide(record["item"])
             await self.review(decision.decision_id, record["label"], classifier=record.get("classifier"),
                               explanation=record.get("explanation"), reason_code=record.get("reason_code"),
-                              reviewer=record.get("reviewer"), selected_by=record.get("selected_by", "program"),
-                              review_id=record.get("review_id"))
+                              reviewer=record.get("reviewer"), selected_by=record.get("selected_by"),
+                              review_id=record.get("review_id"), _replay=True)
             count += 1
         return count
 
@@ -691,6 +973,14 @@ class Cyclotron:
             self.db.execute("UPDATE decisions SET state=? WHERE id=? AND state!='superseded'",
                             ("reviewed" if reviewed else "open", review.decision_id))
             return [self._append({"kind": "review", "review": review.to_json()})]
+        if kind == "optimizer-response" and event.get("cycle_item_id"):
+            row = self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
+                                  (event["cycle_item_id"],)).fetchone()
+            if row is not None:
+                prompt, cached, output = _usage_counts(event.get("usage"))
+                self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
+                                " VALUES (?,?,?,?,?,?)", (row[0], "optimizer", prompt, cached, output,
+                                                         f"{classifier}:{event.get('event_id')}"))
         if change is not None:
             tracker = self.versions[classifier]
             return [self._append({"kind": change.kind, "classifier": classifier, "version": change.to_version,
