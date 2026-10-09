@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cdd7868c-ae75-4048-bda7-f5e362c76c79",
+  "issue_id": "decision-flywheel-a81068b4-c1ef-4087-8273-720beb737f64",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:51:17.346Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Make the review rate engine state: computed from metrics, explained, overridable",
+    "description": "Replace fixed cycle schedules (PhasedFeedbackPolicy in replay_feedback_policy.py) with a review-rate program the engine owns. States: onboarding (review all until each label has N reviews), tapering (every K program-selected labels, step down 1.0, 0.5, 0.25, floor if audit accuracy meets target and calibration gap is within bound), raised (back to 1.0 after a promotion, a definition change, or an accuracy drop). Per decision: review below a confidence threshold, otherwise a deterministic random audit at the current rate; record propensity and a reason. Operator override with rate, expiry, and who set it. Defaults come from decision-flywheel-8ee62604 (when to taper), decision-flywheel-b0cf2975 (which items) and decision-flywheel-7d61bc09 (routing metrics). Ordering: after the SDK facade and the status shape.\n\nAcceptance criteria:\n- status().reviewRate reports state, rate, threshold, audit floor, reason, override, next check, and expected reviews per week.\n- Every decision records whether it was selected, why, and its propensity; selection never reads the hidden label.\n- A rate change and an override each emit a review-rate-changed event with the evidence used.\n- Specs cover onboarding exit, a step down, a raise after promotion, and an expiring override.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

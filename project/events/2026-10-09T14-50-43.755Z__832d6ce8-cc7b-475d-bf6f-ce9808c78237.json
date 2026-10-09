@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "832d6ce8-cc7b-475d-bf6f-ce9808c78237",
+  "issue_id": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:50:43.755Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Embeddable cyclotron: Papyrus integration",
+    "description": "Make a cyclotron easy to embed in an application, using Papyrus (the automated newsroom CMS) as the first integration and the public example. Papyrus decides whether a pending Reference candidate is relevant to the publication (classifier 'relevant', labels include/exclude); editors review with thumbs up or down, a reason code and an explanation. Design: project/wiki/papyrus-integration.md. The Papyrus-side epic lives in AnthusAI/Papyrus (project/wiki/cyclotron-integration.md on branch docs/cyclotron-integration). Order of the child tasks: status shape, then SDK, portable store, review-rate program, review control, status widget, package release, recording export, docs. Done when Papyrus decides and reviews through the SDK, shows the review control and status strip from the package, and one recorded Papyrus fixture exists.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "decision-flywheel-de484ad0-d508-4a11-b454-249783cf27d3",
+  "title": "Export a recorded run fixture from an embedded cyclotron, with consent and redaction",
+  "description": "The marketing site shows only recorded results (decision-flywheel-a5b184fd). Add an export from subscribe() history to the editorial-run-v1 fixture shape used by Cyclotron-web (components/fixtures): per cycle the item title, decision, confidence, probabilities, version, review reason, label, reason code, explanation, plus promotion events with their proposals. Add source (for example papyrus-live) and a disclosure that labels are real reviews. Explanations are kept only when the review is marked shareable; others are redacted. Ordering: after the SDK facade and the review-rate program.\n\nAcceptance criteria:\n- Exporting a fake-model run produces a fixture that Cyclotron-web's existing pictogram loaders accept.\n- Non-shareable explanations and any configured private fields are absent from the file.\n- The fixture records cyclotron versions so a page can show one review leading to one promoted version.,",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-a5b184fd-93ab-4a3a-b7fa-5827b27d5386",
+      "type": "relates-to"
+    },
+    {
+      "target": "decision-flywheel-0736e4a0-fe72-4913-9d4f-964cab23ac6f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-a81068b4-c1ef-4087-8273-720beb737f64",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-09T14:51:30.340670Z",
+  "updated_at": "2026-10-09T14:51:46.363048Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

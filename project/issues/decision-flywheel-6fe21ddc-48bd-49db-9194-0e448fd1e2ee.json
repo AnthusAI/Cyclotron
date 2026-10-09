@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-6fe21ddc-48bd-49db-9194-0e448fd1e2ee",
+  "title": "Define the cyclotron-status/v1 data shape with a JSON Schema and TypeScript types",
+  "description": "One versioned snapshot an application can render without reading trace events. Fields: cyclotron {id, version, classifier}; asOf; alignment {window, labels, accuracy, precision, recall, positiveLabel, measuredOn}; calibration {saysSure, isRight, gapPoints, curve[{bin, count, accuracy}]}; reviewRate {state, rate, auditFloor, confidenceThreshold, reason, override, nextCheckAfterLabels, expectedReviewsPerWeek}; lastChange {kind promoted|dropped|definition, fromVersion, toVersion, at, summary}; pending {decisionsAwaitingReview, staleSince}. Example in project/wiki/papyrus-integration.md.\n\nAcceptance criteria:\n- A JSON Schema file and generated TypeScript types ship in the repo and the npm package.\n- A Python function builds the snapshot from a DecisionFlywheel store with no model calls; specs cover an empty store, onboarding, and a store with a promoted version.\n- Alignment is computed only from program-selected reviews and says so in measuredOn.\n- Uses glossary words in field names and strings: decision, confidence, label, review, version.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T14:50:53.992662Z",
+  "updated_at": "2026-10-09T14:50:54.051736Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

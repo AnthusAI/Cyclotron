@@ -1,0 +1,32 @@
+{
+  "id": "decision-flywheel-0dafa816-04ce-421f-902e-3a8d7d309aab",
+  "title": "Export the embeddable components and types as a versioned package release",
+  "description": "package.json is private, version 0.1.1, ships raw TSX, and MultiLabelCard imports through an @/ path alias that a consumer cannot resolve. Papyrus (Next 15, React 19, Tailwind 4) and Cyclotron-web pin a GitHub tarball. Export review-control, cyclotron-status, the cyclotron-status/v1 types and schema, and keep labeling-review, classifier-metrics, cycle-timeline and lab-metrics. Ordering: after the review control and status widget.\n\nAcceptance criteria:\n- No exported file uses a path alias; a fresh Next 15 app with transpilePackages ['cyclotron'] builds and renders both widgets.\n- Semantic Release tags a version that applications pin; CHANGELOG lists the new exports.\n- A smoke test imports every export path listed in package.json.,",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-dd270031-0cba-4dc8-b489-ee8b5eb586ca",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-a161455d-1370-4f71-b067-5ac16413e109",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-09T14:51:30.293723Z",
+  "updated_at": "2026-10-09T14:51:46.319861Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

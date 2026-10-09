@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-f0285316-32eb-414c-92fa-4071e51e900f",
+  "title": "Support a portable engine store with snapshot, restore and a single-writer lease hook",
+  "description": "Papyrus scales to zero and runs the engine in a short-lived worker. The SQLite state must be copied to object storage after a sweep and restored before the next, with exactly one writer. Add snapshot(path) and restore(path) on the facade and an optional lease callback that the application implements (Papyrus uses an exclusive Assignment claim). Ordering: after the SDK facade.\n\nAcceptance criteria:\n- A snapshot taken after decide and review restores to an identical status() and decision cache.\n- Opening a store while another writer holds the lease fails before any model call.\n- A store rebuilt by replay from the application's recorded labels reaches the same labels and partitions.\n- No credentials or provider keys are written into the snapshot.,",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-0736e4a0-fe72-4913-9d4f-964cab23ac6f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-09T14:51:17.299084Z",
+  "updated_at": "2026-10-09T14:51:46.171771Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

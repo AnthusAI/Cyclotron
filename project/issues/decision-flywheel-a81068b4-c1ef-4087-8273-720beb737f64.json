@@ -1,0 +1,44 @@
+{
+  "id": "decision-flywheel-a81068b4-c1ef-4087-8273-720beb737f64",
+  "title": "Make the review rate engine state: computed from metrics, explained, overridable",
+  "description": "Replace fixed cycle schedules (PhasedFeedbackPolicy in replay_feedback_policy.py) with a review-rate program the engine owns. States: onboarding (review all until each label has N reviews), tapering (every K program-selected labels, step down 1.0, 0.5, 0.25, floor if audit accuracy meets target and calibration gap is within bound), raised (back to 1.0 after a promotion, a definition change, or an accuracy drop). Per decision: review below a confidence threshold, otherwise a deterministic random audit at the current rate; record propensity and a reason. Operator override with rate, expiry, and who set it. Defaults come from decision-flywheel-8ee62604 (when to taper), decision-flywheel-b0cf2975 (which items) and decision-flywheel-7d61bc09 (routing metrics). Ordering: after the SDK facade and the status shape.\n\nAcceptance criteria:\n- status().reviewRate reports state, rate, threshold, audit floor, reason, override, next check, and expected reviews per week.\n- Every decision records whether it was selected, why, and its propensity; selection never reads the hidden label.\n- A rate change and an override each emit a review-rate-changed event with the evidence used.\n- Specs cover onboarding exit, a step down, a raise after promotion, and an expiring override.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-8ee62604-a0fb-434d-8845-1d9edc317bff",
+      "type": "relates-to"
+    },
+    {
+      "target": "decision-flywheel-b0cf2975-0348-4128-9b1c-422b68d96b4c",
+      "type": "relates-to"
+    },
+    {
+      "target": "decision-flywheel-7d61bc09-ff30-45cd-92d7-6856bbcf3d16",
+      "type": "relates-to"
+    },
+    {
+      "target": "decision-flywheel-0736e4a0-fe72-4913-9d4f-964cab23ac6f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-6fe21ddc-48bd-49db-9194-0e448fd1e2ee",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-09T14:51:17.346891Z",
+  "updated_at": "2026-10-09T14:51:46.213432Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
