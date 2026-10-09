@@ -47,8 +47,10 @@ definition = CyclotronDefinition("papyrus-relevance", (relevant,), seed="papyrus
 ```
 
 Seed the first rubric from the application's own parameters (Papyrus uses the
-publication's doctrine), never the question: a store refuses a changed
-definition, while the rubric is what the LLM optimizer is allowed to change.
+publication's doctrine) with `seed_rubrics`, never the question: a store
+refuses a changed definition, while the rubric is what the LLM optimizer is
+allowed to change. The seed is fixed when a classifier's store is first
+opened; later parameter edits do not rewrite it.
 
 Opening a store makes no model call. `max_requests` authorizes that many new
 decision-model requests for this open, on top of all earlier ones. Pass an
@@ -56,8 +58,10 @@ decision-model requests for this open, on top of all earlier ones. Pass an
 ML model fit; without one, the cyclotron decides and records.
 
 ```python
+doctrine = "Publish practical AI security analysis. Prefer primary evidence over vendor marketing."
 cyclotron = Cyclotron.open("var/cyclotrons/papyrus-relevance", definition, ScriptedModel(),
-                           optimizer=None, max_requests=200, review_program=ReviewProgram())
+                           optimizer=None, max_requests=200, review_program=ReviewProgram(),
+                           seed_rubrics={"relevant": doctrine})
 ```
 
 ## Decide

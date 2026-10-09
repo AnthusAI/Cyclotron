@@ -265,13 +265,19 @@ class Cyclotron:
 
     def __init__(self, directory, definition: CyclotronDefinition, model, optimizer=None, *,
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
-                 lease=None, review_program: ReviewProgram | None = ReviewProgram()):
+                 lease=None, review_program: ReviewProgram | None = ReviewProgram(),
+                 seed_rubrics: Mapping[str, str] | None = None):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
             raise ValueError("max_requests must be a positive integer")
         if review_program is not None and not isinstance(review_program, ReviewProgram):
             raise ValueError("review_program must be a ReviewProgram or None")
+        seed_rubrics = dict(seed_rubrics or {})
+        if set(seed_rubrics) - {spec.id for spec in definition.classifiers} or any(
+                not isinstance(text, str) for text in seed_rubrics.values()):
+            raise ValueError("seed_rubrics maps classifier ids to rubric text")
+        self.seed_rubrics = seed_rubrics
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
@@ -322,13 +328,30 @@ class Cyclotron:
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"]
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task), self.shared.adapter(spec.id), optimizer,
+                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id)), self.shared.adapter(spec.id), optimizer,
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
         self._sync()
+
+    def _seed(self, classifier: str) -> str:
+        """The first rubric for a classifier: fixed when its store is first opened.
+
+        The seed is not part of the definition, so an application can derive it
+        from its own parameters (for example a publication's doctrine). Later
+        changes to those parameters do not rewrite a store's rubric; the LLM
+        optimizer owns it from then on.
+        """
+        key = f"seed_rubric:{classifier}"
+        row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        if row is not None:
+            return json.loads(row[0])
+        seed = self.seed_rubrics.get(classifier, "")
+        with self.db:
+            self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(seed)))
+        return seed
 
     @classmethod
     def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> "Cyclotron":
