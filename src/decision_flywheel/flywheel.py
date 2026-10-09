@@ -108,6 +108,9 @@ def _restore(raw):
                             raw.get('validation_status'), tuple(raw.get('answer_dependencies', ())))
 
 
+STORE_BUSY_TIMEOUT_SECONDS = 30
+
+
 class DecisionFlywheel:
     """Small application-facing API: predict, improve, reconcile, history, close.
 
@@ -156,7 +159,10 @@ class DecisionFlywheel:
             raise ValueError("max_request_bytes must be positive")
         path = Path(database)
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path)
+        # WAL lets readers (a progress query, an exporter) never block a commit;
+        # the busy timeout covers the rare checkpoint or second writer.
+        self.db = sqlite3.connect(path, timeout=STORE_BUSY_TIMEOUT_SECONDS)
+        self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS runtime_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS runtime_events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
