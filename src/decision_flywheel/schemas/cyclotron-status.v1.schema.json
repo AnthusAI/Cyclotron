@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AnthusAI/Cyclotron/schemas/cyclotron-status.v1.schema.json",
+  "title": "cyclotron-status/v1",
+  "description": "What one classifier of a cyclotron is doing now: alignment with reviewers, calibration, review rate, last change, and pending work. Built from recorded events without model calls.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "cyclotron", "asOf", "alignment", "calibration", "reviewRate", "lastChange", "pending"],
+  "properties": {
+    "schema": {"const": "cyclotron-status/v1"},
+    "cyclotron": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "classifier", "version", "fingerprint"],
+      "properties": {
+        "id": {"type": "string", "description": "The application's cyclotron identifier."},
+        "classifier": {"type": "string", "description": "The classifier (decision question) this snapshot describes."},
+        "version": {"type": "integer", "minimum": 1, "description": "Ordinal of the active version among the versions this classifier has decided with."},
+        "fingerprint": {"type": "string", "description": "Content fingerprint of the active version."}
+      }
+    },
+    "asOf": {"type": "string", "format": "date-time"},
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window", "labels", "accuracy", "precision", "recall", "positiveLabel", "measuredOn"],
+      "properties": {
+        "window": {"type": "integer", "minimum": 1, "description": "Most recent reviews considered."},
+        "labels": {"type": "integer", "minimum": 0, "description": "Reviews in the window that count toward alignment."},
+        "accuracy": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "precision": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "recall": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "positiveLabel": {"type": ["string", "null"], "description": "Label precision and recall refer to; null means macro average."},
+        "measuredOn": {"type": "string"}
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["saysSure", "isRight", "gapPoints", "curve"],
+      "properties": {
+        "saysSure": {"type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Mean confidence of the reviewed decisions."},
+        "isRight": {"type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Share of those decisions the reviewers agreed with."},
+        "gapPoints": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+        "curve": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["bin", "count", "confidence", "accuracy"],
+            "properties": {
+              "bin": {"type": "number", "minimum": 0, "maximum": 1, "description": "Lower edge of a ten-percent confidence bin."},
+              "count": {"type": "integer", "minimum": 1},
+              "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+              "accuracy": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        }
+      }
+    },
+    "reviewRate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "rate", "reason", "auditFloor", "confidenceThreshold", "override", "nextCheckAfterLabels", "expectedReviewsPerWeek"],
+      "properties": {
+        "state": {"enum": ["full", "onboarding", "tapering", "steady", "raised", "manual"]},
+        "rate": {"type": "number", "minimum": 0, "maximum": 1, "description": "Share of confident decisions sent to review."},
+        "reason": {"type": "string", "description": "Why the rate is what it is, in words a reviewer can read."},
+        "auditFloor": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "confidenceThreshold": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "override": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["rate", "expiresAt", "setBy", "setAt"],
+              "properties": {
+                "rate": {"type": "number", "minimum": 0, "maximum": 1},
+                "expiresAt": {"type": ["string", "null"], "format": "date-time"},
+                "setBy": {"type": "string"},
+                "setAt": {"type": "string", "format": "date-time"}
+              }
+            }
+          ]
+        },
+        "nextCheckAfterLabels": {"type": ["integer", "null"], "minimum": 0},
+        "expectedReviewsPerWeek": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "lastChange": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "fromVersion", "toVersion", "at", "summary"],
+          "properties": {
+            "kind": {"enum": ["promoted", "dropped", "definition"]},
+            "fromVersion": {"type": ["integer", "null"], "minimum": 1},
+            "toVersion": {"type": "integer", "minimum": 1},
+            "at": {"type": ["string", "null"], "format": "date-time"},
+            "summary": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "pending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decisionsAwaitingReview", "staleSince"],
+      "properties": {
+        "decisionsAwaitingReview": {"type": "integer", "minimum": 0},
+        "staleSince": {"type": ["string", "null"], "format": "date-time", "description": "When the earliest review the active version has not learned from arrived."}
+      }
+    }
+  }
+}

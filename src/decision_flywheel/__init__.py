@@ -26,6 +26,7 @@ from .feature_bank import FeatureBank, probability_diagnostics
 from .question_measurement import measure_questions, rank_question, select_window
 from .classifier_training import train_classifier
 from .example_attribution import measure_example_swaps, plan_swaps
+from .cyclotron_status import CyclotronStatus, ReviewRate, ReviewRateOverride, status_from_flywheel
 
 
 def run_demo(*args, **kwargs):
@@ -34,6 +35,7 @@ def run_demo(*args, **kwargs):
     return _run_demo(*args, **kwargs)
 
 __all__ = [
+    "CyclotronStatus", "ReviewRate", "ReviewRateOverride", "status_from_flywheel",
     "EvaluationPolicy",
     "SelectionPolicy",
     "LabelTransitionTrigger",
