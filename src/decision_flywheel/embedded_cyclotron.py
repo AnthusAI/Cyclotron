@@ -638,8 +638,9 @@ class Cyclotron:
                 "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices)}
 
     def decision_log(self) -> list[dict[str, Any]]:
-        """Every decision in the order it was made, with its state and active reviews (for recordings)."""
+        """Every decision in the order it was made, with its item values, state and active reviews (for recordings)."""
         rows = []
+        values = self._item_values()
         for number, (decision_id, state, payload) in enumerate(
                 self.db.execute("SELECT id,state,payload FROM decisions ORDER BY rowid").fetchall(), start=1):
             reviews = {}
@@ -650,7 +651,9 @@ class Cyclotron:
                     reviews[cid] = review.to_json()
                 elif last == "no-label":
                     reviews[cid] = {"kind": "no-label"}
-            rows.append({"n": number, "state": state, "decision": json.loads(payload), "reviews": reviews})
+            decision = json.loads(payload)
+            rows.append({"n": number, "state": state, "decision": decision, "item": values.get(decision["itemId"], {}),
+                         "reviews": reviews})
         return rows
 
     def decision(self, decision_id: str) -> Decision:

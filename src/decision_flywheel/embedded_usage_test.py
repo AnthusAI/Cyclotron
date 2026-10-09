@@ -41,6 +41,7 @@ def test_paid_decision_requests_are_counted_per_window_and_cached_answers_are_fr
                                                 "output_tokens": 30, "usd": pytest.approx(3000 * 0.042 / 1e6)}
     assert usage["total"]["optimizer"]["requests"] == 0
     assert [row["n"] for row in log] == [1, 2, 3] and log[0]["reviews"] == {}
+    assert log[0]["item"] == {"text": "yes 0"}
 
 
 def test_optimizer_calls_count_toward_the_decision_whose_review_drove_them(tmp_path):
