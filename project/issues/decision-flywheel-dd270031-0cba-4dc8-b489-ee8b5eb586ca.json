@@ -22,10 +22,17 @@
       "text": "Landed on feat/review-control (stacked on feat/review-rate-state): trace-ui/src/components/review-control.tsx, exported as cyclotron/components/review-control. Thumbs mode (two classes, positiveLabel maps thumbs up) or one button per class; application reason codes with noLabel for reviews without a label; explanation; onReview({itemId, decisionId, label, reasonCode, explanation}) and onUndo; recorded reviews read-only. Data-only; a spec asserts no fetch. Corrections are marked with a check or cross mark and a sentence, not colour alone. Styles for ReviewControl and LabelingReview now live in styles/shared.css (moved out of the console's index.css). Not done here: MultiLabelCard still uses LabelingReview.",
       "created_at": "2026-10-09T15:56:57.321925Z",
       "comment_type": "default"
+    },
+    {
+      "id": "e57170ec-921e-46c6-bada-00740ee363e4",
+      "author": "home",
+      "text": "Ryan, 2026-10-09: thumbs stay configurable; per-class buttons are the general case. Applications choose the mode per cyclotron (Papyrus: thumbs for include/exclude relevance, per-class otherwise). Reason presets are not generalized: the control must work with no reasons at all; applications pass only their own existing codes.",
+      "created_at": "2026-10-09T16:40:53.158189Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:51:17.394843Z",
-  "updated_at": "2026-10-09T15:56:57.322142Z",
+  "updated_at": "2026-10-09T16:40:53.158223Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

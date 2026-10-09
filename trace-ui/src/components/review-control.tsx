@@ -1,4 +1,4 @@
-import {useId,useState} from 'react'
+import {useState} from 'react'
 import {ThumbsDown,ThumbsUp} from 'lucide-react'
 
 /** The decision a reviewer is checking. */
@@ -52,7 +52,9 @@ const percent=(value:number)=>`${Math.round(value*100)}%`
  * `onReview`. It never calls a server. Styles: `cyclotron/styles/shared.css`.
  */
 export function ReviewControl({itemId,decision,question,reviewReason,mode,positiveLabel,reasons=[],value,disabled=false,compact=false,onReview,onUndo}:ReviewControlProps){
-  const id=useId()
+  // Ids derive from the item and decision so server and client renders agree
+  // even when a host page's component trees differ (React's useId would not).
+  const id=`cyclotron-review-${`${itemId}-${decision.decisionId}`.replace(/[^A-Za-z0-9_-]/g,'_')}`
   const thumbs=(mode??(decision.classes.length===2?'thumbs':'labels'))==='thumbs'
   const positive=positiveLabel??decision.classes[0]
   const negative=decision.classes.find(label=>label!==positive)??decision.classes[1]
