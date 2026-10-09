@@ -324,7 +324,7 @@ test('opening the workspace shows the existing optimization timeline instead of 
   expect(screen.getByText('SELF-ALIGNING AI DECISIONS')).toHaveClass('cyclotron-tagline')
   const title=screen.getByText('Cyclotron')
   const logo=title.parentElement?.querySelector('svg')
-  expect(logo).toHaveAttribute('viewBox','0 0 72 24')
+  expect(logo).toHaveAttribute('viewBox','0 0 42 24')
   expect(logo).toHaveAttribute('stroke','currentColor')
   expect(title.parentElement?.firstElementChild).toBe(title)
   expect(screen.getByRole('banner').querySelector('.lucide-refresh-cw')).toBeNull()
