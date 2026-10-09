@@ -32,3 +32,27 @@ def test_a_dry_run_records_the_rubric_trigger_and_spends_nothing(tmp_path):
     assert protocol["rubric_trigger"] == {"basis": "revealed_feedback_count", "every": 25, "max_attempts": 3}
     ledger = json.loads((output / "global_budget_ledger.json").read_text())
     assert ledger["consumed"] == {"decision_requests": 0, "optimizer_requests": 0}
+
+
+def test_a_longer_corpus_from_an_empty_rubric_is_declared_in_the_protocol(tmp_path):
+    operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
+    operational_sha, bootstrap_sha = _corpus(operational, "op", 1200), _corpus(bootstrap, "boot", 12)
+    output = tmp_path / "study"
+    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
+                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
+                   "--output", str(output), "--operational-items", "1200", "--baseline-rubric", "none",
+                   "--modes", "all"])
+    protocol = json.loads((output / "protocol.json").read_text())
+    assert protocol["operational_items"] == 1200 and protocol["modes"] == ["all"]
+    assert protocol["baseline_rubric"] == "" and protocol["baseline_provenance"].startswith("none")
+    assert protocol["decision_model"] == protocol["optimizer_model"] == "gpt-4.1-mini"
+
+
+def test_the_declared_length_must_match_the_corpus(tmp_path):
+    import pytest
+    operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
+    operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
+    with pytest.raises(ValueError, match="exactly 1200"):
+        _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
+                       "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
+                       "--output", str(tmp_path / "study"), "--operational-items", "1200"])
