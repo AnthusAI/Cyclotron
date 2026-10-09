@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0f3a99b8-3cea-4ae2-ba81-dfb71cd2a677",
+  "issue_id": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:34:35.248Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Longer editorial runs and review-rate heuristics",
+    "description": "Ryan, 2026-10-09: 89 percent whole-system accuracy at 400 cycles is not exciting. Run the editorial example out to at least 1000 cycles to see how accurate it gets and how long that takes, and design the heuristics that let people review fewer items over time: when to start reviewing fewer, how to taper, and which items to pick. Plan first, in these issues, then run the experiments. Every experiment records its numbers in a fixture the marketing site can read, so the site only ever shows recorded results. See the private wiki in Cyclotron-web, project/wiki/confidence-story.md, for what the 400-cycle recording does and does not support: calibration became honest (gap 44 to 2 points) but the least-confident 15 percent held only 28 percent of the mistakes.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-7d61bc09-ff30-45cd-92d7-6856bbcf3d16",
+  "title": "Define and export the routing metrics: mistakes caught in the least-confident N percent, and promised-versus-actual at a threshold",
+  "description": "Add two recorded metrics per window to the exporter: (a) for N in 10, 15, 20, 25, 30 percent, the share of that window's mistakes that fall in the least-confident N percent; (b) for thresholds 0.75 to 0.95 in steps of 0.05, how many items are auto-approved, their mean stated confidence (promised), their actual accuracy (got), and whole-system accuracy with reviewed items counted as right. Compute for both the decision model's raw confidence and the cyclotron's. These are the numbers the marketing site's rule pictogram uses; today the site computes them itself from cycles. Acceptance: the fixture carries them; the site reads them instead of recomputing; specs pin the 400-cycle values (before 100 approved, 52 right; after 74 approved, 63 right at 0.80).",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T14:34:35.392432Z",
+  "updated_at": "2026-10-09T14:34:58.539346Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fee33d42-eab7-4611-a65e-80332e75c93e",
+  "issue_id": "decision-flywheel-a5b184fd-93ab-4a3a-b7fa-5827b27d5386",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:34:35.469Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Publish the results on the marketing site only where a recording supports them",
+    "description": "When T3 to T6 have recordings: update the opening story's end beat with the new cycle count and accuracy; add the fifth beat to the rule pictogram only if the least-confident slice holds most of the mistakes in the recording; update the calibration curve, the two-numbers panel, and the how-it-works detail from the new fixture; keep every number read from the fixture and pinned by tests. The site must never claim an outcome a recording does not show.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 3,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

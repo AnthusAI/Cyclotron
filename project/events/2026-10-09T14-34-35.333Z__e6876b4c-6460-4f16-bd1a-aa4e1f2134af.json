@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e6876b4c-6460-4f16-bd1a-aa4e1f2134af",
+  "issue_id": "decision-flywheel-c9aa95aa-a48b-4850-bed1-4b6720cb7b6e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:34:35.333Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Land the editorial study scripts and the isotonic calibration work on develop",
+    "description": "The editorial prequential study (scripts/run_editorial_prequential_study.py, replay_feedback_policy.py, the OpenAI decision adapter, export_editorial_evaluator_aggregates.py) and the head.py isotonic calibration and cycle_replay resume changes exist only as uncommitted work in the main checkout at ~/Projects/Cyclotron. Nothing below can be reproduced until they are committed, tested, and merged to develop and main. Acceptance: make test green with the new specs; the 400-cycle fixture in Cyclotron-web regenerates byte-identical from the committed scripts, or the diff is explained.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
