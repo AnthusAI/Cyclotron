@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 This changelog is maintained by semantic-release from conventional commits.
 
+## Web package 0.2.1 (2026-10-09)
+
+- Status strip reads "Tapering · 25% reviewed"; the card takes a classifier display name.
+- Review control works with no reason list; field ids derive from item and decision ids (fixes a hydration mismatch in server-rendered host pages).
+- `seed_rubrics` on `Cyclotron.open` lets an application seed the first rubric without changing the definition.
+
 ## Web package 0.2.0 (2026-10-09)
 
 The npm package `cyclotron` (the web components and TypeScript types) is
