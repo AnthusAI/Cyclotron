@@ -110,3 +110,11 @@ def test_raw_final_calibration_uses_only_items_with_both_probability_vectors():
     assert comparison['raw']['count']==comparison['final']['count']==1
     assert comparison['raw']['calibration']['count']==comparison['final']['calibration']['count']==0
     assert comparison['missing_paired_probability_count']==1
+
+
+def test_each_sample_counts_its_training_items_and_leaves_the_ids_on_the_prediction():
+    provenance={'method':'temperature','fit_on':'out_of_fold','training_ids':['a','b','c']}
+    events=[prediction(1,fitted_head=True,calibration_provenance=provenance),vote(1)]
+    sample=reviewed_calibration_metrics(('yes','no'),events)['calibration']['samples'][0]
+    assert sample['calibration_provenance']=={'method':'temperature','fit_on':'out_of_fold','training_count':3}
+    assert events[0]['calibration_provenance']['training_ids']==['a','b','c']

@@ -76,3 +76,22 @@ def test_a_waiting_review_survives_a_later_completed_optimization_cycle(tmp_path
     resumed.__exit__(None,None,None)
     assert wheel.resume_cycle(item) is None
     wheel.close()
+
+
+def test_cycle_boundaries_name_the_fit_proof_that_the_activation_records_in_full(tmp_path):
+    from .flywheel_test import TRAIN, DEV
+    wheel=DecisionFlywheel(tmp_path/'runtime.sqlite3', ClassifierConfig(TASK), FakeModel(), agent([]), max_requests=30)
+    asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1.0 for r in TRAIN}))
+    with wheel.cycle(Item('paper', {'text':'yes paper'})):
+        pass
+    events=wheel.history(1000)
+    activated=next(e for e in reversed(events) if e['kind']=='classifier-activated')['classifier_snapshot']
+    started=next(e for e in events if e['kind']=='cycle-started')['classifier_snapshot']
+    full=activated['head']['out_of_fold']; compact=started['head']['out_of_fold']
+    assert full['fit_ids'] and full['normalizers']
+    assert not {'fit_ids','fit_labels','normalization_fit_ids','normalizers'} & set(compact)
+    assert compact['per_item_fit_proof']['head_fingerprint']==activated['head']['refitted_cyclotron_fingerprint']
+    assert {key:value for key,value in full.items() if key in compact}=={key:value for key,value in compact.items() if key!='per_item_fit_proof'}
+    assert started['config']==activated['config']
+    assert started['head']['provenance']==activated['head']['provenance']
+    wheel.close()

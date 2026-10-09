@@ -60,7 +60,7 @@ def test_legacy_web_metrics_use_recorded_probability_vectors_and_calibration_pro
     curve=emitted[0]['metrics']['calibration']
     assert curve['ece']==__import__('pytest').approx(.4)
     assert curve['samples'][0]['prediction_event_id']==1
-    assert curve['samples'][0]['calibration_provenance']['training_ids']==['trusted']
+    assert curve['samples'][0]['calibration_provenance']=={'fit_on':'oof','training_count':1}
     assert curve['matched_head_comparison']['raw']['ece']==__import__('pytest').approx(.1)
 
 
