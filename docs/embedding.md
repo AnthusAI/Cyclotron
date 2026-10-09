@@ -138,6 +138,18 @@ Event kinds are `decision`, `review`, `promoted` (a new version), `refit` (a
 new ML model, same version), `dropped` (a candidate that failed), and
 `review-rate-changed`. Their shapes are typed in `cyclotron/sdk-types`.
 
+What the model calls cost, per window of decisions and in total, at the list
+prices you state. A cached answer costs nothing; a decision-model request made
+while learning counts toward the decision whose review drove it.
+
+```python
+prices = {"decision_model": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0},
+          "optimizer": {"input_usd_per_mtok": 0.40, "cached_input_usd_per_mtok": 0.10, "output_usd_per_mtok": 1.60}}
+usage = cyclotron.usage(prices, window=100)
+print(usage["total"]["decision_model"]["requests"], "decision-model requests", usage["total"]["usd"], "USD")
+print(len(cyclotron.decision_log()), "decisions in the log")
+```
+
 ## The review program and its override
 
 The default `ReviewProgram` starts by reviewing every decision. It steps the
