@@ -18,6 +18,15 @@ from .models import Item, LabeledItem
 REVIEWER_SELECTED = 'reviewer-selected'
 
 
+def feedback_propensities(wheel):
+    """Each item's recorded selection propensity, from its latest submitted review (default 1.0)."""
+    propensities = {}
+    for event in wheel.history(100000):
+        if event['kind'] == 'human-feedback' and event.get('action') == 'submitted':
+            propensities[event['feedback']['item_id']] = event['feedback'].get('selection_propensity') or 1.
+    return propensities
+
+
 def review_role(seed, item_id):
     """Assign a review's partition from the item identity, before its label is seen."""
     if development_assignment(seed + ':audit', item_id, rate=.2):
@@ -93,8 +102,9 @@ async def decide_with_shared_context(wheels, shared, target, partitions: Callabl
                 wheel.reconcile_model_context(training[identifier])
                 cycle.check_trigger('classifier', due=True, reason='shared decision feature source changed', details={})
                 train, dev, protected = partitions(identifier)
+                recorded = feedback_propensities(wheel)
                 await wheel.step('classifier', train, dev, protected=protected,
-                                 propensities={r.item.id: 1. for r in train}, min_development_per_class=2,
+                                 propensities={r.item.id: recorded.get(r.item.id, 1.) for r in train}, min_development_per_class=2,
                                  limit=200, trigger='shared-context-change')
                 cycle.suspend()
             except Exception as error:
@@ -125,6 +135,7 @@ async def learn_from_review(wheels, shared, identifier, cycle, partitions: Calla
     warnings = []
     wheel = wheels[identifier]
     training, development, protected = partitions(identifier)
+    recorded = feedback_propensities(wheel)
     wheel.reconcile_feedback(training, development=development)
     wheel.set_optimizer_context([row.context['human_feedback'] for row in training if row.context.get('human_feedback')])
     history = wheel.history(100000)
@@ -151,13 +162,13 @@ async def learn_from_review(wheels, shared, identifier, cycle, partitions: Calla
             warnings.append({'classifier_id': identifier, 'reason': 'optimizer call limit reached; labeling can continue'})
             continue
         result = await wheel.step(stage, training, development, protected=protected,
-                                  propensities={row.item.id: 1. for row in training}, min_development_per_class=2,
+                                  propensities={row.item.id: recorded.get(row.item.id, 1.) for row in training}, min_development_per_class=2,
                                   limit=200, trigger='label-transitions' if stage == 'rubric' else 'feedback-cadence')
         if result['status'] not in ('completed', 'waiting'):
             raise RuntimeError('optimization step did not complete')
         if stage in ('rubric', 'questions', 'examples') and result['status'] == 'completed':
             await wheel.step('classifier', training, development, protected=protected,
-                             propensities={row.item.id: 1. for row in training}, min_development_per_class=2,
+                             propensities={row.item.id: recorded.get(row.item.id, 1.) for row in training}, min_development_per_class=2,
                              trigger='context-handoff')
     return warnings
 

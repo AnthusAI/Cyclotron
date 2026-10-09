@@ -200,8 +200,9 @@
         "auditFloor",
         "confidenceThreshold",
         "override",
-        "nextCheckAfterLabels",
-        "expectedReviewsPerWeek"
+        "nextCheckAfterDecisions",
+        "expectedReviewsPerWeek",
+        "nextStep"
       ],
       "properties": {
         "state": {
@@ -278,12 +279,20 @@
             }
           ]
         },
-        "nextCheckAfterLabels": {
+        "nextCheckAfterDecisions": {
           "type": [
             "integer",
             "null"
           ],
-          "minimum": 0
+          "minimum": 0,
+          "description": "Decisions until the program next checks its conditions."
+        },
+        "nextStep": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The next step's conditions, in words a reviewer can read."
         },
         "expectedReviewsPerWeek": {
           "type": [

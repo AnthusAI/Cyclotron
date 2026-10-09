@@ -3,7 +3,7 @@
   "title": "Make the review rate engine state: computed from metrics, explained, overridable",
   "description": "Replace fixed cycle schedules (PhasedFeedbackPolicy in replay_feedback_policy.py) with a review-rate program the engine owns. States: onboarding (review all until each label has N reviews), tapering (every K program-selected labels, step down 1.0, 0.5, 0.25, floor if audit accuracy meets target and calibration gap is within bound), raised (back to 1.0 after a promotion, a definition change, or an accuracy drop). Per decision: review below a confidence threshold, otherwise a deterministic random audit at the current rate; record propensity and a reason. Operator override with rate, expiry, and who set it. Defaults come from decision-flywheel-8ee62604 (when to taper), decision-flywheel-b0cf2975 (which items) and decision-flywheel-7d61bc09 (routing metrics). Ordering: after the SDK facade and the status shape.\n\nAcceptance criteria:\n- status().reviewRate reports state, rate, threshold, audit floor, reason, override, next check, and expected reviews per week.\n- Every decision records whether it was selected, why, and its propensity; selection never reads the hidden label.\n- A rate change and an override each emit a review-rate-changed event with the evidence used.\n- Specs cover onboarding exit, a step down, a raise after promotion, and an expiring override.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -31,9 +31,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "1e42ba13-574f-42d5-aa9e-1741fbf976ee",
+      "author": "home",
+      "text": "Landed on feat/review-rate-state: review_program.py (ReviewProgram configuration, selection, window checks, override, words for the next step) and the SDK wiring (decision.review with reason program/audit and propensity; review selected_by inferred, reviewer for decisions not sent to review; set_review_rate / clear_review_rate; review-rate-changed events in subscribe; status reviewRate with state, rate, reason, override, nextCheckAfterDecisions, nextStep, expectedReviewsPerWeek). PLACEHOLDERS: the step sizes (1.0, 0.5, 0.25, 0.1), the 0.05 audit share, the 0.7 confidence threshold, the 85% target, the 5-point gap, the 100-decision window, two windows, and the 20-label minimum are configuration defaults pending the experiments in the 'Longer editorial runs and review-rate heuristics' epic (decision-flywheel-8db070d7; 8ee62604, b0cf2975, 7d61bc09). Also: open decisions stay stable through ML model refits and change only with a new version; recorded propensities now reach the ML model fit.",
+      "created_at": "2026-10-09T15:52:45.556943Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:17.346891Z",
-  "updated_at": "2026-10-09T14:51:46.213432Z",
+  "updated_at": "2026-10-09T15:52:45.556967Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

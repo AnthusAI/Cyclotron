@@ -3,7 +3,7 @@
   "title": "Ship a review control widget contract with thumbs mode, reason codes and a submit event",
   "description": "Generalize trace-ui/src/components/labeling-review.tsx into an embeddable review control (export path cyclotron/components/review-control). Props: itemId, decision {decisionId, label, confidence, classes, version}, reviewReason?, mode 'thumbs'|'labels', positiveLabel, reasons? [{code, label, labelEffect 'exclude'|'none'}], value?, disabled, compact. Events: onReview({itemId, decisionId, label, reasonCode, explanation}), onUndo({itemId, decisionId}). It never calls a server. Ordering: after the status shape (shares types).\n\nAcceptance criteria:\n- Thumbs up maps to positiveLabel; thumbs down requires a reason when reasons are given; a reason with labelEffect 'none' submits no label.\n- The decision and confidence are visible before the reviewer chooses, and the control says it was shown before the review.\n- Keyboard and screen-reader use pass the existing Vitest accessibility checks; UI strings use review, label, explanation, decision, confidence.\n- The console's MultiLabelCard uses the new control, so there is one implementation.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,9 +15,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a0fee2de-8b05-498c-8d13-31bdf39821e5",
+      "author": "home",
+      "text": "Landed on feat/review-control (stacked on feat/review-rate-state): trace-ui/src/components/review-control.tsx, exported as cyclotron/components/review-control. Thumbs mode (two classes, positiveLabel maps thumbs up) or one button per class; application reason codes with noLabel for reviews without a label; explanation; onReview({itemId, decisionId, label, reasonCode, explanation}) and onUndo; recorded reviews read-only. Data-only; a spec asserts no fetch. Corrections are marked with a check or cross mark and a sentence, not colour alone. Styles for ReviewControl and LabelingReview now live in styles/shared.css (moved out of the console's index.css). Not done here: MultiLabelCard still uses LabelingReview.",
+      "created_at": "2026-10-09T15:56:57.321925Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:17.394843Z",
-  "updated_at": "2026-10-09T14:51:46.234839Z",
+  "updated_at": "2026-10-09T15:56:57.322142Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
