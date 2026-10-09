@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-a3e8c23b-58d5-4834-b47b-ac05266053b4",
+  "title": "Resuming a replay after a failed or killed cycle re-records that cycle's feedback",
+  "description": "Found during the 1,200-cycle editorial study (decision-flywheel-8f3a052a). When a replay stops inside a cycle (a step raises, a provider call fails, or the process is killed), restarting the study on the same output directory is not safe: the resume path replays that cycle's human feedback again, recording it a second time, and numbers the redo as the next cycle instead of completing the interrupted one. The event log then has duplicate feedback for one item and cycle numbers that no longer line up one-to-one with corpus items, so per-window metrics and the fixture exporter (which require exactly one prediction per cycle) are wrong or fail. Workaround used in the study: never resume; start a fresh output directory. Expected: on resume, an incomplete cycle (cycle-started without cycle-completed) is either completed under its own number or rolled back atomically, and feedback already recorded for its item is not recorded again. Acceptance: a spec that kills a replay mid-cycle (after feedback is recorded, before cycle-completed) and resumes it ends with one feedback event per item, contiguous cycle numbers matching corpus order, and the same cycle count as an uninterrupted run.",
+  "type": "bug",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T19:18:45.536475Z",
+  "updated_at": "2026-10-09T19:18:48.213059Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "editorial-study agent"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
