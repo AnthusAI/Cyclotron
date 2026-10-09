@@ -3,16 +3,24 @@
   "title": "Land the editorial study scripts and the isotonic calibration work on develop",
   "description": "The editorial prequential study (scripts/run_editorial_prequential_study.py, replay_feedback_policy.py, the OpenAI decision adapter, export_editorial_evaluator_aggregates.py) and the head.py isotonic calibration and cycle_replay resume changes exist only as uncommitted work in the main checkout at ~/Projects/Cyclotron. Nothing below can be reproduced until they are committed, tested, and merged to develop and main. Acceptance: make test green with the new specs; the 400-cycle fixture in Cyclotron-web regenerates byte-identical from the committed scripts, or the diff is explained.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "11b5d1bf-e108-4665-bd0c-edad72163a3e",
+      "author": "home",
+      "text": "Landed on feat/editorial-study-scripts. Finding: almost all of the uncommitted work was already on develop (407ab02 live replay feedback policies and calibration; the scorecard-to-cyclotron rename since). The main checkout's index is a stale pre-rename snapshot, which is why seven already-committed files showed as untracked; they are byte-identical to develop. The only un-landed change was the rubric_trigger block in protocol.json of run_editorial_prequential_study.py; it is landed with a dry-run spec. make test was red in a plain checkout (embedded_store_test subprocesses could not import the package); fixed with pytest pythonpath=src and an explicit PYTHONPATH for the subprocess. Fixture check: Cyclotron-web scripts/extract-editorial-runs.py over /private/tmp/cyclotron-editorial-study-v1 (all, reject_half, casual_ten_percent) with the semantic-v2 corpus regenerates components/fixtures/editorial-run-v1.json byte-identical. That recording (3.8 GB) and the corpus (~/Documents/Codex/2026-10-08/task-2/semantic-v2) live outside any repository; /private/tmp is not durable.",
+      "created_at": "2026-10-09T16:00:58.071176Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.333516Z",
-  "updated_at": "2026-10-09T14:34:58.472194Z",
+  "updated_at": "2026-10-09T16:00:58.071200Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
