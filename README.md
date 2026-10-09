@@ -58,6 +58,9 @@ adapter, storage choice, and event consumer are application decisions.
 
 ## Embed a cyclotron in an application
 
+The full walk-through, with the widgets and operational notes, is
+[docs/embedding.md](docs/embedding.md).
+
 An application that already has items and reviewers uses four calls. It keys
 everything by its own item identities. The cyclotron owns item partitions,
 held-out reviews, selection propensities, versions and learning, and keeps
