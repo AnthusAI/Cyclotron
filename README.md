@@ -58,6 +58,9 @@ adapter, storage choice, and event consumer are application decisions.
 
 ## Embed a cyclotron in an application
 
+The full walk-through, with the widgets and operational notes, is
+[docs/embedding.md](docs/embedding.md).
+
 An application that already has items and reviewers uses four calls. It keys
 everything by its own item identities. The cyclotron owns item partitions,
 held-out reviews, selection propensities, versions and learning, and keeps
@@ -174,6 +177,39 @@ What an application should know:
 - **Rebuilding.** `labels()` lists every active label with its item;
   `replay(labels)` rebuilds learning in a new store from such records, with
   the same partitions.
+
+## Use the web components in an application
+
+The npm package `cyclotron` ships TypeScript sources for the review control,
+the status widget, their styles, and the types for the SDK's JSON. It is
+released as a tarball on GitHub, not on the npm registry. Pin the release
+asset (or, before a release exists, the archive of a tagged commit):
+
+```json
+"dependencies": {
+  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.0/cyclotron-0.2.0.tgz"
+}
+```
+
+```ts
+// next.config.ts: the package ships TypeScript, so let Next compile it.
+const nextConfig = { transpilePackages: ["cyclotron"] }
+```
+
+```tsx
+import "cyclotron/styles/components.css"          // component rules only: no reset, no theme
+import {ReviewControl} from "cyclotron/components/review-control"
+import {CyclotronStatusView} from "cyclotron/components/cyclotron-status"
+import type {CyclotronStatus} from "cyclotron/cyclotron-status"
+import type {CyclotronDecision, CyclotronEvent} from "cyclotron/sdk-types"
+```
+
+The two embeddable components need no Tailwind. The console's `components/ui/*`
+primitives use Tailwind classes, so an application that imports them adds
+`@source "../node_modules/cyclotron/trace-ui/src";` to its CSS.
+`styles/shared.css` is the console and marketing theme: it imports
+`components.css` and adds a global reset and `:root` tokens, so do not import
+it into another application. Build the tarball with `make pack-ui`.
 
 ### Boundary rules
 

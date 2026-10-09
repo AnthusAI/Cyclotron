@@ -3,7 +3,7 @@
   "title": "Export the embeddable components and types as a versioned package release",
   "description": "package.json is private, version 0.1.1, ships raw TSX, and MultiLabelCard imports through an @/ path alias that a consumer cannot resolve. Papyrus (Next 15, React 19, Tailwind 4) and Cyclotron-web pin a GitHub tarball. Export review-control, cyclotron-status, the cyclotron-status/v1 types and schema, and keep labeling-review, classifier-metrics, cycle-timeline and lab-metrics. Ordering: after the review control and status widget.\n\nAcceptance criteria:\n- No exported file uses a path alias; a fresh Next 15 app with transpilePackages ['cyclotron'] builds and renders both widgets.\n- Semantic Release tags a version that applications pin; CHANGELOG lists the new exports.\n- A smoke test imports every export path listed in package.json.,",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,9 +19,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "25472f91-b3a0-40de-840b-17dc1b95d8d4",
+      "author": "home",
+      "text": "Landed on feat/package-release: web package 0.2.0 with exports review-control, cyclotron-status (component and type), sdk-types (Decision, Review, subscribe events; a Python spec checks every SDK key is typed) and styles/components.css (component rules only; specs forbid :root, html/body/universal selectors and unfallbacked tokens; shared.css imports it). A spec runs npm pack --dry-run and checks every export target is packed and every packed import resolves inside the tarball with no @/ alias; it found CalibrationBins and CalibrationProvenance missing, now shipped. Removed the dead lib/utils export. make pack-ui builds dist/cyclotron-0.2.0.tgz for a GitHub release ui-v0.2.0 (not created: needs a release by the owner). A consumer project typechecked against the tarball. Also filed decision-flywheel-d9f23e3f (windows count labels) under the epic.",
+      "created_at": "2026-10-09T16:07:35.919092Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:30.293723Z",
-  "updated_at": "2026-10-09T14:51:46.319861Z",
+  "updated_at": "2026-10-09T16:07:35.919114Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

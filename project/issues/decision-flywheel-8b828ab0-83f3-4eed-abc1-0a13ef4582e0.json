@@ -3,7 +3,7 @@
   "title": "Document embedding a cyclotron in an application, with Papyrus as the worked example",
   "description": "Add a README section and a docs page: the four SDK calls, the store and lease, the review-rate program, the two widgets, and the status shape, using the Papyrus relevance cyclotron as the example (see project/wiki/papyrus-integration.md). Use the glossary vocabulary (item, cyclotron, classifier, decision model, ML model, LLM optimizer, decision, confidence, reviewer, review, label, correction, explanation, feedback, cycle, version). Ordering: last.\n\nAcceptance criteria:\n- The quickstart runs offline with a scripted decision model and is covered by the existing README snippet check.\n- The page states what the application owns (items, reviewers, its system of record) and what the engine owns (labels, partitions, propensities, versions).\n- No retired glossary words appear in the new text.,",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -23,9 +23,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a18e2c3c-a352-49b3-9e73-823f6e1e9921",
+      "author": "home",
+      "text": "Landed on feat/embedding-docs (stacked on feat/package-release): docs/embedding.md walks an application through define, open, decide, review (label, correction, no label, undo, selected_by, review ids), status, subscribe, the review program and override, the lease, snapshot, restore and replay, the two widgets, and the operational notes. tests/embedding_docs_test.py runs all 13 Python samples in order offline and checks the quoted TSX equals trace-ui/src/examples/embedding.tsx and the pinned tarball matches package.json; trace-ui/src/examples/embedding.test.tsx renders that example. The json and next.config snippets are configuration, checked only for the pin.",
+      "created_at": "2026-10-09T16:11:07.820480Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:30.386515Z",
-  "updated_at": "2026-10-09T14:51:46.427347Z",
+  "updated_at": "2026-10-09T16:11:07.820500Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
