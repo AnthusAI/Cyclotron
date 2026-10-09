@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "82eef137-0c19-4cb5-afbb-fdd72ddd632d",
+  "issue_id": "decision-flywheel-7d61bc09-ff30-45cd-92d7-6856bbcf3d16",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-09T16:00:44.528Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Add two recorded metrics per window to the exporter: (a) for N in 10, 15, 20, 25, 30 percent, the share of that window's mistakes that fall in the least-confident N percent; (b) for thresholds 0.75 to 0.95 in steps of 0.05, how many items are auto-approved, their mean stated confidence (promised), their actual accuracy (got), and whole-system accuracy with reviewed items counted as right. Compute for both the decision model's raw confidence and the cyclotron's. These are the numbers the marketing site's rule pictogram uses; today the site computes them itself from cycles. Acceptance: the fixture carries them; the site reads them instead of recomputing; specs pin the 400-cycle values (before 100 approved, 52 right; after 74 approved, 63 right at 0.80).",
+        "to": "Add two recorded metrics per window to the exporter: (a) for N in 10, 15, 20, 25, 30 percent, the share of that window's mistakes that fall in the least-confident N percent; (b) for thresholds 0.75 to 0.95 in steps of 0.05, how many items are auto-approved, their mean stated confidence (promised), their actual accuracy (got), and whole-system accuracy with reviewed items counted as right. Compute for both the decision model's raw confidence and the cyclotron's. These are the numbers the marketing site's rule pictogram uses; today the site computes them itself from cycles. Acceptance: the fixture carries them; the site reads them instead of recomputing; specs pin the 400-cycle values (before 100 approved, 52 right; after 74 approved, 63 right at 0.80).\n\nAdded 2026-10-09 (Ryan): the marketing site will state how little the model calls cost, so every recording carries measured usage and cost. Per 100-cycle window and in total: decision-model requests with input, cached-input and output tokens; optimizer calls with their tokens; and USD at list prices. Exported under a usage block per window and a usage_total, with the list-price basis and its source in the attribution (Jev: $0.042 per million input tokens, output free, TypeSafe's published price; other engines from engines.yaml in Hard-Decisions; models not listed there state their provider's published price and the date read). Compute the same for the existing 400-cycle recording from its runtime events so the site can state that run's cost now. Acceptance adds: the fixture carries usage per window and usage_total with the price basis; a spec pins the 400-cycle totals (1,152 decision requests, 998,301 input and 28,792 output tokens; 8 optimizer calls, 804,912 input and 5,140 output tokens)."
+      }
+    }
+  }
+}
