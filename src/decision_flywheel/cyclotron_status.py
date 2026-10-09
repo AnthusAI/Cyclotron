@@ -66,7 +66,8 @@ class ReviewRate:
     audit_floor: float | None = None
     confidence_threshold: float | None = None
     override: ReviewRateOverride | None = None
-    next_check_after_labels: int | None = None
+    next_check_after_decisions: int | None = None
+    next_step: str | None = None
     expected_reviews_per_week: float | None = None
 
     def __post_init__(self):
@@ -137,7 +138,8 @@ class CyclotronStatus:
                            "override": None if r.override is None else {
                                "rate": r.override.rate, "expiresAt": r.override.expires_at,
                                "setBy": r.override.set_by, "setAt": r.override.set_at},
-                           "nextCheckAfterLabels": r.next_check_after_labels,
+                           "nextCheckAfterDecisions": r.next_check_after_decisions,
+                           "nextStep": r.next_step,
                            "expectedReviewsPerWeek": r.expected_reviews_per_week},
             "lastChange": None if self.last_change is None else {
                 "kind": self.last_change.kind, "fromVersion": self.last_change.from_version,
@@ -267,7 +269,7 @@ def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str
                 order.remove(item_id)
             reviews[item_id] = (label, predicted, probabilities, feedback.get("id"))
             order.append(item_id)
-        elif kind == "human-skipped":
+        elif kind in ("human-skipped", "review-not-requested"):
             awaiting.discard(str(event.get("target_id")))
     records = [(item_id, *reviews[item_id][:3]) for item_id in order]
     metrics = recent_reviewed_metrics(labels, records, limit=window) if records else None

@@ -100,12 +100,15 @@ asyncio.run(main())
 <!-- embedded-quickstart:end -->
 
 - `decide(item)` returns a decision with a label, confidence, version and
-  whether it goes to review. An unchanged item keeps its decision; no model
-  call is repeated.
+  whether it goes to review (`decision.review`: selected, reason `program` or
+  `audit`, propensity, and a sentence). A decision a person may have seen is
+  stable: an unchanged item keeps its label and confidence until it is
+  reviewed or a new version is promoted. An ML model refit does not change it.
 - `review(decision_id, label, ...)` records a label; a later label is a
   correction, `label=None` closes the decision without teaching, and
-  `undo_review` reopens it. `selected_by="reviewer"` marks a review the
-  reviewer chose: it trains the ML model but is not alignment evidence.
+  `undo_review` reopens it. A review of a decision that was not sent to
+  review is `selected_by="reviewer"`: it trains the ML model but is not
+  alignment or audit evidence.
 - `status()` returns the `cyclotron-status/v1` snapshot
   ([schema](src/decision_flywheel/schemas/cyclotron-status.v1.schema.json),
   [TypeScript type](trace-ui/src/cyclotronStatus.ts)).
@@ -144,6 +147,30 @@ What an application should know:
   call catches up, and a review resubmitted with the same `review_id` is not
   recorded twice. An interrupted `decide` resumes from the shared request
   cache without a new model call.
+- **Review rate.** The default `ReviewProgram` starts at full review and
+  steps the rate for confident decisions down 100%, 50%, 25%, 10% when, for
+  two consecutive windows of 100 decisions, accuracy on confident decisions
+  (at least 70% sure) met 85% with at least 20 reviewed, and the last-200
+  calibration gap was under 5 points. It goes back to full review when a
+  window fails or a new version is promoted. Low-confidence decisions are
+  always reviewed, and a random 5% audit share remains at every rate. Every
+  number is configuration (`review_program=ReviewProgram(...)`), and the
+  defaults are placeholders until the review-rate experiments set them.
+  `set_review_rate(rate, set_by=..., expires_at=...)` overrides the rate;
+  `status().review_rate` reports the state, rate, reason, override and the
+  next step's conditions in words. Pass `review_program=None` to review
+  everything.
+- **After a crash mid-learning.** If a process dies while a review is
+  driving optimization, the label is kept and the item's learning cycle is
+  resumed by the next `decide` of that item; interrupted optimization is not
+  retried automatically.
+- **Closing without a label is recorded** even when nothing was waiting, so
+  it survives a crash like any other review.
+- **Snapshots between calls.** `snapshot()` does not wait for a running
+  `decide` or `review`; take it between operations.
+- **Snapshots hold content.** No provider keys, but item values,
+  explanations, transcripts and caches are in the archive: keep it in private
+  storage.
 - **Rebuilding.** `labels()` lists every active label with its item;
   `replay(labels)` rebuilds learning in a new store from such records, with
   the same partitions.

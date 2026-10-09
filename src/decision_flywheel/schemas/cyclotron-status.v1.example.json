@@ -33,12 +33,13 @@
   "reviewRate": {
     "state": "tapering",
     "rate": 0.25,
-    "reason": "Audit accuracy 86% over 120 labels met the 85% target.",
-    "auditFloor": 0.1,
+    "reason": "Stepped down to 25%: accuracy on confident decisions 88% met the 85% target and the calibration gap was 2 points for 2 windows in a row.",
+    "auditFloor": 0.05,
     "confidenceThreshold": 0.7,
     "override": null,
-    "nextCheckAfterLabels": 40,
-    "expectedReviewsPerWeek": 12
+    "expectedReviewsPerWeek": 12,
+    "nextCheckAfterDecisions": 40,
+    "nextStep": "Steps down to 10% after 2 more windows of 100 decisions with accuracy on confident decisions of at least 85% (at least 20 reviewed) and a calibration gap under 5 points. Next check in 40 decisions."
   },
   "lastChange": {
     "kind": "promoted",
