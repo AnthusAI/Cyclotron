@@ -133,16 +133,29 @@ def test_reviews_a_reviewer_chose_and_retracted_reviews_do_not_count_toward_alig
 
 
 def test_a_promotion_becomes_the_last_change_and_raises_the_version():
-    events = [prediction("a", "include", .9, version="v-one"), review("a", "exclude"),
-              {"kind": "promoted", "version": "v-two", "reason": "lower development brier",
+    events = [{"kind": "cycle-started", "classifier_snapshot": {"config": {"rubric": "", "example_ids": []}}},
+              prediction("a", "include", .9, version="v-one"), review("a", "exclude"),
+              {"kind": "classifier-activated", "classifier_version": "v-two",
+               "classifier_snapshot": {"config": {"rubric": "Prefer primary sources.", "example_ids": []}},
                "created_at": "2026-10-09T12:00:00+00:00"},
+              {"kind": "promoted", "version": "v-two", "reason": "lower development brier"},
               prediction("b", "exclude", .2, version="v-two"),
               review("b", "exclude", at="2026-10-09T13:00:00+00:00")]
     status = build(events, fingerprint="v-two")
     assert status.version == 2
     assert asdict(status.last_change) == {"kind": "promoted", "from_version": 1, "to_version": 2,
-                                          "at": "2026-10-09T12:00:00+00:00", "summary": "lower development brier"}
+                                          "at": "2026-10-09T12:00:00+00:00", "summary": "Changed the rubric."}
     assert status.pending.stale_since == "2026-10-09T13:00:00+00:00"
+
+
+def test_an_ml_model_refit_is_a_new_version_described_as_a_refit():
+    snapshot = {"config": {"rubric": "Prefer primary sources."}, "head": None}
+    events = [{"kind": "cycle-started", "classifier_snapshot": snapshot},
+              {"kind": "classifier-activated", "classifier_version": "v-two", "classifier_snapshot": {
+                  **snapshot, "head": {"provenance": {"training_ids": ["a", "b", "c"]}}}}]
+    status = build(events, fingerprint="v-two")
+    assert status.version == 2
+    assert status.last_change.from_version == 1 and status.last_change.summary == "Refit the ML model on 3 labels."
 
 
 def test_a_dropped_candidate_is_reported_without_changing_the_version():

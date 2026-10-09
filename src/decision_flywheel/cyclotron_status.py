@@ -160,6 +160,33 @@ def all_events(wheel) -> list[dict]:
         cursor = page["cursor"]
 
 
+def note_version(numbers: dict[str, int], event: Mapping[str, Any]) -> None:
+    """Number versions in the order this classifier decided with or activated them.
+
+    Every activation (a promoted candidate, a refined rubric, or a refit ML
+    model) is a new version; reactivating a known fingerprint keeps its number.
+    """
+    kind = event.get("kind")
+    version = (event.get("version") if kind == "prediction"
+               else event.get("classifier_version") if kind == "classifier-activated" else None)
+    if version and version not in numbers:
+        numbers[version] = len(numbers) + 1
+
+
+def describe_activation(previous: Mapping[str, Any] | None, current: Mapping[str, Any]) -> str:
+    """Say what an activation changed, from the two classifier snapshots."""
+    before = (previous or {}).get("config") or {}
+    after = current.get("config") or {}
+    changes = [name for key, name in (("rubric", "rubric"), ("example_ids", "example list"),
+                                      ("tasks", "classifier questions"), ("dynamic_elements", "dynamic inputs"))
+               if before.get(key) != after.get(key)]
+    if changes:
+        return "Changed the " + ", ".join(changes) + "."
+    head = current.get("head") or {}
+    count = len(((head.get("provenance") or {}).get("training_ids")) or ())
+    return f"Refit the ML model on {count} labels." if head else "Activated a new version."
+
+
 def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str, classifier: str,
                        labels: tuple[str, ...], fingerprint: str, positive_label: str | None = None,
                        window: int = 200, review_rate: ReviewRate | None = None,
@@ -176,16 +203,20 @@ def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str
     version_numbers: dict[str, int] = {}
     last_change = None
     awaiting: set[str] = set()
+    active_version: int | None = None
+    snapshot: Mapping[str, Any] | None = None
     latest_review: dict[str, str | None] = {}
     for event in events:
         kind = event.get("kind")
+        if kind == "classifier-activated" and not version_numbers:
+            version_numbers["initial"], active_version = 1, 1  # the version before the first activation
+        note_version(version_numbers, event)
         if kind == "prediction":
+            if active_version is None:
+                active_version = version_numbers.get(event.get("version"))
             item_id = str(event["target_id"])
             shown[item_id] = event
             awaiting.add(item_id)
-            version = event.get("version")
-            if version and version not in version_numbers:
-                version_numbers[version] = len(version_numbers) + 1
         elif kind == "human-feedback":
             feedback = event["feedback"]
             item_id = str(feedback.get("item_id", feedback.get("id")))
@@ -214,18 +245,18 @@ def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str
                 order.remove(item_id)
             reviews[item_id] = (label, predicted, probabilities, feedback.get("id"))
             order.append(item_id)
-        elif kind in ("promoted", "candidate-rejected"):
-            version = event.get("version")
-            if version and version not in version_numbers:
-                version_numbers[version] = len(version_numbers) + 1
-            if kind == "promoted":
-                to_version = version_numbers.get(event.get("version"), len(version_numbers))
-                last_change = LastChange("promoted", to_version - 1 if to_version > 1 else None, to_version,
-                                         event.get("created_at"), str(event.get("reason") or "Candidate promoted."))
-            else:
-                current = version_numbers.get(event.get("version"), len(version_numbers))
-                last_change = LastChange("dropped", current, current, event.get("created_at"),
-                                         str(event.get("reason") or "Candidate dropped."))
+        elif kind == "human-skipped":
+            awaiting.discard(str(event.get("target_id")))
+        elif kind == "classifier-activated":
+            to_version = version_numbers[event["classifier_version"]]
+            last_change = LastChange("promoted", active_version, to_version, event.get("created_at"),
+                                     describe_activation(snapshot, event.get("classifier_snapshot") or {}))
+            active_version, snapshot = to_version, event.get("classifier_snapshot") or {}
+        elif kind == "candidate-rejected":
+            last_change = LastChange("dropped", active_version, active_version or 1, event.get("created_at"),
+                                     str(event.get("reason") or "Candidate dropped."))
+        elif kind == "cycle-started" and snapshot is None:
+            snapshot = event.get("classifier_snapshot")
     if fingerprint not in version_numbers:
         version_numbers[fingerprint] = len(version_numbers) + 1
     records = [(item_id, *reviews[item_id][:3]) for item_id in order]
