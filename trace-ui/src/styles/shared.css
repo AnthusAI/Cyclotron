@@ -105,3 +105,48 @@ body :focus-visible {
 .cyclotron-brand {font-family:'Blinker',sans-serif;font-size:1.5rem;font-weight:600;line-height:1.2}
 .cyclotron-cycle-mark {display:flex;align-items:center;justify-content:center;min-width:0}
 .cyclotron-tagline {grid-column:1 / -1;width:max-content;max-width:100%;font-family:'Blinker',sans-serif;font-size:.625rem;font-weight:400;letter-spacing:.08em;line-height:1.3;color:var(--muted-foreground)}
+
+/* Embeddable components. These rules travel with the package so a site that
+   embeds a component renders it as the console does. They use the theme
+   tokens above, with fallbacks for a host page that defines its own. */
+
+/* LabelingReview */
+.label-choice[data-predicted="true"] { background:var(--accent); }
+.label-choice[data-agreement="correct"] { background:var(--success); color:var(--success-foreground); }
+.label-choice[data-agreement="incorrect"] { background:var(--danger-surface); color:var(--danger-foreground); }
+.label-classifier { container-type:inline-size; }
+.prediction-choices { display:flex; flex-direction:column; gap:6px; }
+.prediction-buttons { display:flex; gap:8px; }
+.prediction-confidence { display:flex; height:7px; overflow:hidden; border-radius:999px; background:var(--muted); }
+.prediction-confidence > span { flex-basis:0; min-width:0; }
+[data-confidence-index="0"] { background:#8b5cf6; }
+[data-confidence-index="1"] { background:#0ea5e9; }
+[data-confidence-index="2"] { background:#f59e0b; }
+[data-confidence-index="3"] { background:#ec4899; }
+.confidence-key { display:inline-block; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+@container (max-width:240px) {
+  .prediction-choices { flex-direction:row; align-items:stretch; }
+  .prediction-buttons { flex:1; min-width:0; flex-direction:column; }
+  .prediction-confidence { flex-direction:column; width:7px; height:auto; flex-shrink:0; }
+  .prediction-confidence > span { min-height:0; }
+}
+
+/* ReviewControl */
+.cyclotron-review { display:flex; flex-direction:column; gap:10px; padding:12px; border-radius:var(--radius,0.45rem); background:var(--card,#f6f4f7); color:var(--card-foreground,#1f1a21); font-size:14px; line-height:1.4; }
+.cyclotron-review[data-compact="true"] { padding:8px; gap:6px; font-size:13px; }
+.cyclotron-review-question { margin:0; font-size:1em; font-weight:600; }
+.cyclotron-review-decision, .cyclotron-review-why, .cyclotron-review-note, .cyclotron-review-recorded, .cyclotron-review-explanation-text { margin:0; }
+.cyclotron-review-why, .cyclotron-review-note, .cyclotron-review-explanation-text { color:var(--muted-foreground,#5d5361); font-size:.93em; }
+.cyclotron-review-choices { display:flex; gap:8px; flex-wrap:wrap; }
+.cyclotron-review-choice { display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:8px 14px; border-radius:var(--radius,0.45rem); background:var(--secondary,#ece8ee); color:var(--secondary-foreground,#1f1a21); font:inherit; font-weight:600; cursor:pointer; }
+.cyclotron-review-choice[aria-pressed="true"] { background:var(--accent,#d8cdf0); color:var(--accent-foreground,#1f1a21); text-decoration:underline; text-underline-offset:3px; }
+.cyclotron-review-choice[data-agreement="agreement"] { background:var(--success,#cdebd6); color:var(--success-foreground,#14301d); }
+.cyclotron-review-choice[data-agreement="correction"] { background:var(--danger-surface,#f6d6cf); color:var(--danger-foreground,#4a1a10); }
+.cyclotron-review-choice:disabled, .cyclotron-review-submit:disabled, .cyclotron-review-secondary:disabled { opacity:.55; cursor:not-allowed; }
+.cyclotron-review-icon { width:1.1em; height:1.1em; }
+.cyclotron-review-field { display:flex; flex-direction:column; gap:4px; font-size:.93em; color:var(--muted-foreground,#5d5361); }
+.cyclotron-review-field select, .cyclotron-review-field textarea { font:inherit; color:var(--foreground,#1f1a21); background:var(--input,#ebe7ec); border-radius:var(--radius,0.45rem); padding:6px 8px; min-height:36px; }
+.cyclotron-review-actions { display:flex; justify-content:flex-end; }
+.cyclotron-review-submit { min-height:44px; padding:8px 18px; border-radius:var(--radius,0.45rem); background:var(--primary,#d9d0f2); color:var(--primary-foreground,#1f1a21); font:inherit; font-weight:600; cursor:pointer; }
+.cyclotron-review-secondary { align-self:flex-start; min-height:36px; padding:6px 12px; border-radius:var(--radius,0.45rem); background:var(--secondary,#ece8ee); color:var(--secondary-foreground,#1f1a21); font:inherit; cursor:pointer; }
+.cyclotron-review :focus-visible { outline:2px solid var(--foreground,#1f1a21) !important; outline-offset:2px; }
