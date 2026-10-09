@@ -6,6 +6,8 @@ export type CyclotronStatusViewProps={
   variant?:'strip'|'card'
   /** Shown in the card as "Change review rate"; the application opens its own form. */
   onOverride?:()=>void
+  /** The classifier's display name for the card title; defaults to its id. */
+  classifierName?:string
 }
 
 const percent=(value:number|null|undefined)=>value==null?null:`${Math.round(value*100)}%`
@@ -65,7 +67,7 @@ function Metric({name,value,definition,testId}:{name:string;value:number|null;de
  * What a cyclotron is doing now, rendered from a cyclotron-status/v1 snapshot.
  * Data only: the application fetches the snapshot. Styles: styles/shared.css.
  */
-export function CyclotronStatusView({status,variant='strip',onOverride}:CyclotronStatusViewProps){
+export function CyclotronStatusView({status,variant='strip',onOverride,classifierName}:CyclotronStatusViewProps){
   const rate=status.reviewRate
   const state=STATES[rate.state]
   const agrees=percent(status.alignment.accuracy)
@@ -74,7 +76,7 @@ export function CyclotronStatusView({status,variant='strip',onOverride}:Cyclotro
     <span>{versionText(status)}</span>
     <span>{agrees?`Agrees ${agrees}`:'Agreement not measured yet'}</span>
     <span>{calibrationText(status)}</span>
-    <span data-review-state={rate.state}><span aria-hidden="true">{state.mark} </span>{state.word}: {rateText(status).toLowerCase()}</span>
+    <span data-review-state={rate.state} title={rateText(status)}><span aria-hidden="true">{state.mark} </span>{state.word} · {percent(rate.rate)} reviewed</span>
     {status.pending.decisionsAwaitingReview?<span>{status.pending.decisionsAwaitingReview} awaiting review</span>:null}
   </section>
 
@@ -82,7 +84,7 @@ export function CyclotronStatusView({status,variant='strip',onOverride}:Cyclotro
   const change=changeText(status)
   return <section className="cyclotron-status" data-variant="card" aria-label={`${status.cyclotron.id} status`}>
     <header className="cyclotron-status-header">
-      <h3>{status.cyclotron.classifier}</h3>
+      <h3>{classifierName?.trim()||status.cyclotron.classifier}</h3>
       <p>{versionText(status)} · as of {day(status.asOf)}</p>
     </header>
     <dl className="cyclotron-status-metrics">

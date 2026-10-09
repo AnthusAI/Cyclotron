@@ -15,12 +15,14 @@ it('renders the strip from a snapshot in words',()=>{
   expect(strip).toHaveTextContent('Version 13')
   expect(strip).toHaveTextContent('Agrees 86%')
   expect(strip).toHaveTextContent('Says 84%, right 86%')
-  expect(strip).toHaveTextContent('▼ Tapering: reviewing 25% of confident decisions')
+  expect(strip).toHaveTextContent('▼ Tapering · 25% reviewed')
   expect(strip).toHaveTextContent('7 awaiting review')
 })
 
 it('explains each alignment number under its name in the card',()=>{
-  render(<CyclotronStatusView status={status} variant="card" />)
+  render(<CyclotronStatusView status={status} variant="card" classifierName="Relevant to the publication" />)
+  expect(screen.getByRole('heading',{name:'Relevant to the publication'})).toBeVisible()
+  expect(screen.getByRole('heading',{name:'Tapering: reviewing 25% of confident decisions'})).toBeVisible()
   const recall=screen.getByTestId('metric-recall')
   expect(within(recall).getByText('90%')).toBeVisible()
   expect(within(recall).getByText('Of the items that should be a yes (include), how many it found.')).toBeVisible()
@@ -39,6 +41,7 @@ it('says what is not measured yet instead of showing empty numbers',()=>{
     reviewRate:{...status.reviewRate,state:'onboarding',rate:1},lastChange:null,
     pending:{decisionsAwaitingReview:0,staleSince:null}}
   render(<CyclotronStatusView status={empty} variant="card" />)
+  expect(screen.getByRole('heading',{name:'relevant'})).toBeVisible()
   expect(screen.getAllByText('Not measured yet')).toHaveLength(3)
   expect(screen.getByText('Calibration not measured yet')).toBeVisible()
   expect(screen.getByRole('heading',{name:'Onboarding: reviewing every decision'})).toHaveTextContent('○ Onboarding')
