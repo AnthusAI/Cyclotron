@@ -1,0 +1,2 @@
+# Strings in trace-ui copy that may keep a retired word from docs/glossary.md.
+# One exact string per line. Only attribution text and data keys belong here.

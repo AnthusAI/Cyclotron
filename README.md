@@ -498,6 +498,8 @@ Use these terms with the same meaning throughout the system.
 | Development set | Labeled items used to compare candidates |
 | Audit set | Labeled items used to measure alignment outside the optimization loop |
 
+The project glossary, with the words each concept uses and the words it retires, is in [docs/glossary.md](docs/glossary.md).
+
 ## The classifier at the center of the flywheel
 
 <img src="docs/diagrams/classifier.svg" alt="The LLM optimizer adjusts the rubric, few-shot example collection, and element classification tasks in the decision-model request. The returned main and element answers become features for the custom ML model.">
