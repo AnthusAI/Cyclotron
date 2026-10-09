@@ -10,7 +10,7 @@ from typing import Callable, Mapping, Protocol, Sequence
 from .context import ContextPolicy
 from .dynamic_elements import (CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE,
                                optimizer_dynamic_element_instruction)
-from .feedback import Element, Scorecard
+from .feedback import Element, Cyclotron
 from .head import LearnedHead
 from .run_ledger import FeatureActivity, FeatureDefinition
 
@@ -55,7 +55,7 @@ class AnalystBriefing:
 
     developer_ids: tuple[str, ...]
     developer_hashes: tuple[str, ...]
-    scorecard_fingerprint: str
+    cyclotron_fingerprint: str
     policy_fingerprint: str
     dynamic_element_instruction: str = optimizer_dynamic_element_instruction()
 
@@ -71,14 +71,14 @@ class SteeringProposal:
 class SteeringHistory:
     proposal_fingerprint: str
     decision: str  # rejected, fit-failed, not-better-on-development, promoted
-    parent_scorecard_fingerprint: str
-    candidate_scorecard_fingerprint: str | None
+    parent_cyclotron_fingerprint: str
+    candidate_cyclotron_fingerprint: str | None
     reason: str | None = None
 
 
 @dataclass(frozen=True)
 class SteeringOutcome:
-    scorecard: Scorecard
+    cyclotron: Cyclotron
     policy: ContextPolicy
     accepted: bool
     promoted: bool
@@ -88,7 +88,7 @@ class SteeringOutcome:
 
 
 def run_steering_round(
-    scorecard: Scorecard,
+    cyclotron: Cyclotron,
     policy: ContextPolicy,
     *,
     analyst_factory: AnalystFactory,
@@ -98,24 +98,24 @@ def run_steering_round(
     protected_ids: Sequence[str],
     protected_hashes: Sequence[str],
     human_accept: Callable[[SteeringProposal], bool],
-    development_objective: Callable[[Scorecard, ContextPolicy, LearnedHead], float],
+    development_objective: Callable[[Cyclotron, ContextPolicy, LearnedHead], float],
     incumbent_development_objective: float,
-    numerical_fitter: Callable[[Scorecard, ContextPolicy, tuple[str, ...]], LearnedHead],
+    numerical_fitter: Callable[[Cyclotron, ContextPolicy, tuple[str, ...]], LearnedHead],
     allowed_policies: Mapping[str, ContextPolicy] | None = None,
 ) -> SteeringOutcome:
     """Fit and evaluate a complete policy-bound child before it can be promoted.
 
     The analyst may propose one structural change only. The code derives the
-    declared features from that child scorecard, fits a :class:`LearnedHead`,
-    proves its policy and scorecard lineage, and only then gives it to the
+    declared features from that child cyclotron, fits a :class:`LearnedHead`,
+    proves its policy and cyclotron lineage, and only then gives it to the
     development objective. Scoreboard identifiers and hashes never cross the
     briefing boundary.
     """
     allowed_policies = {} if allowed_policies is None else allowed_policies
-    _guard_initial_lineage(scorecard, policy)
+    _guard_initial_lineage(cyclotron, policy)
     incumbent = _finite_objective("incumbent development objective", incumbent_development_objective)
     _guard_protected(developer_ids, developer_hashes, protected_ids, protected_hashes)
-    briefing = AnalystBriefing(tuple(developer_ids), tuple(developer_hashes), scorecard.fingerprint, policy.fingerprint)
+    briefing = AnalystBriefing(tuple(developer_ids), tuple(developer_hashes), cyclotron.fingerprint, policy.fingerprint)
     # A factory receives the mock only after installation, so scripted tests do
     # not create a provider-backed analyst while parsing the proposal.
     mock_manager.install()
@@ -127,11 +127,11 @@ def run_steering_round(
     if type(accepted) is not bool:
         raise ValueError("human review must return an exact boolean")
     if not accepted:
-        return _outcome(scorecard, policy, scorecard.fingerprint, False, False, None, proposal, proposal_fingerprint,
+        return _outcome(cyclotron, policy, cyclotron.fingerprint, False, False, None, proposal, proposal_fingerprint,
                         "rejected", None, None)
 
     candidate_policy = allowed_policies.get(proposal.context_policy_name, policy)
-    candidate = _apply(scorecard, proposal, candidate_policy)
+    candidate = _apply(cyclotron, proposal, candidate_policy)
     declared_features = _declared_features(candidate)
     try:
         refit = numerical_fitter(candidate, candidate_policy, declared_features)
@@ -139,24 +139,24 @@ def run_steering_round(
     except Exception as error:
         # Do not serialize exception text: a failed dependency must not leak its
         # inputs into the steering audit trail.
-        return _outcome(scorecard, policy, scorecard.fingerprint, True, False, None, proposal, proposal_fingerprint,
+        return _outcome(cyclotron, policy, cyclotron.fingerprint, True, False, None, proposal, proposal_fingerprint,
                         "fit-failed", candidate.fingerprint, type(error).__name__)
 
     objective = _finite_objective(
         "candidate development objective", development_objective(candidate, candidate_policy, refit)
     )
     if objective <= incumbent:
-        return _outcome(scorecard, policy, scorecard.fingerprint, True, False, None, proposal, proposal_fingerprint,
+        return _outcome(cyclotron, policy, cyclotron.fingerprint, True, False, None, proposal, proposal_fingerprint,
                         "not-better-on-development", candidate.fingerprint, None)
-    return _outcome(candidate, candidate_policy, scorecard.fingerprint, True, True, refit, proposal, proposal_fingerprint,
+    return _outcome(candidate, candidate_policy, cyclotron.fingerprint, True, True, refit, proposal, proposal_fingerprint,
                     "promoted", candidate.fingerprint, None)
 
 
-def _outcome(scorecard: Scorecard, policy: ContextPolicy, parent_scorecard_fingerprint: str, accepted: bool, promoted: bool,
+def _outcome(cyclotron: Cyclotron, policy: ContextPolicy, parent_cyclotron_fingerprint: str, accepted: bool, promoted: bool,
              refit: LearnedHead | None, proposal: SteeringProposal, proposal_fingerprint: str, decision: str,
              candidate_fingerprint: str | None, reason: str | None) -> SteeringOutcome:
-    return SteeringOutcome(scorecard, policy, accepted, promoted, refit, proposal,
-                           (SteeringHistory(proposal_fingerprint, decision, parent_scorecard_fingerprint,
+    return SteeringOutcome(cyclotron, policy, accepted, promoted, refit, proposal,
+                           (SteeringHistory(proposal_fingerprint, decision, parent_cyclotron_fingerprint,
                                             candidate_fingerprint, reason),))
 
 
@@ -164,7 +164,7 @@ def steering_observations(outcome: SteeringOutcome) -> tuple[tuple[FeatureDefini
     """Adapt one real steering outcome to the reusable UI/ledger feature contract."""
     features = tuple(FeatureDefinition(element.key, element.question_type, element.feature_names,
                                        element.definition_fingerprint)
-                     for element in outcome.scorecard.elements)
+                     for element in outcome.cyclotron.elements)
     proposal = outcome.proposal
     feature_key = (proposal.add_element.key if proposal.add_element is not None
                    else proposal.add_programmatic_element or proposal.context_policy_name or "context-policy")
@@ -175,9 +175,9 @@ def steering_observations(outcome: SteeringOutcome) -> tuple[tuple[FeatureDefini
                                       outcome.history[-1].reason, None),)
 
 
-def _guard_initial_lineage(scorecard: Scorecard, policy: ContextPolicy) -> None:
-    if scorecard.policy_fingerprint != policy.fingerprint:
-        raise ValueError("scorecard and active policy fingerprint must match")
+def _guard_initial_lineage(cyclotron: Cyclotron, policy: ContextPolicy) -> None:
+    if cyclotron.policy_fingerprint != policy.fingerprint:
+        raise ValueError("cyclotron and active policy fingerprint must match")
 
 
 def _finite_objective(name: str, value: object) -> float:
@@ -199,7 +199,7 @@ def _parse_proposal(raw: Mapping[str, object], allowed_policies: Mapping[str, Co
     if unknown:
         raise ValueError("analyst proposal edit is not allowed")
     if len(raw) != 1:
-        raise ValueError("analyst proposal must contain one allowed scorecard edit")
+        raise ValueError("analyst proposal must contain one allowed cyclotron edit")
     if "context_policy" in raw:
         name = raw["context_policy"]
         if not isinstance(name, str) or name not in allowed_policies:
@@ -227,34 +227,34 @@ def _parse_proposal(raw: Mapping[str, object], allowed_policies: Mapping[str, Co
     return SteeringProposal(Element(key, question_type, tuple(features), _proposal_fingerprint(detail)))
 
 
-def _apply(scorecard: Scorecard, proposal: SteeringProposal, candidate_policy: ContextPolicy) -> Scorecard:
+def _apply(cyclotron: Cyclotron, proposal: SteeringProposal, candidate_policy: ContextPolicy) -> Cyclotron:
     element = proposal.add_element
     if proposal.add_programmatic_element == CURRENT_DATETIME_ELEMENT:
         element = Element(CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE,
                           (CURRENT_DATETIME_ELEMENT,), _proposal_fingerprint({"kind": CURRENT_DATETIME_ELEMENT}))
-    if element is not None and element.key in {element.key for element in scorecard.elements}:
+    if element is not None and element.key in {element.key for element in cyclotron.elements}:
         raise ValueError("proposal cannot duplicate its element")
-    elements = scorecard.elements if proposal.context_policy_name is not None else scorecard.elements + (element,)
+    elements = cyclotron.elements if proposal.context_policy_name is not None else cyclotron.elements + (element,)
     if any(element is None for element in elements):
-        raise ValueError("proposal must contain an allowed scorecard edit")
-    return Scorecard(scorecard.name, scorecard.version + 1, elements, candidate_policy.fingerprint, scorecard.fingerprint)
+        raise ValueError("proposal must contain an allowed cyclotron edit")
+    return Cyclotron(cyclotron.name, cyclotron.version + 1, elements, candidate_policy.fingerprint, cyclotron.fingerprint)
 
 
-def _declared_features(scorecard: Scorecard) -> tuple[str, ...]:
-    features = tuple(name for element in scorecard.elements for name in element.feature_names)
+def _declared_features(cyclotron: Cyclotron) -> tuple[str, ...]:
+    features = tuple(name for element in cyclotron.elements for name in element.feature_names)
     if len(set(features)) != len(features):
-        raise ValueError("candidate scorecard feature names must be globally unique")
+        raise ValueError("candidate cyclotron feature names must be globally unique")
     return features
 
 
-def _validate_refit(refit: object, candidate: Scorecard, candidate_policy: ContextPolicy,
+def _validate_refit(refit: object, candidate: Cyclotron, candidate_policy: ContextPolicy,
                     declared_features: tuple[str, ...], protected_ids: Sequence[str]) -> None:
     if not isinstance(refit, LearnedHead):
         raise ValueError("numerical fitter must return the core LearnedHead")
     if refit.feature_names != declared_features:
-        raise ValueError("numerical fit must cover every candidate scorecard feature")
-    if refit.provenance.scorecard_fingerprint != candidate.fingerprint:
-        raise ValueError("numerical fit scorecard lineage does not match candidate")
+        raise ValueError("numerical fit must cover every candidate cyclotron feature")
+    if refit.provenance.cyclotron_fingerprint != candidate.fingerprint:
+        raise ValueError("numerical fit cyclotron lineage does not match candidate")
     if refit.provenance.policy_fingerprint != candidate_policy.fingerprint:
         raise ValueError("numerical fit policy lineage does not match candidate")
     training_ids = set(refit.provenance.training_ids)

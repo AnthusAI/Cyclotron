@@ -51,7 +51,7 @@ def test_the_offline_browser_workspace_enables_replay_using_only_injected_fake_m
         assert result['data']['capabilities']['liveEnabled'] is True
         assert result['data']['runs'][0]['id']==fixture['run_id']
         worker=app.state.offline_worker
-        run=worker.create_replay('OFFLINE REPLAY',fixture['run_id'],{'scorecard_id':'fixture-scorecard'})
+        run=worker.create_replay('OFFLINE REPLAY',fixture['run_id'],{'cyclotron_id':'fixture-cyclotron'})
         assert run['config']['input_mode']=='replay'
         model,_=worker.model_factory(run['config'])
         answer=model.client.system_one(state={'target':{'text':'Synthetic item 2; not research data.'}},
@@ -109,7 +109,7 @@ def test_scripted_activity_records_real_worker_learning_phases_without_paid_clie
     assert any(json.loads(event['messages'][-1]['content'])['human_explanations'] for event in requests)
     assert any(event.get('tool_calls') for event in events if event['kind']=='optimizer-response')
     # The fixture sends every engine event through the real GraphQL endpoint,
-    # but a scorecard command flushes bounded ordered batches rather than one
+    # but a cyclotron command flushes bounded ordered batches rather than one
     # HTTP/SQLite transaction per emitted event.
     assert result['trace_requests'] * 10 < len(events)
     current=store.current_item(result['run_id'])

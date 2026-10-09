@@ -215,7 +215,7 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 [data-confidence-index="3"] { background:#ec4899; }
 .confidence-key { display:inline-block; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 @media (max-width:1024px), (pointer:coarse) {
-  .scorecard-workspace :is(button,input,select) { min-height:44px; }
+  .cyclotron-workspace :is(button,input,select) { min-height:44px; }
 }
 @container (max-width:240px) {
   .prediction-choices { flex-direction:row; align-items:stretch; }

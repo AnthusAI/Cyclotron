@@ -64,25 +64,25 @@ def test_old_exhaustion_cannot_hide_newer_pending_interrupted_or_failed_work(tmp
     assert store.jobs(run['id'])[0]['status'] == ('interrupted' if later_status == 'running' else later_status)
 
 
-def test_run_scorecard_identity_uses_version_membership_before_immutable_configuration(tmp_path):
+def test_run_cyclotron_identity_uses_version_membership_before_immutable_configuration(tmp_path):
     store=WebStore(tmp_path/'db')
     for key in ('old','new'):
         store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('list','List')
-    config={'classifiers':[store.classifier('old')],'item_list_id':'list','seed':'seed','scorecard_id':'original-definition'}
+    config={'classifiers':[store.classifier('old')],'item_list_id':'list','seed':'seed','cyclotron_id':'original-definition'}
     run=store.create_run('Original','live',config)
-    assert store.run_scorecard_id(run['id'])=='original-definition'
-    edition=store.extend_scorecard(run['id'],['new'],name='Family')
-    assert store.run_scorecard_id(run['id'])==edition['config']['scorecard_id']
+    assert store.run_cyclotron_id(run['id'])=='original-definition'
+    edition=store.extend_cyclotron(run['id'],['new'],name='Family')
+    assert store.run_cyclotron_id(run['id'])==edition['config']['cyclotron_id']
     assert store.run(run['id'])['config']==config
     independent=store.create_run('Independent','recorded',{})
-    assert store.run_scorecard_id(independent['id']) is None
-    with pytest.raises(ValueError,match='unknown run'):store.run_scorecard_id('missing')
+    assert store.run_cyclotron_id(independent['id']) is None
+    with pytest.raises(ValueError,match='unknown run'):store.run_cyclotron_id('missing')
 
 
-def test_explicit_feedback_recovery_requeues_only_non_paid_scorecard_commands_and_preserves_failure_history(tmp_path):
+def test_explicit_feedback_recovery_requeues_only_non_paid_cyclotron_commands_and_preserves_failure_history(tmp_path):
     store = WebStore(tmp_path / 'workspace.sqlite')
-    run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})
+    run = store.create_run('Cyclotron', 'live', {'classifiers': [{'id': 'a'}]})
     job = store.command(run['id'], 'undo', 'undo', {})
     store.claim_command()
     store.finish_command(job['id'], 'failed', {'error_type': 'RuntimeError', 'reason': 'state retained'})
@@ -103,7 +103,7 @@ def test_explicit_feedback_recovery_requeues_only_non_paid_scorecard_commands_an
 
 def test_feedback_recovery_cannot_interleave_with_work_or_reactivate_an_inactive_edition(tmp_path):
     store = WebStore(tmp_path / 'workspace.sqlite')
-    run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})
+    run = store.create_run('Cyclotron', 'live', {'classifiers': [{'id': 'a'}]})
     job = store.command(run['id'], 'undo', 'undo', {})
     store.claim_command(); store.finish_command(job['id'], 'failed', {})
     busy = store.command(run['id'], 'prepare', 'prepare', {})
@@ -112,9 +112,9 @@ def test_feedback_recovery_cannot_interleave_with_work_or_reactivate_an_inactive
     store.claim_command(); store.finish_command(busy['id'], 'completed', {})
     other = store.create_run('New edition', 'live', {'classifiers': [{'id': 'a'}]})
     with store.connect() as db:
-        db.execute('INSERT INTO scorecards VALUES (?,?,?)', ('card', 'Card', 2))
-        db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)', ('card', 1, run['id'], None, run['created_at']))
-        db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)', ('card', 2, other['id'], run['id'], other['created_at']))
+        db.execute('INSERT INTO cyclotrons VALUES (?,?,?)', ('card', 'Card', 2))
+        db.execute('INSERT INTO cyclotron_versions VALUES (?,?,?,?,?)', ('card', 1, run['id'], None, run['created_at']))
+        db.execute('INSERT INTO cyclotron_versions VALUES (?,?,?,?,?)', ('card', 2, other['id'], run['id'], other['created_at']))
     with pytest.raises(ValueError, match='activate'):
         store.resume_feedback_command(run['id'], job['id'])
     with pytest.raises(ValueError, match='correction or undo'):

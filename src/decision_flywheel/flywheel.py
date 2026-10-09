@@ -103,7 +103,7 @@ def _restore(raw):
         head = LearnedHead(tuple(head["classes"]), tuple(head["feature_names"]), head["weights"],
                            {name: tuple(value) for name, value in head["feature_normalizers"].items()},
                            Calibration(**head["calibration"]), OutOfFoldPredictions(**oof),
-                           HeadProvenance(**provenance), head["refitted_scorecard_fingerprint"])
+                           HeadProvenance(**provenance), head["refitted_cyclotron_fingerprint"])
     return FittedClassifier(config, head, raw["training_evidence"], raw.get("development_evidence"),
                             raw.get('validation_status'), tuple(raw.get('answer_dependencies', ())))
 

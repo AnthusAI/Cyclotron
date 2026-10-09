@@ -16,7 +16,7 @@ from .reviewer_flywheel import ReviewerFlywheel
 from .reviewer_store import Article, ReviewStore
 from .selection_policy import SelectionPolicy
 from .feedback_trigger import learning_feedback
-from .scorecard_runtime import ScorecardRuntime, run_scorecard_command
+from .cyclotron_runtime import CyclotronRuntime, run_cyclotron_command
 
 
 class WebWorker:
@@ -27,7 +27,7 @@ class WebWorker:
         ``runtime`` is the application seam: an article reviewer, another item
         source, or a future host can compose the reusable core and translate
         command results into item updates.  The legacy reviewer path remains
-        the default until the scorecard workspace is moved behind the same
+        the default until the cyclotron workspace is moved behind the same
         seam; it must not change active study behaviour during that migration.
         """
         self.store, self.directory = store, Path(directory)
@@ -45,15 +45,15 @@ class WebWorker:
                 raise ValueError('live collection is not enabled')
             normalized = self.runtime.normalize_run_config(config, self.articles)
             return self.store.create_run(name, 'live', normalized, items=self.articles)
-        if config.get('scorecard_id') or config.get('classifier_ids') or config.get('item_list_id'):
+        if config.get('cyclotron_id') or config.get('classifier_ids') or config.get('item_list_id'):
             if not self.allow_live:
                 raise ValueError('live collection is not enabled')
-            return self._scorecard_runtime().create_run(name, config)
+            return self._cyclotron_runtime().create_run(name, config)
         config,items=self._run_inputs(config)
         return self.store.create_run(name,'live',config,items=items)
 
-    def _scorecard_runtime(self):
-        return ScorecardRuntime(self.store, self.directory, model_factory=self.model_factory,
+    def _cyclotron_runtime(self):
+        return CyclotronRuntime(self.store, self.directory, model_factory=self.model_factory,
                                 sink_factory=self.sink_factory, redact=self.redact)
 
     def create_comparison(self,name,before_run_id,after_run_id,approved_fingerprint,*,max_requests,limit=200,request_id=None):
@@ -126,7 +126,7 @@ class WebWorker:
         """Freeze source feedback before creating a new, empty learning session."""
         if not self.allow_live:
             raise ValueError('live collection is not enabled')
-        return self._scorecard_runtime().create_replay(name, source_run_id, config)
+        return self._cyclotron_runtime().create_replay(name, source_run_id, config)
 
     def _loop(self):
         try:
@@ -175,7 +175,7 @@ class WebWorker:
             raise ValueError('run is read-only')
         runtime = self.runtime
         if runtime is None and 'classifiers' in config:
-            runtime = self._scorecard_runtime()
+            runtime = self._cyclotron_runtime()
         if runtime is not None:
             session = runtime.open_session(
                 run_id, config, self.store.items(run_id), self.store.current_item(run_id),
@@ -228,8 +228,8 @@ class WebWorker:
             if runtime is not None:
                 current = self.store.current_item(run_id)
                 config = self.store.run(run_id)['config']
-                if isinstance(runtime, ScorecardRuntime):
-                    command = run_scorecard_command(runtime, reviewer, job['kind'], job['payload'], current,
+                if isinstance(runtime, CyclotronRuntime):
+                    command = run_cyclotron_command(runtime, reviewer, job['kind'], job['payload'], current,
                                                      config, request_id=job['request_id'])
                 else:
                     command = runtime.execute(reviewer, job['kind'], job['payload'], current, config)
@@ -261,7 +261,7 @@ class WebWorker:
                 elif kind=='skip':result=reviewer.skip(payload)
                 elif kind=='correct':result=reviewer.correct_feedback(payload,job['request_id'])
                 elif kind=='undo':
-                    if payload:raise ValueError('scorecard undo needs an empty payload')
+                    if payload:raise ValueError('cyclotron undo needs an empty payload')
                     result=reviewer.undo_feedback(job['request_id'])
                 elif kind=='optimize':result=asyncio.run(reviewer.resume_optimization())
                 elif kind=='replay-next':

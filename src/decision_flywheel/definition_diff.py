@@ -1,9 +1,9 @@
-"""Read-only, directional differences between immutable scorecard definitions."""
+"""Read-only, directional differences between immutable cyclotron definitions."""
 
 
 def compare_definitions(before, after):
     if before['id']!=after['id']:
-        raise ValueError('compare revisions of the same scorecard')
+        raise ValueError('compare revisions of the same cyclotron')
     positions=lambda definition:{row['id']:{'position':index+1,'revision':row['revision']}
         for index,row in enumerate(definition['classifiers'])}
     old,new=positions(before),positions(after)

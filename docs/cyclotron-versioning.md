@@ -1,10 +1,10 @@
-# Scorecard versions and missing-label review
+# Cyclotron versions and missing-label review
 
-A scorecard definition has an identity, a name, an ordered list of classifier
+A cyclotron definition has an identity, a name, an ordered list of classifier
 revision references, shared settings, and an active definition revision. It can
 exist without any optimization runs. Editing its name, membership, ordering or
 settings creates an immutable revision. Editing a classifier creates a classifier
-revision and new definitions for active scorecards containing that classifier.
+revision and new definitions for active cyclotrons containing that classifier.
 Existing runs do not change. Definition activation changes the configuration for
 future runs, not which historical run accepts feedback.
 
@@ -24,7 +24,7 @@ the run's articles from those immutable revisions, not from another latest-list
 query. A concurrent import cannot shift page offsets or replace frozen content.
 Later imports remain available for new runs without altering existing runs.
 
-Application trace events carry their pinned classifier revision and scorecard
+Application trace events carry their pinned classifier revision and cyclotron
 definition revision and fingerprint. Shared transport events identify all pinned
 classifier revisions. Displayed predictions carry the classifier revision plus
 the actual learned configuration fingerprint (`version`). These are distinct:
@@ -58,16 +58,16 @@ Accuracy, and label counts. These are rolling prediction-before-feedback metrics
 over at most 200 reviewed items, not a matched held-out comparison. Replayed
 historical labels must not be represented as freshly collected human judgments.
 
-GraphQL exposes `scorecards`, `scorecardVersions`, `extendScorecard`, and
-`activateScorecardVersion`. Creating a fresh replay requires explicit live-call
+GraphQL exposes `cyclotrons`, `cyclotronVersions`, `extendCyclotron`, and
+`activateCyclotronVersion`. Creating a fresh replay requires explicit live-call
 authority. Merely creating an edition makes no provider calls; preparing an item
 does, under the edition's explicit request and optimizer ceilings.
 
-Definition configuration uses `scorecardDefinitions`,
-`scorecardDefinitionVersions`, `scorecardClassifiers`,
-`saveScorecardDefinition`, and `activateScorecardDefinition`. The Scorecards
+Definition configuration uses `cyclotronDefinitions`,
+`cyclotronDefinitionVersions`, `cyclotronClassifiers`,
+`saveCyclotronDefinition`, and `activateCyclotronDefinition`. The Cyclotrons
 screen lists memberships and provides nested classifier editors. New runs can
-pass `scorecard_id` and an optional `scorecard_definition_revision`; the server
+pass `cyclotron_id` and an optional `cyclotron_definition_revision`; the server
 freezes that definition fingerprint and its exact classifier revisions.
 
 Each classifier has a read-only history drawer backed by `classifierVersions`.
@@ -75,10 +75,10 @@ It shows the original name, question, and ordered classes for each immutable
 revision. “Edit from this revision” copies that revision into an edit draft;
 inspection alone never publishes a configuration or starts model work. Saving
 the draft creates a new revision rather than modifying the inspected revision.
-Scorecard links carry `scorecard=<id>` in the URL, so reload and browser Back
-restore the selected scorecard without changing its active definition.
-An optional `scorecard_revision=<revision>` restores a read-only historical
-definition. `scorecardClassifiers` accepts the same optional revision and resolves
+Cyclotron links carry `cyclotron=<id>` in the URL, so reload and browser Back
+restore the selected cyclotron without changing its active definition.
+An optional `cyclotron_revision=<revision>` restores a read-only historical
+definition. `cyclotronClassifiers` accepts the same optional revision and resolves
 the exact pinned classifier names, questions and ordered classes—not the latest
 catalog versions. Historical inspection has no edit controls; activation remains
 an explicit “Use this definition” action. Missing revisions and failed history
@@ -87,7 +87,7 @@ selector retains the requested revision; no nested classifier query or activatio
 control is shown for an unavailable definition. “Return to active definition”
 changes navigation only, and browser Back restores the requested revision.
 A classifier edit lists all active
-scorecard definitions affected by saving it and explains that joint requests can
+cyclotron definitions affected by saving it and explains that joint requests can
 affect their other classifiers while existing runs remain unchanged.
 
 Unsent multi-classifier votes and explanations are stored in browser session
@@ -98,7 +98,7 @@ changes items without remounting, and ignores delayed updates from an old item.
 Malformed or unavailable browser storage does not prevent labeling. Drafts are
 local to the browser session; they are not saved human labels or server records.
 
-`scorecardDefinitionComparison` compares an active and inspected definition
+`cyclotronDefinitionComparison` compares an active and inspected definition
 directionally. The read-only comparison drawer shows name changes, added/removed
 members, changed positions and pinned revisions, original classifier questions
 and class roles, and changed shared settings. Missing settings are distinct from
@@ -171,14 +171,14 @@ history, whose opposite labels produce a different curve. Snapshot provenance
 retains the prediction and feedback event IDs and identifies decision passthrough.
 
 The selected history is part of the app URL: `classifier=<classifier-id>` in
-the hash selects a member of the run's frozen scorecard. Reload, Back/Forward,
+the hash selects a member of the run's frozen cyclotron. Reload, Back/Forward,
 and switching between labeling and timeline retain this selection. Unknown
 classifier IDs are removed from the URL and the run's first classifier is used;
 they never load another run's history. Opening or changing this view does not
 submit feedback or start model work.
 
 Replay creation uses `createReplay` with an explicitly authorized request budget,
-source run and scorecard definition. It freezes source trace labels and comments
+source run and cyclotron definition. It freezes source trace labels and comments
 for items labeled for every selected classifier at the same definition revision.
 Missing labels require human backfill first. `replay-next` predicts the next item
 then applies that frozen feedback through the ordinary flywheel. Step runs one
@@ -240,18 +240,18 @@ Calibration, Brier and log loss use only recorded complete probability vectors;
 snapshots and the UI disclose missing-vector counts. The metric window is chosen
 from the latest 200 reviewed items before omitting unavailable probabilities.
 Candidate selection remains strict: it requires complete distributions rather
-than comparing partial losses. Both legacy reviewer and scorecard sessions read
+than comparing partial losses. Both legacy reviewer and cyclotron sessions read
 their original prediction traces instead of rebuilding binary probabilities from
 displayed confidence.
 ## Output comparison and shared defaults
 
 ## Shared defaults
 
-“Edit scorecard” includes model identifiers, partition seed, label-transition and
+“Edit cyclotron” includes model identifiers, partition seed, label-transition and
 feedback cadences, and primary/secondary selection objectives with secondary
 regression limits and an optional score floor. Blank settings use application
 defaults. Saving publishes a new immutable definition; existing runs retain their
-frozen settings. New-run setup inherits the scorecard objective unless explicitly
+frozen settings. New-run setup inherits the cyclotron objective unless explicitly
 overridden. Classifier-specific policies take precedence, and each classifier's
 positive class or macro aggregation is resolved separately. Saving settings does
 not call a model or start optimization.
@@ -259,7 +259,7 @@ not call a model or start optimization.
 The local server dispatches `decisions_provider` explicitly: `jev` uses the Jev
 SDK and `kev` uses the local Kev server at `http://127.0.0.1:8009`. Jev is the
 default for older runs that did not record a provider. Both paths send the full
-joint scorecard request, with per-classifier rubric, labeled examples, and
+joint cyclotron request, with per-classifier rubric, labeled examples, and
 feature questions. Both preserve requests, answers, probability vectors and
 usage. A model identifier alone is not a provider switch.
 
@@ -281,7 +281,7 @@ request is a cache miss and still requires the normal live-call permissions and
 request ceiling. Do not relabel or migrate those old answers to a new server.
 
 The default workspace also accepts `laya`, using the optional local Laya package.
-Its adapter sends the complete structured scorecard state and all scoped
+Its adapter sends the complete structured cyclotron state and all scoped
 questions, including rubrics, actual labeled examples, and dynamic inputs.
 Conservative token-budget checks reject oversized state, questions, or options
 before inference instead of relying on Laya's internal truncation. Reported
@@ -293,7 +293,7 @@ Unknown providers reject in the default server; custom hosts can inject their
 own model factory and explicit provider/model identifiers. There is no silent
 Jev fallback and no completed three-provider experiment claim.
 
-## Correct a recorded scorecard label
+## Correct a recorded cyclotron label
 
 The API command `correct` accepts an item ID and one or more classifier labels:
 
@@ -323,7 +323,7 @@ Explanation-only edits also count as evidence changes. Updated explanations
 enter the next optimizer context, but protected audit labels and explanations
 remain excluded. The affected classifier records a new latest-200 metrics and
 calibration snapshot against its original pre-vote prediction. Other classifier
-labels remain unchanged, and a new scorecard checkpoint records the active state.
+labels remain unchanged, and a new cyclotron checkpoint records the active state.
 
 The reusable Rich reviewer also sends only eligible training explanations by
 default, matching the web session's firewall. Its optimizer prompt includes
@@ -383,7 +383,7 @@ Inherited source labels in a missing-label/backfill run remain read-only and are
 not retracted. Frozen replay inputs cannot be undone.
 
 The runtime reconciles affected classifiers, records new metrics and calibration
-snapshots, checkpoints the scorecard, and reopens the item with its original
+snapshots, checkpoints the cyclotron, and reopens the item with its original
 displayed prediction. Each classifier records a `displayed-prediction-reused`
 event referencing that original prediction. No decision or optimizer request is
 made. Suspended review cycles let the human submit new labels normally, including
@@ -396,9 +396,9 @@ command identity and payload, records its previous failure result in history,
 and is idempotent while pending, running or complete. It refuses prediction,
 label-submission, replay and optimization jobs, since those can incur new model
 calls. It also refuses recovery while other run work is pending or while that
-run's scorecard edition is inactive. No automatic paid retry is introduced.
+run's cyclotron edition is inactive. No automatic paid retry is introduced.
 
-The scorecard labeling UI offers **Edit recorded feedback** and **Undo item
+The cyclotron labeling UI offers **Edit recorded feedback** and **Undo item
 labels** in right-hand drawers. Opening either drawer makes no changes. The
 correction editor sends only changed labels or explanations and retains the
 original expected feedback identity, so a concurrent update cannot silently
@@ -449,7 +449,7 @@ snapshots. Metric snapshots pin each classifier's class order and positive role.
 Protected scoreboard, rolling-audit, and final-audit votes do not count toward
 learning cadence or rubric label-transition triggers. They can update descriptive
 evaluation metrics, but cannot trigger optimizer or retraining work. This rule
-applies to scorecard sessions, the older reviewer path, and operational replays.
+applies to cyclotron sessions, the older reviewer path, and operational replays.
 Older runs collected before this correction may have had learning cadence affected
 by protected votes; their history is not rewritten or claimed as a clean protected
 experiment.
@@ -577,7 +577,7 @@ empty fixture directory:
 ```
 
 The command refuses an existing workspace database. It creates synthetic items,
-labels and a versioned two-classifier scorecard, then serves the real UI and
+labels and a versioned two-classifier cyclotron, then serves the real UI and
 GraphQL/SQLite worker on loopback only. Decision clients are injected fakes;
 optimizer calls are forbidden. This is a technology acceptance fixture, not an
 experiment or evidence of model quality. Its authorization checkbox exercises

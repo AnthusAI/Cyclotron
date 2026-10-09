@@ -313,7 +313,7 @@ def test_a_failed_shared_refresh_requires_explicit_retry_and_keeps_the_old_answe
     finally:wheel.close();shared.close()
 
 
-def test_candidate_feature_collection_keeps_the_sibling_scorecard_context(tmp_path):
+def test_candidate_feature_collection_keeps_the_sibling_cyclotron_context(tmp_path):
     from dataclasses import replace
     class Model:
         model_identity='fake'

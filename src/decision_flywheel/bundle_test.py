@@ -5,7 +5,7 @@ import warnings
 
 import pytest
 
-from .bundle import (EXAMPLES_FILE, MANIFEST_FILE, SCORECARD_FILE, BundleModelWarning,
+from .bundle import (EXAMPLES_FILE, MANIFEST_FILE, CYCLOTRON_FILE, BundleModelWarning,
                      BundleValidationError, ClassifierBundle, load_bundle)
 from .context import FixedExampleList
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
@@ -16,7 +16,7 @@ ROWS = [LabeledItem(Item(f"{label}-{n}", {"text": f"a {label} sample number {n}"
 BY_ID = {row.item.id: row for row in ROWS}
 FIXED = FixedExampleList.from_items(TASK, [BY_ID[i] for i in ("pos-0", "pos-1", "neg-0", "neg-1")],
                                     [BY_ID["pos-2"], BY_ID["neg-2"]])
-SCORECARD = json.dumps({"questions": {"tone": {"type": "choice", "criteria": {"pos": None, "neg": None}},
+CYCLOTRON = json.dumps({"questions": {"tone": {"type": "choice", "criteria": {"pos": None, "neg": None}},
                                       "tone.sport": {"type": "noul"}},
                         "weights": {"tone": 2.0, "tone.sport": 1.0}}, sort_keys=True)
 ENGINE = {"adapter": "jev", "configured_model": "fake-1", "model_identity": "jev:fake-1",
@@ -74,7 +74,7 @@ class FakeEngine:
 
 def _bundle(examples=FIXED):
     rows = [BY_ID[i] for i in examples.example_ids + examples.reserve_ids] if examples else []
-    return ClassifierBundle(TASK, SCORECARD, Rubric(SCORECARD), examples=examples, example_rows=rows,
+    return ClassifierBundle(TASK, CYCLOTRON, Rubric(CYCLOTRON), examples=examples, example_rows=rows,
                             engine=ENGINE, head={"features": ["tone", "tone.sport"], "fit_id": "f1"},
                             lineage={"round": 3, "labels_fingerprint": "0" * 64})
 
@@ -135,12 +135,12 @@ def test_the_manifest_is_text_free_and_records_hashes_lineage_and_engine(tmp_pat
     assert manifest["task"]["fingerprint"] == TASK.fingerprint
     assert manifest["engine"] == ENGINE
     assert manifest["fewshot"]["fingerprint"] == FIXED.fingerprint
-    assert manifest["rubric"]["scorecard_sha256"] == hashlib.sha256(SCORECARD.encode()).hexdigest()
+    assert manifest["rubric"]["cyclotron_sha256"] == hashlib.sha256(CYCLOTRON.encode()).hexdigest()
     assert set(manifest["rubric"]["questions"]) == {"tone", "tone.sport"}
     assert manifest["retrieval"] is None and manifest["lineage"]["round"] == 3
 
 
-@pytest.mark.parametrize("name", [MANIFEST_FILE, EXAMPLES_FILE, SCORECARD_FILE])
+@pytest.mark.parametrize("name", [MANIFEST_FILE, EXAMPLES_FILE, CYCLOTRON_FILE])
 def test_an_edited_file_is_rejected_before_any_model_call(tmp_path, name):
     _bundle().save(tmp_path / "b")
     path = tmp_path / "b" / name
@@ -172,9 +172,9 @@ def test_example_rows_must_match_the_list():
     rows = [BY_ID[i] for i in FIXED.example_ids + FIXED.reserve_ids]
     changed = [LabeledItem(Item(r.item.id, {"text": r.item.values["text"] + "!"}), r.label) for r in rows]
     with pytest.raises(BundleValidationError):
-        ClassifierBundle(TASK, SCORECARD, Rubric(SCORECARD), examples=FIXED, example_rows=changed, engine=ENGINE)
+        ClassifierBundle(TASK, CYCLOTRON, Rubric(CYCLOTRON), examples=FIXED, example_rows=changed, engine=ENGINE)
     with pytest.raises(BundleValidationError):
-        ClassifierBundle(TASK, SCORECARD, Rubric(SCORECARD), examples=FIXED, example_rows=rows[:-1], engine=ENGINE)
+        ClassifierBundle(TASK, CYCLOTRON, Rubric(CYCLOTRON), examples=FIXED, example_rows=rows[:-1], engine=ENGINE)
 
 
 def test_saving_refuses_to_overwrite_a_different_bundle(tmp_path):

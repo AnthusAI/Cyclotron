@@ -1,4 +1,4 @@
-"""Trusted human-feedback and scorecard-lineage contracts, independent of a model."""
+"""Trusted human-feedback and cyclotron-lineage contracts, independent of a model."""
 from __future__ import annotations
 
 import hashlib
@@ -102,7 +102,7 @@ def _propensity(value: object) -> float:
 
 @dataclass(frozen=True)
 class Element:
-    """A named source of features in a scorecard version."""
+    """A named source of features in a cyclotron version."""
 
     key: str
     question_type: str
@@ -156,14 +156,14 @@ class FeatureCoverage:
 
 @dataclass(frozen=True)
 class Decision:
-    """A model-neutral decision tied to exact policy, request, and scorecard lineage."""
+    """A model-neutral decision tied to exact policy, request, and cyclotron lineage."""
 
     value: str
     model_provenance: str
     policy_fingerprint: str
     context_artifact_fingerprint: str
     request_fingerprint: str
-    scorecard_fingerprint: str
+    cyclotron_fingerprint: str
     feature_coverage: FeatureCoverage
 
     def __post_init__(self) -> None:
@@ -172,7 +172,7 @@ class Decision:
         _hash("policy_fingerprint", self.policy_fingerprint)
         _hash("context_artifact_fingerprint", self.context_artifact_fingerprint)
         _hash("request_fingerprint", self.request_fingerprint)
-        _hash("scorecard_fingerprint", self.scorecard_fingerprint)
+        _hash("cyclotron_fingerprint", self.cyclotron_fingerprint)
 
     @property
     def source_model_provenance(self) -> str:
@@ -198,8 +198,8 @@ class ScoreResult:
 
 
 @dataclass(frozen=True)
-class Scorecard:
-    """Versioned scorecard lineage, with policy changes represented in its hash."""
+class Cyclotron:
+    """Versioned cyclotron lineage, with policy changes represented in its hash."""
 
     name: str
     version: int
@@ -208,11 +208,11 @@ class Scorecard:
     parent_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
-        _non_empty("scorecard name", self.name)
+        _non_empty("cyclotron name", self.name)
         if isinstance(self.version, bool) or not isinstance(self.version, int) or self.version < 1:
-            raise ValueError("scorecard version must be a positive integer")
+            raise ValueError("cyclotron version must be a positive integer")
         if not self.elements or len({element.key for element in self.elements}) != len(self.elements):
-            raise ValueError("scorecard elements must be present with unique keys")
+            raise ValueError("cyclotron elements must be present with unique keys")
         _hash("policy_fingerprint", self.policy_fingerprint)
         if self.parent_fingerprint is not None:
             _hash("parent_fingerprint", self.parent_fingerprint)

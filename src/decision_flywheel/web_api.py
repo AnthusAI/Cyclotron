@@ -30,8 +30,8 @@ class Run:
     config: JSON
 
     @strawberry.field
-    async def scorecard_id(self,info:strawberry.Info)->strawberry.ID|None:
-        identifier=await asyncio.to_thread(info.context['store'].run_scorecard_id,str(self.id))
+    async def cyclotron_id(self,info:strawberry.Info)->strawberry.ID|None:
+        identifier=await asyncio.to_thread(info.context['store'].run_cyclotron_id,str(self.id))
         return strawberry.ID(identifier) if identifier is not None else None
 
     @strawberry.field
@@ -89,33 +89,33 @@ async def call(info, method, *args, **kwargs):
 @strawberry.type
 class Query:
     @strawberry.field
-    async def scorecards(self,info:strawberry.Info)->JSON:
-        return await call(info,'scorecards')
+    async def cyclotrons(self,info:strawberry.Info)->JSON:
+        return await call(info,'cyclotrons')
 
     @strawberry.field
-    async def scorecard_definitions(self,info:strawberry.Info)->JSON:
-        return await call(info,'scorecard_definitions')
+    async def cyclotron_definitions(self,info:strawberry.Info)->JSON:
+        return await call(info,'cyclotron_definitions')
 
     @strawberry.field
-    async def scorecard_definition_versions(self,info:strawberry.Info,scorecard_id:strawberry.ID)->JSON:
-        return await call(info,'scorecard_definition_versions',str(scorecard_id))
+    async def cyclotron_definition_versions(self,info:strawberry.Info,cyclotron_id:strawberry.ID)->JSON:
+        return await call(info,'cyclotron_definition_versions',str(cyclotron_id))
 
     @strawberry.field
-    async def scorecard_definition_comparison(self,info:strawberry.Info,scorecard_id:strawberry.ID,before_revision:int,after_revision:int)->JSON:
-        return await call(info,'scorecard_definition_comparison',str(scorecard_id),before_revision,after_revision)
+    async def cyclotron_definition_comparison(self,info:strawberry.Info,cyclotron_id:strawberry.ID,before_revision:int,after_revision:int)->JSON:
+        return await call(info,'cyclotron_definition_comparison',str(cyclotron_id),before_revision,after_revision)
 
     @strawberry.field
-    async def scorecard_classifiers(self,info:strawberry.Info,scorecard_id:strawberry.ID,revision:int|None=None)->JSON:
-        definition=await call(info,'scorecard_definition',str(scorecard_id),revision)
+    async def cyclotron_classifiers(self,info:strawberry.Info,cyclotron_id:strawberry.ID,revision:int|None=None)->JSON:
+        definition=await call(info,'cyclotron_definition',str(cyclotron_id),revision)
         return [await call(info,'classifier',ref['id'],ref['revision']) for ref in definition['classifiers']]
 
     @strawberry.field
-    async def scorecard_versions(self,info:strawberry.Info,scorecard_id:strawberry.ID)->JSON:
-        return await call(info,'scorecard_versions',str(scorecard_id))
+    async def cyclotron_versions(self,info:strawberry.Info,cyclotron_id:strawberry.ID)->JSON:
+        return await call(info,'cyclotron_versions',str(cyclotron_id))
 
     @strawberry.field
-    async def scorecard_checkpoints(self,info:strawberry.Info,run_id:strawberry.ID)->JSON:
-        return await call(info,'scorecard_checkpoints',str(run_id))
+    async def cyclotron_checkpoints(self,info:strawberry.Info,run_id:strawberry.ID)->JSON:
+        return await call(info,'cyclotron_checkpoints',str(run_id))
 
     @strawberry.field
     async def matched_evaluation_target(self,info:strawberry.Info,run_id:strawberry.ID,event_id:int)->JSON|None:
@@ -178,18 +178,18 @@ class Query:
 @strawberry.type
 class Mutation:
     @strawberry.mutation
-    async def extend_scorecard(self,info:strawberry.Info,parent_run_id:strawberry.ID,classifier_ids:list[str],name:str,confirmed:bool=False)->Run:
+    async def extend_cyclotron(self,info:strawberry.Info,parent_run_id:strawberry.ID,classifier_ids:list[str],name:str,confirmed:bool=False)->Run:
         service=info.context.get('service')
         if not confirmed or service is None or not service.allow_live:
-            raise ValueError('scorecard replay requires explicit live authority')
-        run=await call(info,'extend_scorecard',str(parent_run_id),classifier_ids,name=name)
-        await call(info,'append_event',run['id'],'scorecard-created',{'kind':'scorecard-version-created','scorecard_id':run['config']['scorecard_id'],'revision':run['config']['scorecard_revision'],'parent_run_id':str(parent_run_id),'learning_policy':'fresh-replay','backfill_count':run['config']['backfill_count']})
+            raise ValueError('cyclotron replay requires explicit live authority')
+        run=await call(info,'extend_cyclotron',str(parent_run_id),classifier_ids,name=name)
+        await call(info,'append_event',run['id'],'cyclotron-created',{'kind':'cyclotron-version-created','cyclotron_id':run['config']['cyclotron_id'],'revision':run['config']['cyclotron_revision'],'parent_run_id':str(parent_run_id),'learning_policy':'fresh-replay','backfill_count':run['config']['backfill_count']})
         return Run(**run)
 
     @strawberry.mutation
-    async def activate_scorecard_version(self,info:strawberry.Info,scorecard_id:strawberry.ID,revision:int)->Run:
-        run=await call(info,'activate_scorecard_version',str(scorecard_id),revision)
-        await call(info,'append_event',run['id'],f'activate:{uuid4()}',{'kind':'scorecard-version-activated','scorecard_id':str(scorecard_id),'revision':revision})
+    async def activate_cyclotron_version(self,info:strawberry.Info,cyclotron_id:strawberry.ID,revision:int)->Run:
+        run=await call(info,'activate_cyclotron_version',str(cyclotron_id),revision)
+        await call(info,'append_event',run['id'],f'activate:{uuid4()}',{'kind':'cyclotron-version-activated','cyclotron_id':str(cyclotron_id),'revision':revision})
         return Run(**run)
 
     @strawberry.mutation
@@ -206,14 +206,14 @@ class Mutation:
         return await call(info, 'save_classifier', identifier, name, config)
 
     @strawberry.mutation
-    async def save_scorecard_definition(self,info:strawberry.Info,identifier:str,name:str,classifiers:JSON,settings:JSON)->JSON:
+    async def save_cyclotron_definition(self,info:strawberry.Info,identifier:str,name:str,classifiers:JSON,settings:JSON)->JSON:
         if any(secret and secret in json.dumps([name,classifiers,settings]) for secret in info.context.get('redact',())):
             raise ValueError('configuration contains a credential')
-        return await call(info,'save_scorecard_definition',identifier,name,classifiers,settings)
+        return await call(info,'save_cyclotron_definition',identifier,name,classifiers,settings)
 
     @strawberry.mutation
-    async def activate_scorecard_definition(self,info:strawberry.Info,scorecard_id:strawberry.ID,revision:int)->JSON:
-        return await call(info,'activate_scorecard_definition',str(scorecard_id),revision)
+    async def activate_cyclotron_definition(self,info:strawberry.Info,cyclotron_id:strawberry.ID,revision:int)->JSON:
+        return await call(info,'activate_cyclotron_definition',str(cyclotron_id),revision)
 
     @strawberry.mutation
     async def save_item_list(self, info: strawberry.Info, identifier: str, name: str) -> JSON:

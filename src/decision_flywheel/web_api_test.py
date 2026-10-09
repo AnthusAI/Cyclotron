@@ -20,20 +20,20 @@ def test_labeling_access_explains_inactive_editions_without_changing_recorded_st
         store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('list','Items')
     parent=store.create_run('Original','live',{'classifiers':[store.classifier('old')],'item_list_id':'list','seed':'seed'})
-    added=store.extend_scorecard(parent['id'],['new'],name='Versions')
+    added=store.extend_cyclotron(parent['id'],['new'],name='Versions')
     recorded=store.create_run('Recording','recorded',{})
     client=TestClient(create_app(store))
-    query='query($id:ID!){run(runId:$id){labelingAccess scorecardId config}}'
+    query='query($id:ID!){run(runId:$id){labelingAccess cyclotronId config}}'
     def access(run):
         result=client.post('/graphql',json={'query':query,'variables':{'id':run['id']}}).json()
         assert 'errors' not in result
         return result['data']['run']
-    assert access(parent)['labelingAccess']=={'allowed':False,'reason':'Activate this scorecard version before continuing labeling.'}
+    assert access(parent)['labelingAccess']=={'allowed':False,'reason':'Activate this cyclotron version before continuing labeling.'}
     assert access(added)['labelingAccess']=={'allowed':True,'reason':None}
     assert access(recorded)['labelingAccess']=={'allowed':False,'reason':'Recorded runs are read-only.'}
-    assert access(parent)['scorecardId']==access(added)['scorecardId']==added['config']['scorecard_id']
-    assert access(recorded)['scorecardId'] is None
-    store.activate_scorecard_version(added['config']['scorecard_id'],1)
+    assert access(parent)['cyclotronId']==access(added)['cyclotronId']==added['config']['cyclotron_id']
+    assert access(recorded)['cyclotronId'] is None
+    store.activate_cyclotron_version(added['config']['cyclotron_id'],1)
     assert access(parent)['labelingAccess']=={'allowed':True,'reason':None}
     assert access(parent)['config']==parent['config']
     assert store.jobs(parent['id'])==[]
@@ -108,32 +108,32 @@ def test_classifier_history_query_exposes_old_configurations_without_creating_mo
     assert store.runs()==[]
 
 
-def test_scorecard_definition_api_preserves_pinned_members_without_starting_runs(tmp_path):
+def test_cyclotron_definition_api_preserves_pinned_members_without_starting_runs(tmp_path):
     store=WebStore(tmp_path/'db')
     store.save_classifier('a','A',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     client=TestClient(create_app(store))
-    result=client.post('/graphql',json={'query':'mutation($refs:JSON!){saveScorecardDefinition(identifier:"card",name:"Card",classifiers:$refs,settings:{})}', 'variables':{'refs':[{'id':'a','revision':1}]}}).json()
+    result=client.post('/graphql',json={'query':'mutation($refs:JSON!){saveCyclotronDefinition(identifier:"card",name:"Card",classifiers:$refs,settings:{})}', 'variables':{'refs':[{'id':'a','revision':1}]}}).json()
     assert 'errors' not in result
     store.save_classifier('a','A new',{'question':'Choose again','classes':[{'label':'yes'},{'label':'no'}]})
-    data=client.post('/graphql',json={'query':'{scorecardDefinitions scorecardDefinitionVersions(scorecardId:"card") scorecardClassifiers(scorecardId:"card") runs{id}}'}).json()['data']
-    assert data['scorecardDefinitions'][0]['revision']==2
-    assert data['scorecardDefinitionVersions'][0]['classifiers'][0]['revision']==1
-    assert data['scorecardClassifiers'][0]['revision']==2
+    data=client.post('/graphql',json={'query':'{cyclotronDefinitions cyclotronDefinitionVersions(cyclotronId:"card") cyclotronClassifiers(cyclotronId:"card") runs{id}}'}).json()['data']
+    assert data['cyclotronDefinitions'][0]['revision']==2
+    assert data['cyclotronDefinitionVersions'][0]['classifiers'][0]['revision']==1
+    assert data['cyclotronClassifiers'][0]['revision']==2
     assert data['runs']==[]
-    old=client.post('/graphql',json={'query':'{scorecardClassifiers(scorecardId:"card",revision:1)}'}).json()
+    old=client.post('/graphql',json={'query':'{cyclotronClassifiers(cyclotronId:"card",revision:1)}'}).json()
     assert 'errors' not in old
-    assert old['data']['scorecardClassifiers'][0]['name']=='A'
-    assert old['data']['scorecardClassifiers'][0]['config']['question']=='Choose'
-    assert store.scorecard_definition('card')['revision']==2
-    comparison=client.post('/graphql',json={'query':'{scorecardDefinitionComparison(scorecardId:"card",beforeRevision:2,afterRevision:1)}'}).json()
+    assert old['data']['cyclotronClassifiers'][0]['name']=='A'
+    assert old['data']['cyclotronClassifiers'][0]['config']['question']=='Choose'
+    assert store.cyclotron_definition('card')['revision']==2
+    comparison=client.post('/graphql',json={'query':'{cyclotronDefinitionComparison(cyclotronId:"card",beforeRevision:2,afterRevision:1)}'}).json()
     assert 'errors' not in comparison
-    result=comparison['data']['scorecardDefinitionComparison']
+    result=comparison['data']['cyclotronDefinitionComparison']
     assert result['before']['revision']==2
     assert result['after']['revision']==1
     assert result['changes']['members'][0]['before']['revision']==2
     assert result['classifiers'][0]['before']['name']=='A new'
     assert result['classifiers'][0]['after']['config']['question']=='Choose'
-    assert store.scorecard_definition('card')['revision']==2
+    assert store.cyclotron_definition('card')['revision']==2
     assert store.runs()==[]
 
 
@@ -141,23 +141,23 @@ def test_graphql_restores_an_old_definition_without_replacing_history_or_startin
     store=WebStore(tmp_path/'db')
     for cid in ('a','b'):
         store.save_classifier(cid,cid,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
-    original=store.save_scorecard_definition('card','Original',[{'id':'a','revision':1},{'id':'b','revision':1}],{})
-    newer=store.save_scorecard_definition('card','Newer',[{'id':'b','revision':1}],{})
+    original=store.save_cyclotron_definition('card','Original',[{'id':'a','revision':1},{'id':'b','revision':1}],{})
+    newer=store.save_cyclotron_definition('card','Newer',[{'id':'b','revision':1}],{})
     client=TestClient(create_app(store))
-    query='mutation($revision:Int!){activateScorecardDefinition(scorecardId:"card",revision:$revision)}'
+    query='mutation($revision:Int!){activateCyclotronDefinition(cyclotronId:"card",revision:$revision)}'
     restored=client.post('/graphql',json={'query':query,'variables':{'revision':1}}).json()
     assert 'errors' not in restored
-    assert restored['data']['activateScorecardDefinition']==original
-    result=client.post('/graphql',json={'query':'{scorecardDefinitions scorecardDefinitionVersions(scorecardId:"card") scorecardClassifiers(scorecardId:"card") runs{id}}'}).json()
+    assert restored['data']['activateCyclotronDefinition']==original
+    result=client.post('/graphql',json={'query':'{cyclotronDefinitions cyclotronDefinitionVersions(cyclotronId:"card") cyclotronClassifiers(cyclotronId:"card") runs{id}}'}).json()
     assert 'errors' not in result
-    assert result['data']['scorecardDefinitions']==[original]
-    assert result['data']['scorecardDefinitionVersions']==[original,newer]
-    assert [row['id'] for row in result['data']['scorecardClassifiers']]==['a','b']
+    assert result['data']['cyclotronDefinitions']==[original]
+    assert result['data']['cyclotronDefinitionVersions']==[original,newer]
+    assert [row['id'] for row in result['data']['cyclotronClassifiers']]==['a','b']
     assert result['data']['runs']==[]
     invalid=client.post('/graphql',json={'query':query,'variables':{'revision':999}}).json()
     assert invalid['errors']
-    assert store.scorecard_definition('card')==original
-    assert store.scorecard_definition_versions('card')==[original,newer]
+    assert store.cyclotron_definition('card')==original
+    assert store.cyclotron_definition_versions('card')==[original,newer]
     with store.connect() as db:
         assert db.execute('SELECT COUNT(*) FROM web_jobs').fetchone()[0]==0
 

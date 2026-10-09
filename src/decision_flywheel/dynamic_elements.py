@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Mapping
 
-from .feedback import Scorecard
+from .feedback import Cyclotron
 
 
 CURRENT_DATETIME_ELEMENT = "current_datetime"
@@ -28,9 +28,9 @@ def optimizer_dynamic_element_instruction() -> str:
     )
 
 
-def current_datetime_state(scorecard: Scorecard, now: datetime) -> dict[str, str]:
-    """Return the UTC state field when the active scorecard selected this element."""
-    if not any(element.key == CURRENT_DATETIME_ELEMENT for element in scorecard.elements):
+def current_datetime_state(cyclotron: Cyclotron, now: datetime) -> dict[str, str]:
+    """Return the UTC state field when the active cyclotron selected this element."""
+    if not any(element.key == CURRENT_DATETIME_ELEMENT for element in cyclotron.elements):
         return {}
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("current datetime must be timezone-aware")
@@ -38,8 +38,8 @@ def current_datetime_state(scorecard: Scorecard, now: datetime) -> dict[str, str
     return {CURRENT_DATETIME_ELEMENT: utc.isoformat().replace("+00:00", "Z")}
 
 
-def with_dynamic_state(state: Mapping[str, object], scorecard: Scorecard, now: datetime) -> dict[str, object]:
+def with_dynamic_state(state: Mapping[str, object], cyclotron: Cyclotron, now: datetime) -> dict[str, object]:
     """Return a request state with every selected programmatic value attached."""
     if not isinstance(state, Mapping):
         raise ValueError("request state must be a mapping")
-    return {**state, **current_datetime_state(scorecard, now)}
+    return {**state, **current_datetime_state(cyclotron, now)}

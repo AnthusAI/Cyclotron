@@ -1,5 +1,5 @@
 import pytest
-from .scorecard_settings import validate_shared_settings
+from .cyclotron_settings import validate_shared_settings
 
 
 def test_shared_settings_preserve_extension_values_and_validate_role_independent_objectives():

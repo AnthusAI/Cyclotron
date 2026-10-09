@@ -31,9 +31,9 @@ it('keeps classifier save controls outside the scrolling fields',async()=>{
   expect(save.closest('[data-slot="card"]')).toHaveClass('shrink-0')
 })
 
-it('shows every active scorecard affected by a classifier edit before any save',async()=>{
+it('shows every active cyclotron affected by a classifier edit before any save',async()=>{
   const row={id:'a',name:'Shared topic',revision:2,config:{question:'Topic?',classes:[{label:'yes'},{label:'no'}]}}
-  vi.mocked(graphql).mockImplementation(async(query)=>query.includes('scorecardDefinitions')?{scorecardDefinitions:[{id:'one',name:'First card',revision:3,classifiers:[{id:'a',revision:2}]},{id:'two',name:'Second card',revision:7,classifiers:[{id:'a',revision:1}]},{id:'other',name:'Unrelated card',revision:1,classifiers:[{id:'b',revision:1}]}]}:{classifiers:[row],itemLists:[]})
+  vi.mocked(graphql).mockImplementation(async(query)=>query.includes('cyclotronDefinitions')?{cyclotronDefinitions:[{id:'one',name:'First card',revision:3,classifiers:[{id:'a',revision:2}]},{id:'two',name:'Second card',revision:7,classifiers:[{id:'a',revision:1}]},{id:'other',name:'Unrelated card',revision:1,classifiers:[{id:'b',revision:1}]}]}:{classifiers:[row],itemLists:[]})
   render(<Catalog section="classifiers"/> )
   fireEvent.click(await screen.findByRole('button',{name:'Edit configuration'}))
   expect(await screen.findByText('First card · revision 3')).toBeVisible()
