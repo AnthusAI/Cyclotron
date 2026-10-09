@@ -56,3 +56,36 @@ def test_the_declared_length_must_match_the_corpus(tmp_path):
         _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
                        "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
                        "--output", str(tmp_path / "study"), "--operational-items", "1200"])
+
+
+def test_a_rubric_gate_configuration_is_declared_and_spreads_development_through_the_stream(tmp_path):
+    operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
+    operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
+    output = tmp_path / "study"
+    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
+                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
+                   "--output", str(output), "--development-rate", "0.25", "--provisional-allowance", "0.05"])
+    gate = json.loads((output / "protocol.json").read_text())["rubric_gate"]
+    assert gate["evaluation_policy"]["initial_recency_allowance"] == 0.05
+    assert gate["evaluation_policy"]["recency_decay_per_class"] == 20
+    assert 70 <= gate["development_items"] <= 130
+    study = _study()
+    rows = study.rows(operational)
+    plan = study.build_plan(study.DecisionTask("editorial", ("publish", "reject"), "q"), rows, "seed", 0.25)
+    first_200 = {row.item.id for row in rows[:200]}
+    fixed = study.build_plan(study.DecisionTask("editorial", ("publish", "reject"), "q"), rows, "seed")
+    early = lambda p: min(sum(row.label == label and row.item.id in first_200 for row in p.development) for label in ("publish", "reject"))
+    # A fixed 20 per class from the whole corpus has only about half its development labels by mid-run.
+    assert early(fixed) <= 12 < 15 <= early(plan)
+
+
+def test_seeded_answers_copy_only_completed_exact_requests(tmp_path):
+    import sqlite3
+    source = tmp_path / "source.sqlite3"
+    db = sqlite3.connect(source)
+    db.execute("CREATE TABLE runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
+    db.executemany("INSERT INTO runtime_answers VALUES (?,?,?)", [("a", "complete", "{}"), ("b", "pending", None), ("c", "failed", None)])
+    db.commit(); db.close()
+    target = tmp_path / "run" / "runtime.sqlite3"
+    _study().seed_answers(target, source)
+    assert sqlite3.connect(target).execute("SELECT key,status FROM runtime_answers").fetchall() == [("a", "complete")]

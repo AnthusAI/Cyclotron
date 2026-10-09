@@ -5,13 +5,15 @@ The 400-item recording is the default; ``--operational-items`` runs a longer
 corpus with the same plan, models, and cadences. Live calls need --confirm-live.
 """
 import argparse, asyncio, hashlib, json, os, sqlite3
+from dataclasses import asdict
 from pathlib import Path
 
 from decision_flywheel.adapters.openai_decision import OpenAIDecisionAdapter, OpenAIDecisionConfiguration
 from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.cycle_replay import run_cycle_replay
-from decision_flywheel.flywheel import DecisionFlywheel
+from decision_flywheel.evaluation_policy import EvaluationPolicy
+from decision_flywheel.flywheel import DecisionFlywheel, development_assignment
 from decision_flywheel.models import DecisionTask, Item, LabeledItem
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.replay import ReplayPlan
@@ -67,10 +69,33 @@ def policy_for(mode, seed):
     if mode=='first_100_all_then_half': return onboarding_first_hundred_then_half(seed=seed)
     raise ValueError(f'unknown feedback mode: {mode}')
 
-def build_plan(task, operational, seed):
+def evaluation_policy(args):
+    defaults=EvaluationPolicy()
+    return EvaluationPolicy(initial_recency_allowance=defaults.initial_recency_allowance if args.provisional_allowance is None else args.provisional_allowance,
+                            recency_decay_per_class=defaults.recency_decay_per_class if args.recency_decay_per_class is None else args.recency_decay_per_class)
+
+def seed_answers(target, source):
+    """Copy completed exact-request answers from an earlier run; the cache key is the full request."""
+    target.parent.mkdir(parents=True,exist_ok=True)
+    db=sqlite3.connect(target,uri=True)
+    try:
+        db.execute('CREATE TABLE IF NOT EXISTS runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)')
+        db.execute('ATTACH DATABASE ? AS source',(f'file:{source}?mode=ro',))
+        with db:
+            db.execute("INSERT OR IGNORE INTO runtime_answers SELECT key,status,payload FROM source.runtime_answers WHERE status='complete'")
+        db.execute('DETACH DATABASE source')
+    finally: db.close()
+
+def build_plan(task, operational, seed, development_rate=None):
     # All operational items are eligible for feedback; a fixed stratified dev
     # slice is for candidate comparison only, never hidden from the all arm.
     dev=[]; training=[]
+    if development_rate is not None:
+        # A label-independent share of the stream, so development evidence
+        # arrives as the run goes rather than only by the corpus's end.
+        for r in operational:
+            (dev if development_assignment(seed,r.item.id,rate=development_rate) else training).append(r)
+        return ReplayPlan(tuple(operational),tuple(training),tuple(dev),(),(len(operational),),seed)
     for label in task.labels:
         group=sorted((r for r in operational if r.label==label),key=lambda r:hashlib.sha256(f'{seed}:{r.item.id}'.encode()).hexdigest())
         dev.extend(group[:20]); training.extend(group[20:])
@@ -97,13 +122,21 @@ async def main_async(args):
             raise RuntimeError('a mode has an unfinished cycle; wait for its owning process to reach a terminal state')
     else:
         args.output.mkdir(parents=True,exist_ok=False)
-    plan=build_plan(task,operational,args.seed)
+    plan=build_plan(task,operational,args.seed,args.development_rate)
     protocol={'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,'modes':args.modes,
       'operational_items':count,'decision_model':args.model,'optimizer_model':args.model,'baseline_rubric':BASELINE_RUBRIC if args.baseline_rubric=='curated' else '','baseline_provenance':'curated from the product intent and v1 failure analysis; not derived from operational labels at runtime' if args.baseline_rubric=='curated' else 'none: an empty rubric, as in the first 400-cycle recording',
       'feedback_disclosure':f'all reveals all {count} post-prediction labels; selective policies disclose their realized rate','decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
       'transport_retries':{'count':args.transport_retries,'scope':'OpenAI SDK retries of connection errors, 408, 409, 429 and 5xx for decision and optimizer calls; retried attempts are not in the recorded usage'},
       'rubric_trigger':{'basis':args.rubric_trigger_basis,'every':args.rubric_changes_every,
                         'max_attempts':args.max_rubric_optimizations}}
+    if args.development_rate is not None or args.provisional_allowance is not None or args.recency_decay_per_class is not None:
+        protocol['rubric_gate']={'development':(f'label-independent hash share {args.development_rate} of the stream' if args.development_rate is not None
+                                                else 'fixed 20 per class from the whole corpus'),
+                                 'development_items':len(plan.development),
+                                 'evaluation_policy':asdict(evaluation_policy(args))}
+    if args.seed_answers_from:
+        protocol['seeded_answers']={'source':str(args.seed_answers_from),
+            'scope':'exact decision requests already answered in the source run are served from its answers; nothing else is copied'}
     if not args.resume: (args.output/'protocol.json').write_text(json.dumps(protocol,indent=2)+'\n')
     ledger=write_budget_ledger(args.output,args.max_decision_calls,args.max_optimizer_calls,args.modes)
     if not args.confirm_live: return
@@ -128,7 +161,10 @@ async def main_async(args):
             # Retried attempts are not in the recorded usage; the protocol says so.
             adapter.client=adapter.client.with_options(max_retries=args.transport_retries)
             transport.client=transport.client.with_options(max_retries=args.transport_retries)
-        wheel=DecisionFlywheel(out/'runtime.sqlite3',ClassifierConfig(task,BASELINE_RUBRIC if args.baseline_rubric=='curated' else ''),adapter,OptimizerAgent(transport),max_requests=remaining_decisions)
+        if args.seed_answers_from and current['completed_cycles']==0:
+            seed_answers(out/'runtime.sqlite3',args.seed_answers_from)
+        wheel=DecisionFlywheel(out/'runtime.sqlite3',ClassifierConfig(task,BASELINE_RUBRIC if args.baseline_rubric=='curated' else ''),adapter,OptimizerAgent(transport),max_requests=remaining_decisions,
+                               evaluation_policy=evaluation_policy(args))
         try:
             report=await run_cycle_replay(wheel,plan,optimize_every=200,retrain_every=200,stages=('rubric',),
               feedback_policy=policy_for(mode,args.seed),negative_label='reject',max_rubric_optimizations=(args.max_rubric_optimizations or remaining_optimizers),
@@ -151,7 +187,7 @@ async def main_async(args):
       lock.unlink(missing_ok=True)
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--max-rubric-optimizations',type=int); p.add_argument('--rubric-changes-every',type=int,default=20); p.add_argument('--rubric-trigger-basis',choices=('label_transitions','revealed_feedback_count'),default='label_transitions'); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); p.add_argument('--operational-items',type=int,default=400); p.add_argument('--no-playback',dest='playback',action='store_false'); p.add_argument('--transport-retries',type=int,default=0); p.add_argument('--baseline-rubric',choices=('curated','none'),default='curated',help='none starts from an empty rubric, as the first 400-cycle recording did'); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--max-rubric-optimizations',type=int); p.add_argument('--rubric-changes-every',type=int,default=20); p.add_argument('--rubric-trigger-basis',choices=('label_transitions','revealed_feedback_count'),default='label_transitions'); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); p.add_argument('--operational-items',type=int,default=400); p.add_argument('--no-playback',dest='playback',action='store_false'); p.add_argument('--transport-retries',type=int,default=0); p.add_argument('--development-rate',type=float,help='development role by a label-independent hash share of the stream instead of a fixed 20 per class'); p.add_argument('--provisional-allowance',type=float,help='Brier allowance for provisional rubric changes (engine default 2.0)'); p.add_argument('--recency-decay-per-class',type=int,help='development labels per class at which the provisional phase ends (engine default 20)'); p.add_argument('--seed-answers-from',type=Path,help='serve exact decision requests answered in this earlier runtime store'); p.add_argument('--baseline-rubric',choices=('curated','none'),default='curated',help='none starts from an empty rubric, as the first 400-cycle recording did'); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
     if not args.modes or len(set(args.modes))!=len(args.modes): p.error('--modes must be a non-empty unique comma-separated list')
     asyncio.run(main_async(args))
 if __name__=='__main__': main()

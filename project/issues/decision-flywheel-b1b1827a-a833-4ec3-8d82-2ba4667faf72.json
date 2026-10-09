@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-b1b1827a-a833-4ec3-8d82-2ba4667faf72",
+  "title": "Experiment: why no rubric proposal is ever promoted, and a gate configuration that lets one be",
+  "description": "Pre-registered 2026-10-09 before any replay.\n\nOffline finding from attempt 4 (1,124 cycles, decision-flywheel-8f3a052a), the reason this task exists: every rubric step took the provisional branch of staged_optimization. That branch runs while EvaluationPolicy.recency_allowance(development counts) > 0, i.e. until both classes have recency_decay_per_class = 20 development labels. The study's plan fixes development at 20 per class drawn from the whole corpus, so the development set only completes at the corpus's last item: at cycle 1,081 it held 19 publish and 22 reject. The promotion gate (DecisionFlywheel.improve) was therefore never called. Meanwhile the provisional allowance starts at 2.0 balanced-Brier units, the whole range, so every candidate was activated, including clear regressions on development (cycle 238: balanced Brier 0.195 to 0.420; cycle 320, the 110-character rubric: 0.366 to 0.455 and development accuracy 79 to 58 percent, followed by 53 percent decision-model accuracy in cycles 321 to 367).\n\nConfiguration under test (G): development by a label-independent hash share of 0.25 of the stream (the engine's default development_assignment rate), provisional allowance 0.05, recency decay 20 per class (unchanged). Study flags --development-rate 0.25 --provisional-allowance 0.05. Replay: 400 cycles, same corpus, seed, gpt-4.1-mini decision and optimizer, empty starting rubric, review everything; exact decision requests already answered in the 412-cycle replicate (run-500-cancelled) are served from its answers (--seed-answers-from), so only diverging requests cost money. Two replicates.\n\nHypotheses:\nH1 (mechanism): with G, at least one rubric step reaches the promotion gate (a rubric step result that is not provisional, with at least 20 development labels per class) before cycle 400 in each replicate.\nH2 (no accepted regressions): with G, no provisional rubric is activated whose development balanced Brier exceeds the incumbent's by more than 0.05.\nH3 (primary outcome): evaluator-only accuracy over cycles 201 to 400 is at least 81 percent in each replicate, against a baseline mean of 78 percent over the five recorded runs with the current configuration (83, 79, 78, 75, 75). If both replicates are at or below 78 percent, G does not help accuracy.\nSecondary: ECE over cycles 301 to 400 no worse than the baseline's by more than 0.03; cost and time per replicate.\n\nAcceptance: per-step gate table for attempt 4 (dev counts, allowance, incumbent and candidate scores), a few proposals quoted, both replicates run with fixtures in schema 2 and a results note in docs/experiments on this branch, each hypothesis marked supported or not with numbers. Budget: about 2 dollars.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T21:29:01.355328Z",
+  "updated_at": "2026-10-09T21:29:07.288642Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "editorial-study agent"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
