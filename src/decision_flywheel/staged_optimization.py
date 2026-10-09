@@ -144,8 +144,22 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         proposal = {**proposal, "tasks": tasks}
     if stage == 'questions' and 'dynamic_elements' in proposal:
         control = 'dynamic_elements'
-    if set(proposal)-{"rationale", control} or control not in proposal:
-        raise ValueError("stage proposal must change only its assigned control")
+    outside = sorted(set(proposal)-{"rationale", control})
+    if outside or control not in proposal:
+        # A proposal that reaches outside its stage is dropped and recorded, like an
+        # unusable rubric: the active configuration stays and later feedback may
+        # trigger another attempt. Raising here ended long replays on one bad reply.
+        result={'stage':stage,'proposal':proposal,'activated':False,'promoted':False,
+                'validation_status':'invalid-proposal',
+                'reason':(f"proposal changed {', '.join(outside)} outside its {control} stage" if outside
+                          else f'proposal did not set {control}')+'; active configuration retained',
+                'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
+                'answer_dependencies':wheel.collected_answer_dependencies(),
+                'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
+        with wheel.db:
+            wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?",(_json(result),key))
+        wheel._emit({'kind':'optimization-stage-completed',**result})
+        return result
     config=wheel.active.config.apply(proposal, training)
     if stage=='rubric' and not config.rubric.strip():
         result={'stage':stage,'proposal':proposal,'activated':False,'promoted':False,

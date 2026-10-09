@@ -3,16 +3,24 @@
   "title": "Extend the Wikinews editorial corpus to at least 1,200 items",
   "description": "The current curated corpus is 400 stories from malteos/wikinews at revision b4c2ec3. A 1,000-cycle run needs at least 1,000 and ideally 1,200 so the last windows are not thin. Keep the same curation rule and the same simulated editorial label procedure, record the corpus sha256 and the label-generation prompt, and keep the first 400 items identical so earlier results stay comparable. Acceptance: a manifest listing item count, sha256, source revision, and licence; a spec that the first 400 match the existing corpus.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "ffadac3b-bfd6-4442-a7bb-1d6377a2b7a3",
+      "author": "home",
+      "text": "Done on feat/editorial-corpus-1200. 1,200 items, sha256 bba0fa49208e6a806f16cee2bff59bb65294b41155b0d4ae3debac12250e8a30; the first 400 lines are byte-identical to the 400-item corpus (3ce5aacf...). Manifest: docs/experiments/editorial-wikinews-1200.manifest.json (count, sha256, revision b4c2ec3, licence, label prompt and its sha256, schema, set-aside items, usage). The 2020-2023 files hold only 88 more usable items, so the extension draws on the adjacent 2016-2019 files of the same revision (712 of the 800 new items); later windows therefore cover older news. Same curation rule (generalised; it reproduces the original 400-item selection order exactly) and same label procedure (gpt-4.1-mini-2025-04-14, same prompt and schema, temperature 0, one call per item, no retry). 878 calls, 656,951 input and 54,494 output tokens, $0.35. 78 items whose evidence quote was not literal were set aside for the next candidate (50 reject, 28 publish) instead of being hand-reviewed; the base corpus's offline span review and 20-item spot check covered the first 400 only. New items: 250 publish, 550 reject (31% publish vs 37.5% in the first 400). The corpus text is CC BY 2.5 and is not committed (public repo); it lives at ~/Documents/Codex/2026-10-08/task-2/semantic-v2-1200/. Set EDITORIAL_CORPUS_1200 to that file to run the byte-identity spec.",
+      "created_at": "2026-10-09T16:22:02.472547Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.356788Z",
-  "updated_at": "2026-10-09T14:34:58.494775Z",
+  "updated_at": "2026-10-09T16:22:02.472577Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

@@ -100,16 +100,20 @@ def test_question_dynamic_candidates_cannot_mix_controls_or_execute_generated_co
     config = ClassifierConfig(TASK, rubric='Existing')
     wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, model,
         OptimizerAgent(lambda _: OptimizerReply(json.dumps(proposal), 'fake')))
-    with pytest.raises(ValueError):
-        asyncio.run(optimize_stage(wheel, 'questions', TRAIN, DEV, protected=(),
-            propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1))
+    run = lambda: asyncio.run(optimize_stage(wheel, 'questions', TRAIN, DEV, protected=(),
+        propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1))
+    if len(proposal) > 1:
+        assert run()['validation_status'] == 'invalid-proposal'
+    else:
+        with pytest.raises(ValueError):
+            run()
     assert model.calls == 0
     assert wheel.active.config == config
     wheel.close()
 
 
 @pytest.mark.parametrize('stage', ['rubric', 'examples'])
-def test_other_stages_cannot_sneak_dynamic_inputs_into_their_candidate(tmp_path, stage):
+def test_a_proposal_that_reaches_outside_its_stage_is_dropped_without_a_model_call(tmp_path, stage):
     model = FakeModel()
     control = 'rubric' if stage == 'rubric' else 'example_ids'
     proposal = {control: 'Changed' if stage == 'rubric' else [],
@@ -117,9 +121,11 @@ def test_other_stages_cannot_sneak_dynamic_inputs_into_their_candidate(tmp_path,
     config = ClassifierConfig(TASK, rubric='Existing')
     wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, model,
         OptimizerAgent(lambda _: OptimizerReply(json.dumps(proposal), 'fake')))
-    with pytest.raises(ValueError, match='only its assigned control'):
-        asyncio.run(optimize_stage(wheel, stage, TRAIN, DEV, protected=(),
-            propensities={row.item.id:1. for row in TRAIN}))
+    result = asyncio.run(optimize_stage(wheel, stage, TRAIN, DEV, protected=(),
+        propensities={row.item.id:1. for row in TRAIN}))
+    assert (result['promoted'], result['validation_status']) == (False, 'invalid-proposal')
+    assert result['reason'] == f'proposal changed dynamic_elements outside its {control} stage; active configuration retained'
+    assert wheel.history()[-1]['kind'] == 'optimization-stage-completed'
     assert model.calls == 0
     assert wheel.active.config == config
     wheel.close()

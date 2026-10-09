@@ -24,6 +24,17 @@ test('calibration provenance explains recorded fit evidence without a JSON dump'
   expect(document.querySelector('pre')).toBeNull()
 })
 
+test('a sample that counts its training items says where the IDs are', () => {
+  render(<ReliabilityCurve curve={{count:1,ece:.1,bins:[],samples:[{
+    item_id:'paper-two',source:'calibrated-head',version:'version-two',temperature:1.1,
+    calibration_provenance:{method:'temperature',fit_on:'out_of_fold',training_count:338},
+  }]}} />)
+  fireEvent.click(screen.getByText('Snapshot provenance'))
+  fireEvent.click(screen.getByText('paper-two'))
+  expect(screen.getByText('338 trusted training items; their IDs are on the prediction event.')).toBeVisible()
+  expect(screen.queryByText('Training item IDs not recorded.')).toBeNull()
+})
+
 test('raw decision passthrough is not described as fitted calibration', () => {
   render(<ReliabilityCurve curve={{count:1,ece:.1,bins:[],samples:[{
     item_id:'raw-paper',source:'decision-passthrough',version:'raw-version',

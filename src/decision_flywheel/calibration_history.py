@@ -35,6 +35,18 @@ def reviewed_prediction_bindings(events):
     return _review_bindings(events)[1]
 
 
+def _sample_provenance(provenance):
+    """Each sample names its training set by count; the IDs stay on its prediction event.
+
+    Copying every ID into each of the window's samples made every metrics event
+    grow with the training set."""
+    if not isinstance(provenance, dict) or 'training_ids' not in provenance:
+        return provenance
+    ids = provenance['training_ids'] or ()
+    return {**{key: value for key, value in provenance.items() if key != 'training_ids'},
+            'training_count': len(ids)}
+
+
 def reviewed_calibration_metrics(classes, events, *, limit=200):
     classes=tuple(classes)
     reviewed,_=_review_bindings(events)
@@ -47,7 +59,7 @@ def reviewed_calibration_metrics(classes, events, *, limit=200):
         samples.append({'item_id':identifier,'prediction_event_id':prediction.get('event_id'),
                         'feedback_event_id':feedback_id,'version':prediction.get('version'),
                         'source':source,'temperature':prediction.get('calibration_temperature'),
-                        'calibration_provenance':prediction.get('calibration_provenance')})
+                        'calibration_provenance':_sample_provenance(prediction.get('calibration_provenance'))})
         if prediction.get('fitted_head') and prediction.get('uncalibrated_probabilities') and prediction.get('probabilities'):
             truth.append(actual);raw.append(prediction['uncalibrated_probabilities']);calibrated.append(prediction['probabilities'])
     curve=metrics['calibration']

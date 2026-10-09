@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Hash-gated, resumable three-policy prequential Cyclotron study."""
+"""Hash-gated, resumable prequential Cyclotron study over a frozen editorial corpus.
+
+The 400-item recording is the default; ``--operational-items`` runs a longer
+corpus with the same plan, models, and cadences. Live calls need --confirm-live.
+"""
 import argparse, asyncio, hashlib, json, os, sqlite3
 from pathlib import Path
 
@@ -77,14 +81,16 @@ async def main_async(args):
     if digest(args.bootstrap_corpus)!=args.bootstrap_sha256: raise ValueError('bootstrap corpus hash mismatch')
     task=DecisionTask('editorial',('publish','reject'),'Include items with a meaningful constructive or public-benefit outcome; reject harm-dominant or routine items.')
     operational,bootstrap=rows(args.operational_corpus),rows(args.bootstrap_corpus)
-    if len(operational)!=400 or len({r.item.id for r in operational})!=400: raise ValueError('operational corpus must contain exactly 400 unique rows')
+    count=args.operational_items
+    if len(operational)!=count or len({r.item.id for r in operational})!=count: raise ValueError(f'operational corpus must contain exactly {count} unique rows')
     if {r.item.id for r in operational}&{r.item.id for r in bootstrap}: raise ValueError('bootstrap IDs overlap operational stream')
     if len(bootstrap)<12 or any(sum(r.label==label for r in bootstrap)<6 for label in task.labels): raise ValueError('bootstrap needs at least six labels per class')
     if args.resume:
         if not args.output.exists(): raise ValueError('--resume needs the existing study output directory')
         old=json.loads((args.output/'protocol.json').read_text())
         for key,value in {'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,
-                          'decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls}.items():
+                          'decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
+                          'operational_items':count}.items():
             if old.get(key)!=value: raise ValueError(f'--resume protocol mismatch for {key}')
         if tuple(old.get('modes',()))!=args.modes: raise ValueError('--resume protocol mismatch for modes')
         if any(event_counts(args.output/mode/'runtime.sqlite3')['unfinished_cycles'] for mode in args.modes):
@@ -93,8 +99,9 @@ async def main_async(args):
         args.output.mkdir(parents=True,exist_ok=False)
     plan=build_plan(task,operational,args.seed)
     protocol={'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,'modes':args.modes,
-      'operational_items':400,'baseline_rubric':BASELINE_RUBRIC,'baseline_provenance':'curated from the product intent and v1 failure analysis; not derived from operational labels at runtime',
-      'feedback_disclosure':'all reveals all 400 post-prediction labels; selective policies disclose their realized rate','decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
+      'operational_items':count,'decision_model':args.model,'optimizer_model':args.model,'baseline_rubric':BASELINE_RUBRIC if args.baseline_rubric=='curated' else '','baseline_provenance':'curated from the product intent and v1 failure analysis; not derived from operational labels at runtime' if args.baseline_rubric=='curated' else 'none: an empty rubric, as in the first 400-cycle recording',
+      'feedback_disclosure':f'all reveals all {count} post-prediction labels; selective policies disclose their realized rate','decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
+      'transport_retries':{'count':args.transport_retries,'scope':'OpenAI SDK retries of connection errors, 408, 409, 429 and 5xx for decision and optimizer calls; retried attempts are not in the recorded usage'},
       'rubric_trigger':{'basis':args.rubric_trigger_basis,'every':args.rubric_changes_every,
                         'max_attempts':args.max_rubric_optimizations}}
     if not args.resume: (args.output/'protocol.json').write_text(json.dumps(protocol,indent=2)+'\n')
@@ -116,7 +123,12 @@ async def main_async(args):
         if remaining_decisions<1 or remaining_optimizers<1: raise RuntimeError('global authorized budget is exhausted')
         out.mkdir(exist_ok=True); adapter=OpenAIDecisionAdapter.from_environment(configuration=OpenAIDecisionConfiguration(args.model,300))
         transport=OpenAIOptimizer.from_environment(model=args.model,max_calls=remaining_optimizers)
-        wheel=DecisionFlywheel(out/'runtime.sqlite3',ClassifierConfig(task,BASELINE_RUBRIC),adapter,OptimizerAgent(transport),max_requests=remaining_decisions)
+        if args.transport_retries:
+            # Opt-in for long runs: one dropped connection otherwise ends the run.
+            # Retried attempts are not in the recorded usage; the protocol says so.
+            adapter.client=adapter.client.with_options(max_retries=args.transport_retries)
+            transport.client=transport.client.with_options(max_retries=args.transport_retries)
+        wheel=DecisionFlywheel(out/'runtime.sqlite3',ClassifierConfig(task,BASELINE_RUBRIC if args.baseline_rubric=='curated' else ''),adapter,OptimizerAgent(transport),max_requests=remaining_decisions)
         try:
             report=await run_cycle_replay(wheel,plan,optimize_every=200,retrain_every=200,stages=('rubric',),
               feedback_policy=policy_for(mode,args.seed),negative_label='reject',max_rubric_optimizations=(args.max_rubric_optimizations or remaining_optimizers),
@@ -127,17 +139,19 @@ async def main_async(args):
             if report.get('resumed_from_cycles') and prior.exists():
                 old_cycles=json.loads(prior.read_text()).get('cycles',[])
                 report['cycles']=[*old_cycles,*report['cycles']]
-            report['disclosure']={'operational_items':400,'feedback_revealed':sum(x['feedback_selected'] for x in report['cycles']),
+            report['disclosure']={'operational_items':count,'feedback_revealed':sum(x['feedback_selected'] for x in report['cycles']),
               'dev_role_items':len(plan.development),'scoreboard_role_items':0}
-            (out/'results.json').write_text(json.dumps(report,indent=2)+'\n'); events=read_trace(out/'runtime.sqlite3')
-            (out/'playback.html').write_text(render_trace(events,class_config=[{'label':'publish','role':'positive'},{'label':'reject','role':'negative'}]))
+            (out/'results.json').write_text(json.dumps(report,indent=2)+'\n')
+            if args.playback:
+                events=read_trace(out/'runtime.sqlite3')
+                (out/'playback.html').write_text(render_trace(events,class_config=[{'label':'publish','role':'positive'},{'label':'reject','role':'negative'}]))
         finally: wheel.close()
         write_budget_ledger(args.output,args.max_decision_calls,args.max_optimizer_calls,args.modes)
     finally:
       lock.unlink(missing_ok=True)
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--max-rubric-optimizations',type=int); p.add_argument('--rubric-changes-every',type=int,default=20); p.add_argument('--rubric-trigger-basis',choices=('label_transitions','revealed_feedback_count'),default='label_transitions'); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--max-rubric-optimizations',type=int); p.add_argument('--rubric-changes-every',type=int,default=20); p.add_argument('--rubric-trigger-basis',choices=('label_transitions','revealed_feedback_count'),default='label_transitions'); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); p.add_argument('--operational-items',type=int,default=400); p.add_argument('--no-playback',dest='playback',action='store_false'); p.add_argument('--transport-retries',type=int,default=0); p.add_argument('--baseline-rubric',choices=('curated','none'),default='curated',help='none starts from an empty rubric, as the first 400-cycle recording did'); args=p.parse_args(argv); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
     if not args.modes or len(set(args.modes))!=len(args.modes): p.error('--modes must be a non-empty unique comma-separated list')
     asyncio.run(main_async(args))
 if __name__=='__main__': main()

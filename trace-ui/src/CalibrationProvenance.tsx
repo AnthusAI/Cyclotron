@@ -8,6 +8,8 @@ function SampleProvenance({sample}: {sample: RecordValue}) {
   const provenance = record(sample.calibration_provenance)
   const training = Array.isArray(provenance?.training_ids) && provenance.training_ids.every(id => typeof id === 'string')
     ? provenance.training_ids as string[] : undefined
+  const trainingCount = typeof provenance?.training_count === 'number' && Number.isInteger(provenance.training_count)
+    && provenance.training_count >= 0 ? provenance.training_count : undefined
   const source = sample.source === 'calibrated-head' ? 'Calibrated ML head'
     : sample.source === 'decision-passthrough' ? 'Raw decision output' : 'Output source not recorded'
   const fit = text(provenance?.fit_on)
@@ -32,7 +34,8 @@ function SampleProvenance({sample}: {sample: RecordValue}) {
         ? 'No ML-head calibration was applied.' : 'Calibration provenance not recorded.'}</p> : null}
       {training ? <details><summary className="cursor-pointer">{training.length} trusted training items</summary>
         <ul className="mt-1 break-all font-mono">{training.map((id,index) => <li key={`${id}:${index}`}>{id}</li>)}</ul>
-      </details> : provenance ? <p className="text-muted-foreground">Training item IDs not recorded.</p> : null}
+      </details> : trainingCount !== undefined ? <p className="text-muted-foreground">{trainingCount} trusted training items; their IDs are on the prediction event.</p>
+        : provenance ? <p className="text-muted-foreground">Training item IDs not recorded.</p> : null}
     </div>
   </details>
 }
