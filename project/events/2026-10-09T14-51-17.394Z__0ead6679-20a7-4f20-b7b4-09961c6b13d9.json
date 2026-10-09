@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0ead6679-20a7-4f20-b7b4-09961c6b13d9",
+  "issue_id": "decision-flywheel-dd270031-0cba-4dc8-b489-ee8b5eb586ca",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:51:17.394Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Ship a review control widget contract with thumbs mode, reason codes and a submit event",
+    "description": "Generalize trace-ui/src/components/labeling-review.tsx into an embeddable review control (export path cyclotron/components/review-control). Props: itemId, decision {decisionId, label, confidence, classes, version}, reviewReason?, mode 'thumbs'|'labels', positiveLabel, reasons? [{code, label, labelEffect 'exclude'|'none'}], value?, disabled, compact. Events: onReview({itemId, decisionId, label, reasonCode, explanation}), onUndo({itemId, decisionId}). It never calls a server. Ordering: after the status shape (shares types).\n\nAcceptance criteria:\n- Thumbs up maps to positiveLabel; thumbs down requires a reason when reasons are given; a reason with labelEffect 'none' submits no label.\n- The decision and confidence are visible before the reviewer chooses, and the control says it was shown before the review.\n- Keyboard and screen-reader use pass the existing Vitest accessibility checks; UI strings use review, label, explanation, decision, confidence.\n- The console's MultiLabelCard uses the new control, so there is one implementation.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

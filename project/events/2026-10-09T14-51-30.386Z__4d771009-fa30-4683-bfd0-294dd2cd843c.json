@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4d771009-fa30-4683-bfd0-294dd2cd843c",
+  "issue_id": "decision-flywheel-8b828ab0-83f3-4eed-abc1-0a13ef4582e0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:51:30.386Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Document embedding a cyclotron in an application, with Papyrus as the worked example",
+    "description": "Add a README section and a docs page: the four SDK calls, the store and lease, the review-rate program, the two widgets, and the status shape, using the Papyrus relevance cyclotron as the example (see project/wiki/papyrus-integration.md). Use the glossary vocabulary (item, cyclotron, classifier, decision model, ML model, LLM optimizer, decision, confidence, reviewer, review, label, correction, explanation, feedback, cycle, version). Ordering: last.\n\nAcceptance criteria:\n- The quickstart runs offline with a scripted decision model and is covered by the existing README snippet check.\n- The page states what the application owns (items, reviewers, its system of record) and what the engine owns (labels, partitions, propensities, versions).\n- No retired glossary words appear in the new text.,",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
