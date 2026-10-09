@@ -83,8 +83,8 @@ it('shows a recorded review read-only with undo',()=>{
   expect(onUndo).toHaveBeenCalledWith({itemId:'ref-1',decisionId:'d-1'})
 })
 
-it('ships its styles, and the labeling review styles, in the package stylesheet',()=>{
-  const css=readFileSync('src/styles/shared.css','utf8')
+it('ships its styles, and the labeling review styles, in components.css',()=>{
+  const css=readFileSync('src/styles/components.css','utf8')
   for(const selector of ['.cyclotron-review-choice','.cyclotron-review-submit','.label-choice[data-agreement="correct"]','.prediction-confidence','.confidence-key'])
     expect(css).toContain(selector)
   expect(readFileSync('src/index.css','utf8')).not.toContain('.prediction-confidence {')
