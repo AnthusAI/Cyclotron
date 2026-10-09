@@ -190,11 +190,7 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .metric-recall { background:#10b981; }
 .metric-precision { background:#38bdf8; }
 .metric-accuracy { background:#a78bfa; }
-.label-choice[data-predicted="true"] { background:var(--accent); }
-.label-choice[data-agreement="correct"] { background:var(--success); color:var(--success-foreground); }
-.label-choice[data-agreement="incorrect"] { background:var(--danger-surface); color:var(--danger-foreground); }
 [aria-label="Review actions"] button { min-height:48px; }
-.label-classifier { container-type:inline-size; }
 .labeling-card, .labeling-card-content { min-width:0; max-width:100%; }
 .classifier-feedback-strip { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(260px,1fr); gap:12px; overflow-x:auto; min-width:0; width:100%; max-width:100%; padding-bottom:6px; overscroll-behavior-x:contain; scroll-snap-type:x proximity; }
 .classifier-feedback-strip > section { scroll-snap-align:start; }
@@ -205,21 +201,6 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .classifier-metrics[data-embedded="true"] [data-slot="card"] { border:0; background:transparent; padding:0; box-shadow:none; }
 .classifier-metrics[data-embedded="true"] [data-slot="card-content"] { padding:0; }
 @media(max-width:600px) { .labeling-footer { flex-wrap:wrap; } .labeling-footer > div:first-child { flex-basis:100%; } .labeling-footer [aria-label="Review actions"] { margin-left:auto; } }
-.prediction-choices { display:flex; flex-direction:column; gap:6px; }
-.prediction-buttons { display:flex; gap:8px; }
-.prediction-confidence { display:flex; height:7px; overflow:hidden; border-radius:999px; background:var(--muted); }
-.prediction-confidence > span { flex-basis:0; min-width:0; }
-[data-confidence-index="0"] { background:#8b5cf6; }
-[data-confidence-index="1"] { background:#0ea5e9; }
-[data-confidence-index="2"] { background:#f59e0b; }
-[data-confidence-index="3"] { background:#ec4899; }
-.confidence-key { display:inline-block; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 @media (max-width:1024px), (pointer:coarse) {
   .cyclotron-workspace :is(button,input,select) { min-height:44px; }
-}
-@container (max-width:240px) {
-  .prediction-choices { flex-direction:row; align-items:stretch; }
-  .prediction-buttons { flex:1; min-width:0; flex-direction:column; }
-  .prediction-confidence { flex-direction:column; width:7px; height:auto; flex-shrink:0; }
-  .prediction-confidence > span { min-height:0; }
 }
