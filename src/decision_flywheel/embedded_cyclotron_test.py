@@ -246,9 +246,13 @@ def test_a_promoted_version_reaches_subscribers_and_the_status(tmp_path):
         for index in range(16):
             decision = run(cyclotron.decide(item(f"learn-{index}", ("yes " if index % 2 else "no ") + str(index))))
             run(cyclotron.review(decision.decision_id, "include" if index % 2 else "exclude"))
-        promoted = [e for e in cyclotron.subscribe(limit=1000)["events"] if e["kind"] == "promoted"]
+        events = cyclotron.subscribe(limit=1000)["events"]
         status = cyclotron.status()
         latest = run(cyclotron.decide(item("after", "yes after")))
-    assert promoted and promoted[0]["summary"] == "Changed the rubric."
-    assert status.version == promoted[-1]["version"] and status.last_change.kind == "promoted"
+    promoted = [e for e in events if e["kind"] == "promoted"]
+    refits = [e for e in events if e["kind"] == "refit"]
+    assert promoted and promoted[0]["summary"] == "Changed the rubric." and promoted[0]["version"] == 2
+    assert refits and refits[-1]["summary"].startswith("Refit the ML model on ")
+    assert status.version == promoted[-1]["version"]
+    assert status.last_change.kind in ("promoted", "refit")
     assert latest.version == status.version

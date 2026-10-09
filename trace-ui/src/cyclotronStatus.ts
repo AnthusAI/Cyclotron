@@ -7,7 +7,8 @@ export type ReviewRateState = 'full' | 'onboarding' | 'tapering' | 'steady' | 'r
 
 export type CyclotronStatus = {
   schema: 'cyclotron-status/v1'
-  cyclotron: {id: string; classifier: string; version: number; fingerprint: string}
+  /** version counts rubric, example and question changes; refits counts ML model refits since then. */
+  cyclotron: {id: string; classifier: string; version: number; refits: number; fingerprint: string}
   asOf: string
   alignment: {
     window: number
@@ -38,11 +39,13 @@ export type CyclotronStatus = {
     expectedReviewsPerWeek: number | null
   }
   lastChange: {
-    kind: 'promoted' | 'dropped' | 'definition'
+    kind: 'promoted' | 'refit' | 'dropped' | 'definition'
     fromVersion: number | null
     toVersion: number
     at: string | null
     summary: string
+    /** Labels the ML model was refit on, for a refit. */
+    labels: number | null
   } | null
   pending: {decisionsAwaitingReview: number; staleSince: string | null}
 }

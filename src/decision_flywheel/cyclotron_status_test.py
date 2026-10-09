@@ -91,7 +91,7 @@ def test_an_empty_cyclotron_reports_no_alignment_yet_and_full_review(tmp_path):
     snapshot = status.to_json()
     validate(snapshot, load_schema())
     assert snapshot["cyclotron"] == {"id": "papyrus-relevance", "classifier": "inclusion", "version": 1,
-                                     "fingerprint": status.fingerprint}
+                                     "refits": 0, "fingerprint": status.fingerprint}
     assert snapshot["alignment"]["labels"] == 0 and snapshot["alignment"]["accuracy"] is None
     assert snapshot["alignment"]["positiveLabel"] == "include"
     assert snapshot["calibration"] == {"saysSure": None, "isRight": None, "gapPoints": None, "curve": []}
@@ -144,18 +144,26 @@ def test_a_promotion_becomes_the_last_change_and_raises_the_version():
     status = build(events, fingerprint="v-two")
     assert status.version == 2
     assert asdict(status.last_change) == {"kind": "promoted", "from_version": 1, "to_version": 2,
-                                          "at": "2026-10-09T12:00:00+00:00", "summary": "Changed the rubric."}
+                                          "at": "2026-10-09T12:00:00+00:00", "summary": "Changed the rubric.",
+                                          "labels": None}
     assert status.pending.stale_since == "2026-10-09T13:00:00+00:00"
 
 
-def test_an_ml_model_refit_is_a_new_version_described_as_a_refit():
+def test_an_ml_model_refit_keeps_the_version_and_is_counted_as_a_refit():
     snapshot = {"config": {"rubric": "Prefer primary sources."}, "head": None}
+    refit = {**snapshot, "head": {"provenance": {"training_ids": ["a", "b", "c"]}}}
     events = [{"kind": "cycle-started", "classifier_snapshot": snapshot},
-              {"kind": "classifier-activated", "classifier_version": "v-two", "classifier_snapshot": {
-                  **snapshot, "head": {"provenance": {"training_ids": ["a", "b", "c"]}}}}]
-    status = build(events, fingerprint="v-two")
-    assert status.version == 2
-    assert status.last_change.from_version == 1 and status.last_change.summary == "Refit the ML model on 3 labels."
+              {"kind": "classifier-activated", "classifier_version": "v-two", "classifier_snapshot": refit},
+              {"kind": "classifier-activated", "classifier_version": "v-three", "classifier_snapshot": refit}]
+    status = build(events, fingerprint="v-three")
+    assert status.version == 1 and status.refits == 2
+    assert asdict(status.last_change) == {"kind": "refit", "from_version": 1, "to_version": 1, "at": None,
+                                          "summary": "Refit the ML model on 3 labels.", "labels": 3}
+    rubric = {"config": {"rubric": "Prefer vendor-neutral sources."}, "head": None}
+    status = build([*events, {"kind": "classifier-activated", "classifier_version": "v-four",
+                              "classifier_snapshot": rubric}], fingerprint="v-four")
+    assert status.version == 2 and status.refits == 0 and status.last_change.kind == "promoted"
+    validate(status.to_json(), load_schema())
 
 
 def test_a_dropped_candidate_is_reported_without_changing_the_version():

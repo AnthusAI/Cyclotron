@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-ade3088c-39b2-4f4b-ba01-c3da64effc29",
+  "title": "Definition versions: change a cyclotron's question or classifiers without losing history",
+  "description": "Today a store refuses a changed CyclotronDefinition, and DecisionFlywheel refuses a changed task (question, labels, input field), so an application cannot change a classifier's question or add and remove classifiers without starting a new store. Applications seed the first rubric from their own parameters (Papyrus: publication doctrine), never the question, so routine parameter edits go through the rubric; this task covers the rarer structural change.\n\nAcceptance criteria:\n- Cyclotron.open accepts a new definition revision for an existing store when the application says so explicitly; it records the revision, its fingerprint, and what changed.\n- Changing a classifier's question or labels starts a new classifier lineage inside the store; earlier decisions, reviews and versions stay readable and keep their original revision.\n- Adding a classifier starts it with no labels; removing one stops deciding with it but keeps its history.\n- Reviews of items decided under an earlier revision are not silently reused as labels for a changed question; the application can replay them explicitly.\n- status() reports a lastChange of kind definition with the revision and a summary.\n- No model call happens while opening a new revision; specs cover each case.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T15:34:05.870166Z",
+  "updated_at": "2026-10-09T15:34:05.904606Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

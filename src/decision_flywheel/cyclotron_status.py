@@ -19,7 +19,7 @@ from .rolling_metrics import recent_reviewed_metrics
 SCHEMA = "cyclotron-status/v1"
 SCHEMA_PATH = Path(__file__).with_name("schemas") / "cyclotron-status.v1.schema.json"
 REVIEW_RATE_STATES = ("full", "onboarding", "tapering", "steady", "raised", "manual")
-CHANGE_KINDS = ("promoted", "dropped", "definition")
+CHANGE_KINDS = ("promoted", "refit", "dropped", "definition")
 MEASURED_ON = "reviews selected by the cyclotron"
 
 
@@ -90,6 +90,7 @@ class LastChange:
     to_version: int
     at: str | None
     summary: str
+    labels: int | None = None
 
     def __post_init__(self):
         if self.kind not in CHANGE_KINDS:
@@ -114,6 +115,7 @@ class CyclotronStatus:
     review_rate: ReviewRate
     last_change: LastChange | None
     pending: Pending
+    refits: int = 0
     schema: str = field(default=SCHEMA)
 
     def to_json(self) -> dict[str, Any]:
@@ -122,7 +124,7 @@ class CyclotronStatus:
         return {
             "schema": self.schema,
             "cyclotron": {"id": self.cyclotron_id, "classifier": self.classifier,
-                          "version": self.version, "fingerprint": self.fingerprint},
+                          "version": self.version, "refits": self.refits, "fingerprint": self.fingerprint},
             "asOf": self.as_of,
             "alignment": {"window": a.window, "labels": a.labels, "accuracy": a.accuracy,
                           "precision": a.precision, "recall": a.recall,
@@ -140,7 +142,7 @@ class CyclotronStatus:
             "lastChange": None if self.last_change is None else {
                 "kind": self.last_change.kind, "fromVersion": self.last_change.from_version,
                 "toVersion": self.last_change.to_version, "at": self.last_change.at,
-                "summary": self.last_change.summary},
+                "summary": self.last_change.summary, "labels": self.last_change.labels},
             "pending": {"decisionsAwaitingReview": p.decisions_awaiting_review, "staleSince": p.stale_since},
         }
 
@@ -160,37 +162,64 @@ def all_events(wheel) -> list[dict]:
         cursor = page["cursor"]
 
 
-def note_version(numbers: dict[str, int], event: Mapping[str, Any]) -> None:
-    """Number versions in the order this classifier decided with or activated them.
+STRUCTURE = (("rubric", "rubric"), ("example_ids", "example list"),
+             ("tasks", "classifier questions"), ("dynamic_elements", "dynamic inputs"))
 
-    Every activation (a promoted candidate, a refined rubric, or a refit ML
-    model) is a new version; reactivating a known fingerprint keeps its number.
+
+def _plain(value):
+    """Compare snapshots after JSON normalisation (tuples and lists alike)."""
+    return json.loads(json.dumps(value, sort_keys=True, default=list)) if value is not None else None
+
+
+class VersionTracker:
+    """Follow one classifier's versions through its events.
+
+    A version is a change of language or structure: rubric, example list,
+    classifier questions or dynamic inputs. An ML model refit activates a new
+    fingerprint but is not a version; it is counted in ``refits`` and reported
+    as a ``refit`` change with its label count.
     """
-    kind = event.get("kind")
-    version = (event.get("version") if kind == "prediction"
-               else event.get("classifier_version") if kind == "classifier-activated" else None)
-    if version and version not in numbers:
-        numbers[version] = len(numbers) + 1
 
+    def __init__(self, initial_snapshot: Mapping[str, Any] | None = None):
+        self.version = 1
+        self.refits = 0
+        self.last_change: LastChange | None = None
+        self.snapshot = _plain(initial_snapshot)
 
-def describe_activation(previous: Mapping[str, Any] | None, current: Mapping[str, Any]) -> str:
-    """Say what an activation changed, from the two classifier snapshots."""
-    before = (previous or {}).get("config") or {}
-    after = current.get("config") or {}
-    changes = [name for key, name in (("rubric", "rubric"), ("example_ids", "example list"),
-                                      ("tasks", "classifier questions"), ("dynamic_elements", "dynamic inputs"))
-               if before.get(key) != after.get(key)]
-    if changes:
-        return "Changed the " + ", ".join(changes) + "."
-    head = current.get("head") or {}
-    count = len(((head.get("provenance") or {}).get("training_ids")) or ())
-    return f"Refit the ML model on {count} labels." if head else "Activated a new version."
+    def feed(self, event: Mapping[str, Any]) -> LastChange | None:
+        """Update from one event; return the change it caused, if any."""
+        kind = event.get("kind")
+        if kind == "cycle-started" and self.snapshot is None:
+            self.snapshot = _plain(event.get("classifier_snapshot"))
+        elif kind == "classifier-activated":
+            current = _plain(event.get("classifier_snapshot")) or {}
+            before = (self.snapshot or {}).get("config") or {}
+            after = current.get("config") or {}
+            changed = [name for key, name in STRUCTURE if before.get(key) != after.get(key)]
+            if changed:
+                self.last_change = LastChange("promoted", self.version, self.version + 1, event.get("created_at"),
+                                              "Changed the " + ", ".join(changed) + ".")
+                self.version, self.refits = self.version + 1, 0
+            else:
+                head = current.get("head") or {}
+                count = len(((head.get("provenance") or {}).get("training_ids")) or ())
+                self.refits += 1
+                self.last_change = LastChange("refit", self.version, self.version, event.get("created_at"),
+                                              f"Refit the ML model on {count} labels.", labels=count)
+            self.snapshot = current
+            return self.last_change
+        elif kind == "candidate-rejected":
+            self.last_change = LastChange("dropped", self.version, self.version, event.get("created_at"),
+                                          str(event.get("reason") or "Candidate dropped."))
+            return self.last_change
+        return None
 
 
 def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str, classifier: str,
                        labels: tuple[str, ...], fingerprint: str, positive_label: str | None = None,
                        window: int = 200, review_rate: ReviewRate | None = None,
-                       now: datetime | None = None) -> CyclotronStatus:
+                       now: datetime | None = None,
+                       initial_snapshot: Mapping[str, Any] | None = None) -> CyclotronStatus:
     """Build the snapshot from flywheel events; no model calls, no hidden state."""
     labels = tuple(labels)
     if positive_label is None and len(labels) == 2:
@@ -200,20 +229,13 @@ def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str
     shown: dict[str, Mapping[str, Any]] = {}
     reviews: dict[str, tuple[str, str, dict | None, str | None]] = {}
     order: list[str] = []
-    version_numbers: dict[str, int] = {}
-    last_change = None
+    versions = VersionTracker(initial_snapshot)
     awaiting: set[str] = set()
-    active_version: int | None = None
-    snapshot: Mapping[str, Any] | None = None
     latest_review: dict[str, str | None] = {}
     for event in events:
         kind = event.get("kind")
-        if kind == "classifier-activated" and not version_numbers:
-            version_numbers["initial"], active_version = 1, 1  # the version before the first activation
-        note_version(version_numbers, event)
+        versions.feed(event)
         if kind == "prediction":
-            if active_version is None:
-                active_version = version_numbers.get(event.get("version"))
             item_id = str(event["target_id"])
             shown[item_id] = event
             awaiting.add(item_id)
@@ -247,26 +269,15 @@ def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str
             order.append(item_id)
         elif kind == "human-skipped":
             awaiting.discard(str(event.get("target_id")))
-        elif kind == "classifier-activated":
-            to_version = version_numbers[event["classifier_version"]]
-            last_change = LastChange("promoted", active_version, to_version, event.get("created_at"),
-                                     describe_activation(snapshot, event.get("classifier_snapshot") or {}))
-            active_version, snapshot = to_version, event.get("classifier_snapshot") or {}
-        elif kind == "candidate-rejected":
-            last_change = LastChange("dropped", active_version, active_version or 1, event.get("created_at"),
-                                     str(event.get("reason") or "Candidate dropped."))
-        elif kind == "cycle-started" and snapshot is None:
-            snapshot = event.get("classifier_snapshot")
-    if fingerprint not in version_numbers:
-        version_numbers[fingerprint] = len(version_numbers) + 1
     records = [(item_id, *reviews[item_id][:3]) for item_id in order]
     metrics = recent_reviewed_metrics(labels, records, limit=window) if records else None
     alignment = _alignment(metrics, window, positive_label)
     calibration = _calibration(metrics)
     stale_since = _stale_since(events)
-    return CyclotronStatus(cyclotron_id, classifier, version_numbers[fingerprint], fingerprint,
+    return CyclotronStatus(cyclotron_id, classifier, versions.version, fingerprint,
                            (now or datetime.now(timezone.utc)).isoformat(), alignment, calibration,
-                           review_rate or FULL_REVIEW, last_change, Pending(len(awaiting), stale_since))
+                           review_rate or FULL_REVIEW, versions.last_change, Pending(len(awaiting), stale_since),
+                           refits=versions.refits)
 
 
 def status_from_flywheel(wheel, *, cyclotron_id: str, positive_label: str | None = None, window: int = 200,
@@ -275,7 +286,15 @@ def status_from_flywheel(wheel, *, cyclotron_id: str, positive_label: str | None
     task = wheel.initial.task
     return status_from_events(all_events(wheel), cyclotron_id=cyclotron_id, classifier=task.name,
                               labels=tuple(task.labels), fingerprint=wheel.active.fingerprint,
-                              positive_label=positive_label, window=window, review_rate=review_rate, now=now)
+                              positive_label=positive_label, window=window, review_rate=review_rate, now=now,
+                              initial_snapshot=initial_snapshot(wheel))
+
+
+def initial_snapshot(wheel) -> dict:
+    """The classifier snapshot before any activation: its initial configuration."""
+    from dataclasses import asdict
+    from .flywheel import FittedClassifier
+    return asdict(FittedClassifier(wheel.initial))
 
 
 def _alignment(metrics, window, positive_label) -> Alignment:

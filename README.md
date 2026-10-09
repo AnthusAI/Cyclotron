@@ -110,10 +110,43 @@ asyncio.run(main())
   ([schema](src/decision_flywheel/schemas/cyclotron-status.v1.schema.json),
   [TypeScript type](trace-ui/src/cyclotronStatus.ts)).
 - `subscribe(after=cursor)` pages committed events: decision, review,
-  promoted, dropped.
+  promoted (a new version), refit, dropped.
 
 Pass an `OptimizerAgent` as the fourth argument to let reviews drive the LLM
 optimizer and ML model fit; without one, the cyclotron decides and records.
+
+What an application should know:
+
+- **The decision model must be batched.** A cyclotron asks all its
+  classifiers in one request, so the model needs `classify_many` (the
+  `BatchedDecisionModel` protocol), as the Jev adapter provides. A model that
+  only answers one classifier at a time does not fit.
+- **Answers are cached by content.** The shared request cache is keyed by the
+  item values and the classifier contexts, not the item id, so two items with
+  identical values share one decision-model answer.
+- **Versions are language and structure.** A new rubric, example list or
+  set of classifier questions is a new version. Refitting the ML model on new
+  labels is a `refit`: the version stays, `status().refits` counts it, and
+  `subscribe` reports it as a minor change.
+- **One writer.** `Cyclotron.open` takes a lease before touching the store;
+  the default is a lock file the operating system releases when the process
+  ends. Several workers supply their own `lease=` object with `acquire()` and
+  `release()`. A second writer gets `StoreLocked` before anything is opened.
+- **Request ceiling per open.** `max_requests` authorizes that many new
+  decision-model requests for this open, on top of all earlier ones.
+- **Moving a store.** `snapshot(path)` writes one consistent archive
+  (`cyclotron-store/v1`) of every SQLite file; `Cyclotron.restore(path,
+  directory)` unpacks it into an empty directory under the lease. The archive
+  holds item values, reviews, transcripts and caches but no provider keys.
+- **Crash safety.** Reviews, versions and the `subscribe` log are derived
+  from the classifier stores' events, with a durable cursor, in one
+  transaction. A crash between the two stores loses nothing: the next open or
+  call catches up, and a review resubmitted with the same `review_id` is not
+  recorded twice. An interrupted `decide` resumes from the shared request
+  cache without a new model call.
+- **Rebuilding.** `labels()` lists every active label with its item;
+  `replay(labels)` rebuilds learning in a new store from such records, with
+  the same partitions.
 
 ### Boundary rules
 
