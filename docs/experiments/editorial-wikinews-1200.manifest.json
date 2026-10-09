@@ -1,0 +1,472 @@
+{
+  "schema_version": 4,
+  "corpus": "uplifting-editorial-wikinews-1200-semantic-v2",
+  "file": "editorial-uplift-wikinews-1200-semantic-v2.jsonl",
+  "item_count": 1200,
+  "actual_count": 1200,
+  "sha256": "bba0fa49208e6a806f16cee2bff59bb65294b41155b0d4ae3debac12250e8a30",
+  "item_set_sha256": "bba0fa49208e6a806f16cee2bff59bb65294b41155b0d4ae3debac12250e8a30",
+  "first_400": {
+    "corpus": "uplifting-editorial-wikinews-400-semantic-v2",
+    "sha256": "3ce5aacf63e4babf2a7205e29057a34f181d3539a70ae022df331978c561277e",
+    "byte_identical_prefix": true,
+    "lines": 400
+  },
+  "label_disclosure": "simulated_semantic_editorial_labels",
+  "dataset": "malteos/wikinews",
+  "dataset_revision": "b4c2ec3857fcac203c40b8d61586e934ed07c128",
+  "license": "CC BY 2.5 (Wikinews policy; articles dated through 2024-12-15)",
+  "license_url": "https://en.wikinews.org/wiki/Wikinews:Copyright",
+  "source_files": [
+    {
+      "file": "en-2016.parquet",
+      "sha256": "ced5f6a3b3a6be77b8e34a755d9aa71b229a045c645b49074538dc7b1db7ef17"
+    },
+    {
+      "file": "en-2017.parquet",
+      "sha256": "089cbd16b4de34884d26dd0ee0afe6901d5d7ae847e955ae815aba85219859e8"
+    },
+    {
+      "file": "en-2018.parquet",
+      "sha256": "f9c00f01ca36743670d8e6a4b90ced434ad8a07d3ed68958b20f6d99448ad932"
+    },
+    {
+      "file": "en-2019.parquet",
+      "sha256": "06609d8399f03c0036961cdb8f8cc3c473dbcfc0d7467b1aea2f8e19add91be0"
+    },
+    {
+      "file": "en-2020.parquet",
+      "sha256": "a621d11e01dd42889a6fe89004c9bf6c7d32ee4155733afc5e532767079c0d6e"
+    },
+    {
+      "file": "en-2021.parquet",
+      "sha256": "c717d3fa6db21271ac6cb32d03de1e25e9ab9c9872c50dcde727fc15d3e48bc3"
+    },
+    {
+      "file": "en-2022.parquet",
+      "sha256": "995765c9d7864c982235393976da1f30fbae469fe0722c9ef680f62529031357"
+    },
+    {
+      "file": "en-2023.parquet",
+      "sha256": "66fac7b39498947f05db64fac02ab6181b13002b6bd80984922e4ab2969ed4c3"
+    }
+  ],
+  "extension": {
+    "items": 800,
+    "selection_seed": "uplifting-editorial-semantic-v2-extension-1",
+    "curation_rule": "base rule generalised: the top round(count x 210/400) items with relevance >= 2, then a topical round-robin over a seeded shuffle, then a seeded shuffle of the selection; bootstrap and base items excluded",
+    "years": [
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "label_procedure": "one request per item, temperature 0, strict JSON schema, no retry; an item with a failed call, an incoherent factor, or a non-literal evidence quote is set aside for the next candidate in the frozen order",
+    "model": "gpt-4.1-mini-2025-04-14",
+    "label_prompt": "You are performing a SIMULATED human editorial decision for a local marketing-demo corpus. This is not a claim about a real publisher's judgment.\n\nQuestion: Publish this item in an uplifting, general-interest briefing, or reject it?\n\nPublish only if the supplied article excerpt makes a grounded reason for hope, curiosity, connection, or public benefit CENTRAL: a concrete beneficial outcome, meaningful achievement, demonstrated understanding, rights/access improvement, conservation/welfare result, or constructive response whose outcome is established in the text.\nReject promises, speculation, hype, routine awards or scores, celebrity interest, ordinary sports wins, and stories where harm remains central or the benefit is merely incidental. Sports can publish only for inclusion, recovery, access, solidarity, or a substantive public benefit. Animals can publish only for welfare, conservation, or discovery. Do not infer facts beyond the excerpt.\n\nReturn only JSON matching the provided schema. The evidence_span must be an exact, short contiguous quote from the provided ARTICLE EXCERPT that supports the decision; it cannot be the title. rationale must state the deciding factor and be 8-40 words.",
+    "label_prompt_sha256": "0c7a6530f205c504795266db7262a97f7773ce8ec0372c3f241ee510b023ddf3",
+    "label_schema": {
+      "name": "editorial_label",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "enum": [
+              "publish",
+              "reject"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 300
+          },
+          "evidence_span": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "factor": {
+            "type": "string",
+            "enum": [
+              "benefit",
+              "achievement",
+              "understanding",
+              "rights_access",
+              "conservation_welfare",
+              "constructive_response",
+              "insufficient_evidence",
+              "harm_dominant",
+              "routine_or_hype"
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "rationale",
+          "evidence_span",
+          "factor"
+        ]
+      }
+    },
+    "set_aside": [
+      {
+        "id": "wikinews:2786778:4208743",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2868116:4489207",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2789304:4714230",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2810246:4496034",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2795128:4374723",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2875413:4559272",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2748866:4196954",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2906704:4595578",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2794751:4714243",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2860573:4462444",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2866860:4482925",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2822169:4347011",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2802240:4545919",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2849239:4576461",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2802133:4267277",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2923234:4625471",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2846378:4730502",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2805275:4650244",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2874250:4764806",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2880536:4523702",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2816470:4344746",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2935326:4670754",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2756740:4373764",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2845310:4556991",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2852712:4455525",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2834431:4516056",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2817621:4576720",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2841286:4407274",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2838770:4503725",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2803576:4576508",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2846100:4557013",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2876142:4512003",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2837166:4391662",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2797152:4576727",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2883260:4678772",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2797908:4570225",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2833351:4579233",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2809715:4718248",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2792150:4647081",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2805119:4292157",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2865566:4480469",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2878617:4708219",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2849265:4437708",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2857510:4456394",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2941368:4671156",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2792795:4414720",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2803786:4274136",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2811376:4308743",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2804314:4281813",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2846899:4551508",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2805379:4281527",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2834522:4764175",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2862176:4520023",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2838496:4564837",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2789655:4214929",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2816516:4558904",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2804347:4281952",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2877092:4559268",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2914951:4618594",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2815817:4317933",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2859425:4567248",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2793880:4233009",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2906430:4590783",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2795019:4344544",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2858134:4658853",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2829022:4572680",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2837373:4557039",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2837244:4455648",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2828817:4490585",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2856265:4542677",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2838043:4392725",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2805159:4344718",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2807028:4291587",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2866865:4481411",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2858493:4456863",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2939639:4661406",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2815442:4719905",
+        "reason": "evidence quote is not literal in the excerpt"
+      },
+      {
+        "id": "wikinews:2938853:4659850",
+        "reason": "evidence quote is not literal in the excerpt"
+      }
+    ],
+    "live_calls": 878,
+    "usage": {
+      "prompt_tokens": 656951,
+      "completion_tokens": 54494
+    },
+    "cost_usd": 0.349971,
+    "price_basis": {
+      "input_usd_per_mtok": 0.4,
+      "output_usd_per_mtok": 1.6,
+      "source": "OpenAI published API price for gpt-4.1-mini (the base corpus manifest used the same rates)"
+    },
+    "offline_review": "none; the base corpus's offline span review and 20-item spot check covered the first 400 only",
+    "label_counts": {
+      "reject": 550,
+      "publish": 250
+    },
+    "topic_counts": {
+      "general": 362,
+      "civic": 217,
+      "sports": 155,
+      "science": 52,
+      "environment": 12,
+      "animals": 2
+    },
+    "source_file_counts": {
+      "en-2017.parquet": 200,
+      "en-2020.parquet": 17,
+      "en-2018.parquet": 183,
+      "en-2016.parquet": 225,
+      "en-2019.parquet": 129,
+      "en-2021.parquet": 21,
+      "en-2023.parquet": 11,
+      "en-2022.parquet": 14
+    }
+  },
+  "label_counts": {
+    "reject": 800,
+    "publish": 400
+  }
+}
