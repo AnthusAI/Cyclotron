@@ -1,35 +1,8 @@
 """Application-owned operational cycles, independent of optimization-round IDs."""
-from copy import deepcopy
-from dataclasses import asdict, fields, is_dataclass, replace
+from dataclasses import asdict
 from uuid import uuid4
 
-# Each out-of-fold row records the IDs, labels and normalizers it was fitted on,
-# so this proof grows with the square of the training set. It is recorded in
-# full where a head is fitted and activated, not again at every cycle boundary.
-PER_ITEM_FIT_PROOF = ('fit_ids', 'fit_labels', 'normalization_fit_ids', 'normalizers')
-
-
-def _plain(value):
-    return asdict(value) if is_dataclass(value) else deepcopy(value)
-
-
-def cycle_snapshot(classifier):
-    """The active classifier for a cycle boundary event, without the per-item fit proof."""
-    head = classifier.head
-    snapshot = asdict(replace(classifier, head=None))
-    if head is None:
-        return snapshot
-    snapshot['head'] = {field.name: _plain(getattr(head, field.name)) for field in fields(head)
-                        if field.name != 'out_of_fold'}
-    oof = head.out_of_fold
-    snapshot['head']['out_of_fold'] = {
-        **{field.name: _plain(getattr(oof, field.name)) for field in fields(oof)
-           if field.name not in PER_ITEM_FIT_PROOF},
-        'per_item_fit_proof': {'omitted': list(PER_ITEM_FIT_PROOF),
-                               'recorded_in': ['fit-completed', 'classifier-activated'],
-                               'head_fingerprint': head.refitted_cyclotron_fingerprint}}
-    return snapshot
-
+from .classifier_snapshot import compact_snapshot
 
 class Cycle:
     def __init__(self, wheel, item=None, *, reason='item-processing'):
@@ -58,7 +31,7 @@ class Cycle:
                 wheel._cycle_running=True
                 try:
                     wheel._emit({'kind':'cycle-resumed','reason':cycle.reason,
-                        'classifier_snapshot':cycle_snapshot(wheel.active)})
+                        'classifier_snapshot':compact_snapshot(wheel.active)})
                 except Exception:
                     wheel._cycle_context.reset(cycle.token)
                     wheel._cycle_running=False
@@ -77,7 +50,7 @@ class Cycle:
         wheel._cycle_running = True
         wheel._emit({'kind':'cycle-started', 'reason':self.reason,
                      'item':asdict(self.item) if self.item else None,
-                     'classifier_snapshot':cycle_snapshot(wheel.active)})
+                     'classifier_snapshot':compact_snapshot(wheel.active)})
         return self
 
     def check_trigger(self, stage, *, due, reason, details=None):
@@ -101,7 +74,7 @@ class Cycle:
         try:
             self.wheel._emit({'kind':'cycle-failed' if error_type else 'cycle-completed',
                              'error_type':error_type.__name__ if error_type else None,
-                             'classifier_snapshot':cycle_snapshot(self.wheel.active)})
+                             'classifier_snapshot':compact_snapshot(self.wheel.active)})
         finally:
             self.wheel._cycle_context.reset(self.token)
             self.wheel._cycle_running = False

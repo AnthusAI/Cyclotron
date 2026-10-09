@@ -358,8 +358,9 @@ class DecisionFlywheel:
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('active', ?)", (payload,))
         self.active = classifier
+        from .classifier_snapshot import compact_snapshot
         self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,
-                    "classifier_snapshot": asdict(classifier)})
+                    "classifier_snapshot": compact_snapshot(classifier)})
 
     def model_context(self, config, training):
         identity = getattr(self.model, 'feature_context_identity', None)
