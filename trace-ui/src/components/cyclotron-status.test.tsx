@@ -73,8 +73,8 @@ it('gives every review state a mark and a word',()=>{
   }
 })
 
-it('ships its styles in the package stylesheet',()=>{
-  const css=readFileSync('src/styles/shared.css','utf8')
+it('ships its styles in components.css',()=>{
+  const css=readFileSync('src/styles/components.css','utf8')
   expect(css).toContain('.cyclotron-status[data-variant="strip"]')
   expect(css).toContain('.cyclotron-status-metric')
 })
