@@ -150,3 +150,20 @@ body :focus-visible {
 .cyclotron-review-submit { min-height:44px; padding:8px 18px; border-radius:var(--radius,0.45rem); background:var(--primary,#d9d0f2); color:var(--primary-foreground,#1f1a21); font:inherit; font-weight:600; cursor:pointer; }
 .cyclotron-review-secondary { align-self:flex-start; min-height:36px; padding:6px 12px; border-radius:var(--radius,0.45rem); background:var(--secondary,#ece8ee); color:var(--secondary-foreground,#1f1a21); font:inherit; cursor:pointer; }
 .cyclotron-review :focus-visible { outline:2px solid var(--foreground,#1f1a21) !important; outline-offset:2px; }
+
+/* CyclotronStatusView */
+.cyclotron-status { color:var(--card-foreground,#1f1a21); font-size:14px; line-height:1.4; }
+.cyclotron-status[data-variant="strip"] { display:flex; flex-wrap:wrap; align-items:center; gap:4px 16px; padding:8px 12px; border-radius:var(--radius,0.45rem); background:var(--muted,#e6e1e8); }
+.cyclotron-status[data-variant="strip"] > span + span::before { content:"·"; margin-right:16px; color:var(--muted-foreground,#5d5361); }
+.cyclotron-status[data-variant="card"] { display:flex; flex-direction:column; gap:12px; padding:16px; border-radius:var(--radius,0.45rem); background:var(--card,#f6f4f7); }
+.cyclotron-status h3, .cyclotron-status h4, .cyclotron-status p, .cyclotron-status dl, .cyclotron-status dd { margin:0; }
+.cyclotron-status h3 { font-size:1.05em; font-weight:600; }
+.cyclotron-status h4 { font-size:1em; font-weight:600; }
+.cyclotron-status-header p, .cyclotron-status-note, .cyclotron-status-definition { color:var(--muted-foreground,#5d5361); font-size:.9em; }
+.cyclotron-status-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+.cyclotron-status-metric dt { font-weight:600; }
+.cyclotron-status-value { font-size:1.4em; font-variant-numeric:tabular-nums; }
+.cyclotron-status-bar { height:6px; border-radius:999px; background:var(--muted,#e6e1e8); overflow:hidden; margin-top:4px; }
+.cyclotron-status-bar > span { display:block; height:100%; background:var(--foreground,#1f1a21); opacity:.55; }
+.cyclotron-status-section { display:flex; flex-direction:column; gap:4px; }
+.cyclotron-status-override { font-weight:600; }
