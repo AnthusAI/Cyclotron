@@ -1,6 +1,7 @@
 """A cyclotron store moves between workers, has one writer, and survives a crash between its two stores."""
 import asyncio
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -176,7 +177,9 @@ CHILD = textwrap.dedent('''
 def crash(tmp_path, point):
     script = tmp_path / "child.py"
     script.write_text(CHILD)
-    result = subprocess.run([sys.executable, str(script), str(tmp_path / "c"), point], capture_output=True, text=True)
+    source = str(Path(__file__).resolve().parents[1])
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, (source, os.environ.get("PYTHONPATH"))))}
+    result = subprocess.run([sys.executable, str(script), str(tmp_path / "c"), point], capture_output=True, text=True, env=env)
     assert result.returncode == 17, result.stderr
 
 
