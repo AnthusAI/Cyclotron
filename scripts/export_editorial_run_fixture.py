@@ -39,6 +39,8 @@ WINDOW = 100
 PRICES = {
     "gpt-4.1-mini": {"input_usd_per_mtok": 0.40, "cached_input_usd_per_mtok": 0.10, "output_usd_per_mtok": 1.60,
                      "source": "developers.openai.com/api/docs/models/gpt-4.1-mini, read 2026-10-09"},
+    "gpt-4.1": {"input_usd_per_mtok": 2.00, "cached_input_usd_per_mtok": 0.50, "output_usd_per_mtok": 8.00,
+                "source": "developers.openai.com/api/docs/models/gpt-4.1, read 2026-10-09"},
     "jev": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0, "source": "TypeSafe's published price"},
 }
 
