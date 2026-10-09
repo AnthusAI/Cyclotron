@@ -480,7 +480,7 @@ def test_optimizer_traces_belong_only_to_the_classifier_that_requested_them(tmp_
         assert [event['classifier_id'] for event in events if event['kind']=='optimizer-request']==['a']
         transport=session.wheels['a'].optimizer.complete
         transport.calls=3;transport.max_calls=3
-        monkeypatch.setattr('decision_flywheel.workspace_session.LabelTransitionTrigger.check',lambda *args:{'due':True,'reason':'test cadence','details':{}})
+        monkeypatch.setattr('decision_flywheel.learning_loop.LabelTransitionTrigger.check',lambda *args:{'due':True,'reason':'test cadence','details':{}})
         cycle=SimpleNamespace(check_trigger=lambda *args,**kwargs:None)
         warnings=asyncio.run(session.optimize('a',cycle))
         assert warnings[0]['reason']=='optimizer call limit reached; labeling can continue'
