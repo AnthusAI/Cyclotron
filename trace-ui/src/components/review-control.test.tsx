@@ -89,3 +89,13 @@ it('ships its styles, and the labeling review styles, in components.css',()=>{
     expect(css).toContain(selector)
   expect(readFileSync('src/index.css','utf8')).not.toContain('.prediction-confidence {')
 })
+
+it('works with no reason list at all',()=>{
+  const onReview=vi.fn()
+  render(<ReviewControl itemId="ref-1" decision={decision} onReview={onReview} />)
+  fireEvent.click(screen.getByRole('button',{name:'No: exclude'}))
+  expect(screen.queryByLabelText(/Reason/)).toBeNull()
+  expect(screen.getByRole('button',{name:'Submit review'})).toBeEnabled()
+  fireEvent.click(screen.getByRole('button',{name:'Submit review'}))
+  expect(onReview).toHaveBeenCalledWith({itemId:'ref-1',decisionId:'d-1',label:'exclude',reasonCode:null,explanation:null})
+})
