@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "67a18bb3-fc57-465b-8ad2-ec2813f5a731",
+  "issue_id": "decision-flywheel-c9aa95aa-a48b-4850-bed1-4b6720cb7b6e",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-09T14:34:58.472Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "parent": {
+        "from": null,
+        "to": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397"
+      }
+    }
+  }
+}

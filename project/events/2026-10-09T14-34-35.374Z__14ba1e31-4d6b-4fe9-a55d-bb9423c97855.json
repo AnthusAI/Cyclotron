@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "14ba1e31-4d6b-4fe9-a55d-bb9423c97855",
+  "issue_id": "decision-flywheel-8f3a052a-1c33-4923-a353-324e03a32cf0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:34:35.374Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Run the editorial example to 1,000+ cycles and record the learning curve",
+    "description": "Run the prequential study on the extended corpus with review-everything feedback, same decision model and optimizer settings as the 400-cycle recording, and record per-100-cycle windows: accuracy, precision, recall, F1, Brier, calibration error, mean stated confidence, optimizer events, model calls, wall-clock time, and provider cost. Questions: where does accuracy plateau, how many corrections did it take, and what did the run cost. Acceptance: a recording directory plus an exported fixture (same schema as editorial-run-v1 with a schema bump) and a short results note with the curve.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "df2c6e9f-5a1f-460f-a34a-e3471914ced4",
+  "issue_id": "decision-flywheel-f757dc7b-d9aa-4d43-8f98-5d57b8446592",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-09T14:34:35.356Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Extend the Wikinews editorial corpus to at least 1,200 items",
+    "description": "The current curated corpus is 400 stories from malteos/wikinews at revision b4c2ec3. A 1,000-cycle run needs at least 1,000 and ideally 1,200 so the last windows are not thin. Keep the same curation rule and the same simulated editorial label procedure, record the corpus sha256 and the label-generation prompt, and keep the first 400 items identical so earlier results stay comparable. Acceptance: a manifest listing item count, sha256, source revision, and licence; a spec that the first 400 match the existing corpus.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

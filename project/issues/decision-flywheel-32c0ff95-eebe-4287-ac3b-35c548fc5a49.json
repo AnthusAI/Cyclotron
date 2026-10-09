@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-32c0ff95-eebe-4287-ac3b-35c548fc5a49",
+  "title": "Experiment: optimization goal per run, precision versus F1 versus balanced Brier",
+  "description": "The marketing site tells buyers the goal is a setting. Show what it does: rerun the first 400 cycles with selection primary set to precision, to F1, and to balanced Brier (the default), same seed and corpus, and record the three numbers plus calibration per window. Acceptance: a comparison table in the results note and, if the differences are clear, a fixture the site can show on the how-it-works page under the three goal cards. If the differences are within noise, say so and the site keeps its current wording.",
+  "type": "task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T14:34:35.450456Z",
+  "updated_at": "2026-10-09T14:34:58.607246Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
