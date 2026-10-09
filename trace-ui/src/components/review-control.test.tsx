@@ -99,3 +99,10 @@ it('works with no reason list at all',()=>{
   fireEvent.click(screen.getByRole('button',{name:'Submit review'}))
   expect(onReview).toHaveBeenCalledWith({itemId:'ref-1',decisionId:'d-1',label:'exclude',reasonCode:null,explanation:null})
 })
+
+it('derives its field ids from the item and decision, not from render order',()=>{
+  render(<ReviewControl itemId="ref 1" decision={decision} reasons={reasons} />)
+  fireEvent.click(screen.getByRole('button',{name:'No: exclude'}))
+  expect(screen.getByLabelText('Explanation (optional)')).toHaveAttribute('id','cyclotron-review-ref_1-d-1-explanation')
+  expect(screen.getByLabelText('Reason')).toHaveAttribute('id','cyclotron-review-ref_1-d-1-reason')
+})
