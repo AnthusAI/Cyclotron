@@ -3,7 +3,7 @@
   "title": "Support a portable engine store with snapshot, restore and a single-writer lease hook",
   "description": "Papyrus scales to zero and runs the engine in a short-lived worker. The SQLite state must be copied to object storage after a sweep and restored before the next, with exactly one writer. Add snapshot(path) and restore(path) on the facade and an optional lease callback that the application implements (Papyrus uses an exclusive Assignment claim). Ordering: after the SDK facade.\n\nAcceptance criteria:\n- A snapshot taken after decide and review restores to an identical status() and decision cache.\n- Opening a store while another writer holds the lease fails before any model call.\n- A store rebuilt by replay from the application's recorded labels reaches the same labels and partitions.\n- No credentials or provider keys are written into the snapshot.,",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,9 +15,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "90438c0f-a31c-4032-a8ed-993ee244504c",
+      "author": "home",
+      "text": "Landed on feat/portable-store: FileLease (default, OS-released lock file) and an application lease= hook with acquire()/release(), taken before anything is opened (StoreLocked otherwise); snapshot(path) writes a cyclotron-store/v1 tar.gz of SQLite backups with a manifest of sha256 digests; Cyclotron.restore(path, directory) refuses an existing store or a damaged file; labels() and replay(labels) rebuild a store with the same labels and partitions. Durability: reviews, versions and the subscribe log are now derived from classifier events with a per-classifier cursor in one SDK transaction; crash specs kill a child process after the classifier write (review, activation) and before the decision insert, and show no event lost or duplicated and no extra model call. Also per Ryan's decision: versions count only rubric, example and question changes; ML model refits are lastChange kind refit with a label count and a refits counter in status (schema, example and TS type updated). Specs: embedded_store_test.py (9), status refit spec, SDK spec updates.",
+      "created_at": "2026-10-09T15:40:00.385971Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:51:17.299084Z",
-  "updated_at": "2026-10-09T14:51:46.171771Z",
+  "updated_at": "2026-10-09T15:40:00.385996Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
