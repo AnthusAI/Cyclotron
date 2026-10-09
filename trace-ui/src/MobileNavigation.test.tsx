@@ -20,10 +20,10 @@ test('the full-screen menu hides background controls and restores focus after Es
 
 test('selecting a workspace closes the menu and marks the current workspace accessibly',async()=>{
   const navigate=vi.fn()
-  render(<MobileNavigation section="scorecards" onNavigate={navigate}/>)
+  render(<MobileNavigation section="cyclotrons" onNavigate={navigate}/>)
   fireEvent.click(screen.getByRole('button',{name:'Open main menu'}))
   const menu=screen.getByRole('dialog',{name:'Navigate Cyclotron'})
-  expect(within(menu).getByRole('button',{name:/Scorecards/})).toHaveAttribute('aria-current','page')
+  expect(within(menu).getByRole('button',{name:/Cyclotrons/})).toHaveAttribute('aria-current','page')
   fireEvent.click(within(menu).getByRole('button',{name:/Item lists/}))
   expect(navigate).toHaveBeenCalledWith('items')
   await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull())

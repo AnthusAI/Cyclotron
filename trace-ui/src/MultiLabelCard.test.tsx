@@ -13,7 +13,7 @@ it('provides a named keyboard focus target for the scrollable classifier feedbac
   expect(panel).toHaveFocus()
 })
 
-it('shows pinned scorecard order instead of response key order without moving votes between classifiers',()=>{
+it('shows pinned cyclotron order instead of response key order without moving votes between classifiers',()=>{
   const result={label:'yes',confidence:.8,classes:['yes','no']}
   const current={item:{id:'one',values:{text:'Paper'}},prediction:{presentation_id:'ordered',classifiers:{a:result,b:result,c:result}}}
   const submit=vi.fn()

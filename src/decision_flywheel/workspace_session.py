@@ -68,7 +68,7 @@ class WorkspaceSession:
             event['classifier_revision']=definition['revision']
         else:
             event['classifier_revisions']={row['id']:row['revision'] for row in self.config['classifiers']}
-        for key in ('scorecard_id','scorecard_definition_revision','scorecard_definition_fingerprint'):
+        for key in ('cyclotron_id','cyclotron_definition_revision','cyclotron_definition_fingerprint'):
             if key in self.config:event[key]=self.config[key]
         if hasattr(self.observer,'ingest'):
             # Transport sequence is durable across restarts, independent of classifier event IDs.
@@ -154,7 +154,7 @@ class WorkspaceSession:
             self.shared.bind_context(configs,training)
         # A bounded reconciliation must never serve an incompatible head.
         for identifier,wheel in self.wheels.items():wheel.reconcile_model_context(training[identifier])
-        scorecard_fingerprint=self.store.checkpoint_scorecard(self.run['id'],self.wheels)
+        cyclotron_fingerprint=self.store.checkpoint_cyclotron(self.run['id'],self.wheels)
         await self.shared.prepare(configs,target,training,now=now)
         predictions={}
         for identifier,wheel in self.wheels.items():
@@ -169,7 +169,7 @@ class WorkspaceSession:
             except Exception as error:
                 cycle.__exit__(type(error),error,None);raise
         shown={'presentation_id':str(uuid4()),'classifiers':predictions,
-               'scorecard_fingerprint':scorecard_fingerprint,
+               'cyclotron_fingerprint':cyclotron_fingerprint,
                'recorded_labels':self.store.inherited_labels(self.run['id'],target.id)}
         self.store.update_item(self.run['id'],target.id,prediction=shown)
         self.store.record_item_prediction(self.run['id'],self.config['item_list_id'],target.id,row['revision'],shown)
@@ -237,7 +237,7 @@ class WorkspaceSession:
                 cycle=wheel.resume_cycle(target)
                 if cycle:cycle.__exit__(None,None,None)
         self.store.update_item(self.run['id'],item['id'],reviewed=True)
-        self.store.checkpoint_scorecard(self.run['id'],self.wheels)
+        self.store.checkpoint_cyclotron(self.run['id'],self.wheels)
         return {'reviewed':item['id'],'optimization_warnings':warnings}
 
     async def resume_optimization(self):
@@ -316,7 +316,7 @@ class WorkspaceSession:
                 with_cycle.__exit__(None,None,None)
             except Exception as error:
                 with_cycle.__exit__(type(error),error,None);raise
-        self.store.checkpoint_scorecard(self.run['id'],self.wheels)
+        self.store.checkpoint_cyclotron(self.run['id'],self.wheels)
         return {'corrected':item_id,'classifier_ids':[r[0] for r in plans]}
 
     def undo_feedback(self,request_id):
@@ -385,7 +385,7 @@ class WorkspaceSession:
                 cycle.suspend()
             except Exception as error:
                 cycle.__exit__(type(error),error,None);raise
-        self.store.checkpoint_scorecard(self.run['id'],self.wheels)
+        self.store.checkpoint_cyclotron(self.run['id'],self.wheels)
         result={'undone':item_id,'classifier_ids':[row['classifier_id'] for row in plan['targets']]}
         owner._emit({'kind':'feedback-undo-completed','request_id':request_id,'result':result})
         return result

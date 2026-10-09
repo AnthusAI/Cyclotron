@@ -1,4 +1,4 @@
-"""Immutable scorecard editions and complete learned-state checkpoints."""
+"""Immutable cyclotron editions and complete learned-state checkpoints."""
 from datetime import datetime, timezone
 from dataclasses import asdict
 import hashlib
@@ -10,16 +10,40 @@ def encode(value):
     return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
 
 
-class Scorecards:
-    def initialize_scorecards(self):
+def rename_legacy_tables(db,tables):
+    """Rename legacy scorecard tables, and their scorecard_id columns, in place."""
+    existing={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    for old,new in tables.items():
+        if old in existing and new not in existing:
+            db.execute(f'ALTER TABLE {old} RENAME TO {new}');existing.add(new)
+        if new in existing and 'scorecard_id' in {row[1] for row in db.execute(f'PRAGMA table_info({new})')}:
+            db.execute(f'ALTER TABLE {new} RENAME COLUMN scorecard_id TO cyclotron_id')
+
+
+LEGACY_CONFIG_KEYS={'cyclotron_id':'scorecard_id','cyclotron_definition_revision':'scorecard_definition_revision',
+                    'cyclotron_definition_fingerprint':'scorecard_definition_fingerprint'}
+
+
+def load_config(text):
+    """Parse run config JSON, accepting legacy scorecard keys when the new key is absent."""
+    config=json.loads(text)
+    for key,legacy in LEGACY_CONFIG_KEYS.items():
+        if key not in config and legacy in config:config[key]=config[legacy]
+        config.pop(legacy,None)
+    return config
+
+
+class Cyclotrons:
+    def initialize_cyclotrons(self):
         with self.connect() as db:
+            rename_legacy_tables(db,{'scorecards':'cyclotrons','scorecard_versions':'cyclotron_versions','scorecard_checkpoints':'cyclotron_checkpoints'})
             db.executescript('''
-              CREATE TABLE IF NOT EXISTS scorecards(id TEXT PRIMARY KEY,name TEXT NOT NULL,active_revision INTEGER NOT NULL);
-              CREATE TABLE IF NOT EXISTS scorecard_versions(scorecard_id TEXT,revision INTEGER,run_id TEXT UNIQUE,
-                parent_run_id TEXT,created_at TEXT NOT NULL,PRIMARY KEY(scorecard_id,revision));
+              CREATE TABLE IF NOT EXISTS cyclotrons(id TEXT PRIMARY KEY,name TEXT NOT NULL,active_revision INTEGER NOT NULL);
+              CREATE TABLE IF NOT EXISTS cyclotron_versions(cyclotron_id TEXT,revision INTEGER,run_id TEXT UNIQUE,
+                parent_run_id TEXT,created_at TEXT NOT NULL,PRIMARY KEY(cyclotron_id,revision));
               CREATE TABLE IF NOT EXISTS replay_feedback(run_id TEXT,item_id TEXT,classifier_id TEXT,payload TEXT NOT NULL,
                 PRIMARY KEY(run_id,item_id,classifier_id));
-              CREATE TABLE IF NOT EXISTS scorecard_checkpoints(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT,
+              CREATE TABLE IF NOT EXISTS cyclotron_checkpoints(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT,
                 fingerprint TEXT,payload TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(run_id,fingerprint));
               CREATE TABLE IF NOT EXISTS matched_evaluation_inputs(run_id TEXT PRIMARY KEY REFERENCES web_runs(id),
                 payload TEXT NOT NULL);
@@ -27,11 +51,11 @@ class Scorecards:
                 run_id TEXT NOT NULL REFERENCES web_runs(id),payload TEXT NOT NULL);
             ''')
 
-    def extend_scorecard(self,parent_run_id,classifier_ids,*,name):
+    def extend_cyclotron(self,parent_run_id,classifier_ids,*,name):
         parent=self.run(parent_run_id)
         with self.connect() as db:
             if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')",(parent_run_id,)).fetchone():
-                raise ValueError('wait for current work before extending the scorecard')
+                raise ValueError('wait for current work before extending the cyclotron')
         if parent['mode']!='live' or not parent['config'].get('classifiers'):
             raise ValueError('extend a live multi-classifier run')
         old=parent['config']['classifiers'];old_ids={row['id'] for row in old}
@@ -43,8 +67,8 @@ class Scorecards:
             classifier['config']={**definition,'selection_policy':definition.get('selection_policy',{'primary':'f1','aggregation':'positive' if positive else 'macro','positive_class':positive})}
         config={**parent['config'],'classifiers':[*old,*added],'parent_run_id':parent_run_id,
                 'learning_policy':'fresh-replay','review_policy':'missing-labels-first'}
-        config.pop('scorecard_definition_revision',None)
-        config.pop('scorecard_definition_fingerprint',None)
+        config.pop('cyclotron_definition_revision',None)
+        config.pop('cyclotron_definition_fingerprint',None)
         # Preserve the original class definitions, item revisions, split seed,
         # and comments. Never inherit fitted models or future labels.
         items=self.items(parent_run_id);inherited={}
@@ -58,40 +82,40 @@ class Scorecards:
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')",(parent_run_id,)).fetchone():
-                raise ValueError('wait for current work before extending the scorecard')
-            previous=db.execute('SELECT * FROM scorecard_versions WHERE run_id=?',(parent_run_id,)).fetchone()
-            scorecard_id=previous['scorecard_id'] if previous else str(uuid4())
+                raise ValueError('wait for current work before extending the cyclotron')
+            previous=db.execute('SELECT * FROM cyclotron_versions WHERE run_id=?',(parent_run_id,)).fetchone()
+            cyclotron_id=previous['cyclotron_id'] if previous else str(uuid4())
             if not previous:
-                db.execute('INSERT INTO scorecards VALUES (?,?,1)',(scorecard_id,name))
-                db.execute('INSERT INTO scorecard_versions VALUES (?,1,?,NULL,?)',(scorecard_id,parent_run_id,parent['created_at']))
-            revision=db.execute('SELECT MAX(revision)+1 FROM scorecard_versions WHERE scorecard_id=?',(scorecard_id,)).fetchone()[0]
-            config.update(scorecard_id=scorecard_id,scorecard_revision=revision,scorecard_name=name,backfill_count=len(historical))
+                db.execute('INSERT INTO cyclotrons VALUES (?,?,1)',(cyclotron_id,name))
+                db.execute('INSERT INTO cyclotron_versions VALUES (?,1,?,NULL,?)',(cyclotron_id,parent_run_id,parent['created_at']))
+            revision=db.execute('SELECT MAX(revision)+1 FROM cyclotron_versions WHERE cyclotron_id=?',(cyclotron_id,)).fetchone()[0]
+            config.update(cyclotron_id=cyclotron_id,cyclotron_revision=revision,cyclotron_name=name,backfill_count=len(historical))
             db.execute('INSERT INTO web_runs VALUES (?,?,?,?,?,?)',(run_id,f'{name} · v{revision} · missing-label review','live','ready',now,encode(config)))
             for item in [*historical,*unseen]:
                 db.execute('INSERT INTO web_items(run_id,id,payload) VALUES (?,?,?)',(run_id,item['id'],encode(item)))
                 for vote in inherited.get(item['id'],[]):
                     db.execute('INSERT INTO replay_feedback VALUES (?,?,?,?)',(run_id,item['id'],vote['classifier_id'],encode(vote)))
-            db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)',(scorecard_id,revision,run_id,parent_run_id,now))
-            db.execute('UPDATE scorecards SET active_revision=? WHERE id=?',(revision,scorecard_id))
-            self.register_run_definition(db,parent_run_id,scorecard_id,name,parent['config'])
-            definition_revision=self.register_run_definition(db,run_id,scorecard_id,name,config)
-            definition=db.execute('SELECT fingerprint FROM scorecard_definitions WHERE id=? AND revision=?',(scorecard_id,definition_revision)).fetchone()
-            config.update(scorecard_definition_revision=definition_revision,scorecard_definition_fingerprint=definition[0])
+            db.execute('INSERT INTO cyclotron_versions VALUES (?,?,?,?,?)',(cyclotron_id,revision,run_id,parent_run_id,now))
+            db.execute('UPDATE cyclotrons SET active_revision=? WHERE id=?',(revision,cyclotron_id))
+            self.register_run_definition(db,parent_run_id,cyclotron_id,name,parent['config'])
+            definition_revision=self.register_run_definition(db,run_id,cyclotron_id,name,config)
+            definition=db.execute('SELECT fingerprint FROM cyclotron_definitions WHERE id=? AND revision=?',(cyclotron_id,definition_revision)).fetchone()
+            config.update(cyclotron_definition_revision=definition_revision,cyclotron_definition_fingerprint=definition[0])
             db.execute('UPDATE web_runs SET config=? WHERE id=?',(encode(config),run_id))
-            db.execute('INSERT INTO scorecard_catalog VALUES (?,?) ON CONFLICT(id) DO UPDATE SET active_revision=excluded.active_revision',(scorecard_id,definition_revision))
+            db.execute('INSERT INTO cyclotron_catalog VALUES (?,?) ON CONFLICT(id) DO UPDATE SET active_revision=excluded.active_revision',(cyclotron_id,definition_revision))
         return self.run(run_id)
 
     def inherited_labels(self,run_id,item_id):
         with self.connect() as db:
             return [json.loads(row[0]) for row in db.execute('SELECT payload FROM replay_feedback WHERE run_id=? AND item_id=?',(run_id,item_id))]
 
-    def scorecards(self):
+    def cyclotrons(self):
         with self.connect() as db:
-            return [{**dict(row),'versions':[dict(version) for version in db.execute('SELECT revision,run_id FROM scorecard_versions WHERE scorecard_id=? ORDER BY revision',(row['id'],))]} for row in db.execute('SELECT * FROM scorecards ORDER BY name,id')]
+            return [{**dict(row),'versions':[dict(version) for version in db.execute('SELECT revision,run_id FROM cyclotron_versions WHERE cyclotron_id=? ORDER BY revision',(row['id'],))]} for row in db.execute('SELECT * FROM cyclotrons ORDER BY name,id')]
 
-    def scorecard_versions(self,scorecard_id):
+    def cyclotron_versions(self,cyclotron_id):
         with self.connect() as db:
-            versions=[dict(row) for row in db.execute('SELECT * FROM scorecard_versions WHERE scorecard_id=? ORDER BY revision',(scorecard_id,))]
+            versions=[dict(row) for row in db.execute('SELECT * FROM cyclotron_versions WHERE cyclotron_id=? ORDER BY revision',(cyclotron_id,))]
         for version in versions:
             version['classifiers']=self.run(version['run_id'])['config']['classifiers']
             latest={}
@@ -101,16 +125,16 @@ class Scorecards:
             version['metrics']=latest
         return versions
 
-    def activate_scorecard_version(self,scorecard_id,revision):
+    def activate_cyclotron_version(self,cyclotron_id,revision):
         with self.connect() as db:
-            row=db.execute('SELECT run_id FROM scorecard_versions WHERE scorecard_id=? AND revision=?',(scorecard_id,revision)).fetchone()
-            if row is None:raise ValueError('unknown scorecard version')
-            if db.execute("SELECT 1 FROM web_jobs WHERE run_id IN (SELECT run_id FROM scorecard_versions WHERE scorecard_id=?) AND status IN ('pending','running')",(scorecard_id,)).fetchone():
+            row=db.execute('SELECT run_id FROM cyclotron_versions WHERE cyclotron_id=? AND revision=?',(cyclotron_id,revision)).fetchone()
+            if row is None:raise ValueError('unknown cyclotron version')
+            if db.execute("SELECT 1 FROM web_jobs WHERE run_id IN (SELECT run_id FROM cyclotron_versions WHERE cyclotron_id=?) AND status IN ('pending','running')",(cyclotron_id,)).fetchone():
                 raise ValueError('wait for current work before reverting')
-            db.execute('UPDATE scorecards SET active_revision=? WHERE id=?',(revision,scorecard_id))
+            db.execute('UPDATE cyclotrons SET active_revision=? WHERE id=?',(revision,cyclotron_id))
         return self.run(row['run_id'])
 
-    def checkpoint_scorecard(self,run_id,wheels):
+    def checkpoint_cyclotron(self,run_id,wheels):
         config=self.run(run_id)['config']
         snapshot={'classifiers':{identifier:{'fingerprint':wheel.active.fingerprint,'state':asdict(wheel.active)} for identifier,wheel in wheels.items()},
                   'definitions':[{key:row[key] for key in ('id','revision')} for row in config['classifiers']],
@@ -119,14 +143,14 @@ class Scorecards:
                   'event_cursor':self.event_cursor(run_id)}
         fingerprint=hashlib.sha256(encode(snapshot).encode()).hexdigest()
         with self.connect() as db:
-            db.execute('INSERT OR IGNORE INTO scorecard_checkpoints(run_id,fingerprint,payload,created_at) VALUES (?,?,?,?)',
+            db.execute('INSERT OR IGNORE INTO cyclotron_checkpoints(run_id,fingerprint,payload,created_at) VALUES (?,?,?,?)',
                        (run_id,fingerprint,encode(snapshot),datetime.now(timezone.utc).isoformat()))
         return fingerprint
 
-    def scorecard_checkpoints(self,run_id):
+    def cyclotron_checkpoints(self,run_id):
         self.run(run_id)
         with self.connect() as db:
-            return [{**dict(row),'payload':json.loads(row['payload'])} for row in db.execute('SELECT * FROM scorecard_checkpoints WHERE run_id=? ORDER BY id',(run_id,))]
+            return [{**dict(row),'payload':json.loads(row['payload'])} for row in db.execute('SELECT * FROM cyclotron_checkpoints WHERE run_id=? ORDER BY id',(run_id,))]
 
     def matched_run_preflight(self,before_run_id,after_run_id,*,limit=200):
         from .matched_run_plan import plan_matched_runs
@@ -135,8 +159,8 @@ class Scorecards:
     def matched_run_sources(self,before_run_id,after_run_id):
         result={}
         for side,identifier in (('before',before_run_id),('after',after_run_id)):
-            run=self.run(identifier);checkpoints=self.scorecard_checkpoints(identifier)
-            if not checkpoints:raise ValueError('run has no recorded joint scorecard checkpoint')
+            run=self.run(identifier);checkpoints=self.cyclotron_checkpoints(identifier)
+            if not checkpoints:raise ValueError('run has no recorded joint cyclotron checkpoint')
             result[side]={**run,'checkpoint':checkpoints[-1],'items':self.items(identifier),'events':self.all_events(identifier)}
         return result
 
@@ -192,7 +216,7 @@ class Scorecards:
             db.execute('BEGIN IMMEDIATE')
             run=db.execute('SELECT * FROM web_runs WHERE id=?',(run_id,)).fetchone()
             if not run:raise ValueError('unknown run')
-            config=json.loads(run['config'])
+            config=load_config(run['config'])
             if config.get('input_mode')!='comparison':raise ValueError('select a comparison run')
             if type(max_requests) is not int or max_requests<config['plan']['request_upper_bound']:
                 raise ValueError('request ceiling is below preflight upper bound')

@@ -9,7 +9,7 @@ and the website can embed the same file with a plain `<img>`.
 | Diagram | Source | Shows |
 | --- | --- | --- |
 | Harness | [harness.d2](harness.d2) | What Cyclotron adds around one decision model |
-| Scorecards | [scorecards.d2](scorecards.d2) | Many classifiers in one decision-model request |
+| Cyclotrons | [cyclotrons.d2](cyclotrons.d2) | Many classifiers in one decision-model request |
 | Classifier | [classifier.d2](classifier.d2) | The decision request and the learned ML head |
 | Improvement | [improvement.d2](improvement.d2) | One optimization round, from feedback to promotion |
 | Evaluation | [evaluation.d2](evaluation.d2) | Data partitions that keep learning and evaluation apart |
@@ -60,7 +60,7 @@ and run `make diagrams`.
 Keep each diagram at most about 880 pixels wide, the width of a GitHub README
 column, so its text displays near full size. When a loop makes ELK spread a
 diagram into one long row or sideways, lay it out with a D2 grid of two or
-three columns instead, as `harness.d2`, `scorecards.d2`, `classifier.d2`, and
+three columns instead, as `harness.d2`, `cyclotrons.d2`, `classifier.d2`, and
 `improvement.d2` do. Leave `""` cells with `class: spacer` where a connection
 must pass, so no line crosses a shape.
 

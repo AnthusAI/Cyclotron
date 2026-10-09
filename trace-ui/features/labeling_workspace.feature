@@ -3,7 +3,7 @@ Feature: Label items in the Cyclotron workspace
   flywheel fitting or optimization rules in the client.
 
   Scenario: A labeler can compare a displayed prediction with a human label
-    Given a scorecard item and its model predictions from the API
+    Given a cyclotron item and its model predictions from the API
     When the labeler chooses a classifier label and submits feedback
     Then the interface shows that feedback is being recorded
     And the next rendered state comes from the API

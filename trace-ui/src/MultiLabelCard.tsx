@@ -23,7 +23,7 @@ export function MultiLabelCard({current,names,busy,readOnly=false,onSubmit,class
   const {item,prediction}=current
   const outputs=new Map(Object.entries(prediction.classifiers))
   // Serialized response objects have no display-order contract. Use the pinned
-  // scorecard order, retaining unconfigured outputs for legacy presentations.
+  // cyclotron order, retaining unconfigured outputs for legacy presentations.
   const orderedIds=[...new Set([...classifiers.map(classifier=>classifier.id),...outputs.keys()])].filter(id=>outputs.has(id))
   const orderedOutputs=orderedIds.map(id=>[id,outputs.get(id)!] as const)
   const recorded=new Map(prediction.recorded_labels?.map(row=>[row.classifier_id,row]))

@@ -20,7 +20,7 @@ export function ClassifierHistory({classifier,onClose,onEdit}:{classifier:Classi
     {error?<p role="alert" className="text-sm text-destructive">{error}</p>:inspected?<>
       <h3 className="font-semibold">{inspected.name}</h3><p className="text-sm whitespace-pre-wrap">{inspected.config.question}</p>
       <ol className="space-y-2">{inspected.config.classes.map(row=><li key={row.label} className="rounded-md border p-2 text-sm">{row.label}{row.role?` · ${row.role}`:''}</li>)}</ol>
-      <p className="text-xs text-muted-foreground">Read-only revision. Editing from it opens a draft; saving creates a new revision and updates active scorecard definitions. Existing runs keep their pinned configuration.</p>
+      <p className="text-xs text-muted-foreground">Read-only revision. Editing from it opens a draft; saving creates a new revision and updates active cyclotron definitions. Existing runs keep their pinned configuration.</p>
       <details className="disclosure"><summary>Complete definition</summary><pre>{JSON.stringify(inspected,null,2)}</pre></details>
     </>:<p role="status" className="text-sm text-muted-foreground">Loading classifier history…</p>}
   </AppDrawer>

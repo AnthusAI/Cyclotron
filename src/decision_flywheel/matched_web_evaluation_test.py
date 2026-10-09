@@ -18,7 +18,7 @@ def runs(store):
         for i in range(4):
             store.append_event(run['id'],str(i),{'kind':'human-feedback','classifier_id':'topic','action':'submitted','assignment':'scoreboard','feedback':{'item_id':str(i),'final_answer_value':'yes' if i%2 else 'no'}})
         wheel=SimpleNamespace(active=FittedClassifier(ClassifierConfig(DecisionTask('topic',('yes','no'),'Choose'))))
-        store.checkpoint_scorecard(run['id'],{'topic':wheel})
+        store.checkpoint_cyclotron(run['id'],{'topic':wheel})
         result.append(run)
     return result
 

@@ -10,7 +10,7 @@ inspector. Add run history and human labeling around them.
 
 ### Workspace identities
 
-Top-level navigation is Scorecards, Item lists, and Optimizations. Each scorecard
+Top-level navigation is Cyclotrons, Item lists, and Optimizations. Each cyclotron
 definition pins ordered classifier revisions and shared settings. A classifier
 has a stable identity and immutable configuration revisions, an ordered class
 list, a decision question, and optional positive/negative roles. Binary and
@@ -58,7 +58,7 @@ the reusable transport/coordinator contract; it does not install optional local
 checkpoints or demonstrate their predictive quality.
 
 Labels saved directly in the catalog do not trigger session learning. Interactive
-scorecard sessions support corrections and item-level undo through durable API
+cyclotron sessions support corrections and item-level undo through durable API
 commands. Corrections retain the original prediction and append feedback history;
 dependent inferred guidance and fitted heads are invalidated. Undo retracts local
 labels and reopens the saved prediction without calling either model. It does not
@@ -71,15 +71,15 @@ identity blocks submission until the human reloads the saved feedback. Failed or
 interrupted correction/undo commands offer explicit recovery with the original
 command identity. Recovery cannot resume paid-capable commands, interleave with
 pending work, or reactivate an inactive edition. See
-[scorecard versioning](scorecard-versioning.md) for the API and storage contract.
+[cyclotron versioning](cyclotron-versioning.md) for the API and storage contract.
 
-Run history defaults to the inspected run's scorecard family. GraphQL
-`Run.scorecardId` resolves that membership from the persisted scorecard-version
+Run history defaults to the inspected run's cyclotron family. GraphQL
+`Run.cyclotronId` resolves that membership from the persisted cyclotron-version
 relationship before consulting the original configuration. This lets the initial
 run and later editions appear together without rewriting a frozen run snapshot.
-Search and the explicit All scorecards filter remain available. Inspecting an
+Search and the explicit All cyclotrons filter remain available. Inspecting an
 inactive edition is read-only; activation is a separate, explicit action.
-Scorecard and nested classifier controls use at least 44-pixel touch targets on
+Cyclotron and nested classifier controls use at least 44-pixel touch targets on
 narrow screens or coarse-pointer devices. The settings editor scrolls its fields
 while keeping its Save and Cancel footer visible.
 The viewport shell reserves the device's safe-area insets on all four sides.

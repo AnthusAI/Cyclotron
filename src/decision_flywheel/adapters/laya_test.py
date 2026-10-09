@@ -77,7 +77,7 @@ def test_laya_refuses_provider_reported_truncation_before_using_a_result():
     assert model.calls == 1
 
 
-def test_laya_keeps_a_rejected_truncated_response_visible_in_scorecard_traces():
+def test_laya_keeps_a_rejected_truncated_response_visible_in_cyclotron_traces():
     from ..classifier_config import ClassifierConfig
     class Truncated(FakeLayaModel):
         def system_one(self, **kwargs):
@@ -92,7 +92,7 @@ def test_laya_keeps_a_rejected_truncated_response_visible_in_scorecard_traces():
     assert events[1]["usage"]["truncated"] is True
 
 
-def test_laya_checks_the_whole_serialized_scorecard_not_just_the_article_for_truncation():
+def test_laya_checks_the_whole_serialized_cyclotron_not_just_the_article_for_truncation():
     from ..classifier_config import ClassifierConfig
     model = FakeLayaModel()
     model.tok = lambda text, **_: {"input_ids": list(range(len(text.split())))}

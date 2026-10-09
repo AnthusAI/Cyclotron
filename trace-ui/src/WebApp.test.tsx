@@ -11,7 +11,7 @@ beforeEach(()=>{
   window.history.replaceState(null,'','/')
   vi.mocked(graphql).mockImplementation(async(query,variables)=>{
     if(query.includes('capabilities'))return {runs:[live,replay],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[]}
     if(query.includes('events('))return {events:[]}
     return {run:variables?.id==='live'?live:replay,currentItem:null,jobs:[]}
   })
@@ -168,7 +168,7 @@ test('an unknown classifier link is replaced with a valid default without loadin
   expect(new URLSearchParams(window.location.hash.slice(1)).has('classifier')).toBe(false)
 })
 
-test('scorecard feedback recovery uses the original job through its dedicated API mutation',async()=>{
+test('cyclotron feedback recovery uses the original job through its dedicated API mutation',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
   const card={...live,config:{classifiers:[{id:'a',name:'Relevance',config:{classes:[{label:'yes'},{label:'no'}]}}]}}
   vi.mocked(graphql).mockImplementation(async(query)=>{
@@ -184,10 +184,10 @@ test('scorecard feedback recovery uses the original job through its dedicated AP
   expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('submitCommand'))).toBe(false)
 })
 
-test('new scorecard runs inherit their objective unless the user explicitly overrides it',async()=>{
+test('new cyclotron runs inherit their objective unless the user explicitly overrides it',async()=>{
   vi.mocked(graphql).mockImplementation(async(query)=>{
     if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[{id:'items',name:'Items',count:3}],scorecardDefinitions:[{id:'card',name:'Card',revision:2}]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[{id:'items',name:'Items',count:3}],cyclotronDefinitions:[{id:'card',name:'Card',revision:2}]}
     if(query.includes('events('))return {events:[]}
     if(query.includes('createRun'))return {createRun:{...live,id:'created'}}
     return {run:live,currentItem:null,jobs:[]}
@@ -196,14 +196,14 @@ test('new scorecard runs inherit their objective unless the user explicitly over
   fireEvent.click(await screen.findByRole('button',{name:'Run history'}))
   fireEvent.click(screen.getByRole('button',{name:'New run'}))
   const setup=screen.getByRole('dialog',{name:'New optimization run'})
-  await waitFor(()=>expect(within(setup).getByLabelText('Scorecard')).toHaveValue('card'))
+  await waitFor(()=>expect(within(setup).getByLabelText('Cyclotron')).toHaveValue('card'))
   expect(within(setup).getByLabelText('Objective')).toHaveValue('inherit')
   fireEvent.change(within(setup).getByLabelText('Name'),{target:{value:'Inherited defaults'}})
   fireEvent.click(within(setup).getByRole('checkbox',{name:'Authorize paid calls within these limits'}))
   fireEvent.click(within(setup).getByRole('button',{name:'Create run'}))
   await waitFor(()=>expect(vi.mocked(graphql).mock.calls.some(([query])=>query.includes('createRun'))).toBe(true))
   const variables=vi.mocked(graphql).mock.calls.find(([query])=>query.includes('createRun'))![1]
-  expect(variables?.config).toMatchObject({scorecard_id:'card'})
+  expect(variables?.config).toMatchObject({cyclotron_id:'card'})
   expect(variables?.config).not.toHaveProperty('selection_policy')
 })
 
@@ -212,7 +212,7 @@ test('new run setup is a dismissible drawer and preserves unsent labeling feedba
   const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'shown',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
   vi.mocked(graphql).mockImplementation(async(query)=>{
     if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[]}
     if(query.includes('events('))return {events:[]}
     return {run:live,currentItem:shown,jobs:[]}
   })
@@ -234,7 +234,7 @@ test('inspecting a replay and returning through browser history restores unsent 
   const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'unsent',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
   vi.mocked(graphql).mockImplementation(async(query,variables)=>{
     if(query.includes('capabilities'))return {runs:[live,replay],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[]}
     if(query.includes('events('))return {events:[]}
     return {run:variables?.id==='live'?live:replay,currentItem:variables?.id==='live'?shown:null,jobs:[]}
   })
@@ -252,30 +252,30 @@ test('inspecting a replay and returning through browser history restores unsent 
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
-test('history opens scoped to the inspected scorecard and marks its current run without mutations',async()=>{
+test('history opens scoped to the inspected cyclotron and marks its current run without mutations',async()=>{
   window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
-  const scoped={...live,config:{scorecard_id:'card'}}
-  const other={...replay,config:{scorecard_id:'other'}}
+  const scoped={...live,config:{cyclotron_id:'card'}}
+  const other={...replay,config:{cyclotron_id:'other'}}
   vi.mocked(graphql).mockImplementation(async(query)=>{
     if(query.includes('capabilities'))return {runs:[scoped,other],capabilities:{liveEnabled:true,itemCount:1}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[{id:'card',name:'Current card',revision:1},{id:'other',name:'Other card',revision:1}]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[{id:'card',name:'Current card',revision:1},{id:'other',name:'Other card',revision:1}]}
     if(query.includes('events('))return {events:[]}
     return {run:scoped,currentItem:null,jobs:[]}
   })
   render(<WebApp/> )
   fireEvent.click(await screen.findByRole('button',{name:'Run history'}))
   const drawer=screen.getByRole('dialog',{name:'Run history'})
-  await waitFor(()=>expect(within(drawer).getByRole('combobox',{name:'Scorecard filter'})).toHaveValue('card'))
+  await waitFor(()=>expect(within(drawer).getByRole('combobox',{name:'Cyclotron filter'})).toHaveValue('card'))
   expect(within(drawer).getByRole('button',{name:/Interactive study.*cycles/})).toHaveAttribute('aria-current','true')
   expect(within(drawer).queryByRole('button',{name:/Existing optimization replay.*cycles/})).toBeNull()
-  fireEvent.change(within(drawer).getByRole('combobox',{name:'Scorecard filter'}),{target:{value:''}})
+  fireEvent.change(within(drawer).getByRole('combobox',{name:'Cyclotron filter'}),{target:{value:''}})
   expect(within(drawer).getByRole('button',{name:/Existing optimization replay.*cycles/})).not.toHaveAttribute('aria-current')
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
 test('an inactive learned edition explains read-only labeling before a submission can be attempted',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
-  const inactive={...live,labelingAccess:{allowed:false,reason:'Activate this scorecard version before continuing labeling.'}}
+  const inactive={...live,labelingAccess:{allowed:false,reason:'Activate this cyclotron version before continuing labeling.'}}
   const shown={item:{id:'paper',values:{title:'A paper'}},prediction:{presentation_id:'shown',classifiers:{a:{name:'Topic',label:'include',confidence:.8,classes:['include','exclude']}}}}
   vi.mocked(graphql).mockImplementation(async query=>{
     if(query.includes('capabilities'))return {runs:[inactive],capabilities:{liveEnabled:true,itemCount:1}}
@@ -283,7 +283,7 @@ test('an inactive learned edition explains read-only labeling before a submissio
     return {run:inactive,currentItem:shown,jobs:[]}
   })
   render(<WebApp/> )
-  expect(await screen.findByText('Activate this scorecard version before continuing labeling.')).toBeVisible()
+  expect(await screen.findByText('Activate this cyclotron version before continuing labeling.')).toBeVisible()
   expect(screen.getByRole('button',{name:'Topic: exclude'})).toBeDisabled()
   expect(screen.getByRole('button',{name:'Skip item'})).toBeDisabled()
   expect(screen.getByRole('button',{name:'Refresh prediction'})).toBeDisabled()
@@ -292,14 +292,14 @@ test('an inactive learned edition explains read-only labeling before a submissio
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
-test('scorecard history includes an original run whose family was recorded without rewriting its configuration',async()=>{
+test('cyclotron history includes an original run whose family was recorded without rewriting its configuration',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
-  const child={...live,scorecardId:'family',config:{scorecard_id:'family'}}
-  const parent={...replay,name:'Original family run',scorecardId:'family',config:{}}
-  const other={...replay,id:'other',name:'Unrelated run',scorecardId:'other',config:{scorecard_id:'other'}}
+  const child={...live,cyclotronId:'family',config:{cyclotron_id:'family'}}
+  const parent={...replay,name:'Original family run',cyclotronId:'family',config:{}}
+  const other={...replay,id:'other',name:'Unrelated run',cyclotronId:'other',config:{cyclotron_id:'other'}}
   vi.mocked(graphql).mockImplementation(async(query,variables)=>{
     if(query.includes('capabilities'))return {runs:[child,parent,other],capabilities:{liveEnabled:true,itemCount:1}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[{id:'family',name:'Family',revision:2},{id:'other',name:'Other',revision:1}]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[{id:'family',name:'Family',revision:2},{id:'other',name:'Other',revision:1}]}
     if(query.includes('events('))return {events:[]}
     return {run:variables?.id==='replay'?parent:child,currentItem:null,jobs:[]}
   })
@@ -311,7 +311,7 @@ test('scorecard history includes an original run whose family was recorded witho
   fireEvent.click(within(drawer).getByRole('button',{name:/Original family run.*cycles/}))
   expect(await screen.findByRole('heading',{name:'Original family run'})).toBeVisible()
   fireEvent.click(screen.getByRole('button',{name:'Run history'}))
-  await waitFor(()=>expect(screen.getByRole('combobox',{name:'Scorecard filter'})).toHaveValue('family'))
+  await waitFor(()=>expect(screen.getByRole('combobox',{name:'Cyclotron filter'})).toHaveValue('family'))
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
@@ -360,20 +360,20 @@ test('reloading preserves an interactive run and its labeling view without creat
   expect(vi.mocked(graphql).mock.calls.every(([query])=>!query.includes('mutation'))).toBe(true)
 })
 
-test('scorecard navigation has its own route and responds to browser history changes',async()=>{
+test('cyclotron navigation has its own route and responds to browser history changes',async()=>{
   window.history.replaceState(null,'','#run=live&view=label&section=classifiers')
   vi.mocked(graphql).mockImplementation(async(query)=>{
-    if(query.includes('scorecardDefinitions'))return {scorecardDefinitions:[],classifiers:[]}
+    if(query.includes('cyclotronDefinitions'))return {cyclotronDefinitions:[],classifiers:[]}
     if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
     if(query.includes('events('))return {events:[]}
     return {run:live,currentItem:null,jobs:[]}
   })
   render(<WebApp />)
-  expect(await screen.findByRole('heading',{name:'Scorecards'})).toBeVisible()
+  expect(await screen.findByRole('heading',{name:'Cyclotrons'})).toBeVisible()
   fireEvent.click(screen.getByRole('button',{name:'Optimizations'}))
   expect(await screen.findByRole('heading',{name:live.name})).toBeVisible()
-  fireEvent.click(screen.getByRole('button',{name:'Scorecards'}))
-  expect(window.location.hash).toContain('section=scorecards')
+  fireEvent.click(screen.getByRole('button',{name:'Cyclotrons'}))
+  expect(window.location.hash).toContain('section=cyclotrons')
   window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
   fireEvent(window,new PopStateEvent('popstate'))
   expect(await screen.findByRole('heading',{name:live.name})).toBeVisible()
@@ -383,7 +383,7 @@ test('the narrow navigation uses a descriptive full-viewport menu instead of a s
   vi.mocked(graphql).mockImplementation(async(query,variables)=>{
     if(query.includes('{classifiers itemLists}'))return {classifiers:[],itemLists:[]}
     if(query.includes('capabilities'))return {runs:[live,replay],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[]}
     if(query.includes('events('))return {events:[]}
     return {run:variables?.id==='live'?live:replay,currentItem:null,jobs:[]}
   })
@@ -396,7 +396,7 @@ test('the narrow navigation uses a descriptive full-viewport menu instead of a s
   expect(within(menu).getByRole('button',{name:'Close main menu'})).toBeVisible()
   expect(screen.queryByRole('navigation',{name:'Main navigation'})).toBeNull()
   expect(within(menu).getByText('Define the related classifiers that share one decision-model request.')).toBeVisible()
-  expect(within(menu).getByText('Browse source items, decisions, and human labels across scorecards.')).toBeVisible()
+  expect(within(menu).getByText('Browse source items, decisions, and human labels across cyclotrons.')).toBeVisible()
   expect(within(menu).getByText('Run, compare, and inspect live or replayed flywheel experiments.')).toBeVisible()
   expect(screen.queryByRole('combobox',{name:'Navigation'})).toBeNull()
   fireEvent.click(within(menu).getByRole('button',{name:/Item lists/}))
@@ -550,7 +550,7 @@ test('the activity drawer can isolate optimizer exchanges from later decision tr
   const decisions=Array.from({length:45},(_,i)=>({sequence:i+3,sourceId:String(i+3),payload:{kind:'decision-response'}}))
   vi.mocked(graphql).mockImplementation(async(query,variables)=>{
     if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('scorecardDefinitions'))return {classifiers:[],itemLists:[],scorecardDefinitions:[]}
+    if(query.includes('cyclotronDefinitions'))return {classifiers:[],itemLists:[],cyclotronDefinitions:[]}
     if(query.includes('events('))return {events:variables?.after?[]:[request,response,...decisions]}
     return {run:live,currentItem:null,jobs:[]}
   })

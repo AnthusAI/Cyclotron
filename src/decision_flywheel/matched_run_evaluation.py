@@ -1,4 +1,4 @@
-"""Explicit frozen-scorecard evaluation: no fitting, optimization, or promotion."""
+"""Explicit frozen-cyclotron evaluation: no fitting, optimization, or promotion."""
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path

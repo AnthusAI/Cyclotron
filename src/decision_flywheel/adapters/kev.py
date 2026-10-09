@@ -88,7 +88,7 @@ class KevAdapter:
 
     async def classify_many(self, configurations, target, training, *, now=None,
                             event_sink=None, max_request_bytes=32000):
-        """Send the scorecard once and preserve every feature's distribution."""
+        """Send the cyclotron once and preserve every feature's distribution."""
         from ..batched_classification import batch_request, BatchedAnswers
         request,identities=batch_request(configurations,target,training,now=now,
                                          max_request_bytes=max_request_bytes)

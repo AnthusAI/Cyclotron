@@ -1,11 +1,11 @@
-"""A scorecard application runtime owns the shared-request session details."""
+"""A cyclotron application runtime owns the shared-request session details."""
 import asyncio
 import pytest
 
 from .batched_classification import BatchedAnswers
 from .flywheel_test import agent
 from .models import DecisionResult
-from .scorecard_runtime import ScorecardRuntime
+from .cyclotron_runtime import CyclotronRuntime
 from .web_store import WebStore
 from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
@@ -21,14 +21,14 @@ def test_freezing_a_run_does_not_assemble_a_manifest_from_changing_catalog_pages
     store.upsert_list_items('papers',items[200:])
     def forbidden(*args,**kwargs):raise AssertionError('latest pages are not a consistent snapshot')
     monkeypatch.setattr(store,'list_items',forbidden)
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=forbidden,sink_factory=forbidden)
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=forbidden,sink_factory=forbidden)
     run=runtime.create_run('Snapshot',{'classifier_ids':['topic'],'item_list_id':'papers'})
     assert [row['id'] for row in store.items(run['id'])]==[row['id'] for row in items]
     assert len(run['config']['item_revisions'])==205
 
 
 def test_a_catalog_refresh_during_run_creation_cannot_replace_frozen_items(tmp_path, monkeypatch):
-    from . import scorecard_runtime
+    from . import cyclotron_runtime
     store=WebStore(tmp_path/'workspace.sqlite')
     store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('papers','Papers')
@@ -41,9 +41,9 @@ def test_a_catalog_refresh_during_run_creation_cannot_replace_frozen_items(tmp_p
             {'id':'later','occurred_at':'2026-01-03','values':{'text':'New paper'}},
         ])
         return frozen
-    monkeypatch.setattr(scorecard_runtime,'freeze_configuration',refresh_after_freezing)
+    monkeypatch.setattr(cyclotron_runtime,'freeze_configuration',refresh_after_freezing)
     def forbidden(*args):raise AssertionError('freezing must not construct a provider')
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=forbidden,sink_factory=forbidden)
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=forbidden,sink_factory=forbidden)
     run=runtime.create_run('Pinned items',{'classifier_ids':['topic'],'item_list_id':'papers'})
     assert store.items(run['id'])==[original]
     assert run['config']['item_revisions']==[
@@ -51,24 +51,24 @@ def test_a_catalog_refresh_during_run_creation_cannot_replace_frozen_items(tmp_p
     assert store.list_items('papers')[0]['values']['text']=='Revised paper'
 
 
-def test_a_run_pins_its_optimizer_transport_even_when_the_scorecard_later_changes(tmp_path):
+def test_a_run_pins_its_optimizer_transport_even_when_the_cyclotron_later_changes(tmp_path):
     store=WebStore(tmp_path/'workspace.sqlite')
     classifier=store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('papers','Papers')
     store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Paper'}}])
-    scorecard=store.save_scorecard_definition('card','Card',classifiers=[{'id':'topic','revision':classifier['revision']}],
+    cyclotron=store.save_cyclotron_definition('card','Card',classifiers=[{'id':'topic','revision':classifier['revision']}],
         settings={'optimizer_transport':'litellm','optimizer_model':'anthropic/fake'})
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
-    run=runtime.create_run('Pinned transport',{'scorecard_id':scorecard['id'],'item_list_id':'papers'})
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    run=runtime.create_run('Pinned transport',{'cyclotron_id':cyclotron['id'],'item_list_id':'papers'})
     assert run['config']['optimizer_transport']=='litellm'
     assert run['config']['optimizer_model']=='anthropic/fake'
-    store.save_scorecard_definition('card','Card',classifiers=scorecard['classifiers'],
+    store.save_cyclotron_definition('card','Card',classifiers=cyclotron['classifiers'],
         settings={'optimizer_transport':'openai','optimizer_model':'fake-openai'})
     assert store.run(run['id'])['config']['optimizer_transport']=='litellm'
-    newer=runtime.create_run('New transport',{'scorecard_id':scorecard['id'],'item_list_id':'papers'})
+    newer=runtime.create_run('New transport',{'cyclotron_id':cyclotron['id'],'item_list_id':'papers'})
     assert newer['config']['optimizer_transport']=='openai'
     with pytest.raises(ValueError,match='transport'):
-        runtime.create_run('Invalid',{'scorecard_id':scorecard['id'],'item_list_id':'papers','optimizer_transport':'unknown'})
+        runtime.create_run('Invalid',{'cyclotron_id':cyclotron['id'],'item_list_id':'papers','optimizer_transport':'unknown'})
 
 
 def test_an_explicit_run_objective_overrides_saved_classifier_objectives_without_editing_definitions(tmp_path):
@@ -78,7 +78,7 @@ def test_an_explicit_run_objective_overrides_saved_classifier_objectives_without
         'selection_policy':{'primary':'f1','positive_class':'yes'}})
     store.save_item_list('papers','Papers')
     store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Paper'}}])
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
     run=runtime.create_run('Recall objective',{'classifier_ids':['topic'],'item_list_id':'papers',
         'selection_policy':{'primary':'recall','secondary':'accuracy','positive_class':'yes'}})
     policy=run['config']['classifiers'][0]['config']['selection_policy']
@@ -94,15 +94,15 @@ def test_objective_replays_freeze_the_same_votes_and_comments_but_different_effe
     store.save_classifier('topic','Topic',{'question':'Choose',
         'classes':[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}],
         'selection_policy':{'primary':'f1','positive_class':'yes'}})
-    scorecard=_scorecard(store)
+    cyclotron=_cyclotron(store)
     store.save_item_list('papers','Papers')
     store.upsert_list_items('papers',[{'id':'paper','occurred_at':'2026-01-01','values':{'text':'Paper'}}])
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
-    source=runtime.create_run('Source',{'scorecard_id':scorecard,'item_list_id':'papers'})
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    source=runtime.create_run('Source',{'cyclotron_id':cyclotron,'item_list_id':'papers'})
     store.append_event(source['id'],'source-label',{'kind':'human-feedback','classifier_id':'topic','action':'submitted',
         'feedback':{'id':'vote','item_id':'paper','final_answer_value':'yes','edit_comment_value':'A frozen explanation'}})
     before=store.all_events(source['id'])
-    replays=[runtime.create_replay(name,source['id'],{'scorecard_id':scorecard,'seed':'matched-objectives',
+    replays=[runtime.create_replay(name,source['id'],{'cyclotron_id':cyclotron,'seed':'matched-objectives',
         'selection_policy':policy}) for name,policy in [
             ('Recall',{'primary':'recall','secondary':'accuracy','positive_class':'yes'}),
             ('F1',{'primary':'f1','positive_class':'yes'})]]
@@ -114,7 +114,7 @@ def test_objective_replays_freeze_the_same_votes_and_comments_but_different_effe
     assert store.all_events(source['id'])==before
 
 
-def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_path):
+def test_worker_applies_cyclotron_corrections_without_another_model_request(tmp_path):
     from fastapi.testclient import TestClient
     from .web_api import create_app
     from .api_event_sink import GraphQLTraceSink
@@ -141,7 +141,7 @@ def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_
         model_factory=lambda _: (model, agent([])), sink_factory=lambda run_id: GraphQLTraceSink('offline', run_id,
             transport=trace))
     client = TestClient(create_app(store, service=worker))
-    run = worker.create_run('Scorecard', {'scorecard_id': _scorecard(store), 'item_list_id': 'papers'})
+    run = worker.create_run('Cyclotron', {'cyclotron_id': _cyclotron(store), 'item_list_id': 'papers'})
     try:
         store.command(run['id'], 'prepare', 'prepare', {}); worker.process(store.claim_command())
         shown = store.current_item(run['id'])
@@ -193,7 +193,7 @@ def test_worker_applies_scorecard_corrections_without_another_model_request(tmp_
         client.close()
 
 
-def test_scorecard_runtime_prepares_all_classifier_outputs_in_one_shared_request(tmp_path):
+def test_cyclotron_runtime_prepares_all_classifier_outputs_in_one_shared_request(tmp_path):
     store = WebStore(tmp_path / "workspace.sqlite3")
     for identifier in ("relevance", "quality"):
         store.save_classifier(identifier, identifier.title(), {
@@ -209,7 +209,7 @@ def test_scorecard_runtime_prepares_all_classifier_outputs_in_one_shared_request
         "max_requests": 5, "max_optimizer_calls": 2, "optimize_every": 20,
         "rubric_changes_every": 2, "seed": "fixture",
     })
-    run = store.create_run("Scorecard", "live", config, items=store.list_items("papers"))
+    run = store.create_run("Cyclotron", "live", config, items=store.list_items("papers"))
 
     class Model:
         model_identity = "fake"
@@ -223,7 +223,7 @@ def test_scorecard_runtime_prepares_all_classifier_outputs_in_one_shared_request
             }, "fake", {}, 1)
 
     model = Model()
-    runtime = ScorecardRuntime(store, tmp_path / "runs", model_factory=lambda _config: (model, agent([])),
+    runtime = CyclotronRuntime(store, tmp_path / "runs", model_factory=lambda _config: (model, agent([])),
                                sink_factory=lambda _run_id: lambda _event: None)
     session = runtime.open_session(run["id"], run["config"], store.items(run["id"]), None)
     try:
@@ -235,7 +235,7 @@ def test_scorecard_runtime_prepares_all_classifier_outputs_in_one_shared_request
         session.close()
 
 
-def test_worker_routes_a_frozen_scorecard_through_the_scorecard_runtime(tmp_path):
+def test_worker_routes_a_frozen_cyclotron_through_the_cyclotron_runtime(tmp_path):
     store = WebStore(tmp_path / "workspace.sqlite3")
     store.save_classifier("topic", "Topic", {
         "question": "Classify this item", "classes": [{"label": "yes"}, {"label": "no"}],
@@ -260,34 +260,34 @@ def test_worker_routes_a_frozen_scorecard_through_the_scorecard_runtime(tmp_path
     worker = WebWorker(store, tmp_path / "runs", allow_live=True,
                        model_factory=lambda _config: (model, agent([])),
                        sink_factory=lambda _run_id: lambda _event: None)
-    run = worker.create_run("Scorecard", {
-        "scorecard_id": _scorecard(store), "item_list_id": "papers",
+    run = worker.create_run("Cyclotron", {
+        "cyclotron_id": _cyclotron(store), "item_list_id": "papers",
     })
     store.command(run["id"], "prepare", "prepare", {})
     worker.process(store.claim_command())
     try:
-        assert type(worker.sessions[run["id"]]).__name__ == "ScorecardSession"
+        assert type(worker.sessions[run["id"]]).__name__ == "CyclotronSession"
         assert model.calls == 1
         assert store.current_item(run["id"])["prediction"]["classifiers"]["topic"]["label"] == "yes"
     finally:
         worker.close()
 
 
-def _scorecard(store):
-    return store.save_scorecard_definition("scorecard", "Scorecard", [{"id": "topic", "revision": 1}], {})["id"]
+def _cyclotron(store):
+    return store.save_cyclotron_definition("cyclotron", "Cyclotron", [{"id": "topic", "revision": 1}], {})["id"]
 
 
-def test_scorecard_provider_is_inherited_pinned_and_delivered_to_the_model_factory(tmp_path):
+def test_cyclotron_provider_is_inherited_pinned_and_delivered_to_the_model_factory(tmp_path):
     from types import SimpleNamespace
     store=WebStore(tmp_path/'db')
     store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('items','Items')
     store.upsert_list_items('items',[{'id':'item','occurred_at':'2026-01-01','values':{'text':'Synthetic item'}}])
-    definition=store.save_scorecard_definition('scorecard','Scorecard',[{'id':'topic','revision':1}],
+    definition=store.save_cyclotron_definition('cyclotron','Cyclotron',[{'id':'topic','revision':1}],
         {'decisions_provider':'kev','decisions_model':'kev-4b'})
     observed=[]
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda config:observed.append(config) or (SimpleNamespace(model_identity='fake'),agent([])),sink_factory=lambda _:lambda event:None)
-    run=runtime.create_run('Pinned',{'scorecard_id':definition['id'],'item_list_id':'items'})
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=lambda config:observed.append(config) or (SimpleNamespace(model_identity='fake'),agent([])),sink_factory=lambda _:lambda event:None)
+    run=runtime.create_run('Pinned',{'cyclotron_id':definition['id'],'item_list_id':'items'})
     assert run['config']['decisions_provider']=='kev'
     assert run['config']['decisions_model']=='kev-4b'
     # Configuration remains inspectable without constructing any provider.
@@ -302,9 +302,9 @@ def test_explicit_provider_override_uses_its_default_model_without_inheriting_an
     store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('items','Items')
     store.upsert_list_items('items',[{'id':'item','occurred_at':'2026-01-01','values':{'text':'Synthetic item'}}])
-    store.save_scorecard_definition('scorecard','Scorecard',[{'id':'topic','revision':1}],
+    store.save_cyclotron_definition('cyclotron','Cyclotron',[{'id':'topic','revision':1}],
         {'decisions_provider':'jev','decisions_model':'jev-1.13.0'})
-    runtime=ScorecardRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
-    run=runtime.create_run('Kev',{'scorecard_id':'scorecard','item_list_id':'items','decisions_provider':'kev'})
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    run=runtime.create_run('Kev',{'cyclotron_id':'cyclotron','item_list_id':'items','decisions_provider':'kev'})
     assert run['config']['decisions_provider']=='kev'
     assert run['config']['decisions_model']=='kev-latest'

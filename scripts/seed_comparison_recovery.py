@@ -50,7 +50,7 @@ def create_offline_app(directory, *, port):
                 'feedback': {'item_id': str(i), 'final_answer_value': 'yes' if i % 2 else 'no'}})
         wheel = SimpleNamespace(active=FittedClassifier(ClassifierConfig(
             DecisionTask('topic', ('yes', 'no'), 'Choose for this synthetic item'))))
-        store.checkpoint_scorecard(run['id'], {'topic': wheel})
+        store.checkpoint_cyclotron(run['id'], {'topic': wheel})
         sources.append(run['id'])
     model = JevAdapter(FakeComparisonClient())
     # Seed the failure through the same acknowledged GraphQL trace path used

@@ -52,7 +52,7 @@ def build_fixture(directory, *, pending_item=False, optimizer_activity=False):
     for identifier in ('relevance','practicality'):
         store.save_classifier(identifier,identifier.title(),{'question':'Does this synthetic item qualify?',
             'classes':[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}]})
-    store.save_scorecard_definition('fixture-scorecard','Synthetic scorecard',
+    store.save_cyclotron_definition('fixture-cyclotron','Synthetic cyclotron',
         [{'id':identifier,'revision':1} for identifier in ('relevance','practicality')],{})
     store.save_item_list('fixture-items','Synthetic playback items')
     reviews=40 if optimizer_activity else 3
@@ -71,7 +71,7 @@ def build_fixture(directory, *, pending_item=False, optimizer_activity=False):
         worker=WebWorker(store,directory/'runs',allow_live=True,sink_factory=sink,
             model_factory=lambda _: (JevAdapter(model),OptimizerAgent(scripted_optimizer if optimizer_activity else no_optimizer)))
         try:
-            run=worker.create_run('OFFLINE FIXTURE — calibration playback',{'scorecard_id':'fixture-scorecard',
+            run=worker.create_run('OFFLINE FIXTURE — calibration playback',{'cyclotron_id':'fixture-cyclotron',
                 'item_list_id':'fixture-items','seed':'calibration-playback-v1',
                 'optimize_every':10 if optimizer_activity else 100,
                 'rubric_changes_every':20 if optimizer_activity else 100,

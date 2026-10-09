@@ -1,6 +1,6 @@
-"""Application runtime for a versioned multi-classifier scorecard.
+"""Application runtime for a versioned multi-classifier cyclotron.
 
-This module owns the scorecard application's use of ``WorkspaceSession``.  It
+This module owns the cyclotron application's use of ``WorkspaceSession``.  It
 keeps the API command runner independent of shared-request composition,
 per-classifier wheels, and asynchronous decision providers.
 """
@@ -18,8 +18,8 @@ from .decision_provider_settings import normalize_decision_settings
 
 
 @dataclass
-class ScorecardSession:
-    """Lifecycle adapter for one scorecard workspace session."""
+class CyclotronSession:
+    """Lifecycle adapter for one cyclotron workspace session."""
 
     workspace: WorkspaceSession
 
@@ -33,14 +33,14 @@ class ScorecardSession:
     def abort(self, _error: BaseException) -> None:
         """Leave durable suspended cycles available for explicit recovery.
 
-        A scorecard prediction is intentionally suspended between its shared
+        A cyclotron prediction is intentionally suspended between its shared
         decision request and human feedback.  Closing it on API delivery
         failure would destroy the very recovery state the web API persists.
         """
 
 
-class ScorecardRuntime:
-    """Compose and execute source-neutral scorecard sessions for one host."""
+class CyclotronRuntime:
+    """Compose and execute source-neutral cyclotron sessions for one host."""
 
     def __init__(self, store, directory: str | Path, *, model_factory: Callable,
                  sink_factory: Callable, redact: Sequence[str] = ()):
@@ -51,7 +51,7 @@ class ScorecardRuntime:
         self.redact = tuple(redact)
 
     def normalize_run_config(self, config: Mapping[str, object]) -> tuple[dict, list[dict]]:
-        """Validate a scorecard run and freeze its definitions and item list.
+        """Validate a cyclotron run and freeze its definitions and item list.
 
         The returned configuration holds only immutable definition/item
         references.  No provider is constructed and no prediction is made.
@@ -60,15 +60,15 @@ class ScorecardRuntime:
         allowed = {
             "selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
             "rubric_changes_every", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
-            "classifier_ids", "item_list_id", "scorecard_id", "scorecard_definition_revision",
+            "classifier_ids", "item_list_id", "cyclotron_id", "cyclotron_definition_revision",
         }
         if set(values) - allowed:
             raise ValueError("unknown run configuration option")
-        if values.get("scorecard_id"):
+        if values.get("cyclotron_id"):
             if values.get("classifier_ids"):
-                raise ValueError("select a scorecard or independent classifiers, not both")
-            definition = self.store.scorecard_definition(
-                values["scorecard_id"], values.get("scorecard_definition_revision"),
+                raise ValueError("select a cyclotron or independent classifiers, not both")
+            definition = self.store.cyclotron_definition(
+                values["cyclotron_id"], values.get("cyclotron_definition_revision"),
             )
             settings = {key: value for key, value in definition["settings"].items()
                         if key in {"selection_policy", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
@@ -78,8 +78,8 @@ class ScorecardRuntime:
                 'decisions_model' not in values):
                 settings.pop('decisions_model',None)
             values = {**settings, **values}
-            values["scorecard_definition_revision"] = definition["revision"]
-            values["scorecard_definition_fingerprint"] = definition["fingerprint"]
+            values["cyclotron_definition_revision"] = definition["revision"]
+            values["cyclotron_definition_fingerprint"] = definition["fingerprint"]
             values["classifier_ids"] = [row["id"] for row in definition["classifiers"]]
             values["classifier_revisions"] = {row["id"]: row["revision"] for row in definition["classifiers"]}
         if not values.get("classifier_ids") or not values.get("item_list_id"):
@@ -108,16 +108,16 @@ class ScorecardRuntime:
         return values, items
 
     def create_run(self, name: str, config: Mapping[str, object]) -> dict:
-        """Persist a new scorecard run with a fully frozen input snapshot."""
+        """Persist a new cyclotron run with a fully frozen input snapshot."""
         values, items = self.normalize_run_config(config)
         return self.store.create_run(name, "live", values, items=items)
 
     def create_replay(self, name: str, source_run_id: str, config: Mapping[str, object]) -> dict:
         """Create a chronology-preserving replay without leaking future labels."""
         source = self.store.run(source_run_id)
-        if not config.get("scorecard_id"):
-            raise ValueError("choose a versioned scorecard for replay")
-        definition = self.store.scorecard_definition(config["scorecard_id"], config.get("scorecard_definition_revision"))
+        if not config.get("cyclotron_id"):
+            raise ValueError("choose a versioned cyclotron for replay")
+        definition = self.store.cyclotron_definition(config["cyclotron_id"], config.get("cyclotron_definition_revision"))
         refs = definition["classifiers"]
         source_refs = {row["id"]: row["revision"] for row in source["config"].get("classifiers", [])}
         if any(source_refs.get(row["id"]) != row["revision"] for row in refs):
@@ -142,7 +142,7 @@ class ScorecardRuntime:
         eligible = [item_id for item_id in order if item_id in source_items
                     and all((item_id, ref["id"]) in votes for ref in refs)]
         if not eligible:
-            raise ValueError("no fully labeled source items available for this scorecard")
+            raise ValueError("no fully labeled source items available for this cyclotron")
         values, _ = self.normalize_run_config({**config, "item_list_id": source["config"]["item_list_id"]})
         frozen = {**values, "input_mode": "replay", "source_run_id": source_run_id,
                   "learning_policy": "fresh-replay", "replay_count": len(eligible)}
@@ -158,10 +158,10 @@ class ScorecardRuntime:
 
     def open_session(self, run_id: str, config: Mapping[str, object],
                      _items: Sequence[Mapping[str, object]],
-                     _current: Mapping[str, object] | None) -> ScorecardSession:
-        """Open the pinned scorecard configuration without changing it."""
+                     _current: Mapping[str, object] | None) -> CyclotronSession:
+        """Open the pinned cyclotron configuration without changing it."""
         if "classifiers" not in config:
-            raise ValueError("scorecard runtime requires a frozen scorecard configuration")
+            raise ValueError("cyclotron runtime requires a frozen cyclotron configuration")
         model, optimizer = self.model_factory(config)
         run = {"id": run_id, "config": dict(config)}
         observer = self.sink_factory(run_id)
@@ -175,20 +175,20 @@ class ScorecardRuntime:
             self.store, run, self.directory / run_id, model, optimizer,
             observer, redact=self.redact,
         )
-        return ScorecardSession(workspace)
+        return CyclotronSession(workspace)
 
     async def execute(self, session: ApplicationSession, kind: str,
                       payload: Mapping[str, object], _current: Mapping[str, object] | None,
                       config: Mapping[str, object], *, request_id: str | None = None) -> RuntimeCommand:
-        """Execute a scorecard command; storage remains API-owned.
+        """Execute a cyclotron command; storage remains API-owned.
 
-        ``WorkspaceSession`` persists its own scorecard-facing state because
+        ``WorkspaceSession`` persists its own cyclotron-facing state because
         it needs atomic label, prediction, and checkpoint writes.  The command
         runner only records the durable command result and queues the next
         preparation after an acknowledged label.
         """
-        if not isinstance(session, ScorecardSession):
-            raise ValueError("scorecard runtime requires a scorecard session")
+        if not isinstance(session, CyclotronSession):
+            raise ValueError("cyclotron runtime requires a cyclotron session")
         workspace = session.workspace
         workspace.config = dict(config)
         workspace.shared.max_requests = config["max_requests"]
@@ -202,17 +202,17 @@ class ScorecardRuntime:
                 return RuntimeCommand(await workspace.prepare())
             if kind == "label":
                 if not request_id:
-                    raise ValueError("scorecard feedback needs a command identity")
+                    raise ValueError("cyclotron feedback needs a command identity")
                 return RuntimeCommand(await workspace.feedback(payload, request_id))
             if kind == "skip":
                 return RuntimeCommand(workspace.skip(payload))
             if kind == "correct":
                 if not request_id:
-                    raise ValueError("scorecard correction needs a command identity")
+                    raise ValueError("cyclotron correction needs a command identity")
                 return RuntimeCommand(workspace.correct_feedback(payload, request_id))
             if kind == "undo":
                 if payload or not request_id:
-                    raise ValueError("scorecard undo needs an empty payload and a command identity")
+                    raise ValueError("cyclotron undo needs an empty payload and a command identity")
                 return RuntimeCommand(workspace.undo_feedback(request_id))
             if kind == "optimize":
                 return RuntimeCommand(await workspace.resume_optimization())
@@ -234,7 +234,7 @@ class ScorecardRuntime:
                 flush()
 
 
-def run_scorecard_command(runtime: ScorecardRuntime, session: ScorecardSession, kind: str,
+def run_cyclotron_command(runtime: CyclotronRuntime, session: CyclotronSession, kind: str,
                           payload: Mapping[str, object], current: Mapping[str, object] | None,
                           config: Mapping[str, object], *, request_id: str | None = None) -> RuntimeCommand:
     """Synchronous adapter for serialized command workers."""

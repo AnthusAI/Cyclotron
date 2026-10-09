@@ -8,7 +8,7 @@ A bundle is a directory of three files:
 * ``examples.jsonl`` -- the fixed example list's texts (examples, then one reserve per label).
   Private: never commit it. Each row is checked against the manifest's input hashes on load.
   Absent for a zero-shot bundle.
-* ``scorecard.yaml`` -- the rubric questions and the trained head. Core treats it as an opaque
+* ``cyclotron.yaml`` -- the rubric questions and the trained head. Core treats it as an opaque
   payload: it is hashed in the manifest and parsed by the caller's ``parse_rubric`` (for the
   harness, a Jev-Flywheel ``Score``), so core does not copy anyone's head or feature code.
 
@@ -34,7 +34,7 @@ from .models import DecisionResult, DecisionTask, Item, LabeledItem
 BUNDLE_VERSION = 1
 MANIFEST_FILE = "bundle.json"
 EXAMPLES_FILE = "examples.jsonl"
-SCORECARD_FILE = "scorecard.yaml"
+CYCLOTRON_FILE = "cyclotron.yaml"
 DISPLAY_ORDER = "canonical"
 _TOP_KEYS = {"bundle_version", "bundle_hash", "task", "engine", "rubric", "fewshot", "head",
              "retrieval", "lineage"}
@@ -50,7 +50,7 @@ class BundleModelWarning(UserWarning):
 
 
 class Rubric(Protocol):
-    """The parsed ``scorecard.yaml``: the questions to ask and the head that reads the answers."""
+    """The parsed ``cyclotron.yaml``: the questions to ask and the head that reads the answers."""
 
     def questions(self) -> Mapping[str, Mapping[str, Any]]: ...
 
@@ -60,8 +60,8 @@ class Rubric(Protocol):
 @dataclass(frozen=True)
 class ClassifierBundle:
     task: DecisionTask
-    scorecard: str                                  # the rubric-and-head payload, opaque to core
-    rubric: Rubric                                  # ``scorecard`` parsed by the caller
+    cyclotron: str                                  # the rubric-and-head payload, opaque to core
+    rubric: Rubric                                  # ``cyclotron`` parsed by the caller
     examples: FixedExampleList | None = None        # None: zero-shot
     example_rows: Sequence[LabeledItem] = ()        # the list's examples and reserves, with texts
     engine: Mapping[str, str] = field(default_factory=dict)
@@ -71,8 +71,8 @@ class ClassifierBundle:
     lineage: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.scorecard, str) or not self.scorecard:
-            raise BundleValidationError("the scorecard payload must be non-empty text")
+        if not isinstance(self.cyclotron, str) or not self.cyclotron:
+            raise BundleValidationError("the cyclotron payload must be non-empty text")
         missing = _ENGINE_KEYS - set(self.engine)
         if missing:
             raise BundleValidationError(f"engine needs {sorted(missing)}")
@@ -152,7 +152,7 @@ class ClassifierBundle:
             "task": {"name": self.task.name, "labels": list(self.task.labels),
                      "input_field": self.task.input_field, "fingerprint": self.task.fingerprint},
             "engine": dict(self.engine),
-            "rubric": {"scorecard_sha256": _sha(self.scorecard), "questions": questions,
+            "rubric": {"cyclotron_sha256": _sha(self.cyclotron), "questions": questions,
                        "provenance": dict(self.provenance)},
             "fewshot": fewshot,
             "head": dict(self.head),
@@ -179,7 +179,7 @@ class ClassifierBundle:
             if json.loads(existing.read_text()).get("bundle_hash") != manifest["bundle_hash"]:
                 raise BundleValidationError(f"{directory} already holds a different bundle")
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / SCORECARD_FILE).write_text(self.scorecard, encoding="utf-8")
+        (directory / CYCLOTRON_FILE).write_text(self.cyclotron, encoding="utf-8")
         if self.examples is not None:
             (directory / EXAMPLES_FILE).write_text(self._examples_text(), encoding="utf-8")
         existing.write_text(text + "\n", encoding="utf-8")
@@ -212,9 +212,9 @@ def load_bundle(directory: str | Path, task: DecisionTask, parse_rubric: Callabl
                                     f"not {configured_model!r}")
     if document["retrieval"] is not None:
         raise BundleValidationError("retrieval bundles are not supported yet")
-    scorecard = (directory / SCORECARD_FILE).read_text(encoding="utf-8")
-    if _sha(scorecard) != document["rubric"]["scorecard_sha256"]:
-        raise BundleValidationError("scorecard.yaml does not match its hash")
+    cyclotron = (directory / CYCLOTRON_FILE).read_text(encoding="utf-8")
+    if _sha(cyclotron) != document["rubric"]["cyclotron_sha256"]:
+        raise BundleValidationError("cyclotron.yaml does not match its hash")
     fewshot = document["fewshot"]
     examples, rows = None, []
     if fewshot is not None:
@@ -231,8 +231,8 @@ def load_bundle(directory: str | Path, task: DecisionTask, parse_rubric: Callabl
         for line in text.splitlines():
             raw = json.loads(line)
             rows.append(LabeledItem(Item(raw["id"], {task.input_field: raw["text"]}), raw["label"]))
-    rubric = parse_rubric(scorecard)
-    bundle = ClassifierBundle(task, scorecard, rubric, examples=examples, example_rows=rows, engine=engine,
+    rubric = parse_rubric(cyclotron)
+    bundle = ClassifierBundle(task, cyclotron, rubric, examples=examples, example_rows=rows, engine=engine,
                               head=document["head"], provenance=document["rubric"]["provenance"],
                               fewshot_audit=(fewshot or {}).get("audit") or {}, lineage=document["lineage"])
     if bundle.bundle_hash != supplied:

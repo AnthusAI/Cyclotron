@@ -187,7 +187,7 @@ class HeadProvenance:
     development_ids: tuple[str, ...]
     scoreboard_ids: tuple[str, ...]
     weights: tuple[float, ...]
-    scorecard_fingerprint: str
+    cyclotron_fingerprint: str
     policy_fingerprint: str
     context_artifact_fingerprint: str
     source_model_provenance: str
@@ -203,7 +203,7 @@ class LearnedHead:
     calibration: Calibration
     out_of_fold: OutOfFoldPredictions
     provenance: HeadProvenance
-    refitted_scorecard_fingerprint: str
+    refitted_cyclotron_fingerprint: str
 
     def _normalised_values(self, values: Mapping[str, float]) -> dict[str, float]:
         if set(values) != set(self.feature_names):
@@ -244,7 +244,7 @@ class LearnedHead:
 
 
 def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_features: Sequence[str],
-                     development_ids: Sequence[str], scoreboard_ids: Sequence[str], scorecard_fingerprint: str,
+                     development_ids: Sequence[str], scoreboard_ids: Sequence[str], cyclotron_fingerprint: str,
                      policy_fingerprint: str, context_artifact_fingerprint: str, source_model_provenance: str,
                      folds: int = 3, training_class_weighting: str = "natural", calibration_method: str = 'auto') -> LearnedHead:
     """Fit numbers on trusted train rows; dev and scoreboard remain ID-only firewalls."""
@@ -255,7 +255,7 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
         raise ValueError("intercept is reserved for the internal bias")
     if isinstance(folds, bool) or not isinstance(folds, int) or folds < 2:
         raise ValueError("folds must be an integer of at least two")
-    _hash("scorecard_fingerprint", scorecard_fingerprint)
+    _hash("cyclotron_fingerprint", cyclotron_fingerprint)
     _hash("policy_fingerprint", policy_fingerprint)
     _hash("context_artifact_fingerprint", context_artifact_fingerprint)
     if not isinstance(source_model_provenance, str) or not source_model_provenance:
@@ -276,7 +276,7 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
     calibration = calibrate(oof, method=calibration_method)
     fitted = _fit(task.labels, names, matrix, labels, weights)
     provenance = HeadProvenance(training_ids, tuple(development_ids), tuple(scoreboard_ids), tuple(weights),
-                                scorecard_fingerprint, policy_fingerprint, context_artifact_fingerprint,
+                                cyclotron_fingerprint, policy_fingerprint, context_artifact_fingerprint,
                                 source_model_provenance, training_class_weighting)
     # Include the complete text-free provenance, not merely the resulting
     # coefficients. Different task, selection, context, or source-model
@@ -290,7 +290,7 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
         "normalizers": normalizers,
         "policy": policy_fingerprint,
         "scoreboard_ids": tuple(scoreboard_ids),
-        "scorecard": scorecard_fingerprint,
+        "cyclotron": cyclotron_fingerprint,
         "source_model": source_model_provenance,
         "task": task.fingerprint,
         "training_ids": training_ids,
