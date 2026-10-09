@@ -3,7 +3,7 @@
   "title": "Validate rubric, example-list and decision-task proposals",
   "description": "## Behavior and acceptance\nStructured proposals independently support rubric edits, fixed example-list edits, and add/update/remove decision tasks with question wording and answer options. Include rationale and versioned diffs. Current datetime is an allowlisted programmatic dynamic element, not arbitrary generated code. Validate capabilities and complete state/question context budget. Retrieval and input filtering deferred.\nScenario: valid edits change the actual request; malformed edits and attempts to set weights/provenance are rejected without changing the incumbent.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,25 +22,65 @@
       "text": "Implementation progress: ClassifierConfig validates independent rubric/example-list/classification-task edits, rejects weights/arbitrary dynamic elements, constructs combined state/questions with target exclusion and explicit timezone-aware current_datetime. Ten offline specs pass. Whole suite: 364 passed. Not yet wired into Jev batch answer collection, feature generation, fitting or reviewer; this is not a working demo claim.",
       "created_at": "2026-10-05T22:02:47.964422Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "Flywheel Implementation"
+        "name": "Flywheel Implementation",
+        "settings": {}
       }
+    },
+    {
+      "id": "ce4c27eb-29dd-4e86-9008-41d2aef25bd9",
+      "author": "home",
+      "text": "Current proposal audit found a remaining advertised-capability mismatch: OptimizerAgent instructions invite dynamic_elements:[current_datetime], and ClassifierConfig validates/applies it, but optimize_stage rejects every key except its assigned control. The actual staged loop therefore cannot accept that advertised dynamic input. Keep this story open. Next: define the independent-stage ownership for request-time dynamic inputs, make its optimizer instructions and validation agree, prove approved current_datetime reaches actual provider requests under complete-context budgets, and prevent one stage silently changing another control. Retrieval/input filtering remain deferred. No provider calls or source-label changes.",
+      "created_at": "2026-10-07T23:41:19.001276Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "11ad228d-d925-4023-9069-299bc52472db",
+      "author": "home",
+      "text": "Resolved the advertised datetime capability mismatch in the native staged loop. Classifier-question discovery now proposes exactly one independent control: tasks OR dynamic_elements; rubric/examples/questions stay fixed for a dynamic-input candidate. Only current_datetime is allowlisted, [] removes it, mixed edits and arbitrary code are rejected. Actual fake-provider requests prove UTC state.current_datetime, measured promotion, next prediction and restart persistence; an over-budget datetime candidate is rejected before any provider call. Protocol fingerprint changed to prevent old stage-result reuse. No paid calls or human-label changes. Broader add/update/remove task acceptance remains under audit, so this issue stays open.",
+      "created_at": "2026-10-07T23:47:23.700397Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "533a0f07-e45f-49d4-a1ae-b7a44cb6349e",
+      "author": "home",
+      "text": "Fixed numerical question-selection gaps found in the end-to-end audit. Active-name wording/answer-option revisions were previously skipped, and new-concept alternatives were silently deduplicated by name. Training now compares each retained addition or revision independently against one incumbent, plus one-question removal candidates. Other rubric/examples/questions stay fixed per structural candidate. Successful fake-model specs prove revision promotion, changed probability feature columns, restart persistence, a winning removal reaching the next actual request, and retained hypotheses remaining available. New failing specs preceded implementation. Cache protocol updated; unchanged completed fitting still resumes without calls. No paid requests, no user-label changes, no experiment report. Keep open for the remaining broader proposal and application acceptance audit.",
+      "created_at": "2026-10-07T23:53:47.098898Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "dbe8e6a0-199c-4459-b4e5-a9f5505f2f06",
+      "author": "home",
+      "text": "Acceptance audit complete. ClassifierConfig validates isolated rubric/example/task add-update-remove proposals, rationale, immutable parent fingerprints and request construction; forbidden weights, provenance, calibration, arbitrary dynamic code, malformed tasks and ineligible examples cannot mutate the incumbent. New adapter-bound specs verify each independent edit changes the exact Jev state/questions, retains unrelated controls and preserves the parent. Staged and numerical lifecycle specs prove UTC datetime proposal evaluation/promotion/restart, wording/answer-option revision feature regeneration, actual winning removal requests, retained ideas and isolated controls. Complete-byte-budget rejection occurs before provider calls. The audit found and fixed the core capability guard: declared no-context adapters now reject effective demonstrations before reservation/call while zero-shot and target-excluded context still work. Existing proposal-validated events retain rationale plus before/candidate versioned configuration for diffs. All 832 offline Python specs pass; no paid calls or real-label changes. Retrieval/filtering remain explicitly deferred; broader reviewer, frontend observability and application acceptance remain separate open milestones.",
+      "created_at": "2026-10-08T00:02:45.788496Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.282413Z",
-  "updated_at": "2026-10-05T22:02:47.964447Z",
-  "closed_at": null,
-  "agent": {
-    "platform": "codex",
-    "model": "GPT-5",
-    "name": "Flywheel Board Reconciliation"
-  },
+  "updated_at": "2026-10-08T00:02:45.925082Z",
+  "closed_at": "2026-10-08T00:02:45.924950Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-5",
+    "name": "Flywheel Board Reconciliation",
+    "settings": {}
+  },
+  "agent_assignment": null
 }

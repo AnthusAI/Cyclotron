@@ -1,4 +1,4 @@
-"""Read-only preflight for a matched protected joint-scorecard evaluation."""
+"""Read-only preflight for a matched protected joint-cyclotron evaluation."""
 from collections import Counter
 import hashlib
 import json

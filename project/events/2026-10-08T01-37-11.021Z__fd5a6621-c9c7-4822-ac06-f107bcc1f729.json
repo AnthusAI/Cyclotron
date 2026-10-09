@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "fd5a6621-c9c7-4822-ac06-f107bcc1f729",
+  "issue_id": "decision-flywheel-0049a23a-7dc0-4dcc-980f-9548e6e67be0",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-08T01:37:11.021Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "0a292ef6-aac2-4ebd-8cac-2071d54b1db5",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-5",
+      "name": "App acceptance"
+    }
+  }
+}

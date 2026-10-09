@@ -33,7 +33,7 @@ function ClassifierLabel({classifier,item,listId,previous,onSaved}:{classifier:C
   </CardContent></Card>
 }
 
-export function Catalog({section,scorecardId,scorecardRevision,readOnly=false,onChanged}:{section:'classifiers'|'items';scorecardId?:string;scorecardRevision?:number;readOnly?:boolean;onChanged?:()=>void}){
+export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,onChanged}:{section:'classifiers'|'items';cyclotronId?:string;cyclotronRevision?:number;readOnly?:boolean;onChanged?:()=>void}){
   const [classifiers,setClassifiers]=useState<Classifier[]>([]),[lists,setLists]=useState<ItemList[]>([])
   const [selectedList,setSelectedList]=useState(''),[items,setItems]=useState<ListItem[]>([]),[item,setItem]=useState<ListItem|null>(null),[votes,setVotes]=useState<Vote[]>([])
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState<Classifier|null>(null),[creating,setCreating]=useState(false)
@@ -48,10 +48,10 @@ export function Catalog({section,scorecardId,scorecardRevision,readOnly=false,on
   }
   const refresh=async()=>{
     const result=await graphql<{classifiers:Classifier[];itemLists:ItemList[]}>('{classifiers itemLists}')
-    const members=scorecardId?await graphql<{scorecardClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){scorecardClassifiers(scorecardId:$id,revision:$revision)}',{id:scorecardId,revision:scorecardRevision??null}):null
-    setClassifiers(members?.scorecardClassifiers??result.classifiers);setLists(result.itemLists);onChanged?.()
+    const members=cyclotronId?await graphql<{cyclotronClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){cyclotronClassifiers(cyclotronId:$id,revision:$revision)}',{id:cyclotronId,revision:cyclotronRevision??null}):null
+    setClassifiers(members?.cyclotronClassifiers??result.classifiers);setLists(result.itemLists);onChanged?.()
   }
-  useEffect(()=>{let cancelled=false;Promise.all([graphql<{classifiers:Classifier[];itemLists:ItemList[]}>('{classifiers itemLists}'),scorecardId?graphql<{scorecardClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){scorecardClassifiers(scorecardId:$id,revision:$revision)}',{id:scorecardId,revision:scorecardRevision??null}):Promise.resolve(null)]).then(([result,members])=>{if(!cancelled){setClassifiers(members?.scorecardClassifiers??result.classifiers);setLists(result.itemLists)}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[scorecardId,scorecardRevision])
+  useEffect(()=>{let cancelled=false;Promise.all([graphql<{classifiers:Classifier[];itemLists:ItemList[]}>('{classifiers itemLists}'),cyclotronId?graphql<{cyclotronClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){cyclotronClassifiers(cyclotronId:$id,revision:$revision)}',{id:cyclotronId,revision:cyclotronRevision??null}):Promise.resolve(null)]).then(([result,members])=>{if(!cancelled){setClassifiers(members?.cyclotronClassifiers??result.classifiers);setLists(result.itemLists)}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[cyclotronId,cyclotronRevision])
   useEffect(()=>{
     if(!selectedList)return
     let cancelled=false;setItems([]);setItem(null)
@@ -81,7 +81,7 @@ export function Catalog({section,scorecardId,scorecardRevision,readOnly=false,on
   }
   return <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5 [&>*]:shrink-0">
     {history?<ClassifierHistory key={history.id} classifier={history} onClose={()=>setHistory(null)} onEdit={readOnly?undefined:editClassifier}/>:null}
-<div className="flex items-center justify-between"><h1 className="text-xl font-semibold">{section==='classifiers'?'Classifiers':'Item lists'}</h1>{section==='classifiers'&&!scorecardId?<Button onClick={()=>{setCreating(true);setEditing(null);setName('');setQuestion('');setClasses('');setPositive('')}}>New classifier</Button>:null}</div>
+<div className="flex items-center justify-between"><h1 className="text-xl font-semibold">{section==='classifiers'?'Classifiers':'Item lists'}</h1>{section==='classifiers'&&!cyclotronId?<Button onClick={()=>{setCreating(true);setEditing(null);setName('');setQuestion('');setClasses('');setPositive('')}}>New classifier</Button>:null}</div>
     {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}
     {section==='items'&&item&&results.length?<Card><CardHeader><CardTitle className="text-base">Classifier results · {String(item.values.title??item.id)}</CardTitle></CardHeader><CardContent className="space-y-3">{results.map(result=><section key={result.run_id}><p className="text-xs text-muted-foreground">{result.run_name}</p><div className="flex flex-wrap gap-3">{Object.entries(result.payload.classifiers).map(([id,prediction])=><p key={id} className="text-sm">{prediction.name??id}: <strong>{prediction.label}</strong> · {(prediction.confidence*100).toFixed(1)}%</p>)}</div></section>)}</CardContent></Card>:null}
     {section==='classifiers'?<>

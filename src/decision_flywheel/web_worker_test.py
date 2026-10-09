@@ -29,7 +29,7 @@ def test_only_explicit_runtime_exhaustion_marks_a_run_completed(tmp_path):
         worker.close()
 
 
-def test_a_scorecard_correction_command_is_not_misinterpreted_as_legacy_undo(tmp_path):
+def test_a_cyclotron_correction_command_is_not_misinterpreted_as_legacy_undo(tmp_path):
     from types import SimpleNamespace
     store = WebStore(tmp_path / 'workspace.sqlite')
     run = store.create_run('Legacy', 'live', {})
@@ -64,32 +64,32 @@ def test_legacy_web_metrics_use_recorded_probability_vectors_and_calibration_pro
     assert curve['matched_head_comparison']['raw']['ece']==__import__('pytest').approx(.1)
 
 
-def test_a_live_run_pins_the_selected_scorecard_definition_not_latest_classifiers(tmp_path):
+def test_a_live_run_pins_the_selected_cyclotron_definition_not_latest_classifiers(tmp_path):
     store=WebStore(tmp_path/'db')
     config={'question':'Choose','input_field':'text','classes':[{'label':'yes'},{'label':'no'}]}
     store.save_classifier('a','A',config)
-    store.save_scorecard_definition('card','Card',[{'id':'a','revision':1}],{})
+    store.save_cyclotron_definition('card','Card',[{'id':'a','revision':1}],{})
     store.save_classifier('a','New A',{**config,'question':'New question'})
     store.save_item_list('items','Items')
     store.upsert_list_items('items',[{'id':'one','occurred_at':'2026-01-01','values':{'text':'Text'}}])
     worker=WebWorker(store,tmp_path/'runs',allow_live=True,sink_factory=lambda _:None,model_factory=lambda _:None)
-    run=worker.create_run('Pinned',{'scorecard_id':'card','scorecard_definition_revision':1,'item_list_id':'items','selection_policy':{'primary':'accuracy','aggregation':'macro'}})
+    run=worker.create_run('Pinned',{'cyclotron_id':'card','cyclotron_definition_revision':1,'item_list_id':'items','selection_policy':{'primary':'accuracy','aggregation':'macro'}})
     assert run['config']['classifiers'][0]['revision']==1
-    assert run['config']['scorecard_definition_revision']==1
-    assert run['config']['scorecard_definition_fingerprint']==store.scorecard_definition('card',1)['fingerprint']
+    assert run['config']['cyclotron_definition_revision']==1
+    assert run['config']['cyclotron_definition_fingerprint']==store.cyclotron_definition('card',1)['fingerprint']
     assert store.counts(run['id'])['predictions']==0
 
 
 def test_replay_creation_freezes_labels_and_explanations_but_starts_with_no_learning(tmp_path):
     store=WebStore(tmp_path/'db')
     classifier=store.save_classifier('a','A',{'question':'Choose','input_field':'text','classes':[{'label':'yes'},{'label':'no'}]})
-    store.save_scorecard_definition('card','Card',[{'id':'a','revision':1}],{})
+    store.save_cyclotron_definition('card','Card',[{'id':'a','revision':1}],{})
     store.save_item_list('items','Items')
     store.upsert_list_items('items',[{'id':'one','occurred_at':'2026-01-01','values':{'text':'Text'}}])
     source=store.create_run('Source','live',{'classifiers':[classifier],'item_list_id':'items'},items=store.list_items('items'))
     store.append_event(source['id'],'vote',{'kind':'human-feedback','classifier_id':'a','feedback':{'id':'original','item_id':'one','final_answer_value':'yes','edit_comment_value':'Because knowledge bases'}})
     worker=WebWorker(store,tmp_path/'runs',allow_live=True,sink_factory=lambda _:None,model_factory=lambda _:None)
-    replay=worker.create_replay('Replay',source['id'],{'scorecard_id':'card','item_list_id':'items','selection_policy':{'primary':'accuracy','aggregation':'macro'}})
+    replay=worker.create_replay('Replay',source['id'],{'cyclotron_id':'card','item_list_id':'items','selection_policy':{'primary':'accuracy','aggregation':'macro'}})
     assert replay['config']['input_mode']=='replay'
     assert store.inherited_labels(replay['id'],'one')[0]['comment']=='Because knowledge bases'
     assert store.counts(replay['id'])['labels']==0
@@ -153,7 +153,7 @@ def test_replay_resumes_chronological_cycles_after_restart_without_repeating_com
     from .models import DecisionResult
     store=WebStore(tmp_path/'db')
     classifier=store.save_classifier('a','A',{'question':'Choose','input_field':'text','classes':[{'label':'yes'},{'label':'no'}]})
-    store.save_scorecard_definition('card','Card',[{'id':'a','revision':1}],{})
+    store.save_cyclotron_definition('card','Card',[{'id':'a','revision':1}],{})
     store.save_item_list('items','Items')
     store.upsert_list_items('items',[{'id':key,'occurred_at':f'2026-01-0{i+1}','values':{'text':key}} for i,key in enumerate(('one','two'))])
     source=store.create_run('Source','live',{'classifiers':[classifier],'item_list_id':'items'},items=store.list_items('items'))
@@ -174,7 +174,7 @@ def test_replay_resumes_chronological_cycles_after_restart_without_repeating_com
         factory=lambda run_id:GraphQLTraceSink('unused',run_id,transport=lambda body:client.post('/graphql',json=body).json())
         options=dict(allow_live=True,sink_factory=factory,model_factory=lambda _:(model,agent([])))
         worker=WebWorker(store,tmp_path/'runs',**options)
-        replay=worker.create_replay('Replay',source['id'],{'scorecard_id':'card','item_list_id':'items','selection_policy':{'primary':'accuracy','aggregation':'macro'}})
+        replay=worker.create_replay('Replay',source['id'],{'cyclotron_id':'card','item_list_id':'items','selection_policy':{'primary':'accuracy','aggregation':'macro'}})
         store.command(replay['id'],'step-one','replay-next',{})
         worker.process(store.claim_command())
         assert store.jobs(replay['id'])[0]['status']=='completed'
@@ -382,12 +382,12 @@ def test_new_runs_pin_shared_defaults_while_existing_runs_keep_their_settings(tm
     store.upsert_list_items('items',[{'id':'paper','occurred_at':'2026-10-07','values':{'text':'An abstract'}}])
     refs=[{'id':'topic','revision':1}]
     settings={'optimize_every':10,'rubric_changes_every':2,'seed':'fixed','decisions_model':'fake-decision','optimizer_model':'fake-optimizer','selection_policy':{'primary':'recall','secondary':'accuracy','aggregation':'macro'}}
-    store.save_scorecard_definition('card','Card',refs,settings)
+    store.save_cyclotron_definition('card','Card',refs,settings)
     def forbidden(*args):raise AssertionError('creating a run must not instantiate providers')
     worker=WebWorker(store,tmp_path/'runs',sink_factory=forbidden,model_factory=forbidden,allow_live=True)
-    first=worker.create_run('First',{'scorecard_id':'card','item_list_id':'items'})
-    store.save_scorecard_definition('card','Card',refs,{**settings,'optimize_every':5})
-    second=worker.create_run('Second',{'scorecard_id':'card','item_list_id':'items'})
+    first=worker.create_run('First',{'cyclotron_id':'card','item_list_id':'items'})
+    store.save_cyclotron_definition('card','Card',refs,{**settings,'optimize_every':5})
+    second=worker.create_run('Second',{'cyclotron_id':'card','item_list_id':'items'})
     assert first['config']['optimize_every']==store.run(first['id'])['config']['optimize_every']==10
     assert second['config']['optimize_every']==5
     assert first['config']['classifiers'][0]['config']['selection_policy']=={'primary':'recall','secondary':'accuracy','aggregation':'positive','positive_class':'yes','max_secondary_regression':0.,'minimum_secondary':None}

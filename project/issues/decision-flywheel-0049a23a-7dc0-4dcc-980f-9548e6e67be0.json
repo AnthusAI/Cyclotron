@@ -37,14 +37,103 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "882f02e3-71b9-4479-b6e7-d59436d34328",
+      "author": "home",
+      "text": "Deployed the latest core datetime and question revision/removal fixes after confirming the production worker was idle and making a SQLite backup (var/web/before-question-selection-20261007.sqlite3). Verified stored 85-cycle history loads and GraphQL stream reconnects. Browser acceptance exposed repeated classification-count text in every unchanged cycle; projection now prints only count changes while retaining actual-count hover and inspectable cells. Spec failed before fix; browser click opens Active Configuration with the real count. Verified unchanged 255 human labels, zero retractions, 39405 events, and job totals 348 completed / 2 failed; no provider calls or jobs created. Broad physical-iPad gesture/keyboard acceptance remains open.",
+      "created_at": "2026-10-07T23:59:15.323590Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "16ada33c-65cd-4fe5-9b32-04d14de203db",
+      "author": "home",
+      "text": "Completed native keyboard access for the bounded classifier feedback strip: named fieldset group plus tabindex=0, no custom global key handlers or mutable scroll state. Regression failed first; 166 UI specs pass, production build and focused lint pass. Browser fake-only workspace verified PageDown focus on Classifier feedback and internal scrollTop 156.25 while documentTop remained 0; PageUp reversed to 2.5 during native scrolling. Reading retained 216px and footer bottom 882 stayed inside 900px viewport. Browser console and server errors absent; no submitted labels or paid calls. Proof var/web/keyboard-classifier-scroll-proof.png. Provider selector audit confirmed Jev/Kev/Laya and model-reset behavior already exist, no duplicate implementation. Remaining broader dark/safe-area/timeline acceptance stays open.",
+      "created_at": "2026-10-08T00:48:05.755578Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "0a292ef6-aac2-4ebd-8cac-2071d54b1db5",
+      "author": "home",
+      "text": "Safe-area audit found only drawers reserved device insets; main shell did not. Added border-box shell inset padding and viewport-fit=cover consistently in FastAPI, static playback and development HTML, without disabling native zoom. Three new specs failed before implementation; 176 UI tests/build pass. Browser isolated fake workspace at CSS487x800 confirms no document overflow and reachable 44px save footer, actual environment reports zero safe-area insets so nonzero physical inset behavior is not claimed. Full Python suite running. Real labels and provider calls untouched; broader timeline/device acceptance remains open.",
+      "created_at": "2026-10-08T01:37:11.021912Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-5",
+        "name": "App acceptance",
+        "settings": {}
+      }
+    },
+    {
+      "id": "5d8a4ba4-29f0-4301-a2eb-b72e8751da97",
+      "author": "home",
+      "text": "Additional actual-browser short-tablet acceptance on isolated fake SQLite/API workspace: selected label and explanation survive opening/closing the history drawer; CSS viewport 960x687 has document scrollHeight=clientHeight=687 and 48px review actions ending at669.5. Timeline inspector closes and Fit restores all recorded cycles; selecting the matching prediction opens exact joint state/questions and response tabs. Found vis default cursor tooltip exposed a fake 1969 timestamp despite cycle axis. Failing-first interaction spec added; cursor title now suppressed through documented vis setCustomTimeTitle, verified on the refreshed browser with no warnings/errors. Screenshot var/web/cycle-cursor-acceptance-proof.png. No labels submitted or paid calls; physical-device gestures and dark rendering still unverified.",
+      "created_at": "2026-10-08T02:16:05.512675Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "50ec30fe-d15b-4444-a406-6fde4019578f",
+      "author": "home",
+      "text": "Documented an explicit physical-device acceptance checklist in docs/scorecard-versioning.md: portrait/landscape, software keyboard, nonzero safe areas, drawer draft retention, touch pan/pinch, playback and exchange inspection. These remain unverified on a physical iPad. macOS system dark mode was confirmed and restored after an authorized temporary appearance toggle, but the only connected in-app browser reported prefers-color-scheme dark=false even after reload. No alternative normal browser is connected. This is an observability blocker, not proof the app dark styling fails or passes. No production labels/model calls changed. Task remains in progress.",
+      "created_at": "2026-10-08T02:33:23.785931Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "023ce9a2-566b-4f19-b39a-f47b80a66b52",
+      "author": "home",
+      "text": "User physical-iPad review confirms light and dark mode work, but reports excessive gutters/header space. Compacted app header, combined run controls, merged embedded timeline toolbars, removed nested gutter/width cap, reduced panel gap/inspector/footer padding and made iframe explicitly fill its bounded pane. Two specs failed before implementation;182 UI specs/build pass. Actual browser frame at CSS1600x900 is x6.99 y124.01 w1586.02 h768.99, ending6.99px from bottom; tablet override CSS1025x1475 also ends6.99px from bottom, inner panels fill frame. Zoom button changes cycle range; browser warnings/errors empty. No model calls or labels changed. User needs to review compact layout on iPad; other device checks remain open.",
+      "created_at": "2026-10-08T11:24:59.647321Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "4dc9a29f-c2a6-47ab-b6b3-f49ab30306fb",
+      "author": "home",
+      "text": "Further user-requested density pass: timeline counts now share the Run statistics disclosure summary rather than a duplicate metadata row; run title/status/actions are inline, and completed replay controls become a compact status without disabled buttons or pause instructions. Playback details share the footer row and expand to full width when opened. New specs failed before implementation;184 UI specs and build pass. Browser at1180x820 confirms iframe top101.18 bottom813 (7px bottom gutter), summary expansion/collapse and no console warnings/errors. Screenshot var/web/compact-summary-layout-proof.png. Found prior server no longer listening, confirmed348 completed2 failed0 active jobs and restarted same authorized LAN server without optimization. User tab refreshed; no votes or model calls.",
+      "created_at": "2026-10-08T15:58:57.303266Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "ba7ab9f9-8b12-4a38-a6d4-ece04af2ce69",
+      "author": "home",
+      "text": "Removed redundant expanded counts. Run statistics now lead with same-item raw decision model versus final classifier recall, precision, accuracy, ECE and Brier deltas, calibration support and optional curve details. Recorded first/latest review-window trend is secondary and explicitly not causal or matched optimization evidence (first snapshot in this run has only one label). Counts alone no longer enable an empty expander. Added failing-first specs, 191 UI specs pass; browser verification in progress. No optimization calls or feedback changes.",
+      "created_at": "2026-10-08T16:17:12.172593Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "520df6eb-df59-49ab-9397-6a8f7790bafa",
+      "author": "home",
+      "text": "Final browser verification: expanded disclosure shows same 85 reviewed items, raw/final recall62.5%, precision27.8%, accuracy81.2%, ECE9.8%/9.5%, Brier0.219/0.221 with signed deltas and support. The first-label historical trend is secondary and collapsed, not a headline optimization claim. Calibration curves/details remain available. Screenshot var/web/run-outcome-statistics-proof.png, browser warnings/errors empty. 191 UI specs and production build pass after integrating latest develop changes; generated CSS rebuilt to resolve asset-only merge conflicts. No model calls or feedback changes; user tab remains collapsed to preserve timeline space.",
+      "created_at": "2026-10-08T16:18:29.029552Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-07T23:17:31.197794Z",
+  "updated_at": "2026-10-08T16:18:29.029641Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

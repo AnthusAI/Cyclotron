@@ -10,7 +10,7 @@ inspector. Add run history and human labeling around them.
 
 ### Workspace identities
 
-Top-level navigation is Scorecards, Item lists, and Optimizations. Each scorecard
+Top-level navigation is Cyclotrons, Item lists, and Optimizations. Each cyclotron
 definition pins ordered classifier revisions and shared settings. A classifier
 has a stable identity and immutable configuration revisions, an ordered class
 list, a decision question, and optional positive/negative roles. Binary and
@@ -41,10 +41,51 @@ drive the corresponding classifier's learning triggers through API-recorded
 cycles. Tests cover shared calls, restart reuse, independent feedback, and
 GraphQL trace ingestion. The old arXiv adapter remains for existing runs.
 
-Labels saved directly in the catalog do not trigger session learning. Automatic
-learning rollback after label corrections is not implemented; general sessions
-reject undo rather than claim to reverse a trained model. Existing runs freeze
-their item queue: refreshed lists supply new runs, not silently changed history.
+The shared lifecycle is also checked through the actual Jev, Kev, and Laya
+adapter wire contracts with injected clients:
+
+```bash
+.venv/bin/pytest tests/shared_provider_lifecycle_test.py -q
+```
+
+Each case uses two scoped classifiers, a supporting question, a calibrated
+learned head, and real coordinator caches. Sibling rubric changes, refreshed
+training answers, and legacy heads without response provenance cause a bounded
+refit before the next joint prediction. The tests check full confidence vectors,
+consumed feature columns, one-time transport usage, preserved rubric/examples,
+same-cycle invalidation, and restart reuse without recollection. This verifies
+the reusable transport/coordinator contract; it does not install optional local
+checkpoints or demonstrate their predictive quality.
+
+Labels saved directly in the catalog do not trigger session learning. Interactive
+cyclotron sessions support corrections and item-level undo through durable API
+commands. Corrections retain the original prediction and append feedback history;
+dependent inferred guidance and fitted heads are invalidated. Undo retracts local
+labels and reopens the saved prediction without calling either model. It does not
+restore a superseded label or erase prior exposure. Inherited source labels and
+frozen replay feedback remain read-only. Existing runs freeze their item queue:
+refreshed lists supply new runs, not silently changed history.
+
+The correction drawer retains unsent drafts by run and item. A stale feedback
+identity blocks submission until the human reloads the saved feedback. Failed or
+interrupted correction/undo commands offer explicit recovery with the original
+command identity. Recovery cannot resume paid-capable commands, interleave with
+pending work, or reactivate an inactive edition. See
+[cyclotron versioning](cyclotron-versioning.md) for the API and storage contract.
+
+Run history defaults to the inspected run's cyclotron family. GraphQL
+`Run.cyclotronId` resolves that membership from the persisted cyclotron-version
+relationship before consulting the original configuration. This lets the initial
+run and later editions appear together without rewriting a frozen run snapshot.
+Search and the explicit All cyclotrons filter remain available. Inspecting an
+inactive edition is read-only; activation is a separate, explicit action.
+Cyclotron and nested classifier controls use at least 44-pixel touch targets on
+narrow screens or coarse-pointer devices. The settings editor scrolls its fields
+while keeping its Save and Cancel footer visible.
+The viewport shell reserves the device's safe-area insets on all four sides.
+App and exported playback pages use `viewport-fit=cover`; native zoom is not
+disabled. Device keyboard and gesture checks complement the automated layout
+specs; a desktop browser with zero insets does not prove physical notch behavior.
 
 `scripts/update_arxiv_items.py` is an external example importer. It refreshes a
 local SQLite mirror from normalized or raw arXiv JSONL and upserts chronological
@@ -74,8 +115,10 @@ API traces. Creating a replay is atomic and makes no provider calls; advancing i
 does, within explicitly approved budgets. The timeline refreshes on completed
 replay cycles. Offline restart/pause specs verify chronological replay across
 restart, frozen explanations and no automatic continuation after failure. Browser
-replay control acceptance and matched protected-version comparison remain delivery
-work; imported history is not evidence that those checks passed.
+replay controls have also been exercised against a disposable fake-model API:
+step, run, pause, reload and explicit resume preserve completed cycles and labels.
+This is technology acceptance, not experimental evidence for classifier quality;
+imported history alone does not prove a newly executed replay.
 
 - React and existing shadcn components provide the single-page workspace.
 - FastAPI serves the app. Strawberry provides GraphQL queries, mutations, and
@@ -90,6 +133,11 @@ work; imported history is not evidence that those checks passed.
   triggers, human feedback, fit results, and metrics use this path. No separate
   trace export file is required. Internal engine state/cache is not the app's
   event source. A reusable API sink supports other applications and runners.
+- Labeling shows recorded optimization phases as events arrive. Inspect activity
+  opens the correlated full request, response, tool calls, and applied before/after
+  snapshots. A proposed rubric is not an applied rubric. Routine no-op trigger
+  checks do not hide the last outcome. Saved-label acknowledgement is separate
+  from optimization success; failed commands stay stopped until explicit recovery.
 - Label submission creates a durable command. A single worker serializes each
   run's cycles. The API remains available while model calls run. Predictions
   precede labels; triggered optimization completes before the next prediction.

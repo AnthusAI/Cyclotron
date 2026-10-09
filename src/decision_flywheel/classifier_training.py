@@ -10,7 +10,7 @@ from .selection_policy import SelectionPolicy
 @track_answer_dependencies
 async def train_classifier(wheel, training, development, *, protected, propensities,
                            min_development_per_class=20, retry_interrupted=False,
-                           apply_promotion=True):
+                           apply_promotion=True, feature_groups=(), max_group_configurations=8):
     if type(min_development_per_class) is not int or min_development_per_class < 1:
         raise ValueError("development class floor must be positive")
     wheel._validate_partitions(training, development, protected, propensities)
@@ -23,25 +23,40 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                   "reason": "waiting for development class coverage", "minimum_development_per_class": min_development_per_class}
         wheel._emit({"kind": "classifier-training-completed", **result})
         return result
-    # Keep the incumbent's questions. Add one retained revision per new concept;
-    # revisions already deployed are not silently replaced by a bank entry.
+    # All trials share the incumbent. Wording revisions and removals change one
+    # question at a time; discovery never silently replaces a deployed feature.
     tasks = [{"name": t.name, "instructions": t.instructions, "labels": list(t.labels)} for t in wheel.active.config.tasks]
-    names = {t["name"] for t in tasks}
     additions = []
+    revisions = []
     for entry in wheel.feature_bank():
-        if entry["question"]["name"] not in names:
-            additions.append(entry["question"])
-            names.add(entry["question"]["name"])
+        question = entry['question']
+        current = next((task for task in tasks if task['name'] == question['name']), None)
+        if current is not None and current != question:
+            revisions.append((f"revision:{entry['id']}",
+                [question if task['name'] == question['name'] else task for task in tasks]))
+        elif current is None:
+            additions.append((entry['id'], question))
     configs = [("current", tasks)]
-    if additions:
-        configs.append(("retained_questions", tasks + additions))
+    configs.extend((f"addition:{key}", tasks + [question]) for key, question in additions)
+    configs.extend(revisions)
+    configs.extend((f"without:{task['name']}", [other for other in tasks if other['name'] != task['name']])
+                   for task in tasks)
+    from .feature_experiments import plan_feature_groups
+    group_plan = plan_feature_groups(tasks, wheel.feature_bank(), feature_groups,
+                                    max_configurations=max_group_configurations)
+    group_experiments = {trial['name']: trial['experiment'] for trial in group_plan}
+    configs.extend((trial['name'], trial['tasks']) for trial in group_plan)
     evidence = {"version": wheel.active.fingerprint, "training": wheel._evidence(training),
                 "model_context": wheel.model_context(wheel.active.config, training),
                 "optimizer_context": wheel.optimizer_context,
                 "development": wheel._evidence(development), "protected": sorted(i.id for i in protected),
                 "propensities": propensities, "bank": [e["id"] for e in wheel.feature_bank()], "floor": min_development_per_class,
-                "apply_promotion": apply_promotion, "policy": "balanced-brier-no-recall-regression-v1",
+                "apply_promotion": apply_promotion, "policy": "question-revisions-and-ablation-v2",
                 "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None}
+    # Opt-in search is a different experiment. Empty plans preserve existing
+    # cache identities and do not make deployed sessions repeat paid fits.
+    if group_plan:
+        evidence.update(group_plan=group_plan, max_group_configurations=max_group_configurations)
     key = _hash(evidence)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS classifier_training (id TEXT PRIMARY KEY, status TEXT, payload TEXT)")
     key, saved = wheel.cached_artifact('classifier_training', 'id', key)
@@ -52,7 +67,8 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     now = datetime.fromisoformat(json.loads(saved[1])["time"]) if saved else datetime.now(timezone.utc)
     with wheel.db:
         wheel.db.execute("INSERT OR REPLACE INTO classifier_training VALUES (?, 'pending', ?)", (key, _json({"time": now.isoformat()})))
-    wheel._emit({"kind": "classifier-training-started", "configurations": len(configs), "weightings": ["natural", "equal_class"]})
+    wheel._emit({"kind": "classifier-training-started", "configurations": len(configs),
+                 "weightings": ["natural", "equal_class"], **({'feature_group_plan': group_plan} if group_plan else {})})
     previous_weighting = wheel.training_class_weighting
     previous_evaluation = wheel.evaluation_weighting
     trials = []
@@ -94,7 +110,12 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                 safe = bool(baseline and candidate and candidate["balanced_accuracy"] >= baseline["balanced_accuracy"]
                     and all(candidate["per_class"][label]["recall"] >= baseline["per_class"][label]["recall"]
                             for label in wheel.initial.task.labels))
-                trials.append({**trial, "feature_set": name, "recall_safeguard_passed": safe})
+                recorded = {**trial, "feature_set": name, "recall_safeguard_passed": safe}
+                if name in group_experiments:
+                    recorded['feature_experiment'] = group_experiments[name]
+                    wheel._emit({'kind': 'feature-group-trial-completed', 'stage': 'classifier',
+                                 'training_class_weighting': weighting, **recorded})
+                trials.append(recorded)
         qualified = [t for t in trials if t.get("improved") and (wheel.selection_policy or t["recall_safeguard_passed"])]
         best = (max(qualified, key=lambda t: wheel.selection_policy.rank(t['candidate'])) if wheel.selection_policy
                 else min(qualified, key=lambda t: t["candidate"]["balanced_brier"])) if qualified else None
@@ -106,6 +127,8 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                   "answer_dependencies": wheel.collected_answer_dependencies(),
                   "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
                   "reason": (best['reason'] if wheel.selection_policy else "lower balanced Brier with no per-class recall regression") if best else "no candidate passed promotion safeguards"}
+        if group_plan:
+            result['feature_group_plan'] = group_plan
         with wheel.db:
             wheel.db.execute("UPDATE classifier_training SET status='complete',payload=? WHERE id=?", (_json(result), key))
             if result["promoted"]:

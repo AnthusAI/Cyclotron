@@ -3,7 +3,7 @@
   "title": "Make the optimizer easy to use and integrate",
   "description": "Native provider-neutral APIs, documented offline workflow and client integration; no DSPy. Completion includes usable prediction/feedback/optimization APIs, inspectable actual prompts/replies/tool calls and active classifier versions, verified via decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88. Do not equate an optimize-save-decide component walkthrough with a working feedback loop.",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -66,11 +66,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "8037ebeb-b167-4bd1-af93-673e8b53c72d",
+      "author": "home",
+      "text": "Native provider-neutral integration acceptance is complete via e1e92986, headless_core and application_runtime contracts, beside-module observer/step/cache specs, GraphQLTraceSink persistence and actual browser exact-exchange inspection. Public prediction/feedback/staged optimization, version inspection, prompts/replies/tool calls, and offline walkthrough are documented. No DSPy path was introduced. All component children are closed; separate SPA device/dark acceptance stays open.",
+      "created_at": "2026-10-08T02:22:36.614358Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-09-30T18:08:33.870714Z",
-  "updated_at": "2026-10-07T21:42:41.248862Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T02:22:37.124953Z",
+  "closed_at": "2026-10-08T02:22:37.124825Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

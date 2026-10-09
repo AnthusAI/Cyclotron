@@ -103,7 +103,7 @@ def test_a_kev_adapter_reports_a_transport_timeout_without_a_retry():
         asyncio.run(KevAdapter(transport=FakeTransport(TimeoutError())).decide(TASK, TARGET, []))
 
 
-def test_kev_sends_all_scorecard_questions_with_scoped_rubrics_examples_and_observable_wire_exchanges():
+def test_kev_sends_all_cyclotron_questions_with_scoped_rubrics_examples_and_observable_wire_exchanges():
     from ..classifier_config import ClassifierConfig
     extra=DecisionTask('practical',('yes','no'),'Is it practical?')
     configs={'topic':ClassifierConfig(TASK,rubric='Prefer research',example_ids=('demo',),tasks=(extra,)),

@@ -1,6 +1,15 @@
 from .trace_timeline import timeline_data
 
 
+def test_feature_group_trials_are_clickable_in_the_ml_optimization_lane():
+    event = {'kind': 'feature-group-trial-completed', 'stage': 'classifier',
+             'created_at': '2026-10-07T12:00:00Z',
+             'feature_experiment': {'kind': 'ablation', 'omitted_id': 'retained-question'}}
+    item = timeline_data([event])['items'][0]
+    assert item['group'] == 'classifier' and item['event_index'] == 0
+    assert item['content'] == 'Feature ablation trial'
+
+
 def test_a_stale_head_is_inspectable_in_the_ml_optimization_lane():
     event={'kind':'head-invalidated','created_at':'2026-10-07T12:00:00Z',
         'reason':'decision feature context changed','previous_model_context':'old','model_context':'new'}
@@ -25,7 +34,8 @@ def test_configuration_count_markers_show_active_questions_not_unpromoted_propos
     ]
     data=timeline_data([{**event,'created_at':'2026-10-06T12:00:00Z'} for event in events])
     counts=[item for item in data['items'] if item['group']=='configuration-count']
-    assert [item['content'] for item in counts]==['1','3','3']
+    assert [item['content'] for item in counts]==['1','3','']
+    assert [item['classification_count'] for item in counts]==[1,3,3]
     assert [item['event_index'] for item in counts]==[0,2,3]
 
 

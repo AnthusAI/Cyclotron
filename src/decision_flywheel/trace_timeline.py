@@ -9,6 +9,7 @@ GROUPS = [('feedback', 'Human labels'), ('decisions', 'Decisions'), ('rubric', '
 
 def timeline_data(events):
     items, starts, undated = [], {}, 0
+    previous_count = None
     for index, event in enumerate(events):
         date = event.get('created_at')
         try:
@@ -21,9 +22,12 @@ def timeline_data(events):
         kind = event.get('kind')
         snapshot=event.get('classifier_snapshot',{}).get('config')
         if snapshot is not None and kind in {'cycle-started','classifier-activated','classifier-invalidated'}:
+            count = 1 + len(snapshot.get('tasks', []))
             items.append({'id':f'configuration-count:{index}','event_index':index,
-                          'group':'configuration-count','content':str(1+len(snapshot.get('tasks',[]))),
+                          'group':'configuration-count','content':str(count) if count != previous_count else '',
+                          'classification_count':count,
                           'start':date,'type':'point'})
+            previous_count = count
         group, label = None, None
         if kind in {'cycle-started','cycle-completed','cycle-failed'}:
             group,label='cycles',kind.replace('-',' ')
@@ -35,6 +39,9 @@ def timeline_data(events):
             group,label='evaluation','Running prediction agreement'
         elif kind == 'classifier-training-completed':
             group,label='classifier','ML candidate selection'
+        elif kind == 'feature-group-trial-completed':
+            group = 'classifier'
+            label = 'Feature ' + event['feature_experiment']['kind'] + ' trial'
         elif kind == 'head-invalidated':
             group,label='classifier','ML head invalidated'
         elif kind == 'human-feedback':

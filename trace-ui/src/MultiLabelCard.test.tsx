@@ -4,6 +4,36 @@ import '@testing-library/jest-dom/vitest'
 import {MultiLabelCard} from './MultiLabelCard'
 afterEach(()=>{cleanup();sessionStorage.clear()})
 
+it('provides a named keyboard focus target for the scrollable classifier feedback panel',()=>{
+  const current={item:{id:'one',values:{text:'Paper'}},prediction:{presentation_id:'focus',classifiers:{a:{label:'yes',confidence:.8,classes:['yes','no']}}}}
+  render(<MultiLabelCard current={current} names={{a:'Library'}} busy={false} onSubmit={vi.fn()}/>)
+  const panel=screen.getByRole('group',{name:'Classifier feedback'})
+  expect(panel).toHaveAttribute('tabindex','0')
+  panel.focus()
+  expect(panel).toHaveFocus()
+})
+
+it('shows pinned cyclotron order instead of response key order without moving votes between classifiers',()=>{
+  const result={label:'yes',confidence:.8,classes:['yes','no']}
+  const current={item:{id:'one',values:{text:'Paper'}},prediction:{presentation_id:'ordered',classifiers:{a:result,b:result,c:result}}}
+  const submit=vi.fn()
+  const props={current,names:{a:'First response key',b:'First configured',c:'Unconfigured output'},busy:false,onSubmit:submit}
+  const view=render(<MultiLabelCard {...props} classifiers={[{id:'b',name:'First configured'},{id:'a',name:'First response key'}]}/>)
+  expect(screen.getAllByRole('heading',{level:3}).map(el=>el.textContent)).toEqual(['First configured','First response key','Unconfigured output'])
+  fireEvent.click(screen.getByRole('button',{name:'First configured: no'}))
+  fireEvent.change(screen.getByLabelText('Explanation for First configured'),{target:{value:'Feedback belongs to b'}})
+  fireEvent.click(screen.getByRole('button',{name:'First response key: yes, predicted 80%'}))
+  fireEvent.click(screen.getByRole('button',{name:'Submit feedback'}))
+  expect(submit).toHaveBeenLastCalledWith('label',{item_id:'one',presentation_id:'ordered',labels:[
+    {classifier_id:'b',label:'no',comment:'Feedback belongs to b'},{classifier_id:'a',label:'yes',comment:''}]})
+  view.rerender(<MultiLabelCard {...props} classifiers={[{id:'a',name:'First response key'},{id:'b',name:'First configured'}]}/>)
+  expect(screen.getByRole('button',{name:'First configured: no'})).toHaveAttribute('aria-pressed','true')
+  expect(screen.getByLabelText('Explanation for First configured')).toHaveValue('Feedback belongs to b')
+  fireEvent.click(screen.getByRole('button',{name:'Submit feedback'}))
+  expect(submit).toHaveBeenLastCalledWith('label',{item_id:'one',presentation_id:'ordered',labels:[
+    {classifier_id:'a',label:'yes',comment:''},{classifier_id:'b',label:'no',comment:'Feedback belongs to b'}]})
+})
+
 it('restores explicit votes and explanations when returning to an item without remounting the reviewer',()=>{
   const submit=vi.fn()
   const item=(id:string)=>({item:{id,values:{text:`Paper ${id}`}},prediction:{presentation_id:id,classifiers:{a:{label:'yes',confidence:.8,classes:['yes','no']}}}})

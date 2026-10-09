@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4f7b1db9-69d8-4000-87eb-b6e94a4583ca",
+  "issue_id": "decision-flywheel-af4ab2b5-ca9c-4af6-9277-da0043a0f913",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-08T02:25:51.150Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "labels": {
+        "from": [],
+        "to": [
+          "deferred-experiment-report"
+        ]
+      }
+    }
+  }
+}

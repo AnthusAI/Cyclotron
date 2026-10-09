@@ -3,7 +3,7 @@
   "title": "Replace Classifiers navigation with Scorecards and nested classifier editors",
   "description": "Top-level navigation: Scorecards, Item lists, Optimizations. Scorecards list shows names, active revisions and classifier membership; scorecard detail lists ordered classifiers and opens their configuration/history. Support creating a scorecard, adding an existing classifier or a new classifier, binary/multiclass classes with configurable order and positive/negative roles, editing as a new revision and explicit version activation. Show impact of classifier edits on affected scorecard versions and joint requests. Keep existing session/run selection in deep links; do not accidentally start paid runs on navigation. Save/Cancel must remain reachable in a bounded editor footer with scrollable form body at narrow/iPad viewports. Acceptance: browser and component tests navigate, edit Knowledge Bases, save a new version, inspect old versions, and retain in-progress label drafts when opening/closing navigation.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -78,14 +78,44 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "d50b7ae8-65ca-4015-bfae-a18d84cb6cd0",
+      "author": "home",
+      "text": "Fixed labeling-card order to use the run pinned scorecard classifier sequence rather than alphabetically serialized response keys. Regression failed first; 165 UI specs, production build and focused lint pass. Test preserves legacy/unconfigured outputs, proves vote/comment identity survives reordering, and checks submission sequence follows configured order. Browser on isolated fake-model SQLite/API workspace shows Relevance then Practicality, matching saved run configuration; reload retained a synthetic unsubmitted Relevance vote/comment on the same classifier. No console warnings/errors, server errors, provider calls or recorded new labels (fixture catalog still 6). Proof var/web/pinned-card-order-proof.png. React guidance kept order derived rather than mirrored state. Wider scorecard acceptance remains open.",
+      "created_at": "2026-10-08T00:44:55.693338Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "7fb5e7b9-d0b5-4e10-b76e-831964b92204",
+      "author": "home",
+      "text": "Editor acceptance on isolated fake-model API/SQLite workspace: changed a classifier question through Save changes, confirmed classifier revision 2 and new revisions of both affected scorecards, inspected revision 1 with original question and no edit controls, and compared exact old/new questions in the definition comparison drawer. No model commands or human labels added; fixture remains 6 labels, 7 jobs, 4 checkpoints. Responsive browser found 25px save buttons; added scoped 44px minimums for narrow/coarse-pointer scorecard controls, failing-first coverage, 175 UI tests/build pass and focused lint clean. Browser measured Save changes and bounded Save scorecard footer at 44px, both visible in CSS 960x900 viewport; scrolling fields have 988px content without hiding footer. No console errors. Proof var/web/touch-classifier-editor-proof.png and touch-scorecard-editor-proof.png. Decision provider and optimizer transport controls are present. Combined earlier component/API and browser evidence covers membership, immutable revisions, impact, deep links and draft retention; keep open for final narrow mobile editor/activation check rather than claim physical iPad acceptance.",
+      "created_at": "2026-10-08T01:33:53.320781Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "bfdc00b3-631f-4b85-8f61-44bfee209e7c",
+      "author": "home",
+      "text": "Completed final narrow editor/activation acceptance on the isolated fake-model API workspace: CSS viewport 487x800, Save scorecard at y742..786 with 44px height, no document overflow (document equals viewport). Historical definition remains read-only until explicit Use this definition; activated revision 1, inspected revision 2 with exact preserved question, then explicitly restored revision 2. No browser errors, no model work; fixture remains 6 labels / 7 jobs / 4 learned checkpoints. Prior evidence covers saving classifier/scorecard revisions, exact comparison, affected scorecards, ordered membership/new-classifier configuration, provider controls, deep links and draft retention. Screenshot var/web/narrow-safe-shell-proof.png. Physical-device keyboard testing remains a broader shell acceptance concern, not a missing scorecard editor feature.",
+      "created_at": "2026-10-08T01:37:10.490966Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:53:59.760123Z",
-  "updated_at": "2026-10-07T22:53:22.943313Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:37:10.623792Z",
+  "closed_at": "2026-10-08T01:37:10.623723Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

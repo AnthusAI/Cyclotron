@@ -3,7 +3,7 @@
   "title": "Coordinate multiple classifiers in shared decision requests and independent flywheel sessions",
   "description": "Use catalog classifier revisions and source-neutral item lists for live/replay sessions. Batch compatible classifiers in one decision request with scoped rubric/examples/questions and mapped outputs. Maintain independent heads, feedback and trigger/optimization state. Cache complete shared requests; count usage once. Connect catalog labels/explanations to optimization without future-label leakage. Existing arXiv worker is not completion of this general coordinator.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -217,11 +217,38 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "9dd7cb03-c244-4097-bf5f-e32a30bc2482",
+      "author": "home",
+      "text": "Coordinator audit found a capability boundary gap beyond the single-wheel guard: a no-context provider could receive sibling examples in a physical shared request, or serve a prepared joint batch after its declared capability changed. Both scenarios failed first in new offline specs. SharedDecisions now validates every effective classifier scope before cache lookup/reserving attempts and before prepared child reuse; child adapters expose underlying provider capabilities. Zero-shot batches and target-excluded examples remain allowed even with nonempty training pools. 38 focused shared/runtime/workspace specs passed before the additional zero-effective-context cases; full regression underway. No paid calls, production labels, or server restart. Broader multi-provider/coordinator acceptance remains open.",
+      "created_at": "2026-10-08T00:04:56.463519Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "23fa5bf0-1919-4b0e-9125-a2b2f3c3d6d1",
+      "author": "home",
+      "text": "Final regression for shared capability validation: all 836 Python specs pass (16 existing pytest-bdd deprecation warnings). The four new cases cover unsupported sibling examples, capability changes after prepared answers, ordinary zero-shot with a training pool, and target-excluded context. No paid calls, real-label changes, or deployment occurred.",
+      "created_at": "2026-10-08T00:05:30.081267Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    },
+    {
+      "id": "fba9ec9b-2b54-4e77-a07c-1d5a444c395c",
+      "author": "home",
+      "text": "Completed shared adapter/coordinator lifecycle acceptance with nine cross-module cases across actual Jev, Kev and Laya adapters, each using an injected no-network wire client. Two scoped classifier contexts persist rubric and real examples; the supporting practical question reaches decision/include and practical/yes head features. Sibling rubric change, refreshed consumed training answer and legacy missing provenance each invalidate and refit within the next prediction cycle. Fitted confidence equals the calibrated output vector, OOF provenance is retained, physical attempts equal fake wire calls and token use is counted once. Restart restores the pending presentation/head without another call. Full Python suite: 865 passed with 16 existing pytest-bdd warnings. Combined with prior independent feedback/correction, API ingestion, capabilities, protected partitions and replay specs, the general coordinator requirements in this task are met. Optional real checkpoint installation/performance is not claimed; this task validates the reusable contract, not an experiment. Operator test command is documented in docs/web-workspace-plan.md.",
+      "created_at": "2026-10-08T01:58:37.244408Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T21:39:41.885072Z",
-  "updated_at": "2026-10-07T22:02:36.710895Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:58:37.669389Z",
+  "closed_at": "2026-10-08T01:58:37.669284Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

@@ -67,10 +67,19 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "90379e17-92ed-4974-8c97-460e44068a9f",
+      "author": "home",
+      "text": "Completion audit: pinned interactive/replay milestone591 is now closed after88 current lifecycle/versioning/protected-comparison specs and recorded browser acceptance. Editor/navigation814, history683 and optimizer activitybd176 are also closed. Remaining acceptance is actual dark calibration rendering and physical-device touch/keyboard/nonzero safe areas, tracked in42d/0049. Added exact operator device checklist and documented the connected-browser/system-appearance mismatch without adding an app theme switch or changing production labels. This aggregate task remains open until that evidence exists.",
+      "created_at": "2026-10-08T02:33:35.194324Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-07T14:54:11.067923Z",
-  "updated_at": "2026-10-07T22:33:41.718328Z",
+  "updated_at": "2026-10-08T02:33:35.194451Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

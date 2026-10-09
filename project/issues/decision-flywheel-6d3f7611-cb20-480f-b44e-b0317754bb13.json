@@ -3,7 +3,7 @@
   "title": "Ship the fixed classifier bundle: optimized example list, rubric, and head",
   "description": "## Scope\nVersioned fixed classifier bundle containing evolving main rubric, optimized fixed labeled examples, decision-element classification tasks and a fitted head over model answers. One complete decision-model request per item where supported; no DSPy. Default fixed examples; per-target retrieval deferred.\n\n## Completion\nExisting component work and historical harness replays remain evidence for their limited scope. Shipping the reusable classifier requires end-to-end integration and restart/observable lifecycle acceptance in decision-flywheel-e1e92986-a121-410a-b8c2-fb467d6b3d88. Core owns fit/orchestration; no dependency on Jev-Flywheel proof-of-concept implementation. This replaces outdated ownership assumptions and component-only completion criteria.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -25,25 +25,38 @@
       "text": "Phase 1 core pieces landed: f7721c4 (FixedExampleList with per-label reserve and artifact support; objective='brier' with optional checkpoint probabilities; improve_example_list) and 6da5fd3 (example_list_from_policy). make test: 226 passed. The Evaluations harness runs F / F-rand / A-c+F against these APIs offline (S0 passed). Remaining: the Brier fallback question on its story and the ClassifierBundle story (Phase 2). Owner Q2: one Jev request per item; description updated.",
       "created_at": "2026-10-01T21:48:27.414092Z",
       "comment_type": "default",
+      "data": {},
       "agent": {
         "platform": "claude_code",
         "model": "claude-opus-5-5",
-        "name": "phase1-subagent"
+        "name": "phase1-subagent",
+        "settings": {}
       }
+    },
+    {
+      "id": "b5277357-6076-464f-8f3c-2fbb6545d874",
+      "author": "home",
+      "text": "Completion audit: all component children and required end-to-end reviewer milestone e1e92986 are now closed with current fake lifecycle specs plus retained authorized live execution evidence. Versioned request rubric, fixed labeled examples, supporting classification tasks, probability-feature head, calibration, cache dependencies, deployment and restart are implemented in Decision-Flywheel itself. Retrieval remains explicitly deferred. Closing this technology bundle milestone does not claim accuracy improvement or completion of separate scorecard UI/device acceptance.",
+      "created_at": "2026-10-08T02:22:35.568300Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-01T19:56:22.143805Z",
-  "updated_at": "2026-10-05T21:56:53.098030Z",
-  "closed_at": null,
-  "agent": {
-    "platform": "claude_code",
-    "model": "Claude Opus 5.5",
-    "name": "Flywheel Planning"
-  },
+  "updated_at": "2026-10-08T02:22:36.105499Z",
+  "closed_at": "2026-10-08T02:22:36.105179Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "Flywheel Planning",
+    "settings": {}
+  },
+  "agent_assignment": null
 }

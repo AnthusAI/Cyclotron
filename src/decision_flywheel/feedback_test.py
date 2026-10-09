@@ -10,7 +10,7 @@ from .feedback import (
     FeatureCoverage,
     FeedbackItem,
     ScoreResult,
-    Scorecard,
+    Cyclotron,
 )
 from .models import DecisionTask
 
@@ -58,12 +58,12 @@ def test_a_feedback_propensity_must_be_a_finite_probability(propensity):
         FeedbackItem(id="feedback", item_id="item", score_name="review", selection_propensity=propensity)
 
 
-def test_decision_lineage_links_context_request_scorecard_and_complete_features():
+def test_decision_lineage_links_context_request_cyclotron_and_complete_features():
     coverage = FeatureCoverage(("tone.positive", "policy.exception"), ("tone.positive", "policy.exception"))
     decision = Decision(
         value="approve", model_provenance="local-rule-model-v1", policy_fingerprint=HASH,
         context_artifact_fingerprint="b" * 64, request_fingerprint="c" * 64,
-        scorecard_fingerprint="d" * 64, feature_coverage=coverage,
+        cyclotron_fingerprint="d" * 64, feature_coverage=coverage,
     )
     result = ScoreResult(item_id="item-1", score_name="review", decision=decision)
 
@@ -79,11 +79,11 @@ def test_incomplete_or_non_finite_features_are_rejected_before_a_learned_decisio
         Feature("tone.positive", float("nan"), "tone")
 
 
-def test_scorecard_lineage_changes_when_its_policy_or_parent_changes():
+def test_cyclotron_lineage_changes_when_its_policy_or_parent_changes():
     element = Element("tone", "choice", ("tone.positive",), definition_fingerprint=HASH)
-    first = Scorecard("review", 1, (element,), policy_fingerprint="b" * 64)
-    changed_policy = Scorecard("review", 1, (element,), policy_fingerprint="c" * 64)
-    child = Scorecard("review", 2, (element,), policy_fingerprint="b" * 64,
+    first = Cyclotron("review", 1, (element,), policy_fingerprint="b" * 64)
+    changed_policy = Cyclotron("review", 1, (element,), policy_fingerprint="c" * 64)
+    child = Cyclotron("review", 2, (element,), policy_fingerprint="b" * 64,
                       parent_fingerprint=first.fingerprint)
 
     assert first.fingerprint != changed_policy.fingerprint

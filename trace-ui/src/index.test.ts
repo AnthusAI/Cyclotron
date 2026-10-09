@@ -1,6 +1,15 @@
 import {readFileSync} from 'node:fs'
 import {expect, test} from 'vitest'
 
+test('expanded classifier details cannot consume all reading space or push actions off screen',()=>{
+  const css=readFileSync('src/index.css','utf8')
+  const rule=css.match(/\[data-labeling-view="true"\] \.classifier-feedback-strip\s*\{([^}]+)\}/)?.[1]??''
+  expect(rule).toMatch(/max-height:\s*50%/)
+  expect(rule).toMatch(/flex-shrink:\s*1/)
+  expect(rule).toMatch(/min-height:\s*0/)
+  expect(rule).toMatch(/overflow-y:\s*auto/)
+})
+
 test('timeline items cannot scroll independently of their lane labels',()=>{
   const css=readFileSync('src/index.css','utf8')
   expect(css).toMatch(/\.vis-panel\.vis-center\s*\{[^}]*overflow:clip!important/)
@@ -17,7 +26,7 @@ test('cycle background bands use shading without vertical boundary strokes',()=>
 })
 
 test('the Cyclotron mark uses the subtitle width instead of a fixed empty grid column',()=>{
-  const css=readFileSync('src/index.css','utf8')
+  const css=readFileSync('src/styles/shared.css','utf8')
   const layout=css.match(/\.cyclotron-brand-layout\s*\{([^}]+)\}/)
   expect(layout?.[1]).toContain('width:fit-content')
   expect(layout?.[1]).not.toContain('width:17rem')

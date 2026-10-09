@@ -37,6 +37,20 @@ def test_equal_class_training_weights_balance_total_influence_and_keep_selection
         _training_weights([1.], ["red"], "unsupported")
 
 
+def test_auto_calibration_is_sparse_safe_and_explicit_isotonic_remains_available():
+    small=fit_learned_head(TASK,_rows(),declared_features=("signal",),development_ids=(),scoreboard_ids=(),
+        cyclotron_fingerprint=HASH,policy_fingerprint=HASH,context_artifact_fingerprint=HASH,source_model_provenance='fake')
+    large=fit_learned_head(TASK,tuple(_row(i,"approve" if i%2 else "reject") for i in range(120)),declared_features=("signal",),development_ids=(),scoreboard_ids=(),
+        cyclotron_fingerprint=HASH,policy_fingerprint=HASH,context_artifact_fingerprint=HASH,source_model_provenance='fake')
+    isotonic=fit_learned_head(TASK,tuple(_row(i,"approve" if i%2 else "reject") for i in range(120)),declared_features=("signal",),development_ids=(),scoreboard_ids=(),
+        cyclotron_fingerprint=HASH,policy_fingerprint=HASH,context_artifact_fingerprint=HASH,source_model_provenance='fake',calibration_method='isotonic')
+    assert small.calibration.method == 'temperature'
+    assert large.calibration.method == 'temperature'
+    assert 'held-out OOF' in large.calibration.selection_reason
+    assert isotonic.calibration.method == 'isotonic'
+    assert isotonic.calibration.isotonic_knots
+
+
 def test_each_out_of_fold_fit_balances_its_own_classes_while_calibration_keeps_natural_weights(monkeypatch):
     from . import head
     rows = tuple(_row(i, "approve" if i < 3 else "reject", propensity=.5 if i == 0 else 1.)
@@ -48,7 +62,7 @@ def test_each_out_of_fold_fit_balances_its_own_classes_while_calibration_keeps_n
         return original_fit(classes, names, matrix, labels, weights, **kwargs)
     monkeypatch.setattr(head, "_fit", inspect)
     result = fit_learned_head(TASK, rows, declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-                              scorecard_fingerprint=HASH, policy_fingerprint=HASH,
+                              cyclotron_fingerprint=HASH, policy_fingerprint=HASH,
                               context_artifact_fingerprint=HASH, source_model_provenance="fake",
                               training_class_weighting="equal_class")
     assert len(seen) == 4
@@ -61,7 +75,7 @@ def test_each_out_of_fold_fit_balances_its_own_classes_while_calibration_keeps_n
 def test_a_learned_head_uses_only_trusted_full_coverage_rows_and_records_inverse_propensity_provenance():
     result = fit_learned_head(
         TASK, _rows(), declared_features=("signal",), development_ids=("dev-1",), scoreboard_ids=("score-1",),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic-local-head-v1", folds=3,
     )
 
@@ -70,13 +84,13 @@ def test_a_learned_head_uses_only_trusted_full_coverage_rows_and_records_inverse
     assert result.provenance.scoreboard_ids == ("score-1",)
     assert result.provenance.weights[0] > result.provenance.weights[1]
     assert result.calibration.fit_on == "out_of_fold"
-    assert result.refitted_scorecard_fingerprint != HASH
+    assert result.refitted_cyclotron_fingerprint != HASH
     assert result.predict({"signal": 1.0}) == "approve"
 
 
 def test_untrusted_missing_propensity_or_missing_feature_rows_are_refused_not_guessed():
     common = dict(declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-                  scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+                  cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
                   context_artifact_fingerprint="c" * 64, source_model_provenance="generic")
     with pytest.raises(ValueError, match="trusted"):
         fit_learned_head(TASK, (_row(1, "approve", source=LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED),), **common)
@@ -92,7 +106,7 @@ def test_intercept_is_reserved_for_the_internal_bias_not_a_declared_feature():
     with pytest.raises(ValueError, match="reserved"):
         fit_learned_head(
             TASK, _rows(), declared_features=("intercept",), development_ids=(), scoreboard_ids=(),
-            scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+            cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
             context_artifact_fingerprint="c" * 64, source_model_provenance="generic",
         )
 
@@ -100,11 +114,11 @@ def test_intercept_is_reserved_for_the_internal_bias_not_a_declared_feature():
 def test_scoreboard_ids_and_split_ids_cannot_leak_into_training_or_each_other():
     with pytest.raises(ValueError, match="disjoint"):
         fit_learned_head(TASK, _rows(), declared_features=("signal",), development_ids=("item-1",),
-                         scoreboard_ids=(), scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+                         scoreboard_ids=(), cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
                          context_artifact_fingerprint="c" * 64, source_model_provenance="generic")
     with pytest.raises(ValueError, match="disjoint"):
         fit_learned_head(TASK, _rows(), declared_features=("signal",), development_ids=("dev",),
-                         scoreboard_ids=("dev",), scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+                         scoreboard_ids=("dev",), cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
                          context_artifact_fingerprint="c" * 64, source_model_provenance="generic")
 
 
@@ -117,7 +131,7 @@ def test_calibration_refuses_in_sample_predictions_and_fit_is_reproducible():
             origin="in_sample",
         )
     args = dict(declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-                scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+                cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
                 context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3)
     first = fit_learned_head(TASK, _rows(), **args)
     second = fit_learned_head(TASK, _rows(), **args)
@@ -129,7 +143,7 @@ def test_calibration_refuses_in_sample_predictions_and_fit_is_reproducible():
 
 def test_refitted_head_fingerprint_binds_text_free_task_and_training_provenance():
     args = dict(declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-                scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+                cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
                 context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3)
     baseline = fit_learned_head(TASK, _rows(), **args)
     changed_context = fit_learned_head(TASK, _rows(), **{**args, "context_artifact_fingerprint": "d" * 64})
@@ -139,9 +153,9 @@ def test_refitted_head_fingerprint_binds_text_free_task_and_training_provenance(
                                   for index in range(1, 13))
     changed_propensities = fit_learned_head(TASK, uniformly_reselected, **args)
 
-    assert len({baseline.refitted_scorecard_fingerprint, changed_context.refitted_scorecard_fingerprint,
-                changed_source.refitted_scorecard_fingerprint, changed_task.refitted_scorecard_fingerprint,
-                changed_propensities.refitted_scorecard_fingerprint}) == 5
+    assert len({baseline.refitted_cyclotron_fingerprint, changed_context.refitted_cyclotron_fingerprint,
+                changed_source.refitted_cyclotron_fingerprint, changed_task.refitted_cyclotron_fingerprint,
+                changed_propensities.refitted_cyclotron_fingerprint}) == 5
 
 
 def test_multiclass_oof_temperature_uses_full_logits_and_changes_serving_probabilities():
@@ -160,7 +174,7 @@ def test_multiclass_oof_temperature_uses_full_logits_and_changes_serving_probabi
     )
     result = fit_learned_head(
         task, rows, declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
 
@@ -176,7 +190,7 @@ def test_multiclass_oof_temperature_uses_full_logits_and_changes_serving_probabi
 def test_oof_partition_proves_each_held_item_was_not_fit_and_each_fit_has_all_classes():
     result = fit_learned_head(
         TASK, _rows(), declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     oof = result.out_of_fold
@@ -205,7 +219,7 @@ def test_oof_rejects_leakage_missing_class_coverage_and_nonfinite_predictions():
 def test_oof_normalization_is_fit_only_on_each_partition_not_the_held_feature_value():
     baseline = fit_learned_head(
         TASK, _rows(), declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     altered_rows = list(_rows())
@@ -214,7 +228,7 @@ def test_oof_normalization_is_fit_only_on_each_partition_not_the_held_feature_va
                               (Feature("signal", 1e300, "rule"),))
     altered = fit_learned_head(
         TASK, altered_rows, declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     held = baseline.out_of_fold.item_ids.index("item-1")
@@ -226,14 +240,14 @@ def test_oof_normalization_is_fit_only_on_each_partition_not_the_held_feature_va
 def test_oof_fold_fit_weights_do_not_depend_on_held_out_propensity():
     baseline = fit_learned_head(
         TASK, _rows(), declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     changed_rows = list(_rows())
     changed_rows[0] = _row(1, "approve", propensity=0.9)
     changed = fit_learned_head(
         TASK, changed_rows, declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     held = baseline.out_of_fold.item_ids.index("item-1")
@@ -244,7 +258,7 @@ def test_oof_fold_fit_weights_do_not_depend_on_held_out_propensity():
 def test_feature_values_and_temperatures_are_numeric_finite_and_huge_features_stay_stable():
     result = fit_learned_head(
         TASK, _rows(), declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     with pytest.raises(ValueError, match="finite"):
@@ -268,7 +282,7 @@ def test_feature_values_and_temperatures_are_numeric_finite_and_huge_features_st
     )
     huge = fit_learned_head(
         TASK, huge_rows, declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-        scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+        cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
         context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=3,
     )
     assert all(math.isfinite(value) for value in huge.provenance.weights)
@@ -284,6 +298,6 @@ def test_feedback_for_another_task_cannot_become_a_trusted_training_label():
     with pytest.raises(ValueError, match="score_name"):
         fit_learned_head(
             TASK, (wrong_task,), declared_features=("signal",), development_ids=(), scoreboard_ids=(),
-            scorecard_fingerprint=HASH, policy_fingerprint="b" * 64,
+            cyclotron_fingerprint=HASH, policy_fingerprint="b" * 64,
             context_artifact_fingerprint="c" * 64, source_model_provenance="generic", folds=2,
         )

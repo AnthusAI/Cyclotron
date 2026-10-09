@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "1b14422d-e630-453d-a736-56651bf632eb",
+  "issue_id": "decision-flywheel-1dae1dbe-c750-41d3-8512-490741d22e15",
+  "event_type": "state_transition",
+  "occurred_at": "2026-10-07T23:41:18.377Z",
+  "actor_id": "home",
+  "payload": {
+    "from_status": "in_progress",
+    "to_status": "closed"
+  }
+}

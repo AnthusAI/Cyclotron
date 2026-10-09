@@ -3,7 +3,7 @@
   "title": "Brief the live optimizer from trusted feedback and explanations",
   "description": "## Behavior and acceptance\nProvide an injectable live optimizer interface with a scripted fake. Briefing includes eligible training item content/metadata, trusted votes and comments, errors, current rubric/tasks/examples and version. Do not send audit or scoreboard content, labels, errors or metrics to the optimizer.\nScenario: a vote with an explanation reaches the optimizer briefing; protected partition records do not. Inadequate class coverage is reported as waiting for labels, not silently declared successful optimization.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -51,11 +51,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "2116142e-d0c5-403b-84d8-221c34a4111c",
+      "author": "home",
+      "text": "Acceptance audit complete with 809 passing offline Python specs. Injectable OpenAI/LiteLLM optimizer and scripted fake expose exact requests/replies/tools/usage; FeedbackBriefing snapshots trusted content/metadata, labels, explanations, original pre-vote answers/errors and current rubric/questions/examples/version. Protected ID and normalized-text refusal, missing-answer null semantics, cache-key changes, correction/restart provenance and inadequate-evidence waiting/provisional disclosures are tested. Fixed the remaining firewall defect: reusable Rich ReviewerFlywheel now excludes protected/development explanations by default, matching web sessions. Default regression failed before the fix. New application-level exact prompt test proves actual training author/publication metadata/comments/original disagreements reach the optimizer and other partitions do not. Explicit protected-guidance opt-in remains visible and permanently invalidates independent-evaluation claims; historical exposed runs are not rewritten as clean. Existing exact-context UI acceptance is tracked under bd. No real labels, paid calls or experiment report.",
+      "created_at": "2026-10-07T23:41:18.104686Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.163176Z",
-  "updated_at": "2026-10-07T22:12:27.008159Z",
-  "closed_at": null,
+  "updated_at": "2026-10-07T23:41:18.377367Z",
+  "closed_at": "2026-10-07T23:41:18.377276Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

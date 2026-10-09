@@ -42,7 +42,7 @@ def test_workspace_factory_loads_the_selected_laya_revision_without_a_jev_fallba
 
 
 @pytest.mark.parametrize('provider',['kev','laya'])
-def test_scorecard_worker_records_one_joint_wire_request_through_the_graphql_api(tmp_path,provider):
+def test_cyclotron_worker_records_one_joint_wire_request_through_the_graphql_api(tmp_path,provider):
     from fastapi.testclient import TestClient
     from ..web_store import WebStore
     from ..web_api import create_app

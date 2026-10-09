@@ -21,5 +21,5 @@ def test_unchanged_definitions_have_no_changes_and_different_identities_cannot_b
     import pytest
     row={'id':'one','revision':1,'name':'Card','classifiers':[],'settings':{}}
     assert compare_definitions(row,row)=={'name':None,'members':[],'settings':[]}
-    with pytest.raises(ValueError,match='same scorecard'):
+    with pytest.raises(ValueError,match='same cyclotron'):
         compare_definitions(row,{**row,'id':'two'})

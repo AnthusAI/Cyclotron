@@ -15,7 +15,7 @@ the later four-classifier definition: Cyberian Gallery has no completed backfill
 
 Freeze the active source votes, explanations, item revisions, and arrival order
 when creating both replays. Neither replay changes source feedback or the active
-scorecard edition. Both start with an empty rubric, no examples, and no learned
+cyclotron edition. Both start with an empty rubric, no examples, and no learned
 head. Use `protected-feedback-v1` in the fresh replays; do not relabel legacy
 source traces as protected evaluation evidence.
 
@@ -83,6 +83,6 @@ request/response drill-down for every evaluated item.
 
 Record incomplete optimizations, missing class coverage, and unavailable metrics
 explicitly. A diagnostic pilot can complete while the stronger comparison remains
-inconclusive. Continue collecting real human labels for the current scorecard and
+inconclusive. Continue collecting real human labels for the current cyclotron and
 run a separately versioned follow-up once each classifier has sufficient training,
 development, and protected class coverage. Never overwrite this pilot's history.

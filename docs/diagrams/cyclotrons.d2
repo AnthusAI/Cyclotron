@@ -1,0 +1,35 @@
+# Cyclotron cyclotrons: many classifiers, one decision-model request.
+# A cyclotron groups independent classifiers around the same item without
+# mixing their contexts. Three columns keep the diagram README-width: the
+# request is composed in the top rows and the answers return along the bottom.
+...@_cyclotron
+
+grid-rows: 4
+grid-columns: 3
+horizontal-gap: 96
+vertical-gap: 72
+
+cyclotron: "Cyclotron revision\nOrdered classifier\nrevisions" {class: store}
+contexts: "Classifier contexts\nA · B · C; each owns\ncontext and classes" {class: store}
+items: "Item list\nVersioned items from\nany source" {class: store}
+
+_r2c1: "" {class: spacer}
+composer: "Request composer\nKeep contexts scoped;\nname all questions" {class: step}
+request: "One decision request\nOne target, scoped\ncontext, all questions" {class: step}
+
+heads: "Independent ML heads\nOne prediction and\ncalibration per classifier" {class: ml}
+answers: "Mapped answers\nReturn each answer\nto its classifier" {class: step}
+model: "Decision model\nOne provider call" {class: model}
+
+labels: "Human labeling\nLabel several classifiers\nfor the same item" {class: human}
+_r4c2: "" {class: spacer}
+_r4c3: "" {class: spacer}
+
+cyclotron -> contexts: "pins\nrevisions" {class: flow}
+contexts -> composer: "scoped contexts" {class: flow}
+items -> composer: "shared target" {class: flow}
+composer -> request: "compose" {class: flow}
+request -> model: "one call" {class: flow}
+model -> answers: "answers" {class: flow}
+answers -> heads: "map by\nclassifier" {class: flow}
+heads -> labels: "separate predictions" {class: flow}

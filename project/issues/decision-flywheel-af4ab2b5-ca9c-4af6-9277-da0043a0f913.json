@@ -3,12 +3,14 @@
   "title": "Compare recall with accuracy guard against F1 using frozen labels and matched partitions after web workspace verification",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "open",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
-  "labels": [],
+  "labels": [
+    "deferred-experiment-report"
+  ],
   "dependencies": [],
   "comments": [
     {
@@ -73,14 +75,26 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "32eb77d0-0841-45f6-95d7-3cb2002b1d26",
+      "author": "home",
+      "text": "Both authorized85-item trajectories and16-item/32-request protected diagnostic pilot are already complete and retained in the API and text-free results artifact. User explicitly deferred experiment reports while requesting technology completion. Residual report/study-follow-up work is open and labeled deferred-experiment-report, not active implementation or permission to start another paid experiment. The task workflow does not permit backlog. No objective winner is claimed from the scarce positive coverage.",
+      "created_at": "2026-10-08T02:25:28.119543Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-06T20:24:23.179077Z",
-  "updated_at": "2026-10-07T21:00:14.079538Z",
+  "updated_at": "2026-10-08T02:25:51.531015Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

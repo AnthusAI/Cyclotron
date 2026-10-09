@@ -43,6 +43,54 @@ def test_item_upserts_are_idempotent_revisioned_and_chronological(tmp_path):
     assert store.item_lists()[0]['count'] == 2
 
 
+def test_an_item_list_snapshot_includes_all_latest_revisions_in_one_ordered_read(tmp_path):
+    store=WebStore(tmp_path/'web.sqlite')
+    store.save_item_list('papers','Papers')
+    items=[{'id':f'{index:03d}','occurred_at':'2026-01-01','values':{'text':str(index)}}
+           for index in range(205)]
+    store.upsert_list_items('papers',items[:200])
+    store.upsert_list_items('papers',items[200:])
+    store.upsert_list_items('papers',[{**items[0],'values':{'text':'Updated'}}])
+    snapshot=store.snapshot_items('papers')
+    assert [row['id'] for row in snapshot]==[row['id'] for row in items]
+    assert snapshot[0]['revision']==2 and snapshot[0]['values']['text']=='Updated'
+    assert all(row['fingerprint'] for row in snapshot)
+    store.upsert_list_items('papers',[{**items[0],'values':{'text':'Changed after snapshot'}}])
+    assert snapshot[0]['values']['text']=='Updated'
+    store.save_item_list('empty','Empty')
+    assert store.snapshot_items('empty')==[]
+    with pytest.raises(ValueError,match='unknown item list'):store.snapshot_items('missing')
+
+
+def test_a_refresh_committed_during_a_snapshot_is_visible_only_to_the_next_snapshot(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    store=WebStore(tmp_path/'web.sqlite')
+    store.save_item_list('papers','Papers')
+    original={'id':'one','occurred_at':'2026-01-01','values':{'text':'Original'}}
+    store.upsert_list_items('papers',[original])
+    connect=store.connect
+    refreshed=[]
+    @contextmanager
+    def snapshot_connection():
+        with connect() as db:
+            def refresh(statement):
+                if 'SELECT r.* FROM list_item_revisions r' in statement and not refreshed:
+                    refreshed.append(True)
+                    store.upsert_list_items('papers',[
+                        {**original,'values':{'text':'Updated'}},
+                        {'id':'two','occurred_at':'2026-01-02','values':{'text':'Added'}},
+                    ])
+            db.set_trace_callback(refresh)
+            yield db
+    monkeypatch.setattr(store,'connect',snapshot_connection)
+    first=store.snapshot_items('papers')
+    assert refreshed==[True]
+    assert [(row['id'],row['revision'],row['values']['text']) for row in first]==[('one',1,'Original')]
+    second=store.snapshot_items('papers')
+    assert [(row['id'],row['revision'],row['values']['text']) for row in second]==[
+        ('one',2,'Updated'),('two',1,'Added')]
+
+
 def test_invalid_item_batch_is_atomic_and_lists_do_not_share_items(tmp_path):
     store = WebStore(tmp_path/'web.sqlite')
     for name in ('a','b'): store.save_item_list(name,name)

@@ -124,6 +124,23 @@ class WorkspaceCatalog:
         if row is None: raise ValueError('unknown item revision')
         return json.loads(row[0])
 
+    def snapshot_items(self, list_id):
+        """Freeze current membership and revisions without moving page offsets.
+
+        Pagination is for browsing. Run manifests need one SQLite read snapshot
+        so concurrent upserts cannot reorder items between successive pages.
+        """
+        with self.connect() as db:
+            db.execute('BEGIN')
+            if not db.execute('SELECT 1 FROM item_lists WHERE id=?',(list_id,)).fetchone():
+                raise ValueError('unknown item list')
+            rows=db.execute('''SELECT r.* FROM list_item_revisions r
+                WHERE list_id=? AND revision=(SELECT MAX(revision) FROM list_item_revisions
+                    WHERE list_id=r.list_id AND id=r.id)
+                ORDER BY occurred_at,id''',(list_id,))
+            return [{**json.loads(row['payload']),'revision':row['revision'],
+                     'fingerprint':row['fingerprint']} for row in rows]
+
     def label_item(self, classifier_id, classifier_revision, list_id, item_id, item_revision, label, comment, request_id):
         config = self.classifier(classifier_id,classifier_revision)['config']
         self.item_revision(list_id,item_id,item_revision)

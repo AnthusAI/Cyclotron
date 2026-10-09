@@ -12,6 +12,44 @@ TARGET = Item("target", {"text": "target text"})
 CONTEXT = [LabeledItem(Item("demo", {"text": "demo text"}), "yes")]
 
 
+@pytest.mark.parametrize('proposal', [
+    {'rubric':'Revised human criteria'},
+    {'example_ids':[]},
+    {'tasks':[{'name':'practical','instructions':'Revised wording?', 'labels':['present','absent']}]},
+    {'tasks':[{'name':'practical','instructions':'Practical?', 'labels':['yes','no']},
+              {'name':'recent','instructions':'Recent?', 'labels':['yes','no']}]},
+    {'tasks':[]},
+    {'dynamic_elements':[]},
+])
+def test_independent_config_edits_change_the_exact_jev_request_and_keep_the_parent(proposal):
+    from datetime import datetime, timezone
+    from ..classifier_config import ClassifierConfig
+    class Client:
+        def system_one(self, *, state, questions):
+            self.state, self.questions = state, questions
+            return SimpleNamespace(answers={key:{'choice':next(iter(question['criteria'])),
+                'probabilities':{label:1/len(question['criteria']) for label in question['criteria']}}
+                for key, question in questions.items()}, model='fake', usage={})
+    parent = ClassifierConfig(TASK, rubric='Original', example_ids=('demo',),
+        tasks=(DecisionTask('practical', ('yes','no'), 'Practical?'),), dynamic_elements=('current_datetime',))
+    before = parent.briefing_state()
+    child = parent.apply({'rationale':'Feedback-supported isolated edit', **proposal}, CONTEXT)
+    client = Client()
+    now = datetime(2026,10,7,tzinfo=timezone.utc)
+    result = asyncio.run(JevAdapter(client).classify(child, TARGET, CONTEXT, now=now))
+    expected = child.request(TARGET, CONTEXT, now=now)
+    assert client.state == expected['state']
+    assert set(result.answers) == set(expected['questions'])
+    for name, question in expected['questions'].items():
+        assert list(client.questions[name]['criteria']) == question['options']
+        assert client.questions[name]['instructions'] == question['instructions']
+    for key in ('rubric','example_ids','tasks','dynamic_elements'):
+        if key not in proposal:
+            assert child.briefing_state()[key] == before[key]
+    assert child.parent_fingerprint == parent.fingerprint
+    assert parent.briefing_state() == before
+
+
 def test_jev_cache_identity_separates_custom_servers_without_disclosing_endpoint_details():
     first = JevConfiguration(base_url="https://first.example/private-token")
     second = JevConfiguration(base_url="https://second.example/private-token")

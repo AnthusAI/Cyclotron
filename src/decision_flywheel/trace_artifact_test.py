@@ -4,6 +4,12 @@ import json
 from .trace_artifact import read_trace, render_trace, recover_configurations, exchanges_at
 
 
+def test_exported_playback_exposes_the_same_device_safe_areas_as_the_app():
+    html=render_trace([])
+    assert 'viewport-fit=cover' in html
+    assert 'user-scalable=no' not in html
+
+
 def test_the_shadcn_shell_is_bundled_offline_with_no_external_script_or_font_requests():
     html=render_trace([])
     assert 'data-ui="shadcn"' in html

@@ -60,17 +60,21 @@ html,body,#root {height:100%;overflow:hidden}
 body {margin:0;min-width:360px;-webkit-font-smoothing:antialiased}
 h1,h2,h3,h4,h5,h6,[data-slot="card-title"],.font-heading {font-family:'Blinker',sans-serif;font-weight:600}
 .app-shell > header p.font-semibold {font-family:'Blinker',sans-serif;font-weight:600}
-.cyclotron-brand-layout {display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto;width:fit-content;max-width:calc(100vw - 6rem)}
-.cyclotron-brand {font-family:'Blinker',sans-serif;font-size:1.5rem;font-weight:600;line-height:1.2}
-.cyclotron-cycle-mark {display:flex;align-items:center;justify-content:center;min-width:0}
-.cyclotron-tagline {grid-column:1 / -1;width:max-content;max-width:100%;font-family:'Blinker',sans-serif;font-size:.625rem;font-weight:400;letter-spacing:.08em;line-height:1.3;color:var(--muted-foreground)}
-.app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.app-shell {height:100dvh;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
 .app-shell > header {flex-shrink:0}
-.app-header {--app-header-height:4.625rem;position:relative;z-index:50}
+.app-header {--app-header-height:3rem;position:relative;z-index:50}
 .explorer-main {display:flex;flex-direction:column;flex:1;min-height:0}
 .explorer-main > :not(.workspace) {flex-shrink:0}
-.run-statistics {max-height:160px;overflow:auto}
-.workspace {position:relative;display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:16px;align-items:stretch}
+.run-statistics {max-height:min(320px,40vh);overflow:auto}
+.workspace {position:relative;display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:8px;align-items:stretch}
+.timeline-controls {flex-shrink:0}
+.run-workspace > :not(:last-child) {flex-shrink:0}
+.timeline-footer {padding:4px 8px!important;display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
+.timeline-footer > :first-child {flex:1;min-width:0}
+.timeline-footer > details {margin:0!important;flex-shrink:0}
+.timeline-footer > details[open] {flex-basis:100%}
+.inspector-card > [data-slot="card-header"] {padding:4px 8px!important}
+.inspector-body {padding:8px!important}
 .timeline-pane {min-height:0;min-width:0;display:flex;flex-direction:column}
 .timeline-pane > :not(.timeline-viewport) {flex-shrink:0}
 .timeline-viewport {flex:1;min-height:0;overflow:hidden}
@@ -194,6 +198,8 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 .labeling-card, .labeling-card-content { min-width:0; max-width:100%; }
 .classifier-feedback-strip { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(260px,1fr); gap:12px; overflow-x:auto; min-width:0; width:100%; max-width:100%; padding-bottom:6px; overscroll-behavior-x:contain; scroll-snap-type:x proximity; }
 .classifier-feedback-strip > section { scroll-snap-align:start; }
+/* Expanded graphs must not collapse the article or push actions off screen. */
+[data-labeling-view="true"] .classifier-feedback-strip { max-height:50%; flex-shrink:1; min-height:0; overflow-y:auto; }
 .classifier-metrics[data-embedded="true"] { background:var(--muted); padding:8px; }
 .classifier-metrics[data-embedded="true"] > div { display:block; }
 .classifier-metrics[data-embedded="true"] [data-slot="card"] { border:0; background:transparent; padding:0; box-shadow:none; }
@@ -208,6 +214,9 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Geist Mono Variabl
 [data-confidence-index="2"] { background:#f59e0b; }
 [data-confidence-index="3"] { background:#ec4899; }
 .confidence-key { display:inline-block; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+@media (max-width:1024px), (pointer:coarse) {
+  .cyclotron-workspace :is(button,input,select) { min-height:44px; }
+}
 @container (max-width:240px) {
   .prediction-choices { flex-direction:row; align-items:stretch; }
   .prediction-buttons { flex:1; min-width:0; flex-direction:column; }

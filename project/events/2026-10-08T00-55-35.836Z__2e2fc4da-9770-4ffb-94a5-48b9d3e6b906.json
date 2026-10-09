@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "2e2fc4da-9770-4ffb-94a5-48b9d3e6b906",
+  "issue_id": "decision-flywheel-7fc3c046-c2b8-4eec-9a41-22b82a5932d1",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-08T00:55:35.836Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "860b3dd3-8852-4ef2-b935-1e7f999e9923",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-5",
+      "name": "Technology acceptance"
+    }
+  }
+}

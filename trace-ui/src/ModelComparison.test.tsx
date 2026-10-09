@@ -1,8 +1,27 @@
-import {render,screen,fireEvent,cleanup} from '@testing-library/react'
+import {render,screen,fireEvent,cleanup,within} from '@testing-library/react'
 import {expect,it,afterEach} from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import {ModelComparison,PlaybackModelComparison} from './ModelComparison'
 afterEach(cleanup)
+
+it('keeps raw and final output colors theme aware in curves and metric labels',()=>{
+  const metrics={accuracy:1,per_class:{},calibration:{count:1,ece:.2,bins:[{count:1,mean_confidence:.8,accuracy:1}]}}
+  const {container}=render(<ModelComparison comparison={{count:1,missing_raw_count:0,raw:metrics,final:metrics}}/> )
+  expect([...container.querySelectorAll('polyline')].map(node=>node.getAttribute('stroke'))).toEqual(['var(--calibration-raw)','var(--calibration-final)'])
+  expect(within(container.querySelector('table')!).getByRole('rowheader',{name:'Final classifier'}).style.color).toBe('var(--calibration-final)')
+})
+
+it('exposes paired calibration bin support to touch and keyboard readers without hover',()=>{
+  const raw={accuracy:.5,per_class:{},calibration:{count:2,ece:.3,bins:[{count:2,mean_confidence:.8,accuracy:.5}]}}
+  const final={accuracy:1,per_class:{},calibration:{count:2,ece:.1,bins:[{count:2,mean_confidence:.9,accuracy:1}]}}
+  render(<ModelComparison comparison={{count:2,missing_raw_count:0,raw,final}}/> )
+  fireEvent.click(screen.getByText('Calibration bins'))
+  const table=screen.getByRole('table',{name:'Calibration bin details'})
+  expect(table).toBeVisible()
+  expect(table.querySelectorAll('tbody tr')).toHaveLength(2)
+  expect(table).toHaveTextContent('Raw decision model80.0%50.0%2')
+  expect(table).toHaveTextContent('Final classifier90.0%100.0%2')
+})
 
 it('shows a supported point for each output even when only one bin is occupied',()=>{
   const metrics={accuracy:1,per_class:{},calibration:{count:3,ece:.2,bins:[{count:3,mean_confidence:.8,accuracy:1}]}}

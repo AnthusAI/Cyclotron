@@ -12,7 +12,7 @@ from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
 
 class ReviewerFlywheel:
     def __init__(self, store: ReviewStore, core: DecisionFlywheel, *, stage="rubric", retrospective_limit=200,
-                 min_stage_evaluation_per_class=20, rubric_changes_every=2, include_protected_guidance=True):
+                 min_stage_evaluation_per_class=20, rubric_changes_every=2, include_protected_guidance=False):
         self.store, self.core = store, core
         self.stage, self.retrospective_limit = stage, retrospective_limit
         self.min_stage_evaluation_per_class = min_stage_evaluation_per_class
@@ -119,8 +119,8 @@ class ReviewerFlywheel:
     def sync_optimizer_context(self):
         """Use the user's explanations as guidance, never as extra fit labels.
 
-        This reviewer intentionally includes protected-role comments. Their
-        reuse is visible and invalidates independent evaluation claims.
+        Only eligible training comments are sent by default. Explicitly opting
+        into protected guidance marks evaluation as exposed and non-independent.
         """
         training, _, _ = self.partitions()
         training_ids = {row.item.id for row in training}

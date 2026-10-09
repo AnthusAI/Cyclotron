@@ -68,7 +68,7 @@ def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_pr
     finally:session.close()
 
 
-def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_prediction(tmp_path):
+def test_cyclotron_undo_reopens_the_last_item_and_reuses_its_displayed_prediction(tmp_path):
     from .workspace_session import freeze_configuration
     from .flywheel import FittedClassifier, development_assignment
     from .classifier_config import ClassifierConfig
@@ -138,7 +138,7 @@ def test_scorecard_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
         session.close()
 
 
-def test_corrected_scorecard_feedback_invalidates_learning_and_survives_restart_without_paid_calls(tmp_path):
+def test_corrected_cyclotron_feedback_invalidates_learning_and_survives_restart_without_paid_calls(tmp_path):
     from .workspace_session import freeze_configuration
     from .flywheel import FittedClassifier, development_assignment
     from .classifier_config import ClassifierConfig
@@ -352,7 +352,7 @@ def test_backfill_predicts_from_zero_then_replays_old_feedback_with_a_new_human_
     config=freeze_configuration(store,{'classifier_ids':['a'],'item_list_id':'list','max_requests':10,'max_optimizer_calls':3,'optimize_every':20,'rubric_changes_every':2,'seed':'seed'})
     parent=store.create_run('Anthus','live',config,items=store.list_items('list'))
     store.label_item('a',1,'list','one',1,'no','Original explanation','original')
-    run=store.extend_scorecard(parent['id'],['b'],name='Anthus')
+    run=store.extend_cyclotron(parent['id'],['b'],name='Anthus')
     class Model:
         model_identity='fake'
         async def classify_many(self,configs,target,training,**kwargs):
@@ -411,6 +411,58 @@ def test_two_classifiers_share_prediction_and_keep_feedback_separate_after_resta
     assert {e['classifier_id'] for e in feedback}=={'a','b'}
     assert all(e['metrics']['window_size']==200 and e['metrics']['count']==1 for e in events if e['kind']=='cycle-metrics')
     session.close()
+
+
+def test_application_traces_and_predictions_name_pinned_definition_revisions_after_restart(tmp_path):
+    from .cyclotron_runtime import CyclotronRuntime
+    store=WebStore(tmp_path/'web.sqlite')
+    for key in ('a','b'):
+        store.save_classifier(key,key,{'question':'Original question','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_cyclotron_definition('card','Card',[{'id':'a','revision':1},{'id':'b','revision':1}],{})
+    store.save_item_list('list','List')
+    store.upsert_list_items('list',[{'id':'one','occurred_at':'2026-01-01','values':{'text':'Text'}}])
+    runtime=CyclotronRuntime(store,tmp_path/'runs',model_factory=lambda _:None,sink_factory=lambda _:None)
+    run=runtime.create_run('Pinned',{'cyclotron_id':'card','item_list_id':'list','max_requests':10,
+        'max_optimizer_calls':3,'optimize_every':20})
+    class Model:
+        model_identity='fake';calls=0
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.calls+=1
+            assert all(config.task.instructions=='Original question' for config in configs.values())
+            return BatchedAnswers({cid:{'decision':DecisionResult('yes',{'yes':.7,'no':.3})}
+                                  for cid in configs},'fake',{},1)
+    class Sink:
+        def __init__(self):self.events=[]
+        def ingest(self,source,event):
+            store.append_event(run['id'],source,event)
+            self.events.append(event)
+    sink=Sink();model=Model()
+    session=WorkspaceSession(store,run,tmp_path/'run',model,agent([]),sink)
+    shown=asyncio.run(session.prepare())
+    session.close()
+    store.save_classifier('a','Renamed',{'question':'New question','classes':[{'label':'yes'},{'label':'no'}]})
+    session=WorkspaceSession(store,store.run(run['id']),tmp_path/'run',model,agent([]),sink)
+    try:
+        assert asyncio.run(session.prepare())==shown
+        asyncio.run(session.feedback({'item_id':'one','presentation_id':shown['prediction']['presentation_id'],
+            'labels':[{'classifier_id':cid,'label':'yes','comment':'Explained vote'} for cid in ('a','b')]},'vote'))
+        assert model.calls==1
+        for stored in store.all_events(run['id']):
+            event=stored['payload']
+            if event.get('classifier_id') in ('a','b'):
+                assert event['classifier_revision']==1
+            else:
+                assert event['classifier_revisions']=={'a':1,'b':1}
+            assert event['cyclotron_definition_revision']==run['config']['cyclotron_definition_revision']
+            assert event['cyclotron_definition_fingerprint']==run['config']['cyclotron_definition_fingerprint']
+        assert {'prediction','human-feedback','cycle-metrics'} <= {e['kind'] for e in sink.events}
+        assert all(row['classifier_revision']==1 for row in shown['prediction']['classifiers'].values())
+        for event in sink.events:
+            if event['kind']=='prediction':
+                assert event['version']==shown['prediction']['classifiers'][event['classifier_id']]['version']
+        assert all(row['classifier_revision']==1 for row in store.item_labels('list','one',1))
+        assert all(row['comment']=='Explained vote' for row in store.item_labels('list','one',1))
+    finally:session.close()
 
 
 def test_optimizer_traces_belong_only_to_the_classifier_that_requested_them(tmp_path,monkeypatch):

@@ -65,11 +65,11 @@ adapter, storage choice, and event consumer are application decisions.
   optimization decisions in the browser.
 - `WebWorker` is an API command runner. Its `WorkspaceRuntime` seam owns
   application session creation and command semantics. `ArticleReviewRuntime`
-  is the optional single-classifier arXiv adapter; `ScorecardRuntime` is the
+  is the optional single-classifier arXiv adapter; `CyclotronRuntime` is the
   Cyclotron adapter for one shared decision request and independent classifier
   wheels. Neither adds article-review imports to the worker or the core.
   A runtime can return explicit item updates or make its own atomic
-  scorecard/catalog writes; the worker records the command result, streams
+  cyclotron/catalog writes; the worker records the command result, streams
   events, and records failures.
 - Provider adapters translate between the core contracts and Jev, Kev, Laya, or
   another decision-model API.
@@ -96,12 +96,13 @@ The active version keeps context, fitted head, calibration, requests, and
 evidence together. A candidate becomes active only when its configured
 evaluation accepts it.
 
-## Scorecards: many classifiers, one request
+## Cyclotrons: many classifiers, one request
 
 A **classifier** answers one human question, such as “Should this item be in the
-knowledge base?” A **scorecard** is a versioned, ordered group of classifiers
+knowledge base?” A **cyclotron** is a versioned, ordered group of classifiers
 that apply to the same item. Each classifier keeps its own rubric, examples,
-questions, labels, learned head, and metrics.
+questions, labels, learned head, and metrics. A cyclotron is one decision about
+one kind of item, which may ask several classifier questions to make it.
 
 Cyclotron can place all compatible classifier contexts in one decision-model
 request. The target item appears once. Each classifier context stays scoped to
@@ -110,14 +111,14 @@ own ML head makes the final prediction. A human can label several classifiers fo
 the same item in one review. Usage is counted once, and the complete request is
 cached by its full fingerprint.
 
-<img src="docs/diagrams/scorecards.svg" alt="A versioned scorecard holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
+<img src="docs/diagrams/cyclotrons.svg" alt="A versioned cyclotron holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
 
-[Editable D2 source](docs/diagrams/scorecards.d2)
+[Editable D2 source](docs/diagrams/cyclotrons.d2)
 
 Changing a classifier creates a new classifier revision and an affected
-scorecard revision. A run retains the scorecard revision and learned checkpoints
+cyclotron revision. A run retains the cyclotron revision and learned checkpoints
 that produced its predictions. This lets a team compare versions or revert a
-scorecard without rewriting earlier evidence.
+cyclotron without rewriting earlier evidence.
 
 ## Design and implementation status
 
@@ -126,9 +127,19 @@ They define the work that the library must support.
 They do not prove that the current reviewer runs all these steps.
 
 The live reviewer now calls the reusable `DecisionFlywheel` core.
-The core analyzes eligible votes and comments, validates proposals, collects Jev features,
+The core analyzes eligible votes and comments, validates proposals, collects decision-model features,
 fits and calibrates the ML head, compares development results, and promotes or rejects a version.
 Private SQLite records preserve the active version, request cache, and actual transcripts.
+
+Offline integration specs exercise explanations, validated proposals, regenerated
+features, out-of-fold calibration, served learned predictions, restart cache reuse,
+and correction invalidation. The provider lifecycle spec runs the same contract
+against fake Jev, Kev, and Laya transports. These prove the technology path, not
+classifier quality or guaranteed improvement on a real dataset:
+
+```bash
+pytest tests/complete_feedback_loop_behavior_test.py tests/live_review_flow_test.py tests/provider_feature_lifecycle_test.py
+```
 
 Export a private, offline debugging recording:
 
@@ -308,7 +319,7 @@ the model identity and complete state/questions: target, rubric, ordered example
 and extra classifications. Changed requests require new answers; retraining a head
 alone can reuse unchanged decision answers.
 
-For shared scorecard calls, the answer key includes the complete joint request,
+For shared cyclotron calls, the answer key includes the complete joint request,
 including sibling classifiers. A solo answer is not interchangeable with a joint
 answer. Only the most recently prepared batch is eligible for in-memory reuse;
 older batches remain available through the durable exact-request cache.
@@ -368,12 +379,12 @@ passing tests does not establish live-model quality or improvement.
 
 ### Optimizer transports
 
-The scorecard editor's **Optimizer transport** selects `openai` (the existing
+The cyclotron editor's **Optimizer transport** selects `openai` (the existing
 default) or `litellm`. For the latter, install
 `pip install -e '.[litellm-optimizer]'`, then set the optimizer model to a
 LiteLLM provider-qualified identifier, such as `anthropic/your-model` or
 `ollama/your-model`. Configure credentials through the server environment or its
-gitignored `.env`, never through scorecard settings. Runs pin the transport and
+gitignored `.env`, never through cyclotron settings. Runs pin the transport and
 model; editing a definition does not change an existing run. The native optimizer
 and its proposal validation stay the same—this is not DSPy. Both transports
 retain returned usage and tool calls, count failed attempts against the call
@@ -403,7 +414,7 @@ Its structured-state transport carries scoped rubrics, labeled examples, and all
 classifier questions in one call. This enables context experiments, not a claim
 that Laya has demonstrated few-shot improvements. Inputs over the conservative
 checkpoint token budget fail explicitly; provider-reported truncation is rejected.
-Use a checkpoint with enough room for the complete scorecard, or reduce context
+Use a checkpoint with enough room for the complete cyclotron, or reduce context
 explicitly. There is no silent truncation or provider fallback.
 
 ## Terms
@@ -418,8 +429,8 @@ Use these terms with the same meaning throughout the system.
 | Rubric | The criteria that explain which label an item should receive |
 | Decision element | One question or programmatic input inside a classifier context |
 | Classifier | One versioned human decision, its context, and its learned prediction head |
-| Scorecard | A versioned, ordered group of classifier revisions and shared run settings |
-| Decision model | A model, such as Jev, that answers the scorecard questions |
+| Cyclotron | A versioned, ordered group of classifier revisions and shared run settings |
+| Decision model | A model, such as Jev, that answers the cyclotron questions |
 | Feature | A numerical input derived from a decision-element answer |
 | ML model | The fitted decision head that maps features to a final prediction |
 | LLM optimizer | The agent that analyzes feedback and proposes structural changes |
@@ -595,7 +606,7 @@ The system needs examples of both labels before it can learn their difference.
 
 [Editable D2 source](docs/diagrams/improvement.d2)
 
-The optimizer receives training items, human labels, comments, prediction errors, and the current scorecard.
+The optimizer receives training items, human labels, comments, prediction errors, and the current cyclotron.
 It searches for criteria that explain the human's decisions.
 It states a possible rule and identifies the training feedback that supports it.
 The rule is a hypothesis until evaluation supports it.
@@ -1235,8 +1246,36 @@ not a claim that the concept is invalid or that training separation proves succe
 
 The first acceptance milestone is an auditable single-feature comparison from the
 feature bank through real Jev answers, ML fitting, and a visible development result.
-Combination search follows after that path is verified. No DSPy, retrieval, or
+Explicit bounded combination trials are available below. No DSPy, retrieval, or
 long-document input-filter optimization is added by this plan.
+
+Explicit group trials are now available in the numerical classifier stage. Choose
+retained question IDs from `wheel.feature_bank()`; the library does not choose
+groups from audit data or start a combinatorial search automatically:
+
+```python
+result = await wheel.step(
+    "classifier", training, development,
+    protected=protected, propensities=propensities,
+    feature_groups=((first_question_id, second_question_id),),
+    max_group_configurations=3,
+    trigger="explicit-feature-group",
+)
+```
+
+This plans the pair and its two leave-one-question-out ablations. It freezes the
+current rubric and examples and compares each candidate with the same incumbent
+on the same development items, with natural and equal-class training weights.
+The ceiling counts additional group configurations, not provider requests;
+the existing request ceiling still applies. An oversized plan is rejected rather
+than silently truncated. The default development coverage floor remains 20 per
+class. These are selection measurements, not an independent accuracy claim.
+
+Trials record exact additions, removals and wording revisions, weighting, scores,
+and answer dependencies. The `feature-group-trial-completed` events appear in the
+ML optimization lane. Completed work survives restart; changed feedback or
+context permits a fresh trial. Losing ideas remain in the feature bank. Calls
+without `feature_groups` preserve the existing behavior and cache identity.
 
 The reusable interface is `await wheel.improve_controls(..., max_feature_trials=3)`
 and `wheel.feature_bank()` for model-free inspection. The ceiling bounds attempted
@@ -1427,9 +1466,9 @@ Downloaded datasets and model weights retain their upstream terms.
 
 ## Workspace catalog and item imports
 
-The workspace exposes **Scorecards**, **Item lists**, and **Optimizations**.
-Each scorecard shows its ordered classifiers and pinned configuration revisions.
-Create a scorecard, add existing classifiers or create a new classifier in its
+The workspace exposes **Cyclotrons**, **Item lists**, and **Optimizations**.
+Each cyclotron shows its ordered classifiers and pinned configuration revisions.
+Create a cyclotron, add existing classifiers or create a new classifier in its
 membership editor, then save a new immutable definition. Existing sessions keep
 their frozen versions. Inspecting or editing configuration makes no model calls.
 Create independent binary or multi-class classifier configurations with ordered
@@ -1453,7 +1492,7 @@ Full dataset refreshes may be large; use a local JSONL export for small demos.
 
 The library's Jev adapter can batch several independent classifiers and their
 supporting questions into one request with scoped contexts and mapped results.
-From **Optimizations → Run history → New run**, select an item list and scorecard
+From **Optimizations → Run history → New run**, select an item list and cyclotron
 to start an interactive session. Each item gets a shared decision-model request,
 separate predictions, and separate label and explanation inputs. The session uses
 the reusable `DecisionFlywheel` for each classifier: feedback checks learning
@@ -1474,5 +1513,5 @@ explanations remain local to the browser session and prediction presentation;
 they are not counted as saved feedback. The activity inspector pairs model calls
 by recorded identities and never substitutes a nearby unrelated request.
 
-See [scorecard versioning and calibration](docs/scorecard-versioning.md) and
+See [cyclotron versioning and calibration](docs/cyclotron-versioning.md) and
 [remaining workspace acceptance work](docs/web-workspace-plan.md).

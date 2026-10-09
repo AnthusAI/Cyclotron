@@ -67,7 +67,7 @@ def test_the_web_worker_exposes_the_runtime_seam_even_while_the_legacy_adapter_r
     source = Path(__file__).with_name("web_worker.py").read_text()
     imports = [node.module for node in ast.walk(ast.parse(source))
                if isinstance(node, ast.ImportFrom) and node.module]
-    # The scorecard workspace still uses its established adapter during the
+    # The cyclotron workspace still uses its established adapter during the
     # migration, but applications can now inject their own runtime without
     # reaching into the worker's reviewer implementation.
     assert "web_store" not in imports

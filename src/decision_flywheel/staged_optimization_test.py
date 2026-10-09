@@ -10,6 +10,142 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
 
 
+def test_an_explicit_feature_group_runs_through_the_inspectable_numerical_step_only(tmp_path):
+    from .feature_bank import FeatureBank
+    def forbidden(_):
+        raise AssertionError('group experiments must not call the optimizer')
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden))
+    keys = [FeatureBank(wheel.db).register({'name':name,'instructions':name+'?','labels':['yes','no']},
+        rationale='Feedback concept', evidence={}) for name in ('practical','other')]
+    try:
+        result = asyncio.run(wheel.step('classifier', TRAIN, DEV, protected=(),
+            propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1,
+            feature_groups=(tuple(keys),), max_group_configurations=3, trigger='explicit-feature-group'))
+        assert result['status'] == 'completed'
+        assert len(result['result']['feature_group_plan']) == 3
+        events = [event for event in wheel.history(10000) if event['kind']=='feature-group-trial-completed']
+        assert len(events) == 6 and all(event['step_id'] == result['step_id'] for event in events)
+        assert all(event['step_stage'] == 'classifier' for event in events)
+    finally:
+        wheel.close()
+
+
+@pytest.mark.parametrize('stage',['rubric','examples','questions'])
+def test_other_stages_cannot_silently_run_feature_group_experiments(tmp_path, stage):
+    def forbidden(_):
+        raise AssertionError('invalid mixed stages must not reach the optimizer')
+    model = FakeModel()
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK), model, OptimizerAgent(forbidden))
+    try:
+        with pytest.raises(ValueError, match='classifier stage'):
+            asyncio.run(optimize_stage(wheel, stage, TRAIN, DEV, protected=(),
+                propensities={row.item.id:1. for row in TRAIN}, feature_groups=(('one','two'),)))
+        assert model.calls == 0
+    finally:
+        wheel.close()
+
+
+def test_question_discovery_can_test_datetime_alone_and_send_it_in_actual_requests(tmp_path):
+    from dataclasses import replace
+    from datetime import datetime
+    from .models import DecisionResult
+    from .staged_optimization import stage_briefing
+    requests = []
+    class RecordingModel(FakeModel):
+        async def classify(self, config, target, training, *, now=None, event_sink=None):
+            requests.append(config.request(target, training, now=now))
+            batch = await super().classify(config, target, training, now=now, event_sink=event_sink)
+            if config.dynamic_elements:
+                p = .98 if target.values['text'].startswith('yes') else .02
+                batch = replace(batch, answers={'decision': DecisionResult(
+                    'include' if p > .5 else 'exclude', {'include':p, 'exclude':1-p})})
+            return batch
+    optimizer = OptimizerAgent(lambda _: OptimizerReply(
+        '{"dynamic_elements":["current_datetime"],"rationale":"Compare article date to current time"}', 'fake'))
+    config = ClassifierConfig(TASK, rubric='Recent practical work', example_ids=('t0',))
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, RecordingModel(), optimizer)
+    briefing = stage_briefing(wheel, 'questions', TRAIN, DEV, ())
+    assert briefing.payload['current']['allowed_proposal_controls'] == ['tasks', 'dynamic_elements']
+    result = asyncio.run(optimize_stage(wheel, 'questions', TRAIN, DEV, protected=(),
+        propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1))
+    assert result['control_under_test'] == 'dynamic_elements'
+    dynamic_requests = [request for request in requests if 'current_datetime' in request['state']]
+    assert dynamic_requests
+    for request in dynamic_requests:
+        assert datetime.fromisoformat(request['state']['current_datetime'].replace('Z', '+00:00')).utcoffset().total_seconds() == 0
+        assert request['state']['rubric'] == config.rubric
+        assert set(request['questions']) == {'decision'}
+    assert result['proposal']['dynamic_elements'] == ['current_datetime']
+    assert result['promoted']
+    assert wheel.active.config.dynamic_elements == ('current_datetime',)
+    assert wheel.active.config.rubric == config.rubric
+    assert wheel.active.config.example_ids == config.example_ids
+    assert wheel.active.config.tasks == config.tasks
+    wheel.close()
+    reopened = DecisionFlywheel(tmp_path/'wheel.sqlite', config, RecordingModel(), optimizer)
+    assert reopened.active.config.dynamic_elements == ('current_datetime',)
+    prediction = asyncio.run(reopened.predict(DEV[1].item, TRAIN))
+    assert prediction.label == 'include'
+    assert 'current_datetime' in requests[-1]['state']
+    reopened.close()
+
+
+@pytest.mark.parametrize('proposal', [
+    {'tasks': [], 'dynamic_elements': ['current_datetime']},
+    {'dynamic_elements': ['current_datetime'], 'rubric': 'Changed'},
+    {'dynamic_elements': ['execute_python']},
+])
+def test_question_dynamic_candidates_cannot_mix_controls_or_execute_generated_code(tmp_path, proposal):
+    model = FakeModel()
+    config = ClassifierConfig(TASK, rubric='Existing')
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, model,
+        OptimizerAgent(lambda _: OptimizerReply(json.dumps(proposal), 'fake')))
+    with pytest.raises(ValueError):
+        asyncio.run(optimize_stage(wheel, 'questions', TRAIN, DEV, protected=(),
+            propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1))
+    assert model.calls == 0
+    assert wheel.active.config == config
+    wheel.close()
+
+
+@pytest.mark.parametrize('stage', ['rubric', 'examples'])
+def test_other_stages_cannot_sneak_dynamic_inputs_into_their_candidate(tmp_path, stage):
+    model = FakeModel()
+    control = 'rubric' if stage == 'rubric' else 'example_ids'
+    proposal = {control: 'Changed' if stage == 'rubric' else [],
+                'dynamic_elements': ['current_datetime']}
+    config = ClassifierConfig(TASK, rubric='Existing')
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, model,
+        OptimizerAgent(lambda _: OptimizerReply(json.dumps(proposal), 'fake')))
+    with pytest.raises(ValueError, match='only its assigned control'):
+        asyncio.run(optimize_stage(wheel, stage, TRAIN, DEV, protected=(),
+            propensities={row.item.id:1. for row in TRAIN}))
+    assert model.calls == 0
+    assert wheel.active.config == config
+    wheel.close()
+
+
+def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
+    from .flywheel import _json
+    config = ClassifierConfig(TASK, rubric='Existing')
+    ceiling = max(len(_json(config.request(row.item, TRAIN)).encode()) for row in (*TRAIN, *DEV))
+    requests = []
+    class RecordingModel(FakeModel):
+        async def classify(self, config, target, training, **kwargs):
+            requests.append(config.request(target, training, now=kwargs.get('now')))
+            return await super().classify(config, target, training, **kwargs)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, RecordingModel(),
+        OptimizerAgent(lambda _: OptimizerReply('{"dynamic_elements":["current_datetime"]}', 'fake')),
+        max_request_bytes=ceiling)
+    result = asyncio.run(optimize_stage(wheel, 'questions', TRAIN, DEV, protected=(),
+        propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1))
+    assert not result['promoted']
+    assert result['error_type'] == 'ValueError'
+    assert requests == []
+    assert wheel.active.config == config
+    wheel.close()
+
+
 def test_changed_original_prediction_evidence_does_not_reuse_a_completed_optimizer_stage(tmp_path):
     from dataclasses import replace
     calls = []

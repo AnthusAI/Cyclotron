@@ -13,7 +13,8 @@
     "trace-ui/src/metricRates.ts",
     "trace-ui/src/lib/utils.ts",
     "trace-ui/src/styles/shared.css",
-    "trace-ui/tailwind-preset.ts"
+    "trace-ui/tailwind-preset.ts",
+    "trace-ui/src/CyclotronBrand.tsx"
   ],
   "exports": {
     "./components/ui/*": "./trace-ui/src/components/ui/*.tsx",
@@ -22,7 +23,8 @@
     "./components/classifier-metrics": "./trace-ui/src/ClassifierMetrics.tsx",
     "./lib/utils": "./trace-ui/src/lib/utils.ts",
     "./styles/shared.css": "./trace-ui/src/styles/shared.css",
-    "./tailwind-preset": "./trace-ui/tailwind-preset.ts"
+    "./tailwind-preset": "./trace-ui/tailwind-preset.ts",
+    "./components/cyclotron-brand": "./trace-ui/src/CyclotronBrand.tsx"
   },
   "dependencies": {
     "@fontsource-variable/oxanium": "^5.3.0",

@@ -1,4 +1,5 @@
 import type {CalibrationCurve} from './ReliabilityCurve'
+import {CalibrationBins} from './CalibrationBins'
 import {useEffect,useState} from 'react'
 import {metricRates,type ClassRole,type RateMetrics} from './metricRates'
 
@@ -9,7 +10,7 @@ const delta=(before:number|null|undefined,after:number|null|undefined)=>before==
 const signed=(value:number|null,scale=100,suffix=' pp')=>value==null?'—':`${value<0?'−':value>0?'+':''}${(Math.abs(value)*scale).toFixed(scale===100?1:3)}${suffix}`
 export function ModelComparison({comparison,classes}:{comparison?:DecisionModelComparison;classes?:ClassRole[]}){
   if(!comparison?.count)return <p className="text-xs text-muted-foreground">No matched raw decision-model and final-classifier predictions recorded yet.</p>
-  const outputs=[{name:'Raw decision model',metrics:comparison.raw,color:'#3b82f6'},{name:'Final classifier',metrics:comparison.final,color:'#22c55e'}]
+  const outputs=[{name:'Raw decision model',metrics:comparison.raw,color:'var(--calibration-raw)'},{name:'Final classifier',metrics:comparison.final,color:'var(--calibration-final)'}]
   const config=classes
   const metric=(metrics:OutputMetrics,key:'recall'|'precision')=>metricRates(metrics,config)[key]
   return <div className="space-y-3">
@@ -23,6 +24,7 @@ export function ModelComparison({comparison,classes}:{comparison?:DecisionModelC
       <text x="100" y="149" fontSize="10" fill="currentColor">Confidence →</text>
       <text x="37" y="10" fontSize="9" fill="currentColor">Observed correctness</text>
     </svg>
+    <CalibrationBins outputs={outputs.map(({name,metrics})=>({name,bins:metrics.calibration.bins}))}/>
     {outputs.map(({name,metrics,color})=><p key={name} className="text-xs" style={{color}}>{name}: ECE {percent(metrics.calibration.ece)} · Brier {metrics.calibration.brier?.toFixed(3)??'—'} · {metrics.calibration.count} probability vectors</p>)}
     <p className="text-xs">Final − raw: ECE change {signed(delta(comparison.raw.calibration.ece,comparison.final.calibration.ece))} · Brier change {signed(delta(comparison.raw.calibration.brier,comparison.final.calibration.brier),1,'')}</p>
     <p className="text-xs text-muted-foreground">Lower ECE and Brier are better. Diagonal: perfect calibration. Small samples are noisy.</p>

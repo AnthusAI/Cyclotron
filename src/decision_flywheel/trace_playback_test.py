@@ -104,8 +104,8 @@ def test_operational_prediction_details_link_the_actual_request_and_disagreement
     harness = r'''
 const assert=require('node:assert/strict'),elements={},handlers={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
-global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},cloneNode(){return {...this};},append(){},setAttribute(){}})};
-global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
+global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},cloneNode(){return {...this};},append(...children){this.textContent+=children.map(child=>child.textContent||'').join('');},setAttribute(){}})};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.window=[100,300];}on(n,f){handlers[n]=f;}redraw(){}addCustomTime(){}setCustomTime(){}setCustomTimeTitle(title,id){this.cursorTitle={title,id};}setItems(i){this.items=i;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:this.window[0],end:this.window[1]}}moveTo(){}fit(){}}};
 global.CustomEvent=class{constructor(type,options){this.type=type;this.detail=options.detail;}};
 global.window={addEventListener(){},dispatchEvent(){}};
 Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelector(){return null;},style:{setProperty(){}}});
@@ -185,7 +185,13 @@ const savedVote=events[4];events[4]={kind:'nothing'};assert.equal(agreement({eve
 assert.ok(!timelineData.groups.some(group=>group.id==='cycles'));
 assert.ok(!timelineData.groups.some(group=>group.id==='flywheel-cycles'));
 assert.deepEqual(timelineData.groups.find(group=>group.id==='configuration-group').nestedGroups,['configuration','configuration-count']);
+const initialCount=timelineItems.find(item=>item.group==='configuration-count');
+const sameCount={...initialCount,id:'same-count',event_index:1,content:document.createElement('span')};
+const countCell=cycleCells([initialCount,sameCount])[0];
+assert.equal(countCell.content.textContent,'1');
+assert.equal(cellDetails.get(countCell.id).length,2);
 handlers.select({items:['configuration-count:0']});
+assert.deepEqual(timeline.cursorTitle,{title:'',id:'playback'});
 assert.equal(position,0);
 assert.equal(elements['event-title'].textContent,'Active configuration');
 assert.ok(elements['event-content'].textContent.includes('classification_count'));
@@ -303,7 +309,7 @@ const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},append(){},setAttribute(){}})};
 let select;const handlers={};
-global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
+global.vis={Timeline:class{constructor(c,i,g,o){this.options=o;this.groups=g;}on(name,fn){handlers[name]=fn;if(name==='select')select=fn;}redraw(){this.redrawn=true;}addCustomTime(){}setCustomTime(){}setCustomTimeTitle(){}setItems(items){this.items=items;}setWindow(a,b){this.window=[+a,+b];}getWindow(){return {start:0,end:1000}}moveTo(point){this.center=+point}fit(){}}};
 global.CustomEvent=class{constructor(type,options){this.type=type;this.detail=options.detail;}};
 global.window={addEventListener(){},dispatchEvent(){}};
 Object.assign(document.getElementById('timeline'),{clientWidth:1000,querySelector(){return null;},style:{setProperty(){}}});

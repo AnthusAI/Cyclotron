@@ -4,9 +4,85 @@ import pytest
 from .web_store import WebStore
 
 
-def test_explicit_feedback_recovery_requeues_only_non_paid_scorecard_commands_and_preserves_failure_history(tmp_path):
+def test_exhaustion_and_its_completed_command_commit_the_run_status_together(tmp_path):
+    store = WebStore(tmp_path/'web.sqlite')
+    run = store.create_run('Replay', 'live', {'input_mode':'replay'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.set_status(run['id'], 'working')
+    store.finish_command(job['id'], 'completed', {'finished':True})
+    assert store.run(run['id'])['status'] == 'completed'
+    assert store.jobs(run['id'])[0]['result'] == {'finished':True}
+
+
+def test_startup_recovers_a_durable_exhaustion_result_without_replaying_or_rewriting_evidence(tmp_path):
+    path = tmp_path/'web.sqlite'
+    store = WebStore(path)
+    run = store.create_run('Replay', 'live', {'input_mode':'replay','frozen':'unchanged'})
+    store.append_event(run['id'], 'feedback', {'kind':'human-feedback','comment':'Preserve me'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.finish_command(job['id'], 'completed', {'finished':True})
+    store.set_status(run['id'], 'ready')  # a pre-fix record or crash between old commits
+    jobs, events = store.jobs(run['id']), store.all_events(run['id'])
+    restored = WebStore(path)
+    restored.recover_interrupted()
+    assert restored.run(run['id'])['status'] == 'completed'
+    assert restored.run(run['id'])['config'] == run['config']
+    assert restored.jobs(run['id']) == jobs and restored.all_events(run['id']) == events
+    assert restored.claim_command() is None
+    restored.recover_interrupted()
+    assert restored.jobs(run['id']) == jobs and restored.all_events(run['id']) == events
+
+
+@pytest.mark.parametrize('value,status', [(False,'completed'), (1,'completed'),
+    ('true','completed'), (None,'completed'), (True,'failed'), (True,'interrupted')])
+def test_recovery_does_not_infer_exhaustion_from_nonboolean_or_unsuccessful_results(tmp_path, value, status):
+    store = WebStore(tmp_path/'web.sqlite')
+    run = store.create_run('Replay', 'live', {'input_mode':'replay'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.finish_command(job['id'], status, {'finished':value})
+    store.recover_interrupted()
+    assert store.run(run['id'])['status'] == 'ready'
+
+
+@pytest.mark.parametrize('later_status', ['pending','running','failed'])
+def test_old_exhaustion_cannot_hide_newer_pending_interrupted_or_failed_work(tmp_path, later_status):
+    store = WebStore(tmp_path/'web.sqlite')
+    run = store.create_run('Replay', 'live', {'input_mode':'replay'})
+    job = store.command(run['id'], 'last', 'replay-next', {})
+    store.claim_command()
+    store.finish_command(job['id'], 'completed', {'finished':True})
+    store.set_status(run['id'], 'ready')
+    later = store.command(run['id'], 'later', 'prepare', {})
+    if later_status != 'pending':
+        store.claim_command()
+        if later_status == 'failed': store.finish_command(later['id'], 'failed', {})
+    store.recover_interrupted()
+    assert store.run(run['id'])['status'] == 'ready'
+    assert store.jobs(run['id'])[0]['status'] == ('interrupted' if later_status == 'running' else later_status)
+
+
+def test_run_cyclotron_identity_uses_version_membership_before_immutable_configuration(tmp_path):
+    store=WebStore(tmp_path/'db')
+    for key in ('old','new'):
+        store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
+    store.save_item_list('list','List')
+    config={'classifiers':[store.classifier('old')],'item_list_id':'list','seed':'seed','cyclotron_id':'original-definition'}
+    run=store.create_run('Original','live',config)
+    assert store.run_cyclotron_id(run['id'])=='original-definition'
+    edition=store.extend_cyclotron(run['id'],['new'],name='Family')
+    assert store.run_cyclotron_id(run['id'])==edition['config']['cyclotron_id']
+    assert store.run(run['id'])['config']==config
+    independent=store.create_run('Independent','recorded',{})
+    assert store.run_cyclotron_id(independent['id']) is None
+    with pytest.raises(ValueError,match='unknown run'):store.run_cyclotron_id('missing')
+
+
+def test_explicit_feedback_recovery_requeues_only_non_paid_cyclotron_commands_and_preserves_failure_history(tmp_path):
     store = WebStore(tmp_path / 'workspace.sqlite')
-    run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})
+    run = store.create_run('Cyclotron', 'live', {'classifiers': [{'id': 'a'}]})
     job = store.command(run['id'], 'undo', 'undo', {})
     store.claim_command()
     store.finish_command(job['id'], 'failed', {'error_type': 'RuntimeError', 'reason': 'state retained'})
@@ -27,7 +103,7 @@ def test_explicit_feedback_recovery_requeues_only_non_paid_scorecard_commands_an
 
 def test_feedback_recovery_cannot_interleave_with_work_or_reactivate_an_inactive_edition(tmp_path):
     store = WebStore(tmp_path / 'workspace.sqlite')
-    run = store.create_run('Scorecard', 'live', {'classifiers': [{'id': 'a'}]})
+    run = store.create_run('Cyclotron', 'live', {'classifiers': [{'id': 'a'}]})
     job = store.command(run['id'], 'undo', 'undo', {})
     store.claim_command(); store.finish_command(job['id'], 'failed', {})
     busy = store.command(run['id'], 'prepare', 'prepare', {})
@@ -36,9 +112,9 @@ def test_feedback_recovery_cannot_interleave_with_work_or_reactivate_an_inactive
     store.claim_command(); store.finish_command(busy['id'], 'completed', {})
     other = store.create_run('New edition', 'live', {'classifiers': [{'id': 'a'}]})
     with store.connect() as db:
-        db.execute('INSERT INTO scorecards VALUES (?,?,?)', ('card', 'Card', 2))
-        db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)', ('card', 1, run['id'], None, run['created_at']))
-        db.execute('INSERT INTO scorecard_versions VALUES (?,?,?,?,?)', ('card', 2, other['id'], run['id'], other['created_at']))
+        db.execute('INSERT INTO cyclotrons VALUES (?,?,?)', ('card', 'Card', 2))
+        db.execute('INSERT INTO cyclotron_versions VALUES (?,?,?,?,?)', ('card', 1, run['id'], None, run['created_at']))
+        db.execute('INSERT INTO cyclotron_versions VALUES (?,?,?,?,?)', ('card', 2, other['id'], run['id'], other['created_at']))
     with pytest.raises(ValueError, match='activate'):
         store.resume_feedback_command(run['id'], job['id'])
     with pytest.raises(ValueError, match='correction or undo'):

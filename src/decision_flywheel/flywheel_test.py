@@ -17,6 +17,29 @@ DEV = tuple(LabeledItem(Item(f"d{i}", {"text": f"{'yes' if i % 2 else 'no'} dev 
                         "include" if i % 2 else "exclude") for i in range(2))
 
 
+def test_declared_no_context_capability_rejects_actual_examples_before_a_provider_call(tmp_path):
+    from .models import ModelCapabilities
+    model = FakeModel()
+    model.capabilities = ModelCapabilities(supports_labeled_context=False)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK, example_ids=('t0',)), model, agent([]))
+    with pytest.raises(ValueError, match='labeled context'):
+        asyncio.run(wheel.predict(DEV[0].item, TRAIN))
+    assert model.calls == 0
+    assert wheel.requests == 0
+    wheel.close()
+
+
+@pytest.mark.parametrize('examples,target', [((),DEV[0].item), (('t0',),TRAIN[0].item)])
+def test_no_context_capability_uses_only_effective_demonstrations_not_the_training_pool(tmp_path, examples, target):
+    from .models import ModelCapabilities
+    model = FakeModel()
+    model.capabilities = ModelCapabilities(supports_labeled_context=False)
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK, example_ids=examples), model, agent([]))
+    asyncio.run(wheel.predict(target, TRAIN))
+    assert model.calls == 1
+    wheel.close()
+
+
 def test_configured_f1_is_recorded_and_used_instead_of_the_default_brier(tmp_path):
     from .selection_policy import SelectionPolicy
     wheel = DecisionFlywheel(tmp_path / 'wheel.sqlite', ClassifierConfig(TASK), FakeModel(), agent([]),

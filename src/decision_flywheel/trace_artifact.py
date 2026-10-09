@@ -121,7 +121,7 @@ def main(argv=None):
 
 
 TEMPLATE = r'''<!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; connect-src 'none'">
 <title>Decision Flywheel — run explorer</title>
 <script>
@@ -202,7 +202,7 @@ for(const item of timelineItems){
  item.content.setAttribute('aria-label',item.title);
  if(item.group==='configuration-count'){
   item.content.textContent=item.title;item.className='marker-classification-count';
-  item.title+= ' active classifications (main decision plus supporting questions)';
+  item.title= `${item.classification_count??item.title} active classifications (main decision plus supporting questions)`;
  }
  if(label&&(item.className==='marker-prediction'||item.className==='marker-human')){
   item.agreement=agreement(item);item.className+=' agreement-'+item.agreement;
@@ -345,7 +345,10 @@ function cycleCells(items){
    if(changedCount!==null)content.textContent=String(changedCount);
   }else if(!rubric&&!ml&&!decision&&!trigger){
    const representative=members.find(m=>m.className.includes('trigger-fired'))||members.at(-1);
-   if(members.length===1||first.group==='configuration-count'||first.group==='triggers')content.append(representative.content.cloneNode(true));
+   if(first.group==='configuration-count'){
+    const changed=members.findLast(member=>member.content.textContent);
+    if(changed)content.append(changed.content.cloneNode(true));
+   }else if(members.length===1||first.group==='triggers')content.append(representative.content.cloneNode(true));
    else content.textContent=String(members.length);
   }
   cellDetails.set(id,[first,...members.filter(member=>member!==first)]);
@@ -530,7 +533,7 @@ function draw(){
  if(event&&stepPositions.has(String(position))){
   const point=new Date(stepPositions.get(String(position)));
   currentStep=ordered.findIndex(record=>record.key===String(position));
-  if(!cursorAdded){timeline.addCustomTime(point,'playback');cursorAdded=true;}
+  if(!cursorAdded){timeline.addCustomTime(point,'playback');timeline.setCustomTimeTitle('','playback');cursorAdded=true;}
   else timeline.setCustomTime(point,'playback');
   revealPointer(point);
  }
@@ -766,7 +769,7 @@ function inspectSource(index,pause=true){
  el('inspector').scrollTop=0;
  const body=el('inspector').querySelector?.('.inspector-body');if(body)body.scrollTop=0;
  const source=reviewHistory[index],row=source.record;
- const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');cursorAdded=true;}
+ const point=new Date(stepPositions.get('source:'+index));if(cursorAdded)timeline.setCustomTime(point,'playback');else{timeline.addCustomTime(point,'playback');timeline.setCustomTimeTitle('','playback');cursorAdded=true;}
  currentStep=ordered.findIndex(record=>record.key==='source:'+index);
  revealPointer(point);
  el('status').textContent=`Step ${Math.floor(point.valueOf()/1000)+1}/${projection.steps.length} · original reviewer record`;

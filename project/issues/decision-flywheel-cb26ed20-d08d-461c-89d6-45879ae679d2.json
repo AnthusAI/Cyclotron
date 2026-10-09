@@ -3,7 +3,7 @@
   "title": "Prove the complete reusable flywheel through the reviewer interface",
   "description": "## Behavior and acceptance\nCross-module fake-client acceptance exercises vote/comment -> live-interface briefing -> rubric/examples/task proposal -> validated request -> regenerated features -> trained head -> development comparison -> promotion/rejection -> client-visible events, then restart and correction. Prove zero network calls and protected-data exclusion. Integration may not import proof-of-concept orchestration from Jev-Flywheel. A separate explicitly authorized live verification records actual model/usage and bounded requests without claiming guaranteed improvement.\nScenario: every stage is observable, the served prediction uses the trained head, and restart preserves lineage.\n\n## Constraints\nNative provider-neutral library only; no DSPy. The application does not implement a second flywheel. Optimizer proposes; code validates/applies; numerical fitting alone sets weights and calibration. Training, development, random audit and sealed scoreboard remain separated. No credentials or private article text in committed artifacts. Specs first with fake clients; live calls explicit and budgeted.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "home",
   "creator": null,
@@ -69,11 +69,20 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "eed81b0b-29e5-4ad1-b32f-ef6f66141bfd",
+      "author": "home",
+      "text": "Acceptance audit complete against current code: 11 focused cross-module specs pass for executable complete-loop Gherkin, Rich reviewer feedback/explanations, provider feature lifecycle (Jev/Kev/Laya fake wires), runtime delegation and adapter/optimizer flow. They assert exact exchanges, regenerated feature probabilities entering the numerical head, served learned prediction, OOF-only calibration provenance, protected optimizer exclusion, same-cycle ordering, restart cache reuse and correction invalidation. No proof-of-concept orchestration import exists; remaining Jev-Flywheel string mentions are documentation or historical predictor compatibility. Required previously authorized live verification is still present in private var/arxiv-replay-v2/runtime.sqlite3: 79 decision requests/responses, one optimizer request/response (returned gpt-6-luna, 23764 tokens), fit and evaluated/rejected candidate. It records execution/usage without claiming improvement; no new study, calls or report performed. Dependencies cea/e3/7f are closed. README distinguishes reusable integration acceptance from model-quality evidence. Separate feature ablations and scorecard web acceptance remain separate open scope.",
+      "created_at": "2026-10-08T01:43:05.495964Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
     }
   ],
   "created_at": "2026-10-05T21:56:01.857422Z",
-  "updated_at": "2026-10-07T18:11:41.098099Z",
-  "closed_at": null,
+  "updated_at": "2026-10-08T01:43:05.616638Z",
+  "closed_at": "2026-10-08T01:43:05.616550Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
