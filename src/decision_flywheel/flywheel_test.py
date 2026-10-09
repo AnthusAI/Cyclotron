@@ -385,3 +385,27 @@ def test_reverting_a_correction_can_restore_the_original_valid_fit_without_paid_
     assert wheel.active.fingerprint == original
     assert model.calls == calls
     wheel.close()
+
+
+def test_a_reader_holding_the_store_open_does_not_fail_or_stall_a_write(tmp_path):
+    import sqlite3
+    import time
+    from . import flywheel
+    path = tmp_path / "wheel.sqlite"
+    wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]))
+    wheel._emit({"kind": "before-reader"})
+    reader = sqlite3.connect(f"file:{path}?mode=ro", uri=True, isolation_level=None)
+    reader.execute("BEGIN")
+    assert reader.execute("SELECT COUNT(*) FROM runtime_events").fetchone()[0] >= 1
+    started = time.monotonic()
+    try:
+        # Under the old rollback journal this commit waited the default five seconds, then raised.
+        wheel._emit({"kind": "while-reading"})
+        assert time.monotonic() - started < 1
+    finally:
+        reader.execute("COMMIT")
+        reader.close()
+    assert flywheel.STORE_BUSY_TIMEOUT_SECONDS >= 30
+    assert wheel.db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert wheel.history()[-1]["kind"] == "while-reading"
+    wheel.close()

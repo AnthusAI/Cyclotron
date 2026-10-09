@@ -10,9 +10,24 @@
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6c55dff0-938b-432f-bfe0-feededf1dd8e",
+      "author": "home",
+      "text": "Attempt 4 (fresh, gpt-4.1-mini, empty starting rubric, review-everything) stopped at cycle 1125 of 1200: a rubric step failed with sqlite3.OperationalError, most likely the store's 5-second lock timeout tripped by a read-only progress query against the live log (filed as decision-flywheel-189dddde). 1,124 cycles completed; cost $5.67 at list prices (decision model $2.74, optimizer $2.93), 148 minutes. Accuracy per 100 cycles: 57, 85, 84, 66, 82, 81, 84, 83, 83, 82, 79 (and 22 of the last 25). Rubric proposals: 24, all provisional, none promoted; the ML head was promoted at 200, 400, 600 and 800 and rejected once. The cyclotron's label differed from the decision model's on 38 cycles, all in 324 to 367 under one rubric version (cyclotron right 21, decision model 17), and nowhere else. No results.json was written, so no fixture yet. Data kept at ~/Documents/Codex/2026-10-09/editorial-study/run-1200-attempt4-db-locked-at-1125.",
+      "created_at": "2026-10-09T20:55:28.719404Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "cd2c4f89-6fc6-4ee5-85b4-78c89265ef73",
+      "author": "home",
+      "text": "Correction to the comment above: the last partial window is 21 right of the 24 completed cycles 1101 to 1124, not 22 of 25.",
+      "created_at": "2026-10-09T20:55:38.084720Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.374640Z",
-  "updated_at": "2026-10-09T16:25:35.001049Z",
+  "updated_at": "2026-10-09T20:55:38.084748Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
