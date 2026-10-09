@@ -100,3 +100,11 @@ def test_the_decision_model_and_provider_are_declared_separately_from_the_optimi
                    "--output", str(output), "--decision-provider", "jev", "--decision-model", "jev-1.13.0"])
     protocol = json.loads((output / "protocol.json").read_text())
     assert (protocol["decision_provider"], protocol["decision_model"], protocol["optimizer_model"]) == ("jev", "jev-1.13.0", "gpt-4.1-mini")
+
+
+def test_the_decision_model_can_see_the_title_as_the_labeler_did(tmp_path):
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(json.dumps({"id": "a", "title": "T", "text": "body", "simulated_label": "publish"}) + "\n")
+    study = _study()
+    assert dict(study.rows(path)[0].item.values) == {"text": "body"}
+    assert dict(study.rows(path, ("title", "text"))[0].item.values) == {"title": "T", "text": "body"}

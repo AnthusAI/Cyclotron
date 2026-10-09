@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-4b1d3318-f978-43e8-80c0-669d301dcf5c",
+  "title": "Experiment: show the decision model the title, as the labeler saw it",
+  "description": "Pre-registered 2026-10-09 before any run. Motivation (decision-flywheel-c9c5b6e2): the reference labels were generated from title plus excerpt, but the study's decision model sees only the excerpt; with the labeling rubric verbatim, gpt-4.1-mini agrees with the reference on 89.0 percent from the excerpt and 95.5 percent from title plus excerpt (publish recall 79 versus 99 percent).\n\nDesign: as decision-flywheel-c9c5b6e2 (400-item corpus, same seed, review everything, empty starting rubric, recorded gate configuration, gpt-4.1-mini optimizer) with --item-fields title,text. Two arms, one run each: Jev 1.13.0 and gpt-4.1-mini. Comparison: the same model without the title (Jev 79.5 percent over cycles 201 to 400; gpt-4.1-mini mean 78, range 75 to 83).\n\nH1: with the title, Jev's evaluator-only accuracy over cycles 201 to 400 is at least 85 percent.\nH2: with the title, gpt-4.1-mini's accuracy over cycles 201 to 400 is at least 83 percent (above its no-title range).\nH3: the cyclotron's ECE over cycles 301 to 400 stays below the raw model's in both arms.\nReported: accuracy, ECE and mean confidence by window; label differences; promotions; the 0.80 rule and least-confident shares in the last window; cost and time. Fixtures in schema 2; results note in docs/experiments on exp/decision-model-comparison. Budget: about 1.50 USD.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-09T22:55:47.390712Z",
+  "updated_at": "2026-10-09T22:55:47.390751Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "editorial-study agent"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
