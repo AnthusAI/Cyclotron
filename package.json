@@ -1,6 +1,6 @@
 {
   "name": "cyclotron",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Cyclotron's embeddable web components (review control, status widget), their styles, and the TypeScript types for the application SDK and cyclotron-status/v1.",
   "files": [

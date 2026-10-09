@@ -187,7 +187,7 @@ asset (or, before a release exists, the archive of a tagged commit):
 
 ```json
 "dependencies": {
-  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.0/cyclotron-0.2.0.tgz"
+  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.1/cyclotron-0.2.1.tgz"
 }
 ```
 
