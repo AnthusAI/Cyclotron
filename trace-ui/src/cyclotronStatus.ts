@@ -35,7 +35,10 @@ export type CyclotronStatus = {
     auditFloor: number | null
     confidenceThreshold: number | null
     override: {rate: number; expiresAt: string | null; setBy: string; setAt: string} | null
-    nextCheckAfterLabels: number | null
+    /** Decisions until the program next checks its conditions. */
+    nextCheckAfterDecisions: number | null
+    /** The next step's conditions, in words a reviewer can read. */
+    nextStep: string | null
     expectedReviewsPerWeek: number | null
   }
   lastChange: {
