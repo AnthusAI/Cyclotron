@@ -2,6 +2,7 @@
 from dataclasses import asdict
 from uuid import uuid4
 
+from .classifier_snapshot import compact_snapshot
 
 class Cycle:
     def __init__(self, wheel, item=None, *, reason='item-processing'):
@@ -30,7 +31,7 @@ class Cycle:
                 wheel._cycle_running=True
                 try:
                     wheel._emit({'kind':'cycle-resumed','reason':cycle.reason,
-                        'classifier_snapshot':asdict(wheel.active)})
+                        'classifier_snapshot':compact_snapshot(wheel.active)})
                 except Exception:
                     wheel._cycle_context.reset(cycle.token)
                     wheel._cycle_running=False
@@ -49,7 +50,7 @@ class Cycle:
         wheel._cycle_running = True
         wheel._emit({'kind':'cycle-started', 'reason':self.reason,
                      'item':asdict(self.item) if self.item else None,
-                     'classifier_snapshot':asdict(wheel.active)})
+                     'classifier_snapshot':compact_snapshot(wheel.active)})
         return self
 
     def check_trigger(self, stage, *, due, reason, details=None):
@@ -73,7 +74,7 @@ class Cycle:
         try:
             self.wheel._emit({'kind':'cycle-failed' if error_type else 'cycle-completed',
                              'error_type':error_type.__name__ if error_type else None,
-                             'classifier_snapshot':asdict(self.wheel.active)})
+                             'classifier_snapshot':compact_snapshot(self.wheel.active)})
         finally:
             self.wheel._cycle_context.reset(self.token)
             self.wheel._cycle_running = False

@@ -76,3 +76,27 @@ def test_a_waiting_review_survives_a_later_completed_optimization_cycle(tmp_path
     resumed.__exit__(None,None,None)
     assert wheel.resume_cycle(item) is None
     wheel.close()
+
+
+def test_events_name_the_fit_proof_that_only_the_fit_records_in_full(tmp_path):
+    from .flywheel_test import TRAIN, DEV
+    wheel=DecisionFlywheel(tmp_path/'runtime.sqlite3', ClassifierConfig(TASK), FakeModel(), agent([]), max_requests=30)
+    asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1.0 for r in TRAIN}))
+    asyncio.run(wheel.step('classifier', TRAIN, DEV, protected=(), propensities={r.item.id: 1.0 for r in TRAIN}))
+    with wheel.cycle(Item('paper', {'text':'yes paper'})):
+        pass
+    events=wheel.history(1000)
+    activated=next(e for e in reversed(events) if e['kind']=='classifier-activated')['classifier_snapshot']
+    fitted=next(e['head'] for e in events if e['kind']=='fit-completed'
+                and e['head']['refitted_cyclotron_fingerprint']==activated['head']['refitted_cyclotron_fingerprint'])
+    full=fitted['out_of_fold']
+    assert full['fit_ids'] and full['normalizers']
+    for kind in ('classifier-activated','step-completed','cycle-started','cycle-completed'):
+        snapshot=next(e for e in reversed(events) if e['kind']==kind)['classifier_snapshot']
+        compact=snapshot['head']['out_of_fold']
+        assert not {'fit_ids','fit_labels','normalization_fit_ids','normalizers'} & set(compact), kind
+        assert compact['per_item_fit_proof']=={'omitted':['fit_ids','fit_labels','normalization_fit_ids','normalizers'],
+            'recorded_in':'fit-completed','head_fingerprint':fitted['refitted_cyclotron_fingerprint']}
+        assert {key:value for key,value in full.items() if key in compact}=={key:value for key,value in compact.items() if key!='per_item_fit_proof'}
+        assert snapshot['head']['provenance']==fitted['provenance']
+    wheel.close()

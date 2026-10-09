@@ -4,6 +4,18 @@ from .calibration_history import reviewed_calibration_metrics
 from .replay_feedback_policy import ReplayFeedbackPolicy
 from .output_comparison import compare_outputs
 
+TRIGGER_KINDS=('human-feedback','trigger-evaluated')
+CALIBRATION_KINDS=('prediction','displayed-prediction-reused','human-feedback')
+
+
+def _events_of(wheel,kinds):
+    """Only the event kinds a per-cycle check reads; parsing every event made each cycle slower than the last."""
+    import json
+    marks=','.join('?'*len(kinds))
+    rows=wheel.db.execute(f"SELECT id,payload FROM runtime_events WHERE json_extract(payload,'$.kind') IN ({marks}) ORDER BY id",
+                          tuple(kinds)).fetchall()
+    return tuple({**json.loads(payload),'event_id':event_id} for event_id,payload in rows)
+
 
 async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                            stages=('rubric','questions','examples'), min_evaluation_per_class=2,
@@ -133,8 +145,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             kwargs={'protected':protected,'propensities':{r.item.id:revealed_propensities[r.item.id] for r in train},
                     'min_development_per_class':min_evaluation_per_class}
             if rubric_trigger:
-                import json
-                check=rubric_trigger.check(json.loads(r[0]) for r in wheel.db.execute('SELECT payload FROM runtime_events ORDER BY id'))
+                check=rubric_trigger.check(_events_of(wheel,TRIGGER_KINDS))
                 cycle.check_trigger('rubric',**check)
                 if check['due'] and (max_rubric_optimizations is None or rubric_optimizations < max_rubric_optimizations):
                     outcomes.append(await wheel.step('rubric',train,dev,trigger='label-transitions',**kwargs))
@@ -143,7 +154,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                 prior_due=any(event.get('kind')=='trigger-evaluated' and event.get('stage')=='rubric' and
                               event.get('details',{}).get('policy')=='revealed-feedback-count' and
                               event.get('details',{}).get('feedback_count')==eligible_count
-                              for event in wheel.history(100000))
+                              for event in _events_of(wheel,('trigger-evaluated',)))
                 due=eligible and eligible_count%rubric_changes_every==0 and not prior_due
                 cycle.check_trigger('rubric',due=due,
                     reason='revealed feedback cadence reached' if due else 'revealed feedback cadence not reached',
@@ -165,7 +176,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                                 details={'feedback_count':eligible_count,'threshold':retrain_every})
             if fit_due:
                 outcomes.append(await wheel.step('classifier',train,dev,trigger='retraining-cadence',**kwargs))
-            metrics=reviewed_calibration_metrics(wheel.initial.task.labels,wheel.history(100000))
+            metrics=reviewed_calibration_metrics(wheel.initial.task.labels,_events_of(wheel,CALIBRATION_KINDS))
             wheel._emit({'kind':'cycle-metrics','metric_scope':'latest 200 human-reviewed pre-vote predictions; descriptive, not held-out',
                          'metrics':metrics,'training_count':len(train),'development_count':len(dev)})
             report['cycles'].append({'cycle_id':cycle.context['cycle_id'],'cycle_number':index+1,
