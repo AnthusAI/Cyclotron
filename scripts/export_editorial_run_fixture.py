@@ -11,6 +11,11 @@ least-confident N percent; an auto-approve rule at thresholds 0.75 to 0.95),
 optimizer events, and measured model usage and cost at list prices. Totals go
 in ``usage_total``; the price basis goes in the attribution.
 
+``--cycles N`` (schema 2) exports only the first N cycles of a longer
+recording, N a multiple of 100: windows, usage, cost and wall-clock time count
+those cycles alone, and the evaluator-only windows compare the cut's first and
+last 100. The fixture records the cut in ``cycle_cut``.
+
 The source result files remain local study artifacts. This exporter emits only
 the pre-vote prediction, revealed simulated label, public metrics, lifecycle
 outcomes, and source attribution required by the marketing playback.
@@ -382,12 +387,17 @@ def main(argv=None) -> int:
     parser.add_argument("--title", default="Curated editorial demo")
     parser.add_argument("--decision-model-price", choices=sorted(PRICES), default="gpt-4.1-mini")
     parser.add_argument("--optimizer-price", choices=sorted(PRICES), default="gpt-4.1-mini")
+    parser.add_argument("--cycles", type=int, default=None,
+                        help="export only the first N recorded cycles (schema 2; a multiple of 100)")
     args = parser.parse_args(argv)
     manifest = json.loads(args.corpus_manifest.read_text())
     count = manifest.get("actual_count")
     if manifest.get("label_disclosure") != "simulated_semantic_editorial_labels" or (
             count != 400 if args.schema_version == 1 else not isinstance(count, int) or count < 100):
         raise SystemExit("corpus manifest is not a reviewed simulated-label editorial corpus of the expected length")
+    cut = args.cycles
+    if cut is not None and (args.schema_version != 2 or cut < WINDOW or cut % WINDOW or cut > count):
+        raise SystemExit(f"--cycles needs schema 2 and a multiple of {WINDOW} from {WINDOW} to {count}")
     corpus, reference_labels = read_corpus(args.corpus, manifest)
     scenario_dirs = parse_scenarios(args.scenario)
     runs = {name: read(path / "results.json", count) for name, path in scenario_dirs.items()}
@@ -400,11 +410,16 @@ def main(argv=None) -> int:
             revealed = cycle.get("human_label")
             if revealed is not None and revealed != reference_labels[cycle["item_id"]]:
                 raise SystemExit(f"{name}: revealed label does not match frozen reference at cycle {cycle['cycle_number']}")
+        if cut is not None:
+            run["cycles"] = run["cycles"][:cut]
     prices = {"decision_model": PRICES[args.decision_model_price], "optimizer": PRICES[args.optimizer_price]}
     labels = ("publish", "reject")
     scenarios = {}
     for name, run in runs.items():
         events = read_events(scenario_dirs[name] / "runtime.sqlite3")
+        if cut is not None:
+            events = [event for event in events
+                      if not isinstance(event.get("cycle_number"), int) or event["cycle_number"] <= cut]
         predictions = read_logged_predictions(scenario_dirs[name] / "runtime.sqlite3", run["cycles"], events)
         comments = read_logged_feedback(scenario_dirs[name] / "runtime.sqlite3", run["cycles"], events)
         scenario = {
@@ -438,6 +453,7 @@ def main(argv=None) -> int:
         "rubric_summary": RUBRIC_SUMMARY,
         "attribution": attribution,
         "task_hash": next(iter(runs.values()))["protocol"]["task"],
+        **({"cycle_cut": {"cycles": cut, "recorded_cycles": count}} if cut is not None else {}),
         "scenarios": scenarios,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
