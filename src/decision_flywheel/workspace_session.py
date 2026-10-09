@@ -5,13 +5,14 @@ from uuid import uuid4
 import hashlib
 from copy import copy
 from .classifier_config import ClassifierConfig
-from .calibration_history import reviewed_calibration_metrics,reviewed_prediction_bindings
+from .calibration_history import reviewed_prediction_bindings
 from .feedback import FeedbackItem,LABEL_SOURCE_VETTED
-from .feedback_trigger import LabelTransitionTrigger,PROTECTED_ASSIGNMENTS,learning_feedback
-from .flywheel import DecisionFlywheel,development_assignment
-from .models import DecisionTask,Item,LabeledItem
+from .flywheel import DecisionFlywheel
+from .models import DecisionTask,Item
 from .selection_policy import SelectionPolicy
 from .shared_decisions import SharedDecisions
+from .learning_loop import (decide_with_shared_context,feedback_partitions,learn_from_review,
+    record_cycle_metrics,review_role)
 
 
 def freeze_configuration(store,config,*,selection_policy_override=False):
@@ -95,26 +96,7 @@ class WorkspaceSession:
         return {'skipped':target.id}
 
     def partitions(self,identifier):
-        active={}
-        for event in self.wheels[identifier].history(100000):
-            if event['kind']=='human-feedback':
-                feedback=event['feedback'];active.pop(feedback['item_id'],None)
-                if event.get('action')=='submitted':active[feedback['item_id']]=event
-        training=[];development=[];protected=[]
-        task=self.wheels[identifier].initial.task
-        for item_id,row in self.items.items():
-            item=Item(item_id,row['values'])
-            if item_id not in active or active[item_id].get('assignment') in PROTECTED_ASSIGNMENTS or development_assignment(self.config['seed']+':audit',item_id,rate=.2):
-                protected.append(item);continue
-            feedback=active[item_id]['feedback'];comment=feedback.get('edit_comment_value')
-            labeled=LabeledItem(item,task.validate_label(feedback['final_answer_value']),'trusted',
-                {'human_feedback':comment} if comment else {},
-                initial_answer_value=feedback.get('initial_answer_value'))
-            (development if active[item_id].get('assignment')=='development' or development_assignment(self.config['seed'],item_id) else training).append(labeled)
-        # Preserve feedback arrival order for recent-balanced evaluation selection.
-        position={item_id:index for index,item_id in enumerate(active)}
-        training.sort(key=lambda row:position[row.item.id]);development.sort(key=lambda row:position[row.item.id])
-        return tuple(training),tuple(development),tuple(protected)
+        return feedback_partitions(self.wheels[identifier],{item_id:row['values'] for item_id,row in self.items.items()},self.config['seed'])
 
     async def prepare(self):
         current=self.store.current_item(self.run['id'])
@@ -122,52 +104,15 @@ class WorkspaceSession:
         row=next(iter(self.store.unreviewed_items(self.run['id'])),None)
         if row is None:return {'finished':True}
         target=Item(row['id'],row['values']);now=datetime.now(timezone.utc)
-        training={};configs={}
-        for identifier,wheel in self.wheels.items():
-            train,dev,_=self.partitions(identifier);wheel.reconcile_feedback(train,development=dev)
-            training[identifier]=train;configs[identifier]=wheel.active.config
-        self.shared.bind_context(configs,training)
-        # Refit stale heads inside the item's operational cycle. Sibling
-        # context changes can alter probability features even when this
-        # classifier's own question list stays unchanged.
-        for _ in range(len(self.wheels)+1):
-            stale=[identifier for identifier,wheel in self.wheels.items() if wheel.active.head and
-                (wheel.active.head.provenance.source_model_provenance!=wheel.model_context(wheel.active.config,training[identifier])
-                 or not wheel.active.answer_dependencies
-                 or not wheel.answer_dependencies_current(wheel.active.answer_dependencies))]
-            if not stale:break
-            for identifier in stale:
-                wheel=self.wheels[identifier]
-                cycle=wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
-                try:
-                    wheel.reconcile_model_context(training[identifier])
-                    cycle.check_trigger('classifier',due=True,reason='shared decision feature source changed',details={})
-                    train,dev,protected=self.partitions(identifier)
-                    await wheel.step('classifier',train,dev,protected=protected,
-                        propensities={r.item.id:1. for r in train},min_development_per_class=2,
-                        limit=200,trigger='shared-context-change')
-                    cycle.suspend()
-                except Exception as error:
-                    cycle.__exit__(type(error),error,None)
-                    raise
-            configs={identifier:wheel.active.config for identifier,wheel in self.wheels.items()}
-            self.shared.bind_context(configs,training)
-        # A bounded reconciliation must never serve an incompatible head.
-        for identifier,wheel in self.wheels.items():wheel.reconcile_model_context(training[identifier])
-        cyclotron_fingerprint=self.store.checkpoint_cyclotron(self.run['id'],self.wheels)
-        await self.shared.prepare(configs,target,training,now=now)
+        results,cyclotron_fingerprint=await decide_with_shared_context(self.wheels,self.shared,target,self.partitions,now=now,
+            checkpoint=lambda:self.store.checkpoint_cyclotron(self.run['id'],self.wheels))
         predictions={}
-        for identifier,wheel in self.wheels.items():
-            cycle=wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
-            try:
-                result=await wheel.predict(target,training[identifier],now=now)
-                definition=next(c for c in self.config['classifiers'] if c['id']==identifier)
-                predictions[identifier]={**asdict(result),'name':definition['name'],
-                    'classifier_revision':definition['revision'],
-                    'version':wheel.active.fingerprint,'classes':list(wheel.initial.task.labels)}
-                cycle.suspend()
-            except Exception as error:
-                cycle.__exit__(type(error),error,None);raise
+        for identifier,result in results.items():
+            wheel=self.wheels[identifier]
+            definition=next(c for c in self.config['classifiers'] if c['id']==identifier)
+            predictions[identifier]={**asdict(result),'name':definition['name'],
+                'classifier_revision':definition['revision'],
+                'version':wheel.active.fingerprint,'classes':list(wheel.initial.task.labels)}
         shown={'presentation_id':str(uuid4()),'classifiers':predictions,
                'cyclotron_fingerprint':cyclotron_fingerprint,
                'recorded_labels':self.store.inherited_labels(self.run['id'],target.id)}
@@ -218,7 +163,7 @@ class WorkspaceSession:
                     self.store.label_item(identifier,classifier['revision'],self.config['item_list_id'],item['id'],item['revision'],label['label'],label.get('comment',''),feedback_id)
                 feedback=FeedbackItem(feedback_id,item['id'],identifier,initial_answer_value=current['prediction']['classifiers'][identifier]['label'],
                     final_answer_value=label['label'],edit_comment_value=label.get('comment') or None,label_source=LABEL_SOURCE_VETTED,selection_propensity=1.,review_provenance=f"replayed-human-vote:{label['source_request_id']}" if identifier in inherited_ids else 'interactive-human-vote')
-                role='scoreboard' if development_assignment(self.config['seed']+':audit',item['id'],rate=.2) else 'development' if development_assignment(self.config['seed'],item['id']) else 'training'
+                role=review_role(self.config['seed'],item['id'])
                 wheel.record_feedback_event(feedback,assignment=role)
                 from .observability import StepFailed
                 try:
@@ -391,37 +336,10 @@ class WorkspaceSession:
         return result
 
     async def optimize(self,identifier,cycle,*,resume_stages=()):
-        warnings=[]
-        wheel=self.wheels[identifier];training,development,protected=self.partitions(identifier)
-        wheel.reconcile_feedback(training,development=development)
-        wheel.set_optimizer_context([row.context['human_feedback'] for row in training if row.context.get('human_feedback')])
-        history=wheel.history(100000)
-        latest=next((e for e in reversed(history) if e['kind']=='human-feedback'),None)
-        eligible=bool(latest and learning_feedback(latest) and latest.get('action')=='submitted')
-        check=LabelTransitionTrigger(self.config['rubric_changes_every']).check(history)
-        cycle.check_trigger('rubric',**check)
-        count=len(training)+len(development)
-        stages=['rubric'] if check['due'] else []
-        for stage in ('questions','examples','classifier'):
-            due=eligible and count>0 and count%self.config['optimize_every']==0
-            cycle.check_trigger(stage,due=due,reason='feedback cadence reached' if due else 'feedback cadence not reached',details={'feedback_count':count,'threshold':self.config['optimize_every']})
-            if due:stages.append(stage)
-        stages=list(dict.fromkeys([*stages,*resume_stages]))
-        for stage in stages:
-            self.shared.bind_context({cid:w.active.config for cid,w in self.wheels.items()},
-                {cid:self.partitions(cid)[0] for cid in self.wheels})
-            transport=getattr(wheel.optimizer,'complete',None)
-            if stage!='classifier' and hasattr(transport,'max_calls') and transport.calls>=transport.max_calls:
-                wheel._emit({'kind':'optimization-paused','stage':stage,'reason':'optimizer call limit reached','calls':transport.calls,'limit':transport.max_calls})
-                warnings.append({'classifier_id':identifier,'reason':'optimizer call limit reached; labeling can continue'})
-                continue
-            result=await wheel.step(stage,training,development,protected=protected,propensities={row.item.id:1. for row in training},min_development_per_class=2,limit=200,trigger='label-transitions' if stage=='rubric' else 'feedback-cadence')
-            if result['status'] not in ('completed','waiting'):raise RuntimeError('optimization step did not complete')
-            if stage in ('rubric','questions','examples') and result['status']=='completed':
-                await wheel.step('classifier',training,development,protected=protected,propensities={row.item.id:1. for row in training},min_development_per_class=2,trigger='context-handoff')
-        return warnings
+        return await learn_from_review(self.wheels,self.shared,identifier,cycle,self.partitions,
+            optimize_every=self.config['optimize_every'],rubric_changes_every=self.config['rubric_changes_every'],
+            resume_stages=resume_stages)
 
     def metrics(self,identifier):
-        wheel=self.wheels[identifier]
         definition=next(row for row in self.config['classifiers'] if row['id']==identifier)
-        wheel._emit({'kind':'cycle-metrics','class_config':definition['config']['classes'],'metric_scope':'latest 200 human-labeled items; prequential predictions, not protected evaluation','metrics':reviewed_calibration_metrics(wheel.initial.task.labels,wheel.history(100000))})
+        record_cycle_metrics(self.wheels[identifier],definition['config']['classes'])

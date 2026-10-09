@@ -279,14 +279,24 @@ class DecisionFlywheel:
         return {"messages": self.optimizer.request_messages(briefing),
                 "briefing_fingerprint": briefing.fingerprint, "preview_only": True}
 
-    def record_feedback_event(self, feedback: FeedbackItem, *, action="submitted", assignment=None):
-        """Trace application-owned feedback; this never makes it a fit row."""
+    def record_feedback_event(self, feedback: FeedbackItem, *, action="submitted", assignment=None, annotations=None):
+        """Trace application-owned feedback; this never makes it a fit row.
+
+        ``annotations`` adds application facts about the review, such as who
+        selected it, a reason code, or the decision it answers. Values are
+        strings or None and cannot replace the event's own fields.
+        """
         if not isinstance(feedback, FeedbackItem) or action not in {"submitted", "retracted"}:
             raise ValueError("feedback event needs a FeedbackItem and a valid action")
         if assignment is not None and (not isinstance(assignment, str) or not assignment.strip()):
             raise ValueError("assignment must be a non-empty string")
+        annotations = dict(annotations or {})
+        if set(annotations) & {"kind", "action", "assignment", "feedback", "created_at", "event_id"} or any(
+                not isinstance(key, str) or (value is not None and not isinstance(value, str))
+                for key, value in annotations.items()):
+            raise ValueError("feedback annotations must be new string fields with string or None values")
         return self._emit({"kind": "human-feedback", "action": action, "assignment": assignment,
-                           "feedback": asdict(feedback)})
+                           "feedback": asdict(feedback), **annotations})
 
     def hypotheses(self) -> tuple[dict, ...]:
         """Retain proposed structures and outcomes, including older saved rounds."""

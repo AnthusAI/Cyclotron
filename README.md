@@ -56,6 +56,65 @@ To enable structural optimization, inject an `OptimizerAgent` with an
 application-owned completion callable. The core remains provider-neutral. The
 adapter, storage choice, and event consumer are application decisions.
 
+## Embed a cyclotron in an application
+
+An application that already has items and reviewers uses four calls. It keys
+everything by its own item identities. The cyclotron owns item partitions,
+held-out reviews, selection propensities, versions and learning, and keeps
+them in SQLite files under one directory.
+
+<!-- embedded-quickstart:start -->
+```python
+import asyncio
+
+from decision_flywheel import ClassifierSpec, Cyclotron, CyclotronDefinition, Item
+from decision_flywheel.batched_classification import BatchedAnswers
+from decision_flywheel.models import DecisionResult
+
+
+class ScriptedModel:
+    """Replace this with a batched decision-model adapter such as Jev."""
+    model_identity = "scripted-batch-v1"
+
+    async def classify_many(self, configs, target, training, **kwargs):
+        answer = DecisionResult("include", {"include": 0.8, "exclude": 0.2})
+        return BatchedAnswers({name: {"decision": answer} for name in configs}, self.model_identity, {}, 0)
+
+
+relevant = ClassifierSpec("relevant", ("include", "exclude"),
+                          "Is this source relevant to the publication?", positive_label="include")
+definition = CyclotronDefinition("relevance", (relevant,))
+
+
+async def main():
+    with Cyclotron.open("var/relevance", definition, ScriptedModel()) as cyclotron:
+        decision = await cyclotron.decide(Item("ref-1", {"text": "A vendor press release"}))
+        print(decision.label, decision.confidence)
+        await cyclotron.review(decision.decision_id, "exclude", explanation="Vendor marketing.",
+                               reason_code="out_of_scope", reviewer="editor-1")
+        print(cyclotron.status().to_json()["alignment"]["accuracy"])
+        print([event["kind"] for event in cyclotron.subscribe(after=0)["events"]])
+
+asyncio.run(main())
+```
+<!-- embedded-quickstart:end -->
+
+- `decide(item)` returns a decision with a label, confidence, version and
+  whether it goes to review. An unchanged item keeps its decision; no model
+  call is repeated.
+- `review(decision_id, label, ...)` records a label; a later label is a
+  correction, `label=None` closes the decision without teaching, and
+  `undo_review` reopens it. `selected_by="reviewer"` marks a review the
+  reviewer chose: it trains the ML model but is not alignment evidence.
+- `status()` returns the `cyclotron-status/v1` snapshot
+  ([schema](src/decision_flywheel/schemas/cyclotron-status.v1.schema.json),
+  [TypeScript type](trace-ui/src/cyclotronStatus.ts)).
+- `subscribe(after=cursor)` pages committed events: decision, review,
+  promoted, dropped.
+
+Pass an `OptimizerAgent` as the fourth argument to let reviews drive the LLM
+optimizer and ML model fit; without one, the cyclotron decides and records.
+
 ### Boundary rules
 
 - `decision_flywheel` core modules contain model-neutral tasks, context,
