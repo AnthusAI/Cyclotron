@@ -100,3 +100,25 @@ Data is under `~/Documents/Codex/2026-10-09/editorial-study/`:
 - `models/gpt41`, `models/jev113`: databases compressed after export.
 - `exports/models-gpt41-400-v2.json`, `exports/models-jev113-400-v2.json`.
 - `ceiling/`: the check script, per-item answers and summary.
+
+## Follow-up: showing the title (decision-flywheel task "show the decision model the title")
+
+The title experiment was pre-registered before its runs. Its design matches
+the runs above, with `--item-fields title,text`.
+
+| Decision model | 1–100 | 101–200 | 201–300 | 301–400 | Mean 201–400 | Without the title | ECE 301–400 (cyclotron / raw) | USD | Minutes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| Jev 1.13.0 | 67% | 85% | 77% | 77% | **77%** | 79.5% | 0.054 / 0.208 | 0.37 | 5 |
+| gpt-4.1-mini | 56% | 85% | 85% | 82% | **83.5%** | 78% (75–83) | 0.039 / 0.150 | 0.91 | 20 |
+
+- **H1, Jev with the title at least 85%: not supported.** It reached 77%,
+  lower than without the title. Its first window also fell from 80% to 67%.
+- **H2, gpt-4.1-mini with the title at least 83%: supported, narrowly.** It
+  reached 83.5%, against a no-title range of 75% to 83%. One run is within
+  the recorded spread, so this is weak evidence.
+- **H3, cyclotron ECE below the raw model's: supported in both.**
+
+With the labeling rubric itself, the title is worth 6.5 points. Rubrics the
+loop learns from reviewers' explanations do not reliably capture that gain.
+The remaining gap is in what the optimizer learns, not in what the model
+sees.
