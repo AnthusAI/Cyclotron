@@ -94,7 +94,9 @@ async def main_async(args):
     plan=build_plan(task,operational,args.seed)
     protocol={'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,'modes':args.modes,
       'operational_items':400,'baseline_rubric':BASELINE_RUBRIC,'baseline_provenance':'curated from the product intent and v1 failure analysis; not derived from operational labels at runtime',
-      'feedback_disclosure':'all reveals all 400 post-prediction labels; selective policies disclose their realized rate','decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls}
+      'feedback_disclosure':'all reveals all 400 post-prediction labels; selective policies disclose their realized rate','decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
+      'rubric_trigger':{'basis':args.rubric_trigger_basis,'every':args.rubric_changes_every,
+                        'max_attempts':args.max_rubric_optimizations}}
     if not args.resume: (args.output/'protocol.json').write_text(json.dumps(protocol,indent=2)+'\n')
     ledger=write_budget_ledger(args.output,args.max_decision_calls,args.max_optimizer_calls,args.modes)
     if not args.confirm_live: return
