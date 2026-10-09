@@ -56,6 +56,11 @@ STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
 FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
 
 
+def _usage_counts(usage) -> tuple[int, int, int]:
+    from .run_usage import _usage
+    return _usage(usage)
+
+
 def _json(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -308,6 +313,9 @@ class Cyclotron:
             CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,
                 classifier TEXT NOT NULL, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+                source TEXT);
         """)
         saved = self.db.execute("SELECT value FROM meta WHERE key='definition'").fetchone()
         if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
@@ -315,8 +323,9 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO meta VALUES ('definition', ?)",
                             (_json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}),))
+        self._batches: list[tuple[int, int, int]] = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
-                                      observer=lambda event: None)
+                                      observer=self._on_batch)
         # The shared ceiling counts every attempt in the store's lifetime; this
         # open authorizes max_requests more.
         self.shared.max_requests = self.shared.requests + max_requests
@@ -390,6 +399,7 @@ class Cyclotron:
         async with self._lock:
             if not isinstance(item, Item):
                 raise ValueError("decide needs an Item")
+            self._batches = []
             for spec in self.definition.classifiers:
                 spec.task.validate_target(item)
             self._sync()
@@ -571,8 +581,77 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT INTO decisions VALUES (?,?,?,?,?)",
                             (decision.decision_id, decision.item_id, fingerprint, "open", _json(decision.to_json())))
+            self._record_batches(decision.decision_id)
             event = self._append({"kind": "decision", "decision": decision.to_json()})
         self.observer(event)
+
+    def _on_batch(self, event: Mapping[str, Any]) -> None:
+        """A paid shared decision-model request; cached answers cost nothing."""
+        if event.get("kind") == "shared-decision-batch" and not event.get("cached"):
+            self._batches.append(_usage_counts(event.get("usage")))
+
+    def _record_batches(self, decision_id: str) -> None:
+        """Attribute the paid requests of this call to its decision (caller's transaction)."""
+        for prompt, cached, output in self._batches:
+            self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
+                            " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+        self._batches = []
+
+    def usage(self, prices: Mapping[str, Mapping[str, float]], *, window: int = 100) -> dict[str, Any]:
+        """Measured model usage and list-price cost per window of decisions, and in total.
+
+        ``prices`` gives ``decision_model`` and ``optimizer`` list prices in USD
+        per million tokens (``input_usd_per_mtok``, optional
+        ``cached_input_usd_per_mtok``, ``output_usd_per_mtok``). Window 1 holds
+        decisions 1 to ``window`` in the order they were made; a decision-model
+        request made while reviewing or learning counts toward the decision it
+        served. The shape matches ``run_usage.usage_by_window``.
+        """
+        from .run_usage import _block, _empty
+        if type(window) is not int or window < 1:
+            raise ValueError("window must be a positive integer")
+        if set(prices) != {"decision_model", "optimizer"}:
+            raise ValueError("prices must give decision_model and optimizer list prices")
+        position = {decision_id: index for index, (decision_id,) in
+                    enumerate(self.db.execute("SELECT id FROM decisions ORDER BY rowid"))}
+        times = [json.loads(payload)["createdAt"] for (payload,) in self.db.execute("SELECT payload FROM decisions ORDER BY rowid")]
+        windows: dict[int, dict] = {}
+        total = {"decision_model": _empty(), "optimizer": _empty()}
+        for decision_id, model, prompt, cached, output in self.db.execute(
+                "SELECT decision_id,model,input_tokens,cached_input_tokens,output_tokens FROM usage ORDER BY id"):
+            index = position.get(decision_id)
+            targets = [total[model]]
+            if index is not None:
+                targets.append(windows.setdefault(index // window, {"decision_model": _empty(), "optimizer": _empty()})[model])
+            for counts in targets:
+                counts["requests"] += 1
+                counts["input_tokens"] += prompt
+                counts["cached_input_tokens"] += cached
+                counts["output_tokens"] += output
+        blocks = []
+        for index in range((len(times) + window - 1) // window):
+            first, last = index * window, min(len(times), (index + 1) * window) - 1
+            models = windows.get(index, {"decision_model": _empty(), "optimizer": _empty()})
+            blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
+                           **_block(models, prices, times[first], times[last])})
+        return {"window_size": window, "windows": blocks,
+                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices)}
+
+    def decision_log(self) -> list[dict[str, Any]]:
+        """Every decision in the order it was made, with its state and active reviews (for recordings)."""
+        rows = []
+        for number, (decision_id, state, payload) in enumerate(
+                self.db.execute("SELECT id,state,payload FROM decisions ORDER BY rowid").fetchall(), start=1):
+            reviews = {}
+            for cid in self.specs:
+                review = self._active_review(decision_id, cid)
+                last = self._last_review_kind(decision_id, cid)
+                if review is not None:
+                    reviews[cid] = review.to_json()
+                elif last == "no-label":
+                    reviews[cid] = {"kind": "no-label"}
+            rows.append({"n": number, "state": state, "decision": json.loads(payload), "reviews": reviews})
+        return rows
 
     def decision(self, decision_id: str) -> Decision:
         row = self.db.execute("SELECT payload FROM decisions WHERE id=?", (decision_id,)).fetchone()
@@ -599,6 +678,7 @@ class Cyclotron:
         """
         async with self._lock:
             self._sync()
+            self._batches = []
             decision = self.decision(decision_id)
             cid = self._classifier(decision, classifier)
             wheel, spec = self.wheels[cid], self.specs[cid]
@@ -665,6 +745,8 @@ class Cyclotron:
                     wheel._emit({"kind": "feedback-correction-completed", "feedback_id": review_id,
                                  "target_id": target.id, "previous_feedback_id": prior["id"]})
             self._sync()
+            with self.db:
+                self._record_batches(decision_id)
             return replace(self._review(review_id), optimization_warnings=tuple(warnings))
 
     async def undo_review(self, decision_id: str, *, classifier: str | None = None,
@@ -888,6 +970,14 @@ class Cyclotron:
             self.db.execute("UPDATE decisions SET state=? WHERE id=? AND state!='superseded'",
                             ("reviewed" if reviewed else "open", review.decision_id))
             return [self._append({"kind": "review", "review": review.to_json()})]
+        if kind == "optimizer-response" and event.get("cycle_item_id"):
+            row = self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
+                                  (event["cycle_item_id"],)).fetchone()
+            if row is not None:
+                prompt, cached, output = _usage_counts(event.get("usage"))
+                self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
+                                " VALUES (?,?,?,?,?,?)", (row[0], "optimizer", prompt, cached, output,
+                                                         f"{classifier}:{event.get('event_id')}"))
         if change is not None:
             tracker = self.versions[classifier]
             return [self._append({"kind": change.kind, "classifier": classifier, "version": change.to_version,
