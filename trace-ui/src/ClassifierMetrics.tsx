@@ -24,6 +24,6 @@ export function ClassifierMetrics({classifiers,events,compact=false,embedded=fal
         <details className="disclosure"><summary>Raw decision model vs final classifier</summary><ModelComparison comparison={metrics?.decision_model_comparison} classes={classifier.config?.classes}/></details>
       </CardContent></Card>
     })}</div>
-    {!compact?<p className="text-xs text-muted-foreground">Each classifier uses its most recent 200 human-labeled items, or all available if fewer. Predictions were made before your votes. Not a held-out evaluation.</p>:null}
+    {!compact?<p className="text-xs text-muted-foreground">Each classifier uses its most recent 200 human-labeled items, or all available if fewer. Predictions were made before your labels. Not a held-out evaluation.</p>:null}
   </section>
 }
