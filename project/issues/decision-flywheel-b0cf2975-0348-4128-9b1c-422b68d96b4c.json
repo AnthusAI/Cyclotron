@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-b0cf2975-0348-4128-9b1c-422b68d96b4c",
   "title": "Experiment: which items to review, least-confident versus random versus mixed",
-  "description": "At a fixed review rate (start with 25 percent), compare three selection rules on the extended corpus: least-confident first; uniform random; and mixed (a fixed random audit share, say 5 percent, plus least-confident for the rest). Measure after each 100 cycles: whole-system accuracy, mistakes that slipped through unreviewed, calibration error, and how fast the cyclotron learns (labels are only collected on reviewed items, so selection changes the training signal). Hypothesis to test: least-confident learns faster but loses the audit signal needed to keep calibration honest; mixed is the practical default. Acceptance: one recording per arm, a comparison table, and a written recommendation with its caveats.",
+  "description": "At a fixed review rate (start with 25 percent), compare three selection rules on the extended corpus: least-confident first; uniform random; and mixed (a fixed random audit share, say 5 percent, plus least-confident for the rest). Measure after each 100 cycles: whole-system accuracy, mistakes that slipped through unreviewed, calibration error, and how fast the cyclotron learns (labels are only collected on reviewed items, so selection changes the training signal). Hypothesis to test: least-confident learns faster but loses the audit signal needed to keep calibration honest; mixed is the practical default. Acceptance: one recording per arm, a comparison table, and a written recommendation with its caveats. Plateau note (decision-flywheel-8f3a052a, docs/experiments/editorial-long-run-20261009.md): with gpt-4.1-mini as the decision model, accuracy plateaus at about 82 percent on this corpus from cycle 400 through 1,124 cycles of review-everything feedback, so this experiment should also consider a stronger decision model as a variable.",
   "type": "task",
   "status": "open",
   "priority": 2,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-10-09T14:34:35.413946Z",
-  "updated_at": "2026-10-09T14:34:58.561863Z",
+  "updated_at": "2026-10-09T21:23:52.538572Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
