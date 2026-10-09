@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-0736e4a0-fe72-4913-9d4f-964cab23ac6f",
+  "title": "Add an application SDK facade: decide, review, status, subscribe",
+  "description": "A small Python facade over DecisionFlywheel for applications that embed one cyclotron. Cyclotron.open(store, definition, model, optimizer=None). decide(item) -> Decision {decision_id, item_id, label, confidence, probabilities, version, review {selected, reason, propensity}}. review(decision_id, label, *, explanation=None, reason_code=None, reviewer=None, selected_by='program'|'reviewer') records a label, correction, or undo. status() -> cyclotron-status/v1. subscribe(after=cursor) yields committed events (decision, review, promoted, dropped, review-rate-changed). The facade owns labels, held-out partitions, and selection propensities, which DecisionFlywheel.predict and improve currently require from the caller. Ordering: after the status shape task.\n\nAcceptance criteria:\n- An application decides and reviews items keyed by its own ids without building training or development sets.\n- Partition assignment happens before the label is seen and survives restarts; held-out labels never reach the LLM optimizer or ML model fit.\n- review() with selected_by='reviewer' trains the ML model but is excluded from alignment and audit numbers.\n- decide() on an unchanged item and version reuses the cached decision and makes no model call.\n- Specs beside the module use fake models; a README quickstart shows the four calls.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-6fe21ddc-48bd-49db-9194-0e448fd1e2ee",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-09T14:51:17.242504Z",
+  "updated_at": "2026-10-09T14:51:46.149564Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

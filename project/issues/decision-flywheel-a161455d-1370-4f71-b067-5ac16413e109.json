@@ -1,0 +1,32 @@
+{
+  "id": "decision-flywheel-a161455d-1370-4f71-b067-5ac16413e109",
+  "title": "Ship a status widget that renders cyclotron-status/v1 as a strip or a card",
+  "description": "An embeddable view of what the cyclotron is doing now (export path cyclotron/components/cyclotron-status). Props: status (cyclotron-status/v1), variant 'strip'|'card', onOverride?. Strip example: Version 13 · agrees 86% · says 84% sure, right 86% · reviewing 1 in 4: audit accuracy met target. Card adds precision, recall, the calibration curve, the last change, and the override control. No backend client; ClassifierMetrics keeps working for the console. Ordering: after the status shape and the review-rate program.\n\nAcceptance criteria:\n- Renders from a fixture snapshot with no network; empty and onboarding states read sensibly.\n- Shows the review rate, its reason, and any override with its expiry.\n- Calibration is shown as says-sure versus is-right with the gap in points; Brier and ECE do not appear.\n- Vitest covers strip, card, empty and override states.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-6fe21ddc-48bd-49db-9194-0e448fd1e2ee",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-a81068b4-c1ef-4087-8273-720beb737f64",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-09T14:51:17.441293Z",
+  "updated_at": "2026-10-09T14:51:46.277059Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
