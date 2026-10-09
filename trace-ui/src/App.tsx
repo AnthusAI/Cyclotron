@@ -45,7 +45,7 @@ export function App({counts,comparison,outcomes=[],embedded=false}:{counts:Count
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2"><Label htmlFor="label-filter" className="text-xs text-muted-foreground">Class</Label><NativeSelect id="label-filter" aria-label="Label" size="sm"><NativeSelectOption value="">All labels</NativeSelectOption></NativeSelect></div>
               <div className="flex items-center gap-2"><Label htmlFor="role-filter" className="text-xs text-muted-foreground">Partition</Label><NativeSelect id="role-filter" aria-label="Partition" size="sm"><NativeSelectOption value="">All partitions</NativeSelectOption></NativeSelect></div>
-              <FilterCheckbox id="comment-filter" label="With comments" /><FilterCheckbox id="disagreement-filter" label="Disagreements only" />
+              <FilterCheckbox id="comment-filter" label="With explanations" /><FilterCheckbox id="disagreement-filter" label="Disagreements only" />
             </div></div>
             <CardContent className="timeline-viewport px-0 py-0"><div id="timeline" aria-label="Recorded decision and feedback timeline" /></CardContent>
             <div className="timeline-footer space-y-2 border-t border-border px-5 py-3"><div className="flex flex-wrap items-center justify-between gap-2"><p id="status" className="font-mono text-xs text-muted-foreground" aria-live="polite" /><div className="flex items-center gap-1"><Button id="back" variant="ghost" size="sm"><ArrowLeft /> Previous</Button><Button id="play" variant="secondary" size="sm"><Play /> Play</Button><Button id="next" variant="ghost" size="sm">Next <ArrowRight /></Button></div></div>

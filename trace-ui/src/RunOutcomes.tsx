@@ -26,7 +26,7 @@ export function RunOutcomes({windows}:{windows:OutcomeWindow[]}){
       return <section key={window.id} className="space-y-1">
         {windows.length>1?<h3 className="text-xs font-semibold">{window.id}</h3>:null}
         {paired?<>
-          <p className="text-xs text-muted-foreground">Latest raw model versus final classifier · same {paired.count} reviewed items · pre-vote predictions. This measures the outer classifier’s difference, not evidence of improvement caused by optimization over time.</p>
+          <p className="text-xs text-muted-foreground">Latest raw model versus final classifier · same {paired.count} reviewed items · pre-review predictions. This measures the outer classifier’s difference, not evidence of improvement caused by optimization over time.</p>
           <PairedTable before={measures(paired.raw)} after={measures(paired.final)}/>
           <p className="text-xs text-muted-foreground">Calibration uses {paired.raw.calibration.count} paired probability vectors. Small samples are noisy; these reviewed items are not a held-out test.</p>
           <details className="disclosure"><summary>Calibration curves & comparison details</summary><div className="p-2"><ModelComparison comparison={paired} classes={window.classes}/></div></details>

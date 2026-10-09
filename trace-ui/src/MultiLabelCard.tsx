@@ -30,7 +30,7 @@ export function MultiLabelCard({current,names,busy,readOnly=false,onSubmit,class
       <ClassifierMetrics compact embedded classifiers={[classifiers.find(classifier=>classifier.id===id)??{id,name:names[id]??id}]} events={events} />
       </LabelingReview>)}</fieldset>
     <div className="labeling-footer flex shrink-0 items-center justify-between gap-3"><div className="min-w-0 flex-1">{footer}</div>
-    <div role="group" aria-label="Review actions" className="flex shrink-0 justify-end gap-3"><Button className="min-h-12 min-w-28 px-6 text-base" title={recorded.size?'Complete missing historical labels before moving to new items':undefined} disabled={busy||readOnly||recorded.size>0} variant="ghost" onClick={()=>onSubmit('skip',{item_id:item.id})}>Skip item</Button><Button className="min-h-12 min-w-40 px-6 text-base" disabled={busy||readOnly||!choices.length||missingHistorical} onClick={()=>onSubmit('label',{item_id:item.id,presentation_id:prediction.presentation_id,labels:choices})}>{busy?'Submitting…':'Submit feedback'}</Button></div>
+    <div role="group" aria-label="Review actions" className="flex shrink-0 justify-end gap-3"><Button className="min-h-12 min-w-28 px-6 text-base" title={recorded.size?'Complete missing historical labels before moving to new items':undefined} disabled={busy||readOnly||recorded.size>0} variant="ghost" onClick={()=>onSubmit('skip',{item_id:item.id})}>Skip item</Button><Button className="min-h-12 min-w-40 px-6 text-base" disabled={busy||readOnly||!choices.length||missingHistorical} onClick={()=>onSubmit('label',{item_id:item.id,presentation_id:prediction.presentation_id,labels:choices})}>{busy?'Submitting…':'Submit review'}</Button></div>
     </div>
   </CardContent></Card>
 }
