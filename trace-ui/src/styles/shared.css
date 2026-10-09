@@ -1,6 +1,7 @@
 @import "@fontsource-variable/oxanium";
 @import "@fontsource-variable/roboto";
 @import "@fontsource/blinker/600.css";
+@import "./components.css";
 
 /* Flat, polarity-consistent interface */
 :root {

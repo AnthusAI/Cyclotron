@@ -71,3 +71,9 @@ install-tools:
 
 release:
 	semantic-release version
+
+.PHONY: pack-ui
+# The web package: dist/cyclotron-<version>.tgz, attached to a GitHub release
+# as ui-v<version> so applications pin an immutable tarball.
+pack-ui:
+	mkdir -p dist && npm pack --pack-destination dist
