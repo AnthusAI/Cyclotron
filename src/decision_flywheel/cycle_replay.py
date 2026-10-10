@@ -37,7 +37,10 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
     if not stages or any(stage not in {'rubric','questions','examples'} for stage in stages):
         raise ValueError('choose separate decision-context optimization stages')
     prior_events=wheel.history(100000)
-    if not resume and (prior_events or wheel.active.head or wheel.active.config.example_ids or wheel.active.config.tasks):
+    # Declaring a selection policy at construction records its configuration;
+    # that alone does not make a runtime used.
+    configuration_only={'selection-policy-configured'}
+    if not resume and (any(event.get('kind') not in configuration_only for event in prior_events) or wheel.active.head or wheel.active.config.example_ids or wheel.active.config.tasks):
         raise ValueError('operational replay requires a fresh empty runtime')
     if max_rubric_optimizations is not None and (type(max_rubric_optimizations) is not int or max_rubric_optimizations < 1):
         raise ValueError('max_rubric_optimizations must be a positive integer or None')
@@ -113,7 +116,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             else:
                 result=await wheel.predict(row.item,train)
             selection=policy.select(item_id=row.item.id,predicted_label=result.label,negative_label=negative_label,
-                                    cycle_number=index+1)
+                                    cycle_number=index+1,confidence=result.probabilities[result.label])
             selected=selection.selected
             # This is an evaluator-only record.  It is deliberately not emitted
             # into wheel history, optimizer context, or a feedback event.
@@ -135,6 +138,11 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                     wheel.record_feedback_event(feedback,assignment=roles[row.item.id])
                     revealed_rows.append(row)
                     revealed_propensities[row.item.id]=selection.propensity
+                    if hasattr(policy,'observe_review'):
+                        # Only after the choice and only for a reviewed item: the
+                        # label a reviewer gave, as an operator's rule would see it.
+                        policy.observe_review(cycle_number=index+1,label=row.label,predicted_label=result.label,
+                                              confidence=result.probabilities[result.label],propensity=selection.propensity)
             eligible=selected and roles[row.item.id]!='scoreboard'
             eligible_count+=int(eligible)
             train=tuple(value for value in revealed_rows if roles[value.item.id]=='training')
@@ -190,6 +198,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
         if any(outcome['status'] in {'failed','partial','paused'} for outcome in outcomes):
             report['stopped_reason']='triggered step did not complete; inspect its trace before retrying'
             break
+    # A policy that adapts during the run (a taper) reports its final state here.
+    report['feedback_policy']=policy.manifest(negative_label)
     report['all_item_evaluator'] = compare_outputs(wheel.initial.task.labels, all_item_evaluation,
         limit=min(200, len(all_item_evaluation)), scope='replay-oracle') if all_item_evaluation else None
     return report

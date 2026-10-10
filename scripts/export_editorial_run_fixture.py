@@ -39,6 +39,8 @@ WINDOW = 100
 PRICES = {
     "gpt-4.1-mini": {"input_usd_per_mtok": 0.40, "cached_input_usd_per_mtok": 0.10, "output_usd_per_mtok": 1.60,
                      "source": "developers.openai.com/api/docs/models/gpt-4.1-mini, read 2026-10-09"},
+    "gpt-4.1": {"input_usd_per_mtok": 2.00, "cached_input_usd_per_mtok": 0.50, "output_usd_per_mtok": 8.00,
+                "source": "developers.openai.com/api/docs/models/gpt-4.1, read 2026-10-09"},
     "jev": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0, "source": "TypeSafe's published price"},
 }
 
@@ -55,13 +57,15 @@ def public_excerpt(title: str) -> str:
     return f"Wikinews reports: {title}. The original linked article provides the complete reporting context."
 
 
-def read(path: Path, count: int) -> dict:
+def read(path: Path, count: int, cut: int | None = None) -> dict:
     try:
         data = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"invalid results file {path}: {exc}") from exc
-    if len(data.get("cycles", [])) != count:
-        raise SystemExit(f"{path}: requires exactly {count} completed cycles")
+    completed = len(data.get("cycles", []))
+    if completed != count and (cut is None or completed < cut):
+        # A cut may come from a recording that stopped early, as long as it covers the cut.
+        raise SystemExit(f"{path}: requires exactly {count} completed cycles" + (f", or at least {cut} for the cut" if cut else ""))
     if data.get("disclosure", {}).get("operational_items") != count:
         raise SystemExit(f"{path}: expected {count} operational items")
     return data
@@ -400,18 +404,19 @@ def main(argv=None) -> int:
         raise SystemExit(f"--cycles needs schema 2 and a multiple of {WINDOW} from {WINDOW} to {count}")
     corpus, reference_labels = read_corpus(args.corpus, manifest)
     scenario_dirs = parse_scenarios(args.scenario)
-    runs = {name: read(path / "results.json", count) for name, path in scenario_dirs.items()}
+    runs = {name: read(path / "results.json", count, cut) for name, path in scenario_dirs.items()}
     if len({run["protocol"]["task"] for run in runs.values()}) != 1:
         raise SystemExit("modes do not share the same frozen task hash")
     for name, run in runs.items():
-        if {cycle.get("item_id") for cycle in run["cycles"]} != set(corpus):
+        if cut is not None:
+            run["cycles"] = run["cycles"][:cut]
+        if ({cycle.get("item_id") for cycle in run["cycles"]} != set(corpus) if cut is None
+                else not {cycle.get("item_id") for cycle in run["cycles"]} <= set(corpus)):
             raise SystemExit(f"{name}: frozen results do not match the reviewed public corpus")
         for cycle in run["cycles"]:
             revealed = cycle.get("human_label")
             if revealed is not None and revealed != reference_labels[cycle["item_id"]]:
                 raise SystemExit(f"{name}: revealed label does not match frozen reference at cycle {cycle['cycle_number']}")
-        if cut is not None:
-            run["cycles"] = run["cycles"][:cut]
     prices = {"decision_model": PRICES[args.decision_model_price], "optimizer": PRICES[args.optimizer_price]}
     labels = ("publish", "reject")
     scenarios = {}
