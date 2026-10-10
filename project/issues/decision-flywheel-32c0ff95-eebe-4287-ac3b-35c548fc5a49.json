@@ -10,9 +10,17 @@
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "c91e9869-208e-4d31-a619-0e42c564edda",
+      "author": "home",
+      "text": "Pre-registration, 2026-10-09, before any run. Design: Jev 1.13.0, the 1,200-item corpus, same seed, review everything, empty starting rubric, recorded gate configuration, gpt-4.1-mini optimizer; the only difference is --selection-primary: balanced_brier (explicit), precision, recall, f1 (publish class). One run each. Measures per 100 cycles, cyclotron, evaluator-only: accuracy, publish precision, recall and F1, Brier, ECE, mean confidence, optimizer events, labels. Hypotheses over cycles 401 to 1,200, against the balanced-Brier run: H1 the precision run's publish precision is at least 0.05 higher and its recall no higher. H2 the recall run's recall is at least 0.05 higher and its precision no higher. H3 the F1 run's precision and recall each lie between the precision and recall runs'. H4 the range of accuracy across the four goals is smaller than the range of precision and of recall. H5 the range of ECE across the goals is at most 0.03. Prior expectation, stated from the mechanism found in decision-flywheel-b1b1827a: in this gate configuration the goal enters only provisional rubric acceptance (an allowance of up to 2.0, or 1.0 for rate goals, that accepts nearly anything) and ML-head promotion, so I expect H1 and H2 to fail for lack of effect; if they do, the pictogram should not be built and the page should say the runs did not differ beyond noise.",
+      "created_at": "2026-10-10T01:52:44.196783Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.450456Z",
-  "updated_at": "2026-10-09T14:37:22.574483Z",
+  "updated_at": "2026-10-10T01:52:44.196811Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
