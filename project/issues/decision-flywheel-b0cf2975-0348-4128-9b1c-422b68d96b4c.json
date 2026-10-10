@@ -17,10 +17,17 @@
       "text": "Pre-registration, 2026-10-09, before any run. Model: Jev 1.13.0 (from decision-flywheel-c9c5b6e2: accuracy level with the OpenAI models, the best cold start, the cheapest, and the confidence that routes mistakes best). Design: the 1,200-item extended corpus, seed editorial-prequential-v1, empty starting rubric, recorded gate configuration, gpt-4.1-mini optimizer, item field text. Arms, one run each: review everything (reference); random 25 percent; least-confident 25 percent (confidence at or below the 25th percentile of the previous 100 issued confidences; random 25 percent for the first 20 cycles); mixed (least-confident 20 percent plus a random audit of about 5 percent of all items). Measures per 100 cycles, evaluator-only against the reference labels: the cyclotron's accuracy (learning), ECE, labels collected, mistakes that slipped through unreviewed, and whole-system accuracy (reviewed items counted right). Hypotheses over cycles 401 to 1,200: H1 least-confident's whole-system accuracy is at least 5 points above random's. H2 least-confident's ECE is at least 0.03 above random's (it loses the audit signal). H3 mixed's whole-system accuracy is within 2 points of least-confident's and its ECE within 0.02 of random's. H4 least-confident's evaluator-only accuracy (learning) is at least random's. Budget about 6 USD for the four runs.",
       "created_at": "2026-10-09T23:24:07.745723Z",
       "comment_type": "default"
+    },
+    {
+      "id": "852f4542-204c-423f-b907-4790cf2bc0df",
+      "author": "home",
+      "text": "Run note: the review-everything reference arm stopped at cycle 1,031 on the decision-request cap I set (8,000; Jev's rubric steps re-score items, so the cap was too low). It is exported as its first 1,000 cycles and compared with the other arms over cycles 401 to 1,000; the three selection arms run with a 20,000 cap and the hypotheses keep their registered window, 401 to 1,200.",
+      "created_at": "2026-10-10T00:47:20.601234Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:34:35.413946Z",
-  "updated_at": "2026-10-09T23:24:07.745744Z",
+  "updated_at": "2026-10-10T00:47:20.601604Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
