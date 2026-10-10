@@ -153,3 +153,19 @@ def test_revealed_feedback_trigger_resumes_without_duplicate_attempt(tmp_path):
     due=[event for event in second.history(100000) if event['kind']=='trigger-evaluated' and event['stage']=='rubric' and event['due']]
     assert [event['details']['feedback_count'] for event in due].count(2)==1
     second.close()
+
+
+def test_a_replay_can_start_on_a_runtime_that_only_declared_its_selection_policy(tmp_path):
+    import pytest
+    from .selection_policy import SelectionPolicy
+    optimizer=OptimizerAgent(lambda _:OptimizerReply('{"rubric":"Guidance"}','fake'))
+    wheel=DecisionFlywheel(tmp_path/'goal.sqlite',ClassifierConfig(TASK),FakeModel(),optimizer,max_requests=2000,
+                           selection_policy=SelectionPolicy(primary='precision',positive_class=TASK.labels[0]))
+    assert [event['kind'] for event in wheel.history(10)]==['selection-policy-configured']
+    plan=plan_replay(TASK,rows(),seed='goal',batch_size=18)
+    report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=18,retrain_every=18,stages=('rubric',),rubric_changes_every=None))
+    assert len(report['cycles'])==len(plan.ordered)
+    wheel._emit({'kind':'prediction-made-elsewhere'})
+    with pytest.raises(ValueError,match='fresh empty runtime'):
+        asyncio.run(run_cycle_replay(wheel,plan,optimize_every=18,retrain_every=18,stages=('rubric',),rubric_changes_every=None))
+    wheel.close()
