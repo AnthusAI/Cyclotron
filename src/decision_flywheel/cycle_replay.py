@@ -135,6 +135,11 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                     wheel.record_feedback_event(feedback,assignment=roles[row.item.id])
                     revealed_rows.append(row)
                     revealed_propensities[row.item.id]=selection.propensity
+                    if hasattr(policy,'observe_review'):
+                        # Only after the choice and only for a reviewed item: the
+                        # label a reviewer gave, as an operator's rule would see it.
+                        policy.observe_review(cycle_number=index+1,label=row.label,predicted_label=result.label,
+                                              confidence=result.probabilities[result.label],propensity=selection.propensity)
             eligible=selected and roles[row.item.id]!='scoreboard'
             eligible_count+=int(eligible)
             train=tuple(value for value in revealed_rows if roles[value.item.id]=='training')
@@ -190,6 +195,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
         if any(outcome['status'] in {'failed','partial','paused'} for outcome in outcomes):
             report['stopped_reason']='triggered step did not complete; inspect its trace before retrying'
             break
+    # A policy that adapts during the run (a taper) reports its final state here.
+    report['feedback_policy']=policy.manifest(negative_label)
     report['all_item_evaluator'] = compare_outputs(wheel.initial.task.labels, all_item_evaluation,
         limit=min(200, len(all_item_evaluation)), scope='replay-oracle') if all_item_evaluation else None
     return report

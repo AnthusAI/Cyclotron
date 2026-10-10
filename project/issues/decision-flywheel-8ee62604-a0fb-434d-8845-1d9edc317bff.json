@@ -10,9 +10,17 @@
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6ff8bf47-4bd3-44f1-8ea1-b4b988b26b4a",
+      "author": "home",
+      "text": "Pre-registration, 2026-10-09, before any run. Model and settings as the selection experiment (decision-flywheel-b0cf2975): Jev 1.13.0, the 1,200-item corpus, same seed, empty starting rubric, recorded gate configuration, gpt-4.1-mini optimizer. Rule (MetricTaperPolicy, parameters recorded in results.json with its rate log): review everything at first; at each 100-cycle boundary read only reviewed labels: ECE of the last 200 reviewed items, and accuracy of reviewed items in the window with confidence at least 0.80 (at least 10 of them); a window passes when ECE < 0.05 and that accuracy >= 0.90; after two passing windows in a row step the rate down one level (100, 50, 35, 25, 15 percent); one failing window steps it back up. Below full review items are chosen at random at the current rate, so every review is an audit and the 15 percent floor is the audit. Arms: metric taper (new run); time-based taper, first 100 all then 50 percent random (new run, existing mode first_100_all_then_half); fixed random 25 percent and review everything (from the selection experiment). Hypotheses over the run: H1 the metric taper uses at most 60 percent of review-everything's labels. H2 its whole-system accuracy over cycles 401 to 1,200 is within 3 points of review-everything's (compared over 401 to 1,000, where that arm stopped) and at least 3 points above fixed random 25 percent's. H3 its worst 100-cycle whole-system accuracy after cycle 200 is at least the time-based taper's. Risk stated in advance: with ECE below 0.05 required, the rule may never step down on this corpus; that outcome is reported as is.",
+      "created_at": "2026-10-10T01:12:49.682973Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.431306Z",
-  "updated_at": "2026-10-09T14:34:58.583966Z",
+  "updated_at": "2026-10-10T01:12:49.682992Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
