@@ -3,7 +3,7 @@
   "title": "Experiment: which items to review, least-confident versus random versus mixed",
   "description": "At a fixed review rate (start with 25 percent), compare three selection rules on the extended corpus: least-confident first; uniform random; and mixed (a fixed random audit share, say 5 percent, plus least-confident for the rest). Measure after each 100 cycles: whole-system accuracy, mistakes that slipped through unreviewed, calibration error, and how fast the cyclotron learns (labels are only collected on reviewed items, so selection changes the training signal). Hypothesis to test: least-confident learns faster but loses the audit signal needed to keep calibration honest; mixed is the practical default. Acceptance: one recording per arm, a comparison table, and a written recommendation with its caveats.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -24,11 +24,18 @@
       "text": "Run note: the review-everything reference arm stopped at cycle 1,031 on the decision-request cap I set (8,000; Jev's rubric steps re-score items, so the cap was too low). It is exported as its first 1,000 cycles and compared with the other arms over cycles 401 to 1,000; the three selection arms run with a 20,000 cap and the hypotheses keep their registered window, 401 to 1,200.",
       "created_at": "2026-10-10T00:47:20.601234Z",
       "comment_type": "default"
+    },
+    {
+      "id": "62c10d4c-c9be-4806-bea8-327e1b9de306",
+      "author": "home",
+      "text": "Results: docs/experiments/review-selection-20261009.md on exp/review-selection. Cycles 401 to 1,200: random 25 percent learned best (86.4 percent; ECE 0.079; whole-system 89.6; 83 mistakes slipped), least-confident (83.4; 0.092; 94.4; 45 slipped; 30.4 mistakes caught per 100 labels), mixed (85.4; 0.095; 95.1; 39 slipped), review everything 84.3 over 401 to 1,000. H1 not supported (4.8 points), H2 not supported (0.013), H3 supported, H4 not supported. Recommendation: mixed as the default. Caveat: tied Jev confidences pushed the confidence arms' realized rates to 33.5 and 35.7 percent; the cut should break ties at random.",
+      "created_at": "2026-10-10T01:52:09.851192Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:34:35.413946Z",
-  "updated_at": "2026-10-10T00:47:20.601604Z",
-  "closed_at": null,
+  "updated_at": "2026-10-10T01:52:09.876834Z",
+  "closed_at": "2026-10-10T01:52:09.876564Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
