@@ -3,7 +3,7 @@
   "title": "Run the editorial example to 1,000+ cycles and record the learning curve",
   "description": "Run the prequential study on the extended corpus with review-everything feedback, same decision model and optimizer settings as the 400-cycle recording, and record per-100-cycle windows: accuracy, precision, recall, F1, Brier, calibration error, mean stated confidence, optimizer events, model calls, wall-clock time, and provider cost. Questions: where does accuracy plateau, how many corrections did it take, and what did the run cost. Acceptance: a recording directory plus an exported fixture (same schema as editorial-run-v1 with a schema bump) and a short results note with the curve.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -24,11 +24,18 @@
       "text": "Correction to the comment above: the last partial window is 21 right of the 24 completed cycles 1101 to 1124, not 22 of 25.",
       "created_at": "2026-10-09T20:55:38.084720Z",
       "comment_type": "default"
+    },
+    {
+      "id": "2b76fced-ebe2-41e2-ab4e-c6301aa14d22",
+      "author": "home",
+      "text": "Results note: docs/experiments/editorial-long-run-20261009.md on branch exp/editorial-long-run-note. Attempt 4 (1,124 of 1,200 cycles, stopped by the store lock fixed in decision-flywheel-189dddde): accuracy plateaus at about 82 percent from cycle 400 (79 to 84 percent per window through 1,100); 24 rubric proposals, all provisional, none promoted; ML head promoted at 200, 400, 600 and 800, none qualified at 1,000; labels differed from the decision model only on 38 cycles (324 to 367) under the short rubric adopted at 320, where the head was right 21 times to the model's 17, and the 66 percent window 301 to 400 is mostly the decision model under that rubric (62 percent raw). Cost $5.67 at list prices over 148 minutes. Per Ryan, no long-run or 500-cycle fixture is exported; the site keeps the 400-cycle recording. A 500-cycle rerun was started and cancelled at 412 cycles ($0.94).",
+      "created_at": "2026-10-09T21:24:00.929614Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:34:35.374640Z",
-  "updated_at": "2026-10-09T20:55:38.084748Z",
-  "closed_at": null,
+  "updated_at": "2026-10-09T21:24:00.949914Z",
+  "closed_at": "2026-10-09T21:24:00.949881Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
