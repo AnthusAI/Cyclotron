@@ -62,8 +62,7 @@ Per-window tables are in `analysis/selection-*.json`.
   learn better either (84.3% over 401 to 1,000).
   - One reading is that review volume beyond about 25% does not raise this
     plateau.
-  - Fewer labels also means fewer rubric rewrites. The arms ran 23, 7, 6 and
-    8 optimizer calls, so the rubric churned less.
+  - Fewer labels also means fewer rubric rewrites. The arms ran 22 (first 1,000 cycles), 7, 8 and 9 optimizer calls (everything, random, least-confident, mixed), so the rubric churned less.
 
 ## Recommendation
 
