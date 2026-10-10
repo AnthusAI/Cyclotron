@@ -1,19 +1,41 @@
 {
   "id": "decision-flywheel-b0cf2975-0348-4128-9b1c-422b68d96b4c",
   "title": "Experiment: which items to review, least-confident versus random versus mixed",
-  "description": "At a fixed review rate (start with 25 percent), compare three selection rules on the extended corpus: least-confident first; uniform random; and mixed (a fixed random audit share, say 5 percent, plus least-confident for the rest). Measure after each 100 cycles: whole-system accuracy, mistakes that slipped through unreviewed, calibration error, and how fast the cyclotron learns (labels are only collected on reviewed items, so selection changes the training signal). Hypothesis to test: least-confident learns faster but loses the audit signal needed to keep calibration honest; mixed is the practical default. Acceptance: one recording per arm, a comparison table, and a written recommendation with its caveats. Plateau note (decision-flywheel-8f3a052a, docs/experiments/editorial-long-run-20261009.md): with gpt-4.1-mini as the decision model, accuracy plateaus at about 82 percent on this corpus from cycle 400 through 1,124 cycles of review-everything feedback, so this experiment should also consider a stronger decision model as a variable.",
+  "description": "At a fixed review rate (start with 25 percent), compare three selection rules on the extended corpus: least-confident first; uniform random; and mixed (a fixed random audit share, say 5 percent, plus least-confident for the rest). Measure after each 100 cycles: whole-system accuracy, mistakes that slipped through unreviewed, calibration error, and how fast the cyclotron learns (labels are only collected on reviewed items, so selection changes the training signal). Hypothesis to test: least-confident learns faster but loses the audit signal needed to keep calibration honest; mixed is the practical default. Acceptance: one recording per arm, a comparison table, and a written recommendation with its caveats.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "77301ebc-4bed-4be1-b1b1-202a4b3ed7f8",
+      "author": "home",
+      "text": "Pre-registration, 2026-10-09, before any run. Model: Jev 1.13.0 (from decision-flywheel-c9c5b6e2: accuracy level with the OpenAI models, the best cold start, the cheapest, and the confidence that routes mistakes best). Design: the 1,200-item extended corpus, seed editorial-prequential-v1, empty starting rubric, recorded gate configuration, gpt-4.1-mini optimizer, item field text. Arms, one run each: review everything (reference); random 25 percent; least-confident 25 percent (confidence at or below the 25th percentile of the previous 100 issued confidences; random 25 percent for the first 20 cycles); mixed (least-confident 20 percent plus a random audit of about 5 percent of all items). Measures per 100 cycles, evaluator-only against the reference labels: the cyclotron's accuracy (learning), ECE, labels collected, mistakes that slipped through unreviewed, and whole-system accuracy (reviewed items counted right). Hypotheses over cycles 401 to 1,200: H1 least-confident's whole-system accuracy is at least 5 points above random's. H2 least-confident's ECE is at least 0.03 above random's (it loses the audit signal). H3 mixed's whole-system accuracy is within 2 points of least-confident's and its ECE within 0.02 of random's. H4 least-confident's evaluator-only accuracy (learning) is at least random's. Budget about 6 USD for the four runs.",
+      "created_at": "2026-10-09T23:24:07.745723Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "852f4542-204c-423f-b907-4790cf2bc0df",
+      "author": "home",
+      "text": "Run note: the review-everything reference arm stopped at cycle 1,031 on the decision-request cap I set (8,000; Jev's rubric steps re-score items, so the cap was too low). It is exported as its first 1,000 cycles and compared with the other arms over cycles 401 to 1,000; the three selection arms run with a 20,000 cap and the hypotheses keep their registered window, 401 to 1,200.",
+      "created_at": "2026-10-10T00:47:20.601234Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "62c10d4c-c9be-4806-bea8-327e1b9de306",
+      "author": "home",
+      "text": "Results: docs/experiments/review-selection-20261009.md on exp/review-selection. Cycles 401 to 1,200: random 25 percent learned best (86.4 percent; ECE 0.079; whole-system 89.6; 83 mistakes slipped), least-confident (83.4; 0.092; 94.4; 45 slipped; 30.4 mistakes caught per 100 labels), mixed (85.4; 0.095; 95.1; 39 slipped), review everything 84.3 over 401 to 1,000. H1 not supported (4.8 points), H2 not supported (0.013), H3 supported, H4 not supported. Recommendation: mixed as the default. Caveat: tied Jev confidences pushed the confidence arms' realized rates to 33.5 and 35.7 percent; the cut should break ties at random.",
+      "created_at": "2026-10-10T01:52:09.851192Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.413946Z",
-  "updated_at": "2026-10-09T21:23:52.538572Z",
-  "closed_at": null,
+  "updated_at": "2026-10-10T01:52:09.876834Z",
+  "closed_at": "2026-10-10T01:52:09.876564Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

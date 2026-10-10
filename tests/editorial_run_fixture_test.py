@@ -146,3 +146,18 @@ def test_a_cycle_cut_exports_only_the_first_cycles_with_their_own_usage_and_wind
 def test_a_cycle_cut_must_be_whole_windows_within_the_recording(tmp_path, cycles):
     with pytest.raises(SystemExit, match="--cycles"):
         _exporter().main(_recording(tmp_path, 300) + ["--output", str(tmp_path / "x.json"), "--cycles", cycles])
+
+
+def test_a_cut_may_come_from_a_recording_that_stopped_early(tmp_path):
+    arguments = _recording(tmp_path, 300)
+    results = tmp_path / "all" / "results.json"
+    stopped = json.loads(results.read_text())
+    stopped["cycles"] = stopped["cycles"][:250]
+    results.write_text(json.dumps(stopped))
+    output = tmp_path / "cut.json"
+    assert _exporter().main(arguments + ["--output", str(output), "--cycles", "200"]) == 0
+    assert len(json.loads(output.read_text())["scenarios"]["all"]["cycles"]) == 200
+    with pytest.raises(SystemExit, match="at least 300"):
+        _exporter().main(arguments + ["--output", str(output), "--cycles", "300"])
+    with pytest.raises(SystemExit, match="exactly 300"):
+        _exporter().main(arguments + ["--output", str(output)])

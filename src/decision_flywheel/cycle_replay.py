@@ -113,7 +113,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             else:
                 result=await wheel.predict(row.item,train)
             selection=policy.select(item_id=row.item.id,predicted_label=result.label,negative_label=negative_label,
-                                    cycle_number=index+1)
+                                    cycle_number=index+1,confidence=result.probabilities[result.label])
             selected=selection.selected
             # This is an evaluator-only record.  It is deliberately not emitted
             # into wheel history, optimizer context, or a feedback event.
