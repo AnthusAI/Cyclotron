@@ -108,3 +108,14 @@ def test_the_decision_model_can_see_the_title_as_the_labeler_did(tmp_path):
     study = _study()
     assert dict(study.rows(path)[0].item.values) == {"text": "body"}
     assert dict(study.rows(path, ("title", "text"))[0].item.values) == {"title": "T", "text": "body"}
+
+
+def test_the_optimization_goal_is_declared_for_the_publish_class(tmp_path):
+    operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
+    operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
+    output = tmp_path / "study"
+    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
+                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
+                   "--output", str(output), "--selection-primary", "precision"])
+    policy = json.loads((output / "protocol.json").read_text())["selection_policy"]
+    assert (policy["primary"], policy["positive_class"]) == ("precision", "publish")
