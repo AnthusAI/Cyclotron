@@ -17,7 +17,7 @@ from decision_flywheel.flywheel import DecisionFlywheel, development_assignment
 from decision_flywheel.models import DecisionTask, Item, LabeledItem
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.replay import ReplayPlan
-from decision_flywheel.replay_feedback_policy import (ConfidenceFeedbackPolicy, ReplayFeedbackPolicy, onboarding_all_then_half,
+from decision_flywheel.replay_feedback_policy import (ConfidenceFeedbackPolicy, MetricTaperPolicy, ReplayFeedbackPolicy, onboarding_all_then_half,
     onboarding_publish_priority_taper, onboarding_first_hundred_then_half)
 from decision_flywheel.trace_artifact import read_trace, render_trace
 
@@ -63,6 +63,7 @@ def write_budget_ledger(output, decision_cap, optimizer_cap, modes):
     return ledger
 
 def policy_for(mode, seed):
+    if mode=='metric_taper': return MetricTaperPolicy(seed=seed)
     if mode in {'least_confident_25','random_25','mixed_25'}:
         return ConfidenceFeedbackPolicy(mode.rsplit('_',1)[0],rate=.25,audit_rate=.05,seed=seed)
     if mode in {'all','reject_half','casual_ten_percent'}: return ReplayFeedbackPolicy(mode,seed)

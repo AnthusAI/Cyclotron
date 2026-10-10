@@ -68,3 +68,39 @@ def test_confidence_rules_need_the_issued_confidence():
     from .replay_feedback_policy import ConfidenceFeedbackPolicy
     with pytest.raises(ValueError, match='issued confidence'):
         ConfidenceFeedbackPolicy('least_confident').select(item_id='a', predicted_label='publish', negative_label='reject')
+
+
+def _taper_run(policy, accuracy_for, cycles=800):
+    import random
+    draws = random.Random(7)
+    for n in range(1, cycles + 1):
+        confidence = draws.choice((.85, .9, .95, .99))
+        selection = policy.select(item_id=f'i{n}', predicted_label='reject', negative_label='reject', cycle_number=n,
+                                  confidence=confidence)
+        if selection.selected:
+            right = draws.random() < accuracy_for(n, confidence)
+            policy.observe_review(cycle_number=n, label='reject' if right else 'publish', predicted_label='reject',
+                                  confidence=confidence, propensity=selection.propensity)
+    return policy.log
+
+
+def test_the_taper_steps_down_after_two_passing_windows_and_back_up_after_a_failing_one():
+    from .replay_feedback_policy import MetricTaperPolicy
+    log = _taper_run(MetricTaperPolicy(), lambda n, c: c if n <= 500 else .5)
+    streak = 0
+    for entry in log:
+        streak = streak + 1 if entry['passed'] else 0
+        if entry['rate_after'] < entry['rate_before']:
+            assert streak == 2
+            streak = 0
+        if not entry['passed'] and entry['rate_before'] < 1.:
+            assert entry['rate_after'] > entry['rate_before']
+    assert min(entry['rate_after'] for entry in log if entry['cycle'] <= 500) < 1.
+    assert next(entry for entry in log if entry['cycle'] == 600)['rate_after'] == 1.
+
+
+def test_the_taper_holds_full_review_while_the_cyclotron_is_overconfident():
+    from .replay_feedback_policy import MetricTaperPolicy
+    log = _taper_run(MetricTaperPolicy(), lambda n, c: .6)
+    assert {entry['rate_after'] for entry in log} == {1.}
+    assert all(not entry['passed'] for entry in log)

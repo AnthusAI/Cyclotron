@@ -1,19 +1,34 @@
 {
   "id": "decision-flywheel-8ee62604-a0fb-434d-8845-1d9edc317bff",
   "title": "Experiment: when to start reviewing fewer, and how to taper",
-  "description": "Design and test a taper rule driven by recorded metrics rather than a fixed schedule. Candidate rule: review everything until the last-200 calibration error is below 0.05 and auto-approved accuracy at the chosen threshold has met the target for two consecutive 100-cycle windows; then lower the review rate one step (100, 50, 35, 25, 15 percent), holding at least a 5 percent random audit; step back up if either metric fails for a window. Compare against fixed rates and against a time-based taper. Measure labels spent, whole-system accuracy, and worst-window accuracy. Acceptance: the rule implemented as a replay feedback policy with its parameters recorded, one recording per variant, and a recommendation. Plateau note (decision-flywheel-8f3a052a, docs/experiments/editorial-long-run-20261009.md): with gpt-4.1-mini as the decision model, accuracy plateaus at about 82 percent on this corpus from cycle 400 through 1,124 cycles of review-everything feedback, so this experiment should also consider a stronger decision model as a variable.",
+  "description": "Design and test a taper rule driven by recorded metrics rather than a fixed schedule. Candidate rule: review everything until the last-200 calibration error is below 0.05 and auto-approved accuracy at the chosen threshold has met the target for two consecutive 100-cycle windows; then lower the review rate one step (100, 50, 35, 25, 15 percent), holding at least a 5 percent random audit; step back up if either metric fails for a window. Compare against fixed rates and against a time-based taper. Measure labels spent, whole-system accuracy, and worst-window accuracy. Acceptance: the rule implemented as a replay feedback policy with its parameters recorded, one recording per variant, and a recommendation.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6ff8bf47-4bd3-44f1-8ea1-b4b988b26b4a",
+      "author": "home",
+      "text": "Pre-registration, 2026-10-09, before any run. Model and settings as the selection experiment (decision-flywheel-b0cf2975): Jev 1.13.0, the 1,200-item corpus, same seed, empty starting rubric, recorded gate configuration, gpt-4.1-mini optimizer. Rule (MetricTaperPolicy, parameters recorded in results.json with its rate log): review everything at first; at each 100-cycle boundary read only reviewed labels: ECE of the last 200 reviewed items, and accuracy of reviewed items in the window with confidence at least 0.80 (at least 10 of them); a window passes when ECE < 0.05 and that accuracy >= 0.90; after two passing windows in a row step the rate down one level (100, 50, 35, 25, 15 percent); one failing window steps it back up. Below full review items are chosen at random at the current rate, so every review is an audit and the 15 percent floor is the audit. Arms: metric taper (new run); time-based taper, first 100 all then 50 percent random (new run, existing mode first_100_all_then_half); fixed random 25 percent and review everything (from the selection experiment). Hypotheses over the run: H1 the metric taper uses at most 60 percent of review-everything's labels. H2 its whole-system accuracy over cycles 401 to 1,200 is within 3 points of review-everything's (compared over 401 to 1,000, where that arm stopped) and at least 3 points above fixed random 25 percent's. H3 its worst 100-cycle whole-system accuracy after cycle 200 is at least the time-based taper's. Risk stated in advance: with ECE below 0.05 required, the rule may never step down on this corpus; that outcome is reported as is.",
+      "created_at": "2026-10-10T01:12:49.682973Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "e2a50e49-c3cb-4cbe-a0ab-71c12ab49506",
+      "author": "home",
+      "text": "Results: docs/experiments/review-taper-20261009.md on exp/review-taper. Metric taper (as pre-registered): 1,094 labels (91 percent of review-everything), whole-system 98.5 percent over 401 to 1,200, worst window 91, learning 86.9, ECE 0.062, 3.08 USD; it stepped down to 50 percent only at cycle 800 and back to 100 at 1,000. Time-based taper (first 100 all, then 50 percent): 672 labels, whole-system 94.3, worst 88, 1.29 USD. H1 not supported, H2 and H3 supported. The ECE bar of 0.05 over 200 reviews is about its own sampling noise; recommend not shipping these parameters and testing a promise-based variant with the mixed rule below full review.",
+      "created_at": "2026-10-10T04:11:20.560003Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-09T14:34:35.431306Z",
-  "updated_at": "2026-10-09T21:23:52.448354Z",
-  "closed_at": null,
+  "updated_at": "2026-10-10T04:11:20.587107Z",
+  "closed_at": "2026-10-10T04:11:20.586801Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
