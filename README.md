@@ -56,6 +56,8 @@ To enable structural optimization, inject an `OptimizerAgent` with an
 application-owned completion callable. The core remains provider-neutral. The
 adapter, storage choice, and event consumer are application decisions.
 
+Design for keeping and screening many ideas at once: [docs/hypothesis-portfolio.md](docs/hypothesis-portfolio.md).
+
 ## Embed a cyclotron in an application
 
 The full walk-through, with the widgets and operational notes, is
