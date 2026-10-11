@@ -35,6 +35,11 @@ def rows(path, fields=('text',)):
 
 def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def atomic_write(path,text):
+    """Write beside the target and rename, so a full disk cannot leave an empty results file."""
+    tmp=path.with_name(path.name+'.tmp')
+    tmp.write_text(text); tmp.replace(path)
+
 def event_counts(database):
     if not database.exists(): return {'decision_requests':0,'optimizer_requests':0,'completed_cycles':0,'unfinished_cycles':0}
     connection=sqlite3.connect(f'file:{database}?mode=ro',uri=True)
@@ -231,7 +236,7 @@ async def main_async(args):
                 report['cycles']=[*old_cycles,*report['cycles']]
             report['disclosure']={'operational_items':count,'feedback_revealed':sum(x['feedback_selected'] for x in report['cycles']),
               'dev_role_items':len(plan.development),'scoreboard_role_items':0}
-            (out/'results.json').write_text(json.dumps(report,indent=2)+'\n')
+            atomic_write(out/'results.json',json.dumps(report,indent=2)+'\n')
             if args.playback:
                 events=read_trace(out/'runtime.sqlite3')
                 (out/'playback.html').write_text(render_trace(events,class_config=[{'label':'publish','role':'positive'},{'label':'reject','role':'negative'}]))
