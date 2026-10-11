@@ -89,7 +89,7 @@ class CyclotronRuntime:
             value = values.setdefault(key, default)
             if type(value) is not int or value < 1:
                 raise ValueError("run ceilings and cadences must be positive integers")
-        values.setdefault("selection_policy", {"primary": "f1", "positive_class": "include"})
+        values.setdefault("selection_policy", {"primary": "accuracy"})
         values["selection_policy"] = asdict(SelectionPolicy(**values["selection_policy"]))
         values.setdefault("seed", "arxiv-web-v1")
         values=normalize_decision_settings(values)

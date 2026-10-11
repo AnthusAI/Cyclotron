@@ -6,6 +6,8 @@ from .flywheel import DecisionFlywheel
 from .flywheel_test import FakeModel, TASK, TRAIN, DEV
 from .optimizer_agent import OptimizerAgent
 from .classifier_training import train_classifier
+from .selection_policy import SelectionPolicy as _SP
+_BRIER = _SP('balanced_brier')
 
 
 def forbidden(_):
@@ -227,7 +229,7 @@ def test_a_winning_question_removal_rebuilds_the_head_and_changes_the_next_reque
                 answers[task.name] = DecisionResult('yes' if signal else 'no', {'yes':p, 'no':1-p})
             return replace(batch, answers=answers)
     config = ClassifierConfig(TASK, tasks=(DecisionTask('shortcut', ('yes','no'), 'Shortcut?'),))
-    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, HarmfulFeatureModel(), OptimizerAgent(forbidden))
+    wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, HarmfulFeatureModel(), OptimizerAgent(forbidden), selection_policy=_BRIER)
     result = asyncio.run(train_classifier(wheel, TRAIN, DEV, protected=(),
         propensities={row.item.id:1. for row in TRAIN}, min_development_per_class=1))
     assert result['promoted'] and result['selected']['feature_set'] == 'without:shortcut'
@@ -289,7 +291,7 @@ def test_raw_decision_model_can_replace_a_head_using_the_same_configured_objecti
 
 def test_raw_candidate_can_also_win_under_the_legacy_brier_policy(tmp_path):
     from .feature_bank import FeatureBank
-    wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden))
+    wheel = DecisionFlywheel(tmp_path / 'runtime.sqlite', ClassifierConfig(TASK), FakeModel(), OptimizerAgent(forbidden), selection_policy=_BRIER)
     FeatureBank(wheel.db).register({'name':'practical','instructions':'Practical?', 'labels':['yes','no']},
                                  rationale='Feedback', evidence='training-only')
     kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN}, min_development_per_class=1)
@@ -354,6 +356,7 @@ def test_a_context_candidate_cannot_promote_by_sacrificing_a_class_for_lower_bri
     async def score(classifier, *args):
         candidate = classifier.head is not None
         return {"balanced_brier": .1 if candidate else .9, "balanced_accuracy": .5 if candidate else 1.,
+                "accuracy": .5 if candidate else 1.,
                 "per_class": {"include": {"recall": 0. if candidate else 1.}, "exclude": {"recall": 1.}}}
     wheel._score = score
     result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1. for r in TRAIN},

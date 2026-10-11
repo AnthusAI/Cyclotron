@@ -6,6 +6,8 @@ from .models import DecisionResult, Item, LabeledItem
 from .flywheel import DecisionFlywheel
 from .flywheel_test import TASK, TRAIN, DEV, agent
 from .example_attribution import plan_swaps, measure_example_swaps
+from .selection_policy import SelectionPolicy as _SP
+_BRIER = _SP('balanced_brier')
 
 
 class SignalModel:
@@ -68,7 +70,7 @@ def test_changed_objective_recomputes_selection_without_repaying_unchanged_reque
     path = tmp_path / 'runtime.sqlite'
     config = ClassifierConfig(TASK, example_ids=('t0','t1'))
     kwargs = dict(protected=(), propensities={r.item.id:1. for r in TRAIN})
-    wheel = DecisionFlywheel(path, config, model, agent([]), max_requests=50)
+    wheel = DecisionFlywheel(path, config, model, agent([]), max_requests=50, selection_policy=_BRIER)
     first = asyncio.run(measure_example_swaps(wheel, TRAIN, DEV, **kwargs))
     calls = len(model.calls)
     wheel.close()
@@ -98,7 +100,7 @@ def test_each_swap_changes_one_same_class_example_and_keeps_its_display_slot():
 def test_measurement_ranks_probability_gains_without_claiming_accuracy_gains_and_resumes_without_calls(tmp_path):
     config=ClassifierConfig(TASK,rubric='Useful papers',example_ids=('t0','t1'))
     model=SignalModel()
-    wheel=DecisionFlywheel(tmp_path/'runtime.sqlite',config,model,agent([]),max_requests=30)
+    wheel=DecisionFlywheel(tmp_path/'runtime.sqlite',config,model,agent([]),max_requests=30, selection_policy=_BRIER)
     kwargs=dict(protected=(),propensities={r.item.id:1. for r in TRAIN},preferred_ids=('t3',),max_trials=4)
     first=asyncio.run(measure_example_swaps(wheel,TRAIN,DEV,**kwargs))
     assert first['rankings'][0]['added_id']=='t3'

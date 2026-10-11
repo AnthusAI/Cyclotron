@@ -209,8 +209,13 @@ class ControlScheduler:
                 completed.add(control)
                 checkpoint()
             eligible = [result for result in results if result.get("improved")]
-            metric = "balanced_brier" if wheel.evaluation_weighting == "equal_class" else "brier"
-            best = min(eligible, key=lambda result: (result["candidate"][metric], result["idea_id"])) if eligible else None
+            # Best eligible trial follows the active selection policy (default accuracy: higher is better).
+            if wheel.selection_policy:
+                best = min(eligible, key=lambda result: (tuple(-v for v in wheel.selection_policy.rank(result["candidate"])),
+                                                         result["idea_id"])) if eligible else None
+            else:
+                metric = "balanced_brier" if wheel.evaluation_weighting == "equal_class" else "brier"
+                best = min(eligible, key=lambda result: (result["candidate"][metric], result["idea_id"])) if eligible else None
             if best:
                 wheel.promote_trial(best["trial_fingerprint"], training, development)
             result = {"promoted": best is not None, "trials": results, "baseline_version": baseline,

@@ -5,6 +5,8 @@ from .classifier_config import ClassifierConfig
 from .models import DecisionTask,Item,DecisionResult
 from .batched_classification import BatchedAnswers
 from .decision_cache import CacheOptions
+from .selection_policy import SelectionPolicy as _SP
+_BRIER = _SP('balanced_brier')
 
 
 @pytest.mark.parametrize('example_ids', [(), ('target',)])
@@ -162,7 +164,7 @@ def test_a_measured_head_cannot_be_promoted_after_a_sibling_changes_the_joint_re
                              observer=lambda _: None)
     shared.bind_context({'a': config, 'b': config}, {'a': TRAIN, 'b': TRAIN})
     wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, shared.adapter('a'),
-                             OptimizerAgent(lambda _: None), max_requests=100)
+                             OptimizerAgent(lambda _: None), max_requests=100, selection_policy=_BRIER)
     try:
         result = asyncio.run(wheel.improve(TRAIN, DEV, protected=(),
             propensities={row.item.id: 1. for row in TRAIN},

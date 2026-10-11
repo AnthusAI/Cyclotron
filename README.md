@@ -660,6 +660,12 @@ translate into better include recall.
 
 ### Choose the optimization objective
 
+**The default objective is accuracy.** With no `SelectionPolicy`, a candidate is
+promoted only if its development accuracy beats the incumbent's (exact ties keep
+the incumbent), and records say `promotion_metric: accuracy`. A policy saved by
+an earlier run is kept. To optimize something else, pass a `SelectionPolicy`
+(or `--selection-primary`), as below.
+
 The reusable runtime accepts a `SelectionPolicy`. Set the primary objective to
 accuracy, precision, recall, or F1. Brier and balanced scores are also available.
 Precision, recall, and F1 use an explicit positive class, or macro averaging for
@@ -934,8 +940,8 @@ training labels with full feature coverage, and calibrates only out of fold.
 `OPTIMIZATION_STAGE=classifier` to schedule it every 10 votes instead of rubric
 discovery. The same development-coverage gate applies; backfill alone does not
 mean that the new features have been deployed.
-Selection minimizes balanced development Brier, requires non-decreasing balanced
-accuracy, and rejects any per-class recall regression. The selected fitted
+Selection follows the active policy (default: maximize development accuracy);
+with an explicit Brier policy it minimizes that Brier score. The selected fitted
 artifact, evidence, metrics, weighting policy and cache state persist across
 restarts. `F` shows active features; `J` shows requests; fit and evaluation events
 appear as they happen.
