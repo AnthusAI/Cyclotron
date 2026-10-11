@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 This changelog is maintained by semantic-release from conventional commits.
 
+## Web package (unreleased)
+
+- New export `cyclotron/components/cycle-mark` (`CycleMark`): the logo's cycle mark with one animation. At rest it is exactly `RefreshCwWide`. A cycle moves both arrows half the racetrack (a dash offset and arrowheads on one closed path, never a rotate transform, because the wide mark matches itself only at 180 degrees) and lands on the logo pose. `cycleKey` or a `cycle()` handle plays one cycle; reduced motion keeps it still; no new dependencies.
+- `CyclotronBrand` takes an optional `animate` prop (off by default). `animate` cycles the mark 3 s after the logo first becomes visible, then every 10 s (`{firstDelayMs, intervalMs}` to change). The clock runs only while the logo is on screen and the tab is showing.
+
 ## Web package 0.2.1 (2026-10-09)
 
 - Status strip reads "Tapering · 25% reviewed"; the card takes a classifier display name.
