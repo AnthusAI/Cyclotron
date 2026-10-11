@@ -212,9 +212,8 @@ async def main_async(args):
             from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
             adapter=JevAdapter.from_environment(configuration=JevConfiguration(model=args.decision_model))
         elif args.decision_provider=='kev':
-            import os
             from decision_flywheel.adapters.kev import KevAdapter, KevConfiguration
-            adapter=KevAdapter(configuration=KevConfiguration(model=args.decision_model,base_url=os.environ.get('KEV_BASE_URL','http://127.0.0.1:8009')))
+            adapter=KevAdapter(configuration=KevConfiguration(model=args.decision_model,base_url=__import__('os').environ.get('KEV_BASE_URL','http://127.0.0.1:8009')))
         else:
             adapter=OpenAIDecisionAdapter.from_environment(configuration=OpenAIDecisionConfiguration(args.decision_model,300))
         transport=OpenAIOptimizer.from_environment(model=args.model,max_calls=remaining_optimizers)
