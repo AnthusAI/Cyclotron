@@ -1,4 +1,4 @@
-# Hypothesis portfolio (Stages 1, 2 and 2b)
+# Hypothesis portfolio (Stages 1, 2, 2b, 2c and 2d)
 
 Decision-model calls are cheap, so the optimizer should not pick one winner and commit. It should keep many
 ideas (rubric, example and question changes), keep evidence about each for a long time, and screen many
@@ -323,6 +323,139 @@ config. Study flags: `--proposal-mix bold=2,target=2,combine=2`, `--min-novelty`
 ### Not built
 
 Clause-level splitting of rubrics and cross-run idea memory.
+
+## Stage 2d: root-cause diagnosis and element screening (opt-in, shadow mode)
+
+### Why
+
+Until now the optimizer got raw feedback records and a one-line hint to "diagnose disagreements". It never saw a
+confusion matrix or any aggregation, and never did root-cause analysis. On the editorial task the incumbent's errors
+are almost all missed publishes (it says publish for about 20% of stories while editors publish 40%); a confusion
+matrix shows that at a glance, the optimizer never saw it, and it made timid wording edits. A Jev-only pilot (400
+stories, about 2 cents) asked nine yes/no element questions in the same request as the main decision: Jev answered the
+sub-questions accurately (element versus the labeler's recorded factor, AUC 0.83 to 0.999), individual elements carried
+signal (AUC versus the label 0.77 and 0.79 for the two best), and conditional on the main decision's probability the
+elements it under-weights stood out. That conditional analysis is root-cause evidence. The incremental accuracy from
+elements was modest (5-fold CV 80.0 to 82.8%) because the main decision's ranking is already strong, so element tests
+are used chiefly as diagnosis and as candidate head features, not as a promise of big gains.
+
+`DiagnosisConfig` (nested in `IdeaScreeningConfig.diagnosis`, default disabled, shadow mode only) runs this pipeline at
+each rubric round, BEFORE the Stage 2c proposal call. Disabled, every earlier behavior is unchanged and the saved
+configuration has no `diagnosis` key (so existing stage keys stay valid).
+
+### The pipeline (`diagnosis.py`, `element_stats.py`)
+
+1. **Error summary.** The incumbent's confusion matrix on revealed stories, built from `prediction` events recorded
+   before the story's first `human-feedback` event (never a prediction made with the label known), using the
+   main-decision answer. Scope: any revealed non-protected story (training or development), as counts only. Predictions
+   made under the current classifier version are used when there are at least 20; otherwise every recorded prediction is
+   used and `scope` says `all-versions`. The summary lists each error cell with its count, its rate within the true
+   label and overall, a direction (`missed publish`, `wrongful publish`; generic wording for more than two labels), and
+   the actual versus answered share of each label. It is a compact text block for prompts and a structured dict, stored
+   in the `diagnosis-summary` event.
+2. **Samples.** For each error cell with at least `min_cell` errors (default 5; at most 3 cells, largest first; the
+   count of visible training errors must also reach `min_cell`), errors are ordered confident-first (the probability put on the wrong
+   answer) and dealt into `independent + 1` DISJOINT samples (default A, B and C): consecutive groups of three go to A,
+   B and C in a seeded random order, so each spans the whole confidence range. Each holds up to `samples` errors
+   (default 8). Per true label a contrast set of correctly answered stories (`contrast`, default 4 per sample) is dealt
+   the same way; contrast stories are the correct answers closest to the boundary (lowest confidence), because those are
+   the ones a patch can break. Samples are disjoint across cells, labels and each other, and deterministic: the seed is a
+   hash of the task fingerprint and the round number. Each story shows about 400 characters of text, true label, the
+   model's probabilities and the human explanation already revealed. Only training-role, revealed stories whose id and
+   normalized text differ from every development and protected story can appear (the same exclusions as the Stage 2c
+   target sample); development, protected and unrevealed stories never appear.
+3. **RCA optimizer calls.** Per cell, one independent diagnosis call per diagnosis sample (A and B by default), each
+   returning `{"hypotheses": [...]}` whose evidence ids must be errors shown in that sample. Then ONE reconcile-and-critique
+   call, given both diagnoses, the stories shown and the summary, returns `{"causes": [...], "generic_elements": [...]}`.
+   Each cause has exactly `id, name, cell, description, evidence_story_ids, proposed_rule, patch, must_keep_story_ids,
+   confirmed, candidate_element`. Validation is strict: unknown ids, evidence that is not an error of the cause's own
+   cell, must-keep ids that are not contrast stories, duplicate cause ids or names, over-length text, a missing patch,
+   a bad element or missing/unknown fields are rejected. A rejected reply is re-asked once with the error text
+   (`diagnosis-reply-rejected` events); a second failure drops that diagnosis (or, for the reconcile call, the round's
+   causes). `confirmed` is a claim that the code verifies: it stays true only if the cause's evidence overlaps the
+   evidence cited by EVERY independent diagnosis of the cell (`confirmed_claimed` keeps the claim). `patch` is a short
+   clause appended to the incumbent rubric for the trial. Cause ids are stored as `r<round>.<id>`.
+4. **Cause trial.** For each cause the decision model scores incumbent rubric + patch on the held-aside sample (C) of
+   its cell and on C's contrast stories, through `wheel._answers` (so the request ceilings, the answer cache and the
+   durable records apply). `fixed` is the held-aside errors now answered with their true label; `broke` is held-aside
+   contrast stories that stop being right; `fix_rate = fixed / n_errors`, `break_rate = broke / n_contrast`. A cause
+   passes if `fixed >= max(2, 0.25 * n_errors)` and `3 * broke <= fixed`. This is a FILTER that tells the proposal
+   step which causes look real; it is not a gate and promotes nothing. Forward shadow evaluation stays the arbiter. A
+   cell with fewer than two held-aside mismatches is `untestable`; a trial cut off by a cap is `incomplete`; neither passes.
+5. **Element screening.** Candidates are each cause's `candidate_element` plus up to `element_candidates` (default 8)
+   generic elements the reconcile call may add; each is a yes/no `{name, question}` (name: lowercase letters, digits,
+   underscores; the task is called `el_<name>`). An element already evaluated with the same question, or already deployed,
+   is not re-screened. All candidates are scored in ONE Jev request per story: the same classify-with-tasks request shape
+   with a temporary `ClassifierConfig` that adds the element tasks (the active config is never changed), over up to
+   `element_sample` (default 200) revealed training stories, most recent first, alternating between labels. Results go in
+   the ledger table `element_evaluations` (one row per element and round, with the full metrics as JSON).
+
+### Element metrics (exact definitions)
+
+`positive` is the selection policy's positive class, else the task's first label. `main` is the main decision's
+probability of the positive class in the same response; the element score is its `P(yes)`.
+
+* **AUC versus the label.** Mann-Whitney AUC of `P(yes)` for separating positive-class stories from the rest, ties
+  counted half. **AUC on errors.** Within each true label, the AUC of `P(yes)` for separating the incumbent's errors
+  from its correct answers (the incumbent's answer in the same response); `None` when a side is empty.
+* **Incremental value.** Repeated (`5`) stratified 5-fold cross-validation. In each fold two ridge-penalised logistic
+  models (L2 0.01 on slopes) are fitted on the training folds: base `logistic(logit(main))` and augmented
+  `logistic(logit(main) + element)` (`main` clipped to [0.001, 0.999]; the element enters as its probability). Per story
+  and per repeat, log-loss gain = base loss minus augmented loss on the held-out fold (positive is better), averaged over
+  the repeats; the accuracy gain compares out-of-fold decisions at 0.5. `mean_*_gain` averages over stories.
+* **Bootstrap lower bound.** 500 resamples of the per-story gains (seeded); the bound is the 5th percentile of the
+  resampled means, i.e. the lower end of a central 90% interval. It reflects which stories were drawn, not the
+  variation of the model fit, so it is a screening bound and not a test.
+* **Keep rule.** An element is kept when its mean log-loss gain is positive and its bootstrap lower bound is above zero.
+  Candidates are considered by descending gain; one whose correlation (Pearson, on `P(yes)`) with an already kept element is
+  at least 0.95 is not kept as well (`redundant`). The correlation with every kept element is stored.
+* Screening needs at least 40 scored stories with at least 8 of each class, otherwise it is skipped
+  (`element-screening-skipped`).
+
+Kept elements are registered as ideas with `operator: "element"` of the `tasks` control, through the existing feature-bank
+path (`feature-discovered`), so the existing tasks control and ML head path can use them. Nothing is promoted, no head is
+trained and nothing is shadowed here; the optimizer digest lists kept and failed elements with their gains.
+
+### Proposals use the diagnosis (`ask_round`)
+
+The proposal prompt gains `diagnosis`: the confusion summary text; the causes with their description, patch, whether
+they were confirmed, and the trial result (`passing_cause_ids` lists those that passed; unconfirmed causes are
+flagged); the kept elements with their gains; and the elements that failed, so they are not retried blindly. Every
+proposal may carry `addresses`, a list of cause ids from this round. An unknown id drops that proposal (a
+`proposal-operator-skipped` event), it does not crash the round. When no complementary pair of ideas exists yet but at
+least two causes passed, `combine` is asked to merge those causes' patches (`cause_patches`) instead of being skipped.
+`addresses` is stored in the idea payload, in `lineage()` and in the `proposal-operator` event.
+`HypothesisLedger.cause_outcomes()` returns, per stored cause: its name, cell, `confirmed`, `trial_passed`, and the ideas
+that addressed it with operator, latest verdict and latest recorded forward fixed/broke (credit assignment); the
+optimizer digest carries it, so later rounds see which causes' fixes worked.
+
+### Calls per round and caps
+
+Optimizer calls: `independent x cells + 1` reconcile, then the Stage 2c proposal call. Typical (binary task, one or two
+qualifying cells): 3 to 5 diagnosis calls. Worst case with defaults: 3 cells x 2 + 1 = 7, doubled by corrective retries to
+14. Before starting, if the transport states a ceiling (`calls_remaining()`) that cannot cover the planned calls plus the
+proposal call, or while running if it would leave no room for the proposal call, diagnosis stops and emits
+`diagnosis-skipped` with the reason (the summary is still given to the proposals). It never exceeds the ceiling.
+
+Decision-model (Jev) calls: the cause trial scores at most `samples + 2 x contrast` = 16 stories per cause (defaults;
+6 causes at most = 96), then element screening scores up to `element_sample` stories (200), one request each however
+many elements. `max_jev_calls` (default 400) bounds the round; cache hits are free. Every call goes through
+`wheel._answers`, so the wheel's request ceilings and the run ledger count them. The same headroom Stage 2 screening keeps
+for normal decisions (`len(training) + 2 x len(development)`) is kept. The `diagnosis-summary` event ends with the
+accounting: optimizer calls used and Jev calls used.
+
+### Options and flags
+
+`DiagnosisConfig`: `enabled=False`, `samples=8`, `contrast=4`, `min_cell=5`, `max_causes=6`, `independent=2` (2 to 4),
+`element_candidates=8`, `element_sample=200`, `max_jev_calls=400`; validated, saved and resumed with the rest of the
+screening config. Study flags: `--diagnosis`, `--diagnosis-samples`, `--diagnosis-independent`, `--element-candidates`,
+`--element-sample`, `--diagnosis-max-jev-calls`, recorded in `protocol.json` through `idea_screening.diagnosis`.
+`--diagnosis` needs `--idea-screening` in shadow mode.
+
+### Not built
+
+Cross-run memory of causes, clause-level splitting and routing on disagreement. Shadowing `tasks` ideas (kept elements are
+only registered). Head training and promotion are not rewired.
 
 ## Still not built
 

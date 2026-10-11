@@ -115,7 +115,7 @@ def combine_block(wheel, ledger, ideas, count):
             [pair["a"], pair["b"]], None)
 
 
-def plan_round(wheel, ledger, ideas, training, development, protected, mix):
+def plan_round(wheel, ledger, ideas, training, development, protected, mix, diagnosis=None):
     """-> (requests, parents_for_combine, skipped) where requests is {operator: spec} for the operators that can run."""
     config, requests, skipped, parents = wheel.idea_screening, {}, [], []
     for op in OPERATORS:
@@ -134,19 +134,37 @@ def plan_round(wheel, ledger, ideas, training, development, protected, mix):
                 skipped.append((op, "no revealed training story is wrong for every tried idea or for the incumbent yet"))
         else:
             spec, parents, reason = combine_block(wheel, ledger, ideas, count)
+            from .diagnosis import passing_causes
+            passing = passing_causes(diagnosis)
             if spec:
                 requests[op] = spec
+            elif len(passing) >= 2:
+                # No complementary pair of ideas yet: merge the patches of causes that passed the trial instead.
+                requests[op] = {"count": count, "parents": [], "cause_patches": [
+                    {"id": c["id"], "cell": c["cell"], "patch": c["patch"]} for c in passing]}
+                parents = []
             else:
                 skipped.append((op, reason))
     return requests, parents, skipped
 
 
-def _screen(wheel, labeled, requests, parents, control, references, gate):
-    """Strip operator labels, compute novelty, apply the novelty gate to bold. -> (kept, meta, rejected_bold)."""
+def _screen(wheel, labeled, requests, parents, control, references, gate, cause_ids=None):
+    """Strip operator labels, compute novelty, apply the novelty gate to bold. -> (kept, meta, rejected_bold).
+    With a diagnosis (``cause_ids`` is the set of this round's cause ids) each proposal's ``addresses`` is validated;
+    a proposal naming an unknown cause is dropped and recorded."""
+    from .diagnosis import validate_addresses
     kept, meta, rejected, seen = [], [], 0, set()
     for item in labeled:
         item = dict(item)
         operator = item.pop("operator")
+        raw_addresses = item.pop("addresses", None)
+        addresses = []
+        if cause_ids is not None:
+            try:
+                addresses = validate_addresses(raw_addresses, cause_ids)
+            except ValueError as error:
+                wheel._emit({"kind": "proposal-operator-skipped", "operator": operator, "reason": str(error)})
+                continue
         proposal = validate_proposals([item], control, 1)[0]
         key = _json(proposal[control])
         if key in seen:
@@ -163,14 +181,16 @@ def _screen(wheel, labeled, requests, parents, control, references, gate):
         references = [*references, str(proposal[control])]
         kept.append(proposal)
         meta.append({"operator": operator, "parents": list(parents) if operator == "combine" else [],
-                     "novelty": novelty})
+                     "novelty": novelty, **({"addresses": addresses} if cause_ids is not None else {})})
     return kept, meta, rejected
 
 
-def ask_round(wheel, build_briefing, context, control, ideas, training, development, protected):
+def ask_round(wheel, build_briefing, context, control, ideas, training, development, protected, diagnosis=None):
     """Ask for this round's proposals. -> (proposals, meta) where meta[i] = {operator, parents, novelty}, or None
     when the plain multi-proposal request was used (dev_screen mode, non-rubric controls, optimizers without
-    ``propose_operators``). ``build_briefing(extra)`` builds the briefing; ``context`` is the optimizer context."""
+    ``propose_operators``). ``build_briefing(extra)`` builds the briefing; ``context`` is the optimizer context.
+    ``diagnosis`` (Stage 2d, ``diagnosis.run_diagnosis``) adds the confusion summary, causes and elements to the prompt
+    and makes each proposal carry validated ``addresses``; it applies to the operator path only."""
     from .idea_screening import ask_proposals
     config = wheel.idea_screening
     mix = config.effective_mix()
@@ -183,14 +203,19 @@ def ask_round(wheel, build_briefing, context, control, ideas, training, developm
                      "reason": "the optimizer has no propose_operators; used the plain multi-proposal request"})
         return ask_proposals(wheel, build_briefing({"proposals_requested": total, **context}), control, total), None
     ledger = HypothesisLedger(wheel.db)
-    requests, parents, skipped = plan_round(wheel, ledger, ideas, training, development, protected, mix)
+    requests, parents, skipped = plan_round(wheel, ledger, ideas, training, development, protected, mix, diagnosis)
+    cause_ids = None
+    if diagnosis:
+        from .diagnosis import diagnosis_block
+        context = {**context, "diagnosis": diagnosis_block(diagnosis)}
+        cause_ids = {c["id"] for c in diagnosis["causes"]}
     for op, reason in skipped:
         wheel._emit({"kind": "proposal-operator-skipped", "operator": op, "reason": reason})
     references = [wheel.active.config.rubric, *(_rubric_of(i) for i in ideas if _rubric_of(i))]
     total = sum(spec["count"] for spec in requests.values())
     briefing = build_briefing({"proposals_requested": total, "operator_requests": requests, **context})
     labeled = wheel.optimizer.propose_operators(briefing)
-    proposals, meta, rejected = _screen(wheel, labeled, requests, parents, control, references, config.min_novelty)
+    proposals, meta, rejected = _screen(wheel, labeled, requests, parents, control, references, config.min_novelty, cause_ids)
     for attempt in range(config.novelty_retries):
         if not rejected or "bold" not in requests:
             break
@@ -201,7 +226,8 @@ def ask_round(wheel, build_briefing, context, control, ideas, training, developm
         labeled = wheel.optimizer.propose_operators(
             build_briefing({"proposals_requested": rejected, "operator_requests": retry, **context}))
         more, more_meta, rejected = _screen(wheel, labeled, retry, parents, control,
-                                            [*references, *(str(p[control]) for p in proposals)], config.min_novelty)
+                                            [*references, *(str(p[control]) for p in proposals)], config.min_novelty,
+                                            cause_ids)
         proposals, meta = proposals + more, meta + more_meta
     if rejected:
         wheel._emit({"kind": "proposal-operator-skipped", "operator": "bold",

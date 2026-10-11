@@ -29,6 +29,40 @@ OPERATOR_CAPS = {"story_chars": 400, "parent_rubric_chars": 4000, "parent_item_i
 
 
 @dataclass(frozen=True)
+class DiagnosisConfig:
+    """Stage 2d: root-cause diagnosis and element screening before each rubric proposal call (shadow mode only).
+
+    ``samples`` errors per diagnosis sample, ``contrast`` correct stories per true label per sample, ``min_cell``
+    errors a confusion cell needs, ``max_causes`` causes kept, ``independent`` independent diagnoses per cell (a
+    further sample is held aside for the cause trial), ``element_candidates`` generic elements the reconcile call may
+    add, ``element_sample`` stories scored for element screening, ``max_jev_calls`` decision-model requests per round
+    for the cause trial and element screening together."""
+    enabled: bool = False
+    samples: int = 8
+    contrast: int = 4
+    min_cell: int = 5
+    max_causes: int = 6
+    independent: int = 2
+    element_candidates: int = 8
+    element_sample: int = 200
+    max_jev_calls: int = 400
+
+    def __post_init__(self):
+        if type(self.enabled) is not bool:
+            raise ValueError("diagnosis enabled must be boolean")
+        for name, low, high in (("samples", 2, 20), ("contrast", 1, 10), ("min_cell", 2, 1000), ("max_causes", 1, 12),
+                                ("independent", 2, 4), ("element_candidates", 0, 20), ("element_sample", 20, 2000),
+                                ("max_jev_calls", 1, 100000)):
+            value = getattr(self, name)
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError(f"diagnosis {name} must be an integer from {low} to {high}")
+
+    def as_json(self):
+        return {k: getattr(self, k) for k in ("enabled", "samples", "contrast", "min_cell", "max_causes", "independent",
+                                               "element_candidates", "element_sample", "max_jev_calls")}
+
+
+@dataclass(frozen=True)
 class IdeaScreeningConfig:
     enabled: bool = False
     max_candidates: int = 8
@@ -51,6 +85,8 @@ class IdeaScreeningConfig:
     min_novelty: float = 0.35
     target_sample: int = 8
     novelty_retries: int = 1
+    # Stage 2d. Disabled by default; a disabled diagnosis leaves everything above exactly as it was.
+    diagnosis: DiagnosisConfig = DiagnosisConfig()
 
     def __post_init__(self):
         for name in ("max_candidates", "proposals_per_round", "finalists", "max_screen_calls", "shadow_ideas",
@@ -80,6 +116,10 @@ class IdeaScreeningConfig:
             raise ValueError("novelty_retries must be an integer from 0 to 3")
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {', '.join(MODES)}")
+        if not isinstance(self.diagnosis, DiagnosisConfig):
+            raise ValueError("diagnosis must be a DiagnosisConfig")
+        if self.diagnosis.enabled and not (self.enabled and self.mode == "shadow"):
+            raise ValueError("diagnosis needs enabled idea screening in shadow mode")
         if isinstance(self.reserve_fraction, bool) or not 0 < self.reserve_fraction < 1:
             raise ValueError("reserve_fraction must be in (0,1)")
         if isinstance(self.alpha, bool) or not 0 < self.alpha < 1:
@@ -92,7 +132,10 @@ class IdeaScreeningConfig:
         object.__setattr__(self, "stages", stages)
 
     def as_json(self):
-        return {**{k: getattr(self, k) for k in ("enabled", "max_candidates", "proposals_per_round", "finalists",
+        # The diagnosis block is recorded only when it is on, so a run that never used it keeps its saved form
+        # (and therefore its stage keys) unchanged.
+        extra = {"diagnosis": self.diagnosis.as_json()} if self.diagnosis.enabled else {}
+        return {**extra, **{k: getattr(self, k) for k in ("enabled", "max_candidates", "proposals_per_round", "finalists",
                                                   "reserve_fraction", "alpha", "max_screen_calls", "mode", "shadow_ideas",
                                                   "shadow_min_items", "shadow_evict_after", "shadow_looks",
                                                   "max_shadow_calls", "proposal_mix", "min_novelty", "target_sample",
@@ -113,6 +156,9 @@ class IdeaScreeningConfig:
     @classmethod
     def from_json(cls, raw):
         # A configuration saved by a Stage 2 run has no mode: it keeps screening on the development partition.
+        raw = dict(raw)
+        if "diagnosis" in raw:
+            raw["diagnosis"] = DiagnosisConfig(**raw["diagnosis"])
         return cls(**{"mode": "dev_screen", **raw, "stages": tuple(tuple(s) for s in raw["stages"])})
 
 
@@ -184,8 +230,12 @@ def optimizer_context(wheel, ledger, ideas, reserve_ids):
         from .shadow_evaluation import ShadowEvaluator
         digest = ShadowEvaluator(wheel).optimizer_digest()
         outcomes = ledger.operator_outcomes()
+        extra = {}
+        if wheel.idea_screening.diagnosis.enabled:
+            from .diagnosis import diagnosis_digest
+            extra = diagnosis_digest(ledger)
         return {"prior_control_ideas": compact_ideas(ideas, ledger), **digest,
-                **({"operator_outcomes": outcomes} if outcomes else {})}
+                **({"operator_outcomes": outcomes} if outcomes else {}), **extra}
     hidden = frozenset(reserve_ids)
     return {"prior_control_ideas": compact_ideas(ideas, ledger),
             "hypothesis_ledger": ledger.summary_for_optimizer(

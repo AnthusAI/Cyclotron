@@ -92,6 +92,8 @@ class ControlScheduler:
                     born = {"created_seq": ShadowEvaluator(wheel).seq()}
                 if mark:
                     born.update(operator=mark["operator"], parents=list(mark["parents"]), novelty=mark["novelty"])
+                    if mark.get("addresses"):
+                        born["addresses"] = list(mark["addresses"])
                 self.save({"id": idea_id, "control": control, "proposal": partial,
                            "rationale": proposal.get("rationale", ""), "attempts": [], "last_cycle": 0,
                            "created_cycle": cycle, "source": "multi-proposal discovery", **born})
@@ -99,7 +101,8 @@ class ControlScheduler:
                              "proposal": partial, "rationale": proposal.get("rationale", "")})
                 if mark:
                     wheel._emit({"kind": "proposal-operator", "idea_id": idea_id, "operator": mark["operator"],
-                                 "parents": list(mark["parents"]), "novelty": mark["novelty"]})
+                                 "parents": list(mark["parents"]), "novelty": mark["novelty"],
+                                 **({"addresses": list(mark["addresses"])} if mark.get("addresses") else {})})
 
     async def _screen_control(self, control, training, development, protected, propensities, retry_interrupted, *,
                               key, cycle, baseline, counts, results, discovered, completed, checkpoint,

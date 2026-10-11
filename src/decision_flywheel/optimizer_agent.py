@@ -121,15 +121,50 @@ OPERATOR_INSTRUCTIONS = {
               "these named failure patterns without breaking what already works (the incumbent's other behavior).",
     "combine": "combine: operator_requests.combine.parents holds two rubrics with the stories each fixes that the other "
                "does not. Merge the winning clauses of both into ONE rubric that keeps what each gets right.",
+    "combine_causes": "(when operator_requests.combine has cause_patches instead of parents: merge those patches into the "
+                      "incumbent rubric as ONE rubric.)",
 }
 
 
-def operator_prompt(requests):
+DIAGNOSIS_INSTRUCTIONS = {
+    "independent": "\nThis is a ROOT-CAUSE DIAGNOSIS call, not a rubric proposal. current.cell names one error direction of "
+                   "the incumbent; current.errors are revealed stories it got wrong in that cell (true label, the model's "
+                   "probabilities, the human's explanation) and current.contrast are stories of each true label it got "
+                   "right. current.confusion_summary shows the incumbent's error pattern. Work out WHY the errors happen: "
+                   "what do the errors share that the contrast stories do not? Do not write a rubric. Return one JSON "
+                   "object {\"hypotheses\": [...]} with 1 to 4 hypotheses, each an object with name (short), description, "
+                   "proposed_rule (one plain sentence) and evidence_story_ids (a non-empty list of ids taken only from "
+                   "current.errors).",
+    "reconcile": "\nThis is a RECONCILE-AND-CRITIQUE call, not a rubric proposal. current.cells holds, per error cell, two "
+                 "independent diagnoses made on different samples, the stories each saw, and contrast stories. Keep only "
+                 "causes the evidence supports, merge duplicates and drop ones a contrast story contradicts. Return one JSON "
+                 "object {\"causes\": [...], \"generic_elements\": [...]}. At most current.max_causes causes; each cause is an "
+                 "object with exactly: id (short, unique), name (unique), cell (one of current.cell_keys), description, "
+                 "evidence_story_ids (ids of errors shown in that cell), proposed_rule, patch (a short rubric clause that "
+                 "would be appended to the incumbent rubric), must_keep_story_ids (contrast ids the patch must not break), "
+                 "confirmed (true only if BOTH independent diagnoses support the cause), candidate_element (null, or an "
+                 "object {name, question}: a yes/no question about a story that would detect this cause). "
+                 "generic_elements is a list of at most current.element_candidates further {name, question} yes/no "
+                 "questions about story properties that might separate the errors (names: lowercase letters, digits, "
+                 "underscores).",
+}
+
+
+def operator_prompt(requests, diagnosis=False):
     lines = ["\nThis call asks for proposals from several OPERATORS, listed in operator_requests with the number of "
              "proposals wanted from each (count). Return one JSON object {\"proposals\": [...]}. Every proposal is an "
              "object with operator (one of the requested names), rationale and rubric. Return at most count proposals "
              "per operator; fewer is allowed. Duplicates are rejected. Operators:"]
     lines += [f"- {OPERATOR_INSTRUCTIONS[op]}" for op in sorted(requests)]
+    if "cause_patches" in requests.get("combine", {}):
+        lines.append(f"  {OPERATOR_INSTRUCTIONS['combine_causes']}")
+    if diagnosis:
+        lines.append("current.diagnosis holds the incumbent's confusion summary, the root causes found in revealed errors "
+                     "(each with the result of a trial of its patch: passed means it fixed held-aside errors without "
+                     "breaking correct stories), and the question elements that were kept or failed. Aim proposals at "
+                     "causes that passed; treat unconfirmed causes with care. Every proposal must also carry addresses, "
+                     "a list of cause ids from current.diagnosis.causes it targets (may be empty). A combine proposal "
+                     "may merge the patches in operator_requests.combine.cause_patches.")
     lines.append("hypothesis_ledger shows prior ideas with their operator, parents and outcome (operator_outcomes "
                  "summarizes which operators produced ideas that advanced); learn from it.")
     return "\n".join(lines)
@@ -160,7 +195,7 @@ class OptimizerAgent:
             if operators:
                 if control != "rubric":
                     raise ValueError("proposal operators apply to the rubric control only")
-                instructions += operator_prompt(operators)
+                instructions += operator_prompt(operators, bool(briefing.payload.get("current", {}).get("diagnosis")))
             elif wanted is not None:
                 instructions += (f"\nReturn one JSON object {{\"proposals\": [...]}} holding {wanted} DISTINCT proposals, "
                                  f"each an object with rationale and {control}. Make them differ along different axes "
@@ -179,6 +214,11 @@ class OptimizerAgent:
                                  "Return rationale and exactly one of tasks or dynamic_elements, never both. "
                                  "The only allowed dynamic input is current_datetime; [] removes it. "
                                  "This alternative keeps all questions, rubric and examples fixed while code evaluates the input change.")
+        phase = briefing.payload.get("current", {}).get("diagnosis_phase")
+        if phase is not None:
+            if phase not in DIAGNOSIS_INSTRUCTIONS:
+                raise ValueError("unknown diagnosis phase")
+            instructions += DIAGNOSIS_INSTRUCTIONS[phase]
         messages = [{"role": "system", "content": instructions},
                     {"role": "user", "content": briefing.encoded}]
         return messages
@@ -212,6 +252,21 @@ class OptimizerAgent:
     def propose_many(self, briefing: FeedbackBriefing) -> list[dict]:
         """Several proposals from one call; briefing.current.proposals_requested is the ceiling."""
         return parse_proposals(self._reply_content(briefing), briefing.payload["current"]["proposals_requested"])
+
+    def diagnose(self, briefing: FeedbackBriefing) -> dict:
+        """One root-cause diagnosis call (Stage 2d); the caller validates the reply's fields."""
+        try:
+            reply = json.loads(self._reply_content(briefing))
+        except (TypeError, json.JSONDecodeError):
+            raise ValueError("optimizer reply must be a JSON object") from None
+        if not isinstance(reply, dict):
+            raise ValueError("optimizer reply must be a JSON object")
+        return reply
+
+    def calls_remaining(self):
+        """Paid optimizer calls the injected transport still allows, or None when it states no ceiling."""
+        limit, used = getattr(self.complete, "max_calls", None), getattr(self.complete, "calls", None)
+        return limit - used if isinstance(limit, int) and isinstance(used, int) else None
 
     def propose_operators(self, briefing: FeedbackBriefing) -> list[dict]:
         """One call, proposals labeled by operator; briefing.current.operator_requests holds {operator: {count, ...}}."""
@@ -281,4 +336,7 @@ class DisabledOptimizer:
         raise self._disabled()
 
     def propose_operators(self, briefing: FeedbackBriefing) -> list[dict]:
+        raise self._disabled()
+
+    def diagnose(self, briefing: FeedbackBriefing) -> dict:
         raise self._disabled()
