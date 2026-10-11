@@ -77,10 +77,13 @@ class HypothesisLedger:
                 self.db.execute("SELECT at,verdict,reason,evidence FROM idea_verdicts WHERE idea_id=? ORDER BY rowid",
                                 (idea_id,))]
 
-    def _latest(self, idea_id, exclude=frozenset()):
-        """item_id -> correct, newest evaluation per item (across context versions), minus ``exclude``."""
-        rows = self.db.execute("SELECT item_id,correct FROM idea_evaluations WHERE idea_id=? "
-                               "ORDER BY evaluated_at, rowid", (idea_id,))
+    def _latest(self, idea_id, exclude=frozenset(), context_version=None):
+        """item_id -> correct, newest evaluation per item (across context versions, or only ``context_version``),
+        minus ``exclude``."""
+        sql, args = "SELECT item_id,correct FROM idea_evaluations WHERE idea_id=?", [idea_id]
+        if context_version is not None:
+            sql, args = sql + " AND context_version=?", [*args, context_version]
+        rows = self.db.execute(sql + " ORDER BY evaluated_at, rowid", args)
         return {item: bool(c) for item, c in rows if item not in exclude}
 
     def items_evaluated(self, idea_id):
@@ -91,9 +94,9 @@ class HypothesisLedger:
         got = self._latest(idea_id)
         return [got.get(str(i)) for i in item_ids]
 
-    def paired_comparison(self, a_idea, b_idea, exclude=frozenset()):
+    def paired_comparison(self, a_idea, b_idea, exclude=frozenset(), context_version=None):
         """Candidate a versus b on shared items: gained = a right and b wrong; lost = the reverse."""
-        a, b = self._latest(a_idea, exclude), self._latest(b_idea, exclude)
+        a, b = self._latest(a_idea, exclude, context_version), self._latest(b_idea, exclude, context_version)
         shared = sorted(set(a) & set(b))
         gained = [i for i in shared if a[i] and not b[i]]
         lost = [i for i in shared if b[i] and not a[i]]
@@ -133,19 +136,27 @@ class HypothesisLedger:
         idea = json.loads(row[0])
         return " ".join(str(idea.get("rationale") or idea.get("proposal") or "").split())[:width]
 
-    def summary_for_optimizer(self, *, limit=10, incumbent_id=None, max_item_ids=5, exclude_items=frozenset()):
+    def _idea_ids(self, context_version=None):
+        sql, args = "SELECT DISTINCT idea_id FROM idea_evaluations", []
+        if context_version is not None:
+            sql, args = sql + " WHERE context_version=?", [context_version]
+        return [i for (i,) in self.db.execute(sql, args)]
+
+    def summary_for_optimizer(self, *, limit=10, incumbent_id=None, max_item_ids=5, exclude_items=frozenset(),
+                              context_version=None, skip_ids=frozenset()):
         """Compact deterministic digest, best accuracy first. Item-id lists are capped and sorted.
-        ``exclude_items`` hides items (for example a held-out reserve) from every count and list."""
-        ids = sorted({i for (i,) in self.db.execute("SELECT DISTINCT idea_id FROM idea_evaluations")} - {incumbent_id})
+        ``exclude_items`` hides items (for example a held-out reserve) from every count and list.
+        ``context_version`` restricts the digest to one kind of evidence; ``skip_ids`` drops ids (old incumbents)."""
+        ids = sorted(set(self._idea_ids(context_version)) - {incumbent_id} - set(skip_ids))
         rows = []
         for idea_id in ids:
-            got = self._latest(idea_id, exclude_items)
+            got = self._latest(idea_id, exclude_items, context_version)
             if not got:
                 continue
             entry = {"idea_id": idea_id, "text": self._idea_text(idea_id), "items_tested": len(got),
                      "accuracy": round(sum(got.values()) / len(got), 4)}
             if incumbent_id:
-                pair = self.paired_comparison(idea_id, incumbent_id, exclude_items)
+                pair = self.paired_comparison(idea_id, incumbent_id, exclude_items, context_version)
                 entry.update(fixed=pair["gained_items"][:max_item_ids], fixed_count=pair["gained"],
                              broke=pair["lost_items"][:max_item_ids], broke_count=pair["lost"])
             last = (self.verdicts(idea_id) or [None])[-1]
@@ -154,10 +165,10 @@ class HypothesisLedger:
         rows.sort(key=lambda r: (-r["accuracy"], -r["items_tested"], r["idea_id"]))
         return rows[:limit]
 
-    def stubborn_items(self, min_ideas=3, exclude_items=frozenset()):
+    def stubborn_items(self, min_ideas=3, exclude_items=frozenset(), context_version=None):
         """Items evaluated by at least ``min_ideas`` ideas that every one of them got wrong."""
         per_item = {}
-        for (idea_id,) in self.db.execute("SELECT DISTINCT idea_id FROM idea_evaluations").fetchall():
-            for item, ok in self._latest(idea_id, exclude_items).items():
+        for idea_id in self._idea_ids(context_version):
+            for item, ok in self._latest(idea_id, exclude_items, context_version).items():
                 per_item.setdefault(item, []).append(ok)
         return sorted(i for i, marks in per_item.items() if len(marks) >= min_ideas and not any(marks))

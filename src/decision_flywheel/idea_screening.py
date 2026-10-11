@@ -1,6 +1,8 @@
-"""Opt-in idea screening wired into the live optimization loop (hypothesis portfolio, Stage 2).
+"""Opt-in idea screening wired into the live optimization loop (hypothesis portfolio, Stages 2 and 2b).
 
-Several ideas are screened per round against the incumbent on development-eligible labeled items only.
+Two modes. ``shadow`` (Stage 2b, the default when enabled) scores a few candidate ideas on every new
+story as it arrives, before its label is revealed (see ``shadow_evaluation``). ``dev_screen`` (Stage 2):
+several ideas are screened per round against the incumbent on development-eligible labeled items only.
 Protected-evaluation items are never scored. A hash-defined reserve of development items is touched only by
 the confirmation, and its evidence accumulates across rounds. Promotion still goes through the flywheel's
 fitted-trial path, so the selection policy stays the final gate.
@@ -16,6 +18,7 @@ from .idea_screen import holm, screen
 from .optimizer_agent import parse_proposals
 
 SCREENED_CONTROLS = ("rubric", "example_ids")
+MODES = ("shadow", "dev_screen")
 # Bounded optimizer payload: newest prior ideas, ledger digest rows, fixed/broke ids per row, stubborn ids.
 CAPS = {"prior_ideas": 20, "ledger_ideas": 10, "item_ids_per_idea": 5, "stubborn_items": 20}
 
@@ -30,14 +33,23 @@ class IdeaScreeningConfig:
     alpha: float = 0.05
     max_screen_calls: int = 2000
     stages: tuple = ((50, 0.5), (200, 0.5), (None, None))
+    mode: str = "shadow"
+    shadow_ideas: int = 3
+    shadow_min_items: int = 40
+    shadow_evict_after: int = 30
+    shadow_looks: int = 10
+    max_shadow_calls: int = 3000
 
     def __post_init__(self):
-        for name in ("max_candidates", "proposals_per_round", "finalists", "max_screen_calls"):
+        for name in ("max_candidates", "proposals_per_round", "finalists", "max_screen_calls", "shadow_ideas",
+                     "shadow_min_items", "shadow_evict_after", "shadow_looks", "max_shadow_calls"):
             value = getattr(self, name)
             if type(value) is not int or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
         if type(self.enabled) is not bool:
             raise ValueError("enabled must be boolean")
+        if self.mode not in MODES:
+            raise ValueError(f"mode must be one of {', '.join(MODES)}")
         if isinstance(self.reserve_fraction, bool) or not 0 < self.reserve_fraction < 1:
             raise ValueError("reserve_fraction must be in (0,1)")
         if isinstance(self.alpha, bool) or not 0 < self.alpha < 1:
@@ -51,12 +63,15 @@ class IdeaScreeningConfig:
 
     def as_json(self):
         return {**{k: getattr(self, k) for k in ("enabled", "max_candidates", "proposals_per_round", "finalists",
-                                                  "reserve_fraction", "alpha", "max_screen_calls")},
+                                                  "reserve_fraction", "alpha", "max_screen_calls", "mode", "shadow_ideas",
+                                                  "shadow_min_items", "shadow_evict_after", "shadow_looks",
+                                                  "max_shadow_calls")},
                 "stages": [list(s) for s in self.stages]}
 
     @classmethod
     def from_json(cls, raw):
-        return cls(**{**raw, "stages": tuple(tuple(s) for s in raw["stages"])})
+        # A configuration saved by a Stage 2 run has no mode: it keeps screening on the development partition.
+        return cls(**{"mode": "dev_screen", **raw, "stages": tuple(tuple(s) for s in raw["stages"])})
 
 
 def reserve_member(salt, item_id, fraction):
@@ -104,7 +119,14 @@ def compact_ideas(ideas, ledger):
 
 
 def optimizer_context(wheel, ledger, ideas, reserve_ids):
-    """Prior ideas plus what each did to which items; reserve outcomes are hidden from the optimizer."""
+    """Prior ideas plus what each did to which items; reserve outcomes are hidden from the optimizer.
+
+    In shadow mode there is no reserve: the digest is each shadow idea's forward record (items, fixed, broke,
+    running accuracy, verdict) and the forward items every scored idea got wrong. Those are stories that already
+    arrived and whose labels were revealed; the optimizer never sees an item that is still awaiting its label."""
+    if wheel.idea_screening.mode == "shadow":
+        from .shadow_evaluation import ShadowEvaluator
+        return {"prior_control_ideas": compact_ideas(ideas, ledger), **ShadowEvaluator(wheel).optimizer_digest()}
     hidden = frozenset(reserve_ids)
     return {"prior_control_ideas": compact_ideas(ideas, ledger),
             "hypothesis_ledger": ledger.summary_for_optimizer(

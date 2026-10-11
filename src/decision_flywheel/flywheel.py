@@ -242,6 +242,10 @@ class DecisionFlywheel:
             return False
         return True
 
+    def shadow_enabled(self):
+        """Forward shadow evaluation (Stage 2b): opt-in, accuracy objective only."""
+        return self.screening_enabled() and self.idea_screening.mode == 'shadow'
+
     def close(self):
         self.optimizer.observer = self.optimizer_observer
         self.db.close()

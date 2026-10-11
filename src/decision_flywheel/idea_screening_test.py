@@ -75,7 +75,7 @@ TRAIN = tuple(LabeledItem(Item(f"t{i}", {"text": f"train item number {i}"}), "in
               for i in range(8))
 PROPS = {row.item.id: 1. for row in TRAIN}
 PROTECTED = tuple(Item(f"p{i}", {"text": f"protected item number {i}"}) for i in range(10))
-ON = IdeaScreeningConfig(enabled=True, stages=((60, .5), (None, None)), reserve_fraction=.3)
+ON = IdeaScreeningConfig(enabled=True, mode="dev_screen", stages=((60, .5), (None, None)), reserve_fraction=.3)
 
 
 def make(tmp_path, rubrics, *, screening=ON, optimizer=None, name="w.sqlite", **kwargs):
@@ -178,7 +178,7 @@ def test_protected_and_training_items_are_never_scored_by_the_screen(tmp_path, m
 
 
 def test_the_screen_call_budget_truncates_and_promotes_nothing(tmp_path):
-    tight = IdeaScreeningConfig(enabled=True, max_screen_calls=40, stages=((60, .5), (None, None)))
+    tight = IdeaScreeningConfig(enabled=True, mode="dev_screen", max_screen_calls=40, stages=((60, .5), (None, None)))
     wheel, model = make(tmp_path, ["better", "same"], screening=tight)
     result = run(wheel, rows(0, 300))
     assert not result["promoted"] and wheel.active.config.rubric == "base"
@@ -238,7 +238,7 @@ def test_the_real_agent_asks_for_distinct_proposals_and_parses_the_reply():
 
 
 def test_the_configuration_survives_a_restart_and_can_be_replaced(tmp_path):
-    wheel, _ = make(tmp_path, [], screening=IdeaScreeningConfig(enabled=True, finalists=1, proposals_per_round=4))
+    wheel, _ = make(tmp_path, [], screening=IdeaScreeningConfig(enabled=True, mode="dev_screen", finalists=1, proposals_per_round=4))
     wheel.close()
     wheel, _ = make(tmp_path, [], screening=None)
     assert wheel.idea_screening.enabled and wheel.idea_screening.finalists == 1

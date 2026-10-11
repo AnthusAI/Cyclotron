@@ -83,9 +83,14 @@ class ControlScheduler:
             partial = {control: proposal[control]}
             idea_id = _hash({"control": control, "proposal": partial})
             if not any(idea["id"] == idea_id for idea in self.ideas()):
+                born = {}
+                if wheel.idea_screening.enabled and wheel.idea_screening.mode == "shadow":
+                    from .shadow_evaluation import ShadowEvaluator
+                    # Forward-only evidence: this idea is judged only on stories after this one.
+                    born = {"created_seq": ShadowEvaluator(wheel).seq()}
                 self.save({"id": idea_id, "control": control, "proposal": partial,
                            "rationale": proposal.get("rationale", ""), "attempts": [], "last_cycle": 0,
-                           "created_cycle": cycle, "source": "multi-proposal discovery"})
+                           "created_cycle": cycle, "source": "multi-proposal discovery", **born})
                 wheel._emit({"kind": "hypothesis-discovered", "idea_id": idea_id, "control": control,
                              "proposal": partial, "rationale": proposal.get("rationale", "")})
 
@@ -124,6 +129,14 @@ class ControlScheduler:
         new = [idea for idea in ideas if idea.get("created_cycle") == cycle]
         # Ideas that never got a turn (over the candidate cap earlier, or imported) queue behind this cycle's.
         new += [idea for idea in ideas if idea not in new and not idea["last_cycle"] and not ledger.verdicts(idea["id"])]
+        if config.mode == "shadow":
+            from .shadow_evaluation import ShadowEvaluator
+            # New ideas only enter the shadow set here; the review (and any promotion) runs once at the end of
+            # the cycle so that every isolated trial keeps one shared incumbent.
+            ShadowEvaluator(wheel).fill_slots(training)
+            completed.add(control)
+            checkpoint()
+            return
         candidates = candidate_set(new, ledger, cycle, config, ideas, valid)
         now = evaluation_time
         report = await screen_round(wheel, control, candidates, ideas, training, development, protected=protected,
@@ -333,9 +346,16 @@ class ControlScheduler:
                     HypothesisLedger(wheel.db).record_verdict(idea_id, "promoted",
                         f"cleared the reserve gate and improved the fitted development trial; fixed {stats['gained']} "
                         f"and broke {stats['lost']} reserve items (Holm-adjusted p={stats['p_adjusted']:.3f})", stats)
-            result = {"promoted": best is not None, "trials": results, "baseline_version": baseline,
-                      "selected_control": best["control"] if best else None,
-                      "reason": "best isolated candidate improved" if best else "no isolated candidate qualified"}
+            shadow_promoted = None
+            if screening and wheel.idea_screening.mode == "shadow" and not best:
+                from .shadow_evaluation import ShadowEvaluator
+                shadow_promoted = await ShadowEvaluator(wheel).review(training, development, source="control-scheduler")
+            result = {"promoted": best is not None or shadow_promoted is not None, "trials": results,
+                      "baseline_version": baseline, "selected_control": best["control"] if best else None,
+                      **({"shadow_promoted_idea": shadow_promoted} if shadow_promoted else {}),
+                      "reason": ("best isolated candidate improved" if best else
+                                 "an idea cleared forward shadow evaluation" if shadow_promoted else
+                                 "no isolated candidate qualified")}
             with wheel.db:
                 wheel.db.execute("UPDATE control_cycles SET status='complete',payload=? WHERE id=?", (_json(result), key))
             wheel._emit({"kind": "control-cycle-completed", **result})
