@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime
 from dataclasses import dataclass
 from hashlib import sha256
@@ -12,6 +13,8 @@ from typing import Any, Callable, Sequence
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from ..classifier_config import ClassifiedAnswers, ClassifierConfig
 
+_RUBRIC_HINT = " Use state.rubric as the human's decision criteria."
+
 
 @dataclass(frozen=True)
 class JevConfiguration:
@@ -21,12 +24,15 @@ class JevConfiguration:
     base_url: str | None = None
     timeout_seconds: float = 30.0
     max_retries: int = 0
+    rubric_label: str | None = None  # label whose criterion carries the rubric; default: first label
 
     def __post_init__(self) -> None:
         if not isinstance(self.model, str) or not self.model.strip():
             raise ValueError("model must be a non-empty string")
         if isinstance(self.timeout_seconds, bool) or self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+        if self.rubric_label is not None and (not isinstance(self.rubric_label, str) or not self.rubric_label):
+            raise ValueError("rubric_label must be a non-empty string")
         if self.max_retries != 0:
             raise ValueError("Jev adapter retries must be disabled; the outer runner counts attempts")
 
@@ -75,6 +81,25 @@ class JevAdapter:
                                 retry=RetryPolicy(max_retries=0))
         return cls(client, configuration=configuration)
 
+    def _rubric_label(self, labels: Sequence[str]) -> str:
+        """Configured label, else the task's first label (no positive class is visible here)."""
+        label = self.configuration.rubric_label
+        if label is None:
+            return labels[0]
+        if label not in labels:
+            raise ValueError("rubric_label must be one of the task's labels")
+        return label
+
+    def _jev_questions(self, config: ClassifierConfig, questions: dict, names: dict) -> dict:
+        """Build Jev questions; the rubric rides in the decision question's criteria."""
+        built = {}
+        for key, detail in questions.items():
+            criteria = {label: None for label in detail["options"]}
+            if names[key] == "decision" and config.rubric:
+                criteria[self._rubric_label(detail["options"])] = config.rubric
+            built[key] = {"type": detail["type"], "instructions": detail["instructions"], "criteria": criteria}
+        return built
+
     async def decide(self, task: DecisionTask, target: Item,
                      context: Sequence[LabeledItem]) -> DecisionResult:
         self.capabilities.validate_context(context)
@@ -108,14 +133,15 @@ class JevAdapter:
                        event_sink: Callable[[dict], None] | None = None) -> ClassifiedAnswers:
         """Ask the main decision and every discovered element in one SDK request."""
         request = config.request(target, training, now=now)
-        questions = {name: {"type": detail["type"], "instructions": detail["instructions"],
-                            "criteria": {label: None for label in detail["options"]}}
-                     for name, detail in request["questions"].items()}
+        state = {key: value for key, value in request["state"].items() if key != "rubric"}
+        raw_questions = {name: {**detail, "instructions": detail["instructions"].replace(_RUBRIC_HINT, "")}
+                         for name, detail in request["questions"].items()}
+        questions = self._jev_questions(config, raw_questions, {name: name for name in raw_questions})
         observe = event_sink or (lambda event: None)
         observe({"kind": "decision-request", "target_id": target.id, "model": self.model_identity,
-                 "state": request["state"], "questions": questions})
+                 "state": state, "questions": questions})
         started = time.perf_counter()
-        response = await asyncio.to_thread(self.client.system_one, state=request["state"], questions=questions)
+        response = await asyncio.to_thread(self.client.system_one, state=state, questions=questions)
         raw = _mapping(getattr(response, "answers", {}))
         observe({"kind": "decision-response", "target_id": target.id,
                  "answers": {name: _mapping(value) for name, value in raw.items()},
@@ -137,15 +163,21 @@ class JevAdapter:
         """One transport request; each classifier keeps its own context and answer group."""
         from ..batched_classification import batch_request, BatchedAnswers
         request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes)
-        questions = {key:{'type':detail['type'],'instructions':detail['instructions'],
-                          'criteria':{label:None for label in detail['options']}} for key,detail in request['questions'].items()}
+        state = {'target':request['state']['target'],'classifiers':{
+            identifier:{k:v for k,v in value.items() if k!='rubric'} for identifier,value in request['state']['classifiers'].items()}}
+        questions = {}
+        for key,(identifier,local_name,_) in identities.items():
+            scope = 'state.classifiers['+json.dumps(identifier)+']'
+            detail = {**request['questions'][key]}
+            detail['instructions'] = detail['instructions'].replace(f' Use {scope}.rubric as the decision criteria.','')
+            questions.update(self._jev_questions(configurations[identifier],{key:detail},{key:local_name}))
         observe = event_sink or (lambda event:None)
         bindings = {key:{'classifier_id':identifier,'question':local_name,'configuration_fingerprint':configurations[identifier].fingerprint}
                     for key,(identifier,local_name,_) in identities.items()}
         observe({'kind':'decision-request','target_id':target.id,'model':self.model_identity,
-                 'state':request['state'],'questions':questions,'question_bindings':bindings})
+                 'state':state,'questions':questions,'question_bindings':bindings})
         started = time.perf_counter()
-        response = await asyncio.to_thread(self.client.system_one,state=request['state'],questions=questions)
+        response = await asyncio.to_thread(self.client.system_one,state=state,questions=questions)
         raw = _mapping(getattr(response,'answers',{}))
         model, usage = _string_or_none(getattr(response,'model',None)), _numeric_usage(getattr(response,'usage',None))
         observe({'kind':'decision-response','target_id':target.id,'answers':{key:_mapping(value) for key,value in raw.items()},

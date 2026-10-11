@@ -35,7 +35,7 @@ def test_the_article_ui_displays_real_optimizer_and_jev_messages_and_serves_the_
             jev_calls.append({"state": state, "questions": questions})
             positive = "Title: yes" in state["target"]["text"]
             answers = {"decision": {"choice": "exclude", "probabilities": {"include": .2, "exclude": .8}}}
-            if state["rubric"]:
+            if any(v for v in questions["decision"]["criteria"].values()):
                 # Leave room for a learned head to improve probability calibration.
                 p = .65 if positive else .35
                 answers["decision"] = {"choice": "include" if positive else "exclude", "probabilities": {"include": p, "exclude": 1-p}}

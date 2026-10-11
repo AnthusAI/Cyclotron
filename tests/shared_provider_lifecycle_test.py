@@ -114,8 +114,12 @@ def test_shared_provider_features_refit_before_prediction_and_restart_without_re
         prediction_requests = [questions for state, questions in wire.calls
                                if state['target']['text'] == 'yes new paper']
         assert len(prediction_requests) == 1 and len(prediction_requests[0]) == 3
-        for state, _ in wire.calls:
-            assert state['classifiers']['a']['rubric'] == 'Practical papers'
+        for state, questions in wire.calls:
+            if provider == 'jev':  # Jev carries the rubric in the decision question's criteria
+                assert 'rubric' not in state['classifiers']['a']
+                assert any('Practical papers' in q['criteria'].values() for q in questions.values())
+            else:
+                assert state['classifiers']['a']['rubric'] == 'Practical papers'
             assert state['classifiers']['a']['examples']
             assert 'label' not in state['target'] and 'human_feedback' not in state['target']
         final_predictions = [e for e in events if e['kind'] == 'prediction']

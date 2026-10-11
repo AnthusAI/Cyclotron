@@ -611,6 +611,7 @@ It contains three adjustable parts:
 
 The main question starts as “Should this item be included?”
 Its instructions can refer to the evolving rubric in `state.rubric`.
+Jev has no `state.rubric`: its adapter sends the rubric as the criterion of the decision question's first label (or `JevConfiguration.rubric_label`), with `None` for the other labels.
 The optimizer experiments with the example collection and the element tasks.
 Each element task defines its question, answer options, and criteria.
 The main answer and element answers become features for the custom ML model.

@@ -21,14 +21,16 @@ def test_two_classifiers_and_their_features_use_one_request_with_scoped_context(
     client=Client(); events=[]
     result=asyncio.run(JevAdapter(client).classify_many(configurations,Item('target',{'text':'Target paper'}),training,event_sink=events.append))
     assert client.calls == 1 and len(client.questions)==3
-    assert client.state['classifiers']['library']['rubric']=='Memory systems'
+    assert 'rubric' not in client.state['classifiers']['library']
+    crit=[q['criteria'] for q in client.questions.values()]
+    assert {'include':'Memory systems','exclude':None} in crit and {'science':'Choose the primary topic','sport':None,'business':None} in crit
     assert client.state['classifiers']['topic']['examples']==[]
     assert set(result.answers)=={'library','topic'}
     assert set(result.answers['library'])=={'decision','memory'}
     assert result.usage=={'input_tokens':10}
     assert all(answer.usage is None for group in result.answers.values() for answer in group.values())
     assert events[0]['state']==client.state and events[0]['questions']==client.questions
-    assert 'state.classifiers["library"].rubric' in next(iter(client.questions.values()))['instructions']
+    assert '.rubric' not in next(iter(client.questions.values()))['instructions']
 
 
 def test_oversized_batches_and_target_leakage_fail_before_a_model_call():
