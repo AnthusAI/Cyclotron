@@ -48,4 +48,10 @@ summary, tags, featured; featured first, then newest `created`, then id). Output
 changes nothing. It writes a `.cyclotron-recordings` marker; only when that marker already existed does it remove
 directories holding a `recording.json` that are no longer published. An unmarked directory is never cleaned.
 
-`compare` prints the setup settings that differ and each window's cyclotron / decision-model / baseline accuracy.
+`setup.review` records how much of the run a person reviewed: `{policy, summary, stories_reviewed, stories_total}`.
+`policy` is the run's feedback mode (`all`, `reject_half`, `casual_ten_percent`, or any other recorded mode), read from the
+exported scenario's feedback policy, then the protocol's single `modes` entry, then the mode folder name. `stories_reviewed`
+counts the recorded cycles whose label was revealed to the learner; `stories_total` counts the recorded cycles. The block is
+optional: older recordings without it mean every story was reviewed. `list` shows the policy and count.
+
+`compare` prints the setup settings that differ (including `review.policy`) and each window's cyclotron / decision-model / baseline accuracy.
