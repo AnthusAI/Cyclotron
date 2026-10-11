@@ -331,25 +331,33 @@ say" and the Stage 2d section); `replicates-baseline/replicates-summary.md`.
 
 The review program decides which decisions a reviewer checks. It sets your cost and how many mistakes get through.
 
-### 5.0 Do not start with selective review
+### 5.0 Review everything first, then taper
 
-Review everything until the first rubric exists, then taper. We tried the two cheapest policies from a blank start,
-both with the trigger at 6, on the 287-story corpus (window 70):
+Do not start with selective review. We compared five review schedules from a blank start (trigger 6, accuracy
+objective, 287 stories, windows of 70, one run each). Accuracy is scored against the corpus's reference labels, not
+only the stories that were reviewed.
 
-| Policy from the first story | Stories reviewed | Optimizer calls | Cyclotron accuracy by window | Always the most common label |
-|---|---:|---:|---|---|
-| Review the model's publishes and half its rejects | 46 of 287 | 0 | 14.3, 18.6, 14.3, 14.3 | 85.7, 81.4, 84.3, 84.3 |
-| Review one story in ten | 29 of 287 | 0 | 4.3, 2.9, 4.3, 1.4 | 87.1, 92.9, 90.0, 90.0 |
+| Review schedule | Stories reviewed | Cyclotron accuracy by window | Optimizer calls |
+|---|---:|---|---:|
+| Every story | 287 | 77.1, 94.3, 92.9, 95.7 | 13 |
+| Every story for 50 stories, then half | 169 | 78.6, 97.1, 92.9, 94.3 | 6 |
+| Publish-priority taper (all publishes and half the rejects for 50 stories, then half and a quarter) | 113 | 78.6, 95.7, 97.1, 91.4 | 5 |
+| The model's publishes and half its rejects, from the first story | 46 | 45.7, 61.4, 61.4, 41.4 | 0 |
+| One story in ten, from the first story | 29 | 45.7, 60.0, 60.0, 41.4 | 0 |
 
-Neither run ever proposed a rubric. The trigger counts label transitions among the reviewed stories, and with so few
-reviews it never fired, so the cyclotron kept the decision model's default behavior, which is to say publish for
-almost everything. The loop did not fail loudly: it ran to the end and looked busy.
+Always answering the most common label scores 84.3, 80.0, 78.6 and 84.3 in those windows.
 
-What to do: use an onboarding schedule that reviews everything for the first stretch (the study script has
-`first_50_all_then_half`, `first_100_all_then_half` and `publish_priority_taper`), and confirm that the first
-rubric arrives before you reduce the review rate. One run each; we have not measured how short the onboarding can be.
+The two schedules that start selective never proposed a rubric. The trigger counts label transitions among reviewed
+stories, and with so few reviews it never fired, so the cyclotron kept the decision model's default behavior, which
+is to say publish for most stories (recall 82 to 100 percent, precision 19 to 35 percent). The run did not fail
+loudly: it ran to the end and looked busy. The two schedules that review everything first learned a rubric by about
+story 21 and then held their accuracy on 59 and 39 percent of the labels.
 
-Source: `docs/experiments/setup-findings-20261011.md`, "Selective review from a blank start".
+What to do: use an onboarding schedule (the study script has `first_50_all_then_half`, `first_100_all_then_half` and
+`publish_priority_taper`), and confirm that the first rubric has arrived before the review rate drops. One run each;
+a window of 70 carries about plus or minus 7 points; we have not measured how short the onboarding can be.
+
+Source: `docs/experiments/setup-findings-20261011.md`, "Review schedules from a blank start".
 
 ### 5.1 Review rate and which items to review
 
@@ -502,6 +510,7 @@ In the order we would do it.
 | Symptom | Likely cause | What we did |
 |---|---|---|
 | Accuracy far below always-answering-the-most-common-label, and no optimizer calls | Selective review from a blank start starved the first-rubric trigger | Review everything first (`first_50_all_then_half`), then taper (section 5.0) |
+| Accuracy that looks far too low only for runs that review a fraction of stories | The accuracy was computed from reviewed stories' labels, so unreviewed stories counted as wrong | Score against the corpus's reference labels (the exporter does; check any ad hoc analysis) |
 | Accuracy capped near 85 percent whatever the rubric | Labels from one model that over-published | Audited, wrote an explicit policy, relabeled with two blind passes |
 | Labeling passes disagree (kappa 0.07 to 0.24) with boilerplate rationales | Weak labeler, no explicit policy | Used two blind passes under a written policy (kappa 0.90) |
 | Jev publishes far more than the labels do (65 percent by default) | No rubric | Started from a rubric or let the first rubric arrive early |
