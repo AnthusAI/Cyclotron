@@ -37,9 +37,9 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
     if not stages or any(stage not in {'rubric','questions','examples'} for stage in stages):
         raise ValueError('choose separate decision-context optimization stages')
     prior_events=wheel.history(100000)
-    # Declaring a selection policy at construction records its configuration;
-    # that alone does not make a runtime used.
-    configuration_only={'selection-policy-configured'}
+    # Declaring a selection policy or idea screening at construction records
+    # its configuration; that alone does not make a runtime used.
+    configuration_only={'selection-policy-configured','idea-screening-configured'}
     if not resume and (any(event.get('kind') not in configuration_only for event in prior_events) or wheel.active.head or wheel.active.config.example_ids or wheel.active.config.tasks):
         raise ValueError('operational replay requires a fresh empty runtime')
     if max_rubric_optimizations is not None and (type(max_rubric_optimizations) is not int or max_rubric_optimizations < 1):
