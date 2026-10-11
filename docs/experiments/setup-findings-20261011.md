@@ -68,3 +68,27 @@ Curated start, cyclotron accuracy by window: 91.4, 94.3, 94.3, 92.9 percent
 (first rubric change at cycle 121; the curated rubric was in place from the
 start). Blank start, six replicates: first window 73 to 77, final window 94.3
 to 95.7. The curated start wins the first window and ends in the same range.
+
+## Review schedules from a blank start
+
+Blank start, trigger 6, accuracy objective, 287 stories (windows of 70), one run
+each. Accuracy is scored against the corpus's reference labels. An earlier version
+of this note scored against the labels the run recorded, which exist only for
+reviewed stories, and so reported accuracies that were far too low; that was
+wrong.
+
+| Schedule | Labels revealed | Accuracy by window | Publish recall by window | Publish precision by window | Optimizer calls | Jev calls |
+|---|---:|---|---|---|---:|---:|
+| `all` (replicates-cold6/rep-1) | 287 | 77.1, 94.3, 92.9, 95.7 | 82, 86, 67, 73 | 39, 86, 100, 100 | 13 | 2,320 |
+| `first_50_all_then_half` | 169 | 78.6, 97.1, 92.9, 94.3 | 91, 86, 67, 64 | 42, 100, 100, 100 | 6 | 911 |
+| `publish_priority_taper` | 113 | 78.6, 95.7, 97.1, 91.4 | 91, 93, 93, 73 | 42, 87, 93, 73 | 5 | 644 |
+| `reject_half` | 46 | 45.7, 61.4, 61.4, 41.4 | 100, 93, 93, 91 | 22, 33, 35, 20 | 0 | 287 |
+| `casual_ten_percent` | 29 | 45.7, 60.0, 60.0, 41.4 | 100, 93, 93, 82 | 22, 32, 34, 19 | 0 | 287 |
+
+Always answering the most common label: 84.3, 80.0, 78.6, 84.3 in those windows.
+
+The two schedules that start selective never proposed a rubric: the trigger counts
+label transitions among reviewed stories and never fired. They stayed at the blank
+rubric's default behavior (publish for most stories). The two onboarding schedules
+learned a rubric by story 21 and held accuracy on 59 and 39 percent of the labels.
+Runs: `optimization/rec-onboard50`, `rec-taper`, `rec-reject-half`, `rec-casual10`.

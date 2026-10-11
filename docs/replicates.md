@@ -42,6 +42,11 @@ caller's environment, so export keys in the shell that launches it. No key value
 
 ## Metrics (per replicate, percent)
 
+Reference labels come from the operational corpus (`operational_corpus` in `protocol.json` if recorded, else the
+`--operational-corpus` in the base args; id key, label key `simulated_label` or `label`), because `results.json` holds a
+human label only for reviewed stories. Without a readable corpus the recorded labels are used and the summary says
+`recorded (reviewed stories only)` when some are missing.
+
 Computed read-only from `results.json` and `runtime.sqlite3` over the first floor(cycles/window) x window cycles:
 cyclotron accuracy per window (`predicted_label` vs `human_label`); decision-model-alone accuracy per window
 (`prediction` events' `decision_model_label` vs the human label); majority-class baseline per window (the share of

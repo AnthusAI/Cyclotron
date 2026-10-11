@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "f127bcda-7e7f-4416-9d6b-0d4c9838bd42",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/home/Projects/Decision-Flywheel/.archify/workflow-decision-flywheel-20261005-170402/prediction.json",
+  "output": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/prediction.html",
+  "specification": {
+    "sha256": "6a3df4e035557509614beb25921ba1c8036fb01fb043a4dcdcc4d3fb5d8e6de2",
+    "bytes": 2172
+  },
+  "artifact": {
+    "sha256": "f28871a0f1ebea449ae5b14b02f1f0ee7e753f0b02d73300a7df46c3b9424372",
+    "bytes": 753035
+  }
+}

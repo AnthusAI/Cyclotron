@@ -331,6 +331,34 @@ say" and the Stage 2d section); `replicates-baseline/replicates-summary.md`.
 
 The review program decides which decisions a reviewer checks. It sets your cost and how many mistakes get through.
 
+### 5.0 Review everything first, then taper
+
+Do not start with selective review. We compared five review schedules from a blank start (trigger 6, accuracy
+objective, 287 stories, windows of 70, one run each). Accuracy is scored against the corpus's reference labels, not
+only the stories that were reviewed.
+
+| Review schedule | Stories reviewed | Cyclotron accuracy by window | Optimizer calls |
+|---|---:|---|---:|
+| Every story | 287 | 77.1, 94.3, 92.9, 95.7 | 13 |
+| Every story for 50 stories, then half | 169 | 78.6, 97.1, 92.9, 94.3 | 6 |
+| Publish-priority taper (all publishes and half the rejects for 50 stories, then half and a quarter) | 113 | 78.6, 95.7, 97.1, 91.4 | 5 |
+| The model's publishes and half its rejects, from the first story | 46 | 45.7, 61.4, 61.4, 41.4 | 0 |
+| One story in ten, from the first story | 29 | 45.7, 60.0, 60.0, 41.4 | 0 |
+
+Always answering the most common label scores 84.3, 80.0, 78.6 and 84.3 in those windows.
+
+The two schedules that start selective never proposed a rubric. The trigger counts label transitions among reviewed
+stories, and with so few reviews it never fired, so the cyclotron kept the decision model's default behavior, which
+is to say publish for most stories (recall 82 to 100 percent, precision 19 to 35 percent). The run did not fail
+loudly: it ran to the end and looked busy. The two schedules that review everything first learned a rubric by about
+story 21 and then held their accuracy on 59 and 39 percent of the labels.
+
+What to do: use an onboarding schedule (the study script has `first_50_all_then_half`, `first_100_all_then_half` and
+`publish_priority_taper`), and confirm that the first rubric has arrived before the review rate drops. One run each;
+a window of 70 carries about plus or minus 7 points; we have not measured how short the onboarding can be.
+
+Source: `docs/experiments/setup-findings-20261011.md`, "Review schedules from a blank start".
+
 ### 5.1 Review rate and which items to review
 
 In the 1,200-item corpus, cycles 401 to 1,200, with a 25 percent review target:
@@ -481,6 +509,8 @@ In the order we would do it.
 
 | Symptom | Likely cause | What we did |
 |---|---|---|
+| Accuracy far below always-answering-the-most-common-label, and no optimizer calls | Selective review from a blank start starved the first-rubric trigger | Review everything first (`first_50_all_then_half`), then taper (section 5.0) |
+| Accuracy that looks far too low only for runs that review a fraction of stories | The accuracy was computed from reviewed stories' labels, so unreviewed stories counted as wrong | Score against the corpus's reference labels (the exporter does; check any ad hoc analysis) |
 | Accuracy capped near 85 percent whatever the rubric | Labels from one model that over-published | Audited, wrote an explicit policy, relabeled with two blind passes |
 | Labeling passes disagree (kappa 0.07 to 0.24) with boilerplate rationales | Weak labeler, no explicit policy | Used two blind passes under a written policy (kappa 0.90) |
 | Jev publishes far more than the labels do (65 percent by default) | No rubric | Started from a rubric or let the first rubric arrive early |

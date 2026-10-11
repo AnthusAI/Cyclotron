@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/home/Projects/Decision-Flywheel/.archify/workflow-decision-flywheel-20261005-170402/prediction.json",
+    "sha256": "6a3df4e035557509614beb25921ba1c8036fb01fb043a4dcdcc4d3fb5d8e6de2",
+    "bytes": 2172
+  },
+  "artifact": {
+    "path": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/prediction.html",
+    "sha256": "f28871a0f1ebea449ae5b14b02f1f0ee7e753f0b02d73300a7df46c3b9424372",
+    "bytes": 753035
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/prediction.finalize.json",
+    "summaryReceipt": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/prediction.finalize-summary.json",
+    "browserCheckReceipt": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/prediction.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-05T21:05:08.200Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 1708,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "routesOverSuggestedBends": 2
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [],
+      "detours": [
+        {
+          "relationship": {
+            "from": "active",
+            "to": "questions",
+            "label": "Questions",
+            "collectionIndex": 1,
+            "artifactIndex": 2
+          },
+          "bends": 3,
+          "stretch": 1.199
+        },
+        {
+          "relationship": {
+            "from": "head",
+            "to": "reviewer",
+            "label": "Prediction",
+            "collectionIndex": 3,
+            "artifactIndex": 4
+          },
+          "bends": 3,
+          "stretch": 1.18
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "active → questions needs 3 bends: move node active or questions so they share a row or column with matching centers, or sit diagonally with a clear corner.",
+      "head → reviewer needs 3 bends: move node head or reviewer so they share a row or column with matching centers, or sit diagonally with a clear corner."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

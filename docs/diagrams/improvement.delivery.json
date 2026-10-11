@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "cba733e8-7b08-4228-8627-7ee75a80a6c0",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/home/Projects/Decision-Flywheel/.archify/workflow-decision-flywheel-20261005-170402/improvement.json",
+  "output": "/Users/home/Projects/Decision-Flywheel/docs/diagrams/improvement.html",
+  "specification": {
+    "sha256": "946c63415369e06961383d6addb96c232a52556cab3b518593b24b7e2e73e428",
+    "bytes": 4283
+  },
+  "artifact": {
+    "sha256": "784278ed6b1f50170fbfc927e05b1d87cd6f8b54a38317722accc5202a6d6cd3",
+    "bytes": 758488
+  }
+}

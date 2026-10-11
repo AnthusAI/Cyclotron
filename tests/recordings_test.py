@@ -23,7 +23,7 @@ R = _mod()
 LABELS = ("publish", "reject")
 
 
-def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4, mode="all", reviewed=None):
+def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4, mode="all", reviewed=None, hide_unreviewed=False):
     """A synthetic recorded run (protocol, results, events) plus a relabeled corpus and manifest."""
     root.mkdir(parents=True, exist_ok=True)
     corpus = [{"id": f"item-{n}", "title": f"Story {n}", "source_url": f"https://example.org/{n}", "license": "CC BY 2.5",
@@ -50,7 +50,7 @@ def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4, 
         other = LABELS[actual == "publish"]
         predicted = actual if n > 4 else other   # wrong in the first window, right after
         dm = actual if n <= decision_ok else other
-        cycles.append({"cycle_number": n, "item_id": record["id"], "predicted_label": predicted, "human_label": actual,
+        cycles.append({"cycle_number": n, "item_id": record["id"], "predicted_label": predicted, "human_label": None if hide_unreviewed and reviewed is not None and n not in reviewed else actual,
                        "feedback_selected": reviewed is None or n in reviewed, "feedback_propensity": 1.0, "role": "training", "metrics": metrics,
                        "outcomes": [], "requests": 1})
         minute = f"2026-10-09T{10 + n // 60:02d}:{n % 60:02d}"
@@ -374,3 +374,32 @@ def test_export_keeps_the_review_block(tmp_path):
     exported = json.loads((out / "casual" / "recording.json").read_text())
     assert exported["setup"]["review"]["policy"] == "casual_ten_percent"
     assert exported["setup"]["review"]["stories_reviewed"] == 1
+
+
+def test_partial_review_baseline_comes_from_all_stories_not_the_reviewed_ones(tmp_path):
+    # Reviewed stories 1, 2 and 5 are all "reject"; the corpus has one "publish" in each window of four.
+    run = make_run(tmp_path / "p", mode="reject_half", reviewed={1, 2, 5}, hide_unreviewed=True)
+    results = rec(add(tmp_path, "partial", run=run), "partial")["results"]
+    assert [w["majority_baseline"] for w in results["windows"]] == [0.75, 0.75]
+    assert [w["cyclotron_accuracy"] for w in results["windows"]] == [0.0, 1.0]
+    full = rec(add(tmp_path, "full", run=make_run(tmp_path / "f")), "full")["results"]
+    assert [w["majority_baseline"] for w in full["windows"]] == [0.75, 0.75]
+
+
+def test_onboarding_policy_sentences_hyphenated_and_underscored(tmp_path):
+    expected = {
+        "first-50-all-then-half": "Every story for the first 50 stories, then half of the stories.",
+        "first_100_all_then_half": "Every story for the first 100 stories, then half of the stories.",
+        "publish-priority-taper": "For the first 50 stories, every story the model calls publish and half of those it "
+                                  "calls reject; after that, half of the publishes and a quarter of the rejects.",
+        "first-100-all-then-half": "Every story for the first 100 stories, then half of the stories.",
+        "publish_priority_taper": "For the first 50 stories, every story the model calls publish and half of those it "
+                                  "calls reject; after that, half of the publishes and a quarter of the rejects.",
+        "first_50_all_then_half": "Every story for the first 50 stories, then half of the stories.",
+    }
+    for name, sentence in expected.items():
+        assert R.review_summary(name) == sentence
+    assert R.review_summary("odd-mode") is None
+    run = make_run(tmp_path / "t", mode="publish-priority-taper", reviewed={1, 2})
+    review = rec(add(tmp_path, "taper", run=run), "taper")["setup"]["review"]
+    assert review["summary"] == expected["publish-priority-taper"]
