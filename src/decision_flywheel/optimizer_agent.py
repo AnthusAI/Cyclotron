@@ -129,6 +129,16 @@ class OptimizerAgent:
                              "supporting classification questions inferred from the feedback, not another final decision. "
                              "If you have no useful idea, return the existing value and explain why. "
                              "Prior rejected ideas may be reconsidered with more evidence.")
+            wanted = briefing.payload.get("current", {}).get("proposals_requested")
+            if wanted is not None:
+                instructions += (f"\nReturn one JSON object {{\"proposals\": [...]}} holding {wanted} DISTINCT proposals, "
+                                 f"each an object with rationale and {control}. Make them differ along different axes "
+                                 "(for a rubric: strictness, topic-specific rules, positive and negative examples of the "
+                                 "criteria; for examples: coverage of hard cases versus typical ones). "
+                                 "hypothesis_ledger lists ideas already tried with the items each fixed and broke versus "
+                                 "the incumbent, and stubborn_items lists items every tried idea still gets wrong. "
+                                 "Do not repeat a ledger idea; address what the tried ideas broke or never fixed. "
+                                 "Returning fewer proposals is allowed; duplicates are rejected.")
             if control == "tasks":
                 instructions += ("\nEach proposed question enters an individual feature bank. Code tests one question at a time "
                                  "against the same incumbent, preserving its other questions, rubric and examples. "
@@ -142,7 +152,7 @@ class OptimizerAgent:
                     {"role": "user", "content": briefing.encoded}]
         return messages
 
-    def propose(self, briefing: FeedbackBriefing) -> dict:
+    def _reply_content(self, briefing: FeedbackBriefing) -> str:
         messages = self.request_messages(briefing)
         base = {"briefing_fingerprint": briefing.fingerprint,
                 "requested_model": getattr(self.complete, "model", None)}
@@ -157,13 +167,32 @@ class OptimizerAgent:
                        "latency_ms": (perf_counter() - started) * 1000,
                        "model": reply.model, "usage": dict(reply.usage),
                        "tool_calls": list(reply.tool_calls)})
+        return reply.content
+
+    def propose(self, briefing: FeedbackBriefing) -> dict:
         try:
-            proposal = json.loads(reply.content)
+            proposal = json.loads(self._reply_content(briefing))
         except (TypeError, json.JSONDecodeError):
             raise ValueError("optimizer reply must be a JSON object") from None
         if not isinstance(proposal, dict):
             raise ValueError("optimizer reply must be a JSON object")
         return proposal
+
+    def propose_many(self, briefing: FeedbackBriefing) -> list[dict]:
+        """Several proposals from one call; briefing.current.proposals_requested is the ceiling."""
+        return parse_proposals(self._reply_content(briefing), briefing.payload["current"]["proposals_requested"])
+
+
+def parse_proposals(content, count: int) -> list[dict]:
+    """Strict shape check of a multi-proposal reply: {"proposals": [object, ...]} with 1..count objects."""
+    try:
+        reply = json.loads(content)
+    except (TypeError, json.JSONDecodeError):
+        raise ValueError("optimizer reply must be a JSON object") from None
+    proposals = reply.get("proposals") if isinstance(reply, dict) and set(reply) == {"proposals"} else None
+    if not isinstance(proposals, list) or not 1 <= len(proposals) <= count or any(not isinstance(p, dict) for p in proposals):
+        raise ValueError(f"optimizer reply must be {{\"proposals\": [1 to {count} objects]}}")
+    return proposals
 
 
 class DisabledOptimizer:
@@ -187,4 +216,7 @@ class DisabledOptimizer:
         raise self._disabled()
 
     def propose(self, briefing: FeedbackBriefing) -> dict:
+        raise self._disabled()
+
+    def propose_many(self, briefing: FeedbackBriefing) -> list[dict]:
         raise self._disabled()
