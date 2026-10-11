@@ -140,9 +140,12 @@ export const CycleMark=React.forwardRef<CycleMarkHandle,CycleMarkProps>(function
   },[durationMs])
 
   React.useImperativeHandle(ref,()=>({cycle}),[cycle])
-  const first=React.useRef(true)
+  // Compare with the previous key instead of a "first render" flag: React's development double-run of effects would
+  // otherwise play a stray cycle at mount.
+  const previousKey=React.useRef(cycleKey)
   React.useEffect(()=>{
-    if(first.current){first.current=false;return}
+    if(previousKey.current===cycleKey)return
+    previousKey.current=cycleKey
     cycle()
   },[cycleKey,cycle])
   React.useEffect(()=>()=>{if(frame.current!==null)cancelAnimationFrame(frame.current)},[])
