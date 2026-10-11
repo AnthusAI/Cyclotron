@@ -201,7 +201,10 @@ class HypothesisLedger:
             row = describe(parent, depth)
             ancestors.append(row)
             queue.extend((p, depth + 1) for p in row["parents"])
-        return {**root, "ancestors": ancestors}
+        out = {**root, "ancestors": ancestors}
+        if (self._idea_payload(idea_id) or {}).get("addresses"):
+            out["addresses"] = list(self._idea_payload(idea_id)["addresses"])
+        return out
 
     def operator_outcomes(self):
         """Per operator: ideas proposed, ideas advanced (ever 'advanced' or 'promoted'), ideas promoted, and the mean
@@ -228,6 +231,82 @@ class HypothesisLedger:
         return {op: {"proposed": r["proposed"], "advanced": r["advanced"], "promoted": r["promoted"],
                      "mean_forward_net": round(sum(r["nets"]) / len(r["nets"]), 4) if r["nets"] else None}
                 for op, r in sorted(out.items())}
+
+    # -- diagnosis (Stage 2d) ---------------------------------------------------------------------------------
+    def _diagnosis_tables(self):
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS diagnosis_causes (cause_id TEXT PRIMARY KEY, round INTEGER, payload TEXT);
+            CREATE TABLE IF NOT EXISTS element_evaluations (element TEXT, round INTEGER, question TEXT, source TEXT,
+                n INTEGER, auc_label REAL, mean_log_loss_gain REAL, lower_log_loss_gain REAL,
+                mean_accuracy_gain REAL, kept INTEGER, reason TEXT, payload TEXT, evaluated_at TEXT,
+                PRIMARY KEY (element, round));
+        """)
+
+    def record_cause(self, round_number, cause):
+        """Store a cause (a plain dict with a unique ``id``); the same id replaces."""
+        self._diagnosis_tables()
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO diagnosis_causes VALUES (?,?,?)",
+                            (cause["id"], round_number, _json(cause)))
+
+    def causes(self, round_number=None):
+        self._diagnosis_tables()
+        sql, args = "SELECT payload FROM diagnosis_causes", []
+        if round_number is not None:
+            sql, args = sql + " WHERE round=?", [round_number]
+        return [json.loads(p) for (p,) in self.db.execute(sql + " ORDER BY round, cause_id", args)]
+
+    def record_element_evaluation(self, element, round_number, *, question, source, n, metrics, kept, reason):
+        self._diagnosis_tables()
+        cv = metrics.get("cv") or {}
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO element_evaluations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (element, round_number, question, source, n, metrics.get("auc_label"),
+                             cv.get("mean_log_loss_gain"), cv.get("lower_log_loss_gain"),
+                             cv.get("mean_accuracy_gain"), int(bool(kept)), reason, _json(metrics), self.clock()))
+
+    def element_evaluations(self, *, kept=None):
+        """Latest evaluation per element (newest round wins), optionally only kept or only not kept."""
+        self._diagnosis_tables()
+        out = {}
+        for row in self.db.execute("SELECT element,round,question,source,n,auc_label,mean_log_loss_gain,"
+                                   "lower_log_loss_gain,mean_accuracy_gain,kept,reason,payload FROM element_evaluations "
+                                   "ORDER BY round, rowid"):
+            out[row[0]] = {"element": row[0], "round": row[1], "question": row[2], "source": row[3], "n": row[4],
+                           "auc_label": row[5], "mean_log_loss_gain": row[6], "lower_log_loss_gain": row[7],
+                           "mean_accuracy_gain": row[8], "kept": bool(row[9]), "reason": row[10],
+                           "metrics": json.loads(row[11])}
+        return [r for _, r in sorted(out.items()) if kept is None or r["kept"] == kept]
+
+    def cause_outcomes(self):
+        """Credit assignment: per stored cause id, the ideas that addressed it, each with its operator, latest verdict
+        and its latest recorded forward fixed/broke versus the incumbent of the time (None when the idea has no such
+        evidence yet). Causes no idea addressed appear with an empty list."""
+        stored = {c["id"]: c for c in self.causes()}
+        try:
+            payloads = [json.loads(p) for (p,) in self.db.execute("SELECT payload FROM control_ideas ORDER BY id")]
+        except Exception:
+            payloads = []
+        out = {cid: {"name": c.get("name"), "cell": c.get("cell"), "confirmed": c.get("confirmed"),
+                     "trial_passed": (c.get("trial") or {}).get("passed"), "ideas": []} for cid, c in stored.items()}
+        for idea in payloads:
+            for cid in idea.get("addresses") or ():
+                if cid not in out:
+                    continue
+                history = self.verdicts(idea["id"])
+                last = history[-1] if history else None
+                seen = [v for v in history if isinstance(v["evidence"].get("gained"), int)]
+                evidence = seen[-1]["evidence"] if seen else {}
+                out[cid]["ideas"].append({"idea_id": idea["id"], "operator": idea.get("operator"),
+                                          "verdict": last["verdict"] if last else None,
+                                          "gained": evidence.get("gained"), "lost": evidence.get("lost")})
+        for row in out.values():
+            row["ideas"].sort(key=lambda r: r["idea_id"])
+            nets = [r["gained"] - r["lost"] for r in row["ideas"] if r["gained"] is not None and r["lost"] is not None]
+            row["ideas_addressed"] = len(row["ideas"])
+            row["ideas_advanced"] = sum(r["verdict"] in ("advanced", "promoted") for r in row["ideas"])
+            row["net_forward"] = sum(nets) if nets else None
+        return dict(sorted(out.items()))
 
     def _wrong_records(self, ids, exclude_items, context_version):
         """item -> {label, choices (wrong answers seen)} for items each given idea answered wrongly."""

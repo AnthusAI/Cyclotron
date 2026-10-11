@@ -144,10 +144,14 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         own = [idea for idea in ControlScheduler(wheel).ideas() if idea["control"] == "rubric"]
         salt = f"{wheel.initial.task.fingerprint}:idea-screening"
         hidden = {r.item.id for r in development if reserve_member(salt, r.item.id, config.reserve_fraction)}
+        diagnosis = None
+        if config.diagnosis.enabled:
+            from .diagnosis import run_diagnosis
+            diagnosis = await run_diagnosis(wheel, training, development, protected)
         screen_proposals, screen_lineage = ask_round(
             wheel, lambda extra: stage_briefing(wheel, stage, training, development, protected, extra=extra),
             optimizer_context(wheel, HypothesisLedger(wheel.db), own, hidden), "rubric", own, training, development,
-            protected)
+            protected, diagnosis)
         # Every proposal can be gated out (novelty); the stage then keeps the incumbent and shadows what it has.
         proposal = screen_proposals[0] if screen_proposals else {
             "rationale": "no proposal passed the operator gates", "rubric": wheel.active.config.rubric}
