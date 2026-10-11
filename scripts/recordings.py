@@ -302,7 +302,7 @@ def cmd_add(a):
     if not (mode_dir / "results.json").is_file():
         raise SystemExit(f"no results.json under {run_dir}")
     window = a.window_size or DEFAULT_WINDOW
-    decision_price = a.decision_model_price or ("jev" if protocol.get("decision_provider") == "jev" else None) \
+    decision_price = a.decision_model_price or (protocol.get("decision_provider") if protocol.get("decision_provider") in ("jev", "kev") else None) \
         or "gpt-4.1-mini"
     optimizer_price = a.optimizer_price or (protocol.get("optimizer_model") if protocol.get("optimizer_model") in exporter.PRICES
                                             else "gpt-4.1-mini")
