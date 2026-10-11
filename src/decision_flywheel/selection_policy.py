@@ -7,7 +7,7 @@ METRICS = ('accuracy', 'precision', 'recall', 'f1', 'balanced_accuracy', 'brier'
 
 @dataclass(frozen=True)
 class SelectionPolicy:
-    primary: str = 'balanced_brier'
+    primary: str = 'accuracy'
     secondary: str | None = None
     positive_class: str | None = None
     aggregation: str = 'positive'

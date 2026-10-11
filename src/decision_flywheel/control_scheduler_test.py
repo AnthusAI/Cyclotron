@@ -8,6 +8,8 @@ from .flywheel import DecisionFlywheel
 from .flywheel_test import FakeModel, TASK, TRAIN, DEV
 from .models import Item, LabeledItem
 from .optimizer_agent import OptimizerAgent, OptimizerReply
+from .selection_policy import SelectionPolicy as _SP
+_BRIER = _SP('balanced_brier')
 
 
 def optimizer(calls):
@@ -162,7 +164,7 @@ def test_old_unsuccessful_ideas_get_retry_priority_even_when_new_ideas_keep_arri
             proposal["tasks"][0]["name"] += str(len(calls))
         return OptimizerReply(json.dumps(proposal), "fake")
     wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), OptimizerAgent(varied),
-                             max_requests=500)
+                             max_requests=500, selection_policy=_BRIER)
     original_score = wheel._score
     async def neutral(*args):
         score = await original_score(*args)

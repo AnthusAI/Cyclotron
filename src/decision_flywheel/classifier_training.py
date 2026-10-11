@@ -79,6 +79,7 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                           development_evidence=wheel._evidence(development))
             baseline = await wheel._score(wheel.active, development, training, now)
             metrics = await wheel._score(raw, development, training, now)
+            # Fallback only for policy-less wheels; the flywheel now always carries a policy (default accuracy).
             policy = wheel.selection_policy or SelectionPolicy()
             selection = policy.compare(baseline, metrics)
             safe = metrics['balanced_accuracy'] >= baseline['balanced_accuracy'] and all(

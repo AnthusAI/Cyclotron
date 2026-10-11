@@ -189,7 +189,7 @@ class ArticleReviewRuntime:
             value = values.setdefault(key, default)
             if type(value) is not int or value < 1:
                 raise ValueError("run ceilings and cadences must be positive integers")
-        values.setdefault("selection_policy", {"primary": "f1", "positive_class": "include"})
+        values.setdefault("selection_policy", {"primary": "accuracy"})
         policy = SelectionPolicy(**values["selection_policy"])
         if policy.positive_class and policy.positive_class not in live_review_labels():
             raise ValueError("unknown positive class")

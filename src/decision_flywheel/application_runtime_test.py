@@ -38,7 +38,7 @@ def test_an_article_runtime_normalizes_web_run_configuration_without_a_worker(tm
                                    model_factory=lambda _config: (FakeModel(), agent([])))
     config = runtime.normalize_run_config({}, ())
     assert config["max_requests"] == 500
-    assert config["selection_policy"]["positive_class"] == "include"
+    assert config["selection_policy"]["primary"] == "accuracy"
 
 
 def test_a_web_worker_can_use_an_injected_runtime_without_importing_article_types(tmp_path):

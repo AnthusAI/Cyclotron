@@ -201,7 +201,12 @@ class DecisionFlywheel:
         saved_policy = self.db.execute("SELECT value FROM runtime_state WHERE key='selection_policy'").fetchone()
         if self.selection_policy is None and saved_policy:
             self.selection_policy = SelectionPolicy(**json.loads(saved_policy[0]))
-        if self.selection_policy is not None:
+        implicit_default = self.selection_policy is None
+        if implicit_default:
+            # Default objective is accuracy; a policy saved by an earlier run (above) always wins.
+            # The implicit default is not persisted or announced; only explicit policies are.
+            self.selection_policy = SelectionPolicy(primary='accuracy')
+        if not implicit_default:
             encoded = _json(asdict(self.selection_policy))
             if not saved_policy or saved_policy[0] != encoded:
                 with self.db:

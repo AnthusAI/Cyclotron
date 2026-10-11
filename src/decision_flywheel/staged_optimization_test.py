@@ -8,6 +8,8 @@ from .flywheel import DecisionFlywheel
 from .flywheel_test import FakeModel, TASK, TRAIN, DEV
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .staged_optimization import optimize_stage
+from .selection_policy import SelectionPolicy as _SP
+_BRIER = _SP('balanced_brier')
 
 
 def test_an_explicit_feature_group_runs_through_the_inspectable_numerical_step_only(tmp_path):
@@ -218,7 +220,7 @@ def test_example_stage_measures_individual_swaps_even_before_development_is_larg
     from .example_attribution_test import SignalModel
     config=ClassifierConfig(TASK,rubric='Useful work',example_ids=('t0','t1'))
     optimizer=OptimizerAgent(lambda _:OptimizerReply('{"example_ids":["t0","t3"]}','fake'))
-    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',config,SignalModel(),optimizer,max_requests=40)
+    wheel=DecisionFlywheel(tmp_path/'wheel.sqlite',config,SignalModel(),optimizer,max_requests=40, selection_policy=_BRIER)
     report=asyncio.run(optimize_stage(wheel,'examples',TRAIN,DEV,
         protected=(),propensities={r.item.id:1. for r in TRAIN}))
     assert report['example_measurement']['rankings'][0]['added_id']=='t3'
@@ -365,7 +367,7 @@ def test_a_stages_own_promotion_does_not_repeat_discovery_on_unchanged_feedback(
     def complete(messages):
         calls.append(messages)
         return OptimizerReply('{"rationale":"Practical","rubric":"Practical"}', "fake")
-    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK,rubric='Existing'), FakeModel(), OptimizerAgent(complete))
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK,rubric='Existing'), FakeModel(), OptimizerAgent(complete), selection_policy=_BRIER)
     score = wheel._score
     async def configured(classifier, *args):
         result = await score(classifier, *args)
