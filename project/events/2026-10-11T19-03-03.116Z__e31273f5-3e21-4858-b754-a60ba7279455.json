@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e31273f5-3e21-4858-b754-a60ba7279455",
+  "issue_id": "decision-flywheel-299405af-5897-4975-96cf-bba9b0ae633c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:03:03.116Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Verify first: check sibling outputs before promoting a change",
+    "description": "Improving one checklist question must not quietly make another worse. NOTE: found by reading, not by running; write a failing test first to confirm.\n\nCurrent: outputs share one request, so A's rubric changes B's context; siblings are pinned and stale ML models refit (shared_decisions.py:34-44; learning_loop.py:88-89); A's candidate is evaluated only on A's development labels (learning_loop.py:137, 164-172). No check on B found.\n\nDesired: promotion also checks every sibling's development score, or records sibling effect and refuses regressions.\n\nAcceptance: a candidate that helps A and hurts B on B's dev set is dropped or flagged under a declared policy; the event records the effect on each sibling.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

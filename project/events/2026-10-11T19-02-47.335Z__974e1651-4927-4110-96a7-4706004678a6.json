@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "974e1651-4927-4110-96a7-4706004678a6",
+  "issue_id": "decision-flywheel-a80011ac-3e7d-4903-adb7-76ba3dc46c19",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:02:47.335Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Monitor and review-rate program per output, not just the first classifier",
+    "description": "The monitor says it is safe to step back, but only the first question is watched.\n\nCurrent: review-program windows, gap check and version raises read only definition.classifiers[0] (embedded_cyclotron.py:527-545, :467-476). status() is per output (:797-805) with no rollup. Related in-progress work: flywheela8 (review rate as engine state).\n\nDesired: per-output window evidence and rate changes, plus a cyclotron-level status showing the worst output.\n\nAcceptance: when output 2 drifts and output 1 doesn't, the review rate rises and an event names output 2; status lists every output; existing single-output stores unchanged.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

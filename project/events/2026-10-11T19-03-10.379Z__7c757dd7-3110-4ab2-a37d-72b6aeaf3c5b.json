@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7c757dd7-3110-4ab2-a37d-72b6aeaf3c5b",
+  "issue_id": "decision-flywheel-52708206-5a3a-4074-9139-98ae26c780ad",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:03:10.379Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Promote a supporting question to an output",
+    "description": "A sub-question turned out to be worth reporting; make it an output and start labeling it.\n\nCurrent: no path; extend_cyclotron adds existing classifier definitions only (cyclotrons.py:54-68); supporting questions have no labels (classifier_config.py:88-95).\n\nDesired: a command creates a new output from a supporting question's instructions and options; it starts unlabeled; the old supporting question stays until replaced.\n\nAcceptance: a new cyclotron version gains the output; earlier evidence kept; first rubric from the question's instructions; parent's features unchanged until a candidate is promoted.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

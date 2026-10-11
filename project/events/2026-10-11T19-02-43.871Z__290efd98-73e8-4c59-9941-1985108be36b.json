@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "290efd98-73e8-4c59-9941-1985108be36b",
+  "issue_id": "decision-flywheel-82549eef-54e1-4606-87a8-01ce28de1104",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:02:43.871Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Record one review that labels several outputs",
+    "description": "As a reviewer I answer the whole checklist for an item at once and want to save it as one review.\n\nCurrent: review() takes one classifier per call (embedded_cyclotron.py:667-700); with several outputs, omitting it raises 'name the classifier' (:1022-1029); each call can trigger optimization under the lock (:729, :1083-1092). Related in-progress work: flywheel07 (SDK facade: decide, review, status).\n\nDesired: review(decision_id, labels={cid: label, ...}, explanation=...) stored atomically, one optimization pass after.\n\nAcceptance: one call labels N outputs; partial checklists allowed (unlabeled outputs stay open); idempotent by review_id; test with 3 outputs shows one review event per output and no duplicate optimizer runs.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

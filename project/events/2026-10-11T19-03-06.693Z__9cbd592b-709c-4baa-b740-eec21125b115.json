@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9cbd592b-709c-4baa-b740-eec21125b115",
+  "issue_id": "decision-flywheel-b283d2ab-a65a-422c-9411-f6df07042ac9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:03:06.693Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Optimize several outputs without serial review latency",
+    "description": "Labeling a 5-question checklist shouldn't stall the reviewer while 5 optimizations run one after another.\n\nCurrent: every output reaches the cadence count on the same review (learning_loop.py:146-153); _learn runs inside review() under the cyclotron lock (embedded_cyclotron.py:729).\n\nDesired: optimization queued after the review; outputs run concurrently or in a scheduled order.\n\nAcceptance: review latency doesn't grow with output count; per-output optimizer runs recorded; optimizer call limit shared and enforced.",
+    "issue_type": "chore",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

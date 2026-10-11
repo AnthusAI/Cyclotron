@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9dd58d94-bfe7-46dc-8ad9-e8710db622b1",
+  "issue_id": "decision-flywheel-6ffed153-6c1c-43fb-976e-1ed374284d24",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:03:14.028Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Report cost per output",
+    "description": "I want to know which checklist item costs what.\n\nCurrent: usage() aggregates by model and window only (embedded_cyclotron.py:600-640); batched answers count usage once (classifier_config.py:15-21).\n\nDesired: an estimated share of request bytes/tokens per output plus optimizer cost per output.\n\nAcceptance: usage includes a per-output breakdown labeled as an estimate; per-output totals sum to the cyclotron total.",
+    "issue_type": "chore",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

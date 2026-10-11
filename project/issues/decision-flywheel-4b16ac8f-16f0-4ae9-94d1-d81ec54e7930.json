@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-4b16ac8f-16f0-4ae9-94d1-d81ec54e7930",
+  "title": "Route reviews per output instead of per item",
+  "description": "Only send the reviewer the unsure questions on the checklist, not every question for an item where one answer is unsure.\n\nCurrent: selection uses the minimum confidence across outputs and selects the whole item (embedded_cyclotron.py:427-430; review_program.py:113-125).\n\nDesired: per-output selection (below threshold or sampled); the decision records which outputs are requested.\n\nAcceptance: confident A + unsure B requests only B; audit sampling stays per output with propensities; replay deterministic.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-11T19:02:50.904584Z",
+  "updated_at": "2026-10-11T19:02:50.904826Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}
