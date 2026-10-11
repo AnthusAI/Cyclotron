@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-52708206-5a3a-4074-9139-98ae26c780ad",
+  "title": "Promote a supporting question to an output",
+  "description": "A sub-question turned out to be worth reporting; make it an output and start labeling it.\n\nCurrent: no path; extend_cyclotron adds existing classifier definitions only (cyclotrons.py:54-68); supporting questions have no labels (classifier_config.py:88-95).\n\nDesired: a command creates a new output from a supporting question's instructions and options; it starts unlabeled; the old supporting question stays until replaced.\n\nAcceptance: a new cyclotron version gains the output; earlier evidence kept; first rubric from the question's instructions; parent's features unchanged until a candidate is promoted.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-11T19:03:10.379658Z",
+  "updated_at": "2026-10-11T19:03:10.379828Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

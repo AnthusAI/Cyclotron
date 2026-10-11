@@ -103,3 +103,8 @@ test('a cycle called while one is running does not start another',async()=>{
   await act(async()=>{await vi.advanceTimersByTimeAsync(2000)})
   expect(onCycleEnd).toHaveBeenCalledTimes(1)
 })
+
+test('a development double-run of effects (StrictMode) does not play a cycle at mount',()=>{
+  const {container}=render(<React.StrictMode><CycleMark size={20} cycleKey={1} durationMs={1000} aria-hidden="true" /></React.StrictMode>)
+  expect(container.querySelector('[data-cycling]')).toBeNull()
+})

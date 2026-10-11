@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "54120b3c-2ab4-4305-b990-ac0cef09e117",
+  "issue_id": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:02:16.520Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "One cyclotron, many outputs: per-output rubrics, review, routing and monitoring",
+    "description": "Acceptance test from the marketing-site diagram work (Cyclotron-web). Use case: one cyclotron with several outputs (classifiers) answering a checklist of questions about one item. Each output has its own rubric, labels, ML model and evaluation, and all are optimized against reviewer labels; supporting questions feed each output's ML model as features. The core works today (embedded_cyclotron.py:70-119, 336-345; batched_classification.py:22-44). The child issues cover the gaps found when walking the use case end to end.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

@@ -60,6 +60,7 @@ PRICES = {
                    "above_input_tokens": 272000, "above_input_usd_per_mtok": 0.20, "above_output_usd_per_mtok": 0.75,
                    "source": "LiteLLM model price table (standard tier), read 2026-10-11"},
     "jev": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0, "source": "TypeSafe's published price"},
+    "kev": {"input_usd_per_mtok": 0.0, "output_usd_per_mtok": 0.0, "source": "runs locally on the study machine; no per-call charge"},
 }
 
 RUBRIC_SUMMARY = "Publish articles with a meaningful constructive or public-benefit outcome; reject harm-dominant or routine items."
