@@ -9,7 +9,7 @@ Paths are relative to the Cyclotron repo root. Driver files: `.agents/skills/run
 
 ## Rules that apply to every study
 
-- **Spend.** Jev for decisions and gpt-6-luna for the optimizer are pre-authorised if capped and monitored. Any other provider or model (Kev, an Ollama or Bedrock model, any other cloud LLM) needs the user's approval naming the model and the cap before the first paid call. Local models cost nothing but still get a study card.
+- **Spend.** Jev for decisions and gpt-6-luna for the optimizer are pre-authorised if capped and monitored. Kev is a local model and costs nothing, so it needs no approval. Any other paid provider or model (Bedrock, any other cloud LLM) needs the user's approval naming the model and the cap before the first paid call. Local models still get a study card and the same caps.
 - **Parity.** Change one thing per study and say what it is. Every engine and baseline gets the same corpus, order, review schedule, and caps. No extra help for a baseline.
 - **Honest scoring.** Score against the corpus reference labels, never against the human labels in `results.json`, which exist only for reviewed stories.
 - **Keys.** `launch.sh` reads named variables from a keys file with `grep` and never prints them. Never `source` a `.env`: a bare line in it gets echoed in the error. Never commit keys or write them into a card.
@@ -69,4 +69,15 @@ Follow `docs/recordings.md`: `scripts/recordings.py add` makes a draft from the 
 - **Seeding.** `--seed-answers-from OLD/all/runtime.sqlite3` serves identical decision requests from an earlier run at no cost. The optimizer is not cached and is not deterministic, so a rerun is a new run with new rubrics.
 - **Output directory.** The script creates it itself and fails with FileExistsError if it exists, so keep logs beside it, not inside.
 - **Unreviewed stories.** Accuracy for any selective-review schedule must be scored from corpus labels (see Rules).
-- **Provider support.** The study script accepts `--decision-provider openai|jev` only. Kev, Ollama and Bedrock need an adapter in `src/decision_flywheel/adapters/` and a flag here. I have not built or run these; start by adding the adapter, with a test, and get the spend approval first.
+- **Kev (local, free).** `--decision-provider kev --decision-model kev-latest` uses `KEV_BASE_URL`, default `http://127.0.0.1:8009`. Start the server from the pinned wrapper in the Biased-Decisions kev worktree, with the dedicated environment (build it once with `python -m venv ~/.cache/kev-venv` then `pip install -r var/kev-dependencies.txt`):
+
+```bash
+cd ~/Projects/Biased-Decisions/.worktrees/kev
+PYTHONPATH=var/kev-runtime nohup ~/.cache/kev-venv/bin/python var/start_kev.py > /tmp/kev-serve.log 2>&1 &
+curl -s localhost:8009/v1/models
+```
+
+  It answered in about 0.35 s per call on this machine. Kev takes no few-shot examples, and with the long v3.1 rubric it did worse than with no rubric on a 30-story probe, so judge it on its own optimization run. If the port is already serving, do not restart it.
+- **Local optimizer (Ollama or similar).** `src/decision_flywheel/adapters/litellm_optimizer.py` exists but the study script does not yet have a flag for it. Lower priority; small local models may not produce usable rubric proposals.
+- **Bedrock.** Not built. Needs an adapter, a test, and approval naming the model and cap.
+- **zsh.** Do not put flags in a shell variable and expand it unquoted; zsh will not split it. Use a bash array, as in the launch example run under `bash -c`.
