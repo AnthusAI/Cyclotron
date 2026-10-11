@@ -120,8 +120,57 @@ def mean(values):
     return sum(values) / len(values) if values else None
 
 
-def summarise_replicate(rep_dir, window, mode=None):
-    """Metrics for one replicate, or {'status': 'incomplete', ...}."""
+def corpus_arg(args):
+    """The --operational-corpus value in the study's base args, or None."""
+    for i, token in enumerate(args):
+        if token == "--operational-corpus" and i + 1 < len(args):
+            return args[i + 1]
+        if token.startswith("--operational-corpus="):
+            return token.split("=", 1)[1]
+    return None
+
+
+def load_reference_labels(path):
+    """{item id: reference label} from a corpus JSONL (label key simulated_label, else label), or None."""
+    labels = {}
+    try:
+        for line in Path(path).read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            label = row.get("simulated_label", row.get("label"))
+            if row.get("id") is None or label is None:
+                return None
+            labels[row["id"]] = label
+    except (OSError, ValueError, AttributeError):
+        return None
+    return labels or None
+
+
+def reference_labels(rep_dir, base_corpus=None):
+    """(labels, path): the corpus recorded in protocol.json, else the base-args corpus; (None, None) if neither reads."""
+    candidates = []
+    try:
+        recorded = json.loads((rep_dir / "protocol.json").read_text()).get("operational_corpus")
+        if isinstance(recorded, str) and recorded:
+            candidates.append(recorded)
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+    if base_corpus:
+        candidates.append(str(base_corpus))
+    for path in candidates:
+        labels = load_reference_labels(path)
+        if labels:
+            return labels, path
+    return None, None
+
+
+def summarise_replicate(rep_dir, window, mode=None, corpus=None):
+    """Metrics for one replicate, or {'status': 'incomplete', ...}.
+
+    Reference labels come from the operational corpus (protocol.json, else ``corpus``, the base args'
+    --operational-corpus), because results.json records a human label only for reviewed stories. Only when
+    no corpus covers every story do they come from results.json, and ``labels`` says so."""
     mode_dir = find_mode_dir(rep_dir, mode)
     results_path = mode_dir / "results.json"
     ledger = read_ledger(rep_dir)
@@ -141,21 +190,28 @@ def summarise_replicate(rep_dir, window, mode=None):
     if ledger is None:
         return {"status": "incomplete", "reason": "no global_budget_ledger.json", "cycles": len(cycles)}
     cycles = sorted(cycles, key=lambda c: c["cycle_number"])
-    truth = {c["cycle_number"]: c["human_label"] for c in cycles}
-    human = [c["human_label"] for c in cycles]
-    cyclotron = window_accuracies([c["predicted_label"] == c["human_label"] for c in cycles], window)
+    reference, source = reference_labels(rep_dir, corpus)
+    if reference is not None and all(c.get("item_id") in reference for c in cycles):
+        human = [reference[c["item_id"]] for c in cycles]
+        labels_note = f"corpus reference labels ({source})"
+    else:
+        human = [c["human_label"] for c in cycles]
+        labels_note = ("recorded" if all(h is not None for h in human)
+                       else "recorded (reviewed stories only)")
+    truth = {c["cycle_number"]: h for c, h in zip(cycles, human)}
+    cyclotron = window_accuracies([c["predicted_label"] == h for c, h in zip(cycles, human)], window)
     events = read_events(mode_dir / "runtime.sqlite3")
     predictions = {}
     for e in events:
         if e.get("kind") == "prediction":
             predictions[e["cycle_number"]] = e
-    decision = [predictions[c["cycle_number"]]["decision_model_label"] == c["human_label"]
-                if c["cycle_number"] in predictions else False for c in cycles]
+    decision = [predictions[c["cycle_number"]]["decision_model_label"] == h
+                if c["cycle_number"] in predictions else False for c, h in zip(cycles, human)]
     activations = activation_cycles(events)
     head = [bool(p.get("fitted_head")) for p in predictions.values()]
     post = mean(cyclotron[1:])
     return {
-        "status": "complete", "cycles": len(cycles), "windows": len(cyclotron),
+        "status": "complete", "labels": labels_note, "cycles": len(cycles), "windows": len(cyclotron),
         "cyclotron_by_window": cyclotron,
         "decision_model_by_window": window_accuracies(decision, window),
         "majority_baseline_by_window": majority_share(human, window),
@@ -219,6 +275,9 @@ def render_markdown(summary):
     agg = summary["aggregate"]
     lines = [f"# Replicate summary", "",
              f"Window size {summary['window_size']}; {agg['complete']} of {agg['total']} replicates complete.", ""]
+    notes = sorted({r["labels"] for r in reps.values() if r.get("labels")})
+    if notes:
+        lines += [f"Labels: {'; '.join(notes)}.", ""]
     lines += ["| replicate | status | seed | cycles | cyclotron by window | decision model by window | "
               "majority by window | first activation | activations | head share | Jev requests | "
               "optimizer requests | post-warm-up | final | AULC |",
@@ -291,7 +350,7 @@ def run_all(args, base_args, seeds, out_dir):
                          + "); pass --resume to reuse it")
     for name, seed in existing:
         queue.remove((name, seed))
-        s = summarise_replicate(out_dir / name, args.window_size, args.mode)
+        s = summarise_replicate(out_dir / name, args.window_size, args.mode, corpus_arg(base_args))
         finished_ledgers.append(read_ledger(out_dir / name))
         if s["status"] == "complete":
             exits[name] = "skipped (already complete)"
@@ -364,7 +423,7 @@ def main(argv=None):
         if exits.get(name) == "not launched":
             s = {"status": "incomplete", "reason": "not launched"}
         else:
-            s = summarise_replicate(args.out_dir / name, args.window_size, args.mode)
+            s = summarise_replicate(args.out_dir / name, args.window_size, args.mode, corpus_arg(base_args))
         replicates[name] = {"seed": seed, "exit": exits.get(name), **s}
     summary = {"window_size": args.window_size, "seeds": seeds, "launch_notes": notes,
                "replicates": replicates, "aggregate": aggregate(replicates)}

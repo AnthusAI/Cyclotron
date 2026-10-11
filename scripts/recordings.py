@@ -35,7 +35,16 @@ REVIEW_SUMMARIES = {
     "all": "Every story is reviewed.",
     "reject_half": "Every story the model calls publish is reviewed, and half of the stories it calls reject.",
     "casual_ten_percent": "One story in ten is reviewed.",
+    "first_50_all_then_half": "Every story for the first 50 stories, then half of the stories.",
+    "first_100_all_then_half": "Every story for the first 100 stories, then half of the stories.",
+    "publish_priority_taper": "For the first 50 stories, every story the model calls publish and half of those it calls "
+                              "reject; after that, half of the publishes and a quarter of the rejects.",
 }
+
+
+def review_summary(name):
+    """The plain sentence for a policy name; the exporter's hyphenated names read as the underscore ones."""
+    return REVIEW_SUMMARIES.get(str(name).replace("-", "_"))
 
 
 def _load(name):
@@ -235,12 +244,13 @@ def build_fixture(run_dir, mode_dir, manifest_path, corpus_path, out, *, cycles,
 def compute_results(fixture, mode_dir, window):
     scenario = fixture["scenarios"][SCENARIO]
     cycles = scenario["cycles"]
-    results = json.loads((mode_dir / "results.json").read_text())["cycles"]
-    labels = [c["human_label"] for c in sorted(results, key=lambda c: c["cycle_number"])][:len(cycles)]
     windows = []
     for w in scenario["windows"]:
-        chunk = labels[w["first_cycle"] - 1:w["last_cycle"]]
-        baseline = replicates.majority_share(chunk, len(chunk))[0] / 100 if chunk else None
+        # results.json has a human label only for reviewed stories; the fixture's per-class "actual" counts
+        # come from the evaluator-only reference labels and cover every story in the window.
+        actual = [v.get("actual") for v in (w["cyclotron"].get("per_class") or {}).values()]
+        total = w["cyclotron"].get("count") or 0
+        baseline = max(actual) / total if total and actual and all(isinstance(x, int) for x in actual) else None
         windows.append({"first_cycle": w["first_cycle"], "last_cycle": w["last_cycle"],
                         "cyclotron_accuracy": round(w["cyclotron"]["accuracy"], 3),
                         "decision_model_accuracy": round(w["decision_model"]["accuracy"], 3),
@@ -271,7 +281,7 @@ def compute_review(fixture, protocol, mode_dir):
     modes = protocol.get("modes")
     name = policy.get("mode") or (modes[0] if isinstance(modes, list) and len(modes) == 1 else None) or mode_dir.name
     summary = policy.get("summary") if isinstance(policy.get("summary"), str) and policy["summary"].strip() else None
-    summary = summary or REVIEW_SUMMARIES.get(name) or f"Stories are reviewed under the {policy.get('display_name') or name} policy."
+    summary = summary or review_summary(name) or f"Stories are reviewed under the {policy.get('display_name') or name} policy."
     cycles = scenario["cycles"]
     return {"policy": name, "summary": summary,
             "stories_reviewed": sum(bool(c.get("feedback_revealed")) for c in cycles), "stories_total": len(cycles)}
