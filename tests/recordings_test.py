@@ -23,7 +23,7 @@ R = _mod()
 LABELS = ("publish", "reject")
 
 
-def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4):
+def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4, mode="all", reviewed=None):
     """A synthetic recorded run (protocol, results, events) plus a relabeled corpus and manifest."""
     root.mkdir(parents=True, exist_ok=True)
     corpus = [{"id": f"item-{n}", "title": f"Story {n}", "source_url": f"https://example.org/{n}", "license": "CC BY 2.5",
@@ -36,12 +36,12 @@ def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4):
                 "label_provenance": "Labels are simulated; two blind passes agreed."}
     (root / "manifest.json").write_text(json.dumps(manifest))
     run = root / name
-    mode = run / "all"
+    mode_name, mode = mode, run / mode
     mode.mkdir(parents=True)
     protocol = {"operational_items": count, "decision_model": "jev-1.13.0", "decision_provider": "jev",
                 "optimizer_model": "gpt-6-luna", "baseline_rubric": rubric,
                 "selection_policy": {"primary": "accuracy"}, "rubric_trigger": {"basis": "label_transitions", "every": 20, "max_attempts": None},
-                "idea_screening": {"enabled": False}, "decision_cap_total": 100, "optimizer_cap_total": 5}
+                "idea_screening": {"enabled": False}, "modes": [mode_name], "decision_cap_total": 100, "optimizer_cap_total": 5}
     (run / "protocol.json").write_text(json.dumps(protocol))
     metrics = {"count": 1, "accuracy": 1.0, "brier": 0.0, "calibration": {"ece": 0.0}, "per_class": {}, "confusion_matrix": {}}
     cycles, events = [], []
@@ -51,7 +51,7 @@ def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4):
         predicted = actual if n > 4 else other   # wrong in the first window, right after
         dm = actual if n <= decision_ok else other
         cycles.append({"cycle_number": n, "item_id": record["id"], "predicted_label": predicted, "human_label": actual,
-                       "feedback_selected": True, "feedback_propensity": 1.0, "role": "training", "metrics": metrics,
+                       "feedback_selected": reviewed is None or n in reviewed, "feedback_propensity": 1.0, "role": "training", "metrics": metrics,
                        "outcomes": [], "requests": 1})
         minute = f"2026-10-09T{10 + n // 60:02d}:{n % 60:02d}"
         events += [
@@ -60,8 +60,9 @@ def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4):
              "probabilities": {predicted: .8, LABELS[predicted == "publish"]: .2}, "decision_model_label": dm,
              "decision_model_probabilities": {dm: .7, LABELS[dm == "publish"]: .3}},
             {"kind": "decision-response", "cycle_number": n, "usage": {"input_tokens": 1000, "output_tokens": 10}},
-            {"kind": "human-feedback", "action": "submitted", "cycle_number": n,
-             "feedback": {"item_id": record["id"], "final_answer_value": actual, "edit_comment_value": "why"}},
+            *([{"kind": "human-feedback", "action": "submitted", "cycle_number": n,
+                "feedback": {"item_id": record["id"], "final_answer_value": actual, "edit_comment_value": "why"}}]
+              if reviewed is None or n in reviewed else []),
             {"kind": "cycle-completed", "cycle_number": n, "created_at": f"{minute}:30+00:00"},
         ]
         if n == activation:
@@ -69,7 +70,7 @@ def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4):
             events.append({"kind": "classifier-activated", "cycle_number": n})
     (mode / "results.json").write_text(json.dumps({
         "cycles": cycles, "disclosure": {"operational_items": count}, "protocol": {"task": "t" * 64},
-        "feedback_policy": {"mode": "all"}}))
+        "feedback_policy": {"mode": mode_name}}))
     con = sqlite3.connect(mode / "runtime.sqlite3")
     con.execute("CREATE TABLE runtime_events (id INTEGER PRIMARY KEY, payload TEXT)")
     con.executemany("INSERT INTO runtime_events (payload) VALUES (?)", [(json.dumps(e),) for e in events])
@@ -308,3 +309,68 @@ def test_compare_shows_only_differing_setup_and_window_accuracy(tmp_path, capsys
     assert "1-4" in windows_part and "5-8" in windows_part and "0.0% / 100.0% / 75.0%" in windows_part
     cli("compare", "first", "first", "--catalog", str(catalog))
     assert "(none)" in capsys.readouterr().out
+
+
+def test_add_records_the_review_policy_for_full_and_partial_review(tmp_path):
+    full = rec(add(tmp_path, "full", run=make_run(tmp_path / "a")), "full")["setup"]["review"]
+    assert full == {"policy": "all", "summary": "Every story is reviewed.", "stories_reviewed": 8, "stories_total": 8}
+    run = make_run(tmp_path / "b", mode="casual_ten_percent", reviewed={2})
+    casual = rec(add(tmp_path, "casual", run=run), "casual")["setup"]["review"]
+    assert casual == {"policy": "casual_ten_percent", "summary": "One story in ten is reviewed.",
+                      "stories_reviewed": 1, "stories_total": 8}
+    run = make_run(tmp_path / "c", mode="reject_half", reviewed={1, 2, 5})
+    half = rec(add(tmp_path, "half", run=run), "half")["setup"]["review"]
+    assert half["policy"] == "reject_half" and half["stories_reviewed"] == 3
+    assert half["summary"] == "Every story the model calls publish is reviewed, and half of the stories it calls reject."
+    run = make_run(tmp_path / "d", mode="odd_mode", reviewed={1})
+    other = rec(add(tmp_path, "other", run=run), "other")["setup"]["review"]
+    assert other["policy"] == "odd_mode" and other["summary"].strip() and other["stories_reviewed"] == 1
+
+
+def test_review_is_optional_but_validated(tmp_path):
+    catalog = add(tmp_path)
+    r = rec(catalog)
+    assert R.validate_recording(r) == []
+    old = json.loads(json.dumps(r))
+    del old["setup"]["review"]
+    assert R.validate_recording(old) == []
+    for bad in ("all", {"policy": "all"}, {"policy": "", "summary": "x", "stories_reviewed": 1, "stories_total": 2},
+                {"policy": "all", "summary": "x", "stories_reviewed": 3, "stories_total": 2},
+                {"policy": "all", "summary": "x", "stories_reviewed": "1", "stories_total": 2}):
+        broken = json.loads(json.dumps(r))
+        broken["setup"]["review"] = bad
+        assert any("setup.review" in p for p in R.validate_recording(broken)), bad
+
+
+def test_list_shows_the_policy_and_old_recordings_read_as_all(tmp_path, capsys):
+    catalog = add(tmp_path, "full", run=make_run(tmp_path / "a"))
+    add(tmp_path, "casual", catalog=catalog, run=make_run(tmp_path / "b", mode="casual_ten_percent", reviewed={2}))
+    data = rec(catalog, "full")
+    del data["setup"]["review"]
+    (catalog / "full" / "recording.json").write_text(json.dumps(data))
+    assert R.review_of(data)["policy"] == "all" and R.review_of(data)["stories_reviewed"] == 8
+    capsys.readouterr()
+    cli("list", "--catalog", str(catalog))
+    out = capsys.readouterr().out.splitlines()
+    assert "reviewed" in out[0]
+    rows = {line.split()[0]: line for line in out[1:]}
+    assert "casual_ten_percent 1/8" in rows["casual"] and " all " in rows["full"]
+
+
+def test_compare_shows_review_policy_as_a_differing_setting(tmp_path, capsys):
+    catalog = add(tmp_path, "first", run=make_run(tmp_path / "a"))
+    add(tmp_path, "second", catalog=catalog, run=make_run(tmp_path / "b", mode="reject_half", reviewed={1, 2, 5}))
+    capsys.readouterr()
+    cli("compare", "first", "second", "--catalog", str(catalog))
+    setup_part = capsys.readouterr().out.split("Window accuracy")[0]
+    assert "review.policy" in setup_part and "reject_half" in setup_part and "stories_reviewed" not in setup_part
+
+
+def test_export_keeps_the_review_block(tmp_path):
+    catalog = add(tmp_path, "casual", run=make_run(tmp_path / "a", mode="casual_ten_percent", reviewed={2}))
+    cli("publish", "casual", "--catalog", str(catalog))
+    out = tmp_path / "site"
+    cli("export-published", "--to", str(out), "--catalog", str(catalog))
+    exported = json.loads((out / "casual" / "recording.json").read_text())
+    assert exported["setup"]["review"]["policy"] == "casual_ten_percent"
+    assert exported["setup"]["review"]["stories_reviewed"] == 1

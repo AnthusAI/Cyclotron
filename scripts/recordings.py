@@ -31,6 +31,11 @@ STATUSES = ("draft", "published", "retired")
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 DEFAULT_WINDOW = 70  # the replicate harness's window
 SCENARIO = "run"
+REVIEW_SUMMARIES = {
+    "all": "Every story is reviewed.",
+    "reject_half": "Every story the model calls publish is reviewed, and half of the stories it calls reject.",
+    "casual_ten_percent": "One story in ten is reviewed.",
+}
 
 
 def _load(name):
@@ -137,6 +142,19 @@ def validate_recording(rec, *, for_publish=False, directory=None):
             problems.append("setup.corpus needs id and stories")
         if not isinstance(setup.get("window_size"), int) or setup["window_size"] < 1:
             problems.append("setup.window_size must be a positive integer")
+    review = setup.get("review") if isinstance(setup, dict) else None
+    if review is not None:  # optional: older recordings omit it and mean every story was reviewed
+        if not isinstance(review, dict):
+            problems.append("setup.review must be an object")
+        else:
+            for key in ("policy", "summary"):
+                if not isinstance(review.get(key), str) or not review[key].strip():
+                    problems.append(f"setup.review.{key} is required")
+            counts = [review.get("stories_reviewed"), review.get("stories_total")]
+            if not all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in counts):
+                problems.append("setup.review needs stories_reviewed and stories_total as non-negative integers")
+            elif counts[0] > counts[1]:
+                problems.append("setup.review.stories_reviewed cannot exceed stories_total")
     results = rec.get("results")
     if not isinstance(results, dict) or not isinstance(results.get("windows"), list) or not results["windows"]:
         problems.append("results.windows is required")
@@ -246,6 +264,19 @@ def compute_cost(fixture):
             "optimizer_requests": total["optimizer"]["requests"], "price_basis": line}
 
 
+def compute_review(fixture, protocol, mode_dir):
+    """How much of the run a person reviewed: the policy name, a plain sentence and the realized counts."""
+    scenario = fixture["scenarios"][SCENARIO]
+    policy = scenario.get("feedback_policy") if isinstance(scenario.get("feedback_policy"), dict) else {}
+    modes = protocol.get("modes")
+    name = policy.get("mode") or (modes[0] if isinstance(modes, list) and len(modes) == 1 else None) or mode_dir.name
+    summary = policy.get("summary") if isinstance(policy.get("summary"), str) and policy["summary"].strip() else None
+    summary = summary or REVIEW_SUMMARIES.get(name) or f"Stories are reviewed under the {policy.get('display_name') or name} policy."
+    cycles = scenario["cycles"]
+    return {"policy": name, "summary": summary,
+            "stories_reviewed": sum(bool(c.get("feedback_revealed")) for c in cycles), "stories_total": len(cycles)}
+
+
 def cmd_add(a):
     if not ID_PATTERN.match(a.id):
         raise SystemExit("--id must be a kebab-case slug")
@@ -283,6 +314,7 @@ def cmd_add(a):
                  "objective": (protocol.get("selection_policy") or {}).get("primary"),
                  "starting_rubric": rubric_kind, "parameters": setup_parameters(protocol), "corpus": corpus,
                  "window_size": window}
+        setup["review"] = compute_review(fixture, protocol, mode_dir)
         if rubric_text:
             setup["starting_rubric_text"] = rubric_text
         rec = {"schema": SCHEMA, "id": a.id, "title": a.title, "summary": a.summary, "notice": list(a.notice or []),
@@ -311,8 +343,24 @@ def table(rows):
     return "\n".join("  ".join(str(c).ljust(w) for c, w in zip(r, widths)).rstrip() for r in rows)
 
 
+def review_of(rec):
+    """The recorded review block, or the every-story default for recordings made before it existed."""
+    review = (rec.get("setup") or {}).get("review")
+    if review:
+        return review
+    total = (rec.get("setup") or {}).get("corpus", {}).get("stories")
+    return {"policy": "all", "summary": REVIEW_SUMMARIES["all"], "stories_reviewed": total, "stories_total": total}
+
+
+def review_cell(rec):
+    review = review_of(rec)
+    if (rec.get("setup") or {}).get("review") is None:
+        return "all"
+    return f"{review['policy']} {review['stories_reviewed']}/{review['stories_total']}"
+
+
 def cmd_list(a):
-    rows = [("id", "status", "featured", "title", "final window", "first rubric", "cost")]
+    rows = [("id", "status", "featured", "title", "final window", "first rubric", "reviewed", "cost")]
     for rec in all_recordings(a.catalog):
         if a.status and rec["status"] != a.status:
             continue
@@ -320,7 +368,7 @@ def cmd_list(a):
             continue
         first = rec["results"].get("first_rubric_cycle")
         rows.append((rec["id"], rec["status"], "yes" if rec["featured"] else "-", rec["title"],
-                     pct(rec["results"].get("final_window_accuracy")), "-" if first is None else f"cycle {first}",
+                     pct(rec["results"].get("final_window_accuracy")), "-" if first is None else f"cycle {first}", review_cell(rec),
                      f"${rec['cost']['usd_total']:.3f}"))
     print(table(rows))
 
@@ -412,7 +460,9 @@ def cmd_compare(a):
     recs = [load_recording(a.catalog, rid) for rid in a.ids]
     setups = []
     for rec in recs:
-        flat = flatten({k: v for k, v in rec["setup"].items() if k != "corpus"} | {"corpus": rec["setup"]["corpus"].get("id")})
+        flat = flatten({k: v for k, v in rec["setup"].items() if k not in ("corpus", "review")}
+                       | {"corpus": rec["setup"]["corpus"].get("id")})
+        flat["review.policy"] = review_of(rec)["policy"]
         flat.pop("corpus.label_provenance", None)
         setups.append(flat)
     keys = sorted({k for s in setups for k in s})
