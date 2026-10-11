@@ -76,8 +76,8 @@ Source: `~/Documents/Codex/2026-10-09/editorial-study/optimization/replicates-ba
 - What to do: show the decision model what the reviewer used. If the reviewer used the title, include it. Then
   check on a sample whether it changed anything. Do not assume it did.
 
-Source: the title numbers for Jev (about 3 points and 0) are from the owner's run notes of 2026-10-11 and are not in a
-repo file. `docs/experiments/decision-model-comparison-20261009.md` (ceiling check and title follow-up).
+Source: `docs/experiments/setup-findings-20261011.md` (Jev title numbers: about 3 points for the starting rubric, 0.5 and
+not significant for the true rubric); `docs/experiments/decision-model-comparison-20261009.md` (ceiling check and title follow-up).
 
 ### 2.3 Where the label comes from, and how consistent it is
 
@@ -106,11 +106,12 @@ audit and kappa numbers are from the relabel work under `~/Documents/Codex/2026-
 - Default in the study script: at least 12 items and at least 6 labels per class, or the run refuses to start. The
   first 8 are training items and the next 4 are development items.
 - What we saw: the engine's own check is the floor, not the target. With the rare class at 17.8 percent, a seed of
-  12 holds few positives. Positives need to appear in the first 12.
+  12 holds few positives. In our runs we arranged the seed so the first 12 held 4 positives, since the first 8 train and the
+  next 4 are the development items. We did not run a seed without that arrangement.
 - How it fails: with too few positives in the seed, the ML model and the first rubric proposal see almost only
   the majority class. We have not measured how much a larger seed helps.
-- What to do: put at least 6 labels per class in the seed, with positives among the first 12. Pick the seed
-  by class, not by stream order.
+- What to do: put at least 6 labels per class in the seed, and place positives among the first 12 as we did (a judgment
+  from how the first 12 are used, not a measured requirement). Pick the seed by class, not by stream order.
 
 Source: `scripts/run_editorial_prequential_study.py` (the bootstrap check and the `initial_training` and
 `initial_development` split). The positives-in-the-first-12 rule is from the owner's brief.
@@ -128,7 +129,7 @@ Source: `scripts/run_editorial_prequential_study.py` (the bootstrap check and th
   adapter, test the same rubric in two places on a fixed sample before you trust any result.
 
 Source: README, "The classifier at the center of the flywheel" (Jev sends the rubric as the criterion of the first
-label). The 84.5 and 77.5 percent figures are from the owner's run notes and are not in a repo file.
+label). The 84.5 and 77.5 percent figures are in `docs/experiments/setup-findings-20261011.md`.
 
 ## 3. The starting point
 
@@ -183,15 +184,17 @@ What these two runs show, and do not show:
   little to change early. The curated run's final window (92.9) sat inside the blank-start range at trigger 20 and
   below the trigger 6 range (94.3 to 95.7). One run each: we cannot say the curated start is better or worse after
   the first window.
-- The recall objective did not change the path much on accuracy. Its first rubric came at cycle 21 like the other
-  trigger 6 runs, and its final window (90.0) was below the six accuracy-objective replicates (94.3 to 95.7), but a
-  single window of 70 carries about plus or minus 7 points. We have not measured publish recall or precision for
-  this run, because the replicate harness reports accuracy only.
+- The recall objective did not show a clear effect at this scale. Its first rubric came at cycle 21 like the other
+  trigger 6 runs, and its final window accuracy (90.0) was below the six accuracy-objective replicates (94.3 to
+  95.7). Publish recall by window was 91, 86, 80 and 55 percent, against 82, 86, 67 and 73 percent for accuracy
+  replicate 1 and 82, 71, 87 and 73 for replicate 4. A window holds only 11 to 15 publish stories, so one story moves
+  recall by 7 to 9 points; the runs cannot tell the objectives apart. Showing what an objective does needs a larger
+  corpus (`docs/experiments/setup-findings-20261011.md`).
 
 Source: `~/Documents/Codex/2026-10-09/editorial-study/optimization/replicates-cold6/replicates-summary.md`,
 the summaries of `rec-curated-t6` and `rec-recall-t6` (both complete at 287 cycles, summarised read-only with
 `scripts/replicate_study.py --resume` in a scratch directory), `replicates-baseline/replicates-summary.md`; experiment findings, "Clean labels and the v3 recording". The 17 to 20
-percent versus 40 figure is from the owner's run notes and is not in a repo file.
+percent versus 40 figure is in `docs/experiments/setup-findings-20261011.md`.
 
 ## 4. Parameters
 
@@ -227,7 +230,7 @@ A lower trigger buys an earlier rubric and more optimizer calls. We have not mea
 corpus, or either trigger on a balanced task. The study script default is now 6 for this reason.
 
 Source: `replicates-baseline/replicates-summary.md` and `replicates-cold6/replicates-summary.md`. The cost per run is
-from the owner's run notes (gpt-6-luna at LiteLLM prices) and is not in a repo file.
+in `docs/experiments/setup-findings-20261011.md` (gpt-6-luna at LiteLLM prices).
 
 ### 4.2 `--selection-primary`
 
@@ -271,7 +274,7 @@ but reads a long history.
 - In the 1,124-cycle run the optimizer's share was $2.93 of $5.67.
 
 Source: `docs/experiments/decision-model-comparison-20261009.md`; `docs/experiments/editorial-long-run-20261009.md`.
-The gpt-6-luna price is from the owner's brief (LiteLLM) and is not in a repo file.
+The gpt-6-luna price is in `docs/experiments/setup-findings-20261011.md` (LiteLLM, standard tier).
 
 ### 4.4 Retrain and optimize cadence
 
@@ -389,8 +392,7 @@ summarises the spread ([docs/replicates.md](replicates.md)). A seed varies the o
 the development split, and the feedback policy under selective review. It does not vary the decision model's or the
 optimizer's sampling, so the remaining variance is the services' own.
 
-Run `--dry-run` first. Set the global caps. A batch of six runs at trigger 6 cost about $1.15 in total (owner's
-run notes; not in a repo file).
+Run `--dry-run` first. Set the global caps. A batch of six runs at trigger 6 cost about $1.15 in total (`docs/experiments/setup-findings-20261011.md`).
 
 ### 6.2 Recordings
 
