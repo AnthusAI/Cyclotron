@@ -21,47 +21,23 @@
       "author": "home",
       "text": "Landed on feat/application-sdk (stacked on feat/cyclotron-status-shape): src/decision_flywheel/embedded_cyclotron.py with Cyclotron.open(directory, CyclotronDefinition, batched model, optimizer=None) and decide, review (label, correction, label=None for a review without a label), undo_review, status, subscribe(after, limit). Built on the existing loop: WorkspaceSession's partitions, shared decide, optimization cadence and metrics moved into learning_loop.py, and both the web workspace and the SDK call it. DecisionFlywheel.record_feedback_event gained annotations (decision_id, review_id, selected_by, reason_code, reviewer). Reviewer-selected reviews train but never enter audit or development partitions or alignment. Specs: embedded_cyclotron_test.py (16) and tests/readme_embedded_quickstart_test.py. Finding: every activation, including each ML model refit, is a new version, so status versions now count classifier-activated events and describe what changed.",
       "created_at": "2026-10-09T15:24:39.409300Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "e0fa0fff-daa0-4180-9791-cef4d8803ca4",
       "author": "home",
-      "text": "Related: flywheel82 (record one review that labels several outputs) under epic flywheel1f \u2014 a multi-output review() would likely land in this SDK facade.",
+      "text": "Related: flywheel82 (record one review that labels several outputs) under epic flywheel1f — a multi-output review() would likely land in this SDK facade.",
       "created_at": "2026-10-11T19:03:27.355929Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
-    },
-    {
-      "id": "a438904a-e065-436f-9d35-338651c912b7",
-      "author": "home",
-      "text": "x",
-      "created_at": "2026-10-11T19:03:32.056514Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
-    },
-    {
-      "id": "d137ffdb-37eb-47ed-ad0c-be8d5896e10a",
-      "author": "home",
-      "text": "x",
-      "created_at": "2026-10-11T19:03:35.104703Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:51:17.242504Z",
-  "updated_at": "2026-10-11T19:03:35.104793Z",
+  "updated_at": "2026-10-11T19:04:28.083563Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  },
-  "agent": null,
-  "agent_assignment": null
+  }
 }
