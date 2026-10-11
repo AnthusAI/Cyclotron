@@ -19,9 +19,8 @@ Rules this module enforces:
   ceiling, answer cache, durable answer records), so ``wheel.requests`` stays truthful and cache hits are free.
 * Alpha spending. An idea gets at most ``shadow_looks`` looks per incumbent, at the predetermined shared-item counts
   ``shadow_min_items * k``. A look clears only if its exact two-sided sign-test p-value is below
-  ``alpha / shadow_looks`` and gained > lost. Bonferroni over a predetermined number of looks keeps the chance
-  that a truly equal idea ever clears below ``alpha``, however the looks are correlated. (With ``k`` ideas
-  in the shadow set at once the family-wise chance is up to ``k * alpha``; each idea is still held to ``alpha``.)
+  ``alpha / (shadow_looks * shadow_ideas)`` and gained > lost. Bonferroni over a predetermined number of looks keeps the chance
+  that a truly equal idea ever clears below ``alpha``, however the looks are correlated. The threshold also divides by the number of ideas in the shadow set, so the chance that any equal idea clears stays below ``alpha``.
 * Incumbent epochs. The incumbent is identified by its configuration fingerprint. Ledger rows record the incumbent's
   decision answer under that id, so a paired comparison only ever uses stories scored while that incumbent was
   active. After a promotion the old rows stay in the ledger, but they never pair with the new incumbent, and every
@@ -39,13 +38,13 @@ SHADOW = "shadow"
 SHADOW_CONTROLS = ("rubric", "example_ids")
 
 
-def look_threshold(alpha, looks):
-    """Per-look significance level under alpha spending (Bonferroni over the predetermined looks)."""
-    return alpha / looks
+def look_threshold(alpha, looks, ideas=1):
+    """Per-look significance level under alpha spending (Bonferroni over the predetermined looks and the ideas shadowed at once)."""
+    return alpha / (looks * ideas)
 
 
-def clears_look(gained, lost, alpha, looks):
-    return gained > lost and sign_test(gained, lost) < look_threshold(alpha, looks)
+def clears_look(gained, lost, alpha, looks, ideas=1):
+    return gained > lost and sign_test(gained, lost) < look_threshold(alpha, looks, ideas)
 
 
 @dataclass(frozen=True)
@@ -258,13 +257,13 @@ class ShadowEvaluator:
                 continue
             taken = self._looks_taken(idea_id, inc)
             if taken < config.shadow_looks and n >= (taken + 1) * config.shadow_min_items:
-                ok = clears_look(gained, lost, config.alpha, config.shadow_looks)
+                ok = clears_look(gained, lost, config.alpha, config.shadow_looks, config.shadow_ideas)
                 taken += 1
                 with self.wheel.db:
                     self.wheel.db.execute("INSERT INTO shadow_looks VALUES (?,?,?,?,?,?,?,?,?)",
                         (idea_id, inc, taken, n, gained, lost, pair["p_value"], int(ok), seq))
                 self.wheel._emit({"kind": "shadow-look", "idea_id": idea_id, "look": taken, "cleared": ok,
-                                  "threshold": look_threshold(config.alpha, config.shadow_looks), **stats})
+                                  "threshold": look_threshold(config.alpha, config.shadow_looks, config.shadow_ideas), **stats})
                 if ok:
                     cleared.append((-(gained - lost), pair["p_value"], idea_id, {**stats, "looks": taken}))
                 elif taken >= config.shadow_looks:
@@ -287,7 +286,7 @@ class ShadowEvaluator:
         previous = wheel.active.config.briefing_state()
         config = wheel.active.config.apply(idea["proposal"], training)
         evidence = {**stats, "alpha": self.config.alpha, "looks_allowed": self.config.shadow_looks,
-                    "threshold": look_threshold(self.config.alpha, self.config.shadow_looks), "stage": SHADOW}
+                    "threshold": look_threshold(self.config.alpha, self.config.shadow_looks, self.config.shadow_ideas), "stage": SHADOW}
         reason = (f"cleared forward shadow evaluation: on {stats['shared']} stories it fixed {stats['gained']} and broke "
                   f"{stats['lost']} versus the incumbent (p={stats['p_value']:.4f}, look {stats['looks']} of "
                   f"{self.config.shadow_looks}, threshold {evidence['threshold']:.4f})")
