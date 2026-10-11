@@ -20,6 +20,13 @@ RETIRED = (
     "rationale",
     "labeling",
     "annotator",
+    "decision element",
+    "decision elements",
+    "ML head",
+    "learned head",
+    "fitted head",
+    "perceptron",
+    "final answer",
 )
 RETIRED_WORD = re.compile(r"\b(" + "|".join(RETIRED) + r")\b", re.IGNORECASE)
 
