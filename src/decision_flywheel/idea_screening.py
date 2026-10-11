@@ -21,6 +21,11 @@ SCREENED_CONTROLS = ("rubric", "example_ids")
 MODES = ("shadow", "dev_screen")
 # Bounded optimizer payload: newest prior ideas, ledger digest rows, fixed/broke ids per row, stubborn ids.
 CAPS = {"prior_ideas": 20, "ledger_ideas": 10, "item_ids_per_idea": 5, "stubborn_items": 20}
+# Proposal operators (Stage 2c). One optimizer call per round carries every operator's block, so the blocks are capped:
+# at most 8 target stories of 400 characters, two parent rubrics of 4000 characters, 8 fixed/broke ids per parent.
+OPERATORS = ("mutate", "bold", "target", "combine")
+DEFAULT_SHADOW_MIX = {"mutate": 0, "bold": 2, "target": 2, "combine": 2}
+OPERATOR_CAPS = {"story_chars": 400, "parent_rubric_chars": 4000, "parent_item_ids": 8, "target_sample_max": 20}
 
 
 @dataclass(frozen=True)
@@ -34,11 +39,18 @@ class IdeaScreeningConfig:
     max_screen_calls: int = 2000
     stages: tuple = ((50, 0.5), (200, 0.5), (None, None))
     mode: str = "shadow"
-    shadow_ideas: int = 3
+    shadow_ideas: int = 4
     shadow_min_items: int = 40
     shadow_evict_after: int = 30
     shadow_looks: int = 10
     max_shadow_calls: int = 3000
+    # Stage 2c. proposal_mix None means "the default for the mode": DEFAULT_SHADOW_MIX in shadow mode, and the
+    # plain multi-proposal request (proposals_per_round) in dev_screen mode. In shadow mode the mix total replaces
+    # proposals_per_round. Operators only apply to the rubric control.
+    proposal_mix: object = None
+    min_novelty: float = 0.35
+    target_sample: int = 8
+    novelty_retries: int = 1
 
     def __post_init__(self):
         for name in ("max_candidates", "proposals_per_round", "finalists", "max_screen_calls", "shadow_ideas",
@@ -48,6 +60,24 @@ class IdeaScreeningConfig:
                 raise ValueError(f"{name} must be a positive integer")
         if type(self.enabled) is not bool:
             raise ValueError("enabled must be boolean")
+        if self.proposal_mix is not None:
+            mix = self.proposal_mix
+            if not isinstance(mix, dict) or not mix or set(mix) - set(OPERATORS) or \
+                    any(type(v) is not int or v < 0 for v in mix.values()) or sum(mix.values()) < 1:
+                raise ValueError(f"proposal_mix must map operators ({', '.join(OPERATORS)}) to counts of at least 0, "
+                                 "with a positive total")
+            if not (mix.get("mutate", 0) or mix.get("bold", 0)):
+                raise ValueError("proposal_mix needs mutate or bold above 0, so a round can always run")
+            if self.mode != "shadow":
+                raise ValueError("proposal_mix applies to shadow mode only; dev_screen uses proposals_per_round")
+            object.__setattr__(self, "proposal_mix", {op: mix.get(op, 0) for op in OPERATORS})
+        if isinstance(self.min_novelty, bool) or not isinstance(self.min_novelty, (int, float)) or \
+                not 0 <= self.min_novelty < 1:
+            raise ValueError("min_novelty must be in [0,1)")
+        if type(self.target_sample) is not int or not 1 <= self.target_sample <= OPERATOR_CAPS["target_sample_max"]:
+            raise ValueError(f"target_sample must be an integer from 1 to {OPERATOR_CAPS['target_sample_max']}")
+        if type(self.novelty_retries) is not int or not 0 <= self.novelty_retries <= 3:
+            raise ValueError("novelty_retries must be an integer from 0 to 3")
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {', '.join(MODES)}")
         if isinstance(self.reserve_fraction, bool) or not 0 < self.reserve_fraction < 1:
@@ -65,13 +95,36 @@ class IdeaScreeningConfig:
         return {**{k: getattr(self, k) for k in ("enabled", "max_candidates", "proposals_per_round", "finalists",
                                                   "reserve_fraction", "alpha", "max_screen_calls", "mode", "shadow_ideas",
                                                   "shadow_min_items", "shadow_evict_after", "shadow_looks",
-                                                  "max_shadow_calls")},
+                                                  "max_shadow_calls", "proposal_mix", "min_novelty", "target_sample",
+                                                  "novelty_retries")},
                 "stages": [list(s) for s in self.stages]}
+
+    def effective_mix(self):
+        """The operator mix this configuration asks for, or None for the plain multi-proposal request."""
+        if self.mode != "shadow":
+            return None
+        return dict(self.proposal_mix) if self.proposal_mix is not None else dict(DEFAULT_SHADOW_MIX)
+
+    def round_total(self):
+        """Proposals a round may return: the mix total in shadow mode, else proposals_per_round."""
+        mix = self.effective_mix()
+        return sum(mix.values()) if mix else self.proposals_per_round
 
     @classmethod
     def from_json(cls, raw):
         # A configuration saved by a Stage 2 run has no mode: it keeps screening on the development partition.
         return cls(**{"mode": "dev_screen", **raw, "stages": tuple(tuple(s) for s in raw["stages"])})
+
+
+def parse_proposal_mix(text):
+    """'bold=2,target=2,combine=2' -> {'mutate': 0, 'bold': 2, 'target': 2, 'combine': 2}; ValueError when invalid."""
+    mix = {}
+    for part in str(text).split(","):
+        name, sep, count = part.strip().partition("=")
+        if not sep or name not in OPERATORS or not count.strip().isdigit() or name in mix:
+            raise ValueError(f"proposal mix entries look like operator=count with operator in {', '.join(OPERATORS)}: {part!r}")
+        mix[name] = int(count)
+    return IdeaScreeningConfig(enabled=True, proposal_mix=mix).proposal_mix
 
 
 def reserve_member(salt, item_id, fraction):
@@ -112,9 +165,12 @@ def compact_ideas(ideas, ledger):
     out = []
     for idea in rows:
         last = (ledger.verdicts(idea["id"]) or [None])[-1]
-        out.append({"id": idea["id"], "proposal": idea["proposal"], "rationale": idea.get("rationale", ""),
-                    "created_cycle": idea.get("created_cycle", 0), "attempts": len(idea.get("attempts", ())),
-                    "last_verdict": last and last["verdict"]})
+        row = {"id": idea["id"], "proposal": idea["proposal"], "rationale": idea.get("rationale", ""),
+               "created_cycle": idea.get("created_cycle", 0), "attempts": len(idea.get("attempts", ())),
+               "last_verdict": last and last["verdict"]}
+        if idea.get("operator"):
+            row.update(operator=idea["operator"], parents=[p[:8] for p in idea.get("parents", ())])
+        out.append(row)
     return out
 
 
@@ -126,7 +182,10 @@ def optimizer_context(wheel, ledger, ideas, reserve_ids):
     arrived and whose labels were revealed; the optimizer never sees an item that is still awaiting its label."""
     if wheel.idea_screening.mode == "shadow":
         from .shadow_evaluation import ShadowEvaluator
-        return {"prior_control_ideas": compact_ideas(ideas, ledger), **ShadowEvaluator(wheel).optimizer_digest()}
+        digest = ShadowEvaluator(wheel).optimizer_digest()
+        outcomes = ledger.operator_outcomes()
+        return {"prior_control_ideas": compact_ideas(ideas, ledger), **digest,
+                **({"operator_outcomes": outcomes} if outcomes else {})}
     hidden = frozenset(reserve_ids)
     return {"prior_control_ideas": compact_ideas(ideas, ledger),
             "hypothesis_ledger": ledger.summary_for_optimizer(

@@ -331,13 +331,13 @@ class ShadowEvaluator:
                 "stubborn_items": self.ledger.stubborn_items(context_version=SHADOW)[:CAPS["stubborn_items"]]}
 
 
-async def shadow_stage(wheel, proposals, training, development):
+async def shadow_stage(wheel, proposals, training, development, lineage=None):
     """Rubric stage in shadow mode: save the proposals as ideas, give them free shadow slots, then look at the
     evidence already collected. Nothing is scored on the development partition."""
     from .control_scheduler import ControlScheduler
     control = "rubric"
     cycle = wheel.db.execute("SELECT count(*) FROM optimization_stages").fetchone()[0]
-    ControlScheduler(wheel).admit_proposals(control, proposals, training, cycle)
+    ControlScheduler(wheel).admit_proposals(control, proposals, training, cycle, lineage)
     shadow = ShadowEvaluator(wheel)
     shadow.fill_slots(training)
     promoted = await shadow.review(training, development, source="rubric-trigger")

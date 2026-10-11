@@ -56,7 +56,7 @@ To enable structural optimization, inject an `OptimizerAgent` with an
 application-owned completion callable. The core remains provider-neutral. The
 adapter, storage choice, and event consumer are application decisions.
 
-Design for keeping and screening many ideas at once, with the opt-in `idea_screening` option (off by default) that scores a few candidate ideas on every new story before its label is revealed (forward shadow evaluation) and promotes one only when a paired test says so, or screens several ideas per round on the development partition: [docs/hypothesis-portfolio.md](docs/hypothesis-portfolio.md).
+Design for keeping and screening many ideas at once, with the opt-in `idea_screening` option (off by default) that scores a few candidate ideas on every new story before its label is revealed (forward shadow evaluation) and promotes one only when a paired test says so, or screens several ideas per round on the development partition. Shadow rounds ask the optimizer through four proposal operators (mutate, bold with a novelty gate, target at stubborn stories, combine of complementary ideas) and record each idea's lineage (Stage 2c): [docs/hypothesis-portfolio.md](docs/hypothesis-portfolio.md).
 
 ## Embed a cyclotron in an application
 

@@ -71,10 +71,12 @@ class ControlScheduler:
         with self.wheel.db:
             self.wheel.db.execute("INSERT OR REPLACE INTO control_ideas VALUES (?,?)", (idea["id"], _json(idea)))
 
-    def admit_proposals(self, control, proposals, training, cycle):
-        """Save each distinct, changing proposal as a control idea and announce it."""
+    def admit_proposals(self, control, proposals, training, cycle, lineage=None):
+        """Save each distinct, changing proposal as a control idea and announce it. ``lineage`` (optional, aligned
+        with ``proposals``) holds {operator, parents, novelty} for each; it is stored on the idea and announced."""
         wheel = self.wheel
-        for proposal in proposals:
+        for position, proposal in enumerate(proposals):
+            mark = lineage[position] if lineage else None
             candidate = wheel.active.config.apply(proposal, training)
             if candidate.briefing_state()[control] == wheel.active.config.briefing_state()[control]:
                 wheel._emit({"kind": "discovery-no-change", "control": control,
@@ -88,11 +90,16 @@ class ControlScheduler:
                     from .shadow_evaluation import ShadowEvaluator
                     # Forward-only evidence: this idea is judged only on stories after this one.
                     born = {"created_seq": ShadowEvaluator(wheel).seq()}
+                if mark:
+                    born.update(operator=mark["operator"], parents=list(mark["parents"]), novelty=mark["novelty"])
                 self.save({"id": idea_id, "control": control, "proposal": partial,
                            "rationale": proposal.get("rationale", ""), "attempts": [], "last_cycle": 0,
                            "created_cycle": cycle, "source": "multi-proposal discovery", **born})
                 wheel._emit({"kind": "hypothesis-discovered", "idea_id": idea_id, "control": control,
                              "proposal": partial, "rationale": proposal.get("rationale", "")})
+                if mark:
+                    wheel._emit({"kind": "proposal-operator", "idea_id": idea_id, "operator": mark["operator"],
+                                 "parents": list(mark["parents"]), "novelty": mark["novelty"]})
 
     async def _screen_control(self, control, training, development, protected, propensities, retry_interrupted, *,
                               key, cycle, baseline, counts, results, discovered, completed, checkpoint,
@@ -105,15 +112,17 @@ class ControlScheduler:
         salt = f"{wheel.initial.task.fingerprint}:idea-screening"
         reserve_ids = {r.item.id for r in development if reserve_member(salt, r.item.id, config.reserve_fraction)}
         if control not in discovered:
-            briefing = FeedbackBriefing.build(wheel.initial.task, training,
-                current={**wheel.active.config.briefing_state(), "control_under_test": control,
-                         "request_budget_bytes": wheel.max_request_bytes,
-                         "proposals_requested": config.proposals_per_round,
-                         **optimizer_context(wheel, ledger, own, reserve_ids)},
-                protected=tuple(row.item for row in development)+tuple(protected),
-                human_explanations=wheel.optimizer_context["human_explanations"])
-            self.admit_proposals(control, ask_proposals(wheel, briefing, control, config.proposals_per_round),
-                                 training, cycle)
+            from .proposal_operators import ask_round
+
+            def build(extra):
+                return FeedbackBriefing.build(wheel.initial.task, training,
+                    current={**wheel.active.config.briefing_state(), "control_under_test": control,
+                             "request_budget_bytes": wheel.max_request_bytes, **extra},
+                    protected=tuple(row.item for row in development)+tuple(protected),
+                    human_explanations=wheel.optimizer_context["human_explanations"])
+            proposals, lineage = ask_round(wheel, build, optimizer_context(wheel, ledger, own, reserve_ids), control, own,
+                                           training, development, protected)
+            self.admit_proposals(control, proposals, training, cycle, lineage)
             discovered.add(control)
             checkpoint()
         ideas = [idea for idea in self.ideas() if idea["control"] == control]
