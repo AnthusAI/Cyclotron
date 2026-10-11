@@ -68,3 +68,18 @@ Curated start, cyclotron accuracy by window: 91.4, 94.3, 94.3, 92.9 percent
 (first rubric change at cycle 121; the curated rubric was in place from the
 start). Blank start, six replicates: first window 73 to 77, final window 94.3
 to 95.7. The curated start wins the first window and ends in the same range.
+
+## Selective review from a blank start
+
+Blank start, trigger 6, accuracy objective, 287 stories, one run each:
+
+| Policy | Labels revealed | Optimizer calls | Accuracy by window of 70 | Majority baseline by window |
+|---|---:|---:|---|---|
+| `reject_half` (every predicted publish, half of predicted rejects) | 46 | 0 | 14.3, 18.6, 14.3, 14.3 | 85.7, 81.4, 84.3, 84.3 |
+| `casual_ten_percent` | 29 | 0 | 4.3, 2.9, 4.3, 1.4 | 87.1, 92.9, 90.0, 90.0 |
+
+No rubric was ever proposed: the first-rubric trigger counts label transitions
+among reviewed stories and never fired. Jev with a blank rubric publishes for
+almost every story, so accuracy stayed far below always answering "reject".
+Cost: Jev 287 calls each, no optimizer calls, about 1.5 cents each. Runs:
+`optimization/rec-reject-half` and `optimization/rec-casual10` (not published).
