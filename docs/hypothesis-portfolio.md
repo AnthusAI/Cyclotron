@@ -1,8 +1,8 @@
-# Hypothesis portfolio (Stages 1 and 2)
+# Hypothesis portfolio (Stages 1, 2 and 2b)
 
 Decision-model calls are cheap, so the optimizer should not pick one winner and commit. It should keep many
 ideas (rubric, example and question changes), keep evidence about each for a long time, and screen many
-candidates cheaply. Stage 1 is the library layer (ledger and screen). Stage 2, below, wires it into the live loop as an opt-in.
+candidates cheaply. Stage 1 is the library layer (ledger and screen). Stage 2, below, wires it into the live loop as an opt-in (mode `dev_screen`). Stage 2b adds forward shadow evaluation (mode `shadow`, the default when screening is on).
 
 ## The ledger (`hypothesis_ledger.py`)
 
@@ -112,8 +112,123 @@ digest excludes reserve items. These are development item ids, so the run record
 Determinism: screening items are shuffled with the cycle number as the seed and the reserve is hash-defined,
 so the same inputs and recorded responses repeat a round exactly.
 
+## Stage 2b: forward shadow evaluation (opt-in, mode `shadow`)
+
+### Why dev-partition screening was too small
+
+A real validation run showed Stage 2 promoting nothing. Each round screened on 16 to 29 stories and confirmed on
+a reserve of 3 to 12, because it only used the engine's small development partition. With 18 ideas and 893
+evaluations no finalist could clear a paired test. Decision-model calls cost a fraction of a cent, so labels, not
+calls, are the scarce thing. Forward shadow evaluation gets evidence from stories that arrive anyway.
+
+### How it works
+
+Every new story is scored by the incumbent (as always) and by a few candidate ideas, the shadow set, before its
+label is revealed. Those stories were never seen by any idea's author (the optimizer), so the evidence is clean.
+It grows by one paired result per idea per story with no extra labels.
+
+1. Rubric stages (and the scheduler's `rubric` and `example_ids` controls) still ask the optimizer for
+   `proposals_per_round` distinct proposals and save them as control ideas. In shadow mode nothing is scored on the
+   development partition; the new ideas take free shadow slots, newest first. `tasks` ideas are not shadowed.
+2. In `run_cycle_replay`, after the incumbent predicts and the feedback policy chooses, each shadow idea answers
+   through `wheel._answers` (the same request ceiling, answer cache and durable record as every decision, so
+   `wheel.requests` stays truthful and cache hits are free). Then the label is revealed, and correctness for each
+   idea and for the incumbent is written to the ledger with `context_version='shadow'`. The incumbent's side of the
+   pair is its decision-model answer (not the fitted head), the same thing the idea's answer is.
+3. Per story with any shadow scoring, one `portfolio-scored` event records the incumbent's choice and confidence
+   and each idea's, with no label, so disagreement can be analysed later. Nothing routes on it yet (Stage 3).
+4. After each such story, and at each rubric trigger, `review` compares every shadow idea with the incumbent on
+   the shared forward stories.
+
+### Forward-only rule
+
+The replay ticks a story sequence number once per story. An idea records the sequence number at which it was
+created (`created_seq`) and joins the shadow set at or after that; it is scored only on stories with a larger
+sequence number. The `shadow_scored` table logs every (idea, story, sequence) so this can be audited, and the tests
+assert it from the model's call log.
+
+### The protected-partition rule (how it is read)
+
+The replay has three roles: `training`, `development` and `scoreboard`. Scoreboard stories are the permanent
+evaluation firewall: their labels are never revealed to the runtime. Stories the feedback policy does not select
+are not revealed either. The shadow set is scored only on stories that (a) are selected for review, so their label
+will be revealed, and (b) are not scoreboard. Anything else is never scored by a shadow idea, never enters the
+ledger and is never evidence for promotion. Training and development stories are both allowed: for a shadow idea
+they are forward stories it was not written from, and nothing else about them is used. Because only reviewed
+stories count, the evidence is about the stories the policy selects, which can differ from the whole stream
+under selective feedback.
+
+### Promotion and alpha spending
+
+Per idea and per incumbent, the idea gets at most `shadow_looks` looks, at the predetermined shared-story counts
+`shadow_min_items * k`. A look clears when the exact two-sided sign test p-value is below `alpha / shadow_looks`
+and gained is greater than lost. A fixed number of looks at predetermined counts tested at `alpha / looks` is a
+Bonferroni bound: however the looks are correlated, an idea that is truly no better clears with probability at
+most `alpha`. Testing every look at `alpha` instead would exceed it (in the simulation, 6.0% against 0.6%). It is
+conservative, so power is lower than an unadjusted test. With `k` ideas in the shadow set at once, the chance that
+some equal idea clears is up to `k * alpha`; each idea is held to `alpha`. A verdict `advanced` is recorded when an
+idea first reaches `shadow_min_items` shared stories with a positive net.
+
+An idea that clears is promoted by a distinct, logged path, not the fitted-trial path: `idea-promoted-by-shadow`
+(evidence: gained, lost, p, n, looks, threshold), then the idea's change becomes the active decision context
+(`classifier-activated`, then a `promoted` event with `promotion_path='shadow-evaluation'`), verdict `promoted`,
+and the idea record gains an attempt. No head is fitted in the promotion; the usual classifier retraining refits
+it on its own schedule, so predictions use the new decision answer until then.
+
+### Eviction
+
+An idea is evicted (verdict `screened_out`, reason in plain words, slot freed for the next waiting idea) once it has
+`shadow_evict_after` shared forward stories and gained is not greater than lost. Ideas that have not reached the
+count keep their slot, which is the exploration allowance. An idea that uses all its looks without clearing is
+also evicted. Nothing is ever deleted: ledger rows and verdicts stay.
+
+### The incumbent changes
+
+The incumbent's id is its configuration fingerprint. Its ledger rows are written under that id, so a paired
+comparison only uses stories scored while that incumbent was active. After a promotion the old rows stay in the
+ledger but never pair with the new incumbent; every remaining idea restarts a comparison and its looks against the
+new incumbent on the stories that follow (an idea is applied to the current incumbent, so it means "this change
+on top of what is active now").
+
+### Optimizer context
+
+In shadow mode the digest given to the optimizer is each shadow idea's forward record (stories, fixed and broke
+counts with a few story ids, running accuracy, last verdict, shadow status) plus forward stories every voter
+got wrong, with the same caps as Stage 2. There is no hidden reserve. It contains only stories that have arrived
+and whose labels were revealed, never a story awaiting its label. Because development stories can appear in it,
+the run still records `evaluation_context_exposed=true`.
+
+### Options and defaults
+
+`IdeaScreeningConfig` gains `mode` (`shadow` or `dev_screen`; default `shadow`), `shadow_ideas=3`,
+`shadow_min_items=40`, `shadow_evict_after=30`, `shadow_looks=10`, `max_shadow_calls=3000`. All are validated,
+saved in `runtime_state` and kept on resume. A Stage 2 configuration saved without a mode resumes as `dev_screen`.
+Study flags: `--screening-mode`, `--shadow-ideas`, `--shadow-min-items`, `--shadow-evict-after`, `--shadow-looks`,
+`--max-shadow-calls`, recorded in `protocol.json` with the rest of the config. Screening is still off unless
+`--idea-screening` is given.
+
+### Budget safety
+
+Shadow calls count against `max_shadow_calls` and the wheel's request ceiling. Before each shadow call the
+evaluator checks that the remaining requests exceed what normal work still needs (one per remaining story, plus
+the training and development size for a fitted trial). Otherwise it stops scoring, logs `shadow-scoring-stopped`
+once per reason, and resumes by itself if the reason goes away. A failed shadow call is logged
+(`shadow-scoring-failed`) and skipped; it never blocks the decision.
+
+### What the simulations say
+
+Using the module's own look rule on simulated paired outcomes (3000 runs, 10 looks of 40 stories): equal ideas
+were promoted 0.6% of the time. A true +10 point idea (incumbent 75% right, idea 85%) was promoted 81% of the time
+within 400 forward stories, median about 160, and 98% if early eviction is switched off; eviction at 30 stories
+costs power, so raise `shadow_evict_after` if ideas are expensive to produce. A smaller +5 point idea was found
+about a third of the time within 400 stories.
+
+### Not built
+
+Routing on shadow disagreement (Stage 3) and cross-run idea memory (Stage 4).
+
 ## Still not built
 
-- A shadow/ensemble portfolio of the top-k diverse ideas, whose disagreement routes items to review (Stage 3).
+- Routing on the disagreement of the shadow ideas to send items to review (Stage 3). Stage 2b only records `portfolio-scored`.
 - Cross-run idea memory, so screened-out ideas are scored on later labels and revived (Stage 4). Until then
   `revive_candidates()` is wired but only fires if something else scores a screened-out idea.

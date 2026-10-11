@@ -63,6 +63,12 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
     report['rubric_trigger'] = ({'policy':'label-transitions','every':rubric_changes_every}
                                 if rubric_trigger else {'policy':'revealed-feedback-count','every':rubric_changes_every}
                                 if feedback_rubric_trigger else {'policy':'feedback-cadence','every':optimize_every})
+    shadow=None
+    if wheel.shadow_enabled():
+        # Forward shadow evaluation (Stage 2b): opt-in. Scoreboard stories are never scored by shadow ideas.
+        from .shadow_evaluation import ShadowEvaluator
+        shadow=ShadowEvaluator(wheel)
+    scoreboard_ids={identifier for identifier,role in roles.items() if role=='scoreboard'}
     optimization_number=0
     rubric_optimizations=0
     eligible_count=0
@@ -125,6 +131,15 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             all_item_evaluation.append({'item_id':row.item.id, 'actual_label':row.label,
                 'decision_model_label':prediction['decision_model_label'], 'decision_model_probabilities':prediction['decision_model_probabilities'],
                 'label':result.label, 'probabilities':result.probabilities})
+            shadow_cycle=None
+            if shadow:
+                # Shadow ideas score the story now, before its label is revealed; only a story that is about to be
+                # reviewed and is not on the scoreboard can become selection evidence.
+                shadow_cycle=await shadow.score_cycle(row.item,train,
+                    eligible=selected and roles[row.item.id]!='scoreboard',
+                    incumbent_choice=prediction['decision_model_label'],
+                    incumbent_confidence=(prediction['decision_model_probabilities'] or {}).get(prediction['decision_model_label']),
+                    protected_ids=scoreboard_ids,reserve=len(plan.ordered)-index+len(train)+2*len(dev))
             if selected:
                 # Scoreboard is a permanent evaluation firewall: do not reveal
                 # its labels to the runtime, even when sampling would select it.
@@ -143,6 +158,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                         # label a reviewer gave, as an operator's rule would see it.
                         policy.observe_review(cycle_number=index+1,label=row.label,predicted_label=result.label,
                                               confidence=result.probabilities[result.label],propensity=selection.propensity)
+            if shadow:
+                shadow.record(shadow_cycle,row.label)
             eligible=selected and roles[row.item.id]!='scoreboard'
             eligible_count+=int(eligible)
             train=tuple(value for value in revealed_rows if roles[value.item.id]=='training')
@@ -150,6 +167,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             wheel.set_optimizer_context(tuple(r.context['human_feedback'] for r in train if r.context.get('human_feedback')))
             protected=tuple(r.item for r in plan.ordered if r.item.id not in {r.item.id for r in (*train,*dev)})
             outcomes=[]
+            if shadow and shadow_cycle is not None:
+                await shadow.review(train,dev,source='cycle')
             kwargs={'protected':protected,'propensities':{r.item.id:revealed_propensities[r.item.id] for r in train},
                     'min_development_per_class':min_evaluation_per_class}
             if rubric_trigger:
@@ -200,6 +219,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             break
     # A policy that adapts during the run (a taper) reports its final state here.
     report['feedback_policy']=policy.manifest(negative_label)
+    if shadow:
+        report['shadow']=shadow.snapshot()
     report['all_item_evaluator'] = compare_outputs(wheel.initial.task.labels, all_item_evaluation,
         limit=min(200, len(all_item_evaluation)), scope='replay-oracle') if all_item_evaluation else None
     return report

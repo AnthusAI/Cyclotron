@@ -210,6 +210,9 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             result["classifier_training"] = await train_classifier(wheel, training, development,
                 protected=protected, propensities=propensities,
                 min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
+    elif screen_proposals is not None and wheel.idea_screening.mode == "shadow":
+        from .shadow_evaluation import shadow_stage
+        result = await shadow_stage(wheel, screen_proposals, training, development)
     elif screen_proposals is not None:
         from .idea_screening import screening_stage
         result = await screening_stage(wheel, screen_proposals, training, development, protected=protected,
