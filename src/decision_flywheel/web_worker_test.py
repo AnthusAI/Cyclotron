@@ -390,5 +390,5 @@ def test_new_runs_pin_shared_defaults_while_existing_runs_keep_their_settings(tm
     second=worker.create_run('Second',{'cyclotron_id':'card','item_list_id':'items'})
     assert first['config']['optimize_every']==store.run(first['id'])['config']['optimize_every']==10
     assert second['config']['optimize_every']==5
-    assert first['config']['classifiers'][0]['config']['selection_policy']=={'primary':'recall','secondary':'accuracy','aggregation':'positive','positive_class':'yes','max_secondary_regression':0.,'minimum_secondary':None}
+    assert first['config']['classifiers'][0]['config']['selection_policy']=={'primary':'recall','secondary':'accuracy','aggregation':'positive','positive_class':'yes','max_secondary_regression':0.,'minimum_secondary':None,'provisional_rate_allowance':None}
     assert first['config']['decisions_model']=='fake-decision'
