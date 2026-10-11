@@ -21,6 +21,7 @@
     "trace-ui/src/styles/components.css",
     "trace-ui/tailwind-preset.ts",
     "trace-ui/src/CyclotronBrand.tsx",
+    "trace-ui/src/cycleSchedule.ts",
     "trace-ui/src/CalibrationProvenance.tsx"
   ],
   "exports": {
@@ -36,7 +37,8 @@
     "./styles/shared.css": "./trace-ui/src/styles/shared.css",
     "./styles/components.css": "./trace-ui/src/styles/components.css",
     "./tailwind-preset": "./trace-ui/tailwind-preset.ts",
-    "./components/cyclotron-brand": "./trace-ui/src/CyclotronBrand.tsx"
+    "./components/cyclotron-brand": "./trace-ui/src/CyclotronBrand.tsx",
+    "./components/cycle-mark": "./trace-ui/src/components/ui/cycle-mark.tsx"
   },
   "dependencies": {
     "@fontsource-variable/oxanium": "^5.3.0",
