@@ -111,6 +111,11 @@ def majority_share(labels, size):
     return out
 
 
+def activation_cycles(events):
+    """Sorted cycle numbers at which a rubric/classifier candidate was activated."""
+    return sorted(e["cycle_number"] for e in events if e.get("kind") == "classifier-activated")
+
+
 def mean(values):
     return sum(values) / len(values) if values else None
 
@@ -146,7 +151,7 @@ def summarise_replicate(rep_dir, window, mode=None):
             predictions[e["cycle_number"]] = e
     decision = [predictions[c["cycle_number"]]["decision_model_label"] == c["human_label"]
                 if c["cycle_number"] in predictions else False for c in cycles]
-    activations = sorted(e["cycle_number"] for e in events if e.get("kind") == "classifier-activated")
+    activations = activation_cycles(events)
     head = [bool(p.get("fitted_head")) for p in predictions.values()]
     post = mean(cyclotron[1:])
     return {
