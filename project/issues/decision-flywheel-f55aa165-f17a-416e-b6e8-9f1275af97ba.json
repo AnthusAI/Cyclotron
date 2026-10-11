@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-f55aa165-f17a-416e-b6e8-9f1275af97ba",
+  "title": "Seed supporting questions when defining an output",
+  "description": "I already know the sub-questions that matter and want to give them as a starting point for the optimizer to revise.\n\nCurrent: ClassifierSpec has no tasks field (embedded_cyclotron.py:70-77); the store opens with ClassifierConfig(spec.task, rubric=seed) (:340), so supporting questions come only from the optimizer.\n\nDesired: seed_tasks per output, fixed at store creation like _seed (:347-363).\n\nAcceptance: seeded questions appear in the first request and feed the first ML model fit; the optimizer can replace them; reopening the store doesn't rewrite them.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-11T19:02:55.699470Z",
+  "updated_at": "2026-10-11T19:02:55.699666Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

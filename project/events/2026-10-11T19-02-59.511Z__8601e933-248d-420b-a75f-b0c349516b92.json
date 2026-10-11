@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8601e933-248d-420b-a75f-b0c349516b92",
+  "issue_id": "decision-flywheel-19adb9eb-8cc3-41d9-a29f-32319969ad80",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:02:59.511Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Share supporting questions across outputs",
+    "description": "Two checklist items depend on the same sub-question; ask it once and pay once.\n\nCurrent: tasks belong to each output's config (classifier_config.py:28); the joint request keeps them separate (batched_classification.py:30-40), so a shared question is asked and paid twice; one output's answer can't feed another output's ML model (flywheel.py:584-595).\n\nDesired: a cyclotron-level supporting question asked once whose features can feed several outputs' ML models.\n\nAcceptance: appears once in the request; features reach both ML models; optimizer can propose shared questions recording their owners; usage drops vs a duplicated-question test.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}

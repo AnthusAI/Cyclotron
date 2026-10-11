@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "583a9a50-d90e-4eb5-a41b-f6e1aefca4f9",
+  "issue_id": "decision-flywheel-846bbc82-5a73-4602-90a4-a902695893ad",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-11T19:03:17.711Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Glossary: classifier for outputs, supporting question for internal questions, plus feature",
+    "description": "Docs use 'classifier' both for an output and a sub-question.\n\nCurrent: docs/glossary.md defines classifier as 'one question inside a cyclotron' and retires 'element'; README.md:595-600 keeps 'Decision element'; ClassifierSpec docstring says 'One decision question inside the cyclotron'; cyclotron_status.py:168 calls tasks 'classifier questions'; no glossary word for 'feature'.\n\nDesired (approved by the site owner 2026-10-11): 'classifier' = each reviewed output (its result is a decision); 'supporting question' = internal question whose answer feeds that output's ML model as features; add 'feature'. Update docs, status UI and glossary tests.\n\nAcceptance: no user-visible string calls a supporting question a 'classifier'; glossary tests enforce the terms.",
+    "issue_type": "chore",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": []
+  }
+}
