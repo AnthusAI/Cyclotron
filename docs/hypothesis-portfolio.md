@@ -62,7 +62,19 @@ objective other than accuracy, one `idea-screening-unsupported-objective` event 
 one-trial-per-control path runs. With it off, nothing changes.
 
 Where it applies: the `rubric` and `example_ids` controls in `ControlScheduler` (`improve_controls`), and the
-`rubric` stage of `optimize_stage` (what the prequential study runs) once a non-provisional rubric exists.
+`rubric` stage of `optimize_stage` (what the prequential study runs). In `dev_screen` mode the stage screens only
+once a non-provisional rubric exists and development has the per-class minimum. In `shadow` mode it screens whenever
+screening is enabled and the active rubric is nonempty, provisional or not and with or without development coverage,
+because shadow evaluation never selects on the development partition (ideas are judged on forward stories; diagnosis
+reads only recorded predictions and revealed training stories). From a blank start the first nonempty rubric still
+comes from the legacy 'initialized provisionally' path (shadow needs an incumbent to compare against); from the next
+rubric round on, screening replaces the legacy 'working rubric refined with a decaying recency preference' branch,
+which never also runs in a round that screens.
+
+Validation status after a shadow promotion: the promoted context is recorded as `evaluated`, including when the
+incumbent was `provisional`. The justification is the forward paired evidence (the `promoted` event has
+`promotion_path: shadow-evaluation` and `shadow_evidence`), not development coverage, so the context-validation floor
+does not apply to it. Because it is no longer `provisional`, the legacy recency-allowance refinement stops for it.
 Questions (`tasks`) stay on the legacy path.
 
 Each round:

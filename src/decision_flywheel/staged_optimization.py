@@ -129,9 +129,14 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'pending', ?)",
                          (key, _json({"proposal": proposal})))
     wheel._emit({"kind": "optimization-stage-started", "stage": stage, "context_version": wheel.active.config.fingerprint})
-    use_screening = (screening and wheel.active.config.rubric.strip() and wheel.active.validation_status != 'provisional'
-                     and bool(development) and min(sum(row.label == label for row in development)
-                                                   for label in wheel.initial.task.labels) >= min_development_per_class)
+    # Shadow mode never selects on the development partition (it judges ideas on forward stories), so it needs only an
+    # incumbent rubric to compare against, provisional or not. Stage 2 dev_screen selects on development, so it keeps
+    # the non-provisional and per-class coverage requirements.
+    use_screening = bool(screening and wheel.active.config.rubric.strip() and (
+        wheel.idea_screening.mode == 'shadow' or (
+            wheel.active.validation_status != 'provisional' and bool(development)
+            and min(sum(row.label == label for row in development) for label in wheel.initial.task.labels)
+            >= min_development_per_class)))
     screen_proposals = (json.loads(saved[1]).get("screen_proposals") if saved and saved[1] and proposal is not None
                         and use_screening else None)
     screen_lineage = (json.loads(saved[1]).get("screen_lineage") if saved and saved[1] and proposal is not None
