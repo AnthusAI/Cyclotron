@@ -58,6 +58,14 @@ adapter, storage choice, and event consumer are application decisions.
 
 Design for keeping and screening many ideas at once, with the opt-in `idea_screening` option (off by default) that scores a few candidate ideas on every new story before its label is revealed (forward shadow evaluation) and promotes one only when a paired test says so, or screens several ideas per round on the development partition. Shadow rounds ask the optimizer through four proposal operators (mutate, bold with a novelty gate, target at stubborn stories, combine of complementary ideas) and record each idea's lineage (Stage 2c). The opt-in `diagnosis` option (Stage 2d) first builds the incumbent's confusion matrix, diagnoses root causes with several optimizer calls, trials each cause's patch on held-aside errors with the decision model, and screens yes/no element questions asked in the same request as the main decision: [docs/hypothesis-portfolio.md](docs/hypothesis-portfolio.md).
 
+## Set up a cyclotron for a recurring decision
+
+The setup and usage guide, built from our own runs, is [docs/using-cyclotron.md](docs/using-cyclotron.md). Read it before your first run.
+
+## Set up a cyclotron for a recurring decision
+
+The setup and usage guide, built from our own runs, is [docs/using-cyclotron.md](docs/using-cyclotron.md). Read it before your first run.
+
 ## Embed a cyclotron in an application
 
 The full walk-through, with the widgets and operational notes, is
