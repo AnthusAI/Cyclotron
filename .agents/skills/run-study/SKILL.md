@@ -65,6 +65,7 @@ Follow `docs/recordings.md`: `scripts/recordings.py add` makes a draft from the 
 ## Gotchas
 
 - **Crash at the end.** The study writes `results.json` only after the last story. A full disk produced an empty file after all 853 cycles had run. The write is now atomic, but if you meet an empty file, run `score.py`; do not rerun live.
+- **Resume can fail.** A `--resume` of a run that stopped on an optimizer rate-limit error stopped with `training IDs must be unique`. Until that engine bug is fixed, rerun fresh, seeded from the old runtime with `--seed-answers-from`, and pass `--transport-retries 3`.
 - **Resume does nothing for a finished run.** `--resume` skips modes whose cycles are complete, so it will not rewrite a lost report.
 - **Seeding.** `--seed-answers-from OLD/all/runtime.sqlite3` serves identical decision requests from an earlier run at no cost. The optimizer is not cached and is not deterministic, so a rerun is a new run with new rubrics.
 - **Output directory.** The script creates it itself and fails with FileExistsError if it exists, so keep logs beside it, not inside.
