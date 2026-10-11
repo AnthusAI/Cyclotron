@@ -18,8 +18,6 @@ RETIRED = (
     "votes",
     "voting",
     "rationale",
-    "steer",
-    "steering",
     "labeling",
     "annotator",
 )
