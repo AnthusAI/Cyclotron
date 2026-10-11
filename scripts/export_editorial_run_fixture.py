@@ -4,7 +4,7 @@
 Ported from Cyclotron-web's scripts/extract-editorial-runs.py, which wrote
 editorial-run-v1.json; ``--schema-version 1`` reproduces that file byte for
 byte from the same recording. Schema 2 accepts any corpus length and adds, per
-window of 100 cycles and for both the decision model's own confidence and the
+window of 100 cycles (``--window-size N`` changes that) and for both the decision model's own confidence and the
 cyclotron's: accuracy, per-class precision, recall and F1, Brier, calibration
 error, mean stated confidence, the routing metrics (mistakes in the
 least-confident N percent; an auto-approve rule at thresholds 0.75 to 0.95),
@@ -12,9 +12,23 @@ optimizer events, and measured model usage and cost at list prices. Totals go
 in ``usage_total``; the price basis goes in the attribution.
 
 ``--cycles N`` (schema 2) exports only the first N cycles of a longer
-recording, N a multiple of 100: windows, usage, cost and wall-clock time count
-those cycles alone, and the evaluator-only windows compare the cut's first and
-last 100. The fixture records the cut in ``cycle_cut``.
+recording, N a multiple of the window size: windows, usage, cost and
+wall-clock time count those cycles alone, and the evaluator-only windows
+compare the cut's first and last window (``first_100``/``last_100`` at the
+default size, ``first_N``/``last_N`` otherwise). The fixture records the cut in
+``cycle_cut``.
+
+``--window-size N`` (schema 2, default 100) sets the window length for the
+windows, per-window metrics, routing blocks and evaluator-only blocks. When
+given, the scenario's ``evaluator_only_windows.window_size`` is N and the
+fixture carries a top-level ``window_size``; without it the output is
+byte-identical to earlier exports.
+
+Two manifest forms are accepted. The original form carries ``item_set_sha256``.
+The relabeled form (corpus ``editorial-relabel-v3-1``, or any manifest with
+``operational_sha256`` and no ``item_set_sha256``) must have ``actual_count``
+equal to the corpus line count and the corpus file's sha256 equal to
+``operational_sha256``; its ``label_provenance`` is carried into the fixture.
 
 The source result files remain local study artifacts. This exporter emits only
 the pre-vote prediction, revealed simulated label, public metrics, lifecycle
@@ -41,6 +55,10 @@ PRICES = {
                      "source": "developers.openai.com/api/docs/models/gpt-4.1-mini, read 2026-10-09"},
     "gpt-4.1": {"input_usd_per_mtok": 2.00, "cached_input_usd_per_mtok": 0.50, "output_usd_per_mtok": 8.00,
                 "source": "developers.openai.com/api/docs/models/gpt-4.1, read 2026-10-09"},
+    # Per-request tiering: a request whose input exceeds 272,000 tokens is billed at the above-tier rates.
+    "gpt-6-luna": {"input_usd_per_mtok": 0.10, "cached_input_usd_per_mtok": 0.01, "output_usd_per_mtok": 0.50,
+                   "above_input_tokens": 272000, "above_input_usd_per_mtok": 0.20, "above_output_usd_per_mtok": 0.75,
+                   "source": "LiteLLM model price table (standard tier), read 2026-10-11"},
     "jev": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0, "source": "TypeSafe's published price"},
 }
 
@@ -109,6 +127,30 @@ def public_feedback_schedule(policy: object) -> dict:
             public_phases.append(public_phase)
         schedule["phases"] = public_phases
     return schedule
+
+
+V3_FIELDS = ("dataset", "dataset_revision", "license", "license_url", "operational_sha256")
+
+
+def is_relabel_manifest(manifest: dict) -> bool:
+    """The relabeled-corpus manifest form: hashed by ``operational_sha256``, not ``item_set_sha256``."""
+    return manifest.get("corpus") == "editorial-relabel-v3-1" or (
+        "operational_sha256" in manifest and "item_set_sha256" not in manifest)
+
+
+def check_relabel_manifest(manifest: dict, corpus: Path) -> None:
+    missing = [key for key in V3_FIELDS if not isinstance(manifest.get(key), str) or not manifest[key]]
+    if missing:
+        raise SystemExit(f"corpus manifest is missing {', '.join(missing)}")
+    try:
+        data = corpus.read_bytes()
+    except OSError as exc:
+        raise SystemExit(f"invalid reviewed corpus {corpus}: {exc}") from exc
+    lines = len(data.decode("utf-8", "replace").splitlines())
+    if manifest["actual_count"] != lines:
+        raise SystemExit(f"{corpus}: manifest actual_count {manifest['actual_count']} does not match {lines} corpus lines")
+    if hashlib.sha256(data).hexdigest() != manifest["operational_sha256"]:
+        raise SystemExit(f"{corpus}: sha256 does not match the manifest's operational_sha256")
 
 
 def read_corpus(path: Path, manifest: dict) -> tuple[dict[str, dict], dict[str, str]]:
@@ -341,12 +383,12 @@ def decision_model_choice(probabilities: dict, labels: tuple[str, ...]) -> str:
     return max(labels, key=lambda name: probabilities.get(name, 0.0))
 
 
-def scenario_windows(cycles, predictions, reference_labels, labels, usage) -> list[dict]:
-    """Per-100-cycle windows of evaluator-only metrics, routing, optimizer events, and usage."""
+def scenario_windows(cycles, predictions, reference_labels, labels, usage, size=WINDOW) -> list[dict]:
+    """Per-window (100 cycles by default) windows of evaluator-only metrics, routing, optimizer events, and usage."""
     usage_windows = {window["window"]: window for window in usage["windows"]}
     windows = []
-    for index in range(0, len(cycles), WINDOW):
-        chunk = cycles[index:index + WINDOW]
+    for index in range(0, len(cycles), size):
+        chunk = cycles[index:index + size]
         cyclotron, decision_model = [], []
         for cycle in chunk:
             event = predictions[cycle["cycle_number"]]
@@ -355,9 +397,9 @@ def scenario_windows(cycles, predictions, reference_labels, labels, usage) -> li
             raw = event.get("decision_model_probabilities") or event["probabilities"]
             decision_model.append((decision_model_choice(raw, labels), raw, actual))
         lifecycle = [event for cycle in chunk for event in public_events(cycle["outcomes"])]
-        window_usage = usage_windows.get(index // WINDOW + 1, {})
+        window_usage = usage_windows.get(index // size + 1, {})
         windows.append({
-            "window": index // WINDOW + 1,
+            "window": index // size + 1,
             "first_cycle": chunk[0]["cycle_number"], "last_cycle": chunk[-1]["cycle_number"],
             "label_source": "Frozen simulated reference labels, evaluator-only; never learner feedback.",
             "cyclotron": _confidence_metrics(cyclotron, labels),
@@ -393,15 +435,24 @@ def main(argv=None) -> int:
     parser.add_argument("--optimizer-price", choices=sorted(PRICES), default="gpt-4.1-mini")
     parser.add_argument("--cycles", type=int, default=None,
                         help="export only the first N recorded cycles (schema 2; a multiple of 100)")
+    parser.add_argument("--window-size", type=int, default=None,
+                        help=f"cycles per window (schema 2; default {WINDOW}); --cycles must be a multiple of it")
     args = parser.parse_args(argv)
+    size = WINDOW if args.window_size is None else args.window_size
+    if args.window_size is not None and (args.schema_version != 2 or size < 1):
+        raise SystemExit("--window-size needs schema 2 and a positive integer")
     manifest = json.loads(args.corpus_manifest.read_text())
     count = manifest.get("actual_count")
-    if manifest.get("label_disclosure") != "simulated_semantic_editorial_labels" or (
+    relabeled = is_relabel_manifest(manifest)
+    if relabeled and args.schema_version == 2 and manifest.get("label_disclosure") == "simulated_semantic_editorial_labels" \
+            and isinstance(count, int) and count >= size:
+        check_relabel_manifest(manifest, args.corpus)
+    elif relabeled or manifest.get("label_disclosure") != "simulated_semantic_editorial_labels" or (
             count != 400 if args.schema_version == 1 else not isinstance(count, int) or count < 100):
         raise SystemExit("corpus manifest is not a reviewed simulated-label editorial corpus of the expected length")
     cut = args.cycles
-    if cut is not None and (args.schema_version != 2 or cut < WINDOW or cut % WINDOW or cut > count):
-        raise SystemExit(f"--cycles needs schema 2 and a multiple of {WINDOW} from {WINDOW} to {count}")
+    if cut is not None and (args.schema_version != 2 or cut < size or cut % size or cut > count):
+        raise SystemExit(f"--cycles needs schema 2 and a multiple of {size} from {size} to {count}")
     corpus, reference_labels = read_corpus(args.corpus, manifest)
     scenario_dirs = parse_scenarios(args.scenario)
     runs = {name: read(path / "results.json", count, cut) for name, path in scenario_dirs.items()}
@@ -430,21 +481,21 @@ def main(argv=None) -> int:
         scenario = {
             "feedback_policy": public_feedback_schedule(run["feedback_policy"]),
             "evaluator_only_windows": {
-                "window_size": 100,
+                "window_size": size,
                 "label_source": "Frozen simulated reference labels, evaluator-only; never learner feedback.",
-                "first_100": evaluator_window(run["cycles"][:100], predictions, reference_labels),
-                "last_100": evaluator_window(run["cycles"][-100:], predictions, reference_labels),
+                f"first_{size}": evaluator_window(run["cycles"][:size], predictions, reference_labels),
+                f"last_{size}": evaluator_window(run["cycles"][-size:], predictions, reference_labels),
             },
         }
         if args.schema_version == 2:
-            usage = usage_by_window(events, prices, window=WINDOW)
-            scenario["windows"] = scenario_windows(run["cycles"], predictions, reference_labels, labels, usage)
+            usage = usage_by_window(events, prices, window=size)
+            scenario["windows"] = scenario_windows(run["cycles"], predictions, reference_labels, labels, usage, size)
             scenario["usage_total"] = usage["total"]
         scenario["cycles"] = [compact_cycle(cycle, predictions[cycle["cycle_number"]], corpus[cycle["item_id"]], comments)
                               for cycle in run["cycles"]]
         scenarios[name] = scenario
     attribution = {"dataset": manifest["dataset"], "revision": manifest["dataset_revision"], "license": manifest["license"],
-                   "license_url": manifest["license_url"], "corpus_sha256": manifest["item_set_sha256"]}
+                   "license_url": manifest["license_url"], "corpus_sha256": manifest["operational_sha256" if relabeled else "item_set_sha256"]}
     if args.schema_version == 2:
         attribution["price_basis"] = {
             "basis": "list prices, USD per million tokens, applied to the provider-reported usage on every recorded call",
@@ -458,6 +509,8 @@ def main(argv=None) -> int:
         "rubric_summary": RUBRIC_SUMMARY,
         "attribution": attribution,
         "task_hash": next(iter(runs.values()))["protocol"]["task"],
+        **({"label_provenance": manifest["label_provenance"]} if relabeled and manifest.get("label_provenance") else {}),
+        **({"window_size": size} if args.window_size is not None else {}),
         **({"cycle_cut": {"cycles": cut, "recorded_cycles": count}} if cut is not None else {}),
         "scenarios": scenarios,
     }
