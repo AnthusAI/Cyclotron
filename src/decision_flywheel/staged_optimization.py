@@ -134,21 +134,27 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                                                    for label in wheel.initial.task.labels) >= min_development_per_class)
     screen_proposals = (json.loads(saved[1]).get("screen_proposals") if saved and saved[1] and proposal is not None
                         and use_screening else None)
+    screen_lineage = (json.loads(saved[1]).get("screen_lineage") if saved and saved[1] and proposal is not None
+                      and use_screening else None)
     if proposal is None and use_screening:
-        from .idea_screening import ask_proposals, optimizer_context, reserve_member
+        from .idea_screening import optimizer_context, reserve_member
+        from .proposal_operators import ask_round
         from .hypothesis_ledger import HypothesisLedger
         config = wheel.idea_screening
         own = [idea for idea in ControlScheduler(wheel).ideas() if idea["control"] == "rubric"]
         salt = f"{wheel.initial.task.fingerprint}:idea-screening"
         hidden = {r.item.id for r in development if reserve_member(salt, r.item.id, config.reserve_fraction)}
-        briefing = stage_briefing(wheel, stage, training, development, protected,
-                                  extra={"proposals_requested": config.proposals_per_round,
-                                         **optimizer_context(wheel, HypothesisLedger(wheel.db), own, hidden)})
-        screen_proposals = ask_proposals(wheel, briefing, "rubric", config.proposals_per_round)
-        proposal = screen_proposals[0]
+        screen_proposals, screen_lineage = ask_round(
+            wheel, lambda extra: stage_briefing(wheel, stage, training, development, protected, extra=extra),
+            optimizer_context(wheel, HypothesisLedger(wheel.db), own, hidden), "rubric", own, training, development,
+            protected)
+        # Every proposal can be gated out (novelty); the stage then keeps the incumbent and shadows what it has.
+        proposal = screen_proposals[0] if screen_proposals else {
+            "rationale": "no proposal passed the operator gates", "rubric": wheel.active.config.rubric}
         with wheel.db:
             wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?",
-                             (_json({"proposal": proposal, "screen_proposals": screen_proposals}), key))
+                             (_json({"proposal": proposal, "screen_proposals": screen_proposals,
+                                     **({"screen_lineage": screen_lineage} if screen_lineage else {})}), key))
     elif proposal is None:
         briefing = stage_briefing(wheel, stage, training, development, protected)
         recorded = next((event for event in reversed(wheel.history(1000))
@@ -212,7 +218,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
     elif screen_proposals is not None and wheel.idea_screening.mode == "shadow":
         from .shadow_evaluation import shadow_stage
-        result = await shadow_stage(wheel, screen_proposals, training, development)
+        result = await shadow_stage(wheel, screen_proposals, training, development, screen_lineage)
     elif screen_proposals is not None:
         from .idea_screening import screening_stage
         result = await screening_stage(wheel, screen_proposals, training, development, protected=protected,

@@ -126,14 +126,17 @@ class HypothesisLedger:
                 out.append({"idea_id": idea_id, **fresh})
         return sorted(out, key=lambda r: (-r["mean"], r["idea_id"]))
 
-    def _idea_text(self, idea_id, width=120):
+    def _idea_payload(self, idea_id):
         try:
             row = self.db.execute("SELECT payload FROM control_ideas WHERE id=?", (idea_id,)).fetchone()
         except Exception:
             row = None
-        if not row:
+        return json.loads(row[0]) if row else None
+
+    def _idea_text(self, idea_id, width=120):
+        idea = self._idea_payload(idea_id)
+        if not idea:
             return ""
-        idea = json.loads(row[0])
         return " ".join(str(idea.get("rationale") or idea.get("proposal") or "").split())[:width]
 
     def _idea_ids(self, context_version=None):
@@ -161,6 +164,10 @@ class HypothesisLedger:
                              broke=pair["lost_items"][:max_item_ids], broke_count=pair["lost"])
             last = (self.verdicts(idea_id) or [None])[-1]
             entry["last_verdict"] = last and {"verdict": last["verdict"], "reason": last["reason"]}
+            idea = self._idea_payload(idea_id) or {}
+            if idea.get("operator"):  # lineage is shown only for ideas that have it
+                entry.update(operator=idea["operator"], parents=[p[:8] for p in idea.get("parents", ())],
+                             outcome=last["verdict"] if last else "untested")
             rows.append(entry)
         rows.sort(key=lambda r: (-r["accuracy"], -r["items_tested"], r["idea_id"]))
         return rows[:limit]
@@ -172,3 +179,130 @@ class HypothesisLedger:
             for item, ok in self._latest(idea_id, exclude_items, context_version).items():
                 per_item.setdefault(item, []).append(ok)
         return sorted(i for i, marks in per_item.items() if len(marks) >= min_ideas and not any(marks))
+
+
+    # -- lineage and operators (Stage 2c) ----------------------------------------------------------------------
+    def lineage(self, idea_id):
+        """The idea's operator, parents, novelty and verdict, then every ancestor reachable through ``parents``
+        (nearest first, each once). Parents that are not stored ideas (the incumbent) appear as bare ids."""
+        def describe(i, depth):
+            idea = self._idea_payload(i) or {}
+            last = (self.verdicts(i) or [None])[-1]
+            return {"idea_id": i, "depth": depth, "operator": idea.get("operator"),
+                    "parents": list(idea.get("parents", ())), "novelty": idea.get("novelty"),
+                    "outcome": last["verdict"] if last else None}
+        root = describe(idea_id, 0)
+        seen, queue, ancestors = {idea_id}, [(p, 1) for p in root["parents"]], []
+        while queue:
+            parent, depth = queue.pop(0)
+            if parent in seen:
+                continue
+            seen.add(parent)
+            row = describe(parent, depth)
+            ancestors.append(row)
+            queue.extend((p, depth + 1) for p in row["parents"])
+        return {**root, "ancestors": ancestors}
+
+    def operator_outcomes(self):
+        """Per operator: ideas proposed, ideas advanced (ever 'advanced' or 'promoted'), ideas promoted, and the mean
+        forward net gain (fixed minus broke versus the incumbent of the time) over ideas whose verdicts recorded one;
+        None when no idea of that operator has such evidence. Ideas without an operator are not counted."""
+        try:
+            rows = self.db.execute("SELECT payload FROM control_ideas ORDER BY id").fetchall()
+        except Exception:
+            return {}
+        out = {}
+        for (payload,) in rows:
+            idea = json.loads(payload)
+            if not idea.get("operator"):
+                continue
+            history = self.verdicts(idea["id"])
+            seen = {v["verdict"] for v in history}
+            nets = [v["evidence"]["net"] for v in history if isinstance(v["evidence"].get("net"), (int, float))]
+            row = out.setdefault(idea["operator"], {"proposed": 0, "advanced": 0, "promoted": 0, "nets": []})
+            row["proposed"] += 1
+            row["advanced"] += bool(seen & {"advanced", "promoted"})
+            row["promoted"] += "promoted" in seen
+            if nets:
+                row["nets"].append(nets[-1])  # the latest recorded look at this idea
+        return {op: {"proposed": r["proposed"], "advanced": r["advanced"], "promoted": r["promoted"],
+                     "mean_forward_net": round(sum(r["nets"]) / len(r["nets"]), 4) if r["nets"] else None}
+                for op, r in sorted(out.items())}
+
+    def _wrong_records(self, ids, exclude_items, context_version):
+        """item -> {label, choices (wrong answers seen)} for items each given idea answered wrongly."""
+        out = {}
+        for idea_id in ids:
+            sql = ("SELECT item_id,label,choice FROM idea_evaluations WHERE idea_id=? AND correct=0"
+                   + (" AND context_version=?" if context_version is not None else "") + " ORDER BY evaluated_at, rowid")
+            args = [idea_id] + ([context_version] if context_version is not None else [])
+            for item, label, choice in self.db.execute(sql, args):
+                if item not in exclude_items:
+                    rec = out.setdefault(item, {"label": label, "choices": []})
+                    rec["choices"].append(choice)
+        return out
+
+    def error_records(self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None,
+                      recent=20):
+        """Stories to aim at: first those every tried idea gets wrong (stubborn), then the incumbent's newest errors.
+        Each row is {item_id, label, choice, kind}; ``choice`` is the wrong answer given."""
+        rows, seen = [], set()
+        stubborn = self.stubborn_items(stubborn_min_ideas, exclude_items, context_version)
+        wrong = self._wrong_records(self._idea_ids(context_version), exclude_items, context_version)
+        for item in stubborn:
+            rec = wrong.get(item)
+            if rec:
+                seen.add(item)
+                rows.append({"item_id": item, "label": rec["label"], "kind": "stubborn",
+                             "choice": max(set(rec["choices"]), key=lambda c: (rec["choices"].count(c), str(c)))})
+        if incumbent_id:
+            sql = ("SELECT item_id,label,choice FROM idea_evaluations WHERE idea_id=? AND correct=0"
+                   + (" AND context_version=?" if context_version is not None else "")
+                   + " ORDER BY evaluated_at DESC, rowid DESC LIMIT ?")
+            args = [incumbent_id] + ([context_version] if context_version is not None else []) + [recent]
+            for item, label, choice in self.db.execute(sql, args):
+                if item not in seen and item not in exclude_items:
+                    seen.add(item)
+                    rows.append({"item_id": item, "label": label, "choice": choice, "kind": "incumbent-error"})
+        return rows
+
+    def complementary_pair(self, *, incumbent_id=None, ids=None, context_version=None, min_items=10, min_fix=2,
+                           skip_ids=frozenset(), exclude_pairs=frozenset()):
+        """The pair of ideas (the incumbent may be one) that fix the most DIFFERENT stories.
+
+        For ideas X and Y on the stories both were scored on: fixes_Y_not_X = Y right and X wrong, fixes_X_not_Y the
+        reverse. A pair qualifies when both are at least ``min_fix`` and at least ``min_items`` stories are shared.
+        Score = min(fixes_X_not_Y, fixes_Y_not_X); higher is better. Ties prefer more members with positive net
+        versus the incumbent on shared stories, then more shared stories, then the lower ids. Returns the pair as a
+        dict (``exclude_pairs`` holds frozensets already combined), or {"skipped": reason} when fewer than two ideas have ``min_items`` stories or no pair qualifies."""
+        pool = {}
+        for idea_id in sorted(set(self._idea_ids(context_version) if ids is None else ids) - set(skip_ids)):
+            got = self._latest(idea_id, context_version=context_version)
+            if len(got) >= min_items:
+                pool[idea_id] = got
+        if len(pool) < 2:
+            return {"skipped": f"fewer than two eligible ideas ({len(pool)} with at least {min_items} evaluated stories)"}
+        base = pool.get(incumbent_id) if incumbent_id else None
+
+        def positive(idea_id):
+            if base is None or idea_id == incumbent_id:
+                return 0
+            shared = set(pool[idea_id]) & set(base)
+            return int(sum(pool[idea_id][i] and not base[i] for i in shared) > sum(base[i] and not pool[idea_id][i] for i in shared))
+        best, best_key = None, None
+        names = sorted(pool)
+        for n, a in enumerate(names):
+            for b in names[n + 1:]:
+                shared = sorted(set(pool[a]) & set(pool[b]))
+                if len(shared) < min_items or frozenset((a, b)) in exclude_pairs:
+                    continue
+                a_not_b = [i for i in shared if pool[a][i] and not pool[b][i]]
+                b_not_a = [i for i in shared if pool[b][i] and not pool[a][i]]
+                if len(a_not_b) < min_fix or len(b_not_a) < min_fix:
+                    continue
+                key = (min(len(a_not_b), len(b_not_a)), positive(a) + positive(b), len(shared))
+                if best_key is None or key > best_key:
+                    best_key = key
+                    best = {"a": a, "b": b, "score": key[0], "shared": len(shared),
+                            "fixes_a_not_b": a_not_b, "fixes_b_not_a": b_not_a}
+        return best or {"skipped": f"no pair where each idea fixes at least {min_fix} stories the other gets wrong"}

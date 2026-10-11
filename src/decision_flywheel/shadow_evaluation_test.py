@@ -228,7 +228,7 @@ def test_a_better_idea_is_promoted_on_forward_evidence_with_a_verdict_and_ledger
     verdicts = ledger.verdicts(better)
     assert [v["verdict"] for v in verdicts] == ["advanced", "promoted"]
     evidence = verdicts[-1]["evidence"]
-    assert evidence["gained"] > evidence["lost"] and evidence["p_value"] < evidence["threshold"] == pytest.approx(.05 / (10 * 3))
+    assert evidence["gained"] > evidence["lost"] and evidence["p_value"] < evidence["threshold"] == pytest.approx(.05 / (10 * IdeaScreeningConfig().shadow_ideas))
     assert evidence["shared"] >= 40 and evidence["looks_allowed"] == 10
     assert shadow_rows(wheel, better)
     events = kinds(wheel)

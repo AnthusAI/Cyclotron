@@ -200,7 +200,7 @@ the run still records `evaluation_context_exposed=true`.
 
 ### Options and defaults
 
-`IdeaScreeningConfig` gains `mode` (`shadow` or `dev_screen`; default `shadow`), `shadow_ideas=3`,
+`IdeaScreeningConfig` gains `mode` (`shadow` or `dev_screen`; default `shadow`), `shadow_ideas` (default 4 since Stage 2c, was 3),
 `shadow_min_items=40`, `shadow_evict_after=30`, `shadow_looks=10`, `max_shadow_calls=3000`. All are validated,
 saved in `runtime_state` and kept on resume. A Stage 2 configuration saved without a mode resumes as `dev_screen`.
 Study flags: `--screening-mode`, `--shadow-ideas`, `--shadow-min-items`, `--shadow-evict-after`, `--shadow-looks`,
@@ -226,6 +226,103 @@ about a third of the time within 400 stories.
 ### Not built
 
 Routing on shadow disagreement (Stage 3) and cross-run idea memory (Stage 4).
+
+## Stage 2c: proposal operators (opt-in with idea screening, shadow mode)
+
+### Why
+
+In the last real run 18 proposed rubrics were scored on forward stories and 16 were evicted with fixed about equal to
+broke; several changed Jev's answers on none of their 30 stories. The optimizer returned timid wording edits of one
+rubric, so shadow evaluation had nothing to find, while a held-out test showed the true labeling rubric (different
+rules: topic-specific rules for sports and animals, "outcome must be established in the text") beats the learned one
+by 6.5 points. The problem was proposal diversity and targeting, not evaluation. Stage 2c changes how ideas are
+asked for. Evaluation, alpha spending and promotion are unchanged.
+
+### The operators
+
+Each idea comes from one operator; the optimizer is told which proposals serve which operator.
+
+* `mutate`: today's multi-proposal request, careful revisions of the incumbent.
+* `bold`: a rubric that differs structurally from the incumbent and prior ideas: different decision rules,
+  topic- or category-specific rules, explicit boundary cases and counter-rules, guidance for both labels.
+* `target`: the optimizer sees a bounded sample of stubborn stories and is asked to fix those failure patterns
+  without breaking what works.
+* `combine`: the optimizer sees two complementary rubrics with their fixed/broke records and merges the winning
+  clauses of each into one rubric.
+
+`IdeaScreeningConfig.proposal_mix` is a validated mapping such as `{"mutate":0,"bold":2,"target":2,"combine":2}`.
+Unset, it means the default: `bold=2, target=2, combine=2` in shadow mode (and nothing in `dev_screen` mode, where a
+mix is rejected and `proposals_per_round` keeps its meaning). In shadow mode the mix total (6 by default) replaces
+`proposals_per_round` for the rubric control; `example_ids` still uses `proposals_per_round`. A mix must have
+`mutate` or `bold` above 0 so a round can always run. `shadow_ideas` now defaults to 4; a larger queue is fine because
+eviction frees slots (and the alpha-spending threshold divides by the number of ideas shadowed at once).
+
+### Optimizer calls per round
+
+One call per round returns every operator's proposals (`propose_operators`; the reply is `{"proposals": [{"operator",
+"rationale", "rubric"}, ...]}`). The reply is parsed strictly: a missing, unknown or unrequested operator, more
+proposals from an operator than were asked for, or an empty list is rejected. Fewer is allowed. The only extra
+calls are novelty retries: if the novelty gate rejects bold proposals, up to `novelty_retries` (default 1) more calls
+re-ask for just the rejected number. A round with no rejection is exactly one call. Optimizers without
+`propose_operators` (custom ones) get the plain multi-proposal request sized to the mix total, with a
+`proposal-operator-skipped` event (operator `all`).
+
+### Caps on what is sent
+
+At most `target_sample` stories (default 8, at most 20), each excerpt 400 characters and each title 160; two parent
+rubrics of at most 4000 characters, with at most 8 story ids each; plus the existing digest caps (20 prior ideas, 10
+ledger rows, 5 ids per row, 20 stubborn ids). The operator block is therefore a few kilobytes on top of the usual
+briefing.
+
+### Novelty gate (bold)
+
+Distance is `1 - Jaccard` over lowercased word 3-shingles (a text with fewer than 3 words uses single words).
+0 is identical and 1 shares nothing. A proposal's novelty is its smallest distance to the incumbent rubric and every
+prior rubric idea (and the earlier proposals of the same reply). A bold proposal below `min_novelty` (default 0.35)
+is rejected (`proposal-novelty-rejected`), re-asked within the retry bound, and dropped with a
+`proposal-operator-skipped` event if it still fails. Other operators store the number but are not gated. The measure
+sees surface overlap, not meaning: it catches copies and light edits, and a pure paraphrase passes.
+
+### The target sample
+
+Candidates are stories every tried idea got wrong (`HypothesisLedger.stubborn_items`, minimum 3 ideas, across
+forward and development evidence) and then the incumbent's newest errors. Only training-role stories can be shown:
+their text, label and human explanation were already revealed to the optimizer. Development and protected stories,
+and any story whose text equals one, are never shown, and neither is a story the runtime has no revealed text for.
+Candidates are grouped by error direction (true label, wrong answer) and taken in turn across groups, stubborn
+first, so the sample is balanced. Each story carries title, excerpt, true label, the wrong answer, and the
+explanation. With no such story yet, the operator is skipped with an event.
+
+### The complementary pair (combine)
+
+For ideas X and Y on the stories both were scored on (forward evidence): `fixes_Y_not_X` is Y right and X wrong,
+`fixes_X_not_Y` the reverse. A pair qualifies when both are at least 2 and they share at least 10 stories. The score
+is the smaller of the two; the best score wins. Ties prefer more members with positive net versus the incumbent,
+then more shared stories, then the lower ids. The incumbent may be one member. Pairs already combined are not
+chosen again. With fewer than two ideas that have 10 evaluated stories, or no qualifying pair, combine is skipped:
+a `proposal-operator-skipped` event with the reason, and nothing is redistributed to the other operators. Both
+parents are recorded.
+
+### Lineage
+
+Each idea in `control_ideas` may carry `operator`, `parents` (idea ids; the incumbent appears as its
+`incumbent-...` id) and `novelty`. Older ideas lack them, and readers treat that as normal. Creating an idea emits the
+usual `hypothesis-discovered` plus `proposal-operator {idea_id, operator, parents, novelty}`.
+`summary_for_optimizer` and the shadow digest show `operator`, short `parents` and `outcome` (the last verdict, or
+`untested`), and the digest adds `operator_outcomes` once any idea has an operator.
+`HypothesisLedger.operator_outcomes()` returns per operator: proposed, advanced (ever advanced or promoted),
+promoted, and mean forward net gain (the latest recorded net per idea, `None` when none). `lineage(idea_id)` returns
+the idea and its ancestors, nearest first.
+
+### Options and flags
+
+`proposal_mix`, `min_novelty=0.35`, `target_sample=8`, `novelty_retries=1`, all validated and saved with the rest of the
+config. Study flags: `--proposal-mix bold=2,target=2,combine=2`, `--min-novelty`, `--target-sample`; recorded in
+`protocol.json` through `as_json`. Unset flags leave the defaults. `--shadow-ideas` now defaults to 4.
+
+### Not built
+
+Clause-level splitting of rubrics and cross-run idea memory.
 
 ## Still not built
 

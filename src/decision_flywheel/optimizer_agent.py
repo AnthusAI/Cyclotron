@@ -109,6 +109,32 @@ Do not request audit or held-out data. Retrieval and text filtering are deferred
 """
 
 
+OPERATOR_INSTRUCTIONS = {
+    "mutate": "mutate: a careful revision of the incumbent rubric along one axis (strictness, wording of a rule, an added "
+              "example). Distinct from the other mutate proposals.",
+    "bold": "bold: write a rubric that differs STRUCTURALLY from the incumbent and from every prior idea: different "
+            "decision rules, topic- or category-specific rules, explicit boundary cases and counter-rules, guidance for "
+            "BOTH labels. Do not reword the incumbent; code measures text distance and rejects proposals that are "
+            "too close to it or to a prior idea.",
+    "target": "target: operator_requests.target.stories lists revealed past stories the tried ideas keep getting wrong, "
+              "with the true label and the human explanation, grouped by error direction. Write a rubric that fixes "
+              "these named failure patterns without breaking what already works (the incumbent's other behavior).",
+    "combine": "combine: operator_requests.combine.parents holds two rubrics with the stories each fixes that the other "
+               "does not. Merge the winning clauses of both into ONE rubric that keeps what each gets right.",
+}
+
+
+def operator_prompt(requests):
+    lines = ["\nThis call asks for proposals from several OPERATORS, listed in operator_requests with the number of "
+             "proposals wanted from each (count). Return one JSON object {\"proposals\": [...]}. Every proposal is an "
+             "object with operator (one of the requested names), rationale and rubric. Return at most count proposals "
+             "per operator; fewer is allowed. Duplicates are rejected. Operators:"]
+    lines += [f"- {OPERATOR_INSTRUCTIONS[op]}" for op in sorted(requests)]
+    lines.append("hypothesis_ledger shows prior ideas with their operator, parents and outcome (operator_outcomes "
+                 "summarizes which operators produced ideas that advanced); learn from it.")
+    return "\n".join(lines)
+
+
 class OptimizerAgent:
     """Inject a completion callable; explicit application setup owns live clients."""
 
@@ -129,8 +155,13 @@ class OptimizerAgent:
                              "supporting classification questions inferred from the feedback, not another final decision. "
                              "If you have no useful idea, return the existing value and explain why. "
                              "Prior rejected ideas may be reconsidered with more evidence.")
+            operators = briefing.payload.get("current", {}).get("operator_requests")
             wanted = briefing.payload.get("current", {}).get("proposals_requested")
-            if wanted is not None:
+            if operators:
+                if control != "rubric":
+                    raise ValueError("proposal operators apply to the rubric control only")
+                instructions += operator_prompt(operators)
+            elif wanted is not None:
                 instructions += (f"\nReturn one JSON object {{\"proposals\": [...]}} holding {wanted} DISTINCT proposals, "
                                  f"each an object with rationale and {control}. Make them differ along different axes "
                                  "(for a rubric: strictness, topic-specific rules, positive and negative examples of the "
@@ -182,6 +213,34 @@ class OptimizerAgent:
         """Several proposals from one call; briefing.current.proposals_requested is the ceiling."""
         return parse_proposals(self._reply_content(briefing), briefing.payload["current"]["proposals_requested"])
 
+    def propose_operators(self, briefing: FeedbackBriefing) -> list[dict]:
+        """One call, proposals labeled by operator; briefing.current.operator_requests holds {operator: {count, ...}}."""
+        requested = {op: spec["count"] for op, spec in briefing.payload["current"]["operator_requests"].items()}
+        return parse_operator_proposals(self._reply_content(briefing), requested)
+
+
+def parse_operator_proposals(content, requested: Mapping[str, int]) -> list[dict]:
+    """Strict shape check of {"proposals": [{"operator": name, ...}, ...]}: every proposal names a requested operator
+    (missing or unknown names are rejected), no operator exceeds its count, and there is at least one proposal."""
+    try:
+        reply = json.loads(content)
+    except (TypeError, json.JSONDecodeError):
+        raise ValueError("optimizer reply must be a JSON object") from None
+    proposals = reply.get("proposals") if isinstance(reply, dict) and set(reply) == {"proposals"} else None
+    total = sum(requested.values())
+    if not isinstance(proposals, list) or not 1 <= len(proposals) <= total or \
+            any(not isinstance(p, dict) for p in proposals):
+        raise ValueError(f"optimizer reply must be {{\"proposals\": [1 to {total} objects]}}")
+    used = {}
+    for proposal in proposals:
+        operator = proposal.get("operator")
+        if not isinstance(operator, str) or requested.get(operator, 0) < 1:
+            raise ValueError("each proposal must name a requested operator: " + ", ".join(sorted(k for k, v in requested.items() if v)))
+        used[operator] = used.get(operator, 0) + 1
+        if used[operator] > requested[operator]:
+            raise ValueError(f"operator {operator} returned more than the {requested[operator]} proposals requested")
+    return proposals
+
 
 def parse_proposals(content, count: int) -> list[dict]:
     """Strict shape check of a multi-proposal reply: {"proposals": [object, ...]} with 1..count objects."""
@@ -219,4 +278,7 @@ class DisabledOptimizer:
         raise self._disabled()
 
     def propose_many(self, briefing: FeedbackBriefing) -> list[dict]:
+        raise self._disabled()
+
+    def propose_operators(self, briefing: FeedbackBriefing) -> list[dict]:
         raise self._disabled()
