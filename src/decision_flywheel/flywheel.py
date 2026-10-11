@@ -125,7 +125,8 @@ class DecisionFlywheel:
                  max_requests: int = 100, max_request_bytes: int = 32000, calibration_method: str = 'auto',
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
                  training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
-                 cache_options=None, context_validation_floor: int = 20, evaluation_policy=None, selection_policy=None):
+                 cache_options=None, context_validation_floor: int = 20, evaluation_policy=None, selection_policy=None,
+                 idea_screening=None):
         from .selection_policy import SelectionPolicy
         if selection_policy is not None and not isinstance(selection_policy, SelectionPolicy):
             raise ValueError('selection_policy must be SelectionPolicy')
@@ -213,6 +214,33 @@ class DecisionFlywheel:
                     self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('selection_policy', ?)", (encoded,))
                 self._emit({'kind':'selection-policy-configured', 'selection_policy':asdict(self.selection_policy),
                             'previous':json.loads(saved_policy[0]) if saved_policy else None})
+
+        from .idea_screening import IdeaScreeningConfig
+        if idea_screening is not None and not isinstance(idea_screening, IdeaScreeningConfig):
+            raise ValueError('idea_screening must be IdeaScreeningConfig')
+        saved_screening = self.db.execute("SELECT value FROM runtime_state WHERE key='idea_screening'").fetchone()
+        self.idea_screening = idea_screening or (IdeaScreeningConfig.from_json(json.loads(saved_screening[0]))
+                                                 if saved_screening else IdeaScreeningConfig())
+        self._screening_unsupported_logged = False
+        if idea_screening is not None:
+            encoded = _json(idea_screening.as_json())
+            if not saved_screening or saved_screening[0] != encoded:
+                with self.db:
+                    self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('idea_screening', ?)", (encoded,))
+                self._emit({'kind': 'idea-screening-configured', 'idea_screening': idea_screening.as_json(),
+                            'previous': json.loads(saved_screening[0]) if saved_screening else None})
+
+    def screening_enabled(self):
+        """Opt-in idea screening, supported only when accuracy is the primary objective (else legacy path)."""
+        if not self.idea_screening.enabled:
+            return False
+        if self.selection_policy is not None and self.selection_policy.primary != 'accuracy':
+            if not self._screening_unsupported_logged:
+                self._screening_unsupported_logged = True
+                from .idea_screening import _wrong_objective_event
+                _wrong_objective_event(self)
+            return False
+        return True
 
     def close(self):
         self.optimizer.observer = self.optimizer_observer

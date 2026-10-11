@@ -7,6 +7,7 @@ from .flywheel import _hash, _json, track_answer_dependencies
 from .optimizer_agent import FeedbackBriefing
 from .question_measurement import measure_questions
 from .candidate_fitting import fit_candidate
+from .control_scheduler import ControlScheduler
 
 
 def _example_experiments(wheel, training, development):
@@ -26,7 +27,7 @@ def _example_experiments(wheel, training, development):
     return reports
 
 
-def stage_briefing(wheel, stage, training, development, protected):
+def stage_briefing(wheel, stage, training, development, protected, extra=None):
     control = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}.get(stage)
     if control is None:
         raise ValueError("this stage has no optimizer request")
@@ -36,7 +37,7 @@ def stage_briefing(wheel, stage, training, development, protected):
                  "allowed_proposal_controls": [control, "dynamic_elements"] if stage == "questions" else [control],
                  "selection_policy":asdict(wheel.selection_policy) if wheel.selection_policy else None,
                  "stage": stage, "request_budget_bytes": wheel.max_request_bytes,
-                 **({'example_experiments':measurements} if stage=='examples' else {})},
+                 **({'example_experiments':measurements} if stage=='examples' else {}), **(extra or {})},
         protected=tuple(row.item for row in development)+tuple(protected),
         human_explanations=wheel.optimizer_context["human_explanations"])
 
@@ -70,6 +71,10 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         return result
     wheel.reconcile_feedback(training, development=development)
     wheel.reconcile_model_context(training)
+    screening = stage == 'rubric' and wheel.screening_enabled()
+    if screening:
+        # The optimizer is shown development item ids (what each idea fixed or broke): record the exposure.
+        wheel.set_optimizer_context(wheel.optimizer_context['human_explanations'], evaluation_context_exposed=True)
     if stage=='examples' and _example_experiments(wheel,training,development):
         wheel.set_optimizer_context(wheel.optimizer_context['human_explanations'],evaluation_context_exposed=True)
     key_data = {"stage": stage, "context": wheel.active.config.fingerprint,
@@ -90,6 +95,8 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     if predictions:
         key_data["initial_answers"] = predictions
     key_data["train_after_questions"] = train_after_questions
+    if screening:
+        key_data["idea_screening"] = wheel.idea_screening.as_json()
     if stage=='examples':key_data['max_example_trials']=max_example_trials
     key = _hash(key_data)
     wheel.db.execute("CREATE TABLE IF NOT EXISTS optimization_stages (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
@@ -122,7 +129,27 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'pending', ?)",
                          (key, _json({"proposal": proposal})))
     wheel._emit({"kind": "optimization-stage-started", "stage": stage, "context_version": wheel.active.config.fingerprint})
-    if proposal is None:
+    use_screening = (screening and wheel.active.config.rubric.strip() and wheel.active.validation_status != 'provisional'
+                     and bool(development) and min(sum(row.label == label for row in development)
+                                                   for label in wheel.initial.task.labels) >= min_development_per_class)
+    screen_proposals = (json.loads(saved[1]).get("screen_proposals") if saved and saved[1] and proposal is not None
+                        and use_screening else None)
+    if proposal is None and use_screening:
+        from .idea_screening import ask_proposals, optimizer_context, reserve_member
+        from .hypothesis_ledger import HypothesisLedger
+        config = wheel.idea_screening
+        own = [idea for idea in ControlScheduler(wheel).ideas() if idea["control"] == "rubric"]
+        salt = f"{wheel.initial.task.fingerprint}:idea-screening"
+        hidden = {r.item.id for r in development if reserve_member(salt, r.item.id, config.reserve_fraction)}
+        briefing = stage_briefing(wheel, stage, training, development, protected,
+                                  extra={"proposals_requested": config.proposals_per_round,
+                                         **optimizer_context(wheel, HypothesisLedger(wheel.db), own, hidden)})
+        screen_proposals = ask_proposals(wheel, briefing, "rubric", config.proposals_per_round)
+        proposal = screen_proposals[0]
+        with wheel.db:
+            wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?",
+                             (_json({"proposal": proposal, "screen_proposals": screen_proposals}), key))
+    elif proposal is None:
         briefing = stage_briefing(wheel, stage, training, development, protected)
         recorded = next((event for event in reversed(wheel.history(1000))
                          if event["kind"] == "optimizer-response" and
@@ -183,6 +210,11 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             result["classifier_training"] = await train_classifier(wheel, training, development,
                 protected=protected, propensities=propensities,
                 min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
+    elif screen_proposals is not None:
+        from .idea_screening import screening_stage
+        result = await screening_stage(wheel, screen_proposals, training, development, protected=protected,
+                                       propensities=propensities, evaluation_time=datetime.now(timezone.utc),
+                                       retry_interrupted=retry_interrupted)
     elif stage=='examples' and wheel.active.config.example_ids:
         from .example_attribution import measure_example_swaps
         by_id={row.item.id:row for row in training}

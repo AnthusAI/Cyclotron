@@ -77,11 +77,11 @@ class HypothesisLedger:
                 self.db.execute("SELECT at,verdict,reason,evidence FROM idea_verdicts WHERE idea_id=? ORDER BY rowid",
                                 (idea_id,))]
 
-    def _latest(self, idea_id):
-        """item_id -> correct, newest evaluation per item (across context versions)."""
+    def _latest(self, idea_id, exclude=frozenset()):
+        """item_id -> correct, newest evaluation per item (across context versions), minus ``exclude``."""
         rows = self.db.execute("SELECT item_id,correct FROM idea_evaluations WHERE idea_id=? "
                                "ORDER BY evaluated_at, rowid", (idea_id,))
-        return {item: bool(c) for item, c in rows}
+        return {item: bool(c) for item, c in rows if item not in exclude}
 
     def items_evaluated(self, idea_id):
         return frozenset(self._latest(idea_id))
@@ -91,9 +91,9 @@ class HypothesisLedger:
         got = self._latest(idea_id)
         return [got.get(str(i)) for i in item_ids]
 
-    def paired_comparison(self, a_idea, b_idea):
+    def paired_comparison(self, a_idea, b_idea, exclude=frozenset()):
         """Candidate a versus b on shared items: gained = a right and b wrong; lost = the reverse."""
-        a, b = self._latest(a_idea), self._latest(b_idea)
+        a, b = self._latest(a_idea, exclude), self._latest(b_idea, exclude)
         shared = sorted(set(a) & set(b))
         gained = [i for i in shared if a[i] and not b[i]]
         lost = [i for i in shared if b[i] and not a[i]]
@@ -133,16 +133,19 @@ class HypothesisLedger:
         idea = json.loads(row[0])
         return " ".join(str(idea.get("rationale") or idea.get("proposal") or "").split())[:width]
 
-    def summary_for_optimizer(self, *, limit=10, incumbent_id=None, max_item_ids=5):
-        """Compact deterministic digest, best accuracy first. Item-id lists are capped and sorted."""
+    def summary_for_optimizer(self, *, limit=10, incumbent_id=None, max_item_ids=5, exclude_items=frozenset()):
+        """Compact deterministic digest, best accuracy first. Item-id lists are capped and sorted.
+        ``exclude_items`` hides items (for example a held-out reserve) from every count and list."""
         ids = sorted({i for (i,) in self.db.execute("SELECT DISTINCT idea_id FROM idea_evaluations")} - {incumbent_id})
         rows = []
         for idea_id in ids:
-            got = self._latest(idea_id)
+            got = self._latest(idea_id, exclude_items)
+            if not got:
+                continue
             entry = {"idea_id": idea_id, "text": self._idea_text(idea_id), "items_tested": len(got),
                      "accuracy": round(sum(got.values()) / len(got), 4)}
             if incumbent_id:
-                pair = self.paired_comparison(idea_id, incumbent_id)
+                pair = self.paired_comparison(idea_id, incumbent_id, exclude_items)
                 entry.update(fixed=pair["gained_items"][:max_item_ids], fixed_count=pair["gained"],
                              broke=pair["lost_items"][:max_item_ids], broke_count=pair["lost"])
             last = (self.verdicts(idea_id) or [None])[-1]
@@ -151,10 +154,10 @@ class HypothesisLedger:
         rows.sort(key=lambda r: (-r["accuracy"], -r["items_tested"], r["idea_id"]))
         return rows[:limit]
 
-    def stubborn_items(self, min_ideas=3):
+    def stubborn_items(self, min_ideas=3, exclude_items=frozenset()):
         """Items evaluated by at least ``min_ideas`` ideas that every one of them got wrong."""
         per_item = {}
         for (idea_id,) in self.db.execute("SELECT DISTINCT idea_id FROM idea_evaluations").fetchall():
-            for item, ok in self._latest(idea_id).items():
+            for item, ok in self._latest(idea_id, exclude_items).items():
                 per_item.setdefault(item, []).append(ok)
         return sorted(i for i, marks in per_item.items() if len(marks) >= min_ideas and not any(marks))

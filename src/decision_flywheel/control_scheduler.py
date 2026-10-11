@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from .flywheel import _hash, _json
 from .optimizer_agent import FeedbackBriefing
 from .feature_bank import FeatureBank
+from .hypothesis_ledger import HypothesisLedger
+from .idea_screening import (SCREENED_CONTROLS, ask_proposals, candidate_set, optimizer_context, reserve_member,
+                             screen_round)
 
 
 CONTROLS = ("rubric", "example_ids", "tasks")
@@ -68,6 +71,101 @@ class ControlScheduler:
         with self.wheel.db:
             self.wheel.db.execute("INSERT OR REPLACE INTO control_ideas VALUES (?,?)", (idea["id"], _json(idea)))
 
+    def admit_proposals(self, control, proposals, training, cycle):
+        """Save each distinct, changing proposal as a control idea and announce it."""
+        wheel = self.wheel
+        for proposal in proposals:
+            candidate = wheel.active.config.apply(proposal, training)
+            if candidate.briefing_state()[control] == wheel.active.config.briefing_state()[control]:
+                wheel._emit({"kind": "discovery-no-change", "control": control,
+                             "rationale": proposal.get("rationale", "")})
+                continue
+            partial = {control: proposal[control]}
+            idea_id = _hash({"control": control, "proposal": partial})
+            if not any(idea["id"] == idea_id for idea in self.ideas()):
+                self.save({"id": idea_id, "control": control, "proposal": partial,
+                           "rationale": proposal.get("rationale", ""), "attempts": [], "last_cycle": 0,
+                           "created_cycle": cycle, "source": "multi-proposal discovery"})
+                wheel._emit({"kind": "hypothesis-discovered", "idea_id": idea_id, "control": control,
+                             "proposal": partial, "rationale": proposal.get("rationale", "")})
+
+    async def _screen_control(self, control, training, development, protected, propensities, retry_interrupted, *,
+                              key, cycle, baseline, counts, results, discovered, completed, checkpoint,
+                              evaluation_time, winners):
+        """Idea-screening round for one control: several proposals, one screen, one confirmation, then a
+        fitted trial for the best cleared finalist (promotion stays the cycle's single best-eligible step)."""
+        wheel, config = self.wheel, self.wheel.idea_screening
+        ledger = HypothesisLedger(wheel.db)
+        own = [idea for idea in self.ideas() if idea["control"] == control]
+        salt = f"{wheel.initial.task.fingerprint}:idea-screening"
+        reserve_ids = {r.item.id for r in development if reserve_member(salt, r.item.id, config.reserve_fraction)}
+        if control not in discovered:
+            briefing = FeedbackBriefing.build(wheel.initial.task, training,
+                current={**wheel.active.config.briefing_state(), "control_under_test": control,
+                         "request_budget_bytes": wheel.max_request_bytes,
+                         "proposals_requested": config.proposals_per_round,
+                         **optimizer_context(wheel, ledger, own, reserve_ids)},
+                protected=tuple(row.item for row in development)+tuple(protected),
+                human_explanations=wheel.optimizer_context["human_explanations"])
+            self.admit_proposals(control, ask_proposals(wheel, briefing, control, config.proposals_per_round),
+                                 training, cycle)
+            discovered.add(control)
+            checkpoint()
+        ideas = [idea for idea in self.ideas() if idea["control"] == control]
+
+        def valid(idea):
+            try:
+                changed = wheel.active.config.apply(idea["proposal"], training).briefing_state()[control]
+            except ValueError:
+                wheel._emit({"kind": "control-trial-deferred", "idea_id": idea["id"], "control": control,
+                             "reason": "idea references currently ineligible examples"})
+                return False
+            return changed != wheel.active.config.briefing_state()[control]
+        new = [idea for idea in ideas if idea.get("created_cycle") == cycle]
+        # Ideas that never got a turn (over the candidate cap earlier, or imported) queue behind this cycle's.
+        new += [idea for idea in ideas if idea not in new and not idea["last_cycle"] and not ledger.verdicts(idea["id"])]
+        candidates = candidate_set(new, ledger, cycle, config, ideas, valid)
+        now = evaluation_time
+        report = await screen_round(wheel, control, candidates, ideas, training, development, protected=protected,
+                                    cycle=cycle, now=now, config=config, proposal_of=lambda idea: idea["proposal"])
+        wheel._emit({"kind": "idea-screening-completed", **{k: v for k, v in report.items() if k != "stages"},
+                     "stage_count": len(report["stages"])})
+        if report["truncated"]:
+            wheel._emit({"kind": "control-trial-deferred", "control": control, "reason": "session request budget"})
+        by_id = {idea["id"]: idea for idea in ideas}
+        for name in report["cleared"][:config.finalists]:
+            idea = by_id[name]
+            if wheel.max_requests-wheel.requests < len(training)+2*len(development):
+                wheel._emit({"kind": "control-trial-deferred", "control": control, "idea_id": name,
+                             "reason": "session request budget"})
+                break
+            wheel._emit({"kind": "control-trial-started", "control": control, "idea_id": name,
+                         "feature_id": None, "proposal": idea["proposal"], "baseline_version": baseline,
+                         "training_count": len(training), "previous_attempts": len(idea["attempts"]),
+                         "selection_reason": "idea cleared the reserve confirmation"})
+            result = await wheel.improve(training, development, protected=protected, propensities=propensities,
+                                         candidate_proposal=idea["proposal"], apply_promotion=False,
+                                         retry_interrupted=retry_interrupted, evaluation_time=evaluation_time)
+            idea["attempts"].append({"feedback_fingerprint": key, "training_count": len(training),
+                                     "by_label": counts, "result": result})
+            idea["last_cycle"] = cycle
+            self.save(idea)
+            results.append({"control": control, "idea_id": name, "feature_id": None, **result})
+            checkpoint()
+            wheel._emit({"kind": "control-trial-completed", "control": control, "idea_id": name, **result})
+            if wheel.active.fingerprint != baseline:
+                raise RuntimeError("isolated trials must retain one shared incumbent")
+            if result.get("improved"):
+                winners[result["trial_fingerprint"]] = (name, report["paired"][name])
+                break
+        for name in report["candidates"]:
+            idea = by_id[name]
+            if not any(a["feedback_fingerprint"] == key for a in idea["attempts"]):
+                idea["last_cycle"] = cycle
+                self.save(idea)
+        completed.add(control)
+        checkpoint()
+
     async def run(self, training, development, *, protected, propensities, retry_interrupted=False,
                   max_feature_trials=3):
         if isinstance(max_feature_trials, bool) or not isinstance(max_feature_trials, int) or max_feature_trials < 1:
@@ -75,13 +173,18 @@ class ControlScheduler:
         wheel = self.wheel
         wheel._validate_partitions(training, development, protected, propensities)
         wheel.reconcile_feedback(training, development=development)
+        screening = wheel.screening_enabled()
+        if screening:
+            # The optimizer is shown development item ids (what each idea fixed or broke): record the exposure.
+            wheel.set_optimizer_context(wheel.optimizer_context["human_explanations"], evaluation_context_exposed=True)
         evidence = {"training": wheel._evidence(training), "development": wheel._evidence(development),
                     "optimizer_context": wheel.optimizer_context,
                     "propensities": propensities, "protected": sorted(row.id for row in protected),
                     "evaluation_weighting": wheel.evaluation_weighting,
                     "training_class_weighting": wheel.training_class_weighting,
                     "coverage": wheel.min_evaluation_per_class,
-                    "scheduler_version": "individual-features-v1", "max_feature_trials": max_feature_trials}
+                    "scheduler_version": "individual-features-v1", "max_feature_trials": max_feature_trials,
+                    **({"idea_screening": wheel.idea_screening.as_json()} if screening else {})}
         key = _hash(evidence)
         saved = wheel.db.execute("SELECT status,payload FROM control_cycles WHERE id=?", (key,)).fetchone()
         if saved and saved[0] == "complete":
@@ -114,9 +217,16 @@ class ControlScheduler:
                                   "evaluation_time": evaluation_time.isoformat()})))
         checkpoint()
         cycle = wheel.db.execute("SELECT count(*) FROM control_cycles").fetchone()[0]
+        winners = {}
         try:
             for control in CONTROLS:
                 if control in completed:
+                    continue
+                if screening and control in SCREENED_CONTROLS:
+                    await self._screen_control(control, training, development, protected, propensities, retry_interrupted,
+                                               key=key, cycle=cycle, baseline=baseline, counts=counts, results=results,
+                                               discovered=discovered, completed=completed, checkpoint=checkpoint,
+                                               evaluation_time=evaluation_time, winners=winners)
                     continue
                 briefing = FeedbackBriefing.build(wheel.initial.task, training,
                     current={**wheel.active.config.briefing_state(), "control_under_test": control,
@@ -218,6 +328,11 @@ class ControlScheduler:
                 best = min(eligible, key=lambda result: (result["candidate"][metric], result["idea_id"])) if eligible else None
             if best:
                 wheel.promote_trial(best["trial_fingerprint"], training, development)
+                if best["trial_fingerprint"] in winners:
+                    idea_id, stats = winners[best["trial_fingerprint"]]
+                    HypothesisLedger(wheel.db).record_verdict(idea_id, "promoted",
+                        f"cleared the reserve gate and improved the fitted development trial; fixed {stats['gained']} "
+                        f"and broke {stats['lost']} reserve items (Holm-adjusted p={stats['p_adjusted']:.3f})", stats)
             result = {"promoted": best is not None, "trials": results, "baseline_version": baseline,
                       "selected_control": best["control"] if best else None,
                       "reason": "best isolated candidate improved" if best else "no isolated candidate qualified"}

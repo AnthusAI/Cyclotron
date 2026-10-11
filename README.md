@@ -56,7 +56,7 @@ To enable structural optimization, inject an `OptimizerAgent` with an
 application-owned completion callable. The core remains provider-neutral. The
 adapter, storage choice, and event consumer are application decisions.
 
-Design for keeping and screening many ideas at once: [docs/hypothesis-portfolio.md](docs/hypothesis-portfolio.md).
+Design for keeping and screening many ideas at once, with the opt-in `idea_screening` option (off by default) that screens several rubric ideas per round: [docs/hypothesis-portfolio.md](docs/hypothesis-portfolio.md).
 
 ## Embed a cyclotron in an application
 
