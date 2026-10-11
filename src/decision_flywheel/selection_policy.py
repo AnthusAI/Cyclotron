@@ -13,6 +13,7 @@ class SelectionPolicy:
     aggregation: str = 'positive'
     max_secondary_regression: float = 0.
     minimum_secondary: float | None = None
+    provisional_rate_allowance: float | None = None  # caps the provisional acceptance allowance for rate objectives; None keeps the existing Brier-scaled behavior
 
     def __post_init__(self):
         if self.primary not in METRICS or (self.secondary is not None and self.secondary not in METRICS):
@@ -28,6 +29,10 @@ class SelectionPolicy:
             if value is not None and (isinstance(value, bool) or not isinstance(value, (float, int))
                                       or not math.isfinite(value) or value < 0):
                 raise ValueError('selection bounds must be finite and nonnegative')
+        value = self.provisional_rate_allowance
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (float, int))
+                                  or not math.isfinite(value) or value < 0):
+            raise ValueError('provisional rate allowance must be finite and nonnegative')
         if self.minimum_secondary is not None and self.secondary is None:
             raise ValueError('secondary floor requires a secondary objective')
         if self.minimum_secondary is not None and (self.secondary in ('brier', 'balanced_brier') or self.minimum_secondary > 1):

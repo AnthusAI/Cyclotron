@@ -238,6 +238,12 @@ Accuracy is the default objective. The others are recall, precision, f1, balance
 brier. Precision, recall and F1 are for the positive class. A secondary guard can limit how far a second metric
 may fall when a candidate is promoted. With any objective other than accuracy, idea screening does not run.
 
+By default, while the first rubric is still provisional, the engine accepts a rubric change if the objective falls by
+no more than half the Brier allowance (2.0, decaying). For a rate objective that is about 1.0, more than the whole 0 to
+1 range, so every proposal is accepted and the objective does not steer. The study script's
+`--provisional-rate-allowance` (a `SelectionPolicy` field) caps that allowance. It is off by default; 0 allows no
+regression.
+
 What we saw on the 1,200-item corpus (Jev, gpt-4.1-mini, cycles 401 to 1,200, one run per arm):
 
 | Goal | Accuracy | Publish precision | Publish recall |

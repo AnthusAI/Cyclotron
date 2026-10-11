@@ -10,6 +10,14 @@ from .candidate_fitting import fit_candidate
 from .control_scheduler import ControlScheduler
 
 
+def provisional_primary_allowance(policy, allowance):
+    """Primary-metric allowance for provisional acceptance; rate objectives may be capped by the policy."""
+    if policy.primary in ('brier', 'balanced_brier'):
+        return allowance
+    cap = policy.provisional_rate_allowance
+    return allowance / 2 if cap is None else min(allowance / 2, cap)
+
+
 def _example_experiments(wheel, training, development):
     if not wheel.db.execute("SELECT name FROM sqlite_master WHERE name='example_measurements'").fetchone():return []
     current_train=wheel._evidence(training);current_dev=wheel._evidence(development)
@@ -284,7 +292,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             selection = None
             if measurements and wheel.selection_policy:
                 selection = wheel.selection_policy.compare(measurements['incumbent'], measurements['candidate'],
-                    primary_allowance=allowance if wheel.selection_policy.primary in ('brier','balanced_brier') else allowance / 2)
+                    primary_allowance=provisional_primary_allowance(wheel.selection_policy, allowance))
                 accepted = selection['provisional_eligible']
             if accepted:
                 wheel._activate(candidate)
