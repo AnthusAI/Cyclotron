@@ -13,8 +13,14 @@ from typing import Iterable, Mapping
 CALLS = {"decision-response": "decision_model", "optimizer-response": "optimizer"}
 
 
-def _empty():
-    return {"requests": 0, "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+TIER_KEYS = ("tier_requests", "tier_input_tokens", "tier_cached_input_tokens", "tier_output_tokens")
+
+
+def _empty(tiered=False):
+    counts = {"requests": 0, "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+    if tiered:
+        counts.update({key: 0 for key in TIER_KEYS})
+    return counts
 
 
 def _usage(usage) -> tuple[int, int, int]:
@@ -28,9 +34,17 @@ def _usage(usage) -> tuple[int, int, int]:
 def cost_usd(counts: Mapping[str, int], price: Mapping[str, float]) -> float:
     """List-price cost of one model's counts; price is USD per million tokens."""
     cached_rate = price.get("cached_input_usd_per_mtok", price["input_usd_per_mtok"])
-    uncached = counts["input_tokens"] - counts["cached_input_tokens"]
-    return (uncached * price["input_usd_per_mtok"] + counts["cached_input_tokens"] * cached_rate
-            + counts["output_tokens"] * price["output_usd_per_mtok"]) / 1e6
+    # Requests whose input exceeded the price's ``above_input_tokens`` are billed whole at the above-tier rates
+    # (counted separately in the ``tier_*`` fields); the cached rate is the same in both tiers.
+    tier = {key: counts.get(key, 0) for key in TIER_KEYS}
+    uncached = counts["input_tokens"] - counts["cached_input_tokens"] - (tier["tier_input_tokens"] - tier["tier_cached_input_tokens"])
+    cached = counts["cached_input_tokens"] - tier["tier_cached_input_tokens"]
+    output = counts["output_tokens"] - tier["tier_output_tokens"]
+    total = uncached * price["input_usd_per_mtok"] + cached * cached_rate + output * price["output_usd_per_mtok"]
+    if tier["tier_requests"]:
+        total += ((tier["tier_input_tokens"] - tier["tier_cached_input_tokens"]) * price["above_input_usd_per_mtok"]
+                  + tier["tier_cached_input_tokens"] * cached_rate + tier["tier_output_tokens"] * price["above_output_usd_per_mtok"])
+    return total / 1e6
 
 
 def _block(models, prices, start=None, end=None):
@@ -54,14 +68,15 @@ def usage_by_window(events: Iterable[Mapping], prices: Mapping[str, Mapping[str,
         raise ValueError("window must be a positive integer")
     if set(prices) != set(CALLS.values()):
         raise ValueError("prices must give decision_model and optimizer list prices")
+    tiered = {name: "above_input_tokens" in prices[name] for name in CALLS.values()}
     windows: dict[int, dict] = {}
-    total = {name: _empty() for name in CALLS.values()}
+    total = {name: _empty(tiered[name]) for name in CALLS.values()}
     first = last = None
     for event in events:
         kind, number = event.get("kind"), event.get("cycle_number")
         slot = None
         if isinstance(number, int) and number >= 1:
-            slot = windows.setdefault((number - 1) // window, {"models": {name: _empty() for name in CALLS.values()},
+            slot = windows.setdefault((number - 1) // window, {"models": {name: _empty(tiered[name]) for name in CALLS.values()},
                                                                 "start": None, "end": None, "cycles": 0})
         if kind == "cycle-started" and slot is not None:
             slot["start"] = slot["start"] or event.get("created_at")
@@ -78,6 +93,11 @@ def usage_by_window(events: Iterable[Mapping], prices: Mapping[str, Mapping[str,
                 counts["input_tokens"] += prompt
                 counts["cached_input_tokens"] += cached
                 counts["output_tokens"] += output
+                if tiered[name] and prompt > prices[name]["above_input_tokens"]:
+                    counts["tier_requests"] += 1
+                    counts["tier_input_tokens"] += prompt
+                    counts["tier_cached_input_tokens"] += cached
+                    counts["tier_output_tokens"] += output
     return {
         "window_size": window,
         "windows": [{"window": index + 1, "first_cycle": index * window + 1, "last_cycle": index * window + slot["cycles"],
