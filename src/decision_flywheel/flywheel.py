@@ -820,6 +820,11 @@ class DecisionFlywheel:
                                 (_json({"result": result, "active": asdict(self.active),
                                         "answer_dependencies": self.collected_answer_dependencies()}), round_key))
             return result
+        except BaseException as error:
+            # Superseded or cancelled: close the round in the trace; the pass removes its pending row.
+            from .observability import _stopped
+            self._emit({"kind": "round-stopped", "status": _stopped(error), "promoted": False})
+            raise
 
     def promote_trial(self, trial_fingerprint, training, development):
         row = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (trial_fingerprint,)).fetchone()

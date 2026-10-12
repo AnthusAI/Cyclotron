@@ -177,14 +177,29 @@ events.
 
 After the call, the pass takes the store lock back, even when it is being
 cancelled, and restores its cycle and shared decision context. The pass is
-*superseded* if, during the call, any output's version changed, or a label it
-rests on (training or development) was corrected or undone. A superseded pass
-records `optimizer-superseded`, caches nothing, returns `superseded: True` and
-stays queued for the next `learn()`. A pass that labels arrived during stays
-queued too, from the count it covered, and `learn()` runs it again. Cancelling
-`learn()` (a timeout or shutdown) records `optimizer-cancelled`, closes the
-pass's cycle, removes the work it left pending, and keeps it queued. Decisions
-keep working, and the next pass needs no retry authorization.
+*superseded* if, during the call, any output's criteria changed (rubric,
+examples, supporting questions or dynamic inputs; an ML model refit alone does
+not count, because the pass refits ML models itself), or a label it rests on
+(training or development) was corrected or undone. A superseded pass records
+`optimizer-superseded`, closes its step and round in the trace, caches nothing,
+returns `superseded: True` and stays queued. After `max_superseded_passes`
+superseded passes in a row (an option of `Cyclotron.open`, default 3), the
+output's next pass keeps the store lock through its provider calls, so it
+cannot be superseded again. It records `learning-window-withheld`.
+
+Each `learn()` call runs each queued output at most once, so a busy output
+cannot starve the others. A pass during which any review of its output
+arrived, held-out ones included, stays queued from the count it covered.
+
+Cancelling `learn()` (a timeout or shutdown) records `optimizer-cancelled`,
+closes the pass's cycle, step and round, and keeps the output queued.
+Decisions keep working. A stopped pass removes only the pending work it
+started itself. Work that other reviews or decisions left pending while the
+lock was lent keeps its explicit-retry guard. One exception to "no silent
+repayment" is deliberate: if the pass's own paid decision-model request was
+interrupted, its guard is dropped so the next pass can ask again, and each
+such request is recorded as `decision-request-abandoned` with
+`repeat_charge_possible: true`, because asking again may be charged again.
 
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it

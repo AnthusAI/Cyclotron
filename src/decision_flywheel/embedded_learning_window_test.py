@@ -55,6 +55,10 @@ def pending_rows(wheel):
                for table in ("runtime_rounds", "optimization_stages", "classifier_training") if table in tables)
 
 
+def cyclotron_pending_after(passes):
+    return [p["classifier"] for p in passes if p.get("superseded")]
+
+
 def labels_counted(cyclotron, classifier):
     training, development, _ = cyclotron._partitions(classifier)
     return len(training) + len(development)
@@ -103,8 +107,15 @@ def test_a_review_recorded_during_the_call_gets_its_own_learning_pass(tmp_path):
             return await learning
         passes = asyncio.run(scenario())
         pending = cyclotron.pending_learning()
-    assert [p["classifier"] for p in passes] == ["relevant", "relevant"]
-    assert passes[1]["since_count"] == covered and pending == []
+
+        async def again():
+            transport.renew()
+            transport.gate.set()
+            return await cyclotron.learn()
+        later = asyncio.run(again())
+    # Each output runs once per learn() call; the label that arrived mid-pass keeps it queued for the next call.
+    assert [p["classifier"] for p in passes] == ["relevant"] and pending == ["relevant"]
+    assert later[0]["since_count"] == covered and cyclotron_pending_after(later) == []
 
 
 def test_cancelling_learning_mid_call_leaves_the_store_usable_and_the_pass_queued(tmp_path):
@@ -201,7 +212,9 @@ def test_a_window_in_a_later_stage_lets_reviews_and_decisions_through_too(tmp_pa
             transport.gate.set()
             return review, fresh, overlapped, await learning
         review, fresh, overlapped, passes = asyncio.run(scenario())
+        stages = [e.get("step_stage") for e in kinds(cyclotron.wheels["relevant"], "optimizer-request")]
     assert overlapped and review.label == "exclude" and fresh.decision_id and transport.calls >= 2
+    assert len(set(stages[:2])) == 2, f"the two provider calls must be in different stages: {stages}"
     assert passes and not any(p.get("superseded") for p in passes)
 
 
@@ -215,7 +228,7 @@ def superseded_by(tmp_path, change, outputs=2, items=12):
 
         async def scenario():
             transport.renew()
-            learning = asyncio.create_task(cyclotron.learn(limit=1))
+            learning = asyncio.create_task(cyclotron.learn())
             await transport.entered.wait()
             await change(cyclotron)
             transport.gate.set()
@@ -237,6 +250,8 @@ def superseded_by(tmp_path, change, outputs=2, items=12):
 def assert_superseded_and_retried(outcome):
     first, events, queued, rows, failed_rounds, second = outcome
     assert first[0]["superseded"] and first[0]["classifier"] == "relevant"
+    # A superseded output is not rerun within the same learn() call, even with no limit.
+    assert [p["classifier"] for p in first].count("relevant") == 1
     assert events == {"optimizer-superseded": 1, "optimizer-failed": 0}
     assert "relevant" in queued and rows == 0 and failed_rounds == 0
     assert second[0]["classifier"] == "relevant" and not second[0].get("superseded") and second[0]["warnings"] == []
@@ -315,3 +330,214 @@ def test_the_shared_call_limit_holds_for_an_asynchronous_transport(tmp_path):
         passes = asyncio.run(scenario())
     assert transport.calls == 1
     assert any(w["reason"].startswith("optimizer call limit reached") for p in passes for w in p["warnings"])
+
+
+class BlockingModel(Model):
+    """Waits on ``gate`` for requests ``blocks(configs, target)`` selects, like a slow provider."""
+
+    def __init__(self, blocks):
+        self.blocks, self.entered, self.gate = blocks, asyncio.Event(), asyncio.Event()
+
+    async def classify_many(self, configs, target, training, **kwargs):
+        if self.blocks(configs, target):
+            self.entered.set()
+            await self.gate.wait()
+        return await super().classify_many(configs, target, training, **kwargs)
+
+
+def pending_batches(cyclotron):
+    return cyclotron.shared.db.execute("SELECT COUNT(*) FROM batches WHERE status='pending'").fetchone()[0]
+
+
+def test_a_stopped_pass_never_removes_the_retry_guard_of_a_decision_cancelled_during_its_call(tmp_path):
+    transport = GatedTransport()
+    model = BlockingModel(lambda configs, target: target.values["text"].startswith("blocked"))
+    agent = OptimizerAgent(transport)
+    with Cyclotron.open(tmp_path / "c", definition(1), model, agent, max_requests=2000, learning="deferred") as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:1])
+
+        async def scenario():
+            transport.renew()
+            model.entered, model.gate = asyncio.Event(), asyncio.Event()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            deciding = asyncio.create_task(cyclotron.decide(item("blocked", "blocked item")))
+            await model.entered.wait()                       # the decision's paid request is in flight
+            deciding.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await deciding
+            guarded = pending_batches(cyclotron)
+            async with cyclotron._lock:                      # then the pass is superseded
+                wheel = cyclotron.wheels["relevant"]
+                wheel._activate(replace(wheel.active, config=replace(wheel.active.config, rubric="Changed.")))
+            transport.gate.set()
+            passes = await learning
+            return guarded, passes
+        guarded, passes = asyncio.run(scenario())
+        after = pending_batches(cyclotron)
+    assert passes[0]["superseded"]
+    assert guarded == after == 1          # the cancelled decision keeps its no-silent-repayment guard
+
+
+def test_a_cancelled_pass_abandons_its_own_paid_request_openly(tmp_path):
+    from datetime import datetime, timezone
+    transport = GatedTransport(gate_call=99)       # the optimizer never waits here
+    model = BlockingModel(lambda configs, target: any(c.rubric == "Pass-only rubric" for c in configs.values()))
+    with Cyclotron.open(tmp_path / "c", definition(1), model, OptimizerAgent(transport), max_requests=2000,
+                        learning="deferred") as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:1])
+        wheel = cyclotron.wheels["relevant"]
+        original = cyclotron._learn
+
+        async def asking_learn(classifier, cycle, **kwargs):
+            # The pass asks the decision model about a candidate, a paid request of its own.
+            training, _, _ = cyclotron._partitions(classifier)
+            candidate = replace(wheel.active.config, rubric="Pass-only rubric")
+            cyclotron.shared.bind_context({classifier: candidate}, {classifier: training})
+            await wheel._answers(candidate, training[0].item, training, datetime.now(timezone.utc))
+            return await original(classifier, cycle, **kwargs)
+        cyclotron._learn = asking_learn
+
+        async def scenario():
+            transport.renew()
+            model.entered, model.gate = asyncio.Event(), asyncio.Event()
+            learning = asyncio.create_task(cyclotron.learn())
+            await model.entered.wait()                       # the pass's own paid request is in flight
+            learning.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await learning
+        asyncio.run(scenario())
+        abandoned = kinds(wheel, "decision-request-abandoned")
+        guards = pending_batches(cyclotron), pending_rows(wheel)
+        answers = wheel.db.execute("SELECT COUNT(*) FROM runtime_answers WHERE status='pending'").fetchone()[0]
+        queued = cyclotron.pending_learning()
+    assert {bool(e.get("shared_batch")) for e in abandoned} == {True, False}
+    assert all(e["repeat_charge_possible"] for e in abandoned)
+    assert guards == (0, 0) and answers == 0 and queued == ["relevant"]
+
+
+def test_a_stopped_step_and_round_are_closed_in_the_trace(tmp_path):
+    async def change(cyclotron):
+        wheel = cyclotron.wheels["relevant"]
+        async with cyclotron._lock:
+            wheel._activate(replace(wheel.active, config=replace(wheel.active.config, rubric="Changed elsewhere.")))
+    transport = GatedTransport()
+    with store(tmp_path, transport) as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:1])
+        wheel = cyclotron.wheels["relevant"]
+
+        async def scenario():
+            transport.renew()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            await change(cyclotron)
+            transport.gate.set()
+            return await learning
+        passes = asyncio.run(scenario())
+        steps = kinds(wheel, "step-started"), kinds(wheel, "step-completed") + kinds(wheel, "step-failed")
+    assert passes[0]["superseded"]
+    assert len(steps[0]) == len(steps[1]) and any(e.get("status") == "superseded" for e in steps[1])
+
+
+def test_a_head_refit_during_the_call_does_not_supersede_the_pass(tmp_path):
+    from .candidate_fitting import fit_candidate
+    transport = GatedTransport()
+    with store(tmp_path, transport) as cyclotron:
+        for index in range(24):
+            checklist(cyclotron, index, OUTPUTS[:1])
+        wheel = cyclotron.wheels["relevant"]
+        training, development, _ = cyclotron._partitions("relevant")
+        cyclotron.shared.bind_context({"relevant": wheel.active.config}, {"relevant": training})
+        fitted, _ = run(fit_candidate(wheel, wheel.active.config, training, development, protected=(),
+                                      propensities={row.item.id: 1. for row in training}, validation_status="evaluated"))
+        wheel._activate(fitted)
+        assert wheel.active.head is not None
+        waiting = run(cyclotron.decide(item("waiting", "yes waiting")))
+
+        async def scenario():
+            transport.renew()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            await cyclotron.review(waiting.decision_id, "include", selected_by="reviewer")
+            await cyclotron.decide(item("fresh", "yes fresh"))
+            async with cyclotron._lock:                      # the ML model alone changes (a refit or a dropped head)
+                wheel._activate(replace(wheel.active, head=None, answer_dependencies=()))
+            transport.gate.set()
+            return await learning
+        passes = asyncio.run(scenario())
+    assert passes[0]["classifier"] == "relevant" and not passes[0].get("superseded")
+
+
+def test_a_repeatedly_superseded_output_keeps_the_lock_on_its_next_pass(tmp_path):
+    transport = GatedTransport()
+    with Cyclotron.open(tmp_path / "c", definition(1), Model(), OptimizerAgent(transport), max_requests=2000,
+                        learning="deferred", max_superseded_passes=1) as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:1])
+        wheel = cyclotron.wheels["relevant"]
+
+        async def superseded():
+            transport.renew()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            async with cyclotron._lock:
+                wheel._activate(replace(wheel.active, config=replace(wheel.active.config, rubric="Changed.")))
+            transport.gate.set()
+            return await learning
+        first = asyncio.run(superseded())
+
+        async def held():
+            transport.renew()
+            transport.gate_call = transport.calls + 1
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            lock_held = cyclotron._lock.locked()
+            transport.gate.set()
+            return lock_held, await learning
+        lock_held, second = asyncio.run(held())
+        withheld = kinds(wheel, "learning-window-withheld")
+    assert first[0]["superseded"] and lock_held and not second[0].get("superseded")
+    assert withheld and withheld[0]["limit"] == 1
+
+
+def test_a_held_out_review_during_the_call_keeps_the_output_queued(tmp_path):
+    from .learning_loop import review_role
+    transport = GatedTransport()
+    with store(tmp_path, transport) as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:1])
+        held_out = next(f"held-{n}" for n in range(1000) if review_role("deferred-seed", f"held-{n}") == "scoreboard")
+        waiting = run(cyclotron.decide(item(held_out, "yes held")))
+
+        async def scenario():
+            transport.renew()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            await cyclotron.review(waiting.decision_id, "include")
+            transport.gate.set()
+            return await learning
+        asyncio.run(scenario())
+        queued = cyclotron.pending_learning()
+    assert queued == ["relevant"]
+
+
+def test_a_busy_output_does_not_starve_the_others_in_one_learn_call(tmp_path):
+    transport = GatedTransport()
+    with store(tmp_path, transport, 2) as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:2])
+        waiting = run(cyclotron.decide(item("waiting", "yes waiting")))
+
+        async def scenario():
+            transport.renew()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            await cyclotron.review(waiting.decision_id, "include", classifier="relevant", selected_by="reviewer")
+            transport.gate.set()
+            return await learning
+        passes = asyncio.run(scenario())
+        queued = cyclotron.pending_learning()
+    assert [p["classifier"] for p in passes] == ["relevant", "timely"] and queued == ["relevant"]
