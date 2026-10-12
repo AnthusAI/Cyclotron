@@ -505,6 +505,34 @@ head, prediction uses raw decision output rather than stale learned weights.
 Standalone context-aware adapters can expose
 `feature_context_identity(config, training)` for the same provenance check.
 
+Because outputs share one request, a change to one output's rubric, examples or
+supporting questions is part of every sibling's request too. Before such a
+change is activated, the engine scores each sibling on that sibling's own
+development labels twice, with the sibling's current ML model held fixed: under
+the incumbent context and with the candidate substituted. The outcome event
+(`promoted`, `context-initialized`, `context-refined` or `candidate-rejected`)
+carries `sibling_effects`: the policy, and for each sibling its metric, both
+scores and a status of `regressed`, `no-regression` or `insufficient-evidence`.
+A `sibling-effects-measured` event records the same evidence. By default a
+candidate that regresses any sibling is not promoted. Declare another policy on
+the definition:
+
+```python
+from decision_flywheel.sibling_check import SiblingPolicy
+
+# Allow a small drop in a sibling's development score.
+CyclotronDefinition("newsroom", (relevant, timely), sibling_policy=SiblingPolicy("refuse", max_regression=.02))
+# Promote on the output's own evidence; only record the effect on siblings.
+CyclotronDefinition("newsroom", (relevant, timely), sibling_policy=SiblingPolicy("record"))
+```
+
+The policy is not part of the definition fingerprint, so an existing store can
+change it. A sibling without development labels for every class cannot show a
+regression; its effect is recorded as `insufficient-evidence` and does not block
+promotion. The sibling's ML model is refit after any context change, and the
+refit can recover part of a measured drop, so the check is conservative.
+A single-output cyclotron has no siblings and no check.
+
 ```python
 from decision_flywheel.decision_cache import CacheOptions
 

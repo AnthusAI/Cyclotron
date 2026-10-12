@@ -3,16 +3,31 @@
   "title": "Verify first: check sibling outputs before promoting a change",
   "description": "Improving one checklist question must not quietly make another worse. NOTE: found by reading, not by running; write a failing test first to confirm.\n\nCurrent: outputs share one request, so A's rubric changes B's context; siblings are pinned and stale ML models refit (shared_decisions.py:34-44; learning_loop.py:88-89); A's candidate is evaluated only on A's development labels (learning_loop.py:137, 164-172). No check on B found.\n\nDesired: promotion also checks every sibling's development score, or records sibling effect and refuses regressions.\n\nAcceptance: a candidate that helps A and hurts B on B's dev set is dropped or flagged under a declared policy; the event records the effect on each sibling.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "ca16e597-6cc5-4cef-bfa8-bd2bf47c6539",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/9 (verified regression first: timely dev F1 1.0 -> 0.55 on develop; fix adds sibling check with declared SiblingPolicy)",
+      "created_at": "2026-10-12T14:28:39.740150Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:03:03.116203Z",
-  "updated_at": "2026-10-11T19:03:03.116423Z",
+  "updated_at": "2026-10-12T14:28:39.740270Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

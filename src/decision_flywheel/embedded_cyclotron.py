@@ -49,6 +49,7 @@ from .selection_policy import SelectionPolicy
 from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, current_rate,
                              expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
 from .shared_decisions import SharedDecisions
+from .sibling_check import SiblingPolicy, install_sibling_checks
 
 SELECTED_BY = REASONS
 STORE_SCHEMA = "cyclotron-store/v1"
@@ -103,6 +104,10 @@ class CyclotronDefinition:
     seed: str = "cyclotron-v1"
     optimize_every: int = 20
     rubric_changes_every: int = 2
+    # What promotion does when a change to one classifier would regress a
+    # sibling on the sibling's development labels. Policy, not identity: it
+    # is left out of the fingerprint so a store can change it.
+    sibling_policy: SiblingPolicy = field(default_factory=SiblingPolicy)
 
     def __post_init__(self):
         object.__setattr__(self, "classifiers", tuple(self.classifiers))
@@ -116,10 +121,14 @@ class CyclotronDefinition:
         for value in (self.optimize_every, self.rubric_changes_every):
             if type(value) is not int or value < 1:
                 raise ValueError("learning cadences must be positive integers")
+        if not isinstance(self.sibling_policy, SiblingPolicy):
+            raise ValueError("sibling_policy must be SiblingPolicy")
 
     @property
     def fingerprint(self) -> str:
-        return hashlib.sha256(_json(asdict(self)).encode()).hexdigest()
+        identity = asdict(self)
+        identity.pop("sibling_policy")
+        return hashlib.sha256(_json(identity).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -343,6 +352,7 @@ class Cyclotron:
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
+        install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
         self._sync()
 
     def _seed(self, classifier: str) -> str:

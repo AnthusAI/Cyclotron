@@ -270,11 +270,19 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             wheel._emit({'kind':'proposal-validated','proposal':proposal,'previous':previous,'candidate':config.briefing_state()})
             candidate,_=await fit_candidate(wheel,config,training,development,protected=protected,
                 propensities=propensities,validation_status='provisional')
-            wheel._activate(candidate)
-            result={'promoted':False,'activated':True,'validation_status':'provisional','proposal':proposal,
-                    'reason':'first nonempty rubric initialized provisionally; improvement has not been established',
-                    'development_counts':counts,'minimum_development_per_class':min_development_per_class}
-            wheel._emit({'kind':'context-initialized',**result,'configuration':config.briefing_state(),'previous':previous})
+            siblings=await wheel.sibling_effects(candidate.config,datetime.now(timezone.utc))
+            accepted=not (siblings and siblings['refused'])
+            if accepted:
+                wheel._activate(candidate)
+            result={'promoted':False,'activated':accepted,'validation_status':'provisional','proposal':proposal,
+                    'pending_evaluation':not accepted,
+                    'reason':('first nonempty rubric initialized provisionally; improvement has not been established'
+                              if accepted else siblings['reason']),
+                    'development_counts':counts,'minimum_development_per_class':min_development_per_class,
+                    **({'sibling_effects':siblings} if siblings is not None else {})}
+            wheel._emit({'kind':'context-initialized' if accepted else 'candidate-rejected',**result,
+                         'configuration':wheel.active.config.briefing_state() if not accepted else config.briefing_state(),
+                         'previous':previous})
         elif stage=='rubric' and wheel.active.validation_status=='provisional' and wheel.evaluation_policy.recency_allowance(counts)>0:
             candidate,_=await fit_candidate(wheel,config,training,development,protected=protected,
                 propensities=propensities,validation_status='provisional')
@@ -294,13 +302,18 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 selection = wheel.selection_policy.compare(measurements['incumbent'], measurements['candidate'],
                     primary_allowance=provisional_primary_allowance(wheel.selection_policy, allowance))
                 accepted = selection['provisional_eligible']
+            siblings=await wheel.sibling_effects(candidate.config,datetime.now(timezone.utc)) if accepted else None
+            sibling_refused=bool(siblings and siblings['refused'])
+            accepted=accepted and not sibling_refused
             if accepted:
                 wheel._activate(candidate)
             result={'promoted':False,'activated':accepted,'validation_status':'provisional','proposal':proposal,
                     'pending_evaluation':not accepted, 'recency_allowance':allowance, 'selection':selection,
                     'reason':('working rubric refined with a decaying recency preference; evaluation remains exploratory'
-                              if accepted else 'proposal retained; measured regression exceeds current recency allowance'),
-                    'development_counts':counts,'context_validation_floor':wheel.context_validation_floor,**measurements}
+                              if accepted else siblings['reason'] if sibling_refused
+                              else 'proposal retained; measured regression exceeds current recency allowance'),
+                    'development_counts':counts,'context_validation_floor':wheel.context_validation_floor,**measurements,
+                    **({'sibling_effects':siblings} if siblings is not None else {})}
             wheel._emit({'kind':'context-refined' if accepted else 'candidate-rejected',**result,
                          'configuration':wheel.active.config.briefing_state(),'previous':previous})
         elif min(counts.values()) < min_development_per_class:

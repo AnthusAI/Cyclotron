@@ -1,4 +1,5 @@
 """Durable complete-request batch cache and a run-wide paid-attempt ceiling."""
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
@@ -40,6 +41,16 @@ class SharedDecisions:
         self.context_configs=dict(configs)
         self.context_training={name:tuple(rows) for name,rows in training.items()}
         self.prepared={}
+
+    @contextmanager
+    def bound(self,configs,training):
+        """Bind a temporary sibling context, then restore the previous binding exactly."""
+        saved=(self.context_configs,self.context_training,self.prepared,getattr(self,'prepared_scope',None))
+        self.bind_context(configs,training)
+        try:
+            yield
+        finally:
+            self.context_configs,self.context_training,self.prepared,self.prepared_scope=saved
 
     def scope(self,identifier,config,training):
         return ({**self.context_configs,identifier:config},
