@@ -4,7 +4,7 @@ import type {TraceEvent} from './graphql'
 import type {MetricClassifier} from './ClassifierMetrics'
 import type {FeedbackJob} from './FeedbackControls'
 
-const stages:Record<string,string>={rubric:'Rubric',examples:'Few-shot examples',questions:'Classifier questions',classifier:'ML optimization'}
+const stages:Record<string,string>={rubric:'Rubric',examples:'Few-shot examples',questions:'Supporting questions',classifier:'ML optimization'}
 type ActivityState={event:TraceEvent;status:string;failed:boolean;accepted:boolean}
 
 /** Describe recorded phases, not guessed progress from elapsed time. */

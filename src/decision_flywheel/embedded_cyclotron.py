@@ -77,7 +77,7 @@ def _now() -> str:
 
 @dataclass(frozen=True)
 class ClassifierSpec:
-    """One decision question inside the cyclotron."""
+    """One classifier: a reviewed output of the cyclotron, with its own labels and ML model."""
     id: str
     labels: tuple[str, ...]
     question: str

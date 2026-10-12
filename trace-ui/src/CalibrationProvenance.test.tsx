@@ -14,7 +14,7 @@ test('calibration provenance explains recorded fit evidence without a JSON dump'
   fireEvent.click(screen.getByText('Snapshot provenance'))
   expect(screen.getByRole('region',{name:'Calibration sample provenance'})).toHaveAttribute('tabindex','0')
   fireEvent.click(screen.getByText('paper-one'))
-  expect(screen.getByText('Calibrated ML head')).toBeVisible()
+  expect(screen.getByText('Calibrated ML model')).toBeVisible()
   expect(screen.getByText('Out-of-fold training predictions')).toBeVisible()
   expect(screen.getByText('1.250')).toBeVisible()
   expect(screen.getByText('version-one')).toBeVisible()

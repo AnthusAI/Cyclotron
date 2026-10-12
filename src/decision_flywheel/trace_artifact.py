@@ -232,7 +232,7 @@ const otherGroups=timelineData.groups.filter(g=>occupied.has(g.id)&&!['decisions
 const plottedItems=timelineItems.filter(item=>!['decision-api','cycles'].includes(item.group)&&events[item.event_index]?.kind!=='cycle-metrics');
 for(const item of plottedItems){if(item.group==='classifier')item.group='classifier-attempts';if(item.group==='evaluation')item.group='optimization-outcomes';}
 for(const group of otherGroups)if(group.id==='feedback')group.content='Review actions (skip / undo)';
-const optimizationLanes=[['triggers','Triggers'],['rubric','Rubric'],['examples','Few-shot examples'],['questions','Classifier questions'],['classifier','ML optimization']].map(([id,content])=>({id,content}));
+const optimizationLanes=[['triggers','Triggers'],['rubric','Rubric'],['examples','Few-shot examples'],['questions','Supporting questions'],['classifier','ML optimization']].map(([id,content])=>({id,content}));
 const optimizationIds=optimizationLanes.map(group=>group.id);
 optimizationLanes.find(group=>group.id==='classifier').nestedGroups=['classifier-attempts','fit'];
 optimizationLanes.find(group=>group.id==='classifier').showNested=true;

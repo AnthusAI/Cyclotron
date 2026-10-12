@@ -2,7 +2,7 @@
 from datetime import datetime
 
 GROUPS = [('feedback', 'Human labels'), ('decisions', 'Decisions'), ('rubric', 'Rubric'), ('examples', 'Few-shot examples'),
-          ('questions', 'Classifier questions'), ('classifier', 'ML optimization'),
+          ('questions', 'Supporting questions'), ('classifier', 'ML optimization'),
           ('fit', 'ML fitting'), ('evaluation', 'Evaluation / outcome'), ('optimizer', 'Optimizer (unscoped)'),
           ('configuration', 'Changes'), ('configuration-count','Classifications'), ('triggers','Trigger checks'), ('cycles','Cycle boundaries')]
 

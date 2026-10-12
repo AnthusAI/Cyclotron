@@ -15,7 +15,7 @@ identity, so changing display order cannot transfer a draft to another classifie
 Run editions are a separate history: each immutable edition points to one
 optimization run and its frozen classifier definitions. Classifier definitions
 retain their own revision numbers. Runtime checkpoints
-store the complete joint classifier state, including fitted ML heads, with a
+store the complete joint classifier state, including fitted ML models, with a
 content fingerprint. Complete decision requests retain their own cache keys.
 
 Run creation takes one SQLite read snapshot of item-list membership and latest
@@ -219,7 +219,7 @@ Calibration snapshots use the same latest 200 unique human-reviewed pre-vote
 predictions as live metrics. Ten fixed confidence bins retain support, observed
 accuracy and mean confidence, with ECE, multiclass Brier and log loss. Snapshot
 provenance identifies prediction/feedback events, versions, and raw decision
-passthrough versus temperature-calibrated ML heads. Calibration fits only on
+passthrough versus temperature-calibrated ML models. Calibration fits only on
 training out-of-fold predictions, never on this descriptive rolling window.
 Matched raw/calibrated comparisons exclude passthrough predictions. Mixed-version
 rolling curves are not estimates of current-model held-out calibration. Playback
@@ -243,7 +243,7 @@ permission to borrow another output. Previously recorded snapshots stay immutabl
 
 Open **Snapshot provenance** under a confidence curve to inspect the recorded
 samples. Each sample identifies its item, prediction and feedback event IDs,
-model version, and whether the output came from a calibrated ML head or raw
+model version, and whether the output came from a calibrated ML model or raw
 decision passthrough. Expand a head sample to see its recorded calibration
 method, fit origin, temperature, and trusted training-item IDs. Missing legacy
 fields say “not recorded.” These disclosures read the immutable snapshot;

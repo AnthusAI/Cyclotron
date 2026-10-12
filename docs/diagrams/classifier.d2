@@ -22,12 +22,12 @@ request: "DECISION-MODEL REQUEST\nadjustable parts (left) · fixed parts (right)
   target: "state.target\nThe new item's\ntext and metadata"
   examples: "state.examples\nSelected labeled\nitems"
   main: "Main decision\nShould this item be\nincluded? Apply the\nrubric and examples"
-  elements: "Element questions\nOptimizer-defined\nquestions and criteria"
+  elements: "Supporting questions\nOptimizer-defined\nquestions and criteria"
   _spacer: "" {class: spacer}
 }
 
 # Row 2
-feedback: "Human training\nfeedback\nLabels and explanations" {class: human}
+feedback: "Reviewer training\nfeedback\nLabels and explanations" {class: human}
 model: "Decision model\nJev or another provider\nOne request carries state\nand all questions" {class: model}
 
 # Row 3
@@ -37,7 +37,7 @@ answers: "STRUCTURED RESPONSE" {
   grid-columns: 2
   horizontal-gap: 24
   main: "Main answer\nInclude / Exclude\nprobabilities"
-  elements: "Element answers\nOne probability or\nscore per task"
+  elements: "Supporting answers\nOne probability\nper question"
 }
 
 # Row 4
