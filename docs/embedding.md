@@ -64,6 +64,19 @@ cyclotron = Cyclotron.open("var/cyclotrons/papyrus-relevance", definition, Scrip
                            seed_rubrics={"relevant": doctrine})
 ```
 
+If you already know some supporting questions that matter, seed them the same
+way with `seed_supporting_questions`. It maps each classifier id to a list of
+questions, each with exactly `name`, `instructions` and `labels` (the shape the
+optimizer proposes), or to `DecisionTask` values. For example,
+`seed_supporting_questions={"relevant": [{"name": "primary_evidence",
+"instructions": "Does the source cite primary evidence?", "labels": ["yes", "no"]}]}`.
+Seeded questions are in the first decision request, and their answers are
+features of the first ML model fit. They are a starting point, not a pin: the
+optimizer can revise, replace or drop them like any supporting question. They
+are fixed when the store is created. Reopening a store never rewrites them, and
+a store created without seeds keeps none. Your decision model must answer every
+supporting question in the request.
+
 ## Decide
 
 ```python
