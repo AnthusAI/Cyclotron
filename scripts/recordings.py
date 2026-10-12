@@ -255,6 +255,11 @@ def compute_benchmark(setup, cycles, ids_known=True):
     return out
 
 
+def public_decision_model(protocol):
+    """The model name safe to publish; a Foundry deployment label is private, the model it serves is not."""
+    return "microsoft-decision-1" if protocol.get("decision_provider") == "foundry" else protocol.get("decision_model")
+
+
 def decision_model_detail(setup_or_protocol, card_path):
     revision = None
     try:
@@ -267,7 +272,7 @@ def decision_model_detail(setup_or_protocol, card_path):
     except (OSError, ValueError, AttributeError):
         pass
     provider = setup_or_protocol.get("decision_provider")
-    return {"name": setup_or_protocol.get("decision_model"), "revision": revision, "provider": provider,
+    return {"name": public_decision_model(setup_or_protocol), "revision": revision, "provider": provider,
             "hosting": "local" if provider == "kev" else "hosted"}
 
 
@@ -430,7 +435,8 @@ def cmd_add(a):
     if not (mode_dir / "results.json").is_file():
         raise SystemExit(f"no results.json under {run_dir}")
     window = a.window_size or DEFAULT_WINDOW
-    decision_price = a.decision_model_price or (protocol.get("decision_provider") if protocol.get("decision_provider") in ("jev", "kev") else None) \
+    decision_price = a.decision_model_price or ({"foundry": "microsoft-decision-1"}.get(protocol.get("decision_provider"), protocol.get("decision_provider"))
+                                                 if protocol.get("decision_provider") in ("jev", "kev", "foundry") else None) \
         or "gpt-4.1-mini"
     optimizer_price = a.optimizer_price or (protocol.get("optimizer_model") if protocol.get("optimizer_model") in exporter.PRICES
                                             else "gpt-4.1-mini")
@@ -450,7 +456,7 @@ def cmd_add(a):
         sha = manifest.get("operational_sha256") or manifest.get("sha256")
         if sha:
             corpus["sha256"] = sha
-        setup = {"decision_model": protocol.get("decision_model"), "decision_provider": protocol.get("decision_provider"),
+        setup = {"decision_model": public_decision_model(protocol), "decision_provider": protocol.get("decision_provider"),
                  "optimizer_model": protocol.get("optimizer_model"),
                  "objective": (protocol.get("selection_policy") or {}).get("primary"),
                  "starting_rubric": rubric_kind, "parameters": setup_parameters(protocol), "corpus": corpus,

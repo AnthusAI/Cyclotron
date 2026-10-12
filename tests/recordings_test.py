@@ -542,3 +542,18 @@ def test_upgrade_marks_a_recording_not_comparable_when_ids_are_unrecoverable(tmp
     cli("upgrade", "first", "--catalog", str(catalog))
     b = rec(catalog)["benchmark"]
     assert b["comparable"] is False and "ids" in b["reason"]
+
+
+def test_a_foundry_recording_publishes_the_model_not_the_deployment_and_prices_it(tmp_path):
+    run = make_run(tmp_path / "src")
+    protocol_path = run[0] / "protocol.json"
+    protocol = json.loads(protocol_path.read_text())
+    protocol.update(decision_provider="foundry", decision_model="private-deployment-name")
+    protocol_path.write_text(json.dumps(protocol))
+    r = rec(add(tmp_path, run=run))
+    assert r["setup"]["decision_model"] == "microsoft-decision-1"
+    assert r["setup"]["decision_model_detail"] == {"name": "microsoft-decision-1", "revision": None,
+                                                   "provider": "foundry", "hosting": "hosted"}
+    assert "private-deployment-name" not in json.dumps(r)
+    assert r["cost"]["decision_model_usd"] is not None
+    assert "Microsoft-Decision-1" in json.dumps(r["cost"])
