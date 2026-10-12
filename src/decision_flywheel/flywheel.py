@@ -407,6 +407,16 @@ class DecisionFlywheel:
         self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,
                     "classifier_snapshot": compact_snapshot(classifier)})
 
+    SHARED_QUESTIONS_NOTE = ("Other classifiers in this cyclotron ask these supporting questions. A question with the "
+                             "same name, instructions and labels is asked once and its answer feeds every classifier "
+                             "that lists it; propose one verbatim to share it.")
+
+    def sibling_briefing(self):
+        """Optimizer context naming sibling supporting questions; empty for a single output."""
+        check = self.sibling_check
+        questions = check.sibling_questions() if check is not None and check.sharing() else {}
+        return {"sibling_supporting_questions": {"note": self.SHARED_QUESTIONS_NOTE, "by_classifier": questions}} if questions else {}
+
     async def sibling_effects(self, config, now):
         """Each sibling output's development effect of activating ``config`` (None without siblings)."""
         if self.sibling_check is None:
@@ -728,6 +738,7 @@ class DecisionFlywheel:
                          "training_class_weighting": self.training_class_weighting,
                          "prior_hypotheses": self.hypotheses(),
                          "request_budget_bytes": self.max_request_bytes,
+                         **self.sibling_briefing(),
                          "training_predictions": [event for event in self.history(1000)
                             if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}]},
                 protected=tuple(row.item for row in development) + tuple(protected),
@@ -739,8 +750,10 @@ class DecisionFlywheel:
                 self._emit({"kind": "hypothesis-retry", "hypothesis_id": _hash(proposal),
                             "training_count": len(training), "development_count": len(development)})
             config = self.active.config.apply(proposal, training)
+            shared_owners = self.sibling_check.shared_owners(config) if self.sibling_check is not None else {}
             self._emit({"kind": "proposal-validated", "proposal": proposal,
-                        "previous": self.active.config.briefing_state(), "candidate": config.briefing_state()})
+                        "previous": self.active.config.briefing_state(), "candidate": config.briefing_state(),
+                        **({"shared_supporting_questions": shared_owners} if shared_owners else {})})
             status=('provisional' if self.active.validation_status=='provisional' and
                     min(development_counts.values())<self.context_validation_floor else 'evaluated')
             from .candidate_fitting import fit_candidate
@@ -776,6 +789,8 @@ class DecisionFlywheel:
                                  f"development {metric} did not improve")}
             if siblings is not None:
                 result["sibling_effects"] = siblings
+            if shared_owners:
+                result["shared_supporting_questions"] = shared_owners
             self._emit({"kind": "candidate-evaluated", **result})
             baseline_version = self.active.fingerprint
             if promoted:

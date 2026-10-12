@@ -159,10 +159,11 @@ class JevAdapter:
                                  round((time.perf_counter() - started) * 1000, 2))
 
     async def classify_many(self, configurations, target, training, *, now=None, event_sink=None,
-                            max_request_bytes=32000):
+                            max_request_bytes=32000, share_supporting_questions=False):
         """One transport request; each classifier keeps its own context and answer group."""
-        from ..batched_classification import batch_request, BatchedAnswers
-        request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes)
+        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
+        request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes,
+                                            share_questions=share_supporting_questions)
         state = {'target':request['state']['target'],'classifiers':{
             identifier:{k:v for k,v in value.items() if k!='rubric'} for identifier,value in request['state']['classifiers'].items()}}
         questions = {}
@@ -172,8 +173,7 @@ class JevAdapter:
             detail['instructions'] = detail['instructions'].replace(f' Use {scope}.rubric as the decision criteria.','')
             questions.update(self._jev_questions(configurations[identifier],{key:detail},{key:local_name}))
         observe = event_sink or (lambda event:None)
-        bindings = {key:{'classifier_id':identifier,'question':local_name,'configuration_fingerprint':configurations[identifier].fingerprint}
-                    for key,(identifier,local_name,_) in identities.items()}
+        bindings = question_bindings(configurations,request,identities)
         observe({'kind':'decision-request','target_id':target.id,'model':self.model_identity,
                  'state':state,'questions':questions,'question_bindings':bindings})
         started = time.perf_counter()
@@ -182,10 +182,10 @@ class JevAdapter:
         model, usage = _string_or_none(getattr(response,'model',None)), _numeric_usage(getattr(response,'usage',None))
         observe({'kind':'decision-response','target_id':target.id,'answers':{key:_mapping(value) for key,value in raw.items()},
                  'model':model,'usage':usage,'question_bindings':bindings})
-        groups = {identifier:{} for identifier in configurations}
-        for key,(identifier,local_name,task) in identities.items():
-            answer = _mapping(raw.get(key))
-            groups[identifier][local_name] = task.validate_result(DecisionResult(answer['choice'],answer.get('probabilities'),model=model,confidence=answer.get('confidence')))
+        def answer(key,task):
+            value = _mapping(raw.get(key))
+            return task.validate_result(DecisionResult(value['choice'],value.get('probabilities'),model=model,confidence=value.get('confidence')))
+        groups = answer_groups(configurations,request,identities,answer)
         return BatchedAnswers(groups,model,usage,round((time.perf_counter()-started)*1000,2))
 
 
