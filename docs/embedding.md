@@ -145,6 +145,22 @@ learning pass once. Each labeled output's review counts toward that output's
 review-rate window; an output left out does not. Resubmitting the same review
 id is safe and completes any output an interruption left unrecorded.
 
+By default each review runs the labeled outputs' learning before it returns.
+With several outputs that means the reviewer waits for several optimization
+passes. Open the store with `learning="deferred"` and `review()` only records
+the labels and queues one learning pass per labeled output. The queue is
+durable, and several reviews of one output share a pass. Run the queue
+afterwards with `await cyclotron.learn()`, for example once the reviewer's
+request has been answered. `cyclotron.pending_learning()` lists the queued
+outputs. `learn()` runs one output at a time and holds the store lock only for
+that output, so reviews and decisions interleave between outputs. Each pass is
+recorded as a `deferred-learning-completed` event with its warnings and
+duration. A pass covering several reviews still runs any rubric change or
+feedback-cadence stage that one of those reviews made due. Every output's
+optimizer stages share the cyclotron's optimizer and its call limit. The
+optimizer transport is called synchronously, so the event loop is blocked
+while one of its calls runs.
+
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it
 did not send is `selected_by="reviewer"`: it trains the ML model but never

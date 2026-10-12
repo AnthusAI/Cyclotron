@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "895c5394-21c2-4e64-8ab1-8a0997662476",
+  "issue_id": "decision-flywheel-85ecab74-a3dc-4c94-8370-d7423685443b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-12T16:35:22.442Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Estimate expected reviews per week with per-output routing",
+    "description": "Follow-up from flywheel4b16 (PR #14).\n\nCurrent: ReviewRate.expected_reviews_per_week (embedded_cyclotron.py _review_rate_status) feeds review_program.expected_reviews with each decision's minimum confidence across outputs. With per-output routing each output draws independently (own threshold, rate and audit draw), so the expected number of items sent to review is the union over outputs, and the number of output reviews is the per-output sum. The current figure is approximate for multi-output cyclotrons.\n\nDesired: report the expected item reviews per week (probability that any output is requested, from each output's confidence and the program's rate/audit share), and optionally expected output reviews per output. Keep every number ReviewProgram configuration; the review-rate heuristics are placeholders pending experiments.\n\nAcceptance: a multi-output spec where outputs differ in confidence shows the estimate matches the union probability; single-output stores report exactly what they do today.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 3,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Engine Worker"
+    }
+  }
+}
