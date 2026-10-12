@@ -25,3 +25,5 @@ for a in range(1, n + 1, size):
     print(f'{cs[0]}-{cs[-1]:<6} {100*right/len(cs):7.1f}%  {100*common/len(cs):9.1f}%  {rec:12.1f}%  {prec:15.1f}%')
 rec, prec = stats(list(pred))
 print(f'overall     {100*sum(pred[c]["label"] == label[pred[c]["cycle_item_id"]] for c in pred)/n:7.1f}%  {"":10}  {rec:12.1f}%  {prec:15.1f}%')
+raw = sum(pred[c]['decision_model_label'] == label[pred[c]['cycle_item_id']] for c in pred)
+print(f'raw decision-model answers alone (before the learned model): {100*raw/n:.1f}% accuracy')
