@@ -38,15 +38,16 @@ from uuid import uuid4
 
 from .calibration_history import reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
-from .cyclotron_status import (FULL_REVIEW, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
-                              initial_snapshot, status_from_flywheel)
+from .cyclotron_status import (FULL_REVIEW, CyclotronOverview, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
+                              initial_snapshot, status_from_flywheel, worst_output)
 from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel
 from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions,
                             learn_from_review, record_cycle_metrics, review_role)
 from .models import DecisionTask, Item
 from .selection_policy import SelectionPolicy
-from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, current_rate,
+from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, combine_evidence,
+                             current_rate, raise_for_versions,
                              expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
 from .shared_decisions import SharedDecisions
 from .sibling_check import SiblingPolicy, install_sibling_checks
@@ -542,16 +543,24 @@ class Cyclotron:
             state.override = None
             events.append(self._rate_event(state, now, f"The manual rate of {round(expired.rate * 100)}% set by "
                                                        f"{expired.set_by} expired."))
-        state, raised = raise_for_version(self.program, state, self._primary_version())
-        if raised:
-            events.append(self._rate_event(state, now, state.reason))
+        if len(self.specs) == 1:
+            state, raised = raise_for_version(self.program, state, self._primary_version())
+            if raised:
+                events.append(self._rate_event(state, now, state.reason))
+        else:
+            # Every output is watched: a new version of any one raises the rate.
+            state, output = raise_for_versions(self.program, state,
+                                               {cid: self.versions[cid].version for cid in self.specs})
+            if output is not None:
+                events.append(self._rate_event(state, now, state.reason, output=output))
         decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
         while state.checked_windows < decided // self.program.window:
             window = state.checked_windows + 1
-            evidence = window_evidence(self.program, self._window_reviews(window), self._gap_points())
+            evidence = self._window_evidence(window)
             state, change = check_window(self.program, state, evidence)
             if change:
-                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window))
+                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window,
+                                               **({"output": evidence["output"]} if "output" in evidence else {})))
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
             appended = [self._append(event) for event in events]
@@ -608,15 +617,21 @@ class Cyclotron:
     def _primary_version(self) -> int:
         return self.versions[self._primary().id].version
 
-    def _gap_points(self) -> int | None:
-        spec = self._primary()
+    def _window_evidence(self, window: int) -> dict:
+        """One finished window's evidence: the only output's, or the worst of every output's."""
+        evidence = {cid: window_evidence(self.program, self._window_reviews(window, cid), self._gap_points(cid))
+                    for cid in self.specs}
+        return evidence[self._primary().id] if len(evidence) == 1 else combine_evidence(evidence)
+
+    def _gap_points(self, classifier: str | None = None) -> int | None:
+        spec = self.specs[classifier] if classifier else self._primary()
         return status_from_flywheel(self.wheels[spec.id], cyclotron_id=self.definition.id,
                                     positive_label=spec.positive_label,
                                     window=self.program.calibration_window).calibration.gap_points
 
-    def _window_reviews(self, window: int) -> list[dict]:
-        """Program and audit reviews of the decisions in one finished window."""
-        cid = self._primary().id
+    def _window_reviews(self, window: int, classifier: str | None = None) -> list[dict]:
+        """Program and audit reviews of one output's decisions in one finished window."""
+        cid = classifier or self._primary().id
         size = self.program.window
         rows = []
         for decision_id, payload in self.db.execute(
@@ -872,11 +887,18 @@ class Cyclotron:
 
     # Status, events and labels -------------------------------------------
 
+    def overview(self) -> CyclotronOverview:
+        """Every output's status, the worst output, and the output limiting the review rate. No model call."""
+        statuses = tuple(self.status(cid) for cid in self.specs)
+        last = self._program_state().last_check if self.program is not None else None
+        return CyclotronOverview(self.definition.id, statuses[0].review_rate, statuses, worst_output(statuses),
+                                 (last or {}).get("output"))
+
     def status(self, classifier: str | None = None) -> CyclotronStatus:
         """The cyclotron-status/v1 snapshot for one classifier. No model call."""
         if classifier is None:
             if len(self.specs) != 1:
-                raise ValueError("name the classifier; this cyclotron has several")
+                raise ValueError("name the classifier; this cyclotron has several (overview() shows them all)")
             classifier = next(iter(self.specs))
         spec = self.specs[classifier]
         return status_from_flywheel(self.wheels[classifier], cyclotron_id=self.definition.id,
