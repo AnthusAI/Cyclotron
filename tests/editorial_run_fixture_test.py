@@ -163,7 +163,7 @@ def test_a_cut_may_come_from_a_recording_that_stopped_early(tmp_path):
         _exporter().main(arguments + ["--output", str(output)])
 
 
-PINNED_DEFAULT_SHA256 = "facd4b720a6a64ef6f3cca0b18fb200dde9c0813836ee234a14323f6b595f025"
+PINNED_DEFAULT_SHA256 = "ade6f56cbc9ca116c8fe4ebbfee06f8c97d72e1e5b05df205550b68715597f65"
 
 
 def _relabeled(root, count, **overrides):

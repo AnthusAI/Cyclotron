@@ -15,6 +15,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -27,6 +28,7 @@ SCRIPTS = Path(__file__).resolve().parent
 SCHEMA = "cyclotron-recording/v1"
 INDEX_SCHEMA = "cyclotron-recordings-index/v1"
 MARKER = ".cyclotron-recordings"
+PREDICTIONS = "predictions.jsonl"
 STATUSES = ("draft", "published", "retired")
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 DEFAULT_WINDOW = 70  # the replicate harness's window
@@ -151,6 +153,9 @@ def validate_recording(rec, *, for_publish=False, directory=None):
             problems.append("setup.corpus needs id and stories")
         if not isinstance(setup.get("window_size"), int) or setup["window_size"] < 1:
             problems.append("setup.window_size must be a positive integer")
+    benchmark = rec.get("benchmark")
+    if benchmark is not None and not (isinstance(benchmark, dict) and isinstance(benchmark.get("comparable", True), bool)):
+        problems.append("benchmark must be an object")
     review = setup.get("review") if isinstance(setup, dict) else None
     if review is not None:  # optional: older recordings omit it and mean every story was reviewed
         if not isinstance(review, dict):
@@ -198,6 +203,13 @@ def validate_recording(rec, *, for_publish=False, directory=None):
                 problems.append(f"fixture file {fixture.name} is missing")
             elif sha256_file(fixture) != rec["fixture_sha256"]:
                 problems.append("fixture.json does not match the recorded fixture_sha256")
+        predictions = rec.get("predictions_sha256")
+        if predictions is not None and directory is not None:
+            path = Path(directory) / PREDICTIONS
+            if not path.is_file():
+                problems.append(f"{PREDICTIONS} is missing")
+            elif sha256_file(path) != predictions:
+                problems.append(f"{PREDICTIONS} does not match the recorded predictions_sha256")
     return problems
 
 
@@ -205,6 +217,122 @@ def require_valid(rec, **kwargs):
     problems = validate_recording(rec, **kwargs)
     if problems:
         raise SystemExit("recording is not valid:\n" + "\n".join(f"  - {p}" for p in problems))
+
+
+# ------------------------------------------------------------------ comparability
+
+LABELS = ("publish", "reject")
+
+
+def canonical_sha(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
+def fingerprint_inputs(setup, cycles):
+    """Exactly what makes two runs the same benchmark. The decision model and its revision are deliberately absent."""
+    params = setup.get("parameters") or {}
+    return {"corpus_sha256": (setup.get("corpus") or {}).get("sha256"), "window_size": setup.get("window_size"),
+            "review_policy": (setup.get("review") or {}).get("policy", "all"),
+            "rubric_trigger": {k: params.get(k) for k in ("rubric_changes_every", "rubric_trigger_basis", "max_rubric_optimizations")},
+            "optimizer_model": setup.get("optimizer_model"), "selection_policy_primary": setup.get("objective"),
+            "starting_rubric": setup.get("starting_rubric"), "cycles": cycles}
+
+
+def compute_benchmark(setup, cycles, ids_known=True):
+    inputs = fingerprint_inputs(setup, cycles)
+    reason = None
+    if not inputs["corpus_sha256"]:
+        reason = "the corpus sha256 is unknown"
+    elif not ids_known:
+        reason = "story ids are not recoverable for this recording"
+    if not inputs["corpus_sha256"]:
+        return {"id": None, "fingerprint": None, "inputs": inputs, "comparable": False, "reason": reason}
+    fingerprint = canonical_sha(inputs)
+    out = {"id": f"{setup['corpus']['id']}-{fingerprint[:8]}", "fingerprint": fingerprint, "inputs": inputs,
+           "comparable": reason is None}
+    if reason:
+        out["reason"] = reason
+    return out
+
+
+def decision_model_detail(setup_or_protocol, card_path):
+    revision = None
+    try:
+        argv = json.loads(Path(card_path).read_text()).get("argv") or []
+        for i, item in enumerate(argv):
+            if item == "--decision-revision" and i + 1 < len(argv):
+                revision = argv[i + 1]
+            elif isinstance(item, str) and item.startswith("--decision-revision="):
+                revision = item.split("=", 1)[1]
+    except (OSError, ValueError, AttributeError):
+        pass
+    provider = setup_or_protocol.get("decision_provider")
+    return {"name": setup_or_protocol.get("decision_model"), "revision": revision, "provider": provider,
+            "hosting": "local" if provider == "kev" else "hosted"}
+
+
+def card_for(run_dir):
+    run_dir = Path(run_dir)
+    return run_dir.with_name(run_dir.name + ".card.json")
+
+
+def prediction_rows(fixture, ids=None):
+    """One row per exported cycle. gold is the revealed label ('actual'); null when the run did not reveal it."""
+    rows = []
+    for c in fixture["scenarios"][SCENARIO]["cycles"]:
+        raw = c.get("decision_model_probabilities")
+        story = (c.get("article") or {}).get("id") or (ids or {}).get(c["n"])
+        rows.append({"n": c["n"], "id": story, "gold": c.get("actual"),
+                     "raw_label": exporter.decision_model_choice(raw, LABELS) if raw else None, "raw_probs": raw,
+                     "final_label": c.get("predicted"), "final_probs": c.get("probabilities"),
+                     "reviewed": bool(c.get("feedback_revealed"))})
+    return rows
+
+
+def write_predictions(path, rows):
+    Path(path).write_text("".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for r in rows))
+
+
+def read_predictions(path):
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+
+def publish_metrics(rows, key):
+    """Precision, recall and F1 for the positive class 'publish' over rows with a gold label; null when undefined."""
+    tp = sum(r["gold"] == "publish" and r[key] == "publish" for r in rows)
+    fp = sum(r["gold"] != "publish" and r["gold"] is not None and r[key] == "publish" for r in rows)
+    fn = sum(r["gold"] == "publish" and r[key] != "publish" for r in rows)
+    precision = tp / (tp + fp) if tp + fp else None
+    recall = tp / (tp + fn) if tp + fn else None
+    f1 = 2 * precision * recall / (precision + recall) if precision is not None and recall is not None and precision + recall else None
+    rnd = lambda v: None if v is None else round(v, 3)
+    return {"precision": rnd(precision), "recall": rnd(recall), "f1": rnd(f1)}
+
+
+def accuracy(rows, key):
+    scored = [r for r in rows if r["gold"] is not None and r[key] is not None]
+    return round(sum(r[key] == r["gold"] for r in scored) / len(scored), 3) if scored else None
+
+
+def add_classification_results(results, rows):
+    """Additive: per-window and overall publish precision/recall/F1 (final and raw) and overall accuracies."""
+    for w in results["windows"]:
+        part = [r for r in rows if w["first_cycle"] <= r["n"] <= w["last_cycle"]]
+        w["final_publish"] = publish_metrics(part, "final_label")
+        w["raw_publish"] = publish_metrics(part, "raw_label")
+    results["final_publish"] = publish_metrics(rows, "final_label")
+    results["raw_publish"] = publish_metrics(rows, "raw_label")
+    results["final_accuracy"] = accuracy(rows, "final_label")
+    results["raw_accuracy"] = accuracy(rows, "raw_label")
+
+
+def mcnemar_exact(only_a, only_b):
+    """Two-sided exact binomial p-value from the discordant counts (A right/B wrong, A wrong/B right)."""
+    n = only_a + only_b
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(min(only_a, only_b) + 1)) / 2 ** n
+    return min(1.0, 2 * tail)
 
 
 # ------------------------------------------------------------------ add
@@ -319,12 +447,16 @@ def cmd_add(a):
         provenance = manifest.get("label_provenance") or fixture["disclosure"]
         corpus = {"id": manifest.get("corpus") or manifest.get("dataset"), "stories": manifest.get("actual_count"),
                   "label_provenance": provenance}
+        sha = manifest.get("operational_sha256") or manifest.get("sha256")
+        if sha:
+            corpus["sha256"] = sha
         setup = {"decision_model": protocol.get("decision_model"), "decision_provider": protocol.get("decision_provider"),
                  "optimizer_model": protocol.get("optimizer_model"),
                  "objective": (protocol.get("selection_policy") or {}).get("primary"),
                  "starting_rubric": rubric_kind, "parameters": setup_parameters(protocol), "corpus": corpus,
                  "window_size": window}
         setup["review"] = compute_review(fixture, protocol, mode_dir)
+        setup["decision_model_detail"] = decision_model_detail(protocol, card_for(run_dir))
         if rubric_text:
             setup["starting_rubric_text"] = rubric_text
         rec = {"schema": SCHEMA, "id": a.id, "title": a.title, "summary": a.summary, "notice": list(a.notice or []),
@@ -333,11 +465,16 @@ def cmd_add(a):
                "results": compute_results(fixture, mode_dir, window), "cost": compute_cost(fixture),
                "fixture": "fixture.json", "fixture_sha256": sha256_file(built),
                "source": {"run_dir": str(run_dir.resolve()), "replicate_of": a.replicate_of}}
+        rows = prediction_rows(fixture)
+        add_classification_results(rec["results"], rows)
+        rec["benchmark"] = compute_benchmark(setup, len(rows), ids_known=all(r["id"] for r in rows))
         require_valid(rec)
         if target.exists():
             shutil.rmtree(target)
         target.mkdir(parents=True)
         shutil.copyfile(built, target / "fixture.json")
+        write_predictions(target / PREDICTIONS, rows)
+        rec["predictions_sha256"] = sha256_file(target / PREDICTIONS)
         save_recording(a.catalog, rec)
     print(f"added {a.id} (draft) in {a.catalog}")
 
@@ -443,6 +580,8 @@ def cmd_export(a):
         public = {k: v for k, v in rec.items() if k != "source"}
         (out / "recording.json").write_text(dumps(public))
         shutil.copyfile(recording_dir(a.catalog, rec["id"]) / rec["fixture"], out / rec["fixture"])
+        if rec.get("predictions_sha256"):
+            shutil.copyfile(recording_dir(a.catalog, rec["id"]) / PREDICTIONS, out / PREDICTIONS)
     index = {"schema": INDEX_SCHEMA, "recordings": [
         {k: r[k] for k in ("id", "title", "summary", "tags", "featured")} for r in published]}
     (dest / "index.json").write_text(dumps(index))
@@ -466,8 +605,7 @@ def flatten(value, prefix=""):
     return {prefix[:-1]: value}
 
 
-def cmd_compare(a):
-    recs = [load_recording(a.catalog, rid) for rid in a.ids]
+def setup_diff(recs, ids):
     setups = []
     for rec in recs:
         flat = flatten({k: v for k, v in rec["setup"].items() if k not in ("corpus", "review")}
@@ -479,12 +617,48 @@ def cmd_compare(a):
     differing = [k for k in keys if len({json.dumps(s.get(k), sort_keys=True) for s in setups}) > 1]
     fmt = lambda v: "-" if v is None else (v if isinstance(v, str) else json.dumps(v, sort_keys=True))
     clip = lambda s: s if len(s) <= 40 else s[:37] + "..."
+    if not differing:
+        return "(none)", fmt
+    return table([("setting", *ids)] + [(k, *(clip(fmt(s.get(k))) for s in setups)) for k in differing]), fmt
+
+
+def benchmark_problem(recs, ids):
+    """Why these recordings cannot be compared as one benchmark, or None."""
+    marks = [r.get("benchmark") for r in recs]
+    missing = [i for i, m in zip(ids, marks) if not m or not m.get("id")]
+    if missing:
+        return f"no benchmark id for {', '.join(missing)} (run `recordings.py upgrade ID`, or the corpus sha256 is unknown)"
+    bad = [i for i, m in zip(ids, marks) if m.get("comparable") is False]
+    if bad:
+        return "; ".join(f"{i} is not comparable: {m.get('reason')}" for i, m in zip(ids, marks) if m.get("comparable") is False)
+    if len({m["id"] for m in marks}) > 1:
+        a, b = marks[0].get("inputs") or {}, marks[1].get("inputs") or {}
+        diffs = [f"  {k}: {a.get(k)!r} vs {b.get(k)!r}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)]
+        return (f"different benchmarks ({marks[0]['id']} vs {marks[1]['id']}); fields that differ:\n" + "\n".join(diffs or ["  (inputs not recorded)"]))
+    return None
+
+
+def paired_rows(catalog, rec):
+    path = recording_dir(catalog, rec["id"]) / PREDICTIONS
+    if path.is_file():
+        return read_predictions(path)
+    fixture = json.loads((recording_dir(catalog, rec["id"]) / rec["fixture"]).read_text())
+    return prediction_rows(fixture)
+
+
+def cmd_compare(a):
+    recs = [load_recording(a.catalog, rid) for rid in a.ids]
+    if len(recs) != 2:
+        raise SystemExit("compare takes exactly two recording ids")
+    problem = benchmark_problem(recs, a.ids)
+    if problem and not a.force:
+        raise SystemExit(f"cannot compare: {problem}\n(use --force to compare anyway)")
+    if problem:
+        print(f"WARNING: THESE RECORDINGS ARE NOT THE SAME BENCHMARK; differences below may not be due to the model.\n{problem}\n")
+    diff_text, fmt = setup_diff(recs, a.ids)
     print("Setup differences")
-    if differing:
-        print(table([("setting", *a.ids)] + [(k, *(clip(fmt(s.get(k))) for s in setups)) for k in differing]))
-    else:
-        print("(none)")
-    print("\nWindow accuracy (cyclotron / decision model / majority baseline)")
+    print(diff_text)
+    print("\nWindow accuracy: final / raw decision model / majority baseline")
     rows = [("window", *a.ids)]
     for i in range(max(len(r["results"]["windows"]) for r in recs)):
         cells, span = [], None
@@ -500,6 +674,80 @@ def cmd_compare(a):
     rows.append(("first rubric", *(fmt(r["results"].get("first_rubric_cycle")) for r in recs)))
     rows.append(("cost", *(f"${r['cost']['usd_total']:.3f}" for r in recs)))
     print(table(rows))
+    data = [paired_rows(a.catalog, r) for r in recs]
+    summary = [("overall", *a.ids)]
+    for label, key in (("final accuracy", "final_accuracy"), ("raw accuracy", "raw_accuracy")):
+        summary.append((label, *(pct(accuracy(d, key.replace("accuracy", "label"))) for d in data)))
+    for label, key in (("final publish recall", "final_publish"), ("final publish precision", "final_publish"),
+                       ("raw publish recall", "raw_publish"), ("raw publish precision", "raw_publish")):
+        metric = "recall" if "recall" in label else "precision"
+        which = "final_label" if label.startswith("final") else "raw_label"
+        summary.append((label, *(pct(publish_metrics(d, which)[metric]) for d in data)))
+    print("\n" + table(summary))
+    keyed = []
+    for d in data:
+        use_id = all(r.get("id") for r in d)
+        keyed.append({(r["id"] if use_id else r["n"]): r for r in d})
+    if not all(r.get("id") for d in data for r in d):
+        print("\nNote: story ids are missing for at least one recording; pairing by cycle number.")
+    shared = [k for k in keyed[0] if k in keyed[1]]
+    if len(shared) != len(keyed[0]) or len(shared) != len(keyed[1]):
+        print(f"\nNote: only {len(shared)} of {len(keyed[0])} / {len(keyed[1])} stories are in both recordings.")
+    disagreements = []
+    print(f"\nPaired comparison over {len(shared)} stories (exact McNemar, two-sided)")
+    for label, key in (("final decisions", "final_label"), ("raw decision-model answers", "raw_label")):
+        pairs = [(keyed[0][k], keyed[1][k]) for k in shared if keyed[0][k]["gold"] is not None and keyed[0][k][key] and keyed[1][k][key]]
+        only_a = sum(x[key] == x["gold"] and y[key] != y["gold"] for x, y in pairs)
+        only_b = sum(x[key] != x["gold"] and y[key] == y["gold"] for x, y in pairs)
+        differ = sum(x[key] != y[key] for x, y in pairs)
+        print(f"  {label}: {len(pairs)} scored; only {a.ids[0]} right {only_a}, only {a.ids[1]} right {only_b}; "
+              f"p = {mcnemar_exact(only_a, only_b):.4f}; stories where the two answers differ: {differ}")
+        if key == "final_label":
+            disagreements = [(x, y) for x, y in pairs if x[key] != y[key]]
+    if a.disagreements:
+        print(f"\nFirst {a.disagreements} disagreements on final decisions: story, gold, {a.ids[0]}, {a.ids[1]}")
+        for x, y in disagreements[:a.disagreements]:
+            print(f"  {x.get('id') or x['n']}  gold={x['gold']}  {x['final_label']}  {y['final_label']}")
+
+
+# ------------------------------------------------------------------ upgrade
+
+def cmd_upgrade(a):
+    rec = load_recording(a.catalog, a.id)
+    directory = recording_dir(a.catalog, a.id)
+    fixture = json.loads((directory / rec["fixture"]).read_text())
+    src = (rec.get("source") or {}).get("run_dir")
+    run_dir = a.run_dir or (Path(src) if src else None)
+    setup = rec["setup"]
+    ids = None
+    cycles = fixture["scenarios"][SCENARIO]["cycles"]
+    if not all((c.get("article") or {}).get("id") for c in cycles) and run_dir:
+        try:
+            mode_dir = replicates.find_mode_dir(Path(run_dir))
+            results = json.loads((mode_dir / "results.json").read_text())
+            ids = {c["cycle_number"]: c["item_id"] for c in results["cycles"]}
+        except (OSError, ValueError, KeyError):
+            ids = None
+    rows = prediction_rows(fixture, ids)
+    if run_dir and Path(run_dir).is_dir():
+        protocol = {}
+        try:
+            protocol = json.loads((Path(run_dir) / "protocol.json").read_text())
+        except (OSError, ValueError):
+            pass
+        corpus = setup["corpus"]
+        if not corpus.get("sha256") and protocol.get("operational_sha256"):
+            corpus["sha256"] = protocol["operational_sha256"]
+        setup["decision_model_detail"] = decision_model_detail(setup, card_for(run_dir))
+    elif "decision_model_detail" not in setup:
+        setup["decision_model_detail"] = decision_model_detail(setup, "/nonexistent")
+    add_classification_results(rec["results"], rows)
+    rec["benchmark"] = compute_benchmark(setup, len(rows), ids_known=all(r["id"] for r in rows))
+    write_predictions(directory / PREDICTIONS, rows)
+    rec["predictions_sha256"] = sha256_file(directory / PREDICTIONS)
+    save_recording(a.catalog, rec)
+    b = rec["benchmark"]
+    print(f"upgraded {a.id}: benchmark {b['id']}" + ("" if b["comparable"] else f" (not comparable: {b['reason']})"))
 
 
 # ------------------------------------------------------------------ cli
@@ -545,7 +793,13 @@ def build_parser():
     exp.set_defaults(func=cmd_export)
     cmp_ = sub.add_parser("compare", parents=[common])
     cmp_.add_argument("ids", nargs="+")
+    cmp_.add_argument("--disagreements", type=int, default=0, metavar="N", help="list the first N stories where the final decisions differ")
+    cmp_.add_argument("--force", action="store_true", help="compare recordings of different benchmarks, with a warning")
     cmp_.set_defaults(func=cmd_compare)
+    upg = sub.add_parser("upgrade", parents=[common], help="backfill benchmark, identity and per-story fields on an existing recording")
+    upg.add_argument("id")
+    upg.add_argument("--run-dir", type=Path, help="the run directory (default: the recording's source.run_dir)")
+    upg.set_defaults(func=cmd_upgrade)
     return parser
 
 

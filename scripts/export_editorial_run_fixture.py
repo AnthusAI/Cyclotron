@@ -492,7 +492,8 @@ def main(argv=None) -> int:
             usage = usage_by_window(events, prices, window=size)
             scenario["windows"] = scenario_windows(run["cycles"], predictions, reference_labels, labels, usage, size)
             scenario["usage_total"] = usage["total"]
-        scenario["cycles"] = [compact_cycle(cycle, predictions[cycle["cycle_number"]], corpus[cycle["item_id"]], comments)
+        scenario["cycles"] = [compact_cycle(cycle, predictions[cycle["cycle_number"]],
+                               {"id": cycle["item_id"], **corpus[cycle["item_id"]]}, comments)
                               for cycle in run["cycles"]]
         scenarios[name] = scenario
     attribution = {"dataset": manifest["dataset"], "revision": manifest["dataset_revision"], "license": manifest["license"],
