@@ -32,8 +32,13 @@ def shared_questions(configurations):
     return {signature: ids for signature, ids in owners.items() if len(ids) > 1}
 
 
-def batch_request(configurations, target, training, *, now=None, max_request_bytes=32000):
-    """Compose one request. A supporting question shared by several classifiers is asked once.
+def batch_request(configurations, target, training, *, now=None, max_request_bytes=32000,
+                  share_questions=False):
+    """Compose one request. With ``share_questions``, a supporting question several classifiers ask is asked once.
+
+    Without it (the default, and every store created before sharing existed)
+    each classifier's copy is asked separately in its own scope, exactly as
+    before.
 
     The returned identities map each question key to its first owner as
     ``(classifier, local_name, task)``. Shared keys also appear in
@@ -44,7 +49,7 @@ def batch_request(configurations, target, training, *, now=None, max_request_byt
         raise ValueError('every classifier needs its own explicit training pool')
     state = {'target':dict(target.values),'classifiers':{}}
     questions, identities, owners = {}, {}, {}
-    shared, asked = shared_questions(configurations), {}
+    shared, asked = (shared_questions(configurations) if share_questions else {}), {}
     for identifier,config in configurations.items():
         if not isinstance(identifier,str) or not identifier: raise ValueError('classifier identity required')
         request = config.request(target,training[identifier],now=now)

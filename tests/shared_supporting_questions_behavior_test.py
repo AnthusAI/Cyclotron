@@ -11,6 +11,8 @@ from decision_flywheel.flywheel_test import agent
 from decision_flywheel.models import DecisionResult, DecisionTask, Item, LabeledItem
 from decision_flywheel.shared_decisions import SharedDecisions
 from decision_flywheel.sibling_check import install_sibling_checks
+from pathlib import Path
+import sqlite3
 
 RELEVANT = ClassifierSpec("relevant", ("include", "exclude"), "Is this relevant?", positive_label="include")
 TIMELY = ClassifierSpec("timely", ("include", "exclude"), "Is this timely?", positive_label="include")
@@ -34,8 +36,8 @@ class RequestModel:
         self.scoped_signal = scoped_signal
         self.requests = []
 
-    async def classify_many(self, configs, target, training, **kwargs):
-        request, identities = batch_request(configs, target, training)
+    async def classify_many(self, configs, target, training, *, share_supporting_questions=False, **kwargs):
+        request, identities = batch_request(configs, target, training, share_questions=share_supporting_questions)
         self.requests.append(request)
         says_yes = "yes" in target.values["text"]
 
@@ -89,7 +91,8 @@ def test_the_shared_answer_reaches_both_ml_models(tmp_path):
 
 
 def wheels_with_shared_question(tmp_path, model):
-    shared = SharedDecisions(tmp_path / "shared.sqlite3", model, max_requests=1000, observer=lambda _: None)
+    shared = SharedDecisions(tmp_path / "shared.sqlite3", model, max_requests=1000, observer=lambda _: None,
+                             share_supporting_questions=True)
     configs = {"relevant": ClassifierConfig(RELEVANT.task, tasks=(MENTIONS_YES,)),
                "timely": ClassifierConfig(TIMELY.task, tasks=(MENTIONS_YES,))}
     wheels = {cid: DecisionFlywheel(tmp_path / f"{cid}.sqlite3", config, shared.adapter(cid),
@@ -138,3 +141,42 @@ def test_a_candidate_that_adopts_a_sibling_question_records_every_owner(tmp_path
     assert effects["shared_supporting_questions"] == {"mentions_yes": ["relevant", "timely"]}
     assert effects["siblings"]["timely"]["status"] == "no-regression"
     shared.close()
+
+
+LEGACY_REQUEST = Path(__file__).parent / "fixtures" / "legacy_identical_questions_request.json"
+
+
+def canonical(request):
+    return json.dumps(request, sort_keys=True, separators=(",", ":"))
+
+
+def test_an_existing_store_with_an_identical_pair_keeps_its_request_byte_for_byte_after_upgrade(tmp_path):
+    seeds = {"relevant": [QUESTION], "timely": [QUESTION]}
+    definition = CyclotronDefinition("newsroom", (RELEVANT, TIMELY), seed="shared-seed")
+    with Cyclotron.open(tmp_path / "c", definition, RequestModel(), seed_supporting_questions=seeds):
+        pass
+    # A store created before sharing existed has no sharing flag.
+    with sqlite3.connect(tmp_path / "c" / "cyclotron.sqlite3") as db:
+        db.execute("DELETE FROM meta WHERE key='share_supporting_questions'")
+    model = RequestModel()
+    with Cyclotron.open(tmp_path / "c", definition, model, share_supporting_questions=True) as cyclotron:
+        run(cyclotron.decide(Item("item-1", {"text": "yes 1"})))
+        assert not cyclotron.shared.share_supporting_questions
+        assert cyclotron.wheels["relevant"].sibling_briefing() == {}
+    # Captured from the engine before sharing existed (develop at 8ffd7cd).
+    assert canonical(model.requests[0]) == LEGACY_REQUEST.read_text().strip()
+
+
+def test_a_new_store_shares_by_default_and_can_opt_out_once_at_creation(tmp_path):
+    seeds = {"relevant": [QUESTION], "timely": [QUESTION]}
+    definition = CyclotronDefinition("newsroom", (RELEVANT, TIMELY), seed="shared-seed")
+    model = RequestModel()
+    with Cyclotron.open(tmp_path / "out", definition, model, seed_supporting_questions=seeds,
+                        share_supporting_questions=False):
+        pass
+    with Cyclotron.open(tmp_path / "out", definition, model, share_supporting_questions=True) as cyclotron:
+        run(cyclotron.decide(Item("item-1", {"text": "yes 1"})))
+    assert canonical(model.requests[-1]) == LEGACY_REQUEST.read_text().strip()
+    with Cyclotron.open(tmp_path / "in", definition, model, seed_supporting_questions=seeds) as cyclotron:
+        run(cyclotron.decide(Item("item-1", {"text": "yes 1"})))
+    assert "owners" in model.requests[-1]

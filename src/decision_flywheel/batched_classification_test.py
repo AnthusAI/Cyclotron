@@ -55,7 +55,7 @@ def test_a_supporting_question_two_classifiers_ask_is_asked_once_and_answers_bot
             self.questions=questions
             return SimpleNamespace(answers={key:{'choice':next(iter(q['criteria'])),'probabilities':{label:1/len(q['criteria']) for label in q['criteria']}} for key,q in questions.items()},model='fake',usage={'input_tokens':10})
     client=Client(); events=[]
-    result=asyncio.run(JevAdapter(client).classify_many(configurations,Item('target',{'text':'Target'}),{'library':[],'archive':[]},event_sink=events.append))
+    result=asyncio.run(JevAdapter(client).classify_many(configurations,Item('target',{'text':'Target'}),{'library':[],'archive':[]},event_sink=events.append,share_supporting_questions=True))
     assert len(client.questions)==3
     memory=[key for key,q in client.questions.items() if q['instructions'].startswith('About memory?')]
     assert len(memory)==1 and 'shared by classifiers ["library", "archive"]' in client.questions[memory[0]]['instructions']
@@ -74,3 +74,14 @@ def test_questions_that_differ_in_name_instructions_or_labels_are_not_shared_and
                                          Item('target',{'text':'Target'}),{'a':[],'b':[]})
         assert 'owners' not in request and len(request['questions'])==4
         assert all('state.classifiers[' in q['instructions'] for q in request['questions'].values())
+
+
+def test_identical_questions_are_asked_separately_unless_sharing_is_requested():
+    from .batched_classification import batch_request
+    shared = DecisionTask('memory',('yes','no'),'About memory?')
+    configs = {'a':ClassifierConfig(DecisionTask('a',('yes','no'),'A?'),tasks=(shared,)),
+               'b':ClassifierConfig(DecisionTask('b',('yes','no'),'B?'),tasks=(shared,))}
+    legacy,_ = batch_request(configs,Item('target',{'text':'Target'}),{'a':[],'b':[]})
+    assert 'owners' not in legacy and len(legacy['questions'])==4
+    sharing,_ = batch_request(configs,Item('target',{'text':'Target'}),{'a':[],'b':[]},share_questions=True)
+    assert len(sharing['questions'])==3

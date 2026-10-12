@@ -413,7 +413,8 @@ class DecisionFlywheel:
 
     def sibling_briefing(self):
         """Optimizer context naming sibling supporting questions; empty for a single output."""
-        questions = self.sibling_check.sibling_questions() if self.sibling_check is not None else {}
+        check = self.sibling_check
+        questions = check.sibling_questions() if check is not None and check.sharing() else {}
         return {"sibling_supporting_questions": {"note": self.SHARED_QUESTIONS_NOTE, "by_classifier": questions}} if questions else {}
 
     async def sibling_effects(self, config, now):

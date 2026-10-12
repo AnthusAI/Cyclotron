@@ -73,11 +73,11 @@ class LayaAdapter:
         return ClassifiedAnswers(result.answers["classifier"], result.model, result.usage, result.latency_ms)
 
     async def classify_many(self, configurations, target, training, *, now=None,
-                            event_sink=None, max_request_bytes=32000):
+                            event_sink=None, max_request_bytes=32000, share_supporting_questions=False):
         """Transport scoped context, without promising in-context effectiveness."""
         from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
         request, identities = batch_request(configurations, target, training, now=now,
-                                             max_request_bytes=max_request_bytes)
+                                             max_request_bytes=max_request_bytes, share_questions=share_supporting_questions)
         questions = {key: {"type": value["type"], "instructions": value["instructions"],
                            "criteria": {label: None for label in value["options"]}}
                      for key, value in request["questions"].items()}

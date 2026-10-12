@@ -26,8 +26,10 @@ def feature_context_identity(model_identity,configs,training):
 
 
 class SharedDecisions:
-    def __init__(self,path,model,*,max_requests,observer):
+    def __init__(self,path,model,*,max_requests,observer,share_supporting_questions=False):
         self.model,self.max_requests,self.observer=model,max_requests,observer
+        # Off for stores created before sharing existed: their requests never change.
+        self.share_supporting_questions=bool(share_supporting_questions)
         self.db=sqlite3.connect(path)
         self.db.executescript('CREATE TABLE IF NOT EXISTS batches(key TEXT PRIMARY KEY,status TEXT,payload TEXT); CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY,key TEXT);')
         self.db.execute('CREATE TABLE IF NOT EXISTS batch_history(id INTEGER PRIMARY KEY,key TEXT,generation INTEGER,status TEXT,payload TEXT)')
@@ -76,7 +78,7 @@ class SharedDecisions:
         self.prepared={}
         options=options or CacheOptions()
         now=now or datetime.now(timezone.utc)
-        request,_=batch_request(configs,target,training,now=now)
+        request,_=batch_request(configs,target,training,now=now,share_questions=self.share_supporting_questions)
         self.validate_capabilities(request)
         fingerprint=key({'model':self.model.model_identity,'request':request})
         self.identity=fingerprint
@@ -96,7 +98,8 @@ class SharedDecisions:
                 self.db.execute('INSERT OR REPLACE INTO batches VALUES (?,"pending",NULL)',(fingerprint,))
             exchanges=[]
             try:
-                result=await self.model.classify_many(configs,target,training,now=now,event_sink=exchanges.append)
+                result=await self.model.classify_many(configs,target,training,now=now,event_sink=exchanges.append,
+                    **({'share_supporting_questions':True} if self.share_supporting_questions else {}))
                 if set(result.answers)!=set(configs): raise ValueError('batch missing a classifier')
                 from .flywheel import DecisionFlywheel
                 for identifier,config in configs.items():
@@ -128,7 +131,7 @@ class SharedDecisions:
                     fingerprint=shared.prepared[child][2]
                 else:
                     configs,pools=shared.scope(identifier,config,training)
-                    request,_=batch_request(configs,target,pools,now=now)
+                    request,_=batch_request(configs,target,pools,now=now,share_questions=shared.share_supporting_questions)
                     fingerprint=key({'model':shared.model.model_identity,'request':request})
                 return fingerprint
             def cache_identity(self,config,target,training,*,now=None):
@@ -152,7 +155,7 @@ class SharedDecisions:
                 prepared=shared.prepared.get(child)
                 configs,pools=(shared.prepared_scope if prepared and not shared.context_configs else shared.scope(identifier,config,training))
                 if getattr(shared.model,'capabilities',None) is not None:
-                    request,_=batch_request(configs,target,pools,now=now)
+                    request,_=batch_request(configs,target,pools,now=now,share_questions=shared.share_supporting_questions)
                     shared.validate_capabilities(request)
                 if cache_options.policy=='refresh' or not prepared or expected!=shared.model.model_identity+':shared-answer-v3:'+prepared[2]+':'+str(prepared[3]):
                     await shared.prepare(configs,target,pools,now=now,options=cache_options)

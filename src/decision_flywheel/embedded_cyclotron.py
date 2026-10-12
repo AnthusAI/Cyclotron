@@ -308,7 +308,8 @@ class Cyclotron:
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
                  lease=None, review_program: ReviewProgram | None = ReviewProgram(),
                  seed_rubrics: Mapping[str, str] | None = None,
-                 seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None):
+                 seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None,
+                 share_supporting_questions: bool | None = None):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
@@ -321,6 +322,9 @@ class Cyclotron:
             raise ValueError("seed_rubrics maps classifier ids to rubric text")
         self.seed_rubrics = seed_rubrics
         self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
+        if share_supporting_questions is not None and not isinstance(share_supporting_questions, bool):
+            raise ValueError("share_supporting_questions must be a bool")
+        self.requested_sharing = share_supporting_questions
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
@@ -363,7 +367,8 @@ class Cyclotron:
                             (_json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}),))
         self._batches: list[tuple[int, int, int]] = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
-                                      observer=self._on_batch)
+                                      observer=self._on_batch,
+                                      share_supporting_questions=self._sharing(created=saved is None))
         # The shared ceiling counts every attempt in the store's lifetime; this
         # open authorizes max_requests more.
         self.shared.max_requests = self.shared.requests + max_requests
@@ -402,6 +407,21 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(seed)))
         return seed
+
+    def _sharing(self, *, created: bool) -> bool:
+        """Whether identical supporting questions are asked once: fixed when the store is created.
+
+        New stores share unless the application opts out. A store created
+        before sharing existed keeps asking every copy separately, so its
+        requests, answers and ML model features never change on upgrade.
+        """
+        row = self.db.execute("SELECT value FROM meta WHERE key='share_supporting_questions'").fetchone()
+        if row is not None:
+            return json.loads(row[0])
+        sharing = (self.requested_sharing is not False) if created else False
+        with self.db:
+            self.db.execute("INSERT INTO meta VALUES ('share_supporting_questions', ?)", (_json(sharing),))
+        return sharing
 
     def _seed_questions(self, spec: ClassifierSpec, *, created: bool) -> tuple[DecisionTask, ...]:
         """The first supporting questions for a classifier: fixed when its store is first opened.

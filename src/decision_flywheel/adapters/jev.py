@@ -159,10 +159,11 @@ class JevAdapter:
                                  round((time.perf_counter() - started) * 1000, 2))
 
     async def classify_many(self, configurations, target, training, *, now=None, event_sink=None,
-                            max_request_bytes=32000):
+                            max_request_bytes=32000, share_supporting_questions=False):
         """One transport request; each classifier keeps its own context and answer group."""
         from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
-        request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes)
+        request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes,
+                                            share_questions=share_supporting_questions)
         state = {'target':request['state']['target'],'classifiers':{
             identifier:{k:v for k,v in value.items() if k!='rubric'} for identifier,value in request['state']['classifiers'].items()}}
         questions = {}

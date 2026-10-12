@@ -87,11 +87,11 @@ class KevAdapter:
         return ClassifiedAnswers(result.answers['classifier'],result.model,result.usage,result.latency_ms)
 
     async def classify_many(self, configurations, target, training, *, now=None,
-                            event_sink=None, max_request_bytes=32000):
+                            event_sink=None, max_request_bytes=32000, share_supporting_questions=False):
         """Send the cyclotron once and preserve every feature's distribution."""
         from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
         request,identities=batch_request(configurations,target,training,now=now,
-                                         max_request_bytes=max_request_bytes)
+                                         max_request_bytes=max_request_bytes, share_questions=share_supporting_questions)
         questions={key:{'type':detail['type'],'instructions':detail['instructions'],
                         'criteria':{label:None for label in detail['options']}}
                    for key,detail in request['questions'].items()}

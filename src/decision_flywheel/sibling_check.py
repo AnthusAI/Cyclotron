@@ -72,6 +72,9 @@ class SiblingCheck:
     def siblings(self):
         return [identifier for identifier in self.wheels if identifier != self.owner]
 
+    def sharing(self) -> bool:
+        return bool(getattr(self.shared, "share_supporting_questions", False))
+
     def sibling_questions(self) -> dict:
         """Each sibling's current supporting questions, in the optimizer's proposal shape."""
         return {identifier: [{"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
@@ -81,6 +84,8 @@ class SiblingCheck:
     def shared_owners(self, config) -> dict:
         """Supporting questions of ``config`` that siblings also ask, with every owner (asked once)."""
         from .batched_classification import shared_questions
+        if not self.sharing():
+            return {}
         configs = {**{identifier: wheel.active.config for identifier, wheel in self.wheels.items()}, self.owner: config}
         shared = shared_questions(configs)
         return {task.name: shared[(task.name, task.instructions, tuple(task.labels))] for task in config.tasks
