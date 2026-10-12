@@ -3,16 +3,31 @@
   "title": "Record one review that labels several outputs",
   "description": "As a reviewer I answer the whole checklist for an item at once and want to save it as one review.\n\nCurrent: review() takes one classifier per call (embedded_cyclotron.py:667-700); with several outputs, omitting it raises 'name the classifier' (:1022-1029); each call can trigger optimization under the lock (:729, :1083-1092). Related in-progress work: flywheel07 (SDK facade: decide, review, status).\n\nDesired: review(decision_id, labels={cid: label, ...}, explanation=...) stored atomically, one optimization pass after.\n\nAcceptance: one call labels N outputs; partial checklists allowed (unlabeled outputs stay open); idempotent by review_id; test with 3 outputs shows one review event per output and no duplicate optimizer runs.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "0706f4a3-6d6d-4897-a554-08b9cef52963",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/13",
+      "created_at": "2026-10-12T16:02:19.002094Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:02:43.871687Z",
-  "updated_at": "2026-10-11T19:02:43.871888Z",
+  "updated_at": "2026-10-12T16:02:19.002418Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

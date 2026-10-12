@@ -53,6 +53,7 @@ from .shared_decisions import SharedDecisions
 from .sibling_check import SiblingPolicy, install_sibling_checks
 
 SELECTED_BY = REASONS
+_NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
 FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
@@ -757,10 +758,11 @@ class Cyclotron:
 
     # Review ---------------------------------------------------------------
 
-    async def review(self, decision_id: str, label: str | None, *, classifier: str | None = None,
+    async def review(self, decision_id: str, label: str | None = _NO_LABEL, *, classifier: str | None = None,
+                     labels: Mapping[str, str | None] | None = None,
                      explanation: str | None = None, reason_code: str | None = None, reviewer: str | None = None,
-                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False) -> Review:
-        """Record a reviewer's label for a decision.
+                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False):
+        """Record a reviewer's label for a decision, or one checklist of labels for several outputs.
 
         The first label for a decision teaches the cyclotron; a later label is
         a correction. ``label=None`` records a review without a label (for
@@ -771,15 +773,36 @@ class Cyclotron:
         reviewer's own choice trains the ML model but never counts as
         alignment or audit evidence.
         Pass the application's own ``review_id`` to make resubmission safe.
+
+        ``labels={classifier: label, ...}`` saves one review of several
+        outputs and returns ``{classifier: Review}``. Every entry is validated
+        before anything is recorded; outputs left out stay open for review.
+        Each output gets its own review (``<review_id>:<classifier>``) and
+        review event, every label is recorded before any learning, and then
+        each labeled output runs its learning pass once. Resubmitting the
+        same ``review_id`` returns the recorded reviews and completes any that
+        an interruption left unrecorded.
         """
+        if labels is not None:
+            if label is not _NO_LABEL or classifier is not None:
+                raise ValueError("pass labels for several outputs, or label and classifier for one")
+            if not isinstance(labels, Mapping) or not labels:
+                raise ValueError("labels maps classifier ids to labels")
+        elif label is _NO_LABEL:
+            raise ValueError("review needs a label (None to close without one) or labels")
         async with self._lock:
             self._sync()
             self._batches = []
             decision = self.decision(decision_id)
-            cid = self._classifier(decision, classifier)
-            wheel, spec = self.wheels[cid], self.specs[cid]
-            if label is not None:
-                label = spec.task.validate_label(label)
+            if labels is None:
+                entries = {self._classifier(decision, classifier): label}
+                ids = {cid: review_id or str(uuid4()) for cid in entries}
+            else:
+                if any(cid not in decision.results for cid in labels):
+                    raise ValueError("classifier not in this cyclotron")
+                base = review_id or str(uuid4())
+                entries = {cid: labels[cid] for cid in self.specs if cid in labels}
+                ids = {cid: f"{base}:{cid}" for cid in entries}
             if selected_by is None:
                 selected_by = decision.review.reason if decision.review.selected else "reviewer"
             if selected_by not in SELECTED_BY:
@@ -790,60 +813,90 @@ class Cyclotron:
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f"{name} must be text")
             explanation = (explanation.strip() or None) if explanation else None
-            review_id = review_id or str(uuid4())
-            existing = self._review(review_id)
-            if existing is not None:
-                same = (existing.decision_id, existing.classifier, existing.label, existing.reason_code) == (
-                    decision_id, cid, label, reason_code) and (existing.explanation or None) == self._redacted(cid, explanation)
-                if not same:
-                    raise ValueError("review identity has different content")
-                return existing
-            active = self._active_review(decision_id, cid)
             target = Item(decision.item_id, self._item_values()[decision.item_id])
-            annotations = {"decision_id": decision_id, "review_id": review_id, "selected_by": selected_by,
-                           "reason_code": reason_code, "reviewer": reviewer}
-            warnings: list = []
-            if label is None:
-                if active is not None:
+            # Validate every entry before recording any of them.
+            plans = []
+            for cid, value in entries.items():
+                if value is not None:
+                    value = self.specs[cid].task.validate_label(value)
+                existing = self._review(ids[cid])
+                if existing is not None:
+                    same = (existing.decision_id, existing.classifier, existing.label, existing.reason_code) == (
+                        decision_id, cid, value, reason_code) and (existing.explanation or None) == self._redacted(cid, explanation)
+                    if not same:
+                        raise ValueError("review identity has different content")
+                    continue
+                active = self._active_review(decision_id, cid)
+                if value is None and active is not None:
                     raise ValueError("this decision already has a label; undo it before closing it without one")
-                cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
-                wheel._emit({"kind": "human-skipped", "target_id": target.id, "explanation": explanation, **annotations})
-                cycle.__exit__(None, None, None)
-            elif active is None:
-                cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
-                try:
-                    propensity = decision.review.propensity if selected_by != "reviewer" else 1.0
-                    wheel.record_feedback_event(FeedbackItem(
-                        review_id, target.id, cid, initial_answer_value=decision.results[cid].label,
-                        final_answer_value=label, edit_comment_value=explanation, label_source=LABEL_SOURCE_VETTED,
-                        selection_propensity=propensity, review_provenance=f"{selected_by}-selected-review"),
-                        assignment=REVIEWER_SELECTED if selected_by == "reviewer" else review_role(self.definition.seed, target.id),
-                        annotations=annotations)
-                    warnings = await self._learn(cid, cycle)
-                    record_cycle_metrics(wheel, self._class_config(spec))
+                plans.append((cid, value, active))
+            warnings: dict[str, list] = {cid: [] for cid in entries}
+            learning = {}
+            try:
+                for cid, value, active in plans:
+                    cycle = self._record_review(decision, target, cid, value, active, ids[cid], explanation,
+                                                reason_code, reviewer, selected_by)
+                    if cycle is not None:
+                        learning[cid] = cycle
+                # Every label is recorded before any output learns, so each
+                # learning pass (and its sibling check) sees the whole review.
+                for cid in list(learning):
+                    cycle = learning[cid]
+                    warnings[cid] = await self._learn(cid, cycle)
+                    record_cycle_metrics(self.wheels[cid], self._class_config(self.specs[cid]))
                     cycle.__exit__(None, None, None)
-                except Exception as error:
+                    del learning[cid]
+            except Exception as error:
+                for cycle in learning.values():
                     cycle.__exit__(type(error), error, None)
-                    raise
-            else:
-                original = self._feedback_event(wheel, active.review_id)
-                prior = original["feedback"]
-                with wheel.cycle(target, reason="human-correction"):
-                    wheel.record_feedback_event(FeedbackItem(
-                        review_id, target.id, cid, initial_answer_value=prior.get("initial_answer_value"),
-                        final_answer_value=label, edit_comment_value=explanation, label_source=prior["label_source"],
-                        selection_propensity=prior.get("selection_propensity"),
-                        review_provenance=f"corrected-human-vote:{prior['id']}"),
-                        assignment=original.get("assignment"),
-                        annotations={**annotations, "selected_by": original.get("selected_by", selected_by)})
-                    self._reconcile(cid)
-                    record_cycle_metrics(wheel, self._class_config(spec))
-                    wheel._emit({"kind": "feedback-correction-completed", "feedback_id": review_id,
-                                 "target_id": target.id, "previous_feedback_id": prior["id"]})
+                raise
             self._sync()
             with self.db:
                 self._record_batches(decision_id)
-            return replace(self._review(review_id), optimization_warnings=tuple(warnings))
+            reviews = {cid: replace(self._review(ids[cid]), optimization_warnings=tuple(warnings[cid]))
+                       for cid in entries}
+            return reviews if labels is not None else next(iter(reviews.values()))
+
+    def _record_review(self, decision, target, cid, label, active, review_id, explanation, reason_code, reviewer,
+                       selected_by):
+        """Record one output's review; return its open cycle when a new label needs a learning pass."""
+        wheel, spec = self.wheels[cid], self.specs[cid]
+        annotations = {"decision_id": decision.decision_id, "review_id": review_id, "selected_by": selected_by,
+                       "reason_code": reason_code, "reviewer": reviewer}
+        if label is None:
+            cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
+            wheel._emit({"kind": "human-skipped", "target_id": target.id, "explanation": explanation, **annotations})
+            cycle.__exit__(None, None, None)
+            return None
+        if active is None:
+            cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
+            try:
+                propensity = decision.review.propensity if selected_by != "reviewer" else 1.0
+                wheel.record_feedback_event(FeedbackItem(
+                    review_id, target.id, cid, initial_answer_value=decision.results[cid].label,
+                    final_answer_value=label, edit_comment_value=explanation, label_source=LABEL_SOURCE_VETTED,
+                    selection_propensity=propensity, review_provenance=f"{selected_by}-selected-review"),
+                    assignment=REVIEWER_SELECTED if selected_by == "reviewer" else review_role(self.definition.seed, target.id),
+                    annotations=annotations)
+            except Exception as error:
+                cycle.__exit__(type(error), error, None)
+                raise
+            return cycle
+        original = self._feedback_event(wheel, active.review_id)
+        prior = original["feedback"]
+        with wheel.cycle(target, reason="human-correction"):
+            wheel.record_feedback_event(FeedbackItem(
+                review_id, target.id, cid, initial_answer_value=prior.get("initial_answer_value"),
+                final_answer_value=label, edit_comment_value=explanation, label_source=prior["label_source"],
+                selection_propensity=prior.get("selection_propensity"),
+                review_provenance=f"corrected-human-vote:{prior['id']}"),
+                assignment=original.get("assignment"),
+                annotations={**annotations, "selected_by": original.get("selected_by", selected_by)})
+            self._reconcile(cid)
+            record_cycle_metrics(wheel, self._class_config(spec))
+            wheel._emit({"kind": "feedback-correction-completed", "feedback_id": review_id,
+                         "target_id": target.id, "previous_feedback_id": prior["id"]})
+        return None
 
     async def undo_review(self, decision_id: str, *, classifier: str | None = None,
                           review_id: str | None = None) -> Review:
