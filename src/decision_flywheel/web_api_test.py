@@ -296,3 +296,21 @@ def test_workspace_shell_versions_its_static_bundles_by_content(tmp_path):
     assert response.status_code == 200
     assert '/assets/web.css?v=' in response.text
     assert '/assets/web.js?v=' in response.text
+
+
+def test_promoting_a_supporting_question_needs_confirmation_and_live_authority(tmp_path):
+    from types import SimpleNamespace
+    from .cyclotrons_test import _run_with_supporting_question
+    store,parent,_=_run_with_supporting_question(tmp_path)
+    mutation=('mutation($confirmed:Boolean!){promoteSupportingQuestion(parentRunId:"%s",sourceClassifierId:"relevant",'
+              'question:"names_vendor",classifierId:"vendor",classifierName:"Names a vendor",name:"Newsroom",'
+              'confirmed:$confirmed){id config}}' % parent['id'])
+    client=TestClient(create_app(store,service=SimpleNamespace(allow_live=True)))
+    refused=client.post('/graphql',json={'query':mutation,'variables':{'confirmed':False}}).json()
+    assert refused.get('errors') and len(store.cyclotrons())==0
+    created=client.post('/graphql',json={'query':mutation,'variables':{'confirmed':True}}).json()
+    run=created['data']['promoteSupportingQuestion']
+    assert [row['id'] for row in run['config']['classifiers']]==['relevant','vendor']
+    events=[e['payload'] for e in store.all_events(run['id'])]
+    assert events[-1]['promoted_supporting_question']=={'source_classifier_id':'relevant','question':'names_vendor',
+                                                        'classifier_id':'vendor'}

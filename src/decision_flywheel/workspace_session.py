@@ -55,7 +55,10 @@ class WorkspaceSession:
             path=hashlib.sha256(identifier.encode()).hexdigest()+'.sqlite3'
             # Each wheel owns its observer; only the paid transport and its
             # budget are shared. Reusing the agent chains every wheel's traces.
-            self.wheels[identifier]=DecisionFlywheel(directory/path,ClassifierConfig(task),self.shared.adapter(identifier),copy(optimizer),
+            seeded=tuple(DecisionTask(q['name'],tuple(q['labels']),q['instructions'],task.input_field)
+                         for q in self.config.get('seed_supporting_questions',{}).get(identifier,[]))
+            initial=ClassifierConfig(task,rubric=definition.get('seed_rubric',''),tasks=seeded)
+            self.wheels[identifier]=DecisionFlywheel(directory/path,initial,self.shared.adapter(identifier),copy(optimizer),
                 max_requests=self.config['max_requests'],observer=lambda event,cid=identifier:self.emit(cid,event),redact=redact,
                 selection_policy=SelectionPolicy(**definition.get('selection_policy',{'primary':'f1','aggregation':'macro'})),min_evaluation_per_class=2)
         install_sibling_checks(self.wheels,self.shared,self.partitions,SiblingPolicy(**self.config.get('sibling_policy',{})))

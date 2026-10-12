@@ -58,8 +58,22 @@ Accuracy, and label counts. These are rolling prediction-before-feedback metrics
 over at most 200 reviewed items, not a matched held-out comparison. Replayed
 historical labels must not be represented as freshly collected human judgments.
 
-GraphQL exposes `cyclotrons`, `cyclotronVersions`, `extendCyclotron`, and
-`activateCyclotronVersion`. Creating a fresh replay requires explicit live-call
+A supporting question can become an output in its own right.
+`promote_supporting_question(parent_run_id, source_classifier_id, question, ...)`
+reads the question from the parent run's latest checkpoint and saves a new
+classifier. Its decision question and first rubric are the question's
+instructions, its classes are the question's labels (optionally with a
+positive label), and it records `promoted_from`. The command then extends the
+cyclotron with that classifier as a new edition. The new output starts
+unlabeled, earlier labels are replayed as in any extension, and the parent run
+is unchanged. In the new edition the source classifier starts with the
+parent's supporting questions (`seed_supporting_questions` in the run
+configuration, which is configuration, not fitted state). Its features stay the
+same until the optimizer promotes a candidate, so the old question remains
+until it is replaced.
+
+GraphQL exposes `cyclotrons`, `cyclotronVersions`, `extendCyclotron`,
+`promoteSupportingQuestion`, and `activateCyclotronVersion`. Creating a fresh replay requires explicit live-call
 authority. Merely creating an edition makes no provider calls; preparing an item
 does, under the edition's explicit request and optimizer ceilings.
 
