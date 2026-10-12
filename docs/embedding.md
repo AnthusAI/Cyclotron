@@ -120,6 +120,17 @@ asyncio.run(cyclotron.undo_review(decision.decision_id))
 asyncio.run(cyclotron.review(decision.decision_id, "include", reviewer="editor-7"))
 ```
 
+With several outputs, save a reviewer's whole checklist as one review:
+`cyclotron.review(decision_id, labels={"relevant": "include", "timely": "exclude"},
+review_id="message-982")` returns `{classifier: Review}`. Every entry is
+checked before anything is recorded. An output left out stays open for review,
+and a `None` entry closes that output without teaching. Each output gets its
+own review (`message-982:relevant`, ...) and `review` event. All labels are
+recorded before any output learns, and then each labeled output runs its
+learning pass once. Each labeled output's review counts toward that output's
+review-rate window; an output left out does not. Resubmitting the same review
+id is safe and completes any output an interruption left unrecorded.
+
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it
 did not send is `selected_by="reviewer"`: it trains the ML model but never
