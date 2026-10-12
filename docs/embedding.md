@@ -174,6 +174,19 @@ Low-confidence decisions are always reviewed, and a random audit share
 remains at every rate. Every number is configuration; the defaults are
 placeholders until the review-rate experiments set them.
 
+With several outputs there is still one review rate, because one review
+covers the whole decision, but every output is watched. Each window is
+checked per output, against that output's own decisions, reviews and
+calibration gap. The window fails if any output with enough reviews misses the
+target, and it holds if any output is short of reviews. It counts toward
+stepping down only when every output meets the target. A new version of any
+output raises the rate. The `review-rate-changed` event and the reason name the
+output (`output`), and the event's evidence keeps every output's numbers.
+`cyclotron.overview()` returns every output's status, the output with the
+lowest measured alignment (`worst`) and the output that decided the last
+window (`limiting`). A one-output store keeps its program state and events
+exactly as before.
+
 ```python
 strict = ReviewProgram(rates=(1.0, 0.5, 0.2), audit_share=0.1, confidence_threshold=0.75,
                        target_accuracy=0.9, window=50, min_window_labels=15)
