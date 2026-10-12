@@ -3,7 +3,7 @@
   "title": "Make the review rate engine state: computed from metrics, explained, overridable",
   "description": "Replace fixed cycle schedules (PhasedFeedbackPolicy in replay_feedback_policy.py) with a review-rate program the engine owns. States: onboarding (review all until each label has N reviews), tapering (every K program-selected labels, step down 1.0, 0.5, 0.25, floor if audit accuracy meets target and calibration gap is within bound), raised (back to 1.0 after a promotion, a definition change, or an accuracy drop). Per decision: review below a confidence threshold, otherwise a deterministic random audit at the current rate; record propensity and a reason. Operator override with rate, expiry, and who set it. Defaults come from decision-flywheel-8ee62604 (when to taper), decision-flywheel-b0cf2975 (which items) and decision-flywheel-7d61bc09 (routing metrics). Ordering: after the SDK facade and the status shape.\n\nAcceptance criteria:\n- status().reviewRate reports state, rate, threshold, audit floor, reason, override, next check, and expected reviews per week.\n- Every decision records whether it was selected, why, and its propensity; selection never reads the hidden label.\n- A rate change and an override each emit a review-rate-changed event with the evidence used.\n- Specs cover onboarding exit, a step down, a raise after promotion, and an expiring override.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -49,11 +49,25 @@
       "comment_type": "default",
       "data": {},
       "agent": null
+    },
+    {
+      "id": "9a321a08-a2e1-4c68-bfd4-a3f3f486d94e",
+      "author": "home",
+      "text": "landed on develop; closed during flywheel1f work",
+      "created_at": "2026-10-12T15:16:47.876880Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
     }
   ],
   "created_at": "2026-10-09T14:51:17.346891Z",
-  "updated_at": "2026-10-11T19:03:56.630169Z",
-  "closed_at": null,
+  "updated_at": "2026-10-12T15:16:48.682743Z",
+  "closed_at": "2026-10-12T15:16:48.682632Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

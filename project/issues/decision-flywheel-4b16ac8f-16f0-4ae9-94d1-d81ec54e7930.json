@@ -3,17 +3,32 @@
   "title": "Route reviews per output instead of per item",
   "description": "Only send the reviewer the unsure questions on the checklist, not every question for an item where one answer is unsure.\n\nCurrent: selection uses the minimum confidence across outputs and selects the whole item (embedded_cyclotron.py:427-430; review_program.py:113-125).\n\nDesired: per-output selection (below threshold or sampled); the decision records which outputs are requested.\n\nAcceptance: confident A + unsure B requests only B; audit sampling stays per output with propensities; replay deterministic.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "feb3d9f0-5687-4ba6-8dd0-0ca1f8c3215b",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/14",
+      "created_at": "2026-10-12T16:25:36.131089Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:02:50.904584Z",
-  "updated_at": "2026-10-11T19:02:50.904826Z",
-  "closed_at": null,
+  "updated_at": "2026-10-12T16:35:11.049527Z",
+  "closed_at": "2026-10-12T16:35:11.049384Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

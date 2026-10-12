@@ -3,17 +3,32 @@
   "title": "Optimize several outputs without serial review latency",
   "description": "Labeling a 5-question checklist shouldn't stall the reviewer while 5 optimizations run one after another.\n\nCurrent: every output reaches the cadence count on the same review (learning_loop.py:146-153); _learn runs inside review() under the cyclotron lock (embedded_cyclotron.py:729).\n\nDesired: optimization queued after the review; outputs run concurrently or in a scheduled order.\n\nAcceptance: review latency doesn't grow with output count; per-output optimizer runs recorded; optimizer call limit shared and enforced.",
   "type": "chore",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "247cb538-a194-41d3-952c-2f63ae31c31d",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/15",
+      "created_at": "2026-10-12T16:45:56.085460Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:03:06.693160Z",
-  "updated_at": "2026-10-11T19:03:06.693379Z",
-  "closed_at": null,
+  "updated_at": "2026-10-12T16:56:17.120690Z",
+  "closed_at": "2026-10-12T16:56:17.118757Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

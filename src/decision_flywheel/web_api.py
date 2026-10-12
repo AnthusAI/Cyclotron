@@ -187,6 +187,19 @@ class Mutation:
         return Run(**run)
 
     @strawberry.mutation
+    async def promote_supporting_question(self,info:strawberry.Info,parent_run_id:strawberry.ID,source_classifier_id:str,
+                                          question:str,classifier_id:str,classifier_name:str,name:str,
+                                          positive_label:str|None=None,confirmed:bool=False)->Run:
+        service=info.context.get('service')
+        if not confirmed or service is None or not service.allow_live:
+            raise ValueError('cyclotron replay requires explicit live authority')
+        run=await call(info,'promote_supporting_question',str(parent_run_id),source_classifier_id,question,
+                       classifier_id=classifier_id,classifier_name=classifier_name,name=name,positive_label=positive_label)
+        await call(info,'append_event',run['id'],'cyclotron-created',{'kind':'cyclotron-version-created','cyclotron_id':run['config']['cyclotron_id'],'revision':run['config']['cyclotron_revision'],'parent_run_id':str(parent_run_id),'learning_policy':'fresh-replay','backfill_count':run['config']['backfill_count'],
+            'promoted_supporting_question':{'source_classifier_id':source_classifier_id,'question':question,'classifier_id':classifier_id}})
+        return Run(**run)
+
+    @strawberry.mutation
     async def activate_cyclotron_version(self,info:strawberry.Info,cyclotron_id:strawberry.ID,revision:int)->Run:
         run=await call(info,'activate_cyclotron_version',str(cyclotron_id),revision)
         await call(info,'append_event',run['id'],f'activate:{uuid4()}',{'kind':'cyclotron-version-activated','cyclotron_id':str(cyclotron_id),'revision':revision})

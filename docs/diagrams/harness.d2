@@ -17,11 +17,11 @@ model: "Decision model\nJev or another\nprovider" {class: model}
 
 optimizer: "LLM optimizer\nPropose context\nchanges" {class: llm}
 fitter: "ML fitting\nFit weights and\ntemperature from\ntrusted labels" {class: ml}
-answers: "Structured answers\nMain and element\nprobabilities" {class: step}
+answers: "Structured answers\nMain and supporting\nprobabilities" {class: step}
 
-feedback: "Human feedback\nLabel and\nexplanation" {class: human}
-prediction: "Final prediction\nLabel and\nconfidence" {class: outcome}
-head: "Learned ML head\nCombine features;\ncalibrate confidence" {class: ml}
+feedback: "Reviewer feedback\nLabel and\nexplanation" {class: human}
+prediction: "Decision\nLabel and\nconfidence" {class: outcome}
+head: "ML model\nCombine features;\ncalibrate confidence" {class: ml}
 
 context -> request: "context" {class: flow}
 request -> model: "one\nrequest" {class: flow}

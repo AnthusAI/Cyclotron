@@ -3,17 +3,32 @@
   "title": "Share supporting questions across outputs",
   "description": "Two checklist items depend on the same sub-question; ask it once and pay once.\n\nCurrent: tasks belong to each output's config (classifier_config.py:28); the joint request keeps them separate (batched_classification.py:30-40), so a shared question is asked and paid twice; one output's answer can't feed another output's ML model (flywheel.py:584-595).\n\nDesired: a cyclotron-level supporting question asked once whose features can feed several outputs' ML models.\n\nAcceptance: appears once in the request; features reach both ML models; optimizer can propose shared questions recording their owners; usage drops vs a duplicated-question test.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "4b454123-1b0d-43ed-ba0a-48d38cb1be5a",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/11",
+      "created_at": "2026-10-12T14:57:36.751986Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:02:59.511837Z",
-  "updated_at": "2026-10-11T19:02:59.512031Z",
-  "closed_at": null,
+  "updated_at": "2026-10-12T15:33:44.599946Z",
+  "closed_at": "2026-10-12T15:33:44.599738Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

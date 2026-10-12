@@ -86,9 +86,15 @@ class ProgramState:
     reason: str = "Onboarding: every decision is reviewed until the cyclotron earns a lower rate."
     last_check: dict[str, Any] | None = None
     override: dict[str, Any] | None = None
+    # Per-output versions for a multi-output cyclotron; None for one output.
+    versions: dict[str, int] | None = None
 
     def to_json(self) -> dict[str, Any]:
-        return asdict(self)
+        value = asdict(self)
+        if value["versions"] is None:
+            # One-output stores keep their stored state shape exactly.
+            value.pop("versions")
+        return value
 
     @classmethod
     def from_json(cls, value: Mapping[str, Any] | None) -> "ProgramState":
@@ -151,21 +157,45 @@ def window_evidence(program: ReviewProgram, reviews: Sequence[Mapping[str, Any]]
             "enough_evidence": enough, "met": met}
 
 
+def combine_evidence(evidence: Mapping[str, Mapping[str, Any]]) -> dict:
+    """One window's evidence across outputs; the worst output decides.
+
+    Any output with enough evidence that misses the target fails the window
+    (the lowest-accuracy failure is named). Otherwise any output short of
+    evidence holds the rate. Only when every output meets the target does the
+    window count toward stepping down. ``output`` names the deciding output
+    and ``outputs`` keeps every output's own evidence.
+    """
+    def accuracy(cid):
+        value = evidence[cid]["accuracy"]
+        return (value is None, value if value is not None else 0.)
+    failing = [cid for cid, e in evidence.items() if e["enough_evidence"] and not e["met"]]
+    short = [cid for cid, e in evidence.items() if not e["enough_evidence"]]
+    if failing:
+        output = min(failing, key=accuracy)
+    elif short:
+        output = min(short, key=lambda cid: evidence[cid]["labels"])
+    else:
+        output = min(evidence, key=accuracy)
+    return {**evidence[output], "output": output, "outputs": {cid: dict(e) for cid, e in evidence.items()}}
+
+
 def check_window(program: ReviewProgram, state: ProgramState, evidence: Mapping[str, Any]) -> tuple[ProgramState, str | None]:
     """Apply one finished window. Returns the new state and the change, if the rate moved."""
     state = ProgramState(**{**state.to_json(), "checked_windows": state.checked_windows + 1,
                             "last_check": dict(evidence)})
+    named = f" for {evidence['output']}" if evidence.get("output") is not None else ""
     if not evidence["enough_evidence"]:
         state.reason = (f"Holding at {_percent(program.rates[state.index])}: only {evidence['labels']} reviewed "
-                        f"confident decisions in the last window; {program.min_window_labels} are needed.")
+                        f"confident decisions{named} in the last window; {program.min_window_labels} are needed.")
         return state, None
     if not evidence["met"]:
         if state.index == 0:
             state.consecutive = 0
-            state.reason = ("Every decision is reviewed: " + _shortfall(program, evidence) + ".")
+            state.reason = ("Every decision is reviewed: " + _shortfall(program, evidence) + named + ".")
             return state, None
         state.index, state.raised, state.consecutive = 0, True, 0
-        state.reason = "Back to full review: " + _shortfall(program, evidence) + "."
+        state.reason = "Back to full review: " + _shortfall(program, evidence) + named + "."
         return state, "raised"
     state.consecutive += 1
     if state.consecutive >= program.windows_required and state.index < len(program.rates) - 1:
@@ -189,6 +219,36 @@ def raise_for_version(program: ReviewProgram, state: ProgramState, version: int)
     state.index, state.raised, state.consecutive = 0, True, 0
     state.reason = f"Back to full review: version {version} was promoted and its alignment is not yet measured."
     return state, True
+
+
+def raise_for_versions(program: ReviewProgram, state: ProgramState,
+                       versions: Mapping[str, int]) -> tuple[ProgramState, str | None]:
+    """Multi-output form of :func:`raise_for_version`: any output's new version raises the rate.
+
+    Returns the new state and the output that raised it, if any. An output
+    seen for the first time is recorded without raising (its version was
+    already in effect).
+    """
+    known = dict(state.versions or {})
+    if not known and versions:
+        # First multi-output check: the first output's version is the one
+        # the single-version state tracked.
+        first = next(iter(versions))
+        known[first] = state.version
+    raised_by = None
+    for output, version in versions.items():
+        if output in known and version > known[output] and raised_by is None:
+            raised_by = output
+        known[output] = max(version, known.get(output, version))
+    state = ProgramState(**{**asdict(state), "versions": known})
+    if raised_by is None:
+        return state, None
+    if state.index == 0 and state.consecutive == 0:
+        return state, None
+    state.index, state.raised, state.consecutive = 0, True, 0
+    state.reason = (f"Back to full review: version {versions[raised_by]} of {raised_by} was promoted "
+                    "and its alignment is not yet measured.")
+    return state, raised_by
 
 
 def _shortfall(program: ReviewProgram, evidence: Mapping[str, Any]) -> str:

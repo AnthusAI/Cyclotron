@@ -149,6 +149,31 @@ class CyclotronStatus:
         }
 
 
+@dataclass(frozen=True)
+class CyclotronOverview:
+    """Every output of a cyclotron at once, with the worst one named.
+
+    ``worst`` is the output with the lowest measured alignment accuracy (None
+    until one is measured). ``limiting`` is the output that decided the last
+    review-rate window check (None before the first check, or with one output).
+    """
+    cyclotron_id: str
+    review_rate: ReviewRate
+    outputs: tuple[CyclotronStatus, ...]
+    worst: str | None
+    limiting: str | None
+
+    def to_json(self) -> dict[str, Any]:
+        statuses = [status.to_json() for status in self.outputs]
+        return {"cyclotron": self.cyclotron_id, "worstOutput": self.worst, "limitingOutput": self.limiting,
+                "reviewRate": statuses[0]["reviewRate"] if statuses else None, "outputs": statuses}
+
+
+def worst_output(statuses) -> str | None:
+    measured = [status for status in statuses if status.alignment.accuracy is not None]
+    return min(measured, key=lambda status: status.alignment.accuracy).classifier if measured else None
+
+
 def load_schema() -> dict[str, Any]:
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
@@ -165,7 +190,7 @@ def all_events(wheel) -> list[dict]:
 
 
 STRUCTURE = (("rubric", "rubric"), ("example_ids", "example list"),
-             ("tasks", "classifier questions"), ("dynamic_elements", "dynamic inputs"))
+             ("tasks", "supporting questions"), ("dynamic_elements", "dynamic inputs"))
 
 
 def _plain(value):
@@ -177,7 +202,7 @@ class VersionTracker:
     """Follow one classifier's versions through its events.
 
     A version is a change of language or structure: rubric, example list,
-    classifier questions or dynamic inputs. An ML model refit activates a new
+    supporting questions or dynamic inputs. An ML model refit activates a new
     fingerprint but is not a version; it is counted in ``refits`` and reported
     as a ``refit`` change with its label count.
     """

@@ -70,3 +70,84 @@ def test_protected_comparison_preflight_reads_pinned_checkpoints_without_writing
     plan=store.matched_run_preflight(runs[0]['id'],runs[1]['id'])
     assert plan['sample_count']==1 and plan['request_upper_bound']==2
     assert [store.all_events(run['id']) for run in runs]==original
+
+
+def _run_with_supporting_question(tmp_path):
+    from types import SimpleNamespace
+    from .classifier_config import ClassifierConfig
+    from .models import DecisionTask
+    from .flywheel import FittedClassifier
+    from .workspace_session import freeze_configuration
+    store=WebStore(tmp_path/'web.sqlite')
+    store.save_classifier('relevant','Relevant',{'question':'Include?','classes':[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]})
+    store.save_item_list('list','List')
+    store.upsert_list_items('list',[{'id':key,'occurred_at':'2026-01-01','values':{'text':key}} for key in ('seen','unseen')])
+    config=freeze_configuration(store,{'classifier_ids':['relevant'],'item_list_id':'list','max_requests':100,
+        'max_optimizer_calls':0,'optimize_every':20,'rubric_changes_every':2,'seed':'seed'})
+    parent=store.create_run('Newsroom','live',config,items=store.list_items('list'))
+    store.label_item('relevant',1,'list','seen',1,'include','Primary source','vote-1')
+    vendor=DecisionTask('names_vendor',('yes','no'),'Does it name a vendor?','text')
+    learned=ClassifierConfig(DecisionTask('relevant',('include','exclude'),'Include?','text'),'Learned rubric',tasks=(vendor,))
+    store.checkpoint_cyclotron(parent['id'],{'relevant':SimpleNamespace(active=FittedClassifier(learned))})
+    return store,parent,config
+
+
+def test_a_supporting_question_becomes_an_unlabeled_output_of_a_new_version(tmp_path):
+    store,parent,config=_run_with_supporting_question(tmp_path)
+    version=store.promote_supporting_question(parent['id'],'relevant','names_vendor',classifier_id='vendor',
+                                              classifier_name='Names a vendor',name='Newsroom',positive_label='yes')
+    assert version['config']['cyclotron_revision']==2
+    assert [row['id'] for row in version['config']['classifiers']]==['relevant','vendor']
+    promoted=store.classifier('vendor')['config']
+    assert promoted['question']=='Does it name a vendor?' and promoted['seed_rubric']=='Does it name a vendor?'
+    assert promoted['classes']==[{'label':'yes','role':'positive'},{'label':'no','role':'negative'}]
+    assert promoted['promoted_from']['classifier_id']=='relevant' and promoted['promoted_from']['question']=='names_vendor'
+    # Earlier evidence is kept; the new output starts unlabeled.
+    assert [vote['classifier_id'] for vote in store.inherited_labels(version['id'],'seen')]==['relevant']
+    # The source keeps its supporting question in the new version; the parent run is unchanged.
+    assert version['config']['seed_supporting_questions']=={'relevant':[
+        {'name':'names_vendor','instructions':'Does it name a vendor?','labels':['yes','no']}]}
+    assert store.run(parent['id'])['config']==config
+
+
+def test_the_new_version_starts_with_the_question_rubric_and_the_source_features_unchanged(tmp_path):
+    from .workspace_session import WorkspaceSession
+    from .batched_classification import BatchedAnswers
+    from .models import DecisionResult
+    from .flywheel_test import agent
+    store,parent,_=_run_with_supporting_question(tmp_path)
+    version=store.promote_supporting_question(parent['id'],'relevant','names_vendor',classifier_id='vendor',
+                                              classifier_name='Names a vendor',name='Newsroom')
+    class Model:
+        model_identity='fake';requests=[]
+        async def classify_many(self,configs,target,training,**kwargs):
+            self.requests.append(configs)
+            answer=lambda labels:DecisionResult(labels[0],{labels[0]:.6,labels[1]:.4})
+            return BatchedAnswers({cid:{'decision':answer(config.task.labels),
+                                        **{task.name:answer(task.labels) for task in config.tasks}}
+                                   for cid,config in configs.items()},'fake',{},1)
+    session=WorkspaceSession(store,version,tmp_path/'run',Model(),agent([]),lambda _:None)
+    try:
+        assert session.wheels['vendor'].active.config.rubric=='Does it name a vendor?'
+        assert session.wheels['vendor'].active.config.tasks==()
+        assert [task.name for task in session.wheels['relevant'].active.config.tasks]==['names_vendor']
+    finally:
+        session.close()
+
+
+def test_promotion_needs_a_checkpointed_question_and_a_new_classifier_id(tmp_path):
+    import pytest
+    store,parent,_=_run_with_supporting_question(tmp_path)
+    with pytest.raises(ValueError,match='no such supporting question'):
+        store.promote_supporting_question(parent['id'],'relevant','missing',classifier_id='x',classifier_name='X',name='N')
+    with pytest.raises(ValueError,match='unknown source classifier'):
+        store.promote_supporting_question(parent['id'],'other','names_vendor',classifier_id='x',classifier_name='X',name='N')
+    with pytest.raises(ValueError,match='new classifier id'):
+        store.promote_supporting_question(parent['id'],'relevant','names_vendor',classifier_id='relevant',
+                                          classifier_name='X',name='N')
+    with pytest.raises(ValueError,match='positive label'):
+        store.promote_supporting_question(parent['id'],'relevant','names_vendor',classifier_id='x',classifier_name='X',
+                                          name='N',positive_label='maybe')
+    bare=store.create_run('Bare','live',store.run(parent['id'])['config'],items=store.list_items('list'))
+    with pytest.raises(ValueError,match='checkpoint'):
+        store.promote_supporting_question(bare['id'],'relevant','names_vendor',classifier_id='x',classifier_name='X',name='N')

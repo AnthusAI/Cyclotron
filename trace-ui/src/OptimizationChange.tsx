@@ -41,9 +41,9 @@ function Snapshot({snapshot,label,examples}:{snapshot:RecordValue|undefined;labe
           return <details key={id} className="disclosure"><summary>{text(values?.title)??id}</summary><p className="text-xs">{example?`Label: ${text(example.label)??'not recorded'}`:'Example content not recorded in this step'}</p>{values?<p className="whitespace-pre-wrap break-words text-sm">{text(values.abstract)??text(values.text)??'Text not recorded'}</p>:null}{text(example?.comment)?<p className="whitespace-pre-wrap text-xs text-muted-foreground">{String(example?.comment)}</p>:null}</details>
         }):<p className="text-xs text-muted-foreground">Example list not recorded</p>}
       </div>
-      <div><h4 className="text-xs font-medium">Dynamic decision elements</h4><p className="text-xs">{strings(config?.dynamic_elements)?.join(', ')||(Array.isArray(config?.dynamic_elements)?'None':'Not recorded')}</p></div>
+      <div><h4 className="text-xs font-medium">Dynamic inputs</h4><p className="text-xs">{strings(config?.dynamic_elements)?.join(', ')||(Array.isArray(config?.dynamic_elements)?'None':'Not recorded')}</p></div>
       <div><h4 className="text-xs font-medium">Final classifier</h4>
-        <p className="text-sm">{snapshot.head===null?'Raw decision-model output':head?'Learned ML head':'ML head not recorded'}</p>
+        <p className="text-sm">{snapshot.head===null?'Raw decision-model output':head?'Learned ML model':'ML model not recorded'}</p>
         {features?<ul className="mt-1 list-inside list-disc break-words text-xs">{features.map(feature=><li key={feature}>{feature}</li>)}</ul>:null}
         {head?<p className="text-xs text-muted-foreground">Calibration: {typeof calibration?.temperature==='number'?`temperature ${calibration.temperature}`:text(calibration?.method)??'not recorded'}{text(calibration?.fit_on)?` · fitted on ${String(calibration?.fit_on)}`:''}</p>:null}
       </div>

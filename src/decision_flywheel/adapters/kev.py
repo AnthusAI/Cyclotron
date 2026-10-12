@@ -87,17 +87,15 @@ class KevAdapter:
         return ClassifiedAnswers(result.answers['classifier'],result.model,result.usage,result.latency_ms)
 
     async def classify_many(self, configurations, target, training, *, now=None,
-                            event_sink=None, max_request_bytes=32000):
+                            event_sink=None, max_request_bytes=32000, share_supporting_questions=False):
         """Send the cyclotron once and preserve every feature's distribution."""
-        from ..batched_classification import batch_request, BatchedAnswers
+        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
         request,identities=batch_request(configurations,target,training,now=now,
-                                         max_request_bytes=max_request_bytes)
+                                         max_request_bytes=max_request_bytes, share_questions=share_supporting_questions)
         questions={key:{'type':detail['type'],'instructions':detail['instructions'],
                         'criteria':{label:None for label in detail['options']}}
                    for key,detail in request['questions'].items()}
-        bindings={key:{'classifier_id':identifier,'question':local,
-                       'configuration_fingerprint':configurations[identifier].fingerprint}
-                  for key,(identifier,local,_) in identities.items()}
+        bindings=question_bindings(configurations,request,identities)
         body={'state':request['state'],'questions':questions,'model':self.configuration.model}
         observe=event_sink or (lambda _:None)
         observe({'kind':'decision-request','target_id':target.id,'model':self.model_identity,
@@ -110,13 +108,13 @@ class KevAdapter:
         usage=_numeric_usage(payload.get('usage'))
         observe({'kind':'decision-response','target_id':target.id,'model':model,
                  'answers':answers,'usage':usage,'question_bindings':bindings})
-        groups={identifier:{} for identifier in configurations}
-        for key,(identifier,local,task) in identities.items():
+        def answer_for(key,task):
             answer=answers.get(key)
             if not isinstance(answer,dict) or 'choice' not in answer:
                 raise ValueError(f'Kev endpoint response is missing answer for {key!r}')
-            groups[identifier][local]=task.validate_result(DecisionResult(
+            return task.validate_result(DecisionResult(
                 answer['choice'],answer.get('probabilities'),model=model,confidence=answer.get('confidence')))
+        groups=answer_groups(configurations,request,identities,answer_for)
         return BatchedAnswers(groups,model,usage,round((time.perf_counter()-started)*1000,2))
 
     async def _response(self, body):

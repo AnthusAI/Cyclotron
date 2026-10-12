@@ -3,17 +3,32 @@
   "title": "Monitor and review-rate program per output, not just the first classifier",
   "description": "The monitor says it is safe to step back, but only the first question is watched.\n\nCurrent: review-program windows, gap check and version raises read only definition.classifiers[0] (embedded_cyclotron.py:527-545, :467-476). status() is per output (:797-805) with no rollup. Related in-progress work: flywheela8 (review rate as engine state).\n\nDesired: per-output window evidence and rate changes, plus a cyclotron-level status showing the worst output.\n\nAcceptance: when output 2 drifts and output 1 doesn't, the review rate rises and an event names output 2; status lists every output; existing single-output stores unchanged.",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "997aa738-129d-4fb7-828a-627ceba1af5b",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/12",
+      "created_at": "2026-10-12T15:43:31.759989Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:02:47.335132Z",
-  "updated_at": "2026-10-11T19:02:47.335310Z",
-  "closed_at": null,
+  "updated_at": "2026-10-12T15:51:29.313446Z",
+  "closed_at": "2026-10-12T15:51:29.313309Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

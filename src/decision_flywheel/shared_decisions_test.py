@@ -457,3 +457,19 @@ def test_same_named_models_on_different_servers_do_not_reuse_joint_answers(tmp_p
         finally:
             shared.close()
     assert first.calls == second.calls == 1
+
+
+def test_a_temporary_sibling_context_is_restored_exactly_after_use(tmp_path):
+    from .models import LabeledItem
+    task = DecisionTask('topic', ('yes','no'), 'Relevant?')
+    configs = {'a':ClassifierConfig(task), 'b':ClassifierConfig(task)}
+    pools = {'a':(), 'b':(LabeledItem(Item('demo', {'text':'Example'}), 'yes'),)}
+    shared = SharedDecisions(tmp_path/'shared.sqlite', object(), max_requests=5, observer=lambda _:None)
+    shared.bind_context(configs, pools)
+    candidate = ClassifierConfig(task, rubric='Candidate rubric.')
+    with pytest.raises(RuntimeError):
+        with shared.bound({**configs, 'a':candidate}, pools):
+            assert shared.context_configs['a'] is candidate
+            raise RuntimeError('evaluation failed')
+    assert shared.context_configs == configs and shared.context_training == pools
+    shared.close()

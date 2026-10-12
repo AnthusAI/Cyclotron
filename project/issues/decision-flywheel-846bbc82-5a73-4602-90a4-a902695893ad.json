@@ -3,17 +3,32 @@
   "title": "Glossary: classifier for outputs, supporting question for internal questions, plus feature",
   "description": "Docs use 'classifier' both for an output and a sub-question.\n\nCurrent: docs/glossary.md defines classifier as 'one question inside a cyclotron' and retires 'element'; README.md:595-600 keeps 'Decision element'; ClassifierSpec docstring says 'One decision question inside the cyclotron'; cyclotron_status.py:168 calls tasks 'classifier questions'; no glossary word for 'feature'.\n\nDesired (approved by the site owner 2026-10-11): 'classifier' = each reviewed output (its result is a decision); 'supporting question' = internal question whose answer feeds that output's ML model as features; add 'feature'. Update docs, status UI and glossary tests.\n\nAcceptance: no user-visible string calls a supporting question a 'classifier'; glossary tests enforce the terms.",
   "type": "chore",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "2eaf2c49-7ad5-400c-b974-b3fc0f3b9c04",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/18",
+      "created_at": "2026-10-12T17:48:30.935419Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:03:17.711092Z",
-  "updated_at": "2026-10-11T19:03:17.711259Z",
-  "closed_at": null,
+  "updated_at": "2026-10-12T17:58:31.283124Z",
+  "closed_at": "2026-10-12T17:58:31.282993Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {},

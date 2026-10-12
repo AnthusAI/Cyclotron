@@ -23,11 +23,13 @@ open (or call) catches up.
 from __future__ import annotations
 
 import asyncio
+from copy import copy
 from dataclasses import asdict, dataclass, field, replace
 import io
 import os
 import tarfile
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -38,19 +40,23 @@ from uuid import uuid4
 
 from .calibration_history import reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
-from .cyclotron_status import (FULL_REVIEW, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
-                              initial_snapshot, status_from_flywheel)
+from .cyclotron_status import (FULL_REVIEW, CyclotronOverview, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
+                              initial_snapshot, status_from_flywheel, worst_output)
 from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel
 from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions,
                             learn_from_review, record_cycle_metrics, review_role)
 from .models import DecisionTask, Item
 from .selection_policy import SelectionPolicy
-from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, current_rate,
+from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, combine_evidence,
+                             current_rate, raise_for_versions,
                              expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
 from .shared_decisions import SharedDecisions
+from .sibling_check import SiblingPolicy, install_sibling_checks
 
 SELECTED_BY = REASONS
+LEARNING_MODES = ("inline", "deferred")
+_NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
 FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
@@ -71,7 +77,7 @@ def _now() -> str:
 
 @dataclass(frozen=True)
 class ClassifierSpec:
-    """One decision question inside the cyclotron."""
+    """One classifier: a reviewed output of the cyclotron, with its own labels and ML model."""
     id: str
     labels: tuple[str, ...]
     question: str
@@ -103,6 +109,10 @@ class CyclotronDefinition:
     seed: str = "cyclotron-v1"
     optimize_every: int = 20
     rubric_changes_every: int = 2
+    # What promotion does when a change to one classifier would regress a
+    # sibling on the sibling's development labels. Policy, not identity: it
+    # is left out of the fingerprint so a store can change it.
+    sibling_policy: SiblingPolicy = field(default_factory=SiblingPolicy)
 
     def __post_init__(self):
         object.__setattr__(self, "classifiers", tuple(self.classifiers))
@@ -116,10 +126,14 @@ class CyclotronDefinition:
         for value in (self.optimize_every, self.rubric_changes_every):
             if type(value) is not int or value < 1:
                 raise ValueError("learning cadences must be positive integers")
+        if not isinstance(self.sibling_policy, SiblingPolicy):
+            raise ValueError("sibling_policy must be SiblingPolicy")
 
     @property
     def fingerprint(self) -> str:
-        return hashlib.sha256(_json(asdict(self)).encode()).hexdigest()
+        identity = asdict(self)
+        identity.pop("sibling_policy")
+        return hashlib.sha256(_json(identity).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -134,6 +148,18 @@ class ReviewSelection:
     reason: str | None
     propensity: float
     detail: str = ""
+    # With several outputs, each output's own selection; the fields above
+    # summarize them (selected when any output is requested).
+    outputs: Mapping[str, "ReviewSelection"] | None = None
+
+    def for_output(self, classifier: str) -> "ReviewSelection":
+        """This output's selection: its own with several outputs, else the decision's."""
+        return self.outputs[classifier] if self.outputs else self
+
+    @property
+    def requested(self) -> tuple[str, ...] | None:
+        """The outputs sent to review (None when the decision is selected as a whole)."""
+        return None if self.outputs is None else tuple(cid for cid, s in self.outputs.items() if s.selected)
 
 
 @dataclass(frozen=True)
@@ -182,8 +208,7 @@ class Decision:
                                       "probabilities": dict(r.probabilities) if r.probabilities else None,
                                       "version": r.version, "fingerprint": r.fingerprint}
                                 for cid, r in self.results.items()},
-                "review": {"selected": self.review.selected, "reason": self.review.reason,
-                           "propensity": self.review.propensity, "detail": self.review.detail}}
+                "review": _selection_json(self.review)}
 
     @classmethod
     def from_json(cls, value) -> "Decision":
@@ -193,10 +218,20 @@ class Decision:
                    _selection(value["review"]))
 
 
+def _selection_json(selection: ReviewSelection) -> dict[str, Any]:
+    value = {"selected": selection.selected, "reason": selection.reason,
+             "propensity": selection.propensity, "detail": selection.detail}
+    if selection.outputs is not None:
+        value["outputs"] = {cid: _selection_json(output) for cid, output in selection.outputs.items()}
+    return value
+
+
 def _selection(value: Mapping[str, Any]) -> ReviewSelection:
     if "detail" not in value:  # decisions saved before the review-rate program
         return ReviewSelection(value["selected"], "program", value["propensity"], value["reason"])
-    return ReviewSelection(value["selected"], value["reason"], value["propensity"], value["detail"])
+    outputs = value.get("outputs")
+    return ReviewSelection(value["selected"], value["reason"], value["propensity"], value["detail"],
+                           {cid: _selection(output) for cid, output in outputs.items()} if outputs is not None else None)
 
 
 @dataclass(frozen=True)
@@ -257,6 +292,33 @@ class FileLease:
             self._handle = None
 
 
+def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, list[dict]]:
+    """Validate seed supporting questions into the optimizer's own question shape."""
+    specs = {spec.id: spec for spec in definition.classifiers}
+    seeds = dict(seeds or {})
+    if set(seeds) - set(specs):
+        raise ValueError("seed_supporting_questions maps classifier ids to supporting questions")
+    normalized = {}
+    for classifier, questions in seeds.items():
+        if isinstance(questions, (str, Mapping)) or not isinstance(questions, Sequence):
+            raise ValueError("seed_supporting_questions needs a list of questions per classifier")
+        rows = []
+        for question in questions:
+            if isinstance(question, DecisionTask):
+                question = {"name": question.name, "instructions": question.instructions,
+                            "labels": list(question.labels)}
+            if not isinstance(question, Mapping) or set(question) != {"name", "instructions", "labels"}:
+                raise ValueError("a supporting question has exactly name, instructions and labels")
+            task = DecisionTask(question["name"], question["labels"], question["instructions"],
+                                specs[classifier].input_field)
+            rows.append({"name": task.name, "instructions": task.instructions, "labels": list(task.labels)})
+        # The same validation the optimizer's proposals pass: unique, not "decision".
+        ClassifierConfig(specs[classifier].task, tasks=tuple(
+            DecisionTask(row["name"], tuple(row["labels"]), row["instructions"]) for row in rows))
+        normalized[classifier] = rows
+    return normalized
+
+
 def _store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, Path]:
     paths = {name: directory / name for name in STORE_FILES}
     for spec in definition.classifiers:
@@ -271,7 +333,9 @@ class Cyclotron:
     def __init__(self, directory, definition: CyclotronDefinition, model, optimizer=None, *,
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
                  lease=None, review_program: ReviewProgram | None = ReviewProgram(),
-                 seed_rubrics: Mapping[str, str] | None = None):
+                 seed_rubrics: Mapping[str, str] | None = None,
+                 seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None,
+                 share_supporting_questions: bool | None = None, learning: str = "inline"):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
@@ -283,6 +347,13 @@ class Cyclotron:
                 not isinstance(text, str) for text in seed_rubrics.values()):
             raise ValueError("seed_rubrics maps classifier ids to rubric text")
         self.seed_rubrics = seed_rubrics
+        self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
+        if share_supporting_questions is not None and not isinstance(share_supporting_questions, bool):
+            raise ValueError("share_supporting_questions must be a bool")
+        self.requested_sharing = share_supporting_questions
+        if learning not in LEARNING_MODES:
+            raise ValueError(f"learning must be one of {LEARNING_MODES}")
+        self.learning = learning
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
@@ -313,9 +384,13 @@ class Cyclotron:
             CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,
                 classifier TEXT NOT NULL, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,
+                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
                 input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
                 source TEXT);
+            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,
+                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));
         """)
         saved = self.db.execute("SELECT value FROM meta WHERE key='definition'").fetchone()
         if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
@@ -325,7 +400,8 @@ class Cyclotron:
                             (_json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}),))
         self._batches: list[tuple[int, int, int]] = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
-                                      observer=self._on_batch)
+                                      observer=self._on_batch,
+                                      share_supporting_questions=self._sharing(created=saved is None))
         # The shared ceiling counts every attempt in the store's lifetime; this
         # open authorizes max_requests more.
         self.shared.max_requests = self.shared.requests + max_requests
@@ -337,12 +413,17 @@ class Cyclotron:
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"]
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id)), self.shared.adapter(spec.id), optimizer,
+                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id),
+                                       tasks=self._seed_questions(spec, created=saved is None)),
+                # Each output gets its own copy so its optimizer events reach only its own
+                # trace; the copies share the transport, so the call limit stays cyclotron-wide.
+                self.shared.adapter(spec.id), copy(optimizer) if optimizer is not None else None,
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
+        install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
         self._sync()
 
     def _seed(self, classifier: str) -> str:
@@ -361,6 +442,38 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(seed)))
         return seed
+
+    def _sharing(self, *, created: bool) -> bool:
+        """Whether identical supporting questions are asked once: fixed when the store is created.
+
+        New stores share unless the application opts out. A store created
+        before sharing existed keeps asking every copy separately, so its
+        requests, answers and ML model features never change on upgrade.
+        """
+        row = self.db.execute("SELECT value FROM meta WHERE key='share_supporting_questions'").fetchone()
+        if row is not None:
+            return json.loads(row[0])
+        sharing = (self.requested_sharing is not False) if created else False
+        with self.db:
+            self.db.execute("INSERT INTO meta VALUES ('share_supporting_questions', ?)", (_json(sharing),))
+        return sharing
+
+    def _seed_questions(self, spec: ClassifierSpec, *, created: bool) -> tuple[DecisionTask, ...]:
+        """The first supporting questions for a classifier: fixed when its store is first opened.
+
+        Like the seed rubric, they are a starting point the optimizer may
+        revise, replace or drop. A store created before seeding existed keeps
+        an empty seed, so reopening it never changes its initial context.
+        """
+        key = f"seed_supporting_questions:{spec.id}"
+        row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        if row is None:
+            raw = self.seed_supporting_questions.get(spec.id, []) if created else []
+            with self.db:
+                self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(raw)))
+        else:
+            raw = json.loads(row[0])
+        return tuple(DecisionTask(q["name"], tuple(q["labels"]), q["instructions"], spec.input_field) for q in raw)
 
     @classmethod
     def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> "Cyclotron":
@@ -425,37 +538,58 @@ class Cyclotron:
                                                           now=datetime.now(timezone.utc))
             self._sync()
             decision_id = str(uuid4())
-            confidences = [result.confidence for result in results.values()]
-            confidence = None if any(c is None for c in confidences) else min(confidences)
-            selection = self._select(item.id, confidence)
+            selection = self._select(item.id, {cid: result.confidence for cid, result in results.items()})
             decision = Decision(decision_id, item.id, _now(), {
                 cid: ClassifierDecision(cid, result.label, result.confidence,
                                         dict(result.probabilities) if result.probabilities else None,
                                         self.versions[cid].version, self.wheels[cid].active.fingerprint)
-                for cid, result in results.items()},
-                ReviewSelection(selection.selected, selection.reason, selection.propensity, selection.detail))
-            if not selection.selected:
-                # Nobody is asked; close the waiting cycles so nothing reads as pending.
-                for wheel in self.wheels.values():
-                    cycle = wheel.resume_cycle(item)
-                    if cycle is not None:
-                        wheel._emit({"kind": "review-not-requested", "target_id": item.id, "decision_id": decision_id,
-                                     "propensity": selection.propensity, "detail": selection.detail})
-                        cycle.__exit__(None, None, None)
+                for cid, result in results.items()}, selection)
+            for cid, wheel in self.wheels.items():
+                own = selection.for_output(cid)
+                if own.selected:
+                    continue
+                # This output is not asked; close its waiting cycle so it does not read as pending.
+                cycle = wheel.resume_cycle(item)
+                if cycle is not None:
+                    wheel._emit({"kind": "review-not-requested", "target_id": item.id, "decision_id": decision_id,
+                                 "propensity": own.propensity, "detail": own.detail})
+                    cycle.__exit__(None, None, None)
             self._insert_decision(decision, fingerprint)
             return decision
 
     # Review rate ----------------------------------------------------------
 
-    def _select(self, item_id: str, confidence: float | None):
-        """Advance the review-rate program to this decision, then choose.
+    def _select(self, item_id: str, confidences: Mapping[str, float | None]) -> ReviewSelection:
+        """Advance the review-rate program to this decision, then choose which outputs to review.
 
-        The random draw is keyed by the item and the decision's position, so a
-        store replays the same selections; it never reads a label.
+        With one output the whole decision is selected, as before. With
+        several, each output is selected on its own confidence and its own
+        random draw, so a confident output is not sent just because a sibling
+        is unsure, and audit sampling and propensities stay per output. Draws
+        are keyed by the item, the decision's position and the output, so a
+        store replays the same selections; they never read a label.
         """
-        from .review_program import Selection
         if self.program is None:
-            return Selection(True, "program", 1.0, FULL_REVIEW_DETAIL)
+            whole = ReviewSelection(True, "program", 1.0, FULL_REVIEW_DETAIL)
+            return whole if len(confidences) == 1 else replace(whole, outputs={cid: whole for cid in confidences})
+        rate, decided = self._advance_program()
+        if len(confidences) == 1:
+            confidence = next(iter(confidences.values()))
+            chosen = select(self.program, rate, key=f"{item_id}:{decided + 1}", confidence=confidence)
+            return ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
+        outputs = {}
+        for cid, confidence in confidences.items():
+            chosen = select(self.program, rate, key=f"{item_id}:{decided + 1}:{cid}", confidence=confidence)
+            outputs[cid] = ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
+        requested = [cid for cid, own in outputs.items() if own.selected]
+        reasons = {outputs[cid].reason for cid in requested}
+        detail = ("Requested: " + "; ".join(f"{cid} ({outputs[cid].detail})" for cid in requested) if requested
+                  else "No output requested: " + "; ".join(f"{cid} ({own.detail})" for cid, own in outputs.items()))
+        return ReviewSelection(bool(requested), ("program" if "program" in reasons else "audit") if requested else None,
+                               max(own.propensity for own in outputs.values()), detail, outputs)
+
+    def _advance_program(self) -> tuple[float, int]:
+        """Apply expired overrides, version raises and finished windows; return the rate and decision count."""
         now = datetime.now(timezone.utc)
         state = self._program_state()
         events = []
@@ -464,23 +598,30 @@ class Cyclotron:
             state.override = None
             events.append(self._rate_event(state, now, f"The manual rate of {round(expired.rate * 100)}% set by "
                                                        f"{expired.set_by} expired."))
-        state, raised = raise_for_version(self.program, state, self._primary_version())
-        if raised:
-            events.append(self._rate_event(state, now, state.reason))
+        if len(self.specs) == 1:
+            state, raised = raise_for_version(self.program, state, self._primary_version())
+            if raised:
+                events.append(self._rate_event(state, now, state.reason))
+        else:
+            # Every output is watched: a new version of any one raises the rate.
+            state, output = raise_for_versions(self.program, state,
+                                               {cid: self.versions[cid].version for cid in self.specs})
+            if output is not None:
+                events.append(self._rate_event(state, now, state.reason, output=output))
         decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
         while state.checked_windows < decided // self.program.window:
             window = state.checked_windows + 1
-            evidence = window_evidence(self.program, self._window_reviews(window), self._gap_points())
+            evidence = self._window_evidence(window)
             state, change = check_window(self.program, state, evidence)
             if change:
-                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window))
+                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window,
+                                               **({"output": evidence["output"]} if "output" in evidence else {})))
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
             appended = [self._append(event) for event in events]
         for event in appended:
             self.observer(event)
-        return select(self.program, current_rate(self.program, state, now), key=f"{item_id}:{decided + 1}",
-                      confidence=confidence)
+        return current_rate(self.program, state, now), decided
 
     def set_review_rate(self, rate: float, *, set_by: str, expires_at: datetime | None = None) -> None:
         """An operator override of the review rate, with an optional expiry.
@@ -530,15 +671,21 @@ class Cyclotron:
     def _primary_version(self) -> int:
         return self.versions[self._primary().id].version
 
-    def _gap_points(self) -> int | None:
-        spec = self._primary()
+    def _window_evidence(self, window: int) -> dict:
+        """One finished window's evidence: the only output's, or the worst of every output's."""
+        evidence = {cid: window_evidence(self.program, self._window_reviews(window, cid), self._gap_points(cid))
+                    for cid in self.specs}
+        return evidence[self._primary().id] if len(evidence) == 1 else combine_evidence(evidence)
+
+    def _gap_points(self, classifier: str | None = None) -> int | None:
+        spec = self.specs[classifier] if classifier else self._primary()
         return status_from_flywheel(self.wheels[spec.id], cyclotron_id=self.definition.id,
                                     positive_label=spec.positive_label,
                                     window=self.program.calibration_window).calibration.gap_points
 
-    def _window_reviews(self, window: int) -> list[dict]:
-        """Program and audit reviews of the decisions in one finished window."""
-        cid = self._primary().id
+    def _window_reviews(self, window: int, classifier: str | None = None) -> list[dict]:
+        """Program and audit reviews of one output's decisions in one finished window."""
+        cid = classifier or self._primary().id
         size = self.program.window
         rows = []
         for decision_id, payload in self.db.execute(
@@ -588,13 +735,15 @@ class Cyclotron:
     def _on_batch(self, event: Mapping[str, Any]) -> None:
         """A paid shared decision-model request; cached answers cost nothing."""
         if event.get("kind") == "shared-decision-batch" and not event.get("cached"):
-            self._batches.append(_usage_counts(event.get("usage")))
+            self._batches.append((*_usage_counts(event.get("usage")), event.get("output_shares")))
 
     def _record_batches(self, decision_id: str) -> None:
         """Attribute the paid requests of this call to its decision (caller's transaction)."""
-        for prompt, cached, output in self._batches:
-            self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
-                            " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+        for prompt, cached, output, shares in self._batches:
+            row = self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
+                                  " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+            for classifier, share in (shares or {}).items():
+                self.db.execute("INSERT INTO usage_shares VALUES (?,?,?)", (row.lastrowid, classifier, share))
         self._batches = []
 
     def usage(self, prices: Mapping[str, Mapping[str, float]], *, window: int = 100) -> dict[str, Any]:
@@ -635,7 +784,44 @@ class Cyclotron:
             blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
                            **_block(models, prices, times[first], times[last])})
         return {"window_size": window, "windows": blocks,
-                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices)}
+                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices),
+                "outputs": self._usage_by_output(prices)}
+
+    def _usage_by_output(self, prices: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
+        """An estimated split of the total by output; the outputs sum to the total.
+
+        Optimizer calls are measured per output (each output's learning makes
+        its own calls). A shared decision-model request is split by each
+        output's share of the request bytes; a request recorded before shares
+        were kept is split evenly.
+        """
+        from .run_usage import _block, _empty
+        ids = list(self.specs)
+        per = {cid: {"decision_model": _empty(), "optimizer": _empty()} for cid in ids}
+        shares: dict[int, dict[str, float]] = {}
+        for usage_id, classifier, share in self.db.execute("SELECT usage_id,classifier,share FROM usage_shares"):
+            shares.setdefault(usage_id, {})[classifier] = share
+        for usage_id, model, prompt, cached, output, source in self.db.execute(
+                "SELECT id,model,input_tokens,cached_input_tokens,output_tokens,source FROM usage ORDER BY id"):
+            if model == "optimizer":
+                owner = (source or "").rsplit(":", 1)[0]
+                split = {owner: 1.0} if owner in per else {cid: 1 / len(ids) for cid in ids}
+            else:
+                split = {cid: share for cid, share in shares.get(usage_id, {}).items() if cid in per}
+                if not split:
+                    split = {cid: 1 / len(ids) for cid in ids}
+                scale = sum(split.values())
+                split = {cid: share / scale for cid, share in split.items()}
+            for cid, share in split.items():
+                counts = per[cid][model]
+                counts["requests"] += share
+                counts["input_tokens"] += prompt * share
+                counts["cached_input_tokens"] += cached * share
+                counts["output_tokens"] += output * share
+        return {"estimate": ("Decision-model usage is split by each output's share of the shared request bytes "
+                             "(evenly for requests recorded before shares were kept); optimizer usage is measured "
+                             "per output. Outputs sum to the total."),
+                "by_output": {cid: _block(per[cid], prices) for cid in ids}}
 
     def decision_log(self) -> list[dict[str, Any]]:
         """Every decision in the order it was made, with its item values, state and active reviews (for recordings)."""
@@ -664,10 +850,11 @@ class Cyclotron:
 
     # Review ---------------------------------------------------------------
 
-    async def review(self, decision_id: str, label: str | None, *, classifier: str | None = None,
+    async def review(self, decision_id: str, label: str | None = _NO_LABEL, *, classifier: str | None = None,
+                     labels: Mapping[str, str | None] | None = None,
                      explanation: str | None = None, reason_code: str | None = None, reviewer: str | None = None,
-                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False) -> Review:
-        """Record a reviewer's label for a decision.
+                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False):
+        """Record a reviewer's label for a decision, or one checklist of labels for several outputs.
 
         The first label for a decision teaches the cyclotron; a later label is
         a correction. ``label=None`` records a review without a label (for
@@ -678,79 +865,138 @@ class Cyclotron:
         reviewer's own choice trains the ML model but never counts as
         alignment or audit evidence.
         Pass the application's own ``review_id`` to make resubmission safe.
+
+        ``labels={classifier: label, ...}`` saves one review of several
+        outputs and returns ``{classifier: Review}``. Every entry is validated
+        before anything is recorded; outputs left out stay open for review.
+        Each output gets its own review (``<review_id>:<classifier>``) and
+        review event, every label is recorded before any learning, and then
+        each labeled output runs its learning pass once. Resubmitting the
+        same ``review_id`` returns the recorded reviews and completes any that
+        an interruption left unrecorded.
         """
+        if labels is not None:
+            if label is not _NO_LABEL or classifier is not None:
+                raise ValueError("pass labels for several outputs, or label and classifier for one")
+            if not isinstance(labels, Mapping) or not labels:
+                raise ValueError("labels maps classifier ids to labels")
+        elif label is _NO_LABEL:
+            raise ValueError("review needs a label (None to close without one) or labels")
         async with self._lock:
             self._sync()
             self._batches = []
             decision = self.decision(decision_id)
-            cid = self._classifier(decision, classifier)
-            wheel, spec = self.wheels[cid], self.specs[cid]
-            if label is not None:
-                label = spec.task.validate_label(label)
-            if selected_by is None:
-                selected_by = decision.review.reason if decision.review.selected else "reviewer"
-            if selected_by not in SELECTED_BY:
+            if labels is None:
+                entries = {self._classifier(decision, classifier): label}
+                ids = {cid: review_id or str(uuid4()) for cid in entries}
+            else:
+                if any(cid not in decision.results for cid in labels):
+                    raise ValueError("classifier not in this cyclotron")
+                base = review_id or str(uuid4())
+                entries = {cid: labels[cid] for cid in self.specs if cid in labels}
+                ids = {cid: f"{base}:{cid}" for cid in entries}
+            if selected_by is not None and selected_by not in SELECTED_BY:
                 raise ValueError(f"selected_by must be one of {SELECTED_BY}")
-            if selected_by != "reviewer" and not decision.review.selected and not _replay:
-                raise ValueError("this decision was not sent to review; a review of it is selected_by='reviewer'")
+            chosen_by = {}
+            for cid in entries:
+                own = decision.review.for_output(cid)
+                chosen_by[cid] = selected_by or (own.reason if own.selected else "reviewer")
+                if chosen_by[cid] != "reviewer" and not own.selected and not _replay:
+                    raise ValueError("this decision was not sent to review"
+                                     + (f" for {cid}" if decision.review.outputs else "")
+                                     + "; a review of it is selected_by='reviewer'")
             for name, value in (("explanation", explanation), ("reason_code", reason_code), ("reviewer", reviewer)):
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f"{name} must be text")
             explanation = (explanation.strip() or None) if explanation else None
-            review_id = review_id or str(uuid4())
-            existing = self._review(review_id)
-            if existing is not None:
-                same = (existing.decision_id, existing.classifier, existing.label, existing.reason_code) == (
-                    decision_id, cid, label, reason_code) and (existing.explanation or None) == self._redacted(cid, explanation)
-                if not same:
-                    raise ValueError("review identity has different content")
-                return existing
-            active = self._active_review(decision_id, cid)
             target = Item(decision.item_id, self._item_values()[decision.item_id])
-            annotations = {"decision_id": decision_id, "review_id": review_id, "selected_by": selected_by,
-                           "reason_code": reason_code, "reviewer": reviewer}
-            warnings: list = []
-            if label is None:
-                if active is not None:
+            # Validate every entry before recording any of them.
+            plans = []
+            for cid, value in entries.items():
+                if value is not None:
+                    value = self.specs[cid].task.validate_label(value)
+                existing = self._review(ids[cid])
+                if existing is not None:
+                    same = (existing.decision_id, existing.classifier, existing.label, existing.reason_code) == (
+                        decision_id, cid, value, reason_code) and (existing.explanation or None) == self._redacted(cid, explanation)
+                    if not same:
+                        raise ValueError("review identity has different content")
+                    continue
+                active = self._active_review(decision_id, cid)
+                if value is None and active is not None:
                     raise ValueError("this decision already has a label; undo it before closing it without one")
-                cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
-                wheel._emit({"kind": "human-skipped", "target_id": target.id, "explanation": explanation, **annotations})
-                cycle.__exit__(None, None, None)
-            elif active is None:
-                cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
-                try:
-                    propensity = decision.review.propensity if selected_by != "reviewer" else 1.0
-                    wheel.record_feedback_event(FeedbackItem(
-                        review_id, target.id, cid, initial_answer_value=decision.results[cid].label,
-                        final_answer_value=label, edit_comment_value=explanation, label_source=LABEL_SOURCE_VETTED,
-                        selection_propensity=propensity, review_provenance=f"{selected_by}-selected-review"),
-                        assignment=REVIEWER_SELECTED if selected_by == "reviewer" else review_role(self.definition.seed, target.id),
-                        annotations=annotations)
-                    warnings = await self._learn(cid, cycle)
-                    record_cycle_metrics(wheel, self._class_config(spec))
+                plans.append((cid, value, active))
+            warnings: dict[str, list] = {cid: [] for cid in entries}
+            learning = {}
+            try:
+                for cid, value, active in plans:
+                    cycle = self._record_review(decision, target, cid, value, active, ids[cid], explanation,
+                                                reason_code, reviewer, chosen_by[cid])
+                    if cycle is not None:
+                        learning[cid] = cycle
+                # Every label is recorded before any output learns, so each
+                # learning pass (and its sibling check) sees the whole review.
+                for cid in list(learning):
+                    cycle = learning[cid]
+                    if self.learning == "deferred" and self.optimizer is not None:
+                        # Queue the pass; learn() runs it after the review returns.
+                        self._enqueue_learning(cid)
+                    else:
+                        warnings[cid] = await self._learn(cid, cycle)
+                    record_cycle_metrics(self.wheels[cid], self._class_config(self.specs[cid]))
                     cycle.__exit__(None, None, None)
-                except Exception as error:
+                    del learning[cid]
+            except Exception as error:
+                for cycle in learning.values():
                     cycle.__exit__(type(error), error, None)
-                    raise
-            else:
-                original = self._feedback_event(wheel, active.review_id)
-                prior = original["feedback"]
-                with wheel.cycle(target, reason="human-correction"):
-                    wheel.record_feedback_event(FeedbackItem(
-                        review_id, target.id, cid, initial_answer_value=prior.get("initial_answer_value"),
-                        final_answer_value=label, edit_comment_value=explanation, label_source=prior["label_source"],
-                        selection_propensity=prior.get("selection_propensity"),
-                        review_provenance=f"corrected-human-vote:{prior['id']}"),
-                        assignment=original.get("assignment"),
-                        annotations={**annotations, "selected_by": original.get("selected_by", selected_by)})
-                    self._reconcile(cid)
-                    record_cycle_metrics(wheel, self._class_config(spec))
-                    wheel._emit({"kind": "feedback-correction-completed", "feedback_id": review_id,
-                                 "target_id": target.id, "previous_feedback_id": prior["id"]})
+                raise
             self._sync()
             with self.db:
                 self._record_batches(decision_id)
-            return replace(self._review(review_id), optimization_warnings=tuple(warnings))
+            reviews = {cid: replace(self._review(ids[cid]), optimization_warnings=tuple(warnings[cid]))
+                       for cid in entries}
+            return reviews if labels is not None else next(iter(reviews.values()))
+
+    def _record_review(self, decision, target, cid, label, active, review_id, explanation, reason_code, reviewer,
+                       selected_by):
+        """Record one output's review; return its open cycle when a new label needs a learning pass."""
+        wheel, spec = self.wheels[cid], self.specs[cid]
+        annotations = {"decision_id": decision.decision_id, "review_id": review_id, "selected_by": selected_by,
+                       "reason_code": reason_code, "reviewer": reviewer}
+        if label is None:
+            cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
+            wheel._emit({"kind": "human-skipped", "target_id": target.id, "explanation": explanation, **annotations})
+            cycle.__exit__(None, None, None)
+            return None
+        if active is None:
+            cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
+            try:
+                propensity = decision.review.for_output(cid).propensity if selected_by != "reviewer" else 1.0
+                wheel.record_feedback_event(FeedbackItem(
+                    review_id, target.id, cid, initial_answer_value=decision.results[cid].label,
+                    final_answer_value=label, edit_comment_value=explanation, label_source=LABEL_SOURCE_VETTED,
+                    selection_propensity=propensity, review_provenance=f"{selected_by}-selected-review"),
+                    assignment=REVIEWER_SELECTED if selected_by == "reviewer" else review_role(self.definition.seed, target.id),
+                    annotations=annotations)
+            except Exception as error:
+                cycle.__exit__(type(error), error, None)
+                raise
+            return cycle
+        original = self._feedback_event(wheel, active.review_id)
+        prior = original["feedback"]
+        with wheel.cycle(target, reason="human-correction"):
+            wheel.record_feedback_event(FeedbackItem(
+                review_id, target.id, cid, initial_answer_value=prior.get("initial_answer_value"),
+                final_answer_value=label, edit_comment_value=explanation, label_source=prior["label_source"],
+                selection_propensity=prior.get("selection_propensity"),
+                review_provenance=f"corrected-human-vote:{prior['id']}"),
+                assignment=original.get("assignment"),
+                annotations={**annotations, "selected_by": original.get("selected_by", selected_by)})
+            self._reconcile(cid)
+            record_cycle_metrics(wheel, self._class_config(spec))
+            wheel._emit({"kind": "feedback-correction-completed", "feedback_id": review_id,
+                         "target_id": target.id, "previous_feedback_id": prior["id"]})
+        return None
 
     async def undo_review(self, decision_id: str, *, classifier: str | None = None,
                           review_id: str | None = None) -> Review:
@@ -794,11 +1040,18 @@ class Cyclotron:
 
     # Status, events and labels -------------------------------------------
 
+    def overview(self) -> CyclotronOverview:
+        """Every output's status, the worst output, and the output limiting the review rate. No model call."""
+        statuses = tuple(self.status(cid) for cid in self.specs)
+        last = self._program_state().last_check if self.program is not None else None
+        return CyclotronOverview(self.definition.id, statuses[0].review_rate, statuses, worst_output(statuses),
+                                 (last or {}).get("output"))
+
     def status(self, classifier: str | None = None) -> CyclotronStatus:
         """The cyclotron-status/v1 snapshot for one classifier. No model call."""
         if classifier is None:
             if len(self.specs) != 1:
-                raise ValueError("name the classifier; this cyclotron has several")
+                raise ValueError("name the classifier; this cyclotron has several (overview() shows them all)")
             classifier = next(iter(self.specs))
         spec = self.specs[classifier]
         return status_from_flywheel(self.wheels[classifier], cyclotron_id=self.definition.id,
@@ -968,14 +1221,17 @@ class Cyclotron:
                 return []
             self.db.execute("INSERT INTO reviews(id,decision_id,classifier,payload) VALUES (?,?,?,?)",
                             (review.review_id, review.decision_id, classifier, _json(self._review_payload(review))))
+            requested = self._requested_outputs(review.decision_id)
             reviewed = all(self._last_review_kind(review.decision_id, cid) in ("label", "correction", "no-label")
-                           for cid in self.specs)
+                           for cid in requested)
             self.db.execute("UPDATE decisions SET state=? WHERE id=? AND state!='superseded'",
                             ("reviewed" if reviewed else "open", review.decision_id))
             return [self._append({"kind": "review", "review": review.to_json()})]
-        if kind == "optimizer-response" and event.get("cycle_item_id"):
-            row = self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
-                                  (event["cycle_item_id"],)).fetchone()
+        if kind == "optimizer-response":
+            # A deferred learning pass has no item; it counts toward the latest decision.
+            row = (self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
+                                   (event["cycle_item_id"],)).fetchone() if event.get("cycle_item_id")
+                   else self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone())
             if row is not None:
                 prompt, cached, output = _usage_counts(event.get("usage"))
                 self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
@@ -996,6 +1252,12 @@ class Cyclotron:
         return {**event, "cursor": row.lastrowid}
 
     # Internals ------------------------------------------------------------
+
+    def _requested_outputs(self, decision_id: str) -> tuple[str, ...]:
+        """The outputs a decision is waiting on: those sent to review, or every output."""
+        row = self.db.execute("SELECT payload FROM decisions WHERE id=?", (decision_id,)).fetchone()
+        requested = _selection(json.loads(row[0])["review"]).requested if row else None
+        return tuple(requested) if requested else tuple(self.specs)
 
     def _redacted(self, classifier: str, text: str | None) -> str | None:
         if text is None:
@@ -1080,7 +1342,64 @@ class Cyclotron:
         wheel.reconcile_feedback(training, development=development)
         wheel.set_optimizer_context([r.context["human_feedback"] for r in training if r.context.get("human_feedback")])
 
-    async def _learn(self, classifier: str, cycle) -> list:
+    def _enqueue_learning(self, classifier: str) -> None:
+        """Queue one output's learning pass; queued reviews of one output share a pass."""
+        training, development, _ = self._partitions(classifier)
+        with self.db:
+            # The earliest unlearned count is kept, so the pass sees every cadence boundary crossed since.
+            self.db.execute("INSERT OR IGNORE INTO learning_queue(classifier,since_count,queued_at) VALUES (?,?,?)",
+                            (classifier, len(training) + len(development) - 1, _now()))
+
+    def pending_learning(self) -> list[str]:
+        """Outputs with a queued learning pass, oldest first."""
+        return [row[0] for row in self.db.execute("SELECT classifier FROM learning_queue ORDER BY seq")]
+
+    async def learn(self, *, limit: int | None = None) -> list[dict[str, Any]]:
+        """Run queued learning passes, one output at a time, oldest first.
+
+        With ``learning="deferred"``, ``review()`` records labels and returns;
+        an application runs this afterwards (for example from a background
+        task). The store lock is held for one output's pass at a time, so
+        reviews and decisions interleave between outputs. Each output's
+        optimizer stages share the cyclotron's optimizer and its call limit.
+        Returns one record per pass: the output, its warnings and duration.
+        A pass that raises stays queued.
+        """
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("limit must be a positive integer")
+        done = []
+        while limit is None or len(done) < limit:
+            async with self._lock:
+                row = self.db.execute("SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1").fetchone()
+                if row is None:
+                    break
+                seq, cid, since = row
+                self._sync()
+                self._batches = []
+                wheel = self.wheels[cid]
+                started = time.perf_counter()
+                cycle = wheel.cycle(None, reason="deferred-learning").__enter__()
+                try:
+                    warnings = await self._learn(cid, cycle, since_count=since)
+                    cycle.__exit__(None, None, None)
+                except Exception as error:
+                    cycle.__exit__(type(error), error, None)
+                    raise
+                latest = self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone()
+                if latest is not None:
+                    with self.db:
+                        # Decision-model requests made while learning count toward the latest decision.
+                        self._record_batches(latest[0])
+                record = {"classifier": cid, "since_count": since, "warnings": warnings,
+                          "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
+                wheel._emit({"kind": "deferred-learning-completed", **record})
+                with self.db:
+                    self.db.execute("DELETE FROM learning_queue WHERE seq=?", (seq,))
+                self._sync()
+                done.append(record)
+        return done
+
+    async def _learn(self, classifier: str, cycle, *, since_count: int | None = None) -> list:
         if self.optimizer is None:
             # Without an LLM optimizer the cyclotron decides and records only.
             self._reconcile(classifier)
@@ -1089,7 +1408,8 @@ class Cyclotron:
         try:
             return await learn_from_review(self.wheels, self.shared, classifier, cycle, self._partitions,
                                            optimize_every=self.definition.optimize_every,
-                                           rubric_changes_every=self.definition.rubric_changes_every)
+                                           rubric_changes_every=self.definition.rubric_changes_every,
+                                           **({"since_count": since_count} if since_count is not None else {}))
         except (StepFailed, RuntimeError) as error:
             warning = {"classifier_id": classifier, "reason": "optimization failed; labels retained, no automatic retry",
                        "error_type": type(error).__name__}

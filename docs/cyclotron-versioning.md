@@ -15,7 +15,7 @@ identity, so changing display order cannot transfer a draft to another classifie
 Run editions are a separate history: each immutable edition points to one
 optimization run and its frozen classifier definitions. Classifier definitions
 retain their own revision numbers. Runtime checkpoints
-store the complete joint classifier state, including fitted ML heads, with a
+store the complete joint classifier state, including fitted ML models, with a
 content fingerprint. Complete decision requests retain their own cache keys.
 
 Run creation takes one SQLite read snapshot of item-list membership and latest
@@ -58,8 +58,22 @@ Accuracy, and label counts. These are rolling prediction-before-feedback metrics
 over at most 200 reviewed items, not a matched held-out comparison. Replayed
 historical labels must not be represented as freshly collected human judgments.
 
-GraphQL exposes `cyclotrons`, `cyclotronVersions`, `extendCyclotron`, and
-`activateCyclotronVersion`. Creating a fresh replay requires explicit live-call
+A supporting question can become an output in its own right.
+`promote_supporting_question(parent_run_id, source_classifier_id, question, ...)`
+reads the question from the parent run's latest checkpoint and saves a new
+classifier. Its decision question and first rubric are the question's
+instructions, its classes are the question's labels (optionally with a
+positive label), and it records `promoted_from`. The command then extends the
+cyclotron with that classifier as a new edition. The new output starts
+unlabeled, earlier labels are replayed as in any extension, and the parent run
+is unchanged. In the new edition the source classifier starts with the
+parent's supporting questions (`seed_supporting_questions` in the run
+configuration, which is configuration, not fitted state). Its features stay the
+same until the optimizer promotes a candidate, so the old question remains
+until it is replaced.
+
+GraphQL exposes `cyclotrons`, `cyclotronVersions`, `extendCyclotron`,
+`promoteSupportingQuestion`, and `activateCyclotronVersion`. Creating a fresh replay requires explicit live-call
 authority. Merely creating an edition makes no provider calls; preparing an item
 does, under the edition's explicit request and optimizer ceilings.
 
@@ -205,7 +219,7 @@ Calibration snapshots use the same latest 200 unique human-reviewed pre-vote
 predictions as live metrics. Ten fixed confidence bins retain support, observed
 accuracy and mean confidence, with ECE, multiclass Brier and log loss. Snapshot
 provenance identifies prediction/feedback events, versions, and raw decision
-passthrough versus temperature-calibrated ML heads. Calibration fits only on
+passthrough versus temperature-calibrated ML models. Calibration fits only on
 training out-of-fold predictions, never on this descriptive rolling window.
 Matched raw/calibrated comparisons exclude passthrough predictions. Mixed-version
 rolling curves are not estimates of current-model held-out calibration. Playback
@@ -229,7 +243,7 @@ permission to borrow another output. Previously recorded snapshots stay immutabl
 
 Open **Snapshot provenance** under a confidence curve to inspect the recorded
 samples. Each sample identifies its item, prediction and feedback event IDs,
-model version, and whether the output came from a calibrated ML head or raw
+model version, and whether the output came from a calibrated ML model or raw
 decision passthrough. Expand a head sample to see its recorded calibration
 method, fit origin, temperature, and trusted training-item IDs. Missing legacy
 fields say “not recorded.” These disclosures read the immutable snapshot;

@@ -1,0 +1,27 @@
+{
+  "id": "decision-flywheel-a4451e82-ff52-4a29-b72c-685e6554c783",
+  "title": "Async optimizer transport, so deferred learning truly overlaps provider calls",
+  "description": "Follow-up from flywheelb2 (PR #15).\n\nCurrent: OptimizerAgent.propose() calls its completion transport synchronously from inside async optimization (flywheel.py improve, staged_optimization.py, control_scheduler.py, idea_screening.py). With learning=\"deferred\", Cyclotron.learn() releases the store lock between outputs, but each optimizer provider call still blocks the event loop, so reviews and decisions in the same process cannot run while a call is in flight.\n\nConstraint found: the call cannot simply move to a thread (asyncio.to_thread). DecisionFlywheel wraps optimizer.observer (flywheel.py ~197-203) so optimizer-request/response events are written to the wheel's SQLite connection; SQLite connections are bound to their creating thread (check_same_thread) and the wheel and cyclotron share no write lock across threads. Writes must stay on the event-loop thread.\n\nDesired: an async optimizer transport (e.g. an awaitable complete, or OptimizerAgent.propose_async) used by every optimization path when available, with observer events still emitted on the loop thread before and after the awaited provider call. Synchronous transports keep working unchanged.\n\nAcceptance: with an awaiting fake transport, a review (and a decide) issued while learn() is inside a provider call completes before that call returns; no SQLite access happens off the loop thread (spec asserts thread identity in the observer); optimizer call limits and recorded optimizer-request/response events are unchanged; synchronous transports behave exactly as today.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-12T16:56:32.227255Z",
+  "updated_at": "2026-10-12T16:56:32.234185Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Opus 5.5",
+    "name": "Engine Worker",
+    "settings": {}
+  },
+  "agent_assignment": null
+}

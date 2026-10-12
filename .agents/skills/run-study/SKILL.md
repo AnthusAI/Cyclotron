@@ -79,6 +79,6 @@ curl -s localhost:8009/v1/models
 ```
 
   It answered in about 0.35 s per call on this machine. Kev takes no few-shot examples, and with the long v3.1 rubric it did worse than with no rubric on a 30-story probe, so judge it on its own optimization run. If the port is already serving, do not restart it.
-- **Local optimizer (Ollama or similar).** `src/decision_flywheel/adapters/litellm_optimizer.py` exists but the study script does not yet have a flag for it. Lower priority; small local models may not produce usable rubric proposals.
+- **Local optimizer (Ollama).** Ollama is installed (`ollama serve`, model `qwen3:4b`, 2.5 GB). The study script has no flag for it yet, and `adapters/litellm_optimizer.py` has a fixed 60 second timeout and cannot set the context size. A direct probe on the first optimizer prompt of the 853-story run (84 KB, about 21k tokens) took over ten minutes on this machine and the 4B model echoed the input state back instead of proposing a rubric. Later prompts grow to about 1 MB (250k tokens), far beyond a small model. A local optimizer needs a much shorter optimizer context and a larger model before it is worth wiring in. Lower priority.
 - **Bedrock.** Not built. Needs an adapter, a test, and approval naming the model and cap.
 - **zsh.** Do not put flags in a shell variable and expand it unquoted; zsh will not split it. Use a bash array, as in the launch example run under `bash -c`.

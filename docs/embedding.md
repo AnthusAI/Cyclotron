@@ -64,6 +64,19 @@ cyclotron = Cyclotron.open("var/cyclotrons/papyrus-relevance", definition, Scrip
                            seed_rubrics={"relevant": doctrine})
 ```
 
+If you already know some supporting questions that matter, seed them the same
+way with `seed_supporting_questions`. It maps each classifier id to a list of
+questions, each with exactly `name`, `instructions` and `labels` (the shape the
+optimizer proposes), or to `DecisionTask` values. For example,
+`seed_supporting_questions={"relevant": [{"name": "primary_evidence",
+"instructions": "Does the source cite primary evidence?", "labels": ["yes", "no"]}]}`.
+Seeded questions are in the first decision request, and their answers are
+features of the first ML model fit. They are a starting point, not a pin: the
+optimizer can revise, replace or drop them like any supporting question. They
+are fixed when the store is created. Reopening a store never rewrites them, and
+a store created without seeds keeps none. Your decision model must answer every
+supporting question in the request.
+
 ## Decide
 
 ```python
@@ -76,6 +89,20 @@ print(decision.review.selected, decision.review.reason, decision.review.detail)
 (`program`: low confidence or sampled at the review rate; `audit`: the random
 audit share; `None`: not sent), with what probability, and in a sentence.
 Show the sentence next to the item.
+
+With several outputs, each output is routed on its own. It is selected on
+its own confidence, with its own random draw at the review rate and its own
+audit draw, so a confident output is not sent to review just because a sibling
+is unsure. `decision.review.outputs` holds each output's selection (reason,
+propensity, detail), and `decision.review.requested` names the outputs waiting
+for a reviewer. `decision.review` itself summarizes them and is selected when
+any output is requested. Only requested outputs read as pending, and a decision
+is reviewed once each requested output has a review: a checklist that labels
+just those outputs completes it. A review of an output that was not requested
+is the reviewer's choice (`selected_by="reviewer"`). It trains the ML model but
+is not review-rate evidence. Each requested output's review counts toward that
+output's window. Draws are keyed by item, position and output, so a store
+replays the same selections. A one-output decision is unchanged.
 
 A decision a person may have seen is stable. Deciding the same unchanged item
 again returns the same decision with the same label and confidence until it
@@ -106,6 +133,33 @@ asyncio.run(cyclotron.review(other.decision_id, None, reason_code="duplicate"))
 asyncio.run(cyclotron.undo_review(decision.decision_id))
 asyncio.run(cyclotron.review(decision.decision_id, "include", reviewer="editor-7"))
 ```
+
+With several outputs, save a reviewer's whole checklist as one review:
+`cyclotron.review(decision_id, labels={"relevant": "include", "timely": "exclude"},
+review_id="message-982")` returns `{classifier: Review}`. Every entry is
+checked before anything is recorded. An output left out stays open for review,
+and a `None` entry closes that output without teaching. Each output gets its
+own review (`message-982:relevant`, ...) and `review` event. All labels are
+recorded before any output learns, and then each labeled output runs its
+learning pass once. Each labeled output's review counts toward that output's
+review-rate window; an output left out does not. Resubmitting the same review
+id is safe and completes any output an interruption left unrecorded.
+
+By default each review runs the labeled outputs' learning before it returns.
+With several outputs that means the reviewer waits for several optimization
+passes. Open the store with `learning="deferred"` and `review()` only records
+the labels and queues one learning pass per labeled output. The queue is
+durable, and several reviews of one output share a pass. Run the queue
+afterwards with `await cyclotron.learn()`, for example once the reviewer's
+request has been answered. `cyclotron.pending_learning()` lists the queued
+outputs. `learn()` runs one output at a time and holds the store lock only for
+that output, so reviews and decisions interleave between outputs. Each pass is
+recorded as a `deferred-learning-completed` event with its warnings and
+duration. A pass covering several reviews still runs any rubric change or
+feedback-cadence stage that one of those reviews made due. Every output's
+optimizer stages share the cyclotron's optimizer and its call limit. The
+optimizer transport is called synchronously, so the event loop is blocked
+while one of its calls runs.
 
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it
@@ -150,6 +204,17 @@ print(usage["total"]["decision_model"]["requests"], "decision-model requests", u
 print(len(cyclotron.decision_log()), "decisions in the log")
 ```
 
+`usage["outputs"]["by_output"]` estimates what each output (classifier)
+costs, in the same shape as the total. Each output's figures sum to the total.
+Optimizer calls are measured per output, because each output's learning makes
+its own calls. A shared decision-model request is billed as a whole, so it is
+split by each output's share of the request bytes: the output's own context
+and questions, an even share of the item, and an even share of any supporting
+question it shares. Split request and token counts can be fractional.
+`usage["outputs"]["estimate"]` says how the split is made. Requests recorded
+by older stores have no shares and are split evenly. A deferred learning pass
+counts toward the latest decision.
+
 ## The review program and its override
 
 The default `ReviewProgram` starts by reviewing every decision. It steps the
@@ -160,6 +225,19 @@ to full review when a window fails or a new version is promoted.
 Low-confidence decisions are always reviewed, and a random audit share
 remains at every rate. Every number is configuration; the defaults are
 placeholders until the review-rate experiments set them.
+
+With several outputs there is still one review rate, because one review
+covers the whole decision, but every output is watched. Each window is
+checked per output, against that output's own decisions, reviews and
+calibration gap. The window fails if any output with enough reviews misses the
+target, and it holds if any output is short of reviews. It counts toward
+stepping down only when every output meets the target. A new version of any
+output raises the rate. The `review-rate-changed` event and the reason name the
+output (`output`), and the event's evidence keeps every output's numbers.
+`cyclotron.overview()` returns every output's status, the output with the
+lowest measured alignment (`worst`) and the output that decided the last
+window (`limiting`). A one-output store keeps its program state and events
+exactly as before.
 
 ```python
 strict = ReviewProgram(rates=(1.0, 0.5, 0.2), audit_share=0.1, confidence_threshold=0.75,
@@ -326,7 +404,7 @@ rate" button that opens the application's own form.
 - **Content cache.** Identical item values share one decision-model answer.
 - **Stable shown decisions.** A decision keeps its label and confidence until
   it is reviewed or a new version is promoted.
-- **Versions.** A new rubric, example list or set of classifier questions is
+- **Versions.** A new rubric, example list or set of supporting questions is
   a version; an ML model refit is not (`status().refits` counts refits).
 - **One writer.** Use the default lease on one machine, or your own lease
   across workers.

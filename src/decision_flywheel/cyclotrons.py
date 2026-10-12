@@ -51,7 +51,47 @@ class Cyclotrons:
                 run_id TEXT NOT NULL REFERENCES web_runs(id),payload TEXT NOT NULL);
             ''')
 
-    def extend_cyclotron(self,parent_run_id,classifier_ids,*,name):
+    def promote_supporting_question(self,parent_run_id,source_classifier_id,question_name,*,classifier_id,
+                                    classifier_name,name,positive_label=None):
+        """Make one classifier's supporting question an output of a new cyclotron version.
+
+        The question comes from the parent run's latest checkpoint. The new
+        output's decision question and first rubric are the question's
+        instructions, its classes are the question's labels, and it starts
+        unlabeled. The parent run is not changed, the new version replays the
+        parent's labels like any extension, and the source classifier starts
+        it with the parent's supporting questions, so its features stay the
+        same until the optimizer promotes a candidate.
+        """
+        checkpoints=self.cyclotron_checkpoints(parent_run_id)
+        if not checkpoints:raise ValueError('run has no recorded cyclotron checkpoint')
+        state=checkpoints[-1]['payload']['classifiers'].get(source_classifier_id)
+        if state is None:raise ValueError('unknown source classifier')
+        config=state['state']['config']
+        tasks=config.get('tasks') or []
+        question=next((task for task in tasks if task['name']==question_name),None)
+        if question is None:raise ValueError('the source classifier has no such supporting question')
+        labels=list(question['labels'])
+        if positive_label is not None and positive_label not in labels:raise ValueError('positive label must be a question label')
+        if len(labels)<2:raise ValueError('a promoted question needs at least two labels')
+        classes=[{'label':label,**({'role':'positive' if label==positive_label else 'negative'} if positive_label else {})}
+                 for label in labels]
+        try:
+            self.classifier(classifier_id)
+        except ValueError:
+            pass
+        else:
+            raise ValueError('choose a new classifier id for the promoted question')
+        self.save_classifier(classifier_id,classifier_name,{
+            'question':question['instructions'],'classes':classes,'input_field':question.get('input_field','text'),
+            'seed_rubric':question['instructions'],
+            'promoted_from':{'run_id':parent_run_id,'classifier_id':source_classifier_id,'question':question_name,
+                             'configuration_fingerprint':state['fingerprint'],'checkpoint':checkpoints[-1]['fingerprint']}})
+        seeds={source_classifier_id:[{'name':task['name'],'instructions':task['instructions'],'labels':list(task['labels'])}
+                                     for task in tasks]}
+        return self.extend_cyclotron(parent_run_id,[classifier_id],name=name,seed_supporting_questions=seeds)
+
+    def extend_cyclotron(self,parent_run_id,classifier_ids,*,name,seed_supporting_questions=None):
         parent=self.run(parent_run_id)
         with self.connect() as db:
             if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')",(parent_run_id,)).fetchone():
@@ -67,6 +107,10 @@ class Cyclotrons:
             classifier['config']={**definition,'selection_policy':definition.get('selection_policy',{'primary':'f1','aggregation':'positive' if positive else 'macro','positive_class':positive})}
         config={**parent['config'],'classifiers':[*old,*added],'parent_run_id':parent_run_id,
                 'learning_policy':'fresh-replay','review_policy':'missing-labels-first'}
+        config.pop('seed_supporting_questions',None)
+        if seed_supporting_questions:
+            # Configuration, not fitted state: a classifier starts with these questions.
+            config['seed_supporting_questions']=seed_supporting_questions
         config.pop('cyclotron_definition_revision',None)
         config.pop('cyclotron_definition_fingerprint',None)
         # Preserve the original class definitions, item revisions, split seed,

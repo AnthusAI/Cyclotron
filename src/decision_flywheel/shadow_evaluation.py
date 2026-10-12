@@ -274,7 +274,9 @@ class ShadowEvaluator:
             self.fill_slots(training)
             return None
         _, _, idea_id, stats = sorted(cleared)[0]
-        await self._promote(idea_id, stats, training, development, source)
+        if not await self._promote(idea_id, stats, training, development, source):
+            self.fill_slots(training)
+            return None
         return idea_id
 
     async def _promote(self, idea_id, stats, training, development, source):
@@ -290,6 +292,10 @@ class ShadowEvaluator:
         reason = (f"cleared forward shadow evaluation: on {stats['shared']} stories it fixed {stats['gained']} and broke "
                   f"{stats['lost']} versus the incumbent (p={stats['p_value']:.4f}, look {stats['looks']} of "
                   f"{self.config.shadow_looks}, threshold {evidence['threshold']:.4f})")
+        siblings = await wheel.sibling_effects(config, datetime.now(timezone.utc))
+        if siblings and siblings["refused"]:
+            self._evict(idea_id, siblings["reason"], {**stats, "sibling_effects": siblings})
+            return False
         wheel._emit({"kind": "idea-promoted-by-shadow", "idea_id": idea_id, "control": idea["control"],
                      "proposal": idea["proposal"], "evidence": evidence, "reason": reason, "source": source,
                      "previous": previous, "candidate": config.briefing_state()})
@@ -297,7 +303,8 @@ class ShadowEvaluator:
                                          "evaluated"))
         wheel._emit({"kind": "promoted", "promoted": True, "promotion_path": "shadow-evaluation",
                      "idea_id": idea_id, "version": wheel.active.fingerprint, "reason": reason,
-                     "selection": None, "shadow_evidence": evidence})
+                     "selection": None, "shadow_evidence": evidence,
+                     **({"sibling_effects": siblings} if siblings is not None else {})})
         self.ledger.record_verdict(idea_id, "promoted", reason, evidence)
         self._set_status(idea_id, "promoted")
         idea["attempts"].append({"feedback_fingerprint": f"shadow:{self.seq()}", "result": {
@@ -305,6 +312,7 @@ class ShadowEvaluator:
         from .control_scheduler import ControlScheduler
         ControlScheduler(wheel).save(idea)
         self.fill_slots(training)
+        return True
 
     # -- what other parts read -------------------------------------------------------------------------------
     def snapshot(self):

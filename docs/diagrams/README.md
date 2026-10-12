@@ -10,7 +10,7 @@ and the website can embed the same file with a plain `<img>`.
 | --- | --- | --- |
 | Harness | [harness.d2](harness.d2) | What Cyclotron adds around one decision model |
 | Cyclotrons | [cyclotrons.d2](cyclotrons.d2) | Many classifiers in one decision-model request |
-| Classifier | [classifier.d2](classifier.d2) | The decision request and the learned ML head |
+| Classifier | [classifier.d2](classifier.d2) | The decision request and the ML model |
 | Improvement | [improvement.d2](improvement.d2) | One optimization round, from feedback to promotion |
 | Evaluation | [evaluation.d2](evaluation.d2) | Data partitions that keep learning and evaluation apart |
 
