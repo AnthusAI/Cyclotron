@@ -284,3 +284,25 @@ def expected_reviews(program: ReviewProgram, rate: float, confidences: Sequence[
     low = sum(1 for c in confidences if c is None or c < program.confidence_threshold)
     return round(low + (len(confidences) - low) * max(rate, program.audit_share), 1)
 
+
+
+def expected_item_reviews(program: ReviewProgram, rate: float,
+                          decisions: Sequence[Sequence[float | None]]) -> float:
+    """Expected decisions sent to review when each output is routed on its own.
+
+    Each entry holds one decision's per-output confidences. An output below
+    the threshold is always requested; a confident one is requested with
+    probability ``max(rate, audit_share)``, each with its own independent
+    draw. A decision is reviewed when any output is requested, so it counts
+    ``1 - prod(1 - p)``. With one output per decision this equals
+    :func:`expected_reviews`.
+    """
+    sampled = max(rate, program.audit_share)
+    total = 0.
+    for confidences in decisions:
+        missed = 1.
+        for confidence in confidences:
+            requested = 1. if confidence is None or confidence < program.confidence_threshold else sampled
+            missed *= 1 - requested
+        total += 1 - missed
+    return round(total, 1)

@@ -112,3 +112,22 @@ def test_a_single_output_decision_keeps_its_review_shape(tmp_path):
         decision = run(cyclotron.decide(item("ref-1")))
     assert decision.review.outputs is None and decision.review.requested is None
     assert set(decision.to_json()["review"]) == {"selected", "reason", "propensity", "detail"}
+
+
+def test_the_weekly_estimate_is_the_chance_that_any_routed_output_is_requested(tmp_path):
+    with Cyclotron.open(tmp_path / "c", TWO, Model(), review_program=FAST) as cyclotron:
+        quiet(cyclotron, .25)
+        for index in range(8):
+            run(cyclotron.decide(item(f"i-{index}", ("unsure " if index < 2 else "sure ") + str(index))))
+        estimate = cyclotron.overview().review_rate.expected_reviews_per_week
+    # Two unsure decisions are certain; six with two confident outputs each have 1 - 0.75^2.
+    assert estimate == round(2 + 6 * (1 - .75 ** 2), 1)
+
+
+def test_a_single_output_store_keeps_its_weekly_estimate(tmp_path):
+    from .review_program import expected_reviews
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
+        quiet(cyclotron, .25)
+        decisions = [run(cyclotron.decide(item(f"i-{index}", f"sure {index}"))) for index in range(5)]
+        estimate = cyclotron.status().review_rate.expected_reviews_per_week
+    assert estimate == expected_reviews(FAST, .25, [d.confidence for d in decisions])
