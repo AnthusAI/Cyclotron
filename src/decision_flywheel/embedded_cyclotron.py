@@ -23,6 +23,7 @@ open (or call) catches up.
 from __future__ import annotations
 
 import asyncio
+from copy import copy
 from dataclasses import asdict, dataclass, field, replace
 import io
 import os
@@ -388,6 +389,8 @@ class Cyclotron:
             CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
                 input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
                 source TEXT);
+            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,
+                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));
         """)
         saved = self.db.execute("SELECT value FROM meta WHERE key='definition'").fetchone()
         if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
@@ -412,7 +415,9 @@ class Cyclotron:
             wheel = DecisionFlywheel(
                 path, ClassifierConfig(spec.task, rubric=self._seed(spec.id),
                                        tasks=self._seed_questions(spec, created=saved is None)),
-                self.shared.adapter(spec.id), optimizer,
+                # Each output gets its own copy so its optimizer events reach only its own
+                # trace; the copies share the transport, so the call limit stays cyclotron-wide.
+                self.shared.adapter(spec.id), copy(optimizer) if optimizer is not None else None,
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
@@ -730,13 +735,15 @@ class Cyclotron:
     def _on_batch(self, event: Mapping[str, Any]) -> None:
         """A paid shared decision-model request; cached answers cost nothing."""
         if event.get("kind") == "shared-decision-batch" and not event.get("cached"):
-            self._batches.append(_usage_counts(event.get("usage")))
+            self._batches.append((*_usage_counts(event.get("usage")), event.get("output_shares")))
 
     def _record_batches(self, decision_id: str) -> None:
         """Attribute the paid requests of this call to its decision (caller's transaction)."""
-        for prompt, cached, output in self._batches:
-            self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
-                            " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+        for prompt, cached, output, shares in self._batches:
+            row = self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
+                                  " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+            for classifier, share in (shares or {}).items():
+                self.db.execute("INSERT INTO usage_shares VALUES (?,?,?)", (row.lastrowid, classifier, share))
         self._batches = []
 
     def usage(self, prices: Mapping[str, Mapping[str, float]], *, window: int = 100) -> dict[str, Any]:
@@ -777,7 +784,44 @@ class Cyclotron:
             blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
                            **_block(models, prices, times[first], times[last])})
         return {"window_size": window, "windows": blocks,
-                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices)}
+                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices),
+                "outputs": self._usage_by_output(prices)}
+
+    def _usage_by_output(self, prices: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
+        """An estimated split of the total by output; the outputs sum to the total.
+
+        Optimizer calls are measured per output (each output's learning makes
+        its own calls). A shared decision-model request is split by each
+        output's share of the request bytes; a request recorded before shares
+        were kept is split evenly.
+        """
+        from .run_usage import _block, _empty
+        ids = list(self.specs)
+        per = {cid: {"decision_model": _empty(), "optimizer": _empty()} for cid in ids}
+        shares: dict[int, dict[str, float]] = {}
+        for usage_id, classifier, share in self.db.execute("SELECT usage_id,classifier,share FROM usage_shares"):
+            shares.setdefault(usage_id, {})[classifier] = share
+        for usage_id, model, prompt, cached, output, source in self.db.execute(
+                "SELECT id,model,input_tokens,cached_input_tokens,output_tokens,source FROM usage ORDER BY id"):
+            if model == "optimizer":
+                owner = (source or "").rsplit(":", 1)[0]
+                split = {owner: 1.0} if owner in per else {cid: 1 / len(ids) for cid in ids}
+            else:
+                split = {cid: share for cid, share in shares.get(usage_id, {}).items() if cid in per}
+                if not split:
+                    split = {cid: 1 / len(ids) for cid in ids}
+                scale = sum(split.values())
+                split = {cid: share / scale for cid, share in split.items()}
+            for cid, share in split.items():
+                counts = per[cid][model]
+                counts["requests"] += share
+                counts["input_tokens"] += prompt * share
+                counts["cached_input_tokens"] += cached * share
+                counts["output_tokens"] += output * share
+        return {"estimate": ("Decision-model usage is split by each output's share of the shared request bytes "
+                             "(evenly for requests recorded before shares were kept); optimizer usage is measured "
+                             "per output. Outputs sum to the total."),
+                "by_output": {cid: _block(per[cid], prices) for cid in ids}}
 
     def decision_log(self) -> list[dict[str, Any]]:
         """Every decision in the order it was made, with its item values, state and active reviews (for recordings)."""
@@ -1183,9 +1227,11 @@ class Cyclotron:
             self.db.execute("UPDATE decisions SET state=? WHERE id=? AND state!='superseded'",
                             ("reviewed" if reviewed else "open", review.decision_id))
             return [self._append({"kind": "review", "review": review.to_json()})]
-        if kind == "optimizer-response" and event.get("cycle_item_id"):
-            row = self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
-                                  (event["cycle_item_id"],)).fetchone()
+        if kind == "optimizer-response":
+            # A deferred learning pass has no item; it counts toward the latest decision.
+            row = (self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
+                                   (event["cycle_item_id"],)).fetchone() if event.get("cycle_item_id")
+                   else self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone())
             if row is not None:
                 prompt, cached, output = _usage_counts(event.get("usage"))
                 self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
@@ -1339,6 +1385,11 @@ class Cyclotron:
                 except Exception as error:
                     cycle.__exit__(type(error), error, None)
                     raise
+                latest = self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone()
+                if latest is not None:
+                    with self.db:
+                        # Decision-model requests made while learning count toward the latest decision.
+                        self._record_batches(latest[0])
                 record = {"classifier": cid, "since_count": since, "warnings": warnings,
                           "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
                 wheel._emit({"kind": "deferred-learning-completed", **record})

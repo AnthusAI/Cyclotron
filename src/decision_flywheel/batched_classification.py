@@ -109,3 +109,25 @@ def answer_groups(configurations, request, identities, answer):
         for owner,name in request.get('owners',{}).get(key,[[identifier,local_name]]):
             groups[owner][name] = result
     return groups
+
+
+def output_shares(request, identities):
+    """Each classifier's estimated share of one joint request, by request bytes.
+
+    A classifier's own context and questions count for it alone; the target
+    is split evenly across classifiers and a shared supporting question across
+    its owners. Shares sum to one. Providers bill the request as a whole, so
+    this is an estimate for reporting, not a measured cost.
+    """
+    size = lambda value: len(json.dumps(value, sort_keys=True, ensure_ascii=False).encode())
+    classifiers = list(request['state']['classifiers'])
+    weights = {cid: float(size(request['state']['classifiers'][cid])) for cid in classifiers}
+    for cid in classifiers:
+        weights[cid] += size(request['state']['target']) / len(classifiers)
+    owners = request.get('owners', {})
+    for key, (identifier, local_name, _) in identities.items():
+        holders = [owner for owner, _ in owners[key]] if key in owners else [identifier]
+        for owner in holders:
+            weights[owner] += size(request['questions'][key]) / len(holders)
+    total = sum(weights.values())
+    return {cid: weight / total for cid, weight in weights.items()}
