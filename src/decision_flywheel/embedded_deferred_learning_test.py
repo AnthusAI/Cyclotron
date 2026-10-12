@@ -152,3 +152,120 @@ def test_queued_learning_survives_a_restart(tmp_path):
 def test_an_unknown_learning_mode_is_refused(tmp_path):
     with pytest.raises(ValueError, match="learning"):
         Cyclotron.open(tmp_path / "c", definition(1), Model(), learning="later")
+
+
+class GatedTransport:
+    """An asynchronous provider: each call waits until the spec opens the gate."""
+
+    def __init__(self, max_calls=None):
+        self.calls, self.entered, self.gate = 0, None, None
+        if max_calls is not None:
+            self.max_calls = max_calls
+
+    def __call__(self, messages):
+        raise AssertionError("an asynchronous transport must be awaited")
+
+    async def acomplete(self, messages):
+        self.calls += 1
+        self.entered.set()
+        await self.gate.wait()
+        return OptimizerReply(REPLY, "fake-async-optimizer")
+
+
+def test_reviews_and_decisions_complete_while_learning_awaits_the_optimizer(tmp_path):
+    import threading
+    transport, observed = GatedTransport(), []
+    agent = OptimizerAgent(transport, observer=lambda event: observed.append(threading.get_ident()))
+    with Cyclotron.open(tmp_path / "c", definition(2), Model(), agent, max_requests=1000,
+                        learning="deferred") as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:2])
+        waiting = run(cyclotron.decide(item("waiting", "yes waiting")))
+
+        async def scenario():
+            loop_thread = threading.get_ident()
+            transport.entered, transport.gate = asyncio.Event(), asyncio.Event()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()                         # learn() is inside a provider call
+            calls_in_flight = transport.calls
+            review = await cyclotron.review(waiting.decision_id, labels={"relevant": "include"})
+            fresh = await cyclotron.decide(item("fresh", "yes fresh"))
+            finished_first = not learning.done() and transport.calls == calls_in_flight
+            transport.gate.set()
+            passes = await learning
+            return loop_thread, review, fresh, finished_first, passes
+        loop_thread, review, fresh, finished_first, passes = asyncio.run(scenario())
+        requests = sum(e["kind"] == "optimizer-request" for wheel in cyclotron.wheels.values()
+                       for e in wheel.history(100000))
+        responses = sum(e["kind"] == "optimizer-response" for wheel in cyclotron.wheels.values()
+                        for e in wheel.history(100000))
+    assert finished_first and review["relevant"].label == "include" and fresh.decision_id
+    assert [p["classifier"] for p in passes] == ["relevant", "timely"]
+    assert set(observed) == {loop_thread}                         # no event, so no SQLite write, off the loop thread
+    assert requests == responses == transport.calls > 0
+
+
+def test_the_shared_call_limit_holds_for_an_asynchronous_transport(tmp_path):
+    transport = GatedTransport(max_calls=1)
+    with Cyclotron.open(tmp_path / "c", definition(3), Model(), OptimizerAgent(transport), max_requests=1000,
+                        learning="deferred") as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:3])
+
+        async def scenario():
+            transport.entered, transport.gate = asyncio.Event(), asyncio.Event()
+            transport.gate.set()
+            return await cyclotron.learn()
+        passes = asyncio.run(scenario())
+    assert transport.calls == 1
+    assert any(w["reason"].startswith("optimizer call limit reached") for p in passes for w in p["warnings"])
+
+
+def test_a_correction_during_the_call_is_kept_and_no_version_built_on_the_old_label_survives(tmp_path):
+    transport = GatedTransport()
+    with Cyclotron.open(tmp_path / "c", definition(1), Model(), OptimizerAgent(transport), max_requests=1000,
+                        learning="deferred") as cyclotron:
+        reviewed = [checklist(cyclotron, index, OUTPUTS[:1]) for index in range(12)]
+        corrected = reviewed[1]["relevant"]
+        flipped = "include" if corrected.label == "exclude" else "exclude"
+
+        async def scenario():
+            transport.entered, transport.gate = asyncio.Event(), asyncio.Event()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            await cyclotron.review(corrected.decision_id, flipped, classifier="relevant")
+            transport.gate.set()
+            await learning
+            await cyclotron.decide(item("after", "yes after"))
+        asyncio.run(scenario())
+        wheel = cyclotron.wheels["relevant"]
+        training, development, _ = cyclotron._partitions("relevant")
+        current = wheel._evidence((*training, *development))
+        labels = [e["review"] for e in cyclotron.subscribe(limit=1000)["events"] if e["kind"] == "review"]
+    assert labels[-1]["label"] == flipped and labels[-1]["kind"] == "correction"
+    # Whatever the pass promoted, the active version rests only on current labels.
+    assert all(current.get(key) == value for key, value in (wheel.active.training_evidence or {}).items())
+
+
+def test_a_pass_whose_output_changed_during_its_call_stops_instead_of_using_stale_state(tmp_path):
+    from dataclasses import replace
+    transport = GatedTransport()
+    with Cyclotron.open(tmp_path / "c", definition(1), Model(), OptimizerAgent(transport), max_requests=1000,
+                        learning="deferred") as cyclotron:
+        for index in range(12):
+            checklist(cyclotron, index, OUTPUTS[:1])
+        wheel = cyclotron.wheels["relevant"]
+
+        async def scenario():
+            transport.entered, transport.gate = asyncio.Event(), asyncio.Event()
+            learning = asyncio.create_task(cyclotron.learn())
+            await transport.entered.wait()
+            async with cyclotron._lock:   # another operation changes the output meanwhile
+                wheel._activate(replace(wheel.active, config=replace(wheel.active.config, rubric="Changed elsewhere.")))
+            transport.gate.set()
+            return await learning
+        passes = asyncio.run(scenario())
+        failed = [e for e in wheel.history(100000) if e["kind"] == "optimizer-failed"]
+    assert passes[0]["warnings"][0]["reason"].startswith("optimization failed")
+    assert failed and failed[-1]["error_type"] == "RuntimeError"
+    assert wheel.active.config.rubric == "Changed elsewhere."

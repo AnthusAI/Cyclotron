@@ -123,7 +123,7 @@ class ControlScheduler:
                              "request_budget_bytes": wheel.max_request_bytes, **extra},
                     protected=tuple(row.item for row in development)+tuple(protected),
                     human_explanations=wheel.optimizer_context["human_explanations"])
-            proposals, lineage = ask_round(wheel, build, optimizer_context(wheel, ledger, own, reserve_ids), control, own,
+            proposals, lineage = await ask_round(wheel, build, optimizer_context(wheel, ledger, own, reserve_ids), control, own,
                                            training, development, protected)
             self.admit_proposals(control, proposals, training, cycle, lineage)
             discovered.add(control)
@@ -261,7 +261,8 @@ class ControlScheduler:
                     human_explanations=wheel.optimizer_context["human_explanations"])
                 proposal = {control: wheel.active.config.briefing_state()[control]}
                 if control not in discovered:
-                    proposal = wheel.optimizer.propose(briefing)
+                    from .optimizer_agent import ask_optimizer
+                    proposal = await ask_optimizer(wheel.optimizer, 'propose', briefing)
                     if set(proposal) - {"rationale", control} or control not in proposal:
                         raise ValueError("discovery must propose exactly the requested control")
                 # Validate before persisting. Empty/no-change proposals remain

@@ -23,6 +23,8 @@ open (or call) catches up.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from copy import copy
 from dataclasses import asdict, dataclass, field, replace
 import io
@@ -371,6 +373,10 @@ class Cyclotron:
             self.close()
             raise
         self._lock = asyncio.Lock()
+        # The output a deferred learning pass is optimizing, in that pass's task only.
+        self._learning: ContextVar[str | None] = ContextVar("cyclotron_learning", default=None)
+        # One learning pass at a time, even across concurrent learn() calls.
+        self._learn_lock = asyncio.Lock()
 
     def _open(self, model, optimizer, max_requests, redact):
         definition = self.definition
@@ -417,7 +423,7 @@ class Cyclotron:
                                        tasks=self._seed_questions(spec, created=saved is None)),
                 # Each output gets its own copy so its optimizer events reach only its own
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
-                self.shared.adapter(spec.id), copy(optimizer) if optimizer is not None else None,
+                self.shared.adapter(spec.id), self._optimizer_for(optimizer, spec.id),
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
@@ -1344,6 +1350,49 @@ class Cyclotron:
         wheel.reconcile_feedback(training, development=development)
         wheel.set_optimizer_context([r.context["human_feedback"] for r in training if r.context.get("human_feedback")])
 
+    def _optimizer_for(self, optimizer, classifier: str):
+        """Each output's own optimizer copy, lending its provider calls the deferred-learning window."""
+        if optimizer is None:
+            return None
+        own = copy(optimizer)
+        if hasattr(own, "complete"):
+            own.call_window = lambda: self._provider_window(classifier)
+        return own
+
+    @asynccontextmanager
+    async def _provider_window(self, classifier: str):
+        """Release the store lock while learn() awaits an asynchronous optimizer provider call.
+
+        Only a deferred learning pass lends its call; elsewhere this does
+        nothing. While the call is in flight, reviews and decisions run, and
+        their events are written on the event-loop thread as usual. Afterwards
+        the pass gets back its shared decision context and its cycle. If the
+        output itself changed meanwhile (a correction, undo or dropped ML
+        model), the rest of the pass would rest on stale state, so it stops
+        with an error; the labels are kept, as after any failed call.
+        """
+        if self._learning.get() != classifier:
+            yield
+            return
+        wheel = self.wheels[classifier]
+        version = wheel.active.fingerprint
+        flags = (wheel._cycle_running, wheel._step_running)
+        binding = (self.shared.context_configs, self.shared.context_training, self.shared.prepared,
+                   getattr(self.shared, "prepared_scope", None))
+        wheel._cycle_running = wheel._step_running = False
+        self._lock.release()
+        try:
+            yield
+        finally:
+            await self._lock.acquire()
+            if wheel._cycle_running or wheel._step_running:
+                raise RuntimeError("another operation left this output running during an optimizer call")
+            wheel._cycle_running, wheel._step_running = flags
+            (self.shared.context_configs, self.shared.context_training, self.shared.prepared,
+             self.shared.prepared_scope) = binding
+        if wheel.active.fingerprint != version:
+            raise RuntimeError("the output changed while its optimizer call was in flight")
+
     def _enqueue_learning(self, classifier: str) -> None:
         """Queue one output's learning pass; queued reviews of one output share a pass."""
         training, development, _ = self._partitions(classifier)
@@ -1371,7 +1420,7 @@ class Cyclotron:
             raise ValueError("limit must be a positive integer")
         done = []
         while limit is None or len(done) < limit:
-            async with self._lock:
+            async with self._learn_lock, self._lock:
                 row = self.db.execute("SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1").fetchone()
                 if row is None:
                     break
@@ -1381,12 +1430,15 @@ class Cyclotron:
                 wheel = self.wheels[cid]
                 started = time.perf_counter()
                 cycle = wheel.cycle(None, reason="deferred-learning").__enter__()
+                token = self._learning.set(cid)
                 try:
                     warnings = await self._learn(cid, cycle, since_count=since)
                     cycle.__exit__(None, None, None)
                 except Exception as error:
                     cycle.__exit__(type(error), error, None)
                     raise
+                finally:
+                    self._learning.reset(token)
                 latest = self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone()
                 if latest is not None:
                     with self.db:

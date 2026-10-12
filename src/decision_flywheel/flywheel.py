@@ -744,7 +744,8 @@ class DecisionFlywheel:
                 protected=tuple(row.item for row in development) + tuple(protected),
                 human_explanations=self.optimizer_context["human_explanations"])
             if candidate_proposal is None:
-                proposal = self.optimizer.propose(briefing)
+                from .optimizer_agent import ask_optimizer
+                proposal = await ask_optimizer(self.optimizer, 'propose', briefing)
             else:
                 proposal = dict(candidate_proposal)
                 self._emit({"kind": "hypothesis-retry", "hypothesis_id": _hash(proposal),

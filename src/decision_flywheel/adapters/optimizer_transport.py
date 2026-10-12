@@ -15,4 +15,6 @@ def optimizer_transport(config):
     else:
         from .openai_optimizer import OpenAIOptimizer
         cls = OpenAIOptimizer
-    return cls.from_environment(model=config["optimizer_model"], max_calls=config["max_optimizer_calls"])
+    # optimizer_async opts in to the awaitable client; the default stays synchronous.
+    return cls.from_environment(model=config["optimizer_model"], max_calls=config["max_optimizer_calls"],
+                                **({"asynchronous": True} if config.get("optimizer_async") else {}))

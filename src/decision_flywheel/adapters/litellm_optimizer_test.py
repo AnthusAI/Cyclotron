@@ -43,3 +43,26 @@ def test_a_failed_provider_attempt_consumes_the_ceiling_instead_of_retrying_sile
 def test_invalid_configuration_is_rejected_before_any_provider_use(model, limit):
     with pytest.raises(ValueError):
         LiteLLMOptimizer(None, model=model, max_calls=limit)
+
+
+def test_acompletion_is_awaited_under_the_same_ceiling_and_arguments():
+    import asyncio
+    from types import SimpleNamespace
+    from .litellm_optimizer import LiteLLMOptimizer
+    seen = []
+
+    def response():
+        return SimpleNamespace(model="m", usage=SimpleNamespace(model_dump=lambda: {}),
+                               choices=[SimpleNamespace(message=SimpleNamespace(content="{}", tool_calls=None))])
+
+    async def acompletion(**kwargs):
+        seen.append(("async", kwargs))
+        return response()
+    transport = LiteLLMOptimizer(lambda **kwargs: seen.append(("sync", kwargs)) or response(), model="m", max_calls=2,
+                                 acompletion=acompletion)
+    asyncio.run(transport.acomplete([{"role": "user", "content": "x"}]))
+    transport([{"role": "user", "content": "x"}])
+    with pytest.raises(RuntimeError, match="ceiling"):
+        asyncio.run(transport.acomplete([]))
+    assert [kind for kind, _ in seen] == ["async", "sync"] and seen[0][1] == seen[1][1]
+    assert not hasattr(LiteLLMOptimizer(lambda **kwargs: None, model="m"), "acomplete")

@@ -160,9 +160,21 @@ that output, so reviews and decisions interleave between outputs. Each pass is
 recorded as a `deferred-learning-completed` event with its warnings and
 duration. A pass covering several reviews still runs any rubric change or
 feedback-cadence stage that one of those reviews made due. Every output's
-optimizer stages share the cyclotron's optimizer and its call limit. The
-optimizer transport is called synchronously, so the event loop is blocked
-while one of its calls runs.
+optimizer stages share the cyclotron's optimizer and its call limit.
+
+A synchronous optimizer transport blocks the event loop while its call runs.
+An asynchronous one keeps the loop free, and a deferred learning pass releases
+the store lock while it waits on the provider, so reviews and decisions
+complete in the meantime. A transport is asynchronous when it has an `acomplete`
+method or is an `async` callable. `OpenAIOptimizer(..., async_client=...)` and
+`LiteLLMOptimizer(..., acompletion=...)` are asynchronous, as is
+`from_environment(..., asynchronous=True)`, and the application config key
+`optimizer_async` selects the asynchronous form. Optimizer events are still
+recorded on the event-loop thread, before and after the call. If the output
+being learned changes during the call (for example its version changes), that
+pass stops with an `optimization failed` warning instead of continuing on stale
+state; the labels are kept. Any version fitted on a label that was corrected
+during the call is invalidated as usual at the next decision.
 
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it
