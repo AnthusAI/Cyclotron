@@ -11,6 +11,7 @@ from .flywheel import DecisionFlywheel
 from .models import DecisionTask,Item
 from .selection_policy import SelectionPolicy
 from .shared_decisions import SharedDecisions
+from .sibling_check import SiblingPolicy,install_sibling_checks
 from .learning_loop import (decide_with_shared_context,feedback_partitions,learn_from_review,
     record_cycle_metrics,review_role)
 
@@ -57,6 +58,7 @@ class WorkspaceSession:
             self.wheels[identifier]=DecisionFlywheel(directory/path,ClassifierConfig(task),self.shared.adapter(identifier),copy(optimizer),
                 max_requests=self.config['max_requests'],observer=lambda event,cid=identifier:self.emit(cid,event),redact=redact,
                 selection_policy=SelectionPolicy(**definition.get('selection_policy',{'primary':'f1','aggregation':'macro'})),min_evaluation_per_class=2)
+        install_sibling_checks(self.wheels,self.shared,self.partitions,SiblingPolicy(**self.config.get('sibling_policy',{})))
         transport=getattr(optimizer,'complete',None)
         if hasattr(transport,'calls'):transport.calls=sum(sum(e['kind']=='optimizer-request' for e in wheel.history(100000)) for wheel in self.wheels.values())
 

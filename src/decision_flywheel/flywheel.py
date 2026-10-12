@@ -177,6 +177,8 @@ class DecisionFlywheel:
         self.initial, self.model, self.optimizer = initial, model, optimizer
         self._step_context = ContextVar("flywheel_step", default={})
         self._answer_scopes = ContextVar('answer_dependencies', default=())
+        # A multi-output cyclotron installs a sibling check; one output has none.
+        self.sibling_check = None
         self._cycle_context = ContextVar("flywheel_cycle", default={})
         self._cycle_running = False
         self._step_running = False
@@ -404,6 +406,15 @@ class DecisionFlywheel:
         from .classifier_snapshot import compact_snapshot
         self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,
                     "classifier_snapshot": compact_snapshot(classifier)})
+
+    async def sibling_effects(self, config, now):
+        """Each sibling output's development effect of activating ``config`` (None without siblings)."""
+        if self.sibling_check is None:
+            return None
+        effects = await self.sibling_check.evaluate(config, now)
+        if effects['context_changed']:
+            self._emit({'kind': 'sibling-effects-measured', 'candidate_configuration': config.briefing_state(), **effects})
+        return effects
 
     def model_context(self, config, training):
         identity = getattr(self.model, 'feature_context_identity', None)
@@ -679,7 +690,8 @@ class DecisionFlywheel:
                               if evaluation_time is not None and "current_datetime" in self.active.config.dynamic_elements else {}),
                            **({"apply_promotion": False, "baseline_version": self.active.fingerprint}
                               if not apply_promotion else {}),
-                           **({"candidate_proposal": candidate_proposal} if candidate_proposal is not None else {})})
+                           **({"candidate_proposal": candidate_proposal} if candidate_proposal is not None else {}),
+                           **({"siblings": self.sibling_check.evidence()} if self.sibling_check is not None else {})})
         round_key, saved = self.cached_artifact('runtime_rounds', 'key', round_key)
         if saved:
             if saved[0] == "complete":
@@ -744,6 +756,10 @@ class DecisionFlywheel:
                     for label in self.initial.task.labels)) if require_recall_safeguards else True
             selection = self.selection_policy.compare(incumbent_metrics, candidate_metrics) if self.selection_policy else None
             improved = selection['improved'] if selection else brier_improved and recall_safe
+            # A context change is part of every sibling's shared request.
+            siblings = await self.sibling_effects(candidate.config, now) if improved else None
+            sibling_refused = bool(siblings and siblings['refused'])
+            improved = improved and not sibling_refused
             promoted = improved and apply_promotion
             result = {"promoted": promoted, "incumbent": incumbent_metrics, "candidate": candidate_metrics,
                       "improved": improved, "trial_fingerprint": round_key,
@@ -754,9 +770,12 @@ class DecisionFlywheel:
                       "training_class_weighting": self.training_class_weighting,
                       "feature_diagnostics": diagnostics,
                       "evaluation_independent_of_optimizer_context": not self.optimizer_context["evaluation_context_exposed"],
-                      "reason": selection['reason'] if selection else (f"lower development {metric}" if improved else
+                      "reason": siblings['reason'] if sibling_refused else
+                                selection['reason'] if selection else (f"lower development {metric}" if improved else
                                  "candidate failed per-class recall safeguards" if not recall_safe else
                                  f"development {metric} did not improve")}
+            if siblings is not None:
+                result["sibling_effects"] = siblings
             self._emit({"kind": "candidate-evaluated", **result})
             baseline_version = self.active.fingerprint
             if promoted:
