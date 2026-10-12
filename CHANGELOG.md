@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file.
 
 This changelog is maintained by semantic-release from conventional commits.
 
+## Engine (unreleased): one cyclotron, many outputs
+
+The epic `flywheel1f`. A cyclotron can now run several reviewed outputs (classifiers) side by side.
+
+- **Sibling check (#9).** A change to one output is scored on every sibling's development labels before promotion. `CyclotronDefinition(sibling_policy=SiblingPolicy("refuse"|"record", max_regression))` sets the policy; `refuse` is the default. The policy is not part of the definition fingerprint.
+- **Seeded supporting questions (#10).** `Cyclotron.open(seed_supporting_questions=...)` is fixed when the store is created.
+- **Shared supporting questions (#11).** A supporting question that several outputs ask with the same name, instructions and labels is asked and paid once. Sharing is a store setting fixed at creation. New stores share; existing stores keep their requests byte-for-byte.
+- **Per-output monitoring (#12).** The review-rate program checks every output, and the worst output decides. `review-rate-changed` events name it. `Cyclotron.overview()` lists every output.
+- **Checklist reviews (#13).** `review(decision_id, labels={classifier: label, ...})` labels several outputs in one call. Partial checklists are allowed, and it is idempotent by `review_id`.
+- **Per-output routing (#14).** Each output is selected for review on its own. `decision.review.outputs` and `decision.review.requested` record it. `expectedReviewsPerWeek` counts the chance that any output is requested (#20).
+- **Deferred learning (#15).** `Cyclotron.open(learning="deferred")` makes `review()` only record and queue. `await cyclotron.learn()` runs the queue, and `pending_learning()` lists it. **`learn()` runs each queued output at most once per call** (#21), so an output that gained labels during its pass stays queued. Callers that want an empty queue loop:
+
+  ```python
+  while cyclotron.pending_learning():
+      await cyclotron.learn()
+  ```
+
+- **Promote a supporting question (#16, #22).** `promote_supporting_question` (store and GraphQL `promoteSupportingQuestion`) makes a supporting question a classifier of a new cyclotron version. A trace-ui control asks for confirmation first.
+- **Cost per output (#17).** `usage()` includes `outputs.by_output`, an estimate that sums to the total. Each output now has its own optimizer copy, so optimizer events no longer leak into sibling traces.
+- **Async optimizer transport (#21).**
+  - With an `acomplete` coroutine transport (`OpenAIOptimizer(async_client=...)`, `LiteLLMOptimizer(acompletion=...)`, or `from_environment(asynchronous=True)`), `learn()` lends the store lock during provider calls, so reviews and decisions keep working.
+  - A pass is superseded, and stays queued, if an output's criteria or a label it rests on changes during the call. `max_superseded_passes` caps repeats.
+  - Cancellation is safe. A pass's own interrupted paid request is dropped openly and recorded as `decision-request-abandoned`.
+  - Synchronous transports behave as before.
+- **Glossary (#18).** The console, docs and diagrams use classifier (a reviewed output), supporting question, feature and ML model. The trace UI shows superseded and cancelled learning steps as such.
+
 ## Web package (unreleased)
 
 - New export `cyclotron/components/cycle-mark` (`CycleMark`): the logo's cycle mark with one animation. At rest it is exactly `RefreshCwWide`. A cycle moves both arrows half the racetrack (a dash offset and arrowheads on one closed path, never a rotate transform, because the wide mark matches itself only at 180 degrees) and lands on the logo pose. `cycleKey` or a `cycle()` handle plays one cycle; reduced motion keeps it still; no new dependencies.
