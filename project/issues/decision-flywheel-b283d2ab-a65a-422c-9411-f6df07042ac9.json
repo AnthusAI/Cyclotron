@@ -10,9 +10,24 @@
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "247cb538-a194-41d3-952c-2f63ae31c31d",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/15",
+      "created_at": "2026-10-12T16:45:56.085460Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:03:06.693160Z",
-  "updated_at": "2026-10-12T16:35:11.835191Z",
+  "updated_at": "2026-10-12T16:45:56.085628Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
