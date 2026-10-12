@@ -204,6 +204,17 @@ print(usage["total"]["decision_model"]["requests"], "decision-model requests", u
 print(len(cyclotron.decision_log()), "decisions in the log")
 ```
 
+`usage["outputs"]["by_output"]` estimates what each output (classifier)
+costs, in the same shape as the total. Each output's figures sum to the total.
+Optimizer calls are measured per output, because each output's learning makes
+its own calls. A shared decision-model request is billed as a whole, so it is
+split by each output's share of the request bytes: the output's own context
+and questions, an even share of the item, and an even share of any supporting
+question it shares. Split request and token counts can be fractional.
+`usage["outputs"]["estimate"]` says how the split is made. Requests recorded
+by older stores have no shares and are split evenly. A deferred learning pass
+counts toward the latest decision.
+
 ## The review program and its override
 
 The default `ReviewProgram` starts by reviewing every decision. It steps the

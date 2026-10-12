@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "98f7e6af-b7c8-4993-95a4-c056607c6d2d",
+  "issue_id": "decision-flywheel-6b1660bc-ff40-4491-b3ea-716440cedb14",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-12T17:16:34.762Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Trace-ui control to promote a supporting question to an output",
+    "description": "Follow-up from flywheel52 (PR #16).\n\nCurrent: the promoteSupportingQuestion GraphQL mutation (and WebStore.promote_supporting_question) exist, but trace-ui has no control for them.\n\nDesired: on a classifier's supporting questions (from the run's latest checkpoint), a 'Make this an output' action that asks for the new classifier id, name and optional positive label, shows that it creates a new cyclotron version with a fresh replay, and calls promoteSupportingQuestion with confirmed:true only after explicit confirmation.\n\nAcceptance: vitest covers the confirmation step (no mutation before confirm) and the mutation variables; glossary terms (output, supporting question, ML model) only; tsc and vitest green.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 3,
+    "assignee": null,
+    "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Engine Worker"
+    }
+  }
+}

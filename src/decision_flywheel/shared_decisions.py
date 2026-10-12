@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import sqlite3
-from .batched_classification import batch_request
+from .batched_classification import batch_request, output_shares
 from .classifier_config import ClassifiedAnswers
 from .decision_cache import CacheOptions, CacheMiss
 from .models import DecisionResult
@@ -78,7 +78,7 @@ class SharedDecisions:
         self.prepared={}
         options=options or CacheOptions()
         now=now or datetime.now(timezone.utc)
-        request,_=batch_request(configs,target,training,now=now,share_questions=self.share_supporting_questions)
+        request,identities=batch_request(configs,target,training,now=now,share_questions=self.share_supporting_questions)
         self.validate_capabilities(request)
         fingerprint=key({'model':self.model.model_identity,'request':request})
         self.identity=fingerprint
@@ -111,7 +111,8 @@ class SharedDecisions:
                 raise
         self.observer({'kind':'shared-decision-batch','request_fingerprint':fingerprint,'classifier_ids':list(configs),
                        'cached':cached,'usage':None if cached else payload['result']['usage'],'requests':self.requests,
-                       'generation':self.generation(fingerprint),'cache_policy':options.policy,'retry_failed':options.retry_failed})
+                       'generation':self.generation(fingerprint),'cache_policy':options.policy,'retry_failed':options.retry_failed,
+                       'output_shares':output_shares(request,identities)})
         self.prepared_scope=(dict(configs),{cid:tuple(rows) for cid,rows in training.items()})
         for identifier,config in configs.items():
             child=key({'classifier':identifier,'request':config.request(target,training[identifier],now=now)})
