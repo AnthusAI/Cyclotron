@@ -18,6 +18,7 @@ import re
 from .flywheel import _json
 from .hypothesis_ledger import HypothesisLedger
 from .idea_screening import OPERATOR_CAPS, OPERATORS, incumbent_id, validate_proposals
+from .optimizer_agent import ask_optimizer
 
 SHINGLE = 3
 
@@ -185,7 +186,7 @@ def _screen(wheel, labeled, requests, parents, control, references, gate, cause_
     return kept, meta, rejected
 
 
-def ask_round(wheel, build_briefing, context, control, ideas, training, development, protected, diagnosis=None):
+async def ask_round(wheel, build_briefing, context, control, ideas, training, development, protected, diagnosis=None):
     """Ask for this round's proposals. -> (proposals, meta) where meta[i] = {operator, parents, novelty}, or None
     when the plain multi-proposal request was used (dev_screen mode, non-rubric controls, optimizers without
     ``propose_operators``). ``build_briefing(extra)`` builds the briefing; ``context`` is the optimizer context.
@@ -196,12 +197,12 @@ def ask_round(wheel, build_briefing, context, control, ideas, training, developm
     mix = config.effective_mix()
     if mix is None or control != "rubric":
         count = config.proposals_per_round
-        return ask_proposals(wheel, build_briefing({"proposals_requested": count, **context}), control, count), None
+        return await ask_proposals(wheel, build_briefing({"proposals_requested": count, **context}), control, count), None
     if getattr(wheel.optimizer, "propose_operators", None) is None:
         total = sum(mix.values())
         wheel._emit({"kind": "proposal-operator-skipped", "operator": "all",
                      "reason": "the optimizer has no propose_operators; used the plain multi-proposal request"})
-        return ask_proposals(wheel, build_briefing({"proposals_requested": total, **context}), control, total), None
+        return await ask_proposals(wheel, build_briefing({"proposals_requested": total, **context}), control, total), None
     ledger = HypothesisLedger(wheel.db)
     requests, parents, skipped = plan_round(wheel, ledger, ideas, training, development, protected, mix, diagnosis)
     cause_ids = None
@@ -214,7 +215,7 @@ def ask_round(wheel, build_briefing, context, control, ideas, training, developm
     references = [wheel.active.config.rubric, *(_rubric_of(i) for i in ideas if _rubric_of(i))]
     total = sum(spec["count"] for spec in requests.values())
     briefing = build_briefing({"proposals_requested": total, "operator_requests": requests, **context})
-    labeled = wheel.optimizer.propose_operators(briefing)
+    labeled = await ask_optimizer(wheel.optimizer, 'propose_operators', briefing)
     proposals, meta, rejected = _screen(wheel, labeled, requests, parents, control, references, config.min_novelty, cause_ids)
     for attempt in range(config.novelty_retries):
         if not rejected or "bold" not in requests:
@@ -223,7 +224,7 @@ def ask_round(wheel, build_briefing, context, control, ideas, training, developm
                      "attempt": attempt + 1, "min_novelty": config.min_novelty})
         retry = {"bold": {**requests["bold"], "count": rejected, "retry_note":
                           "the previous bold proposals were too close to the incumbent or a prior idea"}}
-        labeled = wheel.optimizer.propose_operators(
+        labeled = await ask_optimizer(wheel.optimizer, 'propose_operators',
             build_briefing({"proposals_requested": rejected, "operator_requests": retry, **context}))
         more, more_meta, rejected = _screen(wheel, labeled, retry, parents, control,
                                             [*references, *(str(p[control]) for p in proposals)], config.min_novelty,

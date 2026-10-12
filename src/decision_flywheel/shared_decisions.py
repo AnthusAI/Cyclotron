@@ -44,6 +44,16 @@ class SharedDecisions:
         self.context_training={name:tuple(rows) for name,rows in training.items()}
         self.prepared={}
 
+    MUTABLE=('context_configs','context_training','prepared','prepared_scope','identity')
+
+    def snapshot(self):
+        """Every mutable binding field, for an exact restore."""
+        return {name:getattr(self,name,None) for name in self.MUTABLE}
+
+    def restore(self,state):
+        for name,value in state.items():
+            setattr(self,name,value)
+
     @contextmanager
     def bound(self,configs,training):
         """Bind a temporary sibling context, then restore the previous binding exactly."""

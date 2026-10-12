@@ -160,9 +160,46 @@ that output, so reviews and decisions interleave between outputs. Each pass is
 recorded as a `deferred-learning-completed` event with its warnings and
 duration. A pass covering several reviews still runs any rubric change or
 feedback-cadence stage that one of those reviews made due. Every output's
-optimizer stages share the cyclotron's optimizer and its call limit. The
-optimizer transport is called synchronously, so the event loop is blocked
-while one of its calls runs.
+optimizer stages share the cyclotron's optimizer and its call limit.
+
+A synchronous optimizer transport blocks the event loop while its call runs.
+An asynchronous one keeps the loop free, and a deferred learning pass releases
+the store lock while it waits on the provider, so reviews and decisions
+complete in the meantime. A transport is asynchronous when its `acomplete` is
+a coroutine function, or when it is itself an `async` callable.
+`OpenAIOptimizer(..., async_client=...)` and
+`LiteLLMOptimizer(..., acompletion=...)` are asynchronous, as is
+`from_environment(..., asynchronous=True)`. Create the asynchronous client in
+the event loop that runs `learn()`. Optimizer events are recorded on the
+event-loop thread, before and after the call. Events from a review or decision
+made during the call can appear in an output's history between the pass's own
+events.
+
+After the call, the pass takes the store lock back, even when it is being
+cancelled, and restores its cycle and shared decision context. The pass is
+*superseded* if, during the call, any output's criteria changed (rubric,
+examples, supporting questions or dynamic inputs; an ML model refit alone does
+not count, because the pass refits ML models itself), or a label it rests on
+(training or development) was corrected or undone. A superseded pass records
+`optimizer-superseded`, closes its step and round in the trace, caches nothing,
+returns `superseded: True` and stays queued. After `max_superseded_passes`
+superseded passes in a row (an option of `Cyclotron.open`, default 3), the
+output's next pass keeps the store lock through its provider calls, so it
+cannot be superseded again. It records `learning-window-withheld`.
+
+Each `learn()` call runs each queued output at most once, so a busy output
+cannot starve the others. A pass during which any review of its output
+arrived, held-out ones included, stays queued from the count it covered.
+
+Cancelling `learn()` (a timeout or shutdown) records `optimizer-cancelled`,
+closes the pass's cycle, step and round, and keeps the output queued.
+Decisions keep working. A stopped pass removes only the pending work it
+started itself. Work that other reviews or decisions left pending while the
+lock was lent keeps its explicit-retry guard. One exception to "no silent
+repayment" is deliberate: if the pass's own paid decision-model request was
+interrupted, its guard is dropped so the next pass can ask again, and each
+such request is recorded as `decision-request-abandoned` with
+`repeat_charge_possible: true`, because asking again may be charged again.
 
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it

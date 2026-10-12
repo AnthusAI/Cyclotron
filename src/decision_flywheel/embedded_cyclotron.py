@@ -23,6 +23,8 @@ open (or call) catches up.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from copy import copy
 from dataclasses import asdict, dataclass, field, replace
 import io
@@ -51,11 +53,15 @@ from .selection_policy import SelectionPolicy
 from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, combine_evidence,
                              current_rate, raise_for_versions,
                              expected_item_reviews, expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
+from .optimizer_agent import OptimizationSuperseded
 from .shared_decisions import SharedDecisions
 from .sibling_check import SiblingPolicy, install_sibling_checks
 
 SELECTED_BY = REASONS
 LEARNING_MODES = ("inline", "deferred")
+# Derived work a learning pass can leave pending (see DecisionFlywheel.cached_artifact).
+DERIVED_TABLES = ("runtime_rounds", "optimization_stages", "classifier_training", "question_measurements",
+                  "example_measurements", "control_cycles", "runtime_answers")
 _NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
@@ -330,12 +336,14 @@ def _store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, 
 class Cyclotron:
     """An embedded cyclotron backed by a directory of SQLite files."""
 
+
     def __init__(self, directory, definition: CyclotronDefinition, model, optimizer=None, *,
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
                  lease=None, review_program: ReviewProgram | None = ReviewProgram(),
                  seed_rubrics: Mapping[str, str] | None = None,
                  seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None,
-                 share_supporting_questions: bool | None = None, learning: str = "inline"):
+                 share_supporting_questions: bool | None = None, learning: str = "inline",
+                 max_superseded_passes: int = 3):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
@@ -354,6 +362,11 @@ class Cyclotron:
         if learning not in LEARNING_MODES:
             raise ValueError(f"learning must be one of {LEARNING_MODES}")
         self.learning = learning
+        if type(max_superseded_passes) is not int or max_superseded_passes < 1:
+            raise ValueError("max_superseded_passes must be a positive integer")
+        # After this many superseded passes in a row, an output's next pass keeps the store lock through
+        # its provider calls, so it cannot be superseded again.
+        self.max_superseded_passes = max_superseded_passes
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
@@ -371,6 +384,12 @@ class Cyclotron:
             self.close()
             raise
         self._lock = asyncio.Lock()
+        # The output a deferred learning pass is optimizing, in that pass's task only.
+        self._learning: ContextVar[str | None] = ContextVar("cyclotron_learning", default=None)
+        # One learning pass at a time, even across concurrent learn() calls.
+        self._learn_lock = asyncio.Lock()
+        # The running pass's evidence, row marks and lent-lock intervals, in that pass's task only.
+        self._pass_state: ContextVar[dict | None] = ContextVar("cyclotron_pass_state", default=None)
 
     def _open(self, model, optimizer, max_requests, redact):
         definition = self.definition
@@ -385,7 +404,7 @@ class Cyclotron:
                 classifier TEXT NOT NULL, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,
-                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL);
+                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL, superseded INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
                 input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
                 source TEXT);
@@ -398,7 +417,11 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO meta VALUES ('definition', ?)",
                             (_json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}),))
-        self._batches: list[tuple[int, int, int]] = []
+        self._batch_log: ContextVar[list | None] = ContextVar(f"cyclotron_batches_{id(self)}", default=None)
+        if "superseded" not in {row[1] for row in self.db.execute("PRAGMA table_info(learning_queue)")}:
+            with self.db:
+                self.db.execute("ALTER TABLE learning_queue ADD COLUMN superseded INTEGER NOT NULL DEFAULT 0")
+        self._batches = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
                                       observer=self._on_batch,
                                       share_supporting_questions=self._sharing(created=saved is None))
@@ -417,7 +440,7 @@ class Cyclotron:
                                        tasks=self._seed_questions(spec, created=saved is None)),
                 # Each output gets its own copy so its optimizer events reach only its own
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
-                self.shared.adapter(spec.id), copy(optimizer) if optimizer is not None else None,
+                self.shared.adapter(spec.id), self._optimizer_for(optimizer, spec.id),
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
@@ -733,6 +756,20 @@ class Cyclotron:
             self._record_batches(decision.decision_id)
             event = self._append({"kind": "decision", "decision": decision.to_json()})
         self.observer(event)
+
+    @property
+    def _batches(self) -> list:
+        """Paid batches of the current operation. Each task keeps its own list, so a decision or
+        review made while a learning pass awaits its optimizer never takes or drops the pass's batches."""
+        batches = self._batch_log.get()
+        if batches is None:
+            batches = []
+            self._batch_log.set(batches)
+        return batches
+
+    @_batches.setter
+    def _batches(self, value: list) -> None:
+        self._batch_log.set(list(value))
 
     def _on_batch(self, event: Mapping[str, Any]) -> None:
         """A paid shared decision-model request; cached answers cost nothing."""
@@ -1344,6 +1381,118 @@ class Cyclotron:
         wheel.reconcile_feedback(training, development=development)
         wheel.set_optimizer_context([r.context["human_feedback"] for r in training if r.context.get("human_feedback")])
 
+    def _optimizer_for(self, optimizer, classifier: str):
+        """Each output's own optimizer copy, lending its provider calls the deferred-learning window."""
+        if optimizer is None:
+            return None
+        own = copy(optimizer)
+        if hasattr(own, "complete"):
+            own.call_window = lambda: self._provider_window(classifier)
+        return own
+
+    @asynccontextmanager
+    async def _provider_window(self, classifier: str):
+        """Release the store lock while learn() awaits an asynchronous optimizer provider call.
+
+        Only a deferred learning pass lends its call; elsewhere this does
+        nothing. While the call is in flight, reviews and decisions run, and
+        their events are written on the event-loop thread as usual (so they
+        can appear in the history between a pass's own events). Afterwards
+        the lock is taken back even if the pass is being cancelled, and the
+        pass gets back its cycle and its shared decision context. If any
+        output's version changed meanwhile, or a label the pass rests on was
+        corrected or undone, the pass is superseded: it unwinds without
+        caching anything and stays queued.
+        """
+        state = self._pass_state.get()
+        if self._learning.get() != classifier or state is None or state["hold_lock"]:
+            yield
+            return
+        wheel = self.wheels[classifier]
+        # Criteria, not ML models: the pass refits ML models itself, so a refit meanwhile is no conflict.
+        criteria = {cid: other.active.config.fingerprint for cid, other in self.wheels.items()}
+        flags = (wheel._cycle_running, wheel._step_running)
+        binding = self.shared.snapshot()
+        lent = self._row_marks(wheel)
+        wheel._cycle_running = wheel._step_running = False
+        self._lock.release()
+        try:
+            yield
+        finally:
+            cancelled = None
+            while True:
+                try:
+                    await self._lock.acquire()
+                    break
+                except asyncio.CancelledError as error:  # get the lock back before unwinding
+                    cancelled = error
+            wheel._cycle_running, wheel._step_running = flags
+            self.shared.restore(binding)
+            # Rows other operations wrote while the lock was lent are theirs, never the pass's to remove.
+            state["lent"].append((lent, self._row_marks(wheel)))
+            if cancelled is not None:
+                raise cancelled
+        reason = self._superseded(classifier, criteria)
+        if reason:
+            raise OptimizationSuperseded(reason)
+
+    def _superseded(self, classifier: str, criteria: Mapping[str, str]) -> str | None:
+        """Why a pass's state no longer holds after its optimizer call, or None."""
+        changed = [cid for cid, other in self.wheels.items() if other.active.config.fingerprint != criteria[cid]]
+        if changed:
+            return "new criteria for " + ", ".join(changed) + " were activated during the optimizer call"
+        covered = self._pass_state.get()["evidence"]
+        if covered:
+            training, development, _ = self._partitions(classifier)
+            current = self.wheels[classifier]._evidence((*training, *development))
+            if any(current.get(key) != value for key, value in covered.items()):
+                return "a label this pass rests on was corrected or undone during the optimizer call"
+        return None
+
+    def _row_marks(self, wheel) -> dict[str, int]:
+        """The highest row id of each table a pass can leave pending work in."""
+        tables = {row[0] for row in wheel.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        marks = {table: wheel.db.execute(f"SELECT COALESCE(MAX(rowid),0) FROM {table}").fetchone()[0]
+                 for table in DERIVED_TABLES if table in tables}
+        marks["shared:batches"] = self.shared.db.execute("SELECT COALESCE(MAX(rowid),0) FROM batches").fetchone()[0]
+        return marks
+
+    def _drop_pending(self, wheel, state) -> None:
+        """Remove pending work the stopped pass itself started, so its next pass needs no retry authorization.
+
+        Rows other operations wrote while the pass lent the store lock, and
+        older interrupted work, keep their explicit-retry guard. Dropping the
+        guard on the pass's own interrupted decision-model request is the one
+        exception to "no silent repayment": it is recorded as
+        ``decision-request-abandoned``, because asking again may be charged again.
+        """
+        start = state["start"]
+
+        def own(table, rowid):
+            return rowid > start.get(table, 0) and not any(
+                before.get(table, 0) < rowid <= after.get(table, 0) for before, after in state["lent"])
+        tables = {row[0] for row in wheel.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        for table in DERIVED_TABLES:
+            if table not in tables:
+                continue
+            for row in wheel.db.execute(f"SELECT rowid,* FROM {table} WHERE status='pending'").fetchall():
+                rowid, key = row[0], row[1]
+                if not own(table, rowid):
+                    continue
+                if table == "runtime_answers":
+                    wheel._emit({"kind": "decision-request-abandoned", "request_fingerprint": key,
+                                 "reason": "the learning pass that made this request stopped before its answer was recorded",
+                                 "repeat_charge_possible": True})
+                with wheel.db:
+                    wheel.db.execute(f"DELETE FROM {table} WHERE rowid=?", (rowid,))
+        for rowid, key in self.shared.db.execute("SELECT rowid,key FROM batches WHERE status='pending'").fetchall():
+            if own("shared:batches", rowid):
+                wheel._emit({"kind": "decision-request-abandoned", "request_fingerprint": key, "shared_batch": True,
+                             "reason": "the learning pass that made this request stopped before its answer was recorded",
+                             "repeat_charge_possible": True})
+                with self.shared.db:
+                    self.shared.db.execute("DELETE FROM batches WHERE rowid=?", (rowid,))
+
     def _enqueue_learning(self, classifier: str) -> None:
         """Queue one output's learning pass; queued reviews of one output share a pass."""
         training, development, _ = self._partitions(classifier)
@@ -1362,44 +1511,89 @@ class Cyclotron:
         With ``learning="deferred"``, ``review()`` records labels and returns;
         an application runs this afterwards (for example from a background
         task). The store lock is held for one output's pass at a time, so
-        reviews and decisions interleave between outputs. Each output's
-        optimizer stages share the cyclotron's optimizer and its call limit.
-        Returns one record per pass: the output, its warnings and duration.
-        A pass that raises stays queued.
+        reviews and decisions interleave between outputs, and, with an
+        asynchronous optimizer transport, during each provider call. Each
+        output's optimizer stages share the cyclotron's optimizer and its
+        call limit. Returns one record per pass: the output, its warnings and
+        duration, and ``superseded`` when its state changed during a provider
+        call. A pass stays queued when labels arrived during it, when it was
+        superseded, or when it raised or was cancelled.
         """
         if limit is not None and (type(limit) is not int or limit < 1):
             raise ValueError("limit must be a positive integer")
-        done = []
+        done, ran = [], set()
         while limit is None or len(done) < limit:
-            async with self._lock:
-                row = self.db.execute("SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1").fetchone()
+            async with self._learn_lock, self._lock:
+                rows = self.db.execute("SELECT seq,classifier,since_count,superseded FROM learning_queue ORDER BY seq").fetchall()
+                # Each output runs at most once per call, so one busy output cannot starve the others.
+                row = next((row for row in rows if row[1] not in ran), None)
                 if row is None:
                     break
-                seq, cid, since = row
+                seq, cid, since, superseded_before = row
+                ran.add(cid)
                 self._sync()
                 self._batches = []
                 wheel = self.wheels[cid]
+                training, development, _ = self._partitions(cid)
+                covered, reviews = len(training) + len(development), self._review_count(cid)
+                hold_lock = superseded_before >= self.max_superseded_passes
+                if hold_lock:
+                    wheel._emit({"kind": "learning-window-withheld", "superseded_passes": superseded_before,
+                                 "limit": self.max_superseded_passes,
+                                 "reason": "repeatedly superseded; this pass keeps the store lock through its optimizer calls"})
+                state = {"evidence": wheel._evidence((*training, *development)), "start": self._row_marks(wheel),
+                         "lent": [], "hold_lock": hold_lock}
                 started = time.perf_counter()
                 cycle = wheel.cycle(None, reason="deferred-learning").__enter__()
+                tokens = (self._learning.set(cid), self._pass_state.set(state))
+                superseded = None
                 try:
                     warnings = await self._learn(cid, cycle, since_count=since)
-                    cycle.__exit__(None, None, None)
-                except Exception as error:
+                except OptimizationSuperseded as error:
+                    superseded, warnings = str(error), []
+                except BaseException as error:
+                    # Failure or cancellation: close the cycle so decisions keep working, keep the pass queued.
                     cycle.__exit__(type(error), error, None)
+                    self._drop_pending(wheel, state)
+                    self._record_pass_batches()
                     raise
-                latest = self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone()
-                if latest is not None:
-                    with self.db:
-                        # Decision-model requests made while learning count toward the latest decision.
-                        self._record_batches(latest[0])
+                finally:
+                    self._learning.reset(tokens[0])
+                    self._pass_state.reset(tokens[1])
+                cycle.__exit__(None, None, None)
+                self._record_pass_batches()
                 record = {"classifier": cid, "since_count": since, "warnings": warnings,
                           "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
-                wheel._emit({"kind": "deferred-learning-completed", **record})
-                with self.db:
-                    self.db.execute("DELETE FROM learning_queue WHERE seq=?", (seq,))
+                if superseded:
+                    self._drop_pending(wheel, state)
+                    record.update(superseded=True, reason=superseded)
+                    wheel._emit({"kind": "deferred-learning-superseded", **record,
+                                 "superseded_passes": superseded_before + 1})
+                    with self.db:
+                        self.db.execute("UPDATE learning_queue SET superseded=superseded+1 WHERE seq=?", (seq,))
+                else:
+                    wheel._emit({"kind": "deferred-learning-completed", **record})
+                    self._sync()
+                    with self.db:
+                        if self._review_count(cid) > reviews:
+                            # Reviews arrived during the pass (any kind, held-out ones too): run again from here.
+                            self.db.execute("UPDATE learning_queue SET since_count=?,superseded=0 WHERE seq=?",
+                                            (covered, seq))
+                        else:
+                            self.db.execute("DELETE FROM learning_queue WHERE seq=?", (seq,))
                 self._sync()
                 done.append(record)
         return done
+
+    def _review_count(self, classifier: str) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM reviews WHERE classifier=?", (classifier,)).fetchone()[0]
+
+    def _record_pass_batches(self) -> None:
+        latest = self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone()
+        if latest is not None:
+            with self.db:
+                # Decision-model requests made while learning count toward the latest decision.
+                self._record_batches(latest[0])
 
     async def _learn(self, classifier: str, cycle, *, since_count: int | None = None) -> list:
         if self.optimizer is None:

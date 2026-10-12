@@ -20,3 +20,4 @@ def test_transport_selection_uses_the_frozen_setting_without_constructing_other_
 def test_unknown_transport_is_rejected_instead_of_silently_using_openai():
     with pytest.raises(ValueError,match="transport"):
         optimizer_transport({"optimizer_transport":"unknown"})
+

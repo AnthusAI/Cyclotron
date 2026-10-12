@@ -14,6 +14,12 @@ class StepFailed(RuntimeError):
         super().__init__("flywheel step failed; inspect the recorded trace")
 
 
+def _stopped(error) -> str:
+    """The terminal status of a step or round that a superseded or cancelled pass stopped."""
+    from .optimizer_agent import OptimizationSuperseded
+    return "superseded" if isinstance(error, OptimizationSuperseded) else "cancelled"
+
+
 async def step(wheel, stage, training, development, *, trigger="manual", request_budget=None,
                parent_step_id=None, **kwargs):
     if stage not in {"rubric", "examples", "questions", "classifier"}:
@@ -60,6 +66,12 @@ async def step(wheel, stage, training, development, *, trigger="manual", request
             return {"step_id": step_id, "status": "paused", "reason": "request budget exhausted"}
         wheel._emit({"kind": "step-failed", "error_type": type(error).__name__})
         raise StepFailed(type(error).__name__) from None
+    except BaseException as error:
+        # A superseded or cancelled pass still closes the step it started in the trace.
+        wheel._emit({"kind": "step-completed", "status": _stopped(error), "result": None,
+                     "classifier_snapshot": compact_snapshot(wheel.active),
+                     "classifier_version": wheel.active.fingerprint})
+        raise
     finally:
         wheel.max_requests = ceiling
         wheel._step_context.reset(token)

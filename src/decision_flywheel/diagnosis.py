@@ -322,7 +322,7 @@ class Asker:
         return FeedbackBriefing.build(self.wheel.initial.task, (), current=current,
                                       protected=tuple(r.item for r in self.development) + tuple(self.protected))
 
-    def ask(self, current, validate):
+    async def ask(self, current, validate):
         """-> the validated reply, or None after a corrective retry also failed. Raises _Stop on a ceiling or a failed call."""
         error = None
         for attempt in range(1 + RETRIES):
@@ -332,7 +332,8 @@ class Asker:
             self.calls += 1
             body = current if error is None else {**current, "previous_reply_error": str(error)}
             try:
-                return validate(self.wheel.optimizer.diagnose(self.briefing(body)))
+                from .optimizer_agent import ask_optimizer
+                return validate(await ask_optimizer(self.wheel.optimizer, 'diagnose', self.briefing(body)))
             except ValueError as problem:
                 error = problem
                 self.wheel._emit({"kind": "diagnosis-reply-rejected", "phase": current["diagnosis_phase"],
@@ -636,7 +637,7 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
                            "errors": [show(wheel, r) for r in errors],
                            "contrast": [show(wheel, r) for label in task.labels for r in samples["contrast"][index][label]],
                            "max_hypotheses": MAX_HYPOTHESES}
-                diagnoses[cell["key"]].append(asker.ask(current, lambda reply, s=shown: validate_diagnosis(reply, s)))
+                diagnoses[cell["key"]].append(await asker.ask(current, lambda reply, s=shown: validate_diagnosis(reply, s)))
         usable = [c for c in cells if any(d for d in diagnoses[c["key"]])]
         if not usable:
             _skip(wheel, result, "no independent diagnosis passed validation")
@@ -655,7 +656,7 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
                                               for r in samples["errors"][c["key"]][i]]} for c in usable],
                    "contrast_seen": [show(wheel, r) for i in range(config.independent) for label in task.labels
                                      for r in samples["contrast"][i][label]]}
-        reconciled = asker.ask(current, lambda reply: validate_reconcile(
+        reconciled = await asker.ask(current, lambda reply: validate_reconcile(
             reply, errors_by_cell=errors_by_cell, contrast_ids=contrast_ids, max_causes=config.max_causes,
             max_elements=config.element_candidates, taken_elements=taken))
     except _Stop as stop:
