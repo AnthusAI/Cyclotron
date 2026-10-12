@@ -62,6 +62,7 @@ export function OptimizationChange({event,events}:{event:TraceEvent;events:Trace
   const end=scoped.findLast(row=>['step-completed','step-paused'].includes(String(row.payload.kind)))
   const result=record(end?.payload.result)
   const outcome=end?.payload.status==='failed'||end?.payload.status==='partial'?'Failed or incomplete':end?.payload.kind==='step-paused'?'Paused':
+    end?.payload.status==='superseded'?'Superseded':end?.payload.status==='cancelled'?'Cancelled':
     !end?'No final outcome recorded':result?.activated===true||result?.promoted===true?'Accepted':end.payload.status==='waiting'?'Waiting for evidence':
       result?.activated===false||result?.promoted===false?'No change accepted':'Outcome not recorded'
   const examples=recordedExamples(scoped)
