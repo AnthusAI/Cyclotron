@@ -23,6 +23,8 @@ export type CyclotronDecision = {
     reason: 'program' | 'audit' | null
     propensity: number
     detail: string
+    /** With several outputs: each output's own selection. Only these outputs are waiting for review. */
+    outputs?: Record<string, { selected: boolean; reason: 'program' | 'audit' | null; propensity: number; detail: string }>
   }
 }
 

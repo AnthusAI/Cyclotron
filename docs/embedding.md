@@ -90,6 +90,20 @@ print(decision.review.selected, decision.review.reason, decision.review.detail)
 audit share; `None`: not sent), with what probability, and in a sentence.
 Show the sentence next to the item.
 
+With several outputs, each output is routed on its own. It is selected on
+its own confidence, with its own random draw at the review rate and its own
+audit draw, so a confident output is not sent to review just because a sibling
+is unsure. `decision.review.outputs` holds each output's selection (reason,
+propensity, detail), and `decision.review.requested` names the outputs waiting
+for a reviewer. `decision.review` itself summarizes them and is selected when
+any output is requested. Only requested outputs read as pending, and a decision
+is reviewed once each requested output has a review: a checklist that labels
+just those outputs completes it. A review of an output that was not requested
+is the reviewer's choice (`selected_by="reviewer"`). It trains the ML model but
+is not review-rate evidence. Each requested output's review counts toward that
+output's window. Draws are keyed by item, position and output, so a store
+replays the same selections. A one-output decision is unchanged.
+
 A decision a person may have seen is stable. Deciding the same unchanged item
 again returns the same decision with the same label and confidence until it
 is reviewed or a new version is promoted; an ML model refit does not change

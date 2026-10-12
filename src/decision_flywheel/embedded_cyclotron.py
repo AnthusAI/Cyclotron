@@ -145,6 +145,18 @@ class ReviewSelection:
     reason: str | None
     propensity: float
     detail: str = ""
+    # With several outputs, each output's own selection; the fields above
+    # summarize them (selected when any output is requested).
+    outputs: Mapping[str, "ReviewSelection"] | None = None
+
+    def for_output(self, classifier: str) -> "ReviewSelection":
+        """This output's selection: its own with several outputs, else the decision's."""
+        return self.outputs[classifier] if self.outputs else self
+
+    @property
+    def requested(self) -> tuple[str, ...] | None:
+        """The outputs sent to review (None when the decision is selected as a whole)."""
+        return None if self.outputs is None else tuple(cid for cid, s in self.outputs.items() if s.selected)
 
 
 @dataclass(frozen=True)
@@ -193,8 +205,7 @@ class Decision:
                                       "probabilities": dict(r.probabilities) if r.probabilities else None,
                                       "version": r.version, "fingerprint": r.fingerprint}
                                 for cid, r in self.results.items()},
-                "review": {"selected": self.review.selected, "reason": self.review.reason,
-                           "propensity": self.review.propensity, "detail": self.review.detail}}
+                "review": _selection_json(self.review)}
 
     @classmethod
     def from_json(cls, value) -> "Decision":
@@ -204,10 +215,20 @@ class Decision:
                    _selection(value["review"]))
 
 
+def _selection_json(selection: ReviewSelection) -> dict[str, Any]:
+    value = {"selected": selection.selected, "reason": selection.reason,
+             "propensity": selection.propensity, "detail": selection.detail}
+    if selection.outputs is not None:
+        value["outputs"] = {cid: _selection_json(output) for cid, output in selection.outputs.items()}
+    return value
+
+
 def _selection(value: Mapping[str, Any]) -> ReviewSelection:
     if "detail" not in value:  # decisions saved before the review-rate program
         return ReviewSelection(value["selected"], "program", value["propensity"], value["reason"])
-    return ReviewSelection(value["selected"], value["reason"], value["propensity"], value["detail"])
+    outputs = value.get("outputs")
+    return ReviewSelection(value["selected"], value["reason"], value["propensity"], value["detail"],
+                           {cid: _selection(output) for cid, output in outputs.items()} if outputs is not None else None)
 
 
 @dataclass(frozen=True)
@@ -505,37 +526,58 @@ class Cyclotron:
                                                           now=datetime.now(timezone.utc))
             self._sync()
             decision_id = str(uuid4())
-            confidences = [result.confidence for result in results.values()]
-            confidence = None if any(c is None for c in confidences) else min(confidences)
-            selection = self._select(item.id, confidence)
+            selection = self._select(item.id, {cid: result.confidence for cid, result in results.items()})
             decision = Decision(decision_id, item.id, _now(), {
                 cid: ClassifierDecision(cid, result.label, result.confidence,
                                         dict(result.probabilities) if result.probabilities else None,
                                         self.versions[cid].version, self.wheels[cid].active.fingerprint)
-                for cid, result in results.items()},
-                ReviewSelection(selection.selected, selection.reason, selection.propensity, selection.detail))
-            if not selection.selected:
-                # Nobody is asked; close the waiting cycles so nothing reads as pending.
-                for wheel in self.wheels.values():
-                    cycle = wheel.resume_cycle(item)
-                    if cycle is not None:
-                        wheel._emit({"kind": "review-not-requested", "target_id": item.id, "decision_id": decision_id,
-                                     "propensity": selection.propensity, "detail": selection.detail})
-                        cycle.__exit__(None, None, None)
+                for cid, result in results.items()}, selection)
+            for cid, wheel in self.wheels.items():
+                own = selection.for_output(cid)
+                if own.selected:
+                    continue
+                # This output is not asked; close its waiting cycle so it does not read as pending.
+                cycle = wheel.resume_cycle(item)
+                if cycle is not None:
+                    wheel._emit({"kind": "review-not-requested", "target_id": item.id, "decision_id": decision_id,
+                                 "propensity": own.propensity, "detail": own.detail})
+                    cycle.__exit__(None, None, None)
             self._insert_decision(decision, fingerprint)
             return decision
 
     # Review rate ----------------------------------------------------------
 
-    def _select(self, item_id: str, confidence: float | None):
-        """Advance the review-rate program to this decision, then choose.
+    def _select(self, item_id: str, confidences: Mapping[str, float | None]) -> ReviewSelection:
+        """Advance the review-rate program to this decision, then choose which outputs to review.
 
-        The random draw is keyed by the item and the decision's position, so a
-        store replays the same selections; it never reads a label.
+        With one output the whole decision is selected, as before. With
+        several, each output is selected on its own confidence and its own
+        random draw, so a confident output is not sent just because a sibling
+        is unsure, and audit sampling and propensities stay per output. Draws
+        are keyed by the item, the decision's position and the output, so a
+        store replays the same selections; they never read a label.
         """
-        from .review_program import Selection
         if self.program is None:
-            return Selection(True, "program", 1.0, FULL_REVIEW_DETAIL)
+            whole = ReviewSelection(True, "program", 1.0, FULL_REVIEW_DETAIL)
+            return whole if len(confidences) == 1 else replace(whole, outputs={cid: whole for cid in confidences})
+        rate, decided = self._advance_program()
+        if len(confidences) == 1:
+            confidence = next(iter(confidences.values()))
+            chosen = select(self.program, rate, key=f"{item_id}:{decided + 1}", confidence=confidence)
+            return ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
+        outputs = {}
+        for cid, confidence in confidences.items():
+            chosen = select(self.program, rate, key=f"{item_id}:{decided + 1}:{cid}", confidence=confidence)
+            outputs[cid] = ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
+        requested = [cid for cid, own in outputs.items() if own.selected]
+        reasons = {outputs[cid].reason for cid in requested}
+        detail = ("Requested: " + "; ".join(f"{cid} ({outputs[cid].detail})" for cid in requested) if requested
+                  else "No output requested: " + "; ".join(f"{cid} ({own.detail})" for cid, own in outputs.items()))
+        return ReviewSelection(bool(requested), ("program" if "program" in reasons else "audit") if requested else None,
+                               max(own.propensity for own in outputs.values()), detail, outputs)
+
+    def _advance_program(self) -> tuple[float, int]:
+        """Apply expired overrides, version raises and finished windows; return the rate and decision count."""
         now = datetime.now(timezone.utc)
         state = self._program_state()
         events = []
@@ -567,8 +609,7 @@ class Cyclotron:
             appended = [self._append(event) for event in events]
         for event in appended:
             self.observer(event)
-        return select(self.program, current_rate(self.program, state, now), key=f"{item_id}:{decided + 1}",
-                      confidence=confidence)
+        return current_rate(self.program, state, now), decided
 
     def set_review_rate(self, rate: float, *, set_by: str, expires_at: datetime | None = None) -> None:
         """An operator override of the review rate, with an optional expiry.
@@ -803,12 +844,16 @@ class Cyclotron:
                 base = review_id or str(uuid4())
                 entries = {cid: labels[cid] for cid in self.specs if cid in labels}
                 ids = {cid: f"{base}:{cid}" for cid in entries}
-            if selected_by is None:
-                selected_by = decision.review.reason if decision.review.selected else "reviewer"
-            if selected_by not in SELECTED_BY:
+            if selected_by is not None and selected_by not in SELECTED_BY:
                 raise ValueError(f"selected_by must be one of {SELECTED_BY}")
-            if selected_by != "reviewer" and not decision.review.selected and not _replay:
-                raise ValueError("this decision was not sent to review; a review of it is selected_by='reviewer'")
+            chosen_by = {}
+            for cid in entries:
+                own = decision.review.for_output(cid)
+                chosen_by[cid] = selected_by or (own.reason if own.selected else "reviewer")
+                if chosen_by[cid] != "reviewer" and not own.selected and not _replay:
+                    raise ValueError("this decision was not sent to review"
+                                     + (f" for {cid}" if decision.review.outputs else "")
+                                     + "; a review of it is selected_by='reviewer'")
             for name, value in (("explanation", explanation), ("reason_code", reason_code), ("reviewer", reviewer)):
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f"{name} must be text")
@@ -835,7 +880,7 @@ class Cyclotron:
             try:
                 for cid, value, active in plans:
                     cycle = self._record_review(decision, target, cid, value, active, ids[cid], explanation,
-                                                reason_code, reviewer, selected_by)
+                                                reason_code, reviewer, chosen_by[cid])
                     if cycle is not None:
                         learning[cid] = cycle
                 # Every label is recorded before any output learns, so each
@@ -871,7 +916,7 @@ class Cyclotron:
         if active is None:
             cycle = wheel.resume_cycle(target) or wheel.cycle(target, reason="review").__enter__()
             try:
-                propensity = decision.review.propensity if selected_by != "reviewer" else 1.0
+                propensity = decision.review.for_output(cid).propensity if selected_by != "reviewer" else 1.0
                 wheel.record_feedback_event(FeedbackItem(
                     review_id, target.id, cid, initial_answer_value=decision.results[cid].label,
                     final_answer_value=label, edit_comment_value=explanation, label_source=LABEL_SOURCE_VETTED,
@@ -1121,8 +1166,9 @@ class Cyclotron:
                 return []
             self.db.execute("INSERT INTO reviews(id,decision_id,classifier,payload) VALUES (?,?,?,?)",
                             (review.review_id, review.decision_id, classifier, _json(self._review_payload(review))))
+            requested = self._requested_outputs(review.decision_id)
             reviewed = all(self._last_review_kind(review.decision_id, cid) in ("label", "correction", "no-label")
-                           for cid in self.specs)
+                           for cid in requested)
             self.db.execute("UPDATE decisions SET state=? WHERE id=? AND state!='superseded'",
                             ("reviewed" if reviewed else "open", review.decision_id))
             return [self._append({"kind": "review", "review": review.to_json()})]
@@ -1149,6 +1195,12 @@ class Cyclotron:
         return {**event, "cursor": row.lastrowid}
 
     # Internals ------------------------------------------------------------
+
+    def _requested_outputs(self, decision_id: str) -> tuple[str, ...]:
+        """The outputs a decision is waiting on: those sent to review, or every output."""
+        row = self.db.execute("SELECT payload FROM decisions WHERE id=?", (decision_id,)).fetchone()
+        requested = _selection(json.loads(row[0])["review"]).requested if row else None
+        return tuple(requested) if requested else tuple(self.specs)
 
     def _redacted(self, classifier: str, text: str | None) -> str | None:
         if text is None:

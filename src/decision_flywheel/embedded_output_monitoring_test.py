@@ -14,8 +14,10 @@ TWO = CyclotronDefinition("newsroom", (RELEVANT, TIMELY), seed="monitor-seed")
 def decide_and_review_both(cyclotron, start, count, timely_label="include"):
     for index in range(start, start + count):
         decision = run(cyclotron.decide(item(f"i-{index}", f"sure {index}")))
-        if decision.review.selected:
+        # Each output is reviewed when it is requested (outputs are routed separately).
+        if decision.review.for_output("relevant").selected:
             run(cyclotron.review(decision.decision_id, "include", classifier="relevant"))
+        if decision.review.for_output("timely").selected:
             run(cyclotron.review(decision.decision_id, timely_label, classifier="timely"))
 
 
@@ -29,7 +31,8 @@ def test_when_the_second_output_drifts_the_rate_rises_and_the_event_names_it(tmp
     assert [e["state"] for e in events] == ["tapering", "raised"]
     raised = events[-1]
     assert raised["output"] == "timely" and "for timely" in raised["reason"]
-    assert raised["evidence"]["outputs"]["relevant"]["met"] and not raised["evidence"]["outputs"]["timely"]["met"]
+    relevant, timely = raised["evidence"]["outputs"]["relevant"], raised["evidence"]["outputs"]["timely"]
+    assert relevant["accuracy"] == 1.0 and timely["enough_evidence"] and not timely["met"]
     assert overview.review_rate.state == "raised" and overview.limiting == "timely"
 
 
