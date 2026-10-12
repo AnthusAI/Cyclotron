@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "599a26a4-9d63-49fc-878c-353294cb952b",
+  "issue_id": "decision-flywheel-52708206-5a3a-4074-9139-98ae26c780ad",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-12T17:06:40.327Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "ffe8a2c1-302d-4639-9134-a6ee6e954229",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Opus 5.5",
+      "name": "Engine Worker"
+    }
+  }
+}
