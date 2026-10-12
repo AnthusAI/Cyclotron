@@ -50,7 +50,7 @@ from .models import DecisionTask, Item
 from .selection_policy import SelectionPolicy
 from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, combine_evidence,
                              current_rate, raise_for_versions,
-                             expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
+                             expected_item_reviews, expected_reviews, next_step, raise_for_version, select, state_name, window_evidence)
 from .shared_decisions import SharedDecisions
 from .sibling_check import SiblingPolicy, install_sibling_checks
 
@@ -707,12 +707,14 @@ class Cyclotron:
         decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
         until = self.program.window - decided % self.program.window
         week_ago = (now - timedelta(days=7)).isoformat()
-        confidences = []
+        decisions = []
         for (payload,) in self.db.execute("SELECT payload FROM decisions"):
             decision = json.loads(payload)
             if decision["createdAt"] >= week_ago:
                 values = [r["confidence"] for r in decision["classifiers"].values()]
-                confidences.append(None if None in values else min(values))
+                # Routed decisions draw per output; older ones were selected as a whole on the lowest confidence.
+                routed = "outputs" in decision["review"]
+                decisions.append(tuple(values) if routed else (None if None in values else min(values),))
         rate = current_rate(self.program, state, now)
         return ReviewRate(state_name(self.program, state, now), rate,
                           (f"Manual rate of {round(override.rate * 100)}% set by {override.set_by}."
@@ -722,7 +724,7 @@ class Cyclotron:
                           if active else None,
                           next_check_after_decisions=until,
                           next_step=next_step(self.program, state, decisions_until_check=until, now=now),
-                          expected_reviews_per_week=expected_reviews(self.program, rate, confidences))
+                          expected_reviews_per_week=expected_item_reviews(self.program, rate, decisions))
 
     def _insert_decision(self, decision: Decision, fingerprint: str) -> None:
         with self.db:

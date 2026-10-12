@@ -109,3 +109,19 @@ def test_the_next_step_is_written_in_words():
     text = next_step(PROGRAM, ProgramState(index=1, consecutive=1), decisions_until_check=37, now=NOW)
     assert text == ("Steps down to 25% after 1 more window of 100 decisions with accuracy on confident decisions "
                     "of at least 85% (at least 20 reviewed) and a calibration gap under 5 points. Next check in 37 decisions.")
+
+
+def test_expected_reviews_with_routing_is_the_chance_that_any_output_is_requested():
+    from .review_program import expected_item_reviews
+    program = ReviewProgram()
+    p = max(.25, program.audit_share)
+    # One unsure output: certain. Two confident outputs: 1 - (1 - p)^2. One confident output: p.
+    decisions = [(0.5, 0.9), (0.9, 0.9), (0.9,)]
+    assert expected_item_reviews(program, .25, decisions) == round(1 + (1 - (1 - p) ** 2) + p, 1)
+
+
+def test_one_output_per_decision_matches_the_existing_estimate():
+    from .review_program import expected_item_reviews, expected_reviews
+    program = ReviewProgram()
+    confidences = [None, .5, .8, .9, .95]
+    assert expected_item_reviews(program, .1, [(c,) for c in confidences]) == expected_reviews(program, .1, confidences)
