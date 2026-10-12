@@ -130,8 +130,13 @@ async def decide_with_shared_context(wheels, shared, target, partitions: Callabl
 
 
 async def learn_from_review(wheels, shared, identifier, cycle, partitions: Callable, *, optimize_every,
-                            rubric_changes_every, resume_stages=()):
-    """Run the optimization stages a new review makes due; return warnings."""
+                            rubric_changes_every, resume_stages=(), since_count=None):
+    """Run the optimization stages a new review makes due; return warnings.
+
+    ``since_count`` serves a deferred pass covering several reviews: the
+    feedback cadence is due when the label count crossed a multiple of
+    ``optimize_every`` since that count, not only when it lands on one.
+    """
     warnings = []
     wheel = wheels[identifier]
     training, development, protected = partitions(identifier)
@@ -141,14 +146,32 @@ async def learn_from_review(wheels, shared, identifier, cycle, partitions: Calla
     history = wheel.history(100000)
     latest = next((e for e in reversed(history) if e['kind'] == 'human-feedback'), None)
     eligible = bool(latest and learning_feedback(latest) and latest.get('action') == 'submitted')
-    check = LabelTransitionTrigger(rubric_changes_every).check(history)
+    if since_count is not None:
+        # A deferred pass covers every review since since_count, not only the latest.
+        submitted = [e for e in history if e['kind'] == 'human-feedback' and e.get('action') == 'submitted']
+        recent = submitted[-max(1, len(training) + len(development) - since_count):]
+        eligible = any(learning_feedback(e) for e in recent)
+    trigger = LabelTransitionTrigger(rubric_changes_every)
+    check = trigger.check(history)
+    if since_count is not None and not check['due']:
+        # A deferred pass covers several reviews: run the rubric if any of them made it due.
+        positions = [index for index, e in enumerate(history)
+                     if e['kind'] == 'human-feedback' and e.get('action') == 'submitted']
+        for position in reversed(positions[-max(1, len(training) + len(development) - since_count):]):
+            earlier = trigger.check(history[:position + 1])
+            if earlier['due']:
+                check = {**earlier, 'details': {**earlier['details'], 'since_count': since_count}}
+                break
     cycle.check_trigger('rubric', **check)
     count = len(training) + len(development)
     stages = ['rubric'] if check['due'] else []
     for stage in ('questions', 'examples', 'classifier'):
-        due = eligible and count > 0 and count % optimize_every == 0
+        crossed = (count % optimize_every == 0 if since_count is None
+                   else count // optimize_every > since_count // optimize_every)
+        due = eligible and count > 0 and crossed
         cycle.check_trigger(stage, due=due, reason='feedback cadence reached' if due else 'feedback cadence not reached',
-                            details={'feedback_count': count, 'threshold': optimize_every})
+                            details={'feedback_count': count, 'threshold': optimize_every,
+                                     **({'since_count': since_count} if since_count is not None else {})})
         if due:
             stages.append(stage)
     stages = list(dict.fromkeys([*stages, *resume_stages]))

@@ -28,6 +28,7 @@ import io
 import os
 import tarfile
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -53,6 +54,7 @@ from .shared_decisions import SharedDecisions
 from .sibling_check import SiblingPolicy, install_sibling_checks
 
 SELECTED_BY = REASONS
+LEARNING_MODES = ("inline", "deferred")
 _NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
@@ -332,7 +334,7 @@ class Cyclotron:
                  lease=None, review_program: ReviewProgram | None = ReviewProgram(),
                  seed_rubrics: Mapping[str, str] | None = None,
                  seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None,
-                 share_supporting_questions: bool | None = None):
+                 share_supporting_questions: bool | None = None, learning: str = "inline"):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
@@ -348,6 +350,9 @@ class Cyclotron:
         if share_supporting_questions is not None and not isinstance(share_supporting_questions, bool):
             raise ValueError("share_supporting_questions must be a bool")
         self.requested_sharing = share_supporting_questions
+        if learning not in LEARNING_MODES:
+            raise ValueError(f"learning must be one of {LEARNING_MODES}")
+        self.learning = learning
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
@@ -378,6 +383,8 @@ class Cyclotron:
             CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,
                 classifier TEXT NOT NULL, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,
+                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
                 input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
                 source TEXT);
@@ -887,7 +894,11 @@ class Cyclotron:
                 # learning pass (and its sibling check) sees the whole review.
                 for cid in list(learning):
                     cycle = learning[cid]
-                    warnings[cid] = await self._learn(cid, cycle)
+                    if self.learning == "deferred" and self.optimizer is not None:
+                        # Queue the pass; learn() runs it after the review returns.
+                        self._enqueue_learning(cid)
+                    else:
+                        warnings[cid] = await self._learn(cid, cycle)
                     record_cycle_metrics(self.wheels[cid], self._class_config(self.specs[cid]))
                     cycle.__exit__(None, None, None)
                     del learning[cid]
@@ -1285,7 +1296,59 @@ class Cyclotron:
         wheel.reconcile_feedback(training, development=development)
         wheel.set_optimizer_context([r.context["human_feedback"] for r in training if r.context.get("human_feedback")])
 
-    async def _learn(self, classifier: str, cycle) -> list:
+    def _enqueue_learning(self, classifier: str) -> None:
+        """Queue one output's learning pass; queued reviews of one output share a pass."""
+        training, development, _ = self._partitions(classifier)
+        with self.db:
+            # The earliest unlearned count is kept, so the pass sees every cadence boundary crossed since.
+            self.db.execute("INSERT OR IGNORE INTO learning_queue(classifier,since_count,queued_at) VALUES (?,?,?)",
+                            (classifier, len(training) + len(development) - 1, _now()))
+
+    def pending_learning(self) -> list[str]:
+        """Outputs with a queued learning pass, oldest first."""
+        return [row[0] for row in self.db.execute("SELECT classifier FROM learning_queue ORDER BY seq")]
+
+    async def learn(self, *, limit: int | None = None) -> list[dict[str, Any]]:
+        """Run queued learning passes, one output at a time, oldest first.
+
+        With ``learning="deferred"``, ``review()`` records labels and returns;
+        an application runs this afterwards (for example from a background
+        task). The store lock is held for one output's pass at a time, so
+        reviews and decisions interleave between outputs. Each output's
+        optimizer stages share the cyclotron's optimizer and its call limit.
+        Returns one record per pass: the output, its warnings and duration.
+        A pass that raises stays queued.
+        """
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("limit must be a positive integer")
+        done = []
+        while limit is None or len(done) < limit:
+            async with self._lock:
+                row = self.db.execute("SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1").fetchone()
+                if row is None:
+                    break
+                seq, cid, since = row
+                self._sync()
+                self._batches = []
+                wheel = self.wheels[cid]
+                started = time.perf_counter()
+                cycle = wheel.cycle(None, reason="deferred-learning").__enter__()
+                try:
+                    warnings = await self._learn(cid, cycle, since_count=since)
+                    cycle.__exit__(None, None, None)
+                except Exception as error:
+                    cycle.__exit__(type(error), error, None)
+                    raise
+                record = {"classifier": cid, "since_count": since, "warnings": warnings,
+                          "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
+                wheel._emit({"kind": "deferred-learning-completed", **record})
+                with self.db:
+                    self.db.execute("DELETE FROM learning_queue WHERE seq=?", (seq,))
+                self._sync()
+                done.append(record)
+        return done
+
+    async def _learn(self, classifier: str, cycle, *, since_count: int | None = None) -> list:
         if self.optimizer is None:
             # Without an LLM optimizer the cyclotron decides and records only.
             self._reconcile(classifier)
@@ -1294,7 +1357,8 @@ class Cyclotron:
         try:
             return await learn_from_review(self.wheels, self.shared, classifier, cycle, self._partitions,
                                            optimize_every=self.definition.optimize_every,
-                                           rubric_changes_every=self.definition.rubric_changes_every)
+                                           rubric_changes_every=self.definition.rubric_changes_every,
+                                           **({"since_count": since_count} if since_count is not None else {}))
         except (StepFailed, RuntimeError) as error:
             warning = {"classifier_id": classifier, "reason": "optimization failed; labels retained, no automatic retry",
                        "error_type": type(error).__name__}
