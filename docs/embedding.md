@@ -165,16 +165,26 @@ optimizer stages share the cyclotron's optimizer and its call limit.
 A synchronous optimizer transport blocks the event loop while its call runs.
 An asynchronous one keeps the loop free, and a deferred learning pass releases
 the store lock while it waits on the provider, so reviews and decisions
-complete in the meantime. A transport is asynchronous when it has an `acomplete`
-method or is an `async` callable. `OpenAIOptimizer(..., async_client=...)` and
+complete in the meantime. A transport is asynchronous when its `acomplete` is
+a coroutine function, or when it is itself an `async` callable.
+`OpenAIOptimizer(..., async_client=...)` and
 `LiteLLMOptimizer(..., acompletion=...)` are asynchronous, as is
-`from_environment(..., asynchronous=True)`, and the application config key
-`optimizer_async` selects the asynchronous form. Optimizer events are still
-recorded on the event-loop thread, before and after the call. If the output
-being learned changes during the call (for example its version changes), that
-pass stops with an `optimization failed` warning instead of continuing on stale
-state; the labels are kept. Any version fitted on a label that was corrected
-during the call is invalidated as usual at the next decision.
+`from_environment(..., asynchronous=True)`. Create the asynchronous client in
+the event loop that runs `learn()`. Optimizer events are recorded on the
+event-loop thread, before and after the call. Events from a review or decision
+made during the call can appear in an output's history between the pass's own
+events.
+
+After the call, the pass takes the store lock back, even when it is being
+cancelled, and restores its cycle and shared decision context. The pass is
+*superseded* if, during the call, any output's version changed, or a label it
+rests on (training or development) was corrected or undone. A superseded pass
+records `optimizer-superseded`, caches nothing, returns `superseded: True` and
+stays queued for the next `learn()`. A pass that labels arrived during stays
+queued too, from the count it covered, and `learn()` runs it again. Cancelling
+`learn()` (a timeout or shutdown) records `optimizer-cancelled`, closes the
+pass's cycle, removes the work it left pending, and keeps it queued. Decisions
+keep working, and the next pass needs no retry authorization.
 
 Who chose the review matters. A review of a decision the cyclotron sent is
 `selected_by="program"` or `"audit"` (the default). A review of a decision it

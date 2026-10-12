@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+import asyncio
 import hashlib
 import inspect
 import json
@@ -234,7 +235,7 @@ class OptimizerAgent:
         always emitted on the loop thread, before and after the call.
         """
         acomplete = getattr(self.complete, "acomplete", None)
-        if callable(acomplete):
+        if inspect.iscoroutinefunction(acomplete):
             return acomplete
         if inspect.iscoroutinefunction(self.complete) or inspect.iscoroutinefunction(
                 getattr(self.complete, "__call__", None)):
@@ -283,6 +284,14 @@ class OptimizerAgent:
         try:
             async with (window() if window is not None else nullcontext()):
                 reply = await transport(messages)
+        except OptimizationSuperseded as superseded:
+            # The provider answered, but the state the call was made for changed meanwhile.
+            self.observer({**base, "kind": "optimizer-superseded", "reason": str(superseded),
+                           "latency_ms": (perf_counter() - started) * 1000})
+            raise
+        except asyncio.CancelledError:
+            self.observer({**base, "kind": "optimizer-cancelled", "latency_ms": (perf_counter() - started) * 1000})
+            raise
         except Exception as error:
             raise self._failed(base, error) from None
         return self._replied(base, reply, started)
@@ -331,6 +340,16 @@ class OptimizerAgent:
     async def propose_operators_async(self, briefing: FeedbackBriefing) -> list[dict]:
         requested = {op: spec["count"] for op, spec in briefing.payload["current"]["operator_requests"].items()}
         return parse_operator_proposals(await self._reply_content_async(briefing), requested)
+
+
+class OptimizationSuperseded(BaseException):
+    """A learning pass's state changed while its optimizer call was in flight.
+
+    It derives from BaseException, like cancellation, so that no step, round
+    or stage handler records it as an ordinary failure: the pass unwinds,
+    nothing derived from the stale state is cached, and the pass stays
+    queued to run again.
+    """
 
 
 def _has_sync_call(transport) -> bool:

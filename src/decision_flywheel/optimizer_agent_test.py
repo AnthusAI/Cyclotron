@@ -206,3 +206,28 @@ def test_optimizers_without_async_methods_are_called_synchronously():
         def propose(self, briefing):
             return {"rubric": "legacy"}
     assert asyncio.run(ask_optimizer(Legacy(), "propose", _briefing())) == {"rubric": "legacy"}
+
+
+def test_an_acomplete_attribute_that_is_not_a_coroutine_function_does_not_make_a_transport_async():
+    from unittest.mock import Mock
+    transport = Mock(return_value=OptimizerReply('{"rubric":"x"}', "m"))
+    transport.acomplete = Mock()   # a mock has every attribute; it is not an async transport
+    assert OptimizerAgent(transport).propose(_briefing()) == {"rubric": "x"}
+    transport.acomplete.assert_not_called()
+
+
+def test_a_cancelled_async_call_is_recorded_and_the_cancellation_propagates():
+    import asyncio
+    events = []
+
+    async def complete(messages):
+        await asyncio.sleep(10)
+
+    async def scenario():
+        task = asyncio.create_task(OptimizerAgent(complete, observer=events.append).propose_async(_briefing()))
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    asyncio.run(scenario())
+    assert [e["kind"] for e in events] == ["optimizer-request", "optimizer-cancelled"]

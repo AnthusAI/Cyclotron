@@ -21,10 +21,3 @@ def test_unknown_transport_is_rejected_instead_of_silently_using_openai():
     with pytest.raises(ValueError,match="transport"):
         optimizer_transport({"optimizer_transport":"unknown"})
 
-
-def test_the_async_client_is_opt_in(monkeypatch):
-    from .openai_optimizer import OpenAIOptimizer
-    calls=[]
-    monkeypatch.setattr(OpenAIOptimizer,"from_environment",lambda **kwargs:calls.append(kwargs) or "openai")
-    optimizer_transport({"optimizer_model":"fake","max_optimizer_calls":3,"optimizer_async":True})
-    assert calls==[{"model":"fake","max_calls":3,"asynchronous":True}]
