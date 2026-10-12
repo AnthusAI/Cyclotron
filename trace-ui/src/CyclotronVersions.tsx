@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react'
 import {Button} from '@/components/ui/button'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {graphql} from './graphql'
+import {PromoteSupportingQuestion} from './PromoteSupportingQuestion'
 
 type Cyclotron={id:string;name:string;active_revision:number;versions:{revision:number;run_id:string}[]}
 type Version={revision:number;run_id:string;metrics:Record<string,{count:number;accuracy:number|null;per_class:Record<string,{recall:number|null;precision:number|null}>}>;classifiers:{id:string;name:string;config:{classes:{label:string;role?:string}[]}}[]}
@@ -41,6 +42,9 @@ export function CyclotronVersions({runId,onSelect,busy}:{runId:string;onSelect:(
         const mean=(key:'recall'|'precision')=>{const values=Object.values(metrics?.per_class??{}).map(row=>row[key]);return values.length&&values.every(value=>value!=null)?values.reduce<number>((sum,value)=>sum+(value??0),0)/values.length:null}
         return <tr key={`${version.revision}:${classifier.id}`} className="border-t border-border"><td className="p-2">{version.revision}</td><td className="p-2">{classifier.name}</td><td className="p-2">{percent(positive?metrics?.per_class[positive]?.recall:mean('recall'))}</td><td className="p-2">{percent(positive?metrics?.per_class[positive]?.precision:mean('precision'))}</td><td className="p-2">{percent(metrics?.accuracy)}</td><td className="p-2">{metrics?.count??0}</td></tr>
       }))}</tbody></table><p className="text-muted-foreground">Latest 200 reviewed items per classifier. Versions may cover different items; this is not a matched held-out comparison.</p></div>
-    </details>{error?<p role="alert" className="text-destructive">{error}</p>:null}
+    </details>
+    <PromoteSupportingQuestion runId={runId} cyclotronName={cyclotron.name} busy={busy||saving}
+      nextRevision={Math.max(...versions.map(version=>version.revision))+1} onCreated={onSelect}/>
+    {error?<p role="alert" className="text-destructive">{error}</p>:null}
   </section>
 }
