@@ -32,11 +32,11 @@ learning.compare -> frozen: "Promote only if the rule passes" {class: flow}
 
 measurement: "MEASURE ALIGNMENT" {
   class: group
-  ongoing: "Ongoing audit score\nSave prediction before the vote\nAccuracy, per-class recall,\nuncertainty, and sample size"
+  ongoing: "Ongoing audit\nSave the decision before review\nAccuracy, per-class recall,\nuncertainty, and sample size"
   final: "Final holdout score\nTest a frozen version\nNever used to select changes"
 }
-frozen -> measurement.ongoing: "Saved-version\npredictions" {class: evidence}
-frozen -> measurement.final: "Frozen-version\npredictions" {class: evidence}
+frozen -> measurement.ongoing: "Saved-version\ndecisions" {class: evidence}
+frozen -> measurement.final: "Frozen-version\ndecisions" {class: evidence}
 partitions.audit -> measurement.ongoing: "Audit labels only" {class: evidence}
 partitions.holdout -> measurement.final: "Holdout labels only" {class: evidence}
 

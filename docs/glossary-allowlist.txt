@@ -1,7 +1,2 @@
 # Strings in trace-ui copy that may keep a retired word from docs/glossary.md.
 # One exact string per line. Only attribution text and data keys belong here.
-# Pending rename in the trace UI (the glossary retires these words); remove each line when the copy changes.
-Calibrated ML head
-Dynamic decision elements
-Learned ML head
-ML head not recorded

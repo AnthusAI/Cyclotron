@@ -190,7 +190,7 @@ def all_events(wheel) -> list[dict]:
 
 
 STRUCTURE = (("rubric", "rubric"), ("example_ids", "example list"),
-             ("tasks", "classifier questions"), ("dynamic_elements", "dynamic inputs"))
+             ("tasks", "supporting questions"), ("dynamic_elements", "dynamic inputs"))
 
 
 def _plain(value):
@@ -202,7 +202,7 @@ class VersionTracker:
     """Follow one classifier's versions through its events.
 
     A version is a change of language or structure: rubric, example list,
-    classifier questions or dynamic inputs. An ML model refit activates a new
+    supporting questions or dynamic inputs. An ML model refit activates a new
     fingerprint but is not a version; it is counted in ``refits`` and reported
     as a ``refit`` change with its label count.
     """

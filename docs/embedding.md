@@ -404,7 +404,7 @@ rate" button that opens the application's own form.
 - **Content cache.** Identical item values share one decision-model answer.
 - **Stable shown decisions.** A decision keeps its label and confidence until
   it is reviewed or a new version is promoted.
-- **Versions.** A new rubric, example list or set of classifier questions is
+- **Versions.** A new rubric, example list or set of supporting questions is
   a version; an ML model refit is not (`status().refits` counts refits).
 - **One writer.** Use the default lease on one machine, or your own lease
   across workers.

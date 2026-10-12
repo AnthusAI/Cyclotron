@@ -27,6 +27,8 @@ RETIRED = (
     "fitted head",
     "perceptron",
     "final answer",
+    "classifier question",
+    "classifier questions",
 )
 RETIRED_WORD = re.compile(r"\b(" + "|".join(RETIRED) + r")\b", re.IGNORECASE)
 

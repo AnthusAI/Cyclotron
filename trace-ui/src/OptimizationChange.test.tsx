@@ -53,6 +53,6 @@ test('unrecorded example text and partial snapshot fields are not guessed',()=>{
   render(<OptimizationChange event={selected} events={[selected]}/>)
   fireEvent.click(screen.getByText('unknown'))
   expect(screen.getByText('Example content not recorded in this step')).toBeVisible()
-  expect(screen.getByText('ML head not recorded')).toBeVisible()
+  expect(screen.getByText('ML model not recorded')).toBeVisible()
   expect(screen.queryByText('Raw decision-model output')).toBeNull()
 })

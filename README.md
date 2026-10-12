@@ -7,9 +7,9 @@ improvable classifier.
 A decision model can give a fast structured answer. It does not know a team's
 private definition of a good item. Cyclotron starts with a simple decision, then
 uses human labels and explanations to make three controlled changes around the
-model: an evolving rubric, a fixed few-shot example list, and extra classifier
-questions. The answers to the main and extra questions become features for a
-small learned ML head. The head produces the final prediction and calibrated
+model: an evolving rubric, a fixed few-shot example list, and supporting
+questions. The answers to the main and supporting questions become features for
+a small ML model. The ML model produces the decision and a calibrated
 confidence.
 
 The optimizer proposes changes. Code validates them, fits the numerical model,
@@ -141,7 +141,7 @@ What an application should know:
   item values and the classifier contexts, not the item id, so two items with
   identical values share one decision-model answer.
 - **Versions are language and structure.** A new rubric, example list or
-  set of classifier questions is a new version. Refitting the ML model on new
+  set of supporting questions is a new version. Refitting the ML model on new
   labels is a `refit`: the version stays, `status().refits` counts it, and
   `subscribe` reports it as a minor change.
 - **One writer.** `Cyclotron.open` takes a lease before touching the store;
@@ -246,18 +246,18 @@ React components.
 
 ## What Cyclotron adds around a decision model
 
-<img src="docs/diagrams/harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and extra classifier questions around a decision-model request. The model answers become features for a learned ML head. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
+<img src="docs/diagrams/harness.svg" alt="Cyclotron adds an evolving rubric, a few-shot example list, and supporting questions around a decision-model request. The model answers become features for an ML model. Human labels and explanations drive the LLM optimizer and ML fitting loop.">
 
 [Editable D2 source](docs/diagrams/harness.d2)
 
 The diagram separates two jobs that must not be confused:
 
 - The **LLM optimizer** proposes changes to language and structure: rubric,
-  examples, and classifier questions.
+  examples, and supporting questions.
 - The **ML fitter** learns numerical feature weights and confidence calibration
   only from trusted labels. The optimizer cannot write those numbers.
 
-The active version keeps context, fitted head, calibration, requests, and
+The active version keeps context, ML model, calibration, requests, and
 evidence together. A candidate becomes active only when its configured
 evaluation accepts it.
 
@@ -266,17 +266,17 @@ evaluation accepts it.
 A **classifier** answers one human question, such as “Should this item be in the
 knowledge base?” A **cyclotron** is a versioned, ordered group of classifiers
 that apply to the same item. Each classifier keeps its own rubric, examples,
-questions, labels, learned head, and metrics. A cyclotron is one decision about
-one kind of item, which may ask several classifier questions to make it.
+supporting questions, labels, ML model, and metrics. A cyclotron is one decision
+about one kind of item, which may ask several supporting questions to make it.
 
 Cyclotron can place all compatible classifier contexts in one decision-model
 request. The target item appears once. Each classifier context stays scoped to
 that classifier. Returned answers map back to the correct classifier, where its
-own ML head makes the final prediction. A human can label several classifiers for
+own ML model makes the final prediction. A human can label several classifiers for
 the same item in one review. Usage is counted once, and the complete request is
 cached by its full fingerprint.
 
-<img src="docs/diagrams/cyclotrons.svg" alt="A versioned cyclotron holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed independent learned ML heads and human labels for each classifier.">
+<img src="docs/diagrams/cyclotrons.svg" alt="A versioned cyclotron holds several classifier contexts. A request composer combines them with one target into one decision-model request. Mapped answers feed an independent ML model and reviews for each classifier.">
 
 [Editable D2 source](docs/diagrams/cyclotrons.d2)
 
@@ -293,7 +293,7 @@ They do not prove that the current reviewer runs all these steps.
 
 The live reviewer now calls the reusable `DecisionFlywheel` core.
 The core analyzes eligible votes and comments, validates proposals, collects decision-model features,
-fits and calibrates the ML head, compares development results, and promotes or rejects a version.
+fits and calibrates the ML model, compares development results, and promotes or rejects a version.
 Private SQLite records preserve the active version, request cache, and actual transcripts.
 
 Offline integration specs exercise explanations, validated proposals, regenerated
@@ -337,7 +337,7 @@ installation is needed for playback. UI contributors can run `make build-trace-u
 and `make test-trace-ui` after installing the locked dependencies in `trace-ui`.
 Previous/Next and the timeline step through
 events. The bundled vis-timeline 8.5.4 view separates human feedback, rubric,
-few-shot examples, classifier questions, ML optimization, fitting, and evaluation.
+few-shot examples, supporting questions, ML optimization, fitting, and evaluation.
 Feedback markers retain arbitrary label values, partition roles, comments, and
 retractions. Click markers to inspect events; pan/zoom to compare recorded rounds.
 Individual request, response, proposal, evaluation and activation markers open
@@ -390,7 +390,7 @@ class coverage is recorded as waiting, never as a successful optimization.
 Prediction and human-label lanes share compact class symbols
 and labeled class rows, with confidence and content in drill-down details.
 The collapsible Optimization group contains Triggers, Rubric, Few-shot examples,
-Classifier questions, ML optimization, and Optimization outcomes, in that order.
+Supporting questions, ML optimization, and Optimization outcomes, in that order.
 ML optimization contains Proposals / trials and Fitting: fitting is the training
 work inside an optimization attempt, not an unrelated top-level phase.
 Internal steps do not
@@ -626,7 +626,7 @@ The legacy `--live-jev` artifact mode remains Jev-only and rejects another
 provider before opening a review database or constructing a client.
 Laya loads the selected local checkpoint through the optional `laya` extra.
 Its structured-state transport carries scoped rubrics, labeled examples, and all
-classifier questions in one call. This enables context experiments, not a claim
+supporting questions in one call. This enables context experiments, not a claim
 that Laya has demonstrated few-shot improvements. Inputs over the conservative
 checkpoint token budget fail explicitly; provider-reported truncation is rejected.
 Use a checkpoint with enough room for the complete cyclotron, or reduce context
@@ -642,12 +642,13 @@ Use these terms with the same meaning throughout the system.
 | Label | The human's final decision for an item |
 | Feedback | A label, an optional comment, and the prediction shown before the vote |
 | Rubric | The criteria that explain which label an item should receive |
-| Decision element | One question or programmatic input inside a classifier context |
-| Classifier | One versioned human decision, its context, and its learned prediction head |
+| Supporting question | An internal question inside a classifier; its answer feeds that classifier's ML model |
+| Dynamic input | A programmatic input inside a classifier context, such as the current date |
+| Classifier | One reviewed output: its own rubric, labels, ML model and evaluation; its result is a decision |
 | Cyclotron | A versioned, ordered group of classifier revisions and shared run settings |
 | Decision model | A model, such as Jev, that answers the cyclotron questions |
-| Feature | A numerical input derived from a decision-element answer |
-| ML model | The fitted decision head that maps features to a final prediction |
+| Feature | A numerical input derived from a supporting question's answer (or the main answer) |
+| ML model | The small model fitted on your labels that maps features to a decision |
 | LLM optimizer | The agent that analyzes feedback and proposes structural changes |
 | Candidate | A proposed version that has not passed its evaluation |
 | Active version | The saved version used for current predictions |
@@ -690,13 +691,13 @@ One task can classify the method as practical or theoretical.
 Another task can classify the paper's age against the supplied current date.
 The fitter learns how these answers relate to the human's labels.
 
-The classifier context defines a holistic question and additional decision-element questions.
+The classifier context defines a holistic question and additional supporting questions.
 Jev answers these questions for the same item in one request.
 The feature converter derives named numbers from the answers and their probabilities.
 The trained decision head combines these features to predict the final label.
 Calibration adjusts the head's confidence.
 
-Each classification supplies its probability distribution to the ML head. The
+Each classification supplies its probability distribution to the ML model. The
 feature converter omits the last probability in each distribution because it is
 equal to one minus the sum of the others. The head produces probabilities for
 the final classes; its confidence is the probability of the selected class.
@@ -1375,7 +1376,7 @@ Do not again present a four-item comparison as convincing improvement evidence.
 
 Retain feature concepts, wording revisions, and failed/deferred measurements.
 Repeat backfill/ranking when new feedback changes the evidence or a frozen context
-version changes. Refit the downstream ML head separately with trusted, covered
+version changes. Refit the downstream ML model separately with trusted, covered
 training labels; combinations, redundancy checks, and ablations build on this
 feature matrix later. Promotion remains a distinct, adequately supported evaluation
 decision, not a side effect of admitting or ranking a new question.
@@ -1546,7 +1547,7 @@ examples, supporting questions, or fitted head.
 The optimizer selected eight examples. It also proposed three supporting questions:
 knowledge extraction and curation, memory or data systems, and research assessment
 or interactive refinement. These questions were actually sent to Jev; their answers
-became features for a separately fitted ML head. Their failure to win this trial
+became features for a separately fitted ML model. Their failure to win this trial
 does not establish that the ideas are false or cannot help with more labels.
 
 On the separate audit, the selected examples-only classifier agreed with 4/4 labels,
@@ -1647,7 +1648,7 @@ Frozen artifacts preserve the selected policy and its provenance.
 `JsonlEventStream` records request and trial activity.
 These older text-free records are separate from the core's private SQLite transcript history.
 
-`fit_learned_head` fits the optional ML head.
+`fit_learned_head` fits the optional ML model.
 `run_steering_round` tests structural changes with a scripted analyst and an application-supplied fitter.
 The connected path uses these core fitting guards without importing the Jev-Flywheel proof of concept.
 

@@ -10,7 +10,7 @@ function SampleProvenance({sample}: {sample: RecordValue}) {
     ? provenance.training_ids as string[] : undefined
   const trainingCount = typeof provenance?.training_count === 'number' && Number.isInteger(provenance.training_count)
     && provenance.training_count >= 0 ? provenance.training_count : undefined
-  const source = sample.source === 'calibrated-head' ? 'Calibrated ML head'
+  const source = sample.source === 'calibrated-head' ? 'Calibrated ML model'
     : sample.source === 'decision-passthrough' ? 'Raw decision output' : 'Output source not recorded'
   const fit = text(provenance?.fit_on)
   const temperature = typeof sample.temperature === 'number' && Number.isFinite(sample.temperature) && sample.temperature > 0

@@ -12,13 +12,13 @@ horizontal-gap: 72
 vertical-gap: 56
 
 # Row 1
-feedback: "New human training\nfeedback\nLabels, explanations,\nand prediction errors" {class: human}
+feedback: "New reviewer training\nfeedback\nLabels, explanations,\nand corrections" {class: human}
 optimizer: "LLM optimizer\nAnalyze feedback and\npropose an experiment" {class: llm}
 active: "Current classifier\ndefinition\nRubric, examples, tasks,\nand fitted ML model" {class: store}
 
 # Row 2
 _r2c1: "" {class: spacer}
-candidate: "Candidate request\ndefinition\nRubric · examples ·\nelement tasks" {class: llm}
+candidate: "Candidate request\ndefinition\nRubric · examples ·\nsupporting questions" {class: llm}
 transcript: "Visible optimization\nrecord\nPrompts, responses,\ntool calls, and diff" {class: store}
 
 # Row 3
@@ -48,7 +48,7 @@ retain: "Keep current\nclassifier\nRecord an invalid, failed,\nor weak candidate
 
 # Row 8
 _r8c1: "" {class: spacer}
-next: "Next round\nClassify more items and\ncollect human feedback" {class: step}
+next: "Next cycle\nDecide more items and\ncollect reviews" {class: step}
 _r8c3: "" {class: spacer}
 
 feedback -> optimizer {class: proposal}
