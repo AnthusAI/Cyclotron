@@ -8,6 +8,10 @@ the incumbent context and once with the candidate substituted. The effect on
 each sibling is recorded, and under the ``refuse`` policy a candidate that
 regresses any sibling beyond the declared tolerance is not promoted.
 
+A supporting question several outputs ask is asked once and shared, so adding,
+revising or dropping it changes every owner's features; the substituted
+request carries that change, and the effect on each owner is measured.
+
 A sibling's ML model is refit after any context change, and a refit can
 recover part of a regression. The check measures the effect a promotion has
 on the sibling's served decisions before that refit, so it is conservative.
@@ -68,6 +72,20 @@ class SiblingCheck:
     def siblings(self):
         return [identifier for identifier in self.wheels if identifier != self.owner]
 
+    def sibling_questions(self) -> dict:
+        """Each sibling's current supporting questions, in the optimizer's proposal shape."""
+        return {identifier: [{"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
+                             for task in self.wheels[identifier].active.config.tasks]
+                for identifier in self.siblings() if self.wheels[identifier].active.config.tasks}
+
+    def shared_owners(self, config) -> dict:
+        """Supporting questions of ``config`` that siblings also ask, with every owner (asked once)."""
+        from .batched_classification import shared_questions
+        configs = {**{identifier: wheel.active.config for identifier, wheel in self.wheels.items()}, self.owner: config}
+        shared = shared_questions(configs)
+        return {task.name: shared[(task.name, task.instructions, tuple(task.labels))] for task in config.tasks
+                if (task.name, task.instructions, tuple(task.labels)) in shared}
+
     def evidence(self) -> dict:
         """Round-cache identity: a sibling's new development labels must re-run the check."""
         return {"policy": asdict(self.policy),
@@ -76,7 +94,8 @@ class SiblingCheck:
 
     async def evaluate(self, config, now) -> dict:
         owner = self.wheels[self.owner]
-        record = {"policy": asdict(self.policy), "owner": self.owner}
+        record = {"policy": asdict(self.policy), "owner": self.owner,
+                  "shared_supporting_questions": self.shared_owners(config)}
         if config.fingerprint == owner.active.config.fingerprint:
             return {**record, "context_changed": False, "siblings": {}, "regressed": [], "refused": False,
                     "reason": "candidate leaves the shared decision request unchanged"}

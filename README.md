@@ -505,8 +505,23 @@ head, prediction uses raw decision output rather than stale learned weights.
 Standalone context-aware adapters can expose
 `feature_context_identity(config, training)` for the same provenance check.
 
+A supporting question that several outputs list with the same name,
+instructions and labels is asked once in the shared request and paid once. The
+request's `owners` map names every `[classifier, question]` it answers;
+adapters call `batched_classification.answer_groups` to give each owner the
+same answer, and trace bindings list the owners. Each owner's ML model uses the
+answer as a feature. A shared question is answered from the target alone, not
+from any one output's rubric or examples. A question only one output asks keeps
+its scoped instructions, so existing requests and caches are unchanged. During
+the questions stage the optimizer sees the siblings' supporting questions and
+can propose one verbatim to share it. `proposal-validated`, round results and
+`sibling_effects` record the owners of each shared question as
+`shared_supporting_questions`.
+
 Because outputs share one request, a change to one output's rubric, examples or
-supporting questions is part of every sibling's request too. Before such a
+supporting questions is part of every sibling's request too. Adding, revising
+or dropping a shared supporting question also changes how every other owner's
+copy is asked, and so its features. Before such a
 change is activated, the engine scores each sibling on that sibling's own
 development labels twice, with the sibling's current ML model held fixed: under
 the incumbent context and with the candidate substituted. The outcome event
