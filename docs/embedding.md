@@ -103,6 +103,9 @@ is the reviewer's choice (`selected_by="reviewer"`). It trains the ML model but
 is not review-rate evidence. Each requested output's review counts toward that
 output's window. Draws are keyed by item, position and output, so a store
 replays the same selections. A one-output decision is unchanged.
+`review_rate.expected_reviews_per_week` follows the routing: a decision
+counts by the chance that any of its outputs is requested. Decisions saved
+before routing count as they were selected, on their lowest confidence.
 
 A decision a person may have seen is stable. Deciding the same unchanged item
 again returns the same decision with the same label and confidence until it

@@ -40,6 +40,7 @@ def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4, 
     mode.mkdir(parents=True)
     protocol = {"operational_items": count, "decision_model": "jev-1.13.0", "decision_provider": "jev",
                 "optimizer_model": "gpt-6-luna", "baseline_rubric": rubric,
+                "operational_sha256": manifest["operational_sha256"],
                 "selection_policy": {"primary": "accuracy"}, "rubric_trigger": {"basis": "label_transitions", "every": 20, "max_attempts": None},
                 "idea_screening": {"enabled": False}, "modes": [mode_name], "decision_cap_total": 100, "optimizer_cap_total": 5}
     (run / "protocol.json").write_text(json.dumps(protocol))
@@ -108,7 +109,9 @@ def test_add_builds_a_valid_draft_with_results_cost_and_setup(tmp_path):
     assert r["engine"] == {"commit": "abc123"} and r["tags"] == ["blank-start", "jev"]
     assert r["setup"]["starting_rubric"] == "blank" and "starting_rubric_text" not in r["setup"]
     assert r["setup"]["parameters"]["rubric_changes_every"] == 20 and r["setup"]["parameters"]["idea_screening"] is None
-    assert r["setup"]["corpus"] == {"id": "fake-corpus", "stories": 8, "label_provenance": "Labels are simulated; two blind passes agreed."}
+    corpus_sha = hashlib.sha256((tmp_path / "src" / "corpus.jsonl").read_bytes()).hexdigest()
+    assert r["setup"]["corpus"] == {"id": "fake-corpus", "stories": 8, "sha256": corpus_sha,
+                                    "label_provenance": "Labels are simulated; two blind passes agreed."}
     assert r["setup"]["window_size"] == 4 and r["setup"]["decision_provider"] == "jev"
     w = r["results"]["windows"]
     assert [(x["first_cycle"], x["last_cycle"]) for x in w] == [(1, 4), (5, 8)]
@@ -301,8 +304,9 @@ def test_compare_shows_only_differing_setup_and_window_accuracy(tmp_path, capsys
     (other[0] / "protocol.json").write_text(json.dumps(protocol))
     add(tmp_path, "second", catalog=catalog, run=other)
     capsys.readouterr()
-    cli("compare", "first", "second", "--catalog", str(catalog))
+    cli("compare", "first", "second", "--catalog", str(catalog), "--force")
     out = capsys.readouterr().out
+    assert "NOT THE SAME BENCHMARK" in out
     setup_part, windows_part = out.split("Window accuracy")
     assert "parameters.rubric_changes_every" in setup_part and "starting_rubric " in setup_part
     assert "decision_model " not in setup_part and "optimizer_model" not in setup_part
@@ -361,7 +365,7 @@ def test_compare_shows_review_policy_as_a_differing_setting(tmp_path, capsys):
     catalog = add(tmp_path, "first", run=make_run(tmp_path / "a"))
     add(tmp_path, "second", catalog=catalog, run=make_run(tmp_path / "b", mode="reject_half", reviewed={1, 2, 5}))
     capsys.readouterr()
-    cli("compare", "first", "second", "--catalog", str(catalog))
+    cli("compare", "first", "second", "--catalog", str(catalog), "--force")
     setup_part = capsys.readouterr().out.split("Window accuracy")[0]
     assert "review.policy" in setup_part and "reject_half" in setup_part and "stories_reviewed" not in setup_part
 
@@ -403,3 +407,138 @@ def test_onboarding_policy_sentences_hyphenated_and_underscored(tmp_path):
     run = make_run(tmp_path / "t", mode="publish-priority-taper", reviewed={1, 2})
     review = rec(add(tmp_path, "taper", run=run), "taper")["setup"]["review"]
     assert review["summary"] == expected["publish-priority-taper"]
+
+
+# ---------------------------------------------------------------- comparison-ready recordings
+
+def fx(cycles):
+    return {"scenarios": {"run": {"cycles": cycles}}}
+
+
+def cyc(n, gold, final, raw, story=None):
+    other = lambda x: "reject" if x == "publish" else "publish"
+    return {"n": n, "actual": gold, "predicted": final, "probabilities": {final: .9, other(final): .1},
+            "decision_model_probabilities": {raw: .6, other(raw): .4}, "feedback_revealed": True,
+            "article": {"id": story or f"s{n}"}}
+
+
+def test_publish_metrics_hand_computed():
+    # gold: P P P R R R ; final: P P R P R R -> tp2 fp1 fn1 ; raw: P R R R R P -> tp1 fp1 fn2
+    gold = "publish publish publish reject reject reject".split()
+    final = "publish publish reject publish reject reject".split()
+    raw = "publish reject reject reject reject publish".split()
+    rows = R.prediction_rows(fx([cyc(i + 1, g, f, r) for i, (g, f, r) in enumerate(zip(gold, final, raw))]))
+    assert R.publish_metrics(rows, "final_label") == {"precision": 0.667, "recall": 0.667, "f1": 0.667}
+    assert R.publish_metrics(rows, "raw_label") == {"precision": 0.5, "recall": 0.333, "f1": 0.4}
+    assert R.accuracy(rows, "final_label") == 0.667 and R.accuracy(rows, "raw_label") == 0.5
+    none = R.prediction_rows(fx([cyc(1, "reject", "reject", "reject")]))
+    assert R.publish_metrics(none, "final_label") == {"precision": None, "recall": None, "f1": None}
+
+
+def test_mcnemar_exact_matches_hand_computation():
+    assert R.mcnemar_exact(0, 0) == 1.0
+    assert R.mcnemar_exact(5, 5) == 1.0
+    assert R.mcnemar_exact(0, 5) == pytest.approx(2 / 32)          # 2 * (1/32)
+    assert R.mcnemar_exact(2, 8) == pytest.approx(2 * 56 / 1024)   # n=10, tail = 1+10+45 = 56
+
+
+def test_fingerprint_is_stable_and_ignores_the_decision_model():
+    setup = {"corpus": {"id": "c", "sha256": "ab" * 32}, "window_size": 4, "review": {"policy": "all"},
+             "parameters": {"rubric_changes_every": 20, "rubric_trigger_basis": "x", "max_rubric_optimizations": None},
+             "optimizer_model": "o", "objective": "accuracy", "starting_rubric": "blank",
+             "decision_model": "jev", "decision_model_detail": {"name": "jev", "revision": "1"}}
+    base = R.compute_benchmark(setup, 8)
+    assert base == R.compute_benchmark(json.loads(json.dumps(setup)), 8) and base["id"] == "c-" + base["fingerprint"][:8]
+    other_model = dict(setup, decision_model="kev", decision_model_detail={"name": "kev", "revision": "2"})
+    assert R.compute_benchmark(other_model, 8)["fingerprint"] == base["fingerprint"]
+    changes = [("window_size", 5), ("review", {"policy": "reject_half"}), ("optimizer_model", "p"), ("objective", "f1"),
+               ("starting_rubric", "curated"), ("corpus", {"id": "c", "sha256": "cd" * 32}),
+               ("parameters", {"rubric_changes_every": 40, "rubric_trigger_basis": "x", "max_rubric_optimizations": None})]
+    for key, value in changes:
+        assert R.compute_benchmark(dict(setup, **{key: value}), 8)["fingerprint"] != base["fingerprint"], key
+    assert R.compute_benchmark(setup, 4)["fingerprint"] != base["fingerprint"]
+
+
+def test_add_writes_identity_benchmark_predictions_and_classification_results(tmp_path):
+    run = make_run(tmp_path / "src")
+    run_dir = run[0]
+    (run_dir.parent / (run_dir.name + ".card.json")).write_text(json.dumps({"argv": ["--decision-revision", "r7"]}))
+    catalog = add(tmp_path, run=run)
+    r = rec(catalog)
+    assert r["setup"]["decision_model_detail"] == {"name": "jev-1.13.0", "revision": "r7", "provider": "jev", "hosting": "hosted"}
+    assert r["benchmark"]["id"].startswith("fake-corpus-") and r["benchmark"]["comparable"] is True
+    rows = R.read_predictions(catalog / "first" / "predictions.jsonl")
+    assert len(rows) == 8 and rows[0]["id"] == "item-1" and set(rows[0]) == {"n", "id", "gold", "raw_label", "raw_probs", "final_label", "final_probs", "reviewed"}
+    assert r["predictions_sha256"] == hashlib.sha256((catalog / "first" / "predictions.jsonl").read_bytes()).hexdigest()
+    assert r["results"]["windows"][0]["final_publish"] == {"precision": 0.0, "recall": 0.0, "f1": None}  # all four inverted; f1 undefined at 0/0
+    assert r["results"]["raw_accuracy"] == 0.5 and r["results"]["final_accuracy"] == 0.5
+    assert json.loads((catalog / "first" / "fixture.json").read_text())["scenarios"]["run"]["cycles"][0]["article"]["id"] == "item-1"
+    cli("publish", "first", "--catalog", str(catalog))
+    cli("export-published", "--to", str(tmp_path / "site"), "--catalog", str(catalog))
+    assert (tmp_path / "site" / "first" / "predictions.jsonl").is_file()
+    (catalog / "first" / "predictions.jsonl").write_text("tampered\n")
+    with pytest.raises(SystemExit, match="predictions_sha256"):
+        cli("export-published", "--to", str(tmp_path / "site2"), "--catalog", str(catalog))
+
+
+def test_compare_refuses_other_benchmarks_and_runs_paired_tests_on_the_same_one(tmp_path, capsys):
+    catalog = add(tmp_path, "first", run=make_run(tmp_path / "a"))
+    add(tmp_path, "second", catalog=catalog, run=make_run(tmp_path / "b", decision_ok=8))
+    add(tmp_path, "third", catalog=catalog, run=make_run(tmp_path / "c", mode="reject_half"))
+    capsys.readouterr()
+    with pytest.raises(SystemExit, match="review_policy"):
+        cli("compare", "first", "third", "--catalog", str(catalog))
+    assert cli("compare", "first", "second", "--catalog", str(catalog), "--disagreements", "3") == 0
+    out = capsys.readouterr().out
+    assert "exact McNemar" in out and "final decisions: 8 scored" in out and "raw decision-model answers: 8 scored" in out
+    assert "only first right 0, only second right 4" in out and "p = 0.1250" in out   # raw: 2*(1/16)
+    assert "final accuracy" in out and "final publish recall" in out
+
+
+def test_upgrade_backfills_an_old_recording_idempotently(tmp_path):
+    catalog = add(tmp_path)
+    path = catalog / "first" / "recording.json"
+    fixture_path = catalog / "first" / "fixture.json"
+    fixture = json.loads(fixture_path.read_text())
+    for c in fixture["scenarios"]["run"]["cycles"]:
+        del c["article"]["id"]
+    fixture_path.write_text(json.dumps(fixture))
+    old = rec(catalog)
+    for key in ("benchmark", "predictions_sha256"):
+        del old[key]
+    del old["setup"]["decision_model_detail"], old["setup"]["corpus"]["sha256"]
+    for w in old["results"]["windows"]:
+        del w["final_publish"], w["raw_publish"]
+    for key in ("final_publish", "raw_publish", "final_accuracy", "raw_accuracy"):
+        del old["results"][key]
+    old["fixture_sha256"] = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+    path.write_text(json.dumps(old))
+    (catalog / "first" / "predictions.jsonl").unlink()
+    assert R.validate_recording(old) == []
+    cli("list", "--catalog", str(catalog))
+    before = fixture_path.read_bytes()
+    cli("upgrade", "first", "--catalog", str(catalog))
+    first = path.read_bytes()
+    new = rec(catalog)
+    assert new["benchmark"]["comparable"] is True and new["setup"]["corpus"]["sha256"]
+    assert R.read_predictions(catalog / "first" / "predictions.jsonl")[0]["id"] == "item-1"
+    for key in ("status", "notice", "fixture_sha256", "cost"):
+        assert new[key] == old[key]
+    assert [w["cyclotron_accuracy"] for w in new["results"]["windows"]] == [w["cyclotron_accuracy"] for w in old["results"]["windows"]]
+    cli("upgrade", "first", "--catalog", str(catalog))
+    assert path.read_bytes() == first and fixture_path.read_bytes() == before
+
+
+def test_upgrade_marks_a_recording_not_comparable_when_ids_are_unrecoverable(tmp_path):
+    catalog = add(tmp_path)
+    fixture_path = catalog / "first" / "fixture.json"
+    fixture = json.loads(fixture_path.read_text())
+    for c in fixture["scenarios"]["run"]["cycles"]:
+        del c["article"]["id"]
+    fixture_path.write_text(json.dumps(fixture))
+    r = rec(catalog)
+    r["source"]["run_dir"] = str(tmp_path / "gone")
+    (catalog / "first" / "recording.json").write_text(json.dumps(r))
+    cli("upgrade", "first", "--catalog", str(catalog))
+    b = rec(catalog)["benchmark"]
+    assert b["comparable"] is False and "ids" in b["reason"]
