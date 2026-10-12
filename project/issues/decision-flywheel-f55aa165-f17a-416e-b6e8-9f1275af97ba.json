@@ -3,16 +3,31 @@
   "title": "Seed supporting questions when defining an output",
   "description": "I already know the sub-questions that matter and want to give them as a starting point for the optimizer to revise.\n\nCurrent: ClassifierSpec has no tasks field (embedded_cyclotron.py:70-77); the store opens with ClassifierConfig(spec.task, rubric=seed) (:340), so supporting questions come only from the optimizer.\n\nDesired: seed_tasks per output, fixed at store creation like _seed (:347-363).\n\nAcceptance: seeded questions appear in the first request and feed the first ML model fit; the optimizer can replace them; reopening the store doesn't rewrite them.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "848ff73b-5593-4af7-8594-7d739479c1da",
+      "author": "home",
+      "text": "PR opened: https://github.com/AnthusAI/Cyclotron/pull/10",
+      "created_at": "2026-10-12T14:40:39.082611Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": {
+        "platform": "claude_code",
+        "model": "Claude Opus 5.5",
+        "name": "Engine Worker",
+        "settings": {}
+      }
+    }
+  ],
   "created_at": "2026-10-11T19:02:55.699470Z",
-  "updated_at": "2026-10-11T19:02:55.699666Z",
+  "updated_at": "2026-10-12T14:40:39.082750Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

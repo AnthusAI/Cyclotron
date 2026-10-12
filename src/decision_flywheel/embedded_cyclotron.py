@@ -266,6 +266,33 @@ class FileLease:
             self._handle = None
 
 
+def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, list[dict]]:
+    """Validate seed supporting questions into the optimizer's own question shape."""
+    specs = {spec.id: spec for spec in definition.classifiers}
+    seeds = dict(seeds or {})
+    if set(seeds) - set(specs):
+        raise ValueError("seed_supporting_questions maps classifier ids to supporting questions")
+    normalized = {}
+    for classifier, questions in seeds.items():
+        if isinstance(questions, (str, Mapping)) or not isinstance(questions, Sequence):
+            raise ValueError("seed_supporting_questions needs a list of questions per classifier")
+        rows = []
+        for question in questions:
+            if isinstance(question, DecisionTask):
+                question = {"name": question.name, "instructions": question.instructions,
+                            "labels": list(question.labels)}
+            if not isinstance(question, Mapping) or set(question) != {"name", "instructions", "labels"}:
+                raise ValueError("a supporting question has exactly name, instructions and labels")
+            task = DecisionTask(question["name"], question["labels"], question["instructions"],
+                                specs[classifier].input_field)
+            rows.append({"name": task.name, "instructions": task.instructions, "labels": list(task.labels)})
+        # The same validation the optimizer's proposals pass: unique, not "decision".
+        ClassifierConfig(specs[classifier].task, tasks=tuple(
+            DecisionTask(row["name"], tuple(row["labels"]), row["instructions"]) for row in rows))
+        normalized[classifier] = rows
+    return normalized
+
+
 def _store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, Path]:
     paths = {name: directory / name for name in STORE_FILES}
     for spec in definition.classifiers:
@@ -280,7 +307,8 @@ class Cyclotron:
     def __init__(self, directory, definition: CyclotronDefinition, model, optimizer=None, *,
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
                  lease=None, review_program: ReviewProgram | None = ReviewProgram(),
-                 seed_rubrics: Mapping[str, str] | None = None):
+                 seed_rubrics: Mapping[str, str] | None = None,
+                 seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
@@ -292,6 +320,7 @@ class Cyclotron:
                 not isinstance(text, str) for text in seed_rubrics.values()):
             raise ValueError("seed_rubrics maps classifier ids to rubric text")
         self.seed_rubrics = seed_rubrics
+        self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.directory = Path(directory)
@@ -346,7 +375,9 @@ class Cyclotron:
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"]
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id)), self.shared.adapter(spec.id), optimizer,
+                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id),
+                                       tasks=self._seed_questions(spec, created=saved is None)),
+                self.shared.adapter(spec.id), optimizer,
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2)
             self.wheels[spec.id] = wheel
@@ -371,6 +402,23 @@ class Cyclotron:
         with self.db:
             self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(seed)))
         return seed
+
+    def _seed_questions(self, spec: ClassifierSpec, *, created: bool) -> tuple[DecisionTask, ...]:
+        """The first supporting questions for a classifier: fixed when its store is first opened.
+
+        Like the seed rubric, they are a starting point the optimizer may
+        revise, replace or drop. A store created before seeding existed keeps
+        an empty seed, so reopening it never changes its initial context.
+        """
+        key = f"seed_supporting_questions:{spec.id}"
+        row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        if row is None:
+            raw = self.seed_supporting_questions.get(spec.id, []) if created else []
+            with self.db:
+                self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(raw)))
+        else:
+            raw = json.loads(row[0])
+        return tuple(DecisionTask(q["name"], tuple(q["labels"]), q["instructions"], spec.input_field) for q in raw)
 
     @classmethod
     def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> "Cyclotron":
