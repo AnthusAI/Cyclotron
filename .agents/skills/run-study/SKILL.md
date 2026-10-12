@@ -36,7 +36,7 @@ S=~/Documents/Codex/2026-10-09/editorial-study
   --rubric-changes-every 6 --baseline-rubric none
 ```
 
-It prints the process id, the log path and `NAME.card.json`. The card records the engine commit, whether `src` or `scripts` had uncommitted changes, Python version and the exact flags. Commit the engine change first so the card names a real commit.
+It prints the process id, the log path and `NAME.card.json`. The card records the engine commit, whether `src` or `scripts` had uncommitted changes, Python version and the exact flags. Commit the engine change first so the card names a real commit. It also writes `NAME.environment.json` (engine commit, dirty flag, Python version and, for `--decision-provider kev`, the JSON body of `GET $KEV_BASE_URL/v1/models` captured at launch, or a note that the server was unreachable); keep it with the run so the recording can name the exact model server.
 
 `--operational-items` must equal the corpus row count, and the sha256 must match, or the script stops at once. For a smoke test, cut a small corpus with `head`, hash it, and use a tiny cap such as 300 Jev calls and 2 optimizer calls. A 40-story test cost a few cents and finished in under a minute.
 
@@ -61,6 +61,17 @@ Prints per-window accuracy against the most-common-label baseline and the cycles
 ## 5. Record, then publish
 
 Follow `docs/recordings.md`: `scripts/recordings.py add` makes a draft from the run directory, `publish` validates it, and the site picks it up from `export-published`. Add a short plain-English summary and the "what to notice" bullets. Publishing is a site change: do it only when the user has asked for the study to appear, and describe the setup (decision model, optimizer, review schedule, corpus) exactly as run.
+
+## Adding a new decision model
+
+Comparing two decision models is only valid when they ran the same benchmark (`docs/recordings.md`, "Benchmark id"). Checklist:
+
+1. Adapter: add a `--decision-provider` choice and an adapter for the model, with a test; no live calls in the test.
+2. Price: add an entry to `PRICES` in `scripts/export_editorial_run_fixture.py` (use zero input and output prices for a local model) so `--decision-model-price` accepts it.
+3. Identity: launch with `--decision-model NAME` and, if the model has a revision, `--decision-revision REV` so `add` records it in `setup.decision_model_detail`. Only `kev` counts as local hosting; add any other local provider to `decision_model_detail` in `scripts/recordings.py`.
+4. Run the same benchmark: the same corpus file, window size, review schedule, rubric trigger, optimizer and starting rubric as the run you will compare against. Change only the decision model.
+5. Record it with `scripts/recordings.py add`; the new recording must show the same `benchmark.id` as the baseline (`recordings.py show ID`).
+6. Compare: `.venv/bin/python scripts/recordings.py compare BASELINE_ID NEW_ID --catalog CATALOG --disagreements 10`. It refuses a different benchmark.
 
 ## Gotchas
 

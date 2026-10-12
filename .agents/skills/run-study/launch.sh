@@ -32,4 +32,23 @@ json.dump({'started':time.strftime('%Y-%m-%dT%H:%M:%S%z'),'engine_commit':sha,'e
 P
 cd "$repo"
 nohup .venv/bin/python scripts/run_editorial_prequential_study.py --output "$out" --confirm-live "$@" > "$log" 2>&1 &
-echo "pid $! log $log card $out.card.json"
+pid=$!
+# Capture the environment next to the card: engine commit, dirty flag, python, and (for kev) the model server's identity.
+models=""; reached=""
+case " $* " in *" --decision-provider kev "*)
+  models=$(curl -s -m 5 "${KEV_BASE_URL:-http://127.0.0.1:8009}/v1/models" 2>/dev/null) && reached=yes || reached=no;;
+esac
+MODELS="$models" REACHED="$reached" "$repo/.venv/bin/python" - "$repo" "$out" <<'P'
+import json,os,platform,subprocess,sys,time
+repo,out=sys.argv[1:]
+git=lambda *a: subprocess.check_output(['git','-C',repo,*a],text=True).strip()
+env={'captured':time.strftime('%Y-%m-%dT%H:%M:%S%z'),'engine_commit':git('rev-parse','HEAD'),
+ 'engine_dirty':bool(git('status','--porcelain','--','src','scripts')),'python':platform.python_version()}
+if os.environ['REACHED']:
+    env['kev_base_url']=os.environ.get('KEV_BASE_URL','http://127.0.0.1:8009')
+    env['kev_server_reachable']=os.environ['REACHED']=='yes'
+    try: env['kev_models']=json.loads(os.environ['MODELS'])
+    except ValueError: env['kev_models']=None
+json.dump(env,open(out+'.environment.json','w'),indent=1)
+P
+echo "pid $pid log $log card $out.card.json environment $out.environment.json"
