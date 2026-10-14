@@ -3,16 +3,24 @@
   "title": "Design optional Cyclotron persistence adapters and a separate execution contract",
   "description": "Research/design only, requested by Ryan through parent. Preserve clone-and-run SQLite/local workers without AWS account. Inspect actual Virtuus PR33, current local storage work, Kanbus PR399, Cyclotron persistence and worker seams. Recommend smallest optional cloud adapter contract, reusable conventions and phased local/cloud parity acceptance tests. Do not encode Cyclotron state as Kanbus issues. Persistence and durable job execution are separate. No adapter implementation, EC2/cloud resources, or access grants until design is settled. Related console integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28 and Prospectus initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "b569eb77-620f-4244-95cd-98247233e7a2",
+      "author": "home",
+      "text": "Design delivered in docs/optional-persistence-design.md. Inspected exact Virtuus PR33 f94d7e2 and Kanbus PR399 25410911 clean product worktrees. Recommend optional embedded checkpoint repository over existing Cyclotron snapshot/restore, preserving cloud-free SQLite/local worker; raw Virtuus ObjectStore semantics reusable but new store currently Rust-only, Python bridge ownership needs decision. DynamoDB catalog is rebuildable, not transactional runtime authority. Separate later WorkspaceRepository domain transactions and fenced durable runner; no Kanbus issue encoding. Existing embedded_store_test.py: 9 passed; prior account checkpoint: 73 focused Python +252 UI passed and synthetic browser proof. No adapter/hosting/resource/grant implementation. Await parent design decision before next implementation.",
+      "created_at": "2026-10-14T21:42:19.338459Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-14T21:37:22.662215Z",
+  "updated_at": "2026-10-14T21:42:25.349465Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
@@ -21,5 +29,8 @@
   },
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

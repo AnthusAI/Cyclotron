@@ -1742,3 +1742,7 @@ by recorded identities and never substitutes a nearby unrelated request.
 
 See [cyclotron versioning and calibration](docs/cyclotron-versioning.md) and
 [remaining workspace acceptance work](docs/web-workspace-plan.md).
+
+The [optional persistence design](docs/optional-persistence-design.md) examines
+filesystem/cloud checkpoint adapters and the separate requirements for durable
+command execution. The local SQLite workspace remains the default.
