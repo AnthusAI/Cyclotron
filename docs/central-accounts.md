@@ -90,6 +90,23 @@ family continued successfully; changing the family revoked the BFF session
 without another enrollment call. Focused Python account/session/web regressions
 passed 95 tests.
 
+Add `--filesystem` to that command to use the central harness's
+`filesystemRoot` mode and its already-built native Virtuus
+`FileStore`/`JournaledStore` bridge. This creates and removes a disposable identity
+directory. The test restarts the central process with the same directory and
+public keys while keeping both BFF sessions open, then checks Person and session
+continuity, selected-account/scoped GraphQL access, and durable exact-retry versus
+changed-proof behavior. This filesystem mode and the original memory mode both
+passed locally. No runtime console code change was needed.
+
+Only **central identity enrollment** uses the durable filesystem in this proof.
+The account/membership adapter remains an explicit in-memory fixture and the
+workspace is temporary SQLite. It does not prove account-storage durability,
+multi-process console sessions, a live S3 backend, or deployed Google/IAM
+configuration. Native journal interruption and cross-process enrollment safety
+are separate central-repository tests; this script establishes the BFF contract
+across a central restart after successful publication.
+
 ## Existing account boundary
 
 The existing console remains `trace-ui/src/WebApp.tsx`, served by

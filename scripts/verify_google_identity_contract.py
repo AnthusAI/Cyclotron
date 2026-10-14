@@ -1,16 +1,18 @@
 """Exercise the real Python BFF against Prospectus's isolated identity factory.
 
-Usage: PYTHONPATH=src python scripts/verify_google_identity_contract.py PATH_TO_PROSPECTUS
+Usage: PYTHONPATH=src python scripts/verify_google_identity_contract.py PATH_TO_PROSPECTUS [--filesystem]
 Requires the optional accounts/web Python dependencies, Node and that checkout's
-locked tsx installation. Uses synthetic RSA keys, memory storage, mock HTTP and a
-JSON-lines child only. Gateway IAM context is a fixture, not deployed IAM proof.
+locked tsx installation. Uses synthetic RSA keys, disposable memory/filesystem
+storage, mock HTTP and a JSON-lines child only. Filesystem mode also needs the
+central checkout's built native Virtuus bridge. Gateway IAM context is a fixture,
+not deployed IAM proof. Accounts remain an in-memory fixture in both modes.
 """
+import argparse
 import json
 from pathlib import Path
 import select
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -33,6 +35,7 @@ from decision_flywheel.web_store import WebStore
 
 class Harness:
     def __init__(self, repository):
+        self.repository = repository
         self.child = subprocess.Popen([shutil.which('node') or 'node', '--import', 'tsx',
             'accounts/testing/google-harness.ts'], cwd=repository,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -54,9 +57,16 @@ class Harness:
         except subprocess.TimeoutExpired:
             self.child.kill()
             self.child.wait()
+        for pipe in (self.child.stdin, self.child.stdout, self.child.stderr):
+            pipe.close()
+
+    def restart(self, configuration):
+        self.close()
+        self.__init__(self.repository)
+        assert self.call(configuration) == {'configured': True}
 
 
-def verify(repository):
+def verify(repository, *, filesystem=False):
     now = int(time.time())
     products, private_keys, public_keys = [], {}, {}
     for index, product in enumerate(('cyclotron', 'papyrus')):
@@ -88,9 +98,13 @@ def verify(repository):
             requestContext=dict(identity=dict(userArn=f'arn:aws:sts::111111111111:assumed-role/Synthetic{index}/test',
                 accountId='111111111111')))
 
+    identity_directory = tempfile.TemporaryDirectory(prefix='cyclotron-google-identity-')
+    configuration = dict(op='configure', nowSeconds=now, products=products, keys=public_keys)
+    if filesystem:
+        configuration['filesystemRoot'] = str(Path(identity_directory.name).resolve())
     harness = Harness(repository)
     try:
-        assert harness.call(dict(op='configure', nowSeconds=now, products=products, keys=public_keys)) == {'configured': True}
+        assert harness.call(configuration) == {'configured': True}
         with tempfile.TemporaryDirectory(prefix='cyclotron-google-contract-') as directory:
             accounts, stores, resolutions = {}, {}, []
             def bff(index):
@@ -165,6 +179,15 @@ def verify(repository):
                 headers = {'Origin': second_gateway.config.public_origin, 'X-CSRF-Token': second_session['csrfToken']}
                 assert second.post('/api/accounts/select', json={'accountId': account_id}, headers=headers).status_code == 200
                 assert second.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == 'Shared synthetic workspace'
+                if filesystem:
+                    # Restart central identity only. BFF cookies/sessions and
+                    # the explicitly synthetic accounts adapter stay in memory.
+                    harness.restart(configuration)
+                    assert first.get('/api/session').json()['personId'] == first_session['personId']
+                    restored = second.get('/api/session').json()
+                    assert restored['personId'] == first_session['personId']
+                    assert restored['selectedAccountId'] == account_id
+                    assert second.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == 'Shared synthetic workspace'
                 assert first.get('/auth/callback', params=callback).status_code == 400
                 assert len(resolutions) == 2  # state replay did not reach central
                 assert harness.call(dict(op='request', event=resolutions[0]))['statusCode'] == 200
@@ -192,12 +215,18 @@ def verify(repository):
                 rejected += 1
             print(json.dumps(dict(result='PASS', pools=2, canonicalPeople=1, syntheticAccountContinuity=True,
                 invalidProofCases=rejected, localStateReplay='denied', centralExactRetry='idempotent',
-                centralChangedProof='409', continuationFamily='enforced', deployedIamVerified=False, liveGoogleVerified=False)))
+                centralChangedProof='409', continuationFamily='enforced',
+                identityStorage='virtuus-filesystem' if filesystem else 'memory',
+                centralRestartVerified=filesystem, accountStorage='memory-fixture',
+                deployedIamVerified=False, liveGoogleVerified=False)))
     finally:
         harness.close()
+        identity_directory.cleanup()
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        raise SystemExit('Pass the Prospectus checkout path; this script makes no cloud calls.')
-    verify(Path(sys.argv[1]).resolve())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('prospectus', type=Path)
+    parser.add_argument('--filesystem', action='store_true', help='Use disposable durable identity files and restart the central harness')
+    arguments = parser.parse_args()
+    verify(arguments.prospectus.resolve(), filesystem=arguments.filesystem)
