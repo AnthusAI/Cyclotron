@@ -3,7 +3,7 @@
   "title": "M1: Preview, revise and atomically accept curated examples",
   "description": "M1: Optional priming through validated structured files and language-neutral external HTTP transformation. Configurable item schema and classifier revisions drive templates, labels and rationales. Async start/status/clarification/feedback/cancel yields complete candidates; explicit preview acceptance commits items and human classifications with raw provenance and exact model representation. First integration reuses Papyrus scholarly and web curation planners and shared embedded UI. Local tests/preview only; draft PRs, no merge/deploy/IAM. Earlier callable draft at 2a45f44 is superseded.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,25 @@
         "model": "GPT-6",
         "name": "Curated Example Priming"
       }
+    },
+    {
+      "id": "e231eaa2-e2a3-4fff-a4e7-3511f9a19924",
+      "author": "home",
+      "text": "Local tested slice on codex/priming-http-import from verified 547dc00. Structured CSV/JSON/JSONL/Excel templates and validation, durable external HTTP jobs, explicit human acceptance, atomic multi-output labels, initial-context priming, shared TypeScript panel and companion Papyrus References embedding implemented. Full Python: 1360 pass/1 skip; focused latest priming/config/API/context/glossary: 29 pass. UI/browser/build verified, including paper revision, web summary, stored label/provenance, mobile one-output cancel and stale/racing responses. Review brief docs/priming-review.md and protocol docs/priming.md. Public pushes, package publication and deployment held per user; real examples pending. Keep issues open until landing. Earlier callable draft preserved and superseded.",
+      "created_at": "2026-10-14T14:03:38.188087Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Curated Example Priming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T11:55:48.891089Z",
-  "updated_at": "2026-10-14T12:42:53.470945Z",
+  "updated_at": "2026-10-14T14:03:38.188108Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

@@ -3,7 +3,7 @@
   "title": "Curate an example through preview, revision and human acceptance",
   "description": "As an operator I want optional example priming so representative decisions can be recorded before operation.\nFeature: Curated examples\n  Scenario: Preview and revise\n    Given a registered transformer with configurable input fields\n    When I preview raw inputs and reject the extraction with feedback\n    Then revision reruns the transformer and validates the candidate without importing it\n  Scenario: Accept with human classification\n    Given a valid preview\n    When I explicitly accept with a configured label and nonempty rationale\n    Then the item and label are committed atomically with separate raw input and revision provenance\n    And retrying acceptance does not duplicate either record\n  Scenario: Cancel or fail\n    Given a pending preview\n    When I cancel or transformation fails\n    Then no item or label is imported\n    And stale previews cannot be accepted\n  Scenario: Optional UI\n    Given the item-list workspace\n    When I open curated example import\n    Then configured fields, preview, revision feedback and separate classification controls are available\n    And normal operation remains available without priming",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -28,7 +28,7 @@
     }
   ],
   "created_at": "2026-10-14T11:56:05.725Z",
-  "updated_at": "2026-10-14T12:42:53.489835Z",
+  "updated_at": "2026-10-14T14:03:38.152400Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
