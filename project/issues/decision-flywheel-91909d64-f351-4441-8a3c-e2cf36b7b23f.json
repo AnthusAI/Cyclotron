@@ -1,0 +1,44 @@
+{
+  "id": "decision-flywheel-91909d64-f351-4441-8a3c-e2cf36b7b23f",
+  "title": "Curate an example through preview, revision and human acceptance",
+  "description": "As an operator I want optional example priming so representative decisions can be recorded before operation.\nFeature: Curated examples\n  Scenario: Preview and revise\n    Given a registered transformer with configurable input fields\n    When I preview raw inputs and reject the extraction with feedback\n    Then revision reruns the transformer and validates the candidate without importing it\n  Scenario: Accept with human classification\n    Given a valid preview\n    When I explicitly accept with a configured label and nonempty rationale\n    Then the item and label are committed atomically with separate raw input and revision provenance\n    And retrying acceptance does not duplicate either record\n  Scenario: Cancel or fail\n    Given a pending preview\n    When I cancel or transformation fails\n    Then no item or label is imported\n    And stale previews cannot be accepted\n  Scenario: Optional UI\n    Given the item-list workspace\n    When I open curated example import\n    Then configured fields, preview, revision feedback and separate classification controls are available\n    And normal operation remains available without priming",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "afafa3aa-5f22-4488-a233-e73d41b58e3e",
+      "author": "home",
+      "text": "Authorized resume: current origin/develop 547dc00084c6d4e390b9dad96f43b22767a9aa31 in isolated cyclotron-current worktree, codex/priming-http-import. Cyclotron retains Python core and TypeScript UI; PiDurable belongs to Chatticus. Preserve old draft without shipping it. Add Gherkin coverage for CSV/JSON/JSONL/Excel templates and row errors, multiple classifier labels, external HTTP jobs/clarification/feedback/cancel, exact model values and atomic retry-safe acceptance; Papyrus reuses existing extraction planners, no source text in GraphQL.",
+      "created_at": "2026-10-14T12:42:53.489809Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Curated Example Priming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
+  "created_at": "2026-10-14T11:56:05.725Z",
+  "updated_at": "2026-10-14T12:42:53.489835Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Curated Example Priming"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
