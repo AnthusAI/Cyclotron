@@ -37,10 +37,25 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "f438df12-443a-4fd9-8a79-65e20a81202e",
+      "author": "home",
+      "text": "Local implementation commit 7a76d97. Final UI regression: 252 passed across 58 files; build passes. Full Python 1360 passed/1 skipped plus subsequent focused priming/config/API/context/glossary 29 passed. Companion Papyrus code commit 4ca32a5 has exact baseline-only failure set (48 cases), no introduced regression. Public pushes held; previews remain live on 8796/8798. Review briefs committed locally.",
+      "created_at": "2026-10-14T14:06:47.483157Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Curated Example Priming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T11:55:48.891089Z",
-  "updated_at": "2026-10-14T14:03:38.188108Z",
+  "updated_at": "2026-10-14T14:06:47.483186Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
