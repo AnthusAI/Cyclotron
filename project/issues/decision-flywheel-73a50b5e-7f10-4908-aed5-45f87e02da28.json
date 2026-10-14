@@ -1,0 +1,36 @@
+{
+  "id": "decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28",
+  "title": "Integrate existing console with central Prospectus accounts",
+  "description": "Cross-project initiative Prospectus kanbus-4b25e2, epic kanbus-c32497, integration kanbus-e1dbe6. Reuse trace-ui and Python web_api. First increment: typed server-side accounts gateway, temporary-runtime-credential IAM SigV4 transport, fail-closed account/person/product authorization binding, synthetic specs. Live slice blocked on exact runtime hosting/persistence, runtime role approval, OAuth callback, and agreed read/write permission contract. No central database duplication.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f5fb2cbd-25fd-4124-92ba-8ac4f3ce944e",
+      "author": "home",
+      "text": "Local increment complete: existing console retained; IAM SigV4 accounts client requires refreshing temporary credentials, forwards verified human access token, supports identity resolution and idempotent creation. Hosted injectable boundary authorizes every GraphQL read/write (including WebSocket) and timeline before selecting account-owned SQLite store; no shared-token/LAN fallback or global worker. Synthetic/API/session specifications pass; UI production build passes; loopback browser Alpha/Beta fixtures render with no warnings/errors. No Google/deployment proof. Reviewed inventory: no persistent compute host in cyclotron-production/us-east-1; no console Amplify app in east1/east2/west2. Deployment blocked for reviewed persistent Python runtime, separate Cognito client/callback, exact runtime IAM role/central registry and API. Parent recommendation: minimal persistent singleton Python host with retained encrypted EBS and temporary instance-profile credentials; Amplify-only cannot preserve Python/SQLite serialized-worker semantics. No provisioning performed. Related central initiative kanbus-4b25e2, epic kanbus-c32497, integration kanbus-e1dbe6.",
+      "created_at": "2026-10-14T21:07:15.588449Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-14T20:57:51.094917Z",
+  "updated_at": "2026-10-14T21:07:15.588476Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "cyclotron-console"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

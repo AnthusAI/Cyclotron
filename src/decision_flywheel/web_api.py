@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import strawberry
+from strawberry.extensions import SchemaExtension
 from strawberry.fastapi import GraphQLRouter
 from strawberry.scalars import JSON
 
@@ -338,10 +339,35 @@ class Subscription:
             await asyncio.sleep(.2)
 
 
-schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription)
+class AccountAuthorization(SchemaExtension):
+    async def on_execute(self):
+        context = self.execution_context.context
+        access = context.get('account_access')
+        if access:
+            operation = 'console:write' if self.execution_context.operation_type.value == 'mutation' else 'console:read'
+            workspace = await access(context['connection'], operation)
+            context.update(store=workspace.store, service=workspace.service, account_id=workspace.account_id)
+        yield
+
+    async def on_stream_result(self, result):
+        context = self.execution_context.context
+        if context.get('account_access') and self.execution_context.operation_type.value == 'subscription':
+            from .prospectus_accounts import AccountAccessDenied
+            workspace = await context['account_access'](context['connection'], 'console:read')
+            if workspace.account_id != context['account_id']:
+                raise AccountAccessDenied('account selection changed; reconnect required')
+        yield
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False):
+schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription,
+    extensions=[AccountAuthorization])
+
+
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None):
+    if account_access and (token or allow_unauthenticated_lan or service):
+        raise ValueError('hosted account access cannot use shared-token/LAN authority or a global worker')
+    if account_access and not hasattr(SchemaExtension, 'on_stream_result'):
+        raise ValueError('hosted accounts require streaming authorization support; install the accounts extra')
     def authorized(connection):
         if allow_unauthenticated_lan and connection.client:
             try:
@@ -374,7 +400,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         if request.url.path.startswith(('/graphql','/runs/')):
             if not same_origin(request):
                 return JSONResponse({'error':'cross-origin access refused'}, status_code=403)
-            if not authorized(request):
+            authenticated = await account_access.authenticated(request) if account_access else authorized(request)
+            if not authenticated:
                 return JSONResponse({'error':'authentication required'}, status_code=401)
         response = await next_handler(request)
         response.headers['Cache-Control'] = 'no-store'
@@ -383,9 +410,11 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     async def context(request: Request = None, websocket: WebSocket = None):
         connection = request or websocket
-        if not authorized(connection) or not same_origin(connection):
+        authenticated = await account_access.authenticated(connection) if account_access else authorized(connection)
+        if not authenticated or not same_origin(connection):
             raise HTTPException(403, 'access refused')
-        return {'store':store,'service':service,'redact':redact}
+        return {'store':None if account_access else store,'service':service,'redact':redact,
+            'account_access':account_access,'connection':connection}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')
@@ -400,6 +429,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.post('/session')
     async def session(request: Request):
+        if account_access:
+            raise HTTPException(403,'shared token login is unavailable')
         if not same_origin(request):
             raise HTTPException(403,'access refused')
         body = await request.json()
@@ -414,10 +445,21 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"></div><script src="{asset_url("web.js")}"></script></body></html>'
 
     @app.get('/runs/{run_id}/timeline',response_class=HTMLResponse)
-    async def timeline(run_id: str, classifier_id: str | None = None):
-        run = await asyncio.to_thread(store.run,run_id)
-        rows = await asyncio.to_thread(store.all_events,run_id)
-        summary = await asyncio.to_thread(store.summary,run_id)
+    async def timeline(run_id: str, request: Request, classifier_id: str | None = None):
+        timeline_store = store
+        if account_access:
+            from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
+            try:
+                workspace = await account_access(request, 'console:read')
+                timeline_store = workspace.store
+            except (AccountAccessDenied, ProspectusUnavailable):
+                raise HTTPException(403,'account access refused') from None
+        try:
+            run = await asyncio.to_thread(timeline_store.run,run_id)
+        except ValueError:
+            raise HTTPException(404,'unknown run') from None
+        rows = await asyncio.to_thread(timeline_store.all_events,run_id)
+        summary = await asyncio.to_thread(timeline_store.summary,run_id)
         classes=run['config'].get('class_config')
         if run['config'].get('classifiers'):
             classifiers=run['config']['classifiers']
