@@ -6,7 +6,8 @@ import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {LabelCard as LegacyLabelCard,type CurrentItem} from './LabelCard'
-import {graphql,subscribeEvents,type TraceEvent} from './graphql'
+import type {TraceEvent} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {Catalog} from './Catalog'
 import {AppDrawer} from './AppDrawer'
 import {CyclotronCatalog} from './CyclotronCatalog'
@@ -50,8 +51,9 @@ function RunWorkspaceSkeleton(){
 
 
 export function RunTimeline({runId,revision,classifierId}:{runId:string;revision:number|string;classifierId?:string}){
+  const {url:workspaceUrl}=useWorkspaceTransport()
   const [loading,setLoading]=useState(true)
-  const url=`/runs/${runId}/timeline?revision=${encodeURIComponent(revision)}${classifierId?`&classifier_id=${encodeURIComponent(classifierId)}`:''}`
+  const url=workspaceUrl(`/runs/${runId}/timeline?revision=${encodeURIComponent(revision)}${classifierId?`&classifier_id=${encodeURIComponent(classifierId)}`:''}`)
   useEffect(()=>setLoading(true),[url])
   return <div className="relative flex min-h-0 flex-1">
     <iframe key={url} title="Run timeline and event inspector" src={url} onLoad={()=>setLoading(false)} className="absolute inset-0 h-full w-full rounded-lg border-0" />
@@ -59,7 +61,8 @@ export function RunTimeline({runId,revision,classifierId}:{runId:string;revision
   </div>
 }
 
-export function WebApp(){
+export function WebApp({embedded=false}:{embedded?:boolean}={}){
+  const {graphql,subscribeEvents}=useWorkspaceTransport()
   const [commandIds]=useState(()=>new PendingCommandIds())
   const [section,setSection]=useState<'cyclotrons'|'items'|'optimizations'>(routeSection)
   const [runs,setRuns]=useState<Run[]>([]),[selected,setSelected]=useState(()=>locationState().get('run')??''),[run,setRun]=useState<Run|null>(null)
@@ -96,13 +99,13 @@ export function WebApp(){
     setSessionCyclotron(previous=>previous||value.cyclotronDefinitions?.[0]?.id||'')
     setItemList(previous=>previous||value.itemLists[0]?.id||'')
     setClassifierIds(previous=>previous.length?previous:value.classifiers.slice(0,1).map(classifier=>classifier.id))
-  }).catch(e=>setError(e.message))},[creating,historyOpen,setError])
+  }).catch(e=>setError(e.message))},[creating,historyOpen,setError,graphql])
   const refresh=useCallback(async()=>{
     const result=await graphql<{runs:Run[];capabilities:{liveEnabled:boolean;itemCount:number}}>(RUNS)
     setRuns(result.runs);setCapabilities(result.capabilities)
     setSelected(previous=>result.runs.some(run=>run.id===previous)?previous:
       (result.runs.find(run=>run.counts.optimizations>0)??result.runs[0])?.id??'')
-  },[])
+  },[graphql])
   useEffect(()=>{
     const route=new URLSearchParams(window.location.hash.slice(1))
     if(invalidTimelineClassifier)setTimelineClassifier('')
@@ -145,7 +148,7 @@ export function WebApp(){
     }
     state();const timer=setInterval(state,1000)
     return ()=>{cancelled=true;unsubscribe?.();clearInterval(timer)}
-  },[selected,section,view,setError])
+  },[selected,section,view,setError,graphql,subscribeEvents])
   const submittedJob=jobs.find(job=>job.id===submission?.jobId)
   const awaitingLabels=submission?.runId===selected&&!submission.unconfirmed&&
     (!submittedJob||['pending','running'].includes(submittedJob.status))
@@ -184,8 +187,8 @@ export function WebApp(){
     }catch(e){setError((e as Error).message)}finally{setSending(false)}
   }
   const recent=events.filter(event=>latestOptimizationActivity([event])||['decision-request','decision-response','human-feedback','cycle-metrics'].includes(String(event.payload.kind))).filter(event=>activityFilter==='all'||activityFilter==='optimizer'&&String(event.payload.kind).startsWith('optimizer-')||activityFilter==='decision'&&String(event.payload.kind).startsWith('decision-')).slice(-40).reverse()
-  return <div data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
-<header data-testid="main-application-header" className="app-header flex items-center justify-between gap-2 border-b border-border bg-background px-2 py-1"><CyclotronBrand /><nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
+  return <div data-embedded={embedded||undefined} data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
+<header data-testid="main-application-header" className="app-header flex items-center justify-between gap-2 border-b border-border bg-background px-2 py-1">{embedded?null:<CyclotronBrand />}<nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
     {section!=='optimizations'?(section==='cyclotrons'?<CyclotronCatalog/>:<Catalog section="items" />):
     <div className="flex min-h-0 flex-1">
       <AppDrawer title="Run history" open={historyOpen} onOpenChange={setHistoryOpen}><div className="flex items-center justify-between"><p className="flex items-center gap-2 text-sm font-semibold"><History className="size-4" />Run history</p><Button variant="ghost" size="icon" aria-label="Refresh run history" onClick={()=>refresh().catch(e=>setError(e.message))}><RefreshCw /></Button></div><Button variant="outline" disabled={!capabilities.liveEnabled} onClick={()=>{setCreating(!creating);setHistoryOpen(false)}}><Plus />New run</Button>

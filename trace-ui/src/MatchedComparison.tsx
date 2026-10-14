@@ -4,7 +4,7 @@ import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {AppDrawer} from './AppDrawer'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {ReliabilityCurve,type CalibrationCurve} from './ReliabilityCurve'
 import {MatchedItemTrace} from './MatchedItemTrace'
 import {ModelComparison,type DecisionModelComparison} from './ModelComparison'
@@ -19,6 +19,7 @@ export type ComparisonResult={sample_count:number;classifiers:Record<string,{bef
 const percent=(value:number|null|undefined)=>value==null?'—':`${(value*100).toFixed(1)}%`
 
 export function MatchedComparison({runs,initialRunId,onCreated,onClose}:{runs:{id:string;name:string}[];initialRunId:string;onCreated:(id:string)=>void;onClose:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [before,setBefore]=useState(runs.find(run=>run.id!==initialRunId)?.id??'')
   const [after,setAfter]=useState(initialRunId),[plan,setPlan]=useState<Plan|null>(null)
   const [ceiling,setCeiling]=useState(400),[confirmed,setConfirmed]=useState(false)

@@ -16,7 +16,7 @@ test('Scenario: The browser does not own optimization logic',()=>{
   const source=sourceFiles(path.join(import.meta.dirname)).map(file=>readFileSync(file,'utf8')).join('\n')
   expect(source).not.toMatch(/(?:OPENAI|TYPESAFE|ANTHROPIC)_(?:API_)?KEY/)
   expect(source).not.toMatch(/fit_learned_head|DecisionFlywheel|OptimizerAgent/)
-  expect(source).toContain("fetch('/graphql'")
+  expect(source).toContain("'/graphql'")
 })
 
 

@@ -29,8 +29,9 @@ class SigV4Transport:
         from botocore.session import get_session
         import httpx
         parsed = urlsplit(endpoint)
-        if parsed.scheme != 'https' or not parsed.hostname or parsed.path not in ('', '/') or parsed.query or parsed.fragment or parsed.username:
-            raise ValueError('Prospectus endpoint must be an HTTPS origin')
+        if (parsed.scheme != 'https' or not parsed.hostname or parsed.query or parsed.fragment or parsed.username
+                or not re.fullmatch(r'(?:/[A-Za-z0-9_-]+)*/?', parsed.path)):
+            raise ValueError('Prospectus endpoint must be an HTTPS origin with an optional fixed API stage')
         self.endpoint = endpoint.rstrip('/')
         self.region = region
         self.session = session or get_session()
@@ -54,7 +55,8 @@ class SigV4Transport:
                 data=json.dumps(body, separators=(',', ':')).encode() if body is not None else b'', headers=headers)
             SigV4Auth(credentials, 'execute-api', self.region).add_auth(request)
             prepared = request.prepare()
-            response = self.client.request(method, prepared.url, content=prepared.body, headers=dict(prepared.headers))
+            response = self.client.request(method, prepared.url, content=prepared.body,
+                headers=dict(prepared.headers), follow_redirects=False, timeout=10)
             if response.status_code in (401, 403):
                 raise AccountAccessDenied('account access refused')
             if response.status_code not in (200, 201):
@@ -81,10 +83,16 @@ class AccountsClient:
         return self.transport('POST', '/v1/identities/resolve', human_token, {})
 
     def create_account(self, human_token, name, idempotency_key):
-        key = str(UUID(idempotency_key))
+        identifier = UUID(idempotency_key)
+        if identifier.version != 4:
+            raise ValueError('account creation requires a UUIDv4 idempotency key')
+        key = str(identifier)
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 200:
             raise ValueError('account name required (maximum 200 characters)')
-        return self.transport('POST', '/v1/accounts', human_token, {'name': name.strip()}, key)
+        result = self.transport('POST', '/v1/accounts', human_token, {'name': name.strip()}, key)
+        if not isinstance(result.get('account'), dict):
+            raise ProspectusUnavailable('invalid account service response')
+        return result['account']
 
     def authorize(self, human_token, account_id, person_id, operation):
         if operation not in ('console:read', 'console:write'):
@@ -96,6 +104,8 @@ class AccountsClient:
         result = self.transport('POST', f'/v1/accounts/{quote(account_id, safe="")}/authorize', human_token, {'operation': operation})
         if (result.get('allowed') is not True or result.get('accountId') != account_id
                 or result.get('personId') != person_id or result.get('product') != self.product
+                or result.get('operation') != operation
+                or type(result.get('revision')) is not int or result['revision'] < 1
                 or result.get('role') not in ('owner', 'admin', 'member', 'viewer')
                 or operation == 'console:write' and result.get('role') == 'viewer'):
             raise AccountAccessDenied('account access refused')

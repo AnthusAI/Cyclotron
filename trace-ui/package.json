@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@anthus/prospectus-accounts-client": "file:vendor/prospectus-accounts-client-0.1.1.tgz",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@fontsource-variable/oxanium": "^5.3.0",

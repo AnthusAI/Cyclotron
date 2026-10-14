@@ -20,10 +20,12 @@ def test_signing_uses_fresh_temporary_credentials_and_forwards_only_the_human_to
         seen.append(request)
         return httpx.Response(200, json={'accounts': []})
     session = SimpleNamespace(get_credentials=lambda: Credentials('synthetic', 'fake-secret', 'temporary'))
-    transport = SigV4Transport('https://accounts.example.test', 'us-east-1', session=session,
+    transport = SigV4Transport('https://accounts.example.test/api', 'us-east-1', session=session,
         client=httpx.Client(transport=httpx.MockTransport(respond)))
     AccountsClient(transport).accounts('verified-access-jwt')
+    assert str(seen[0].url) == 'https://accounts.example.test/api/v1/accounts'
     assert seen[0].headers['authorization'].startswith('AWS4-HMAC-SHA256 ')
+    assert 'x-prospectus-human-token' in seen[0].headers['authorization']
     assert seen[0].headers['x-amz-security-token'] == 'temporary'
     assert seen[0].headers['x-prospectus-human-token'] == 'verified-access-jwt'
     assert 'x-prospectus-person' not in seen[0].headers
@@ -39,7 +41,7 @@ def test_long_lived_credentials_and_redirects_fail_closed_without_exposing_token
     with pytest.raises(ProspectusUnavailable, match='temporary runtime credentials required'):
         AccountsClient(transport).accounts('private-jwt')
     session.get_credentials = lambda: Credentials('synthetic', 'fake-secret', 'temporary')
-    transport.client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(302,
+    transport.client = httpx.Client(follow_redirects=True, transport=httpx.MockTransport(lambda _: httpx.Response(302,
         headers={'Location': 'https://untrusted.example.test'})))
     with pytest.raises(ProspectusUnavailable, match='account service unavailable'):
         AccountsClient(transport).accounts('private-jwt')
@@ -47,10 +49,10 @@ def test_long_lived_credentials_and_redirects_fail_closed_without_exposing_token
 
 def test_account_creation_preserves_the_callers_idempotency_key():
     calls = []
-    client = AccountsClient(lambda *args: calls.append(args) or {'id': 'account-a'})
+    client = AccountsClient(lambda *args: calls.append(args) or {'account': {'id': 'account-a'}})
     key = str(uuid4())
     for _ in range(2):
-        client.create_account('verified', ' Example ', key)
+        assert client.create_account('verified', ' Example ', key) == {'id': 'account-a'}
     assert calls[0] == calls[1] == ('POST', '/v1/accounts', 'verified', {'name': 'Example'}, key)
     with pytest.raises(ValueError):
         client.create_account('verified', 'Example', 'not-a-uuid')
@@ -64,16 +66,16 @@ def test_unknown_people_can_resolve_their_verified_identity_explicitly():
 
 
 @pytest.mark.parametrize('change', [dict(allowed=False), dict(accountId='other'),
-    dict(personId='other'), dict(product='other'), dict(role='unknown')])
+    dict(personId='other'), dict(product='other'), dict(role='unknown'), dict(operation='console:write'), dict(revision=0)])
 def test_an_authorization_response_is_bound_to_person_account_and_product(change):
-    result = dict(allowed=True, accountId='account-a', personId='person-a', product='cyclotron', role='member')
+    result = dict(allowed=True, accountId='account-a', personId='person-a', product='cyclotron', role='member', operation='console:read', revision=1)
     client = AccountsClient(lambda *args: result | change)
     with pytest.raises(AccountAccessDenied):
         client.authorize('verified', 'account-a', 'person-a', 'console:read')
 
 
 def test_viewer_cannot_write_even_if_a_malformed_central_response_allows_it():
-    client = AccountsClient(lambda *args: dict(allowed=True, accountId='a', personId='p', product='cyclotron', role='viewer'))
+    client = AccountsClient(lambda *args: dict(allowed=True, accountId='a', personId='p', product='cyclotron', role='viewer', operation='console:write', revision=1))
     with pytest.raises(AccountAccessDenied):
         client.authorize('verified', 'a', 'p', 'console:write')
 
@@ -96,7 +98,7 @@ def hosted_client(tmp_path):
         account = path.split('/')[3]
         if token == 'revoked' or account not in stores:
             raise AccountAccessDenied('account access refused')
-        return dict(allowed=True, accountId=account, personId='person', product='cyclotron', role='viewer' if token == 'viewer' else 'member')
+        return dict(allowed=True, accountId=account, personId='person', product='cyclotron', role='viewer' if token == 'viewer' else 'member', operation=body['operation'], revision=1)
     async def session(connection):
         token = connection.cookies.get('synthetic-session')
         if not token:

@@ -2,13 +2,14 @@ import {useEffect,useState} from 'react'
 import {Button} from '@/components/ui/button'
 import {Card,CardHeader,CardTitle,CardContent} from '@/components/ui/card'
 import {Catalog} from './Catalog'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {CyclotronEditor,type Definition,type CatalogClassifier} from './CyclotronEditor'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {CyclotronComparison} from './CyclotronComparison'
 
 const routeRevision=()=>{const value=new URLSearchParams(window.location.hash.slice(1)).get('cyclotron_revision');return value&&/^[1-9]\d*$/.test(value)?Number(value):null}
 export function CyclotronCatalog(){
+  const {graphql}=useWorkspaceTransport()
   const [cards,setCards]=useState<Definition[]>([]),[selected,setSelectedValue]=useState(()=>new URLSearchParams(window.location.hash.slice(1)).get('cyclotron')??''),[error,setError]=useState('')
   const setSelected=(id:string)=>{
     const route=new URLSearchParams(window.location.hash.slice(1))
@@ -34,7 +35,7 @@ export function CyclotronCatalog(){
     return()=>{window.removeEventListener('popstate',restore);window.removeEventListener('hashchange',restore)}
   },[])
   const refresh=()=>graphql<{cyclotronDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{cyclotronDefinitions classifiers}').then(result=>{setCards(result.cyclotronDefinitions);setClassifiers(result.classifiers??[])}).catch(e=>setError(e.message))
-  useEffect(()=>{let cancelled=false;graphql<{cyclotronDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{cyclotronDefinitions classifiers}').then(result=>{if(!cancelled){setCards(result.cyclotronDefinitions);setClassifiers(result.classifiers??[])}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[])
+  useEffect(()=>{let cancelled=false;graphql<{cyclotronDefinitions:Definition[];classifiers?:CatalogClassifier[]}>('{cyclotronDefinitions classifiers}').then(result=>{if(!cancelled){setCards(result.cyclotronDefinitions);setClassifiers(result.classifiers??[])}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[graphql])
   useEffect(()=>{
     let cancelled=false
     const known=Object.fromEntries(classifiers.map(row=>[`${row.id}:${row.revision}`,row.name]))
@@ -43,8 +44,8 @@ export function CyclotronCatalog(){
       if(!cancelled)setRevisionNames(previous=>({...previous,...Object.fromEntries(results.flatMap(result=>(result.classifierVersions??[]).map(row=>[`${row.id}:${row.revision}`,row.name])))}))
     }).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[cards,classifiers,revisionNames])
-  useEffect(()=>{if(!selected)return;let cancelled=false;graphql<{cyclotronDefinitionVersions:Definition[]}>('query($id:ID!){cyclotronDefinitionVersions(cyclotronId:$id)}',{id:selected}).then(result=>{if(!cancelled)setHistory({cyclotronId:selected,versions:result.cyclotronDefinitionVersions??[]})}).catch(e=>{if(!cancelled){setHistory({cyclotronId:selected,versions:[],failed:true});setError(e.message)}});return()=>{cancelled=true}},[selected,cards])
+  },[cards,classifiers,revisionNames,graphql])
+  useEffect(()=>{if(!selected)return;let cancelled=false;graphql<{cyclotronDefinitionVersions:Definition[]}>('query($id:ID!){cyclotronDefinitionVersions(cyclotronId:$id)}',{id:selected}).then(result=>{if(!cancelled)setHistory({cyclotronId:selected,versions:result.cyclotronDefinitionVersions??[]})}).catch(e=>{if(!cancelled){setHistory({cyclotronId:selected,versions:[],failed:true});setError(e.message)}});return()=>{cancelled=true}},[selected,cards,graphql])
   const card=cards.find(row=>row.id===selected)
   const names={...revisionNames,...Object.fromEntries(classifiers.map(row=>[`${row.id}:${row.revision}`,row.name]))}
   const historical=versions.find(row=>row.revision===inspected)

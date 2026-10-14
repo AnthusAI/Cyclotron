@@ -1601,6 +1601,8 @@ endpoint-audit scripts accept `--trace-api-url` and `--trace-api-run-id` to reco
 their new events through the API. Offline exports remain available separately.
 
 This first workspace supports one reviewer at a time. It has no user accounts.
+The optional [central accounts integration](docs/central-accounts.md) adds a
+separate hosted OAuth/account boundary; the local CLI retains this local mode.
 LAN access requires `FLYWHEEL_WEB_TOKEN` unless the operator explicitly selects
 `--allow-unauthenticated-lan` for a trusted local network. Provider keys
 stay on the server. The local database contains private article text and feedback;

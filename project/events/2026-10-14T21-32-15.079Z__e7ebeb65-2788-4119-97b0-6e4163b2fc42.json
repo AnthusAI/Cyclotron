@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "e7ebeb65-2788-4119-97b0-6e4163b2fc42",
+  "issue_id": "decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-14T21:32:15.079Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Cross-project initiative Prospectus kanbus-4b25e2, epic kanbus-c32497, integration kanbus-e1dbe6. Reuse trace-ui and Python web_api. First increment: typed server-side accounts gateway, temporary-runtime-credential IAM SigV4 transport, fail-closed account/person/product authorization binding, synthetic specs. Live slice blocked on exact runtime hosting/persistence, runtime role approval, OAuth callback, and agreed read/write permission contract. No central database duplication.",
+        "to": "Cross-project links: Prospectus initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9; M1 accounts epic kanbus-c324971a-b3de-4b8e-9f9c-ab67ad09a261; console integration story kanbus-e1dbe67e-2beb-407b-ba8c-5b8948267002. Existing Cyclotron trace-ui and Python web_api retained. Local implementation includes SDK temporary-credential SigV4 accounts gateway; exact central response/entitlement contract; Cognito RS256 issuer/client/token_use/expiry verification; code+PKCE+state+nonce; opaque secure server sessions; exact-Origin plus CSRF-protected BFF; shared Prospectus selector/types; account creation and selection; account-bound HTTP/WebSocket/timeline transports and request authorization. No central user/membership database duplicated. Cloud hosting choice, dedicated console OAuth client, exact reviewed runtime IAM role/central registry, API activation and workspace/worker provisioning remain pending. No cloud resources or public source publication authorized/performed."
+      }
+    }
+  }
+}

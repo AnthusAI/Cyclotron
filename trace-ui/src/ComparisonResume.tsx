@@ -2,10 +2,11 @@ import {useState} from 'react'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {requestId} from './requestId'
 
 export function ComparisonResume({runId,ceiling,busy,enabled,status}:{runId:string;ceiling:number;busy:boolean;enabled:boolean;status:string}){
+  const {graphql}=useWorkspaceTransport()
   const [limit,setLimit]=useState(ceiling),[retryFailed,setRetryFailed]=useState(false),[confirmed,setConfirmed]=useState(false)
   const [identity,setIdentity]=useState(requestId),[sending,setSending]=useState(false),[queued,setQueued]=useState(false),[error,setError]=useState('')
   if(!['failed','interrupted'].includes(status))return null

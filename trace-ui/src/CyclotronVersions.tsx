@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react'
 import {Button} from '@/components/ui/button'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {PromoteSupportingQuestion} from './PromoteSupportingQuestion'
 
 type Cyclotron={id:string;name:string;active_revision:number;versions:{revision:number;run_id:string}[]}
@@ -9,6 +9,7 @@ type Version={revision:number;run_id:string;metrics:Record<string,{count:number;
 const percent=(value:number|null|undefined)=>value==null?'—':`${Math.round(value*100)}%`
 
 export function CyclotronVersions({runId,onSelect,busy}:{runId:string;onSelect:(id:string)=>void;busy:boolean}){
+  const {graphql}=useWorkspaceTransport()
   const [cyclotron,setCyclotron]=useState<Cyclotron|null>(null),[versions,setVersions]=useState<Version[]>([]),[error,setError]=useState(''),[saving,setSaving]=useState(false)
   useEffect(()=>{
     let cancelled=false
@@ -21,7 +22,7 @@ export function CyclotronVersions({runId,onSelect,busy}:{runId:string;onSelect:(
       if(!cancelled){setCyclotron(found);setVersions(data.cyclotronVersions)}
     })().catch(e=>{if(!cancelled)setError((e as Error).message)})
     return ()=>{cancelled=true}
-  },[runId])
+  },[runId,graphql])
   if(!cyclotron)return null
   const selected=versions.find(version=>version.run_id===runId)
   if(!selected)return <section aria-label="Cyclotron versions"><p role="status">This learned version is unavailable.</p></section>

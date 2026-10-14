@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "3cb82de9-65ed-4ab7-aa67-e5e093c580b9",
+  "issue_id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-14T21:37:22.662Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Design optional Cyclotron persistence adapters and a separate execution contract",
+    "description": "Research/design only, requested by Ryan through parent. Preserve clone-and-run SQLite/local workers without AWS account. Inspect actual Virtuus PR33, current local storage work, Kanbus PR399, Cyclotron persistence and worker seams. Recommend smallest optional cloud adapter contract, reusable conventions and phased local/cloud parity acceptance tests. Do not encode Cyclotron state as Kanbus issues. Persistence and durable job execution are separate. No adapter implementation, EC2/cloud resources, or access grants until design is settled. Related console integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28 and Prospectus initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "cyclotron-console"
+    }
+  }
+}
