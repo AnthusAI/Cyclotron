@@ -40,6 +40,7 @@ def main(argv=None):
     serve = sub.add_parser('serve')
     serve.add_argument('--database',type=Path,default=Path('var/web/workspace.sqlite3'))
     serve.add_argument('--articles',type=Path)
+    serve.add_argument('--priming-config',type=Path,help='operator-owned HTTP transformer and item-schema configuration')
     serve.add_argument('--host',default='127.0.0.1')
     serve.add_argument('--port',type=int,default=8782)
     serve.add_argument('--allow-live',action='store_true',help='enable explicit live-run creation; does not itself make model calls')
@@ -82,13 +83,18 @@ def main(argv=None):
                 OptimizerAgent(optimizer_transport(config)))
     service = WebWorker(store,args.database.parent / 'runs',articles=articles,allow_live=args.allow_live,
         sink_factory=lambda run_id:GraphQLTraceSink(endpoint,run_id,token=token),model_factory=model_factory,redact=redact)
-    app = create_app(store,service=service,token=token,redact=redact,
+    from .priming_config import load_priming_service
+    priming = load_priming_service(store,args.priming_config,redact=redact)
+    app = create_app(store,service=service,token=token,redact=redact,priming=priming,
         allow_unauthenticated_lan=args.allow_unauthenticated_lan)
     if host == '0.0.0.0':
         print(f'Workspace: http://127.0.0.1:{args.port}/ (and this Mac\'s private LAN address)',flush=True)
     else:
         print(f'Workspace: http://{host}:{args.port}/',flush=True)
-    uvicorn.run(app,host=host,port=args.port,workers=1,access_log=False)
+    try:
+        uvicorn.run(app,host=host,port=args.port,workers=1,access_log=False)
+    finally:
+        priming.close()
     return 0
 
 

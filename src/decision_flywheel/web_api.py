@@ -89,6 +89,18 @@ async def call(info, method, *args, **kwargs):
 @strawberry.type
 class Query:
     @strawberry.field
+    async def priming_contract(self, info: strawberry.Info, list_id: strawberry.ID, classifiers: JSON) -> JSON:
+        return await asyncio.to_thread(info.context['priming'].contract, str(list_id), classifiers)
+
+    @strawberry.field
+    async def priming_template(self, info: strawberry.Info, list_id: strawberry.ID, classifiers: JSON, format: str) -> JSON:
+        return await asyncio.to_thread(info.context['priming'].template, str(list_id), classifiers, format)
+
+    @strawberry.field
+    async def priming_draft(self, info: strawberry.Info, identifier: str) -> JSON:
+        return await asyncio.to_thread(info.context['priming'].get, identifier)
+
+    @strawberry.field
     async def cyclotrons(self,info:strawberry.Info)->JSON:
         return await call(info,'cyclotrons')
 
@@ -177,6 +189,16 @@ class Query:
 
 @strawberry.type
 class Mutation:
+    @strawberry.mutation
+    async def priming_command(self, info: strawberry.Info, action: str, payload: JSON) -> JSON:
+        priming = info.context['priming']
+        payload = priming.safe(payload)
+        actions = {'file': priming.start_file, 'transform': priming.start_transform,
+                   'poll': priming.poll, 'feedback': priming.feedback, 'cancel': priming.cancel, 'accept': priming.accept}
+        if action not in actions or not isinstance(payload, dict):
+            raise ValueError('unknown priming command')
+        return await asyncio.to_thread(actions[action], **payload)
+
     @strawberry.mutation
     async def extend_cyclotron(self,info:strawberry.Info,parent_run_id:strawberry.ID,classifier_ids:list[str],name:str,confirmed:bool=False)->Run:
         service=info.context.get('service')
@@ -341,7 +363,11 @@ class Subscription:
 schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription)
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False):
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, priming=None):
+    from .priming import PrimingService
+    owns_priming = priming is None
+    priming = priming or PrimingService(store, redact=redact)
+
     def authorized(connection):
         if allow_unauthenticated_lan and connection.client:
             try:
@@ -366,6 +392,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         yield
         if service:
             await asyncio.to_thread(service.close)
+        if owns_priming:
+            priming.close()
 
     app = FastAPI(lifespan=lifespan)
 
@@ -385,7 +413,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         connection = request or websocket
         if not authorized(connection) or not same_origin(connection):
             raise HTTPException(403, 'access refused')
-        return {'store':store,'service':service,'redact':redact}
+        return {'store':store,'service':service,'redact':redact,'priming':priming}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')

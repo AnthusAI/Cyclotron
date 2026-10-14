@@ -1,4 +1,6 @@
 import {useEffect,useState} from 'react'
+import {PrimingPanel} from './components/priming-panel'
+import {createPrimingClient} from './primingClient'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
@@ -33,6 +35,8 @@ function ClassifierLabel({classifier,item,listId,previous,onSaved}:{classifier:C
   </CardContent></Card>
 }
 
+const primingClient=createPrimingClient(graphql)
+
 export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,onChanged}:{section:'classifiers'|'items';cyclotronId?:string;cyclotronRevision?:number;readOnly?:boolean;onChanged?:()=>void}){
   const [classifiers,setClassifiers]=useState<Classifier[]>([]),[lists,setLists]=useState<ItemList[]>([])
   const [selectedList,setSelectedList]=useState(''),[items,setItems]=useState<ListItem[]>([]),[item,setItem]=useState<ListItem|null>(null),[votes,setVotes]=useState<Vote[]>([])
@@ -40,6 +44,7 @@ export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,on
   const [name,setName]=useState(''),[question,setQuestion]=useState(''),[classes,setClasses]=useState(''),[positive,setPositive]=useState('')
   const [listName,setListName]=useState(''),[page,setPage]=useState(0)
   const [results,setResults]=useState<ItemResult[]>([])
+  const [primingOpen,setPrimingOpen]=useState(false),[primingClassifiers,setPrimingClassifiers]=useState<string[]>([]),[importVersion,setImportVersion]=useState(0)
   const [history,setHistory]=useState<Classifier|null>(null)
   const editClassifier=(classifier:Classifier)=>{
     setHistory(null);setEditing(classifier);setCreating(true);setName(classifier.name)
@@ -57,7 +62,7 @@ export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,on
     let cancelled=false;setItems([]);setItem(null)
     graphql<{listItems:ListItem[]}>('query($list:ID!,$after:Int!){listItems(listId:$list,after:$after)}',{list:selectedList,after:page*200}).then(result=>{if(!cancelled)setItems(result.listItems)}).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[selectedList,page])
+  },[selectedList,page,importVersion])
   const loadVotes=async()=>{
     if(!item)return
     const result=await graphql<{itemLabels:Vote[]}>('query($list:ID!,$item:String!,$revision:Int!){itemLabels(listId:$list,itemId:$item,itemRevision:$revision)}',{list:selectedList,item:item.id,revision:item.revision})
@@ -92,6 +97,7 @@ export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,on
     </>:<>
       <form className="flex max-w-xl gap-2" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await graphql('mutation($id:String!,$name:String!){saveItemList(identifier:$id,name:$name)}',{id:requestId(),name:listName});setListName('');await refresh()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}><Input aria-label="New item list name" placeholder="Name a new item list" value={listName} onChange={e=>setListName(e.target.value)} /><Button disabled={busy||!listName.trim()}>Create list</Button></form>
       <div className="flex flex-wrap gap-2">{lists.map(list=><Button key={list.id} variant={selectedList===list.id?'secondary':'outline'} onClick={()=>{setSelectedList(list.id);setPage(0)}}>{list.name} · {list.count} items</Button>)}</div>
+      {selectedList&&!readOnly?<div className="space-y-3"><Button variant="outline" aria-expanded={primingOpen} onClick={()=>{setPrimingOpen(value=>!value);setPrimingClassifiers(classifiers.map(row=>row.id))}}>{primingOpen?'Hide example import':'Import curated examples (optional)'}</Button>{primingOpen?<><div className="flex flex-wrap gap-4" role="group" aria-label="Classifiers for imported examples">{classifiers.map(row=><label key={row.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={primingClassifiers.includes(row.id)} onChange={event=>setPrimingClassifiers(old=>event.target.checked?[...old,row.id]:old.filter(id=>id!==row.id))}/>{row.name} · revision {row.revision}</label>)}</div>{primingClassifiers.length?<PrimingPanel key={selectedList+primingClassifiers.join(':')} client={primingClient} listId={selectedList} classifiers={classifiers.filter(row=>primingClassifiers.includes(row.id)).map(row=>({id:row.id,revision:row.revision}))} initialDraftId={sessionStorage.getItem(`cyclotron:priming:${selectedList}`)??undefined} onDraftChange={draft=>{if(['accepted','cancelled'].includes(draft.status))sessionStorage.removeItem(`cyclotron:priming:${selectedList}`);else sessionStorage.setItem(`cyclotron:priming:${selectedList}`,draft.id)}} onAccepted={()=>{setImportVersion(value=>value+1);void refresh()}}/>:<p className="text-sm text-muted-foreground">Choose at least one classifier to label examples.</p>}</>:null}</div>:null}
       {selectedList?<div className="grid min-h-0 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]"><aside className="space-y-2"><p className="text-xs text-muted-foreground">Oldest first · page {page+1}</p>{items.map(row=><button key={row.id} className={`w-full rounded-lg border p-3 text-left text-sm ${item?.id===row.id?'border-primary bg-accent':'border-border hover:bg-accent'}`} onClick={()=>setItem(row)}>{String(row.values.title??row.id)}</button>)}<div className="flex gap-2"><Button variant="outline" disabled={!page} onClick={()=>setPage(p=>p-1)}>Previous</Button><Button variant="outline" disabled={items.length<200} onClick={()=>setPage(p=>p+1)}>Next</Button></div></aside><section className="space-y-4">{item?<><Card><CardHeader><CardTitle>{String(item.values.title??item.id)}</CardTitle><p className="text-xs text-muted-foreground">{item.occurred_at} · {item.id} · revision {item.revision}</p></CardHeader><CardContent><dl className="space-y-3">{Object.entries(item.values).filter(([key])=>key!=='title'&&key!=='text').map(([key,value])=><div key={key}><dt className="text-xs capitalize text-muted-foreground">{key.replaceAll('_',' ')}</dt><dd className="whitespace-pre-wrap text-sm">{typeof value==='string'?value:JSON.stringify(value)}</dd></div>)}{Object.keys(item.values).length===1?<p className="whitespace-pre-wrap text-sm">{String(item.values.text??'')}</p>:null}</dl></CardContent></Card><p className="text-sm text-muted-foreground">Label this item independently for each classifier. Saving a correction retains the earlier label in history.</p>{classifiers.map(classifier=><ClassifierLabel key={`${item.id}:${item.revision}:${classifier.id}:${classifier.revision}:${votes.find(v=>v.classifier_id===classifier.id&&v.classifier_revision===classifier.revision)?.label??''}`} classifier={classifier} item={item} listId={selectedList} previous={votes.find(v=>v.classifier_id===classifier.id&&v.classifier_revision===classifier.revision)} onSaved={()=>loadVotes().catch(e=>setError(e.message))} />)}</>:<p className="text-sm text-muted-foreground">Select an item to label it for your classifiers.</p>}</section></div>:null}
     </>}
   </main>

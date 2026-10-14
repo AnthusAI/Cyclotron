@@ -180,3 +180,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 project/.overlay/
+
+# Isolated priming verification dependencies
+.priming-deps/

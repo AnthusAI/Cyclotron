@@ -38,6 +38,9 @@ def freeze_configuration(store,config,*,selection_policy_override=False):
         classifier['config']={**definition,'selection_policy':policy}
         if policy.get('positive_class') and policy['positive_class'] not in labels: raise ValueError('unknown positive class')
         SelectionPolicy(**policy)
+    if config.get('priming_list_id'):
+        from .priming_context import catalog_priming
+        config['priming_examples']=catalog_priming(store,config['priming_list_id'],config['classifiers'],{row['id'] for row in items})
     return config
 
 
@@ -49,6 +52,8 @@ class WorkspaceSession:
         self.items={row['id']:row for row in store.items(run['id'])}
         self.shared=SharedDecisions(directory/'shared.sqlite3',model,max_requests=self.config['max_requests'],observer=lambda event:self.emit('transport',event))
         self.wheels={}
+        from .priming_context import decode_priming
+        self.priming_examples=decode_priming(self.config.get('priming_examples',{}))
         for classifier in self.config['classifiers']:
             identifier=classifier['id'];definition=classifier['config']
             task=DecisionTask(identifier,tuple(row['label'] for row in definition['classes']),definition['question'],definition.get('input_field','text'))
@@ -57,7 +62,7 @@ class WorkspaceSession:
             # budget are shared. Reusing the agent chains every wheel's traces.
             seeded=tuple(DecisionTask(q['name'],tuple(q['labels']),q['instructions'],task.input_field)
                          for q in self.config.get('seed_supporting_questions',{}).get(identifier,[]))
-            initial=ClassifierConfig(task,rubric=definition.get('seed_rubric',''),tasks=seeded)
+            initial=ClassifierConfig(task,rubric=definition.get('seed_rubric',''),tasks=seeded,example_ids=tuple(row.item.id for row in self.priming_examples.get(identifier,())))
             self.wheels[identifier]=DecisionFlywheel(directory/path,initial,self.shared.adapter(identifier),copy(optimizer),
                 max_requests=self.config['max_requests'],observer=lambda event,cid=identifier:self.emit(cid,event),redact=redact,
                 selection_policy=SelectionPolicy(**definition.get('selection_policy',{'primary':'f1','aggregation':'macro'})),min_evaluation_per_class=2)
@@ -101,7 +106,8 @@ class WorkspaceSession:
         return {'skipped':target.id}
 
     def partitions(self,identifier):
-        return feedback_partitions(self.wheels[identifier],{item_id:row['values'] for item_id,row in self.items.items()},self.config['seed'])
+        training,development,protected=feedback_partitions(self.wheels[identifier],{item_id:row['values'] for item_id,row in self.items.items()},self.config['seed'])
+        return (*self.priming_examples.get(identifier,()),*training),development,protected
 
     async def prepare(self):
         current=self.store.current_item(self.run['id'])
