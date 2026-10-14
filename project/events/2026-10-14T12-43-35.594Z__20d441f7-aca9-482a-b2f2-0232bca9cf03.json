@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "20d441f7-aca9-482a-b2f2-0232bca9cf03",
+  "issue_id": "decision-flywheel-89212dcc-72c9-4f47-bb08-f150a1515ebd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-14T12:43:35.594Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Import schema-valid files with classifier-specific templates and row errors",
+    "description": "As an operator I want to supply representative examples in existing structured files without needing a transformer.\nFeature: Structured example imports\n  Scenario Outline: Validate a file\n    Given a configured item schema and pinned classifier revisions\n    When I preview an <format> file\n    Then each row must include a schema-valid item and explicit labels and rationales for the selected classifiers\n    And invalid rows show row numbers and field errors without importing anything\n    Examples:\n      | format |\n      | Excel |\n      | CSV |\n      | JSON |\n      | JSONL |\n  Scenario: Download a template\n    Given item fields and two classifiers\n    When I request a template\n    Then it contains the schema fields and independent label/rationale columns with configured label choices\n  Scenario: Accept a batch\n    Given a fully valid preview\n    When I explicitly accept the batch\n    Then items and human labels commit together exactly once\n    And an invalid label, stale classifier, duplicate item or cancelled draft imports nothing",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Curated Example Priming",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

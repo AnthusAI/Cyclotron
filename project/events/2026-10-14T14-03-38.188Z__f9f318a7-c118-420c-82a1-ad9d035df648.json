@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "f9f318a7-c118-420c-82a1-ad9d035df648",
+  "issue_id": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-14T14:03:38.188Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "e231eaa2-e2a3-4fff-a4e7-3511f9a19924",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Curated Example Priming",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}
