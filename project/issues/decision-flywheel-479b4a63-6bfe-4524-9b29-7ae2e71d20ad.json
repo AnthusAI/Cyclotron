@@ -1,0 +1,41 @@
+{
+  "id": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+  "title": "M1: Preview, revise and atomically accept curated examples",
+  "description": "M1: Optional priming through validated structured files and language-neutral external HTTP transformation. Configurable item schema and classifier revisions drive templates, labels and rationales. Async start/status/clarification/feedback/cancel yields complete candidates; explicit preview acceptance commits items and human classifications with raw provenance and exact model representation. First integration reuses Papyrus scholarly and web curation planners and shared embedded UI. Local tests/preview only; draft PRs, no merge/deploy/IAM. Earlier callable draft at 2a45f44 is superseded.",
+  "type": "epic",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3c4f308b-a9c6-4abd-9ff2-e544a357f37c",
+      "author": "home",
+      "text": "Scope clarified: first integration reuses Papyrus reference processing/curation planners and embeds the shared Cyclotron UI in Papyrus. Separate domain service from host transport. Standalone hosting uses configured transformers. Reference.create currently persists before enrichment; preview must reuse planning stages without applying writes. No schema plugin revival, new public feed, keys, cloud calls or deployments.",
+      "created_at": "2026-10-14T11:59:13.153404Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "Curated Example Priming"
+      }
+    }
+  ],
+  "created_at": "2026-10-14T11:55:48.891089Z",
+  "updated_at": "2026-10-14T12:42:53.470945Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "Curated Example Priming"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
