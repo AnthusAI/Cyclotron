@@ -1,6 +1,6 @@
 """Pinned Cognito verification and bounded, opaque server-side OAuth sessions."""
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import hmac
 import re
@@ -90,26 +90,37 @@ class CognitoTokenVerifier:
     def access(self, token):
         return self._verify(token, 'access')
 
-    def token_pair(self, access_token, id_token, nonce):
+    def token_pair(self, access_token, id_token, nonce, *, require_session_binding=False):
         access = self.access(access_token)
         identity = self._verify(id_token, 'id')
-        if (identity['sub'] != access['sub'] or not isinstance(identity.get('nonce'), str)
+        if (identity['sub'] != access['sub'] or not isinstance(identity.get('nonce'), str) or not identity['nonce'].isascii()
                 or not hmac.compare_digest(identity['nonce'], nonce)):
             raise SessionRejected('identity token does not match the login')
         if 'at_hash' in identity:
             expected = base64.urlsafe_b64encode(sha256(access_token.encode()).digest()[:16]).decode().rstrip('=')
-            if not isinstance(identity['at_hash'], str) or not hmac.compare_digest(identity['at_hash'], expected):
+            if not isinstance(identity['at_hash'], str) or not identity['at_hash'].isascii() or not hmac.compare_digest(identity['at_hash'], expected):
                 raise SessionRejected('identity token does not match the access token')
+        if require_session_binding:
+            auth_time = access.get('auth_time')
+            lineage = access.get('origin_jti')
+            if (identity.get('aud') != self.client_id or type(auth_time) is not int
+                    or type(identity.get('auth_time')) is not int or identity['auth_time'] != auth_time
+                    or not 0 <= time.time() - auth_time <= 300
+                    or not isinstance(lineage, str) or not 0 < len(lineage) <= 256 or not lineage.isascii()
+                    or not isinstance(identity.get('origin_jti'), str) or not identity['origin_jti'].isascii()
+                    or not hmac.compare_digest(lineage, identity['origin_jti'])):
+                raise SessionRejected('identity evidence does not match the login session')
         return access
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class PendingLogin:
     state: str
     nonce: str
     code_verifier: str
     browser_cookie: str
     expires_at: float
+    challenge_id: str | None = None
 
     @property
     def code_challenge(self):
@@ -118,10 +129,10 @@ class PendingLogin:
 
 @dataclass
 class ConsoleSession:
-    access_token: str
+    access_token: str = field(repr=False)
     subject: str
     expires_at: float
-    csrf_token: str
+    csrf_token: str = field(repr=False)
     person_id: str | None = None
     account_id: str | None = None
 
@@ -147,13 +158,17 @@ class OAuthSessions:
         self.pending = {key: value for key, value in self.pending.items() if value.expires_at > now}
         self.sessions = {key: value for key, value in self.sessions.items() if value.expires_at > now}
 
-    def begin(self):
+    def begin(self, challenge=None):
         with self.lock:
             self._purge()
             if len(self.pending) >= self.capacity:
                 raise SessionRejected('too many pending logins; try again later')
-            pending = PendingLogin(secrets.token_urlsafe(32), secrets.token_urlsafe(32),
-                secrets.token_urlsafe(64), secrets.token_urlsafe(32), self.clock() + 300)
+            expiry = min(self.clock() + 300, challenge.expires_at) if challenge else self.clock() + 300
+            if expiry <= self.clock():
+                raise SessionRejected('identity challenge expired')
+            pending = PendingLogin(secrets.token_urlsafe(32), challenge.nonce if challenge else secrets.token_urlsafe(32),
+                secrets.token_urlsafe(64), secrets.token_urlsafe(32), expiry,
+                challenge.challenge_id if challenge else None)
             self.pending[digest(pending.state)] = pending
             return pending
 

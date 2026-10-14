@@ -9,7 +9,7 @@ import pytest
 from .account_sessions_test import identity, ISSUER, CLIENT
 from .account_sessions import OAuthConfig, OAuthSessions
 from .account_routes import HostedAccounts
-from .prospectus_accounts import AccountAccessDenied, AccountsClient, AccountWorkspace
+from .prospectus_accounts import AccountAccessDenied, AccountsClient, AccountWorkspace, ProspectusUnavailable
 from .web_api import create_app
 from .web_store import WebStore
 
@@ -43,7 +43,8 @@ def hosted(tmp_path, identity):
         return dict(allowed=True, accountId=selected['id'], personId=person_id, product='cyclotron', role=selected['role'], operation=body['operation'], revision=1)
     def exchange(request):
         state['exchanges'].append(parse_qs(request.content.decode()))
-        return httpx.Response(200, json={'access_token': token(), 'id_token': token('id', nonce=state['nonce'])})
+        return httpx.Response(200, json={'access_token': token(**state.get('access_changes', {})),
+            'id_token': token('id', **({'nonce': state['nonce']} | state.get('id_changes', {})))})
     config = OAuthConfig(ISSUER, CLIENT, 'https://synthetic.auth.us-east-1.amazoncognito.com', 'https://console.example.test')
     gateway = HostedAccounts(config, AccountsClient(central), lambda identifier: AccountWorkspace(state['stores'][identifier]),
         verifier=verifier, token_client=httpx.AsyncClient(transport=httpx.MockTransport(exchange)))
@@ -179,3 +180,118 @@ def test_another_tabs_selection_cannot_redirect_an_older_workspaces_writes(hoste
         assert client.post('/graphql', params={'account': alpha_id}, json={'query': mutation}).json()['data']['createRun']['id']
         assert [run['name'] for run in state['stores'][alpha_id].runs()] == ['Alpha delayed write', 'Private account run']
         assert [run['name'] for run in beta.runs()] == ['Beta only']
+
+
+def google_mode(gateway, state):
+    from .google_identity import GoogleIdentityClient
+    import time
+    challenge_id = str(uuid4())
+    person = {'id': str(uuid4()), 'createdAt': '2026-10-14T00:00:00Z'}
+    calls = []
+    def transport(method, path, access=None, body=None, *, identity_token=None):
+        calls.append((method, path, access, body, identity_token))
+        if path.endswith('/challenge'):
+            return {'challengeId': challenge_id, 'nonce': 'central-nonce-' + 'n' * 32, 'expiresAt': int(time.time()) + 300}
+        if path.endswith('/resolve'):
+            state['person'] = person
+        return {'person': person}
+    gateway.google_identity = GoogleIdentityClient(transport)
+    return calls, person, challenge_id
+
+
+def test_google_challenge_precedes_redirect_and_callback_forwards_both_proofs_only_server_side(hosted):
+    client, gateway, state, _ = hosted
+    calls, person, challenge_id = google_mode(gateway, state)
+    with client:
+        query, callback = sign_in(client, state)
+        assert query['nonce'] == ['central-nonce-' + 'n' * 32]
+        assert calls[0][:2] == ('POST', '/v1/identities/google/challenge')
+        assert calls[0][2] is None
+        assert calls[1][1] == '/v1/identities/google/resolve'
+        assert calls[1][3] == {'challengeId': challenge_id}
+        assert gateway.verifier.access(calls[1][2])['sub'] == 'provider-subject'
+        assert gateway.verifier._verify(calls[1][4], 'id')['nonce'] == query['nonce'][0]
+        result = client.get('/api/session')
+        assert result.json()['personId'] == person['id']
+        assert calls[-1][1] == '/v1/identities/me' and calls[-1][4] is None
+        assert calls[1][2] not in result.text + str(callback.headers)
+        assert calls[1][4] not in result.text + str(callback.headers)
+        session = gateway.sessions.get(client.cookies.get(gateway.config.cookie_name))
+        assert not hasattr(session, 'id_token')  # drop ID evidence after successful enrollment
+
+
+@pytest.mark.parametrize('changes', [dict(aud='wrong-client'), dict(iss='https://wrong.example.test'),
+    dict(origin_jti='other-session'), dict(auth_time=1)])
+def test_google_callback_rejects_bad_independent_id_evidence_before_central_enrollment(hosted, changes):
+    client, gateway, state, _ = hosted
+    calls, _, _ = google_mode(gateway, state)
+    state['id_changes'] = changes
+    with client:
+        login = client.get('/auth/login', follow_redirects=False)
+        query = parse_qs(urlsplit(login.headers['location']).query)
+        state['nonce'] = query['nonce'][0]
+        assert client.get('/auth/callback', params={'state': query['state'][0], 'code': 'synthetic'}).status_code == 400
+        assert len(calls) == 1
+        assert not client.cookies.get(gateway.config.cookie_name)
+
+
+def test_google_me_cannot_silently_change_person_or_enroll_a_missing_alias(hosted):
+    client, gateway, state, _ = hosted
+    calls, person, _ = google_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        gateway.google_identity.me = lambda _: {'id': str(uuid4()), 'createdAt': person['createdAt']}
+        assert client.get('/api/session').json()['authenticated'] is False
+        assert sum(call[1].endswith('/resolve') for call in calls) == 1
+
+
+def test_separate_accounts_person_mismatch_blocks_creation_before_side_effects(hosted):
+    client, gateway, state, _ = hosted
+    google_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get('/api/session').json()
+        state['person'] = {'id': str(uuid4())}
+        headers = {'Origin': 'https://console.example.test', 'X-CSRF-Token': session['csrfToken'], 'Idempotency-Key': str(uuid4())}
+        assert client.post('/api/accounts', json={'name': 'Must not create'}, headers=headers).status_code == 403
+        assert not any(call[0] == 'POST' and call[1] == '/v1/accounts' for call in state['calls'])
+
+
+def test_identity_outage_never_falls_back_to_existing_local_session_or_workspace(hosted):
+    client, gateway, state, account_id = hosted
+    google_mode(gateway, state)
+    def unavailable(*args):
+        raise ProspectusUnavailable('identity service unavailable')
+    with client:
+        sign_in(client, state)
+        gateway.google_identity.me = unavailable
+        assert client.get('/api/session').status_code == 503
+        response = client.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'})
+        assert response.status_code == 503
+        assert 'Private account run' not in response.text
+        assert response.headers['Cache-Control'] == 'no-store'
+
+
+def test_challenge_outage_does_not_redirect_or_create_local_pending_login(hosted):
+    client, gateway, state, _ = hosted
+    google_mode(gateway, state)
+    def unavailable():
+        raise ProspectusUnavailable('identity service unavailable')
+    gateway.google_identity.challenge = unavailable
+    with client:
+        result = client.get('/auth/login', follow_redirects=False)
+        assert result.status_code == 503 and 'location' not in result.headers
+        assert not gateway.sessions.pending and not gateway.sessions.sessions
+
+
+@pytest.mark.parametrize('changes', [dict(client_id='wrong'), dict(iss='https://wrong.example.test')])
+def test_google_callback_rejects_wrong_access_authority_before_identity_resolution(hosted, changes):
+    client, gateway, state, _ = hosted
+    calls, _, _ = google_mode(gateway, state)
+    state['access_changes'] = changes
+    with client:
+        login = client.get('/auth/login', follow_redirects=False)
+        query = parse_qs(urlsplit(login.headers['location']).query)
+        state['nonce'] = query['nonce'][0]
+        assert client.get('/auth/callback', params={'state': query['state'][0], 'code': 'synthetic'}).status_code == 400
+        assert len(calls) == 1 and not gateway.sessions.sessions

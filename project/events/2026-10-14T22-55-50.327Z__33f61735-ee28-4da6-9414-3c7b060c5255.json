@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "33f61735-ee28-4da6-9414-3c7b060c5255",
+  "issue_id": "decision-flywheel-7d63acc8-4474-411d-ba31-45b379285e77",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-14T22:55:50.327Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Bind console Google sign-in evidence to central cross-app identity",
+    "description": "Ryan authorized local cross-app Google identity implementation through parent. Coordinate exact challenge/session evidence contract with Prospectus owner before coding. Preserve code+PKCE+browser-bound one-use state+nonce. Keep independent ID/access evidence server-side only; no token browser storage/logs, no email merge, and identities array alone never proves current Google login. Central owner handles Google issuer/sub to canonical Person plus pool aliases and ambiguity fail-closed. Synthetic specs: two registered pools same Google subject retain account continuity, wrong issuer/client/pair/nonce/replay rejected. Related local console story decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28 and central initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9. No storage adapter/hosting, EC2/IAM/OAuth grants/DNS or public push.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "cyclotron-console"
+    }
+  }
+}

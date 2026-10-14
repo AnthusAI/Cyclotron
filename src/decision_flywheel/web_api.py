@@ -400,7 +400,12 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         if request.url.path.startswith(('/graphql','/runs/')):
             if not same_origin(request):
                 return JSONResponse({'error':'cross-origin access refused'}, status_code=403)
-            authenticated = await account_access.authenticated(request) if account_access else authorized(request)
+            from .prospectus_accounts import ProspectusUnavailable
+            try:
+                authenticated = await account_access.authenticated(request) if account_access else authorized(request)
+            except ProspectusUnavailable:
+                return JSONResponse({'error':'account service unavailable; try again'}, status_code=503,
+                    headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Vary':'Cookie'})
             if not authenticated:
                 return JSONResponse({'error':'authentication required'}, status_code=401)
         response = await next_handler(request)

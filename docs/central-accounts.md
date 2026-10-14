@@ -1,5 +1,97 @@
 # Central accounts integration boundary
 
+## Optional cross-app Google identity experiment
+
+The local-only cross-app identity mode is explicitly selected by injecting a
+`GoogleIdentityClient` as `HostedAccounts(..., google_identity=identity)`. It uses
+the central owner's separate identity factory, not an activated account Lambda.
+It does not change standalone/offline use. No production client, registry policy,
+runtime role or OAuth configuration was created for this experiment.
+
+The agreed server-to-server contract is:
+
+1. Before the browser redirect, the SigV4 BFF calls
+   `POST /v1/identities/google/challenge {}` without a human token. The response
+   `{challengeId, nonce, expiresAt}` has a maximum 300-second lifetime and is
+   centrally bound to the registered product role, Cognito issuer, exact client
+   and reviewed federation policy revision. The BFF validates its shape and
+   expiry and binds its nonce/ID to the independent one-use browser state and PKCE
+   verifier. Neither the challenge ID nor the PKCE verifier is accepted from the
+   browser callback.
+2. The callback obtains both JWTs from the same code exchange and independently
+   verifies their signatures, issuer, token use and client. In this mode it also
+   requires exact ID audience, matching subject/authentication time/nonempty
+   `origin_jti`, authentication no older than 300 seconds, and the expected ID
+   nonce. Distinct JWT signing keys and JWT IDs are allowed. Existing optional
+   `at_hash` verification remains in place.
+3. It calls `POST /v1/identities/google/resolve {challengeId}` with the access JWT
+   in `X-Prospectus-Human-Token` and ID JWT in
+   `X-Prospectus-Identity-Token`. Both proof headers and the request body are
+   SigV4 signed using temporary runtime credentials, sent only to the fixed
+   configured central HTTPS endpoint, without redirects. The identity header is
+   forbidden on every other route. Resolve returns `{person:{id,createdAt}}`.
+4. Only after successful central resolution does the BFF create an opaque local
+   session bound to that Person. The ID JWT is discarded after the callback;
+   only the access JWT remains in bounded server memory. Tokens and CSRF values
+   are omitted from session representations. No JWT goes to browser storage,
+   response bodies, cookies, local files or application logs. A callback/state
+   replay fails before another code exchange or central resolution.
+5. Each later authenticated request calls `GET /v1/identities/me` with access
+   evidence only. It returns `{person}` or `{person:null}` and never enrolls.
+   Missing/changed Person or denied continuation revokes the local session;
+   central unavailability fails closed. Central continuation requires the
+   enrolled authentication time and hashed `origin_jti` family plus the current
+   role/client/policy provenance. A new login family requires a fresh challenge.
+   The console does not implement refresh-token storage or automatic refresh.
+
+Central owns Google subject extraction and canonical association. The BFF never
+uses email, username prefixes or a Cognito `identities` array to infer identity.
+The current automatic central policy requires a reviewed built-in Google-only
+configuration and exactly one unlinked Google identity; ambiguous profiles fail
+closed. This is a trust contract for the Cognito federation configuration, not
+direct verification of a Google-signed token. Proof-pair retries under the same
+challenge are centrally idempotent until expiry; changed proof or conflicting
+identity is refused. The BFF starts a new login after an unsuccessful callback
+rather than retaining a failed proof pair for browser-driven retries.
+
+The old accounts API and this identity factory are **not assumed unified**.
+Before exposing account state, and before account-create side effects, the BFF
+requires the accounts response Person to equal the enrolled canonical Person.
+Mismatch (including a missing old-account Person) fails closed. A synthetic
+accounts fixture can demonstrate account continuity, but does not establish that
+the existing account storage can consume these canonical Persons. Memberships
+and entitlements remain central; there is no implicit product or staff grant.
+
+This code supplies nonce/state/PKCE and enforces proof freshness regardless of
+provider UI behavior. Reauthentication behavior still needs live client review;
+AWS documents that the `prompt` parameter depends on the managed-login branding
+version, so no unverified prompt setting is treated as a freshness guarantee.
+See [AWS authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html).
+
+### Local cross-language verification
+
+Run `PYTHONPATH=src python scripts/verify_google_identity_contract.py PATH_TO_PROSPECTUS`
+with the optional accounts dependencies and the Prospectus checkout's locked
+Node/tsx installation. The script invokes its real
+`accounts/testing/google-harness.ts` factory through JSON lines with public RSA
+JWKS. It opens no HTTP listener and makes no cloud/provider calls. Two instances
+of this BFF model the two product registrations; it does not modify Papyrus.
+
+Verified on 2026-10-14: distinct synthetic pool subjects and independent access/ID
+signing keys resolved to one central Person. A deliberately synthetic accounts
+adapter showed that Person reopening the same account and scoped GraphQL store.
+Wrong issuer/client, wrong token family, wrong nonce and ambiguous linked
+profiles failed. Reusing local callback state was refused before another central
+resolution; identical central proof retry succeeded and changed proof returned
+409. The handler's gateway caller context is synthetic: this verifies no deployed
+IAM enforcement, live Google sign-in, account-storage unification or persistence
+durability. An independently issued replacement access JWT in the enrolled
+family continued successfully; changing the family revoked the BFF session
+without another enrollment call. Focused Python account/session/web regressions
+passed 95 tests.
+
+## Existing account boundary
+
 The existing console remains `trace-ui/src/WebApp.tsx`, served by
 `decision_flywheel.web_api`. The optional accounts adapter adds a hosted access
 boundary without changing the offline exporter or local workspace command.
@@ -67,8 +159,10 @@ associate identities. The callback is the configured public origin followed by
 `/api/session`, `/api/accounts`, and `/api/accounts/select`. Mutations require an
 exact configured Origin and a session CSRF token. The OAuth callback accepts the
 cross-site provider redirect only with its browser-bound state proof. Account
-creation requires a retained UUID idempotency key. Merely signing in or listing
-accounts never creates a central person or account.
+creation requires a retained UUID idempotency key. In the original pool-bound
+mode, signing in or listing accounts never creates a central person or account.
+The optional Google mode explicitly resolves/enrolls a canonical Person at
+sign-in; it still creates no account or membership merely by signing in.
 
 Access tokens remain in bounded server memory. The browser receives only an
 opaque HttpOnly, Secure, SameSite=Lax `__Host-` session cookie, plus a CSRF token

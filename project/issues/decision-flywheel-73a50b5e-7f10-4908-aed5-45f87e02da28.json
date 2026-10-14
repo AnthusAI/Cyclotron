@@ -24,10 +24,17 @@
       "text": "Local account UI/session increment verified:73 focused Python specs,252 UI specs, production build and focused new-code lint pass. RSA-signed mock Cognito tests cover signature/issuer/client/token_use/expiry, PKCE/state/nonce, secure opaque sessions and logout; equal emails never link subjects. Shared Prospectus0.1.1 selector/types installed from checksum-verified archive. Browser verified new-person create/select, Alpha/Beta switch, viewer-only Beta access and logout; fixture only, no live Google/AWS/charges/email. Cross-tab delayed writes stay bound to original account via scoped HTTP/WS/timeline transport; server reauthorizes every operation. Hosting-specific work paused after Ryan requested local-default optional cloud adapter research. No cloud provisioning or retry of rejected public push.",
       "created_at": "2026-10-14T21:37:18.634569Z",
       "comment_type": "default"
+    },
+    {
+      "id": "866d9695-9456-4e3d-9075-01b404584717",
+      "author": "home",
+      "text": "Resumed local cross-app Google identity work per Ryan authorization. New detailed story decision-flywheel-7d63acc8-4474-411d-ba31-45b379285e77 records agreed central challenge/session contract and verified95 Python tests plus actual two-pool Python-to-TypeScript factory proof. Accounts storage integration remains separate and fail-closed on Person mismatch. Hosting/storage design decisions and public publication remain paused.",
+      "created_at": "2026-10-14T23:04:10.202886Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-14T21:37:18.634602Z",
+  "updated_at": "2026-10-14T23:04:10.202913Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

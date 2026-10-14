@@ -3,7 +3,7 @@
 The host must verify its session access JWT before passing it here. Prospectus
 independently verifies that JWT and the SigV4 runtime identity on every call.
 """
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 import re
 from urllib.parse import quote, urlsplit
@@ -37,18 +37,30 @@ class SigV4Transport:
         self.session = session or get_session()
         self.client = client or httpx.Client(timeout=10, follow_redirects=False)
 
-    def __call__(self, method, path, human_token, body=None, idempotency_key=None):
+    def __call__(self, method, path, human_token, body=None, idempotency_key=None, *, identity_token=None):
         from botocore.auth import SigV4Auth
         from botocore.awsrequest import AWSRequest
-        if not (path == '/v1/accounts' or path.startswith('/v1/accounts/') or path == '/v1/identities/resolve') or '?' in path or '#' in path:
+        challenge = path == '/v1/identities/google/challenge' and method == 'POST'
+        resolution = path == '/v1/identities/google/resolve' and method == 'POST'
+        if not (path == '/v1/accounts' or path.startswith('/v1/accounts/') or path == '/v1/identities/resolve'
+                or challenge or resolution or path == '/v1/identities/me' and method == 'GET') or '?' in path or '#' in path:
             raise ValueError('unsupported accounts path')
-        if not human_token or '\r' in human_token or '\n' in human_token:
+        def valid_token(value):
+            return isinstance(value, str) and 0 < len(value) <= 16384 and not any(character in value for character in ('\r', '\n'))
+        if (not challenge and not valid_token(human_token)
+                or challenge and (human_token is not None or body != {})
+                or resolution and not valid_token(identity_token)
+                or not resolution and identity_token is not None):
             raise AccountAccessDenied('verified session required')
         try:
             credentials = self.session.get_credentials().get_frozen_credentials()
             if not credentials.token:
                 raise ProspectusUnavailable('temporary runtime credentials required')
-            headers = {'Content-Type': 'application/json', 'X-Prospectus-Human-Token': human_token}
+            headers = {'Content-Type': 'application/json'}
+            if human_token is not None:
+                headers['X-Prospectus-Human-Token'] = human_token
+            if identity_token is not None:
+                headers['X-Prospectus-Identity-Token'] = identity_token
             if idempotency_key:
                 headers['Idempotency-Key'] = idempotency_key
             request = AWSRequest(method=method, url=self.endpoint + path,
@@ -57,7 +69,7 @@ class SigV4Transport:
             prepared = request.prepare()
             response = self.client.request(method, prepared.url, content=prepared.body,
                 headers=dict(prepared.headers), follow_redirects=False, timeout=10)
-            if response.status_code in (401, 403):
+            if response.status_code in (401, 403, 409):
                 raise AccountAccessDenied('account access refused')
             if response.status_code not in (200, 201):
                 raise ProspectusUnavailable('account service unavailable')
@@ -115,7 +127,7 @@ class AccountsClient:
 @dataclass(frozen=True)
 class VerifiedAccountSession:
     """Returned only by the host's verified, server-side OAuth session resolver."""
-    access_token: str
+    access_token: str = field(repr=False)
     person_id: str
     account_id: str
 

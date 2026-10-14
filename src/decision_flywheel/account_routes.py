@@ -14,9 +14,11 @@ from .prospectus_accounts import (AccountAccessDenied, AccountWorkspaceAccess,
 
 
 class HostedAccounts:
-    def __init__(self, config, accounts, workspace_for_account, *, verifier=None, sessions=None, token_client=None):
+    def __init__(self, config, accounts, workspace_for_account, *, verifier=None, sessions=None, token_client=None,
+                 google_identity=None):
         self.config = config
         self.accounts = accounts
+        self.google_identity = google_identity
         self.verifier = verifier or CognitoTokenVerifier(config.issuer, config.client_id)
         self.sessions = sessions or OAuthSessions(self.verifier)
         self.token_client = token_client or httpx.AsyncClient(timeout=10, follow_redirects=False)
@@ -32,8 +34,12 @@ class HostedAccounts:
             claims = await asyncio.to_thread(self.verifier.access, session.access_token)
             if claims['sub'] != session.subject:
                 raise SessionRejected('session identity changed')
+            if self.google_identity:
+                person = await asyncio.to_thread(self.google_identity.me, session.access_token)
+                if not person or person['id'] != session.person_id:
+                    raise SessionRejected('session identity enrollment changed')
             return session
-        except SessionRejected:
+        except (SessionRejected, AccountAccessDenied):
             self.sessions.revoke(identifier)
             return None
 
@@ -78,6 +84,8 @@ class HostedAccounts:
                 'entitlement': {key: entitlement[key] for key in ('accountId', 'product', 'status', 'capabilities')}})
         if person is None and cleaned:
             raise ProspectusUnavailable('invalid account identity response')
+        if self.google_identity and (person is None or person['id'] != session.person_id):
+            raise AccountAccessDenied('account identity service is not aligned')
         session.person_id = person['id'] if person else None
         return cleaned
 
@@ -125,7 +133,8 @@ class HostedAccounts:
         @app.get('/auth/login')
         async def login():
             try:
-                pending = self.sessions.begin()
+                challenge = await asyncio.to_thread(self.google_identity.challenge) if self.google_identity else None
+                pending = self.sessions.begin(challenge)
             except SessionRejected:
                 raise HTTPException(503, 'sign-in unavailable; try again') from None
             query = urlencode({'client_id': self.config.client_id, 'response_type': 'code',
@@ -152,8 +161,17 @@ class HostedAccounts:
                     raise SessionRejected('authorization exchange failed')
                 tokens = result.json()
                 access_token, id_token = tokens['access_token'], tokens['id_token']
-                claims = await asyncio.to_thread(self.verifier.token_pair, access_token, id_token, pending.nonce)
+                if self.google_identity:
+                    if not pending.challenge_id:
+                        raise SessionRejected('identity challenge required')
+                    claims = await asyncio.to_thread(self.verifier.token_pair, access_token, id_token,
+                        pending.nonce, require_session_binding=True)
+                    person = await asyncio.to_thread(self.google_identity.resolve, access_token, id_token, pending.challenge_id)
+                else:
+                    claims = await asyncio.to_thread(self.verifier.token_pair, access_token, id_token, pending.nonce)
                 identifier, session = self.sessions.create(access_token, claims)
+                if self.google_identity:
+                    session.person_id = person['id']
                 self.sessions.revoke(request.cookies.get(self.config.cookie_name))
                 response = RedirectResponse('/', status_code=303)
                 response.set_cookie(self.config.cookie_name, identifier,
@@ -189,6 +207,10 @@ class HostedAccounts:
         @app.post('/api/accounts')
         async def create(request: Request):
             session = await self._csrf(request)
+            if self.google_identity:
+                # Isolated identity and legacy account stores are not assumed
+                # unified: prove their person mapping before any account write.
+                await self._listing(session)
             try:
                 body = await request.json()
                 account = await asyncio.to_thread(self.accounts.create_account, session.access_token,

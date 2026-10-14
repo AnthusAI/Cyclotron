@@ -1,0 +1,36 @@
+{
+  "id": "decision-flywheel-7d63acc8-4474-411d-ba31-45b379285e77",
+  "title": "Bind console Google sign-in evidence to central cross-app identity",
+  "description": "Ryan authorized local cross-app Google identity implementation through parent. Coordinate exact challenge/session evidence contract with Prospectus owner before coding. Preserve code+PKCE+browser-bound one-use state+nonce. Keep independent ID/access evidence server-side only; no token browser storage/logs, no email merge, and identities array alone never proves current Google login. Central owner handles Google issuer/sub to canonical Person plus pool aliases and ambiguity fail-closed. Synthetic specs: two registered pools same Google subject retain account continuity, wrong issuer/client/pair/nonce/replay rejected. Related local console story decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28 and central initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9. No storage adapter/hosting, EC2/IAM/OAuth grants/DNS or public push.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "85dfd287-5111-4320-8450-4a6b4d61b3bf",
+      "author": "home",
+      "text": "Local opt-in implementation verified: GoogleIdentityClient challenge/resolve/me contract agreed with central owner, related kanbus-b47a71 and kanbus-04402f. Central nonce+UUID+expiry bound to independent browser state/PKCE; callback independently verifies access/ID signature/issuer/client/sub/nonce/fresh auth_time/same origin_jti, sends both signed headers only to fixed identity resolver. ID proof discarded after callback, opaque session retains access only with secret-safe repr. Me checks enrolled canonical Person; accounts mismatch blocks create BEFORE side effects.95 focused Python tests pass including outages/no fallback, wrong access/ID authority and replay. Actual Python BFF -> real TypeScript googleIdentityHandler via public-RSA JSON-lines harness PASS: two synthetic pools distinct pool subs same Google -> same Person and synthetic account/scoped GraphQL continuity; invalid issuer/client/family/nonce/ambiguous identities denied; exact central retry200 changed proof409. Reproduction scripts/verify_google_identity_contract.py; docs/central-accounts.md. No claim old account API unified, live Google, deployed SigV4, durability or cloud activation. No storage/hosting/grants/DNS/public push. Local slice ready; actual canonical account-storage adapter and reviewed cloud registry/client/runtime remain pending.",
+      "created_at": "2026-10-14T23:04:06.202486Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-14T22:55:50.327741Z",
+  "updated_at": "2026-10-14T23:04:06.202511Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "cyclotron-console"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

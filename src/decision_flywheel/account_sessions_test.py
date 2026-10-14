@@ -20,9 +20,10 @@ def identity():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key())) | {'kid': 'synthetic', 'alg': 'RS256', 'use': 'sig'}
     verifier = CognitoTokenVerifier(ISSUER, CLIENT, jwks={'keys': [jwk]})
+    now = int(time.time())
     def token(kind='access', **changes):
-        claims = dict(iss=ISSUER, sub='provider-subject', exp=int(time.time()) + 1800,
-            iat=int(time.time()), token_use=kind)
+        claims = dict(iss=ISSUER, sub='provider-subject', exp=now + 1800,
+            iat=now, token_use=kind, auth_time=now, origin_jti='synthetic-lineage')
         claims.update({'client_id': CLIENT} if kind == 'access' else {'aud': CLIENT, 'nonce': 'expected-nonce'})
         claims.update(changes)
         return jwt.encode(claims, key, algorithm='RS256', headers={'kid': 'synthetic'})
@@ -63,6 +64,35 @@ def test_access_and_id_tokens_must_agree_and_the_id_token_must_match_nonce(ident
     for id_token in [token('id', nonce='wrong'), token('id', sub='another-person'), token('id', aud='other')]:
         with pytest.raises(SessionRejected):
             verifier.token_pair(token(), id_token, 'expected-nonce')
+
+
+def test_enrollment_requires_independently_verified_matching_fresh_session_evidence(identity):
+    verifier, token = identity
+    assert verifier.token_pair(token(), token('id'), 'expected-nonce', require_session_binding=True)
+    for changes in (dict(origin_jti='other'), dict(origin_jti=''), dict(origin_jti=None),
+                    dict(auth_time=int(time.time()) - 301), dict(auth_time=True), dict(aud=[CLIENT])):
+        with pytest.raises(SessionRejected):
+            verifier.token_pair(token(), token('id', **changes), 'expected-nonce', require_session_binding=True)
+    old = dict(auth_time=int(time.time()) - 301)
+    with pytest.raises(SessionRejected):
+        verifier.token_pair(token(**old), token('id', **old), 'expected-nonce', require_session_binding=True)
+
+
+def test_central_nonce_and_expiry_are_bound_to_the_local_single_use_login(identity):
+    from .google_identity import GoogleChallenge
+    verifier, token = identity
+    clock = [1000]
+    sessions = OAuthSessions(verifier, clock=lambda: clock[0])
+    challenge = GoogleChallenge('central-challenge', 'central-nonce', 1010)
+    pending = sessions.begin(challenge)
+    assert pending.nonce == 'central-nonce' and pending.challenge_id == 'central-challenge'
+    assert pending.expires_at == 1010
+    assert pending.nonce not in repr(pending) and pending.code_verifier not in repr(pending)
+    _, session = sessions.create(token(), {'sub': 'subject', 'exp': 3000})
+    assert session.access_token not in repr(session) and session.csrf_token not in repr(session)
+    clock[0] = 1011
+    with pytest.raises(SessionRejected):
+        sessions.consume(pending.state, pending.browser_cookie)
 
 
 def test_oauth_state_is_browser_bound_single_use_and_carries_pkce_and_nonce(identity):
