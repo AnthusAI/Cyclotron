@@ -95,3 +95,10 @@ class CatalogArchive:
             tables[member['table']].append(envelope['row'])
         return self.validator({'schema':self.snapshot_schema,'tables':tables,self.snapshot_metadata_field:manifest[self.metadata_field]},
             max_records=self.max_records,max_bytes=self.max_bytes)
+
+
+class LegacyCatalogArchive(CatalogArchive):
+    """Read known v1 manifests explicitly and upgrade their validated records."""
+    columns={table:columns for table,columns in COLUMNS.items() if table!='priming_drafts'}
+    snapshot_schema='cyclotron-catalog/v1'
+    def publish(self,snapshot): raise ValueError('legacy archive is read-only; publish v2')

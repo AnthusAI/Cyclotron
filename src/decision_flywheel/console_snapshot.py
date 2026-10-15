@@ -10,7 +10,7 @@ from .catalog_snapshot import COLUMNS as CATALOG_COLUMNS, KEYS as CATALOG_KEYS
 from .catalog_snapshot import budgets, decode, encode, validate as validate_catalog
 
 
-SCHEMA='cyclotron-console/v1'
+SCHEMA='cyclotron-console/v2'
 TABLES={**CATALOG_COLUMNS,
     'web_runs':('id','name','mode','status','created_at','config'),
     'web_events':('sequence','run_id','source_id','payload'),
@@ -49,6 +49,11 @@ def validate(snapshot, *, max_records=10000,max_bytes=64000000):
     content=encode(snapshot)
     if len(content)>max_bytes: raise ValueError('console snapshot byte budget exceeded')
     snapshot=decode(content)
+    if isinstance(snapshot,dict) and snapshot.get('schema')=='cyclotron-console/v1':
+        if not isinstance(snapshot.get('tables'),dict) or set(snapshot['tables'])!=set(TABLES)-{'priming_drafts'}:
+            raise ValueError('complete legacy console tables required')
+        snapshot['schema']=SCHEMA
+        snapshot['tables']['priming_drafts']=[]
     if not isinstance(snapshot,dict) or set(snapshot)!={'schema','tables','sequences'} or snapshot['schema']!=SCHEMA:
         raise ValueError('unsupported console snapshot')
     tables=snapshot['tables']
@@ -82,7 +87,7 @@ def validate(snapshot, *, max_records=10000,max_bytes=64000000):
         value=sequences[table]
         if type(value) is not int or not max((row[column] for row in tables[table]),default=0)<=value<2**63:
             raise ValueError('invalid native sequence watermark')
-    validate_catalog({'schema':'cyclotron-catalog/v1','feedback_sequence':sequences['item_feedback'],
+    validate_catalog({'schema':'cyclotron-catalog/v2','feedback_sequence':sequences['item_feedback'],
         'tables':{table:[{key:value for key,value in row.items() if key!='_rowid'} for row in tables[table]] for table in CATALOG_COLUMNS}},
         max_records=max_records,max_bytes=max_bytes)
     runs={row['id']:row for row in tables['web_runs']}
@@ -201,3 +206,10 @@ class ConsoleArchive(CatalogArchive):
         if not isinstance(value,dict) or set(value)!=set(SEQUENCES): raise ValueError('invalid console watermarks')
         if any(type(number) is not int or not 0<=number<2**63 for number in value.values()):
             raise ValueError('invalid console watermarks')
+
+
+class LegacyConsoleArchive(ConsoleArchive):
+    """Explicit read-only reader for v1 console manifests."""
+    columns={table:columns for table,columns in TABLES.items() if table!='priming_drafts'}
+    snapshot_schema='cyclotron-console/v1'
+    def publish(self,snapshot): raise ValueError('legacy archive is read-only; publish v2')

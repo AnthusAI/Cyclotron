@@ -102,12 +102,38 @@ Required shared inputs are `priming.py`, `priming_context.py`, `priming_files.py
 `priming_examples` API/meta binding and frozen runtime/workspace priming context.
 Papyrus accepted bootstrap is `ebdbff1`.
 
-This branch's root migration preserves raw metadata (including an existing
-`priming_examples` key), but that does **not** establish priming API/catalog
-compatibility. The existing priming behavior must be incorporated through shared
-interfaces and covered by migration tests before cloud enablement. Its owner
-worktrees and publication host/UI files are untouched; no competing priming
-implementation has been created.
+The existing priming modules and own API/meta/context delta are now ported through
+`PrimingStorage` and a named transaction view. Its transaction commits the draft,
+new catalog revisions, and explicit human feedback together. External HTTP calls
+remain outside storage transactions; uncertain calls retain their existing
+idempotency keys and late-response/version/cancellation checks. `catalog_priming`
+reads current revision-pinned accepted evidence in one snapshot. A retracted
+latest vote cannot revive an older label. Raw imported inputs and transformation
+revision feedback remain separate from the final human label/rationale.
+
+`PrimingService.examples(...)` and `Cyclotron.open(..., priming_examples=...)`
+are supported. Accepted context is immutable for a created root and frozen run,
+training only, excluded from operational feedback and scoring, and prohibited as
+an operational target. Existing roots cannot be silently retrofitted. The native
+root metadata snapshot retains the frozen examples; shared/runtime records must
+still migrate as a matching quiescent bundle.
+
+Catalog and full console snapshots now use v2 and include `priming_drafts`.
+Known v1 snapshots upgrade explicitly to an empty draft table after structural
+validation. `LegacyCatalogArchive` and `LegacyConsoleArchive` are explicit
+read-only readers for old immutable v1 manifests; ordinary readers reject a
+mismatched manifest schema. New publications contain all drafts, including raw
+source, transformation feedback, accepted labels and provenance. There is no
+fallback that silently omits draft evidence.
+
+The original local GraphQL priming API is ported without changing auth/origin
+controls. Its local default service is lazy to avoid making unrelated console
+routes depend on optional file-format libraries. Hosted account mode rejects a
+global priming service and fails closed before constructing one or touching its
+catalog/transformer. An account-scoped priming host composition remains required
+before hosted priming activation. This is distinct from the shared repository
+conversion; no hosted priming, provider, publication UI or cloud storage authority
+has been activated. Owner worktrees and publication host/UI files are untouched.
 
 ## Focused verification
 
@@ -152,4 +178,15 @@ Embedded root records now export `cyclotron-embedded-root/v2`, including the
 column with zero. Native restore explicitly validates and upgrades v1 snapshots;
 v2 snapshots retain the exact count. Unknown schema remains rejected. Neither
 this parity update nor the earlier repository extraction selects cloud authority.
-Priming's own API/catalog schema delta remains a separate integration step.
+Priming's own API/catalog schema delta is incorporated as described above; hosted composition remains gated.
+
+
+## Priming verification checkpoint
+
+The combined focused priming/catalog/console/root/learning/guard checks passed
+122 tests. Local API/account checks passed 52 tests before final additional
+fail-closed and explicit-storage-selection checks. The final focused safety rerun passed 10 tests; the publication owner harness passed 83 again. The Papyrus owner's actual
+`priming_bootstrap_test.py` passed 10 tests loaded against this engine source:
+accepted source/HTTP/file context, rationale, frozen snapshot and no-retrofit
+behavior. This is synthetic cross-owner evidence, not a live provider or cloud
+claim. No heavy build/full suite was run.

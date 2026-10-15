@@ -5,7 +5,7 @@ import json
 from .models import DecisionTask
 
 
-SCHEMA = 'cyclotron-catalog/v1'
+SCHEMA = 'cyclotron-catalog/v2'
 COLUMNS = {
     'classifiers': ('id','revision','name','config','created_at'),
     'item_lists': ('id','name'),
@@ -13,8 +13,10 @@ COLUMNS = {
     'item_feedback': ('sequence','request_id','classifier_id','classifier_revision','list_id','item_id','item_revision','label','comment','created_at'),
     'item_predictions': ('run_id','list_id','item_id','item_revision','payload'),
     'item_feedback_retractions': ('request_id','feedback_request_id','created_at'),
+    'priming_drafts': ('id','payload'),
 }
 KEYS = {
+    'priming_drafts': ('id',),
     'classifiers': ('id','revision'), 'item_lists': ('id',),
     'list_item_revisions': ('list_id','id','revision'), 'item_feedback': ('sequence',),
     'item_predictions': ('run_id','list_id','item_id','item_revision'),
@@ -44,6 +46,11 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
     content=encode(snapshot)
     if len(content)>max_bytes: raise ValueError('catalog snapshot byte budget exceeded')
     snapshot=decode(content)
+    if isinstance(snapshot,dict) and snapshot.get('schema')=='cyclotron-catalog/v1':
+        if not isinstance(snapshot.get('tables'),dict) or set(snapshot['tables'])!=set(COLUMNS)-{'priming_drafts'}:
+            raise ValueError('complete legacy catalog tables required')
+        snapshot['schema']=SCHEMA
+        snapshot['tables']['priming_drafts']=[]
     if not isinstance(snapshot,dict) or set(snapshot)!={'schema','tables','feedback_sequence'} or snapshot['schema']!=SCHEMA:
         raise ValueError('unsupported catalog snapshot')
     tables=snapshot['tables']
@@ -65,6 +72,17 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
             seen.add(key)
             for name in ('created_at','imported_at','occurred_at'):
                 if name in row: datetime.fromisoformat(row[name].replace('Z','+00:00'))
+    for row in tables['priming_drafts']:
+        draft=decode(row['payload'])
+        if (not isinstance(draft,dict) or draft.get('id')!=row['id'] or type(draft.get('version')) is not int
+                or draft['version']<1 or draft.get('status') not in ('starting','failed','invalid','preview','queued','running','clarification','accepted','cancelled')
+                or not isinstance(draft.get('contract'),dict) or not isinstance(draft.get('source'),dict)
+                or not isinstance(draft.get('rows'),list) or not isinstance(draft.get('actions'),dict)
+                or not isinstance(draft.get('feedback'),list)):
+            raise ValueError('invalid priming draft record')
+        signature=json.dumps({'contract':draft['contract'],'source':draft['source']},sort_keys=True,separators=(',',':'),allow_nan=False)
+        if draft.get('signature')!=sha256(signature.encode()).hexdigest():
+            raise ValueError('invalid priming draft signature')
     classifiers={}
     generations={}
     for row in tables['classifiers']:

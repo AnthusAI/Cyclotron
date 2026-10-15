@@ -340,6 +340,7 @@ class Cyclotron:
                  max_requests: int = 100, redact: Sequence[str] = (), observer: Callable[[dict], None] | None = None,
                  lease=None, review_program: ReviewProgram | None = ReviewProgram(),
                  seed_rubrics: Mapping[str, str] | None = None,
+                 priming_examples: Mapping[str, Sequence[LabeledItem]] | None = None,
                  seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None,
                  share_supporting_questions: bool | None = None, learning: str = "inline",
                  max_superseded_passes: int = 3):
@@ -354,6 +355,9 @@ class Cyclotron:
                 not isinstance(text, str) for text in seed_rubrics.values()):
             raise ValueError("seed_rubrics maps classifier ids to rubric text")
         self.seed_rubrics = seed_rubrics
+        from .priming_context import encode_priming
+        self.requested_priming = None if priming_examples is None else encode_priming(
+            dict(priming_examples), {spec.id:spec.task for spec in definition.classifiers}, redact=redact)
         self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
         if share_supporting_questions is not None and not isinstance(share_supporting_questions, bool):
             raise ValueError("share_supporting_questions must be a bool")
@@ -400,6 +404,18 @@ class Cyclotron:
             raise ValueError("this store belongs to a different cyclotron definition")
         with self.root_storage.transaction():
             self.root_storage.insert_meta('definition',_json({'fingerprint': definition.fingerprint, 'definition': asdict(definition)}),ignore=True)
+        from .priming_context import decode_priming
+        stored_priming = self.root_storage.meta('priming_examples')
+        saved_priming = json.loads(stored_priming[0]) if stored_priming else {}
+        if stored_priming and self.requested_priming is not None and self.requested_priming != saved_priming:
+            raise ValueError("this store has different accepted priming; create a new store")
+        if not stored_priming and self.requested_priming:
+            if saved:
+                raise ValueError("priming must be supplied when the store is first created")
+            saved_priming = self.requested_priming
+        with self.root_storage.transaction():
+            self.root_storage.insert_meta('priming_examples',_json(saved_priming),ignore=True)
+        self.priming_examples = decode_priming(saved_priming)
         self._batch_log: ContextVar[list | None] = ContextVar(f"cyclotron_batches_{id(self)}", default=None)
         self._batches = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
@@ -416,7 +432,7 @@ class Cyclotron:
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"]
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task, rubric=self._seed(spec.id),
+                path, ClassifierConfig(spec.task, example_ids=tuple(row.item.id for row in self.priming_examples.get(spec.id,())), rubric=self._seed(spec.id),
                                        tasks=self._seed_questions(spec, created=saved is None)),
                 # Each output gets its own copy so its optimizer events reach only its own
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
@@ -545,6 +561,8 @@ class Cyclotron:
         async with self.execution(execution_guard=execution_guard):
             if not isinstance(item, Item):
                 raise ValueError("decide needs an Item")
+            if any(item.id == row.item.id for rows in self.priming_examples.values() for row in rows):
+                raise ValueError("priming items cannot be operational targets")
             self._batches = []
             for spec in self.definition.classifiers:
                 spec.task.validate_target(item)
@@ -1317,7 +1335,8 @@ class Cyclotron:
         return text
 
     def _partitions(self, classifier: str):
-        return feedback_partitions(self.wheels[classifier], self._item_values(), self.definition.seed)
+        training, development, protected = feedback_partitions(self.wheels[classifier], self._item_values(), self.definition.seed)
+        return (*self.priming_examples.get(classifier,()),*training), development, protected
 
     def _item_values(self) -> dict[str, dict]:
         return {item_id: json.loads(values) for item_id, values in

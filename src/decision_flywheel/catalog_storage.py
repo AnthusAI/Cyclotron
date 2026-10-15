@@ -59,6 +59,7 @@ class SQLiteCatalogStorage:
     def initialize_catalog(self):
         with self.connect() as db:
             db.executescript('''
+              CREATE TABLE IF NOT EXISTS priming_drafts(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS classifiers(id TEXT, revision INTEGER, name TEXT NOT NULL,
                 config TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(id,revision));
               CREATE TABLE IF NOT EXISTS item_lists(id TEXT PRIMARY KEY, name TEXT NOT NULL);

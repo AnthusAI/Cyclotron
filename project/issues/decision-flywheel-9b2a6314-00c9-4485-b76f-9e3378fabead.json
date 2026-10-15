@@ -132,10 +132,22 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "8da1850b-8d66-411a-825a-1948d3c1e913",
+      "author": "home",
+      "text": "Priming own delta from 7a76d97 now ported through PrimingStorage named transactions/accepted-record snapshot. Preserves raw file/source inputs, separate transformation feedback and explicit human rationale; draft+catalog revisions+human feedback atomically commit. Embedded priming_examples and PrimingService.examples APIs restored; frozen training-only context, operational overlap/reopen retrofit refusal, latest retracted vote does not revive old label. Catalog/console v2 include priming_drafts; explicit validated v1 snapshot upgrades and read-only legacy manifest readers. Local GraphQL priming ported; hosted priming fails closed until account-scoped composition. Focused122 + initial52API/account (overlap), final10safety, actual Papyrus bootstrap10 and publication83 pass. No UI/publication files, provider calls, full/heavy build or cloud writes. Live runtime still SQLite: selected authoritative cloud coordinator and runtime adapters remain required; Dynamo discovery is not live state. Story stays in_progress.",
+      "created_at": "2026-10-15T18:59:23.258284Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T18:50:53.109534Z",
+  "updated_at": "2026-10-15T18:59:23.258364Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

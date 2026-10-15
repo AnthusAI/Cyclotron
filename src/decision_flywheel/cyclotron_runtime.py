@@ -60,7 +60,7 @@ class CyclotronRuntime:
         allowed = {
             "selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
             "rubric_changes_every", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
-            "classifier_ids", "item_list_id", "cyclotron_id", "cyclotron_definition_revision",
+            "classifier_ids", "item_list_id", "priming_list_id", "cyclotron_id", "cyclotron_definition_revision",
         }
         if set(values) - allowed:
             raise ValueError("unknown run configuration option")

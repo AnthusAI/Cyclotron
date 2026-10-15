@@ -90,6 +90,19 @@ async def call(info, method, *args, **kwargs):
 @strawberry.type
 class Query:
     @strawberry.field
+    async def priming_contract(self, info: strawberry.Info, list_id: strawberry.ID, classifiers: JSON) -> JSON:
+        return await asyncio.to_thread(info.context['priming_service']().contract, str(list_id), classifiers)
+
+    @strawberry.field
+    async def priming_template(self, info: strawberry.Info, list_id: strawberry.ID, classifiers: JSON, format: str) -> JSON:
+        return await asyncio.to_thread(info.context['priming_service']().template, str(list_id), classifiers, format)
+
+    @strawberry.field
+    async def priming_draft(self, info: strawberry.Info, identifier: str) -> JSON:
+        return await asyncio.to_thread(info.context['priming_service']().get, identifier)
+
+
+    @strawberry.field
     async def cyclotrons(self,info:strawberry.Info)->JSON:
         return await call(info,'cyclotrons')
 
@@ -178,6 +191,17 @@ class Query:
 
 @strawberry.type
 class Mutation:
+    @strawberry.mutation
+    async def priming_command(self, info: strawberry.Info, action: str, payload: JSON) -> JSON:
+        priming = info.context['priming_service']()
+        payload = priming.safe(payload)
+        actions = {'file': priming.start_file, 'transform': priming.start_transform,
+                   'poll': priming.poll, 'feedback': priming.feedback, 'cancel': priming.cancel, 'accept': priming.accept}
+        if action not in actions or not isinstance(payload, dict):
+            raise ValueError('unknown priming command')
+        return await asyncio.to_thread(actions[action], **payload)
+
+
     @strawberry.mutation
     async def extend_cyclotron(self,info:strawberry.Info,parent_run_id:strawberry.ID,classifier_ids:list[str],name:str,confirmed:bool=False)->Run:
         service=info.context.get('service')
@@ -363,7 +387,21 @@ schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscrip
     extensions=[AccountAuthorization])
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None):
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None):
+    if account_access and priming is not None:
+        raise ValueError('hosted account access cannot use a global priming service')
+    configured_priming=priming
+    def priming_service():
+        nonlocal configured_priming
+        # A local default is lazy so unrelated console routes do not require
+        # optional priming dependencies. Hosted composition stays fail-closed:
+        # a global service cannot select another account's catalog or transformer.
+        if account_access:
+            raise ValueError('hosted priming requires an account-scoped service composition')
+        if configured_priming is None:
+            from .priming import PrimingService
+            configured_priming=PrimingService(store,redact=redact)
+        return configured_priming
     if account_access and (token or allow_unauthenticated_lan or service):
         raise ValueError('hosted account access cannot use shared-token/LAN authority or a global worker')
     if account_access and not hasattr(SchemaExtension, 'on_stream_result'):
@@ -392,6 +430,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         yield
         if service:
             await asyncio.to_thread(service.close)
+        if priming is None and configured_priming is not None:
+            configured_priming.close()
 
     app = FastAPI(lifespan=lifespan)
 
@@ -422,7 +462,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         if not authenticated or not same_origin(connection):
             raise HTTPException(403, 'access refused')
         return {'store':None if account_access else store,'service':service,'redact':redact,
-            'account_access':account_access,'connection':connection}
+            'account_access':account_access,'connection':connection,'priming_service':priming_service}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')

@@ -9,7 +9,7 @@ from .run_storage import SQLiteRunStorage, _UNSET, encode
 
 
 class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
-    def __init__(self, path, *, catalog_storage=None, definition_storage=None, run_storage=None):
+    def __init__(self, path, *, catalog_storage=None, definition_storage=None, run_storage=None, priming_storage=None):
         self.catalog_storage, self.definition_storage = catalog_storage, definition_storage
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -18,6 +18,8 @@ class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
         native = SQLiteRunStorage(lambda: self.connect(), lambda *args: self.register_run_definition(*args))
         self.run_storage = run_storage if run_storage is not None else native
         self.initialize_catalog()
+        from .priming_storage import SQLitePrimingStorage
+        self.priming_storage = priming_storage if priming_storage is not None else SQLitePrimingStorage(self.connect)
         self.initialize_cyclotrons()
         self.initialize_cyclotron_definitions()
 
