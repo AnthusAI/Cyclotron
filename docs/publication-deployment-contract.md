@@ -79,16 +79,14 @@ Storage owner `/task-4/cyclotron-console` checkpoint
 Read its `docs/storage-portability.md` before composition. This slice changes no
 engine SQL, catalog adapter, immutable payload adapter, coordinator or cloud
 resource. Full cloud execution/lease/session conversion and the cloud coordinator
-remain release dependencies. Existing `decision_log` carries current item values;
-immutable historical source revisions require the owning catalog/history contract
-and should use explicit source-revision identities until reconciled.
+remain release dependencies. Without the optional records composition, existing `decision_log` carries current
+item values. The frozen revision composition below supplies historical views;
+revision-specific learning still requires the runtime owner's support.
 
-Output-scoped steering is also a dependency: the current SDK's global review-rate
-override must not be exposed as though it changed only one publication. Papyrus's
-new panel accepts an optional host steering callback, which must stay absent
-until backed by an authorized output-scoped command. The shared controls are
-reused, not a new steering engine. This slice does not claim complete deployment
-mode parity or production authorization integration.
+Output-scoped proposal evaluation/promotion is now available through the injected
+native steering composition below. The SDK's global review-rate override remains
+global and is not exposed as a publication-specific mutation. Hosted ownership,
+full cloud conversion and production authorization integration remain dependencies.
 
 ## Verified evidence
 
@@ -114,3 +112,102 @@ Tracking: remote `decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce`, embed
 implementation after the initial planning hold; later publication/merge/rollout
 work is coordinated through the release owner. This contract does not itself
 activate a production endpoint, fake classifier, account mapping or data migration.
+
+## Frozen revision and steering composition checkpoint
+
+`PublicationLab(..., records=..., steering=...)` accepts optional compositions.
+`features` in every response reports whether frozen contexts, replay export and a
+steering handler are configured. Feature metadata is not authorization or cloud
+activation; all actor/account/publication checks still run.
+
+### Immutable source and binding joins
+
+`PublicationRecords(catalog, account_id=..., source_lists={...},
+binding_list=..., record_list=...)` uses only the existing injected catalog's
+`item_revision`, `upsert_list_items` and `snapshot_items` operations. The host
+creates/configures its account/lab-scoped lists. No SQL/file/S3/DynamoDB adapter,
+mutable head, distributed transaction or separate label authority is added.
+Canonical labels/learning remain in the injected SDK owner; catalog receipts are
+immutable provenance joins to its acknowledged event IDs.
+
+A reference is `{listId, itemId, revision, contentHash}`. `contentHash` hashes the
+canonical **decoded JSON revision**, not transport bytes or a presumed raw SQL
+fingerprint. The original immutable revision and source provenance are retained.
+A binding record has only `{id, occurred_at, values}`; values are exactly
+`{accountId, publicationId, revision, outputs}`. Private transport/auth material
+must stay outside these public binding snapshots. A binding revision cannot be
+reused for a changed output mapping. An output with recorded historical ownership
+cannot silently be assigned to a different publication; a reviewed migration is
+required.
+
+When records are configured, `decide` also requires
+`context: {sourceRef, bindingRef}`. The source's original ID/values must exactly
+match the model item. After actual SDK execution, a content-addressed context
+records the exact scoped prediction, source revision and binding snapshot. This
+address names a provenance envelope only: operational item identities, partition
+assignment and the model representation are unchanged. A failed/uncertain catalog
+acknowledgement never becomes a successful import; retrying the unchanged call
+reuses the existing SDK decision and publishes the same context.
+
+`review` additionally requires the returned `contextId`. Its request namespace
+includes that context; the verified SDK review and authoritative event cursor are
+then joined to it. Original and corrected explanations retain their own source
+and binding revisions. History reads the frozen source, not the SDK's latest
+item-value map, and marks older contexts read-only. Missing legacy provenance is
+explicit rather than filled from the current source.
+
+The current SDK uses latest item values for learning/review. Until its owner
+supports per-decision values, this composed mode refuses a changed source for an
+already-labeled item and refuses review against a superseded source. This guard
+avoids silently teaching from the wrong text. It is not a new learning/storage
+implementation. `feedbackReconciliationRequired` marks canonical feedback changed
+outside this composition; historical receipts do not overrule SDK retractions.
+
+`replay` with `{}` returns ordered, publication/output-scoped **export records**
+with original source, binding, displayed prediction and review. It does not execute
+learning. SDK event cursors order receipts, not wall-clock guesses. A native
+feedback event without a joined receipt (including an external retraction) blocks
+replay until explicit reconciliation, rather than resurrecting a withdrawn label.
+Tests replay a valid export into a fresh actual SDK store and preserve the final
+corrected label/explanation without labeling the sibling output. Bounded catalog
+and event budgets fail explicitly; cloud-scale indexed discovery and complete
+cross-domain migration remain owner work.
+
+### Output-scoped native steering
+
+`PublicationSteering(records, evaluators, owner_lock=..., allow_evaluation=False)`
+requires the **same existing single-writer owner lock** that protects other engine
+operations. It does not create a lease or distributed coordinator. The local
+integration test supplies the SDK's existing lock; the production host/storage
+owner must expose/review that ownership composition before enabling execution.
+The default refuses execution. Cloud execution remains off while the coordinator
+choice and runtime conversion are pending.
+
+Each `NativeOutputEvaluator(output_id, wheel, partitions=...)` wraps one existing
+native wheel. The host supplies authoritative training/development/protected
+partitions and their recorded propensities; none are invented by this adapter.
+The existing `improve(..., candidate_proposal=..., apply_promotion=False)` evaluates
+a human proposal with native fitting, evaluation firewalls and sibling guards.
+The separate `promote_trial` operation applies only an already evaluated,
+publication-bound trial and retains the native feedback/context/version guards.
+There is no direct rubric overwrite, force promotion or global rate mutation.
+
+The `steer` operation requires both `steer` and `read` actor capabilities. Payload:
+`{bindingRevision, bindingRef, classifier, requestId, expectedFingerprint, action,
+explanation, proposal}` for `action: 'evaluate'`; use `trialFingerprint` instead of
+`proposal` for `action: 'promote'`. Native proposal keys are `rubric`, `tasks`,
+`example_ids`, `dynamic_elements`. The explanation records steering intent and
+never becomes a classification rationale or human label. Sibling metrics are
+not returned as this publication's result.
+
+Immutable intent precedes dispatch; a completed receipt makes the unchanged retry
+safe even after reconstruction. A pending command with an ambiguous outcome fails
+closed for operator reconciliation and never automatically reexecutes. A lost
+settlement acknowledgement recovers the stored receipt without another native
+execution. This guarantee assumes the existing single owner and is **not** a
+claim that catalog appends provide distributed CAS. No live cloud claim, token
+issuer or paid provider validation is supplied.
+
+Reconciliation failures carry `code: reconciliation_required` through HTTP. The
+remote client preserves that state and never describes an ambiguous dispatch as
+a confirmed refusal or automatically retries it.

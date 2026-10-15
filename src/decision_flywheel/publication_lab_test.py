@@ -231,3 +231,16 @@ def test_http_boundary_rejects_cross_origin_malformed_operations_and_oversized_i
                 assert (await http.post(path,content=b' '*2_000_001)).status_code==413
                 assert model.calls==0
     run(scenario())
+
+
+def test_remote_uncertain_outcomes_remain_reconciliation_errors_without_automatic_retry():
+    async def scenario():
+        calls=[]
+        async def response(request):
+            calls.append(request)
+            return httpx.Response(409,json={'error':'Pending command needs reconciliation','code':'reconciliation_required'})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(response),base_url='http://offline.test') as http:
+            with pytest.raises(PublicationError,match='reconciliation') as error:
+                await HTTPPublicationClient(http).command('threat-intelligence','steer',{})
+            assert error.value.code=='reconciliation_required' and len(calls)==1
+    run(scenario())

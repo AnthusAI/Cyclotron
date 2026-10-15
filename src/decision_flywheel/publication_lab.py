@@ -1,6 +1,6 @@
 """Publication-scoped application contract over an injected Cyclotron facade.
 
-This module owns no persistence, credentials, cloud configuration or worker
+This module owns no physical storage adapter, credentials, cloud configuration or worker
 lifecycle. Hosts verify actors and supply account-scoped engines and bindings.
 Local HTTP tests are not an authorization to host the SQLite engine remotely.
 """
@@ -17,9 +17,10 @@ MAX_BYTES = 2_000_000
 
 
 class PublicationError(ValueError):
-    def __init__(self, message, status=409):
+    def __init__(self, message, status=409, *, code='publication_error'):
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 def text(value, name):
@@ -58,7 +59,7 @@ class PublicationActor:
 
 class PublicationLab:
     """One account's engine; authority stays with its existing persistence owner."""
-    def __init__(self, engine, *, account_id, bindings):
+    def __init__(self, engine, *, account_id, bindings, records=None, steering=None):
         self.engine = engine
         self.account_id = text(account_id, 'account identity')
         rows = tuple(bindings)
@@ -72,6 +73,10 @@ class PublicationLab:
         if not set(outputs) <= known:
             raise ValueError('binding names an unknown classifier output')
         self.bindings = MappingProxyType({row.publication_id: row for row in rows})
+        self.records,self.steering = records,steering
+        if records is not None:
+            if records.account_id!=self.account_id:raise ValueError('publication record account scope mismatch')
+            for binding in rows:records.check_binding(binding)
 
     def authorize(self, actor, publication, capability):
         if not isinstance(actor, PublicationActor) or actor.account_id != self.account_id:
@@ -97,21 +102,23 @@ class PublicationLab:
     async def command(self, actor, publication, operation, payload):
         if not isinstance(operation, str):
             raise PublicationError('operation must be text', 400)
-        capability = {'decide':'decide', 'review':'review', 'status':'read', 'history':'read', 'events':'read'}.get(operation)
+        capability = {'decide':'decide', 'review':'review', 'status':'read', 'history':'read', 'events':'read', 'replay':'read', 'steer':'steer'}.get(operation)
         if capability is None:
             raise PublicationError('unsupported publication operation', 400)
         binding = self.authorize(actor, publication, capability)
         if not isinstance(payload, dict):
             raise PublicationError('structured operation payload required', 400)
         envelope = {'contractVersion':CONTRACT, 'publicationId':publication, 'bindingRevision':binding.revision,
+                    'features':{'frozenContext':self.records is not None,'replayExport':self.records is not None,'steering':self.steering is not None},
                     'outputs':[{'id':cid, 'question':self.specs[cid].question,
                                 'classes':list(self.specs[cid].labels),
                                 'positiveLabel':self.specs[cid].positive_label} for cid in binding.outputs]}
-        if operation in ('decide', 'review') and payload.get('bindingRevision') != binding.revision:
+        if operation in ('decide', 'review', 'steer') and payload.get('bindingRevision') != binding.revision:
             raise PublicationError('publication binding revision changed')
         try:
             if operation == 'decide':
-                if set(payload) != {'bindingRevision','item'}:
+                expected={'bindingRevision','item'}|({'context'} if self.records is not None else set())
+                if set(payload) != expected:
                     raise PublicationError('unexpected decision fields', 400)
                 item = payload['item']
                 if not isinstance(item, dict) or set(item) != {'id','values'} or not isinstance(item['values'], dict):
@@ -120,11 +127,20 @@ class PublicationLab:
                 encoded = json.dumps(item, allow_nan=False)
                 if len(encoded.encode()) > MAX_BYTES:
                     raise PublicationError('item exceeds size limit', 413)
-                decision = await self.engine.decide(Item(item['id'], item['values']))
-                return {**envelope, 'decision':self.project(decision, binding)}
+                target=Item(item['id'],json.loads(json.dumps(item['values'],allow_nan=False)))
+                prepared=None
+                if self.records is not None:
+                    prepared=self.records.prepare(binding,target,payload['context'])
+                    for row in self.engine.decision_log():
+                        if row['decision']['itemId']==target.id and row['item']!=dict(target.values) and any(value.get('label') is not None for value in row['reviews'].values()):
+                            raise PublicationError('labeled source revision cannot change until revision-specific learning is supported')
+                decision = await self.engine.decide(target)
+                context=self.records.freeze(decision.decision_id,decision.created_at,prepared,prediction=self.project(decision,binding)) if prepared is not None else None
+                return {**envelope, 'decision':self.project(decision, binding),**({'context':context} if context else {})}
             if operation == 'review':
                 expected = {'bindingRevision','decisionId','classifier','predictionVersion','predictionFingerprint',
                             'requestId','label','explanation','reasonCode'}
+                if self.records is not None:expected.add('contextId')
                 if set(payload) != expected:
                     raise PublicationError('explicit review fields required; actor is host supplied', 400)
                 cid = payload['classifier']
@@ -136,12 +152,31 @@ class PublicationLab:
                 predicted = decision.results[cid]
                 if type(payload['predictionVersion']) is not int or (predicted.version, predicted.fingerprint) != (payload['predictionVersion'], payload['predictionFingerprint']):
                     raise PublicationError('displayed prediction revision does not match')
+                context=None
+                if self.records is not None:
+                    context=self.records.context(payload['contextId'],publication,decision.decision_id)
+                    if context['binding']['values']['revision']!=binding.revision:
+                        raise PublicationError('historical binding is read-only; obtain a current decision context')
+                    rows=self.engine.decision_log()
+                    current=next(row for row in rows if row['decision']['decisionId']==decision.decision_id)
+                    if current['item']!=context['source']['values']:
+                        raise PublicationError('superseded source is read-only; revision-specific review is unavailable')
                 # Request IDs cannot collide across publication/actor scopes.
-                identity = hashlib.sha256(json.dumps([self.account_id, publication, actor.actor_id, payload['requestId']],separators=(',',':')).encode()).hexdigest()
+                identity = hashlib.sha256(json.dumps([self.account_id, publication, actor.actor_id, payload['requestId'],*([context['contextId']] if context else [])],separators=(',',':')).encode()).hexdigest()
                 review = await self.engine.review(decision.decision_id, payload['label'], classifier=cid,
                     explanation=payload['explanation'], reason_code=payload['reasonCode'], reviewer=actor.actor_id,
                     review_id='publication-'+identity)
+                if context is not None:self.records.review(context,review.to_json(),source_cursor=self.review_cursor(review.review_id))
                 return {**envelope, 'review':review.to_json()}
+            if operation == 'replay':
+                if payload or self.records is None:raise PublicationError('frozen replay records require configured provenance and an empty payload',400)
+                if not self.feedback_composed(publication,binding):raise PublicationError('canonical feedback requires provenance reconciliation before replay',code='reconciliation_required')
+                return {**envelope,'executesLearning':False,'records':self.records.replay(publication,set(binding.outputs))}
+            if operation == 'steer':
+                if self.steering is None:raise PublicationError('output-scoped steering is not configured',503)
+                self.authorize(actor,publication,'read')
+                result=await self.steering.command(actor,binding,payload)
+                return {**envelope,'steering':result}
             if operation == 'events':
                 if set(payload) != {'after','limit'}:
                     raise PublicationError('events requires an explicit cursor and page size', 400)
@@ -152,7 +187,9 @@ class PublicationLab:
                         decision = self.engine.decision(event['decision']['decisionId'])
                         events.append({**event, 'decision':self.project(decision,binding)})
                     elif event['kind'] == 'review' and event['review']['classifier'] in binding.outputs:
-                        events.append(event)
+                        receipt=self.records.receipt(publication,event['review']['reviewId']) if self.records is not None else None
+                        if self.records is None or receipt is not None:
+                            events.append({**event,**({'contextId':receipt['contextId']} if receipt else {})})
                     elif event.get('classifier') in binding.outputs:
                         events.append(event)
                 return {**envelope, 'events':events, 'cursor':page['cursor']}
@@ -164,8 +201,26 @@ class PublicationLab:
             rows = self.engine.decision_log()
             if len(rows) > 200:
                 raise PublicationError('history exceeds local slice limit; bounded history adapter required', 413)
+            replay=self.records.replay(publication,set(binding.outputs)) if self.records is not None else []
+            reconciliation=self.records is not None and not self.feedback_composed(publication,binding)
             for row in rows:
                 decision = self.engine.decision(row['decision']['decisionId'])
+                if self.records is not None:
+                    contexts=self.records.contexts(publication,decision.decision_id)
+                    for index,context in enumerate(contexts):
+                        context=self.records.context(context['contextId'],publication,decision.decision_id)
+                        prior=context['binding']['values']
+                        outputs=tuple(cid for cid in prior['outputs'] if cid in binding.outputs)
+                        if not outputs:continue
+                        projected=PublicationBinding(publication,outputs,prior['revision'])
+                        reviews={record['review']['classifier']:record['review'] for record in replay if record['contextId']==context['contextId']}
+                        history.append({**row,'decision':self.project(decision,projected),'item':context['source']['values'],
+                                        'reviews':reviews,'context':context,
+                                        'feedbackReconciliationRequired':reconciliation,
+                                        'historicalContext':reconciliation or index<len(contexts)-1 or prior['revision']!=binding.revision or context['source']['values']!=row['item']})
+                    if not contexts:
+                        history.append({**row,'decision':self.project(decision,binding),'item':{},'reviews':{},'provenanceUnavailable':True,'historicalContext':True})
+                    continue
                 history.append({**row, 'decision':self.project(decision, binding),
                                 'reviews':{cid:value for cid,value in row['reviews'].items() if cid in binding.outputs}})
             return {**envelope, 'history':history}
@@ -173,6 +228,27 @@ class PublicationLab:
             raise
         except (ValueError, KeyError, TypeError) as exc:
             raise PublicationError('operation conflicts with the classifier contract') from exc
+
+    def review_cursor(self,review_id):
+        after=0
+        for _ in range(10):
+            page=self.engine.subscribe(after=after,limit=1000)
+            for event in page['events']:
+                if event['kind']=='review' and event['review']['reviewId']==review_id:return event['cursor']
+            if len(page['events'])<1000:break
+            after=page['cursor']
+        raise PublicationError('review acknowledgement requires bounded authoritative event lookup')
+
+    def feedback_composed(self,publication,binding):
+        after=0
+        for _ in range(10):
+            page=self.engine.subscribe(after=after,limit=1000)
+            for event in page['events']:
+                if event['kind']=='review' and event['review']['classifier'] in binding.outputs:
+                    if self.records.receipt(publication,event['review']['reviewId']) is None:return False
+            if len(page['events'])<1000:return True
+            after=page['cursor']
+        raise PublicationError('canonical feedback reconciliation exceeds bounded event lookup')
 
 
 class EmbeddedPublicationClient:
@@ -189,7 +265,14 @@ class HTTPPublicationClient:
         response = await self.client.post('/publications/'+quote(publication,safe='')+'/operations',
             json={'contractVersion':CONTRACT, 'operation':operation, 'payload':payload}, follow_redirects=False)
         if response.status_code >= 300:
-            raise PublicationError('remote publication operation refused', response.status_code)
+            code='publication_error'
+            if len(response.content)<=MAX_BYTES:
+                try:
+                    error=response.json()
+                    if isinstance(error,dict) and error.get('code')=='reconciliation_required':code='reconciliation_required'
+                except ValueError:pass
+            message='remote operation requires explicit reconciliation; outcome is uncertain' if code=='reconciliation_required' else 'remote operation failed; check its outcome before retrying'
+            raise PublicationError(message,response.status_code,code=code)
         if len(response.content) > MAX_BYTES:
             raise PublicationError('remote response exceeds size limit', 502)
         value = response.json()
@@ -235,5 +318,5 @@ def create_publication_app(lab, *, authorize):
                 raise PublicationError('response exceeds contract size limit', 413)
             return JSONResponse(result, headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
         except PublicationError as exc:
-            return JSONResponse({'error':str(exc)},status_code=exc.status,headers={'Cache-Control':'no-store'})
+            return JSONResponse({'error':str(exc),'code':exc.code},status_code=exc.status,headers={'Cache-Control':'no-store'})
     return app
