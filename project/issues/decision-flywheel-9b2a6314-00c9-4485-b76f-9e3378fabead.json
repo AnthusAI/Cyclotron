@@ -41,10 +41,34 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "028c3693-a5a3-42b8-a507-cd7f545652ed",
+      "author": "home",
+      "text": "Independent catalog portability slice implemented after 8845b257: WorkspaceCatalog's 15 existing operations delegate to CatalogStorage; SQLiteCatalogStorage retains native tables, ordering, item/classifier revisions, exact feedback retry semantics, explanations, tombstones and immutable displayed predictions. Classifier revision + definition-pin advancement stays one SQLite transaction via native-only composition hook. Bounded catalog export/restore retains all six tables, raw JSON strings and separate feedback sequence watermark; validates pinned references/history and restores atomically into empty catalog/run/definition composition. Immutable File/S3 per-record transport + final manifest supports canonical membership, scoped bounded reads, exact retry after uncertain publication, and optional rebuildable DDB discovery. This is migration transport, NOT a live cloud CatalogStorage/coordinator/head or hosted mode. 76 focused catalog/definition/API/worker tests pass; full Python regression running. Ryan's S3-only vs additional DDB coordination authority choice is still pending and neither implemented. No cloud/push/deploy or priming worktree changes. Story remains in_progress.\n",
+      "created_at": "2026-10-15T15:30:33.256116Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
+    },
+    {
+      "id": "622c846a-7824-4afe-88d0-db304d47d126",
+      "author": "home",
+      "text": "Catalog slice final verification: full Python regression 1419 passed, 1 skipped, 16 existing pytest-bdd warnings; focused catalog/definition/API/worker set 76 passed. All original native catalog method bodies retained unchanged in SQLiteCatalogStorage; existing API delegates its 15 catalog operations. New tests verify native export/restore + immutable per-record File/S3 transport, retained explanation/correction/tombstone/sequence identity, atomic restore rollback, consistent concurrent export, exact retry races, scope/budget checks and default no-AWS/no-network restart. Current cloud CatalogStorage mutation/head/coordinator intentionally absent; immutable manifest is migration transport, not runtime authority. Pending S3-only vs DDB coordinator choice remains pending and does not block next independent native repository work. Definition/run/command/runtime/learning/lease/session conversion remains incomplete. Priming heads f5ef70a/bad2b5b unchanged. No cloud resources, IAM/OAuth, publication or deployment changes. Preparing local recoverable commit; story stays in_progress.\n",
+      "created_at": "2026-10-15T15:33:22.050097Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T15:17:43.934164Z",
+  "updated_at": "2026-10-15T15:33:22.050124Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

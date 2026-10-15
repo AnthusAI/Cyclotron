@@ -15,9 +15,9 @@ as Kanbus issues. Remote/embedded Papyrus initiatives are separate planning.
 
 | Data | Current authority and entry points | Required correctness boundary |
 | --- | --- | --- |
-| Classifier revisions, cyclotron definitions and activation | `WorkspaceCatalog`, `CyclotronDefinitions`; SQLite `classifiers`, `cyclotron_catalog`, `cyclotron_definitions`, `run_cyclotron_definitions` | Compare active revision; freeze definitions with run creation |
-| Item lists and immutable item revisions | `workspace_catalog.py`: `item_lists`, `list_item_revisions` | Stable item identity, input hash, revision, ordering and bounded discovery |
-| Labels, explanations, corrections and retractions | `item_feedback`, `item_feedback_retractions`, `item_predictions`; `reviewer_store.py` review events/presentations | Idempotent request identity; original displayed prediction/version; preserve explanations, eligibility and evaluation partitions |
+| Classifier revisions, cyclotron definitions and activation | `WorkspaceCatalog` facade / `SQLiteCatalogStorage`, `CyclotronDefinitions`; SQLite `classifiers`, `cyclotron_catalog`, `cyclotron_definitions`, `run_cyclotron_definitions` | Compare active revision; freeze definitions with run creation |
+| Item lists and immutable item revisions | `CatalogStorage` / `catalog_storage.py`: `item_lists`, `list_item_revisions` | Stable item identity, input hash, revision, ordering and bounded discovery |
+| Labels, explanations, corrections and retractions | `CatalogStorage`: `item_feedback`, `item_feedback_retractions`, `item_predictions`; separate `reviewer_store.py` review events/presentations | Idempotent request identity; original displayed prediction/version; preserve explanations, eligibility and evaluation partitions |
 | Runs, predictions, current item and summaries | `WebStore`: `web_runs`, `web_items`, `web_summaries` | Run+frozen inputs+initial events; command result/terminal-state consistency |
 | Commands and recovery | `web_jobs`, `WebWorker` | One active command/run; atomic claim; fenced completion; no automatic replay of uncertain paid work |
 | API trace/history and comparison inputs | `web_events`, `replay_feedback`, `cyclotron_checkpoints`, `matched_evaluation_inputs`, `matched_evaluation_authorizations` | Stable event source IDs, ordered resumable cursor, immutable approved plan/budget |
@@ -151,3 +151,62 @@ The full Python regression run against the final implementation passed
 additional no-AWS subprocess specification was added after that run collected;
 it passed separately and in the final 82-test focused run. `git diff --check`
 passed. No browser/deployment claim follows from these storage tests.
+
+## Catalog domain checkpoint
+
+The existing `WorkspaceCatalog` API now delegates all fifteen catalog operations
+to `CatalogStorage`. `WebStore(path)` selects `SQLiteCatalogStorage` by default;
+its optional injected repository is a composition/test seam, not a hosted backend
+selector. The native adapter retains the original tables, validation, ordering,
+200-item browsing/upsert bounds, current-label semantics and immutable displayed
+predictions. No SQL emulation or duplicate membership authority is introduced.
+
+Classifier saves still advance cyclotron definition pins **inside the same native
+SQLite transaction**. The SQLite-specific host hook remains deliberately inside
+that adapter. Cloud coordination must eventually provide the same cross-domain
+invariant. Definition/run stores themselves are not converted by this hook.
+`item_results` also retains its native join to run names; migrating catalog records
+alone does not migrate the referenced runs or their display metadata.
+
+Catalog export uses one SQLite read snapshot. `cyclotron-catalog/v1` retains all
+six tables: classifiers, item lists, every item revision, feedback history,
+predictions and retraction tombstones. JSON database columns remain raw strings,
+including whitespace, Unicode escapes and large integers in item values. The
+feedback sequence watermark is separate from the highest retained row, so an
+import does not reuse source identities. Configurable record and byte ceilings
+fail explicitly. Restore validates/copies the complete snapshot before any
+mutation, requires an empty catalog and empty run/definition composition, and
+inserts all rows plus the watermark in one transaction. It is not a live merge,
+a complete workspace restore or an online migration protocol.
+
+`CatalogArchive` transports those records through the existing immutable
+`FilePayloads`/`S3Payloads` boundary. Each record is a separate content-addressed
+object; a final immutable manifest contains exact membership, schema and sequence
+watermark. Publication checks aggregate limits before putting records, then puts
+the manifest last. Retrying the same snapshot after an uncertain row publication
+is safe. Partial publication can leave orphan immutable objects, never an active
+head. Manifest membership and payload hashes govern import; a rebuildable
+DynamoDB discovery index can contain only hints. Canonical reads check fixed
+scope, aggregate byte/record budgets, duplicate membership, row envelopes and
+record-level invariants. No mutable catalog head, CAS coordinator, account-wide
+live JSON aggregate, runtime cloud configuration or hosting activation exists.
+
+Scope prefixes and a manifest are not authorization. The host must authorize the
+human/account and migration operation before supplying the fixed repository
+scope. Run references, definition activation, command receipts and current heads
+remain separate conversion work. The pending S3-only versus additional DynamoDB
+coordination decision is unchanged; catalog work did not select either option.
+
+Catalog checkpoint focused validation: **76 passed**, covering existing catalog,
+definition, GraphQL/API and worker behavior plus new native migration and injected
+file/S3 transport tests. New scenarios include same-request races between two
+SQLite clients, export concurrent with a committed writer, rollback after a native
+insertion failure, raw-text/history/tombstone/sequence fidelity, pinned-reference
+validation, no-AWS/no-network local save and restart, scope denial, missing payload,
+manifest corruption, additive index rebuilding, aggregate budgets and lost S3
+publication response. S3/DynamoDB boundaries are injected fakes, not real services.
+
+Catalog checkpoint full Python regression: **1,419 passed, one skipped**, with
+16 existing pytest-bdd deprecation warnings. `git diff --check` passed. Both
+priming worktree heads remain unchanged (`f5ef70a`, `bad2b5b`). No cloud service,
+IAM/OAuth/DNS configuration, public push or deployment was changed.

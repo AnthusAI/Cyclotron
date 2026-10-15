@@ -18,7 +18,8 @@ def encode(value):
 
 
 class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
-    def __init__(self, path):
+    def __init__(self, path, *, catalog_storage=None):
+        self.catalog_storage = catalog_storage
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
