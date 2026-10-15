@@ -1,5 +1,9 @@
 # Optional persistence and execution: proposed boundaries
 
+Superseded by Ryan's explicit full SQLite + DynamoDB/S3 portability direction.
+See [current inventory and implementation boundary](storage-portability.md).
+The checkpoint proposal below is historical research, not the current plan.
+
 Research checkpoint, 2026-10-14. This is a proposal, not an implemented adapter
 or a cloud deployment. Hosting implementation is paused while this boundary is
 reviewed. The existing local console and embedded Python engine remain the base.

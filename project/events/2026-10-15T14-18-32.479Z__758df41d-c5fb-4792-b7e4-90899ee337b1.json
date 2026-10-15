@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "event_id": "758df41d-c5fb-4792-b7e4-90899ee337b1",
+  "issue_id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-15T14:18:32.479Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Design optional Cyclotron persistence adapters and a separate execution contract",
+        "to": "Make Cyclotron persistence portable across SQLite and DynamoDB"
+      },
+      "description": {
+        "from": "Research/design only, requested by Ryan through parent. Preserve clone-and-run SQLite/local workers without AWS account. Inspect actual Virtuus PR33, current local storage work, Kanbus PR399, Cyclotron persistence and worker seams. Recommend smallest optional cloud adapter contract, reusable conventions and phased local/cloud parity acceptance tests. Do not encode Cyclotron state as Kanbus issues. Persistence and durable job execution are separate. No adapter implementation, EC2/cloud resources, or access grants until design is settled. Related console integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28 and Prospectus initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9.",
+        "to": "Ryan explicitly selected full cloud-native storage portability and rejected server-hosted SQLite. This supersedes checkpoint-only design. Preserve complete zero-cloud local SQLite behavior and Python/API/UI. Inventory every catalog/item/label/explanation/prediction/cycle/history/learning/job/lease/cache/session path. Shared backend contract and DynamoDB/S3 adapter, with DDB correctness-critical CAS/counters/claims distinguished from rebuildable indexes and S3 payloads. First cohesive slice: shared decision batches, durable paid-attempt ceiling, cache generations/history and restart; all remaining authoritative stores must convert before hosted cloud mode can be enabled. Contract tests: concurrency/idempotency/pagination/scoped isolation/recovery/migration fidelity. Existing console account integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28. Preserve priming branches, no Kanbus issue encoding or TypeScript rewrite. No EC2 SQLite host, cloud resources/IAM/OAuth/deploy/public push; Papyrus remote/embedded initiatives remain separate planning."
+      },
+      "priority": {
+        "from": 2,
+        "to": 1
+      }
+    }
+  }
+}

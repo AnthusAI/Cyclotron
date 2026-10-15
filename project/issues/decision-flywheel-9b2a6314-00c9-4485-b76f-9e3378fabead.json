@@ -1,10 +1,10 @@
 {
   "id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
-  "title": "Design optional Cyclotron persistence adapters and a separate execution contract",
-  "description": "Research/design only, requested by Ryan through parent. Preserve clone-and-run SQLite/local workers without AWS account. Inspect actual Virtuus PR33, current local storage work, Kanbus PR399, Cyclotron persistence and worker seams. Recommend smallest optional cloud adapter contract, reusable conventions and phased local/cloud parity acceptance tests. Do not encode Cyclotron state as Kanbus issues. Persistence and durable job execution are separate. No adapter implementation, EC2/cloud resources, or access grants until design is settled. Related console integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28 and Prospectus initiative kanbus-4b25e22d-e764-419d-bd5e-dcb2ce05f5d9.",
+  "title": "Make Cyclotron persistence portable across SQLite and DynamoDB",
+  "description": "Ryan explicitly selected full cloud-native storage portability and rejected server-hosted SQLite. This supersedes checkpoint-only design. Preserve complete zero-cloud local SQLite behavior and Python/API/UI. Inventory every catalog/item/label/explanation/prediction/cycle/history/learning/job/lease/cache/session path. Shared backend contract, native SQLite parity, immutable S3 payloads and rebuildable DynamoDB index. Cloud coordination authority is undecided: approving a DDB index does NOT approve authoritative DDB CAS/counters/claims. Compare bounded canonical S3 per-run CAS ledger with additional DDB transaction authority before implementing either coordinator. First cohesive slice: shared decision batches, durable paid-attempt ceiling, cache generations/history and restart; all remaining authoritative stores must convert before hosted cloud mode can be enabled. Contract tests: concurrency/idempotency/pagination/scoped isolation/recovery/migration fidelity. Existing console account integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28. Preserve priming branches, no Kanbus issue encoding or TypeScript rewrite. No EC2 SQLite host, cloud resources/IAM/OAuth/deploy/public push; Papyrus remote/embedded initiatives remain separate planning.",
   "type": "story",
   "status": "in_progress",
-  "priority": 2,
+  "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": null,
@@ -17,10 +17,34 @@
       "text": "Design delivered in docs/optional-persistence-design.md. Inspected exact Virtuus PR33 f94d7e2 and Kanbus PR399 25410911 clean product worktrees. Recommend optional embedded checkpoint repository over existing Cyclotron snapshot/restore, preserving cloud-free SQLite/local worker; raw Virtuus ObjectStore semantics reusable but new store currently Rust-only, Python bridge ownership needs decision. DynamoDB catalog is rebuildable, not transactional runtime authority. Separate later WorkspaceRepository domain transactions and fenced durable runner; no Kanbus issue encoding. Existing embedded_store_test.py: 9 passed; prior account checkpoint: 73 focused Python +252 UI passed and synthetic browser proof. No adapter/hosting/resource/grant implementation. Await parent design decision before next implementation.",
       "created_at": "2026-10-14T21:42:19.338459Z",
       "comment_type": "default"
+    },
+    {
+      "id": "1f4b87bb-ff07-422c-bd31-5cbef4020816",
+      "author": "home",
+      "text": "First implementation checkpoint: docs/storage-portability.md inventories all persistence and replaces checkpoint-only scope. Native BatchStorage + SQLite shared-request cache preserves legacy tables/raw payloads/history and now atomically reserves budget/generation, grants one dispatch claim, fences stale completion and exports/restores exact retained evidence. SharedDecisions consumes injected storage without issuing SQL. Immutable local/S3 payload adapters enforce scoped hashes, read bounds and create-only retry safety. Optional DynamoDB index is rebuildable discovery ONLY, verified from canonical bytes, with bounded additive rebuilds/pages; never mutable heads or paid coordination. 80 focused synthetic tests pass including separate-process dispatch/restart, concurrency, migration, scope/corruption/lost response and SDK serialization. Full Python regression running. IMPORTANT: authoritative DDB CAS/counters/claims are a distinct UNAPPROVED semantics choice; docs compare minimal S3 canonical per-run CAS ledger vs DDB transaction authority. No cloud coordinator silently introduced, no hosted mode enabled. All remaining catalog/runtime/learning/job/lease/session conversions remain open; no claim full conversion. Priming worktrees untouched. No AWS/IAM/OAuth/deploy/public push.\n",
+      "created_at": "2026-10-15T15:10:27.334435Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
+    },
+    {
+      "id": "278b5d52-f837-4ac0-b7de-c186b422035c",
+      "author": "home",
+      "text": "Final local validation: 1398 Python regression tests passed, 1 skipped (existing pytest-bdd deprecation warnings). Final focused set 82 passed, including added zero-AWS/network-forbidden default open/restart spec. Concurrent-refresh regression first reproduced mismatched payload/generation, fixed by a single SQLite statement snapshot; now passes. Full implementation checkpoint remains local/unpublished and story in progress: full cloud storage conversion, coordinator authority decision, IAM/OAuth and deployment remain outstanding. No cloud writes or priming changes. Parent direct thread messenger still returns thread not found; checkpoint also reported in commentary/final.\n",
+      "created_at": "2026-10-15T15:17:43.934139Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-14T21:42:25.349465Z",
+  "updated_at": "2026-10-15T15:17:43.934164Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
