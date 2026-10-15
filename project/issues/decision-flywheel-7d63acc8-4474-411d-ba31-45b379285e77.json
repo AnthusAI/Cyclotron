@@ -31,10 +31,17 @@
       "text": "Remaining real-handler continuity proof PASS. scripts/verify_google_identity_contract.py --filesystem --accounts-handler sends Python BFF account traffic through actual accountHandler -> AccountsService -> googlePersonDirectory, shared durable identity repo, central MemoryAccountStore only. Two pools same canonical Person; each product creates/lists/selects/authorizes its own account and scoped GraphQL fixture. Same account-create key/input returns same ID, changed input denied. Pool1 cannot select pool0 account without caller-product entitlement despite same Person/membership; no auto-grant. After central restart Person/session family and exact proof receipt persist, but MemoryAccountStore resets: account lists empty, selections cleared, old account select403 despite surviving local fixture store. Actual-handler, durable-identity/Python-account-fixture, and original memory modes all rerun PASS with negative proof/replay/family checks. Account/membership durability, live S3/Google/IAM and deployed Lambda not established. No runtime console/adapter/cloud changes or public push; only script/docs/tracking.",
       "created_at": "2026-10-15T00:03:06.385380Z",
       "comment_type": "default"
+    },
+    {
+      "id": "7fc913aa-619d-48a2-b002-0032a7ba973e",
+      "author": "home",
+      "text": "Durable accounts local end-to-end proof PASS against central bf655d5e4ac6c3775fdecbc9aa07bb79af9072f5. Added --filesystem --durable-accounts (filesystemRoot + durableAccounts:true; no accountsFixture) in scripts/verify_google_identity_contract.py. Actual Python BFF/SigV4 -> canonicalAccountsHandler -> shared PersonDirectory + pinned Virtuus identity/account files. Two Google Persons (same email remains separate), two Cyclotron accounts many-to-many: owner owns both, second Person viewer in one/member in other; viewer GraphQL write denied, member write changes only selected store, nonmember/random account denied. Cross-product entitlement denied. Central restart preserves full account summaries/entitlements and owner/product/member selections plus scoped GraphQL auth. Revoking one account leaves other active; revoking remaining membership clears selection/denies direct write and persists through second restart. Original create key/input returns same account after restart, changed input denied, repeated membership setting leaves revision unchanged. JWT/profile/replay/family negative checks retained; older memory controls rerun. Only verification script/docs/tracking changed: no console runtime, local-first, central repo/CRM, cloud/IAM/OAuth/deploy/public push changes. Actual S3/live Google/IAM/browser onboarding, BFF process persistence, quotas/audit/retention and uncertain-claim operator recovery remain unproven/held.",
+      "created_at": "2026-10-15T13:38:10.697767Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T22:55:50.327741Z",
-  "updated_at": "2026-10-15T00:03:06.385409Z",
+  "updated_at": "2026-10-15T13:38:10.697803Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

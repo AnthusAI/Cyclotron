@@ -131,6 +131,64 @@ and shared-PersonDirectory compatibility in the optional local factory. It does
 not establish durable accounts/memberships or activate the existing deployed
 account Lambda. The original two modes also remain available for comparison.
 
+### Durable accounts through the actual BFF
+
+The latest local proof was run against central checkpoint
+`bf655d5e4ac6c3775fdecbc9aa07bb79af9072f5`. Reproduce with:
+
+```bash
+PYTHONPATH=src python scripts/verify_google_identity_contract.py \
+  PATH_TO_PROSPECTUS --filesystem --durable-accounts
+```
+
+This mode configures `filesystemRoot` and `durableAccounts:true`, **omitting**
+`accountsFixture`. It uses the actual Python OAuth/accounts BFF, signed transport,
+central `canonicalAccountsHandler`, shared PersonDirectory, and native pinned
+Virtuus FileStore/JournaledStore for both identities and account aggregates. It
+creates and removes a disposable root. `--accounts-handler` remains a separate
+memory-account control and cannot be combined with `--durable-accounts`.
+
+Observed end-to-end behavior:
+
+- Two registered synthetic pools resolve the same Google subject to one Person.
+  A second Google subject with the same email resolves to a different Person.
+- One Person owns two Cyclotron accounts. The second Person has viewer access to
+  one and member access to the other. Both memberships are listed under the
+  appropriate Person; the owner retains both accounts.
+- Viewer reads succeed and direct GraphQL writes fail without changing the
+  workspace. Member writes succeed only in the selected account's store. A
+  nonmember and a random account selection are refused. Shared Person/membership
+  still does not grant Papyrus access to a Cyclotron entitlement.
+- Restarting central with the same root/public keys preserves the full account
+  summaries (names, IDs, roles and entitlement capabilities/status), both product
+  selections and the member selection; scoped GraphQL reads remain authorized.
+  The restored viewer remains read-only when selected; a direct write is denied.
+  The existing Python BFF processes and their opaque sessions remain open during
+  this restart, so this is not a claim of BFF-session persistence.
+- Revocation in one account leaves the other account's membership usable. A later
+  revocation of that remaining membership clears the member's selected account
+  and denies a direct GraphQL write. Another central restart retains both
+  revocations; knowing the surviving local workspace/account ID restores nothing.
+- Repeating account creation with its original key/input after restart returns
+  the same account. Changed input under that key is denied. Repeating an identical
+  membership setting preserves its account revision instead of duplicating audit.
+- The existing nonce/issuer/client/profile, callback replay, central proof retry,
+  changed-proof replay and same-family/new-family checks remain in this run.
+
+The durable mode passed, and all three older control modes were rerun. This
+closes the local Python-BFF-to-durable-account verification gap. No console runtime
+or local-first CLI behavior changed. It does **not** prove actual S3 durability,
+deployed IAM enforcement, live Google, browser-based durable onboarding, a
+production endpoint or safe concurrent/ephemeral console workers. The only
+workspace data is temporary SQLite; no real model calls or customer data are used.
+
+Central's deliberate MVP bounds remain material: bounded account scans (256
+documents), 100 retained memberships/account, 128 audit entries and 64 KiB/account
+document; capacity fails closed. Audit rollover, index/scan sizing, a strict
+cross-account quota, retention/read-bound work, and operator reconciliation of
+pre-publication uncertain claims remain central design/production work. This BFF
+test does not replace the central owner's interruption, race or limit tests.
+
 ## Existing account boundary
 
 The existing console remains `trace-ui/src/WebApp.tsx`, served by
