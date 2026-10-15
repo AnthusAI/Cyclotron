@@ -70,10 +70,40 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "fe08b73e-a761-40b6-8824-6ae80e50348f",
+      "author": "home",
+      "text": "Shared dependency review composition requested: assemble isolated local branch from supported storage-owner source pin plus exact0123708 shared PrimingPanel/client and publication9911/guard modules. Verify exports, offline Python and UI consumer contracts; record deterministic Git-SHA install/lock plan. Root cyclotron package private=true/version0.2.1, Python0.6.0; no invented published registry release. No public push/tag/npm/PyPI publication under planning scope, no hosted activation or human state edits. Given one coherent source commit, consumers must install immutable fullSHA without unpublished overlays. Awaiting storage owner baseline confirmation.",
+      "created_at": "2026-10-15T21:46:56.768524Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "CuratedExamplePriming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "7440268f-d60c-489b-8251-84c1597a88c8",
+      "author": "home",
+      "text": "Local coherent shared source candidate258a7a7ee3064cb5463ecc3a185c19ea1772ed03 on codex/priming-shared-release, isolated task/cyclotron-shared-release. ONE commit above publicmainc09f70b; filtered owner37fe source delta frome143, preservepublic0.20.1 tokens/newexports; exact012 publication/UI overlay; no deployment/project/activation/vendor assets or37commit ancestry. Owner confirmscorebaseline/dev+webprimingextras.208focusedPython +83actualPapyrusharness +21UItests andTypeScript PASS. Localwheel/36filepackverifyPASS; packSHA25646228c0dfbc6ac52b882fe3136d5c90c03e456d5df92bb8792fd7dcfe97d5193. Manifest+releaseplan committed; integration/storageowners receivedfullSHA/proof. Gate pending explicit publicAnthusAI/Cyclotron branchpush→draftPRmain; proposedui-v0.2.2 onlyafterreview/authorizedmerge; no npm/PyPI publication. Rootprivate0.2.1 unchanged; Python0.20.1 not reuploaded. FullSHA Git dependency forbothPython/UI onlyafterremoteaccessible; consumerlockmustnotpointunreachableSHA. No cloud/provider/humanstate changes.",
+      "created_at": "2026-10-15T21:52:15.902517Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "CuratedExamplePriming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T11:54:33.949970Z",
-  "updated_at": "2026-10-15T21:03:52.075809Z",
+  "updated_at": "2026-10-15T21:52:15.902550Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
