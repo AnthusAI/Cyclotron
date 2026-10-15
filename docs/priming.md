@@ -189,3 +189,11 @@ Ryan's real examples have not been supplied. Synthetic fixtures are labelled as
 such. Public example content and production transport/hosting configuration need
 separate review; these changes do not deploy an authenticated app at the marketing
 hostname, register source content in production Papyrus, or publish examples.
+
+Papyrus now supplies an explicit accepted-catalog snapshot -> optional new
+relevance-store bootstrap (`papyrus_content.priming_bootstrap`). The shared panel
+calls `onAccepted(draft)` with the acknowledged draft/list/classifier pins; the
+host must still deliberately choose priming when creating a new store. Acceptance
+does not start operations. No-argument callbacks remain usable by hosts that only
+refresh their UI. This integration remains local until the existing priming API
+and records are represented in the shared storage-owner conversion.

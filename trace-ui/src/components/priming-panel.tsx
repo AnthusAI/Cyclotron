@@ -15,7 +15,7 @@ export type PrimingClient={
  get:(identifier:string)=>Promise<PrimingDraft>
  command:(action:string,payload:Record<string,unknown>)=>Promise<PrimingDraft>
 }
-export type PrimingPanelProps={client:PrimingClient;listId:string;classifiers:ClassifierRef[];initialDraftId?:string;pollInterval?:number;onDraftChange?:(draft:PrimingDraft)=>void;onAccepted?:()=>void;renderItem?:(item:PrimingDraft["rows"][number]["item"])=>ReactNode}
+export type PrimingPanelProps={client:PrimingClient;listId:string;classifiers:ClassifierRef[];initialDraftId?:string;pollInterval?:number;onDraftChange?:(draft:PrimingDraft)=>void;onAccepted?:(draft:PrimingDraft)=>void;renderItem?:(item:PrimingDraft["rows"][number]["item"])=>ReactNode}
 
 function InputFields({fields,values,onChange,disabled}:{fields:PrimingField[];values:Record<string,string>;onChange:(key:string,value:string)=>void;disabled:boolean}){
  return <div className="grid gap-3">{fields.map(field=><label key={field.name} className="grid gap-1 text-sm"><span>{field.label}{field.required?' *':''}</span>{field.multiline?<textarea aria-label={field.label} disabled={disabled} required={field.required} value={values[field.name]??''} onChange={event=>onChange(field.name,event.target.value)} className="min-h-24 rounded-md border border-input bg-background p-2"/>:<Input aria-label={field.label} disabled={disabled} required={field.required} value={values[field.name]??''} onChange={event=>onChange(field.name,event.target.value)}/>}</label>)}</div>
@@ -38,7 +38,7 @@ export function PrimingPanel({client,listId,classifiers,initialDraftId,pollInter
   if(!mounted.current)return
   setDraft(value);setAnswers({});draftCallback.current?.(value)
   if(value.status==='preview'){setLabels(value.rows.map(row=>structuredClone(row.labels)));setFeedback('')}
-  if(value.status==='accepted')acceptedCallback.current?.()
+  if(value.status==='accepted')acceptedCallback.current?.(value)
  }
  useEffect(()=>{
   mounted.current=true;epoch.current+=1;let live=true

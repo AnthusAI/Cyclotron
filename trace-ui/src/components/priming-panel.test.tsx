@@ -69,3 +69,14 @@ it('shows a committed acceptance when cancellation loses the transaction race',a
  expect(await screen.findByText('Examples and human labels saved.')).toBeVisible()
  expect(vi.mocked(api.command).mock.calls.filter(([action])=>action==='cancel')).toHaveLength(1)
 })
+
+it('hands the accepted draft and classifier pins to the host only after acknowledged acceptance',async()=>{
+ const api=client();const accepted={...preview,status:'accepted'};api.command=vi.fn().mockResolvedValue(accepted)
+ const onAccepted=vi.fn()
+ render(<PrimingPanel client={api} listId="examples" classifiers={[{id:'editor',revision:1}]} initialDraftId="draft" pollInterval={0} onAccepted={onAccepted}/> )
+ fireEvent.click(await screen.findByRole('button',{name:'Editorial: publish'}));fireEvent.change(screen.getByLabelText('Explanation for Editorial'),{target:{value:'Explicit human explanation'}})
+ expect(onAccepted).not.toHaveBeenCalled()
+ fireEvent.click(screen.getByRole('button',{name:'Accept examples and labels'}))
+ await waitFor(()=>expect(onAccepted).toHaveBeenCalledWith(accepted))
+ expect(onAccepted.mock.calls[0][0].contract.classifiers[0].id).toBe('editor')
+})
