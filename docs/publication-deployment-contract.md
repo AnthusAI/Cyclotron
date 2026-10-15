@@ -228,3 +228,36 @@ acknowledged as complete; they leave an explicit reconciliation state. Pending
 and completed receipt lookup still precede dispatch, so receipt recovery does not
 need new execution capacity or another evaluation. This is local single-owner
 preflight, not a substitute for the pending cloud coordinator decision.
+
+### Request-scoped account host
+
+`create_publication_host(resolve_access)` adds multi-account host composition over
+already-open labs. The required sync/async resolver receives `(request,
+publication_id, capability)` and returns `PublicationAccess(lab, actor)` from fresh
+verified session/account/publication authorization. Return `None` to refuse access;
+a resolver exception returns a sanitized 503 without a fallback lab. Cancellation
+while authorization is pending propagates without dispatch. The resolver owns
+engine lifetime; this factory neither opens stores nor creates credentials.
+
+Dynamic hosts require `X-Cyclotron-Account`, an expected-account constraint, never
+an authority or instruction to choose that account. Python callers use
+`HTTPPublicationClient(http, account_id=verified_selected_account)`. A mismatch
+returns `409` with `code: account_changed` before any engine command. Successful
+responses include host-derived `accountId`, which a pinned client also validates.
+Account/actor fields in operation JSON remain forbidden. The legacy single-lab
+`create_publication_app(lab, authorize=...)` retains its authentication-first
+behavior and accepts the optional account constraint.
+
+The Papyrus BFF must obtain its verified selection from its trusted account host,
+resolve fresh publication capabilities and forward the pin. No console role is
+implicitly mapped to `review` or `steer`. Browser state/cache/component identity
+must include account, publication and binding revision when the release owner
+wires this endpoint. The existing Papyrus client currently validates publication
+and binding only; multi-account production UI activation awaits that wiring.
+
+These tests prove per-request routing, account isolation, stale-write rejection,
+revocation/outage refusal, cancellation before dispatch and explicit retry using
+the native SDK. They do not prove revocation after an SDK command has queued on
+its internal owner lock. A supported public owned-operation authorization hook
+remains a storage/core-owner integration dependency. There is no distributed
+cloud authority or hosted SQLite fallback in this increment.

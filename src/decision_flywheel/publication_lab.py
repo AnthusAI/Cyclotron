@@ -14,6 +14,7 @@ from .models import Item
 
 CONTRACT = 'cyclotron-publication/v1'
 MAX_BYTES = 2_000_000
+CAPABILITIES = {'decide':'decide', 'review':'review', 'status':'read', 'history':'read', 'events':'read', 'replay':'read', 'steer':'steer'}
 
 
 class PublicationError(ValueError):
@@ -102,13 +103,13 @@ class PublicationLab:
     async def command(self, actor, publication, operation, payload):
         if not isinstance(operation, str):
             raise PublicationError('operation must be text', 400)
-        capability = {'decide':'decide', 'review':'review', 'status':'read', 'history':'read', 'events':'read', 'replay':'read', 'steer':'steer'}.get(operation)
+        capability = CAPABILITIES.get(operation)
         if capability is None:
             raise PublicationError('unsupported publication operation', 400)
         binding = self.authorize(actor, publication, capability)
         if not isinstance(payload, dict):
             raise PublicationError('structured operation payload required', 400)
-        envelope = {'contractVersion':CONTRACT, 'publicationId':publication, 'bindingRevision':binding.revision,
+        envelope = {'contractVersion':CONTRACT, 'accountId':self.account_id, 'publicationId':publication, 'bindingRevision':binding.revision,
                     'features':{'frozenContext':self.records is not None,'replayExport':self.records is not None,'steering':self.steering is not None},
                     'outputs':[{'id':cid, 'question':self.specs[cid].question,
                                 'classes':list(self.specs[cid].labels),
@@ -260,25 +261,47 @@ class EmbeddedPublicationClient:
 
 class HTTPPublicationClient:
     """Host owns endpoint, verified credentials and httpx transport. No auto retry."""
-    def __init__(self, client): self.client = client
+    def __init__(self, client, *, account_id=None):
+        self.client = client
+        self.account_id = text(account_id, 'account identity') if account_id is not None else None
     async def command(self, publication, operation, payload):
         response = await self.client.post('/publications/'+quote(publication,safe='')+'/operations',
-            json={'contractVersion':CONTRACT, 'operation':operation, 'payload':payload}, follow_redirects=False)
+            json={'contractVersion':CONTRACT, 'operation':operation, 'payload':payload},
+            headers={'X-Cyclotron-Account':self.account_id} if self.account_id is not None else {}, follow_redirects=False)
         if response.status_code >= 300:
             code='publication_error'
             if len(response.content)<=MAX_BYTES:
                 try:
                     error=response.json()
-                    if isinstance(error,dict) and error.get('code')=='reconciliation_required':code='reconciliation_required'
+                    if isinstance(error,dict) and error.get('code') in ('reconciliation_required','account_changed'):code=error['code']
                 except ValueError:pass
             message='remote operation requires explicit reconciliation; outcome is uncertain' if code=='reconciliation_required' else 'remote operation failed; check its outcome before retrying'
+            if code=='account_changed':message='selected account changed; refresh account context'
             raise PublicationError(message,response.status_code,code=code)
         if len(response.content) > MAX_BYTES:
             raise PublicationError('remote response exceeds size limit', 502)
         value = response.json()
-        if value.get('contractVersion') != CONTRACT or value.get('publicationId') != publication:
+        if not isinstance(value,dict) or value.get('contractVersion') != CONTRACT or value.get('publicationId') != publication:
             raise PublicationError('remote publication contract mismatch', 502)
+        if self.account_id is not None and value.get('accountId') != self.account_id:
+            raise PublicationError('remote account contract mismatch', 502)
         return value
+
+
+@dataclass(frozen=True)
+class PublicationAccess:
+    """Trusted host resolution of an already-open lab and verified actor."""
+    lab: PublicationLab
+    actor: PublicationActor
+
+
+def create_publication_host(resolve_access):
+    """Resolve fresh account/publication grants for each bounded operation.
+
+    The host owns session verification and engine lifecycle. No cached membership,
+    fallback lab, credential issuer, or storage backend is provided here.
+    """
+    return _create_publication_http(resolve_access=resolve_access)
 
 
 def create_publication_app(lab, *, authorize):
@@ -288,6 +311,10 @@ def create_publication_app(lab, *, authorize):
     selector here. A future production host must supply its reviewed service-role
     and human authorization boundaries after the storage conversion is complete.
     """
+    return _create_publication_http(lab=lab, authorize=authorize)
+
+
+def _create_publication_http(*, lab=None, authorize=None, resolve_access=None):
     import inspect
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
@@ -300,10 +327,11 @@ def create_publication_app(lab, *, authorize):
             origin = request.headers.get('origin')
             if origin and urlsplit(origin).netloc != request.headers.get('host'):
                 raise PublicationError('cross-origin access refused', 403)
-            actor = authorize(request)
-            if inspect.isawaitable(actor): actor = await actor
-            if not isinstance(actor, PublicationActor):
-                raise PublicationError('host authorization required', 403)
+            if authorize is not None:
+                actor = authorize(request)
+                if inspect.isawaitable(actor): actor = await actor
+                if not isinstance(actor, PublicationActor):
+                    raise PublicationError('host authorization required', 403)
             raw = bytearray()
             async for chunk in request.stream():
                 raw.extend(chunk)
@@ -313,7 +341,26 @@ def create_publication_app(lab, *, authorize):
             except (ValueError, UnicodeError): raise PublicationError('invalid JSON', 400) from None
             if not isinstance(body, dict) or set(body) != {'contractVersion','operation','payload'} or body['contractVersion'] != CONTRACT:
                 raise PublicationError('unknown publication contract', 400)
-            result = await lab.command(actor, publication, body['operation'], body['payload'])
+            operation = body['operation']
+            if not isinstance(operation,str) or operation not in CAPABILITIES or not isinstance(body['payload'],dict):
+                raise PublicationError('unknown publication operation or payload',400)
+            selected_lab = lab
+            if resolve_access is not None and not request.headers.get('x-cyclotron-account'):
+                raise PublicationError('expected account pin required',400)
+            if resolve_access is not None:
+                try:
+                    access = resolve_access(request, publication, CAPABILITIES[operation])
+                    if inspect.isawaitable(access): access = await access
+                except Exception:
+                    raise PublicationError('host authorization unavailable',503) from None
+                if not isinstance(access,PublicationAccess) or not isinstance(access.lab,PublicationLab):
+                    raise PublicationError('host authorization required',403)
+                selected_lab,actor = access.lab,access.actor
+            selected_lab.authorize(actor,publication,CAPABILITIES[operation])
+            expected_account = request.headers.get('x-cyclotron-account')
+            if expected_account is not None and expected_account != selected_lab.account_id:
+                raise PublicationError('selected account changed',409,code='account_changed')
+            result = await selected_lab.command(actor, publication, operation, body['payload'])
             if len(json.dumps(result, allow_nan=False).encode()) > MAX_BYTES:
                 raise PublicationError('response exceeds contract size limit', 413)
             return JSONResponse(result, headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
