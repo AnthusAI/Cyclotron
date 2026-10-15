@@ -304,3 +304,39 @@ def test_google_callback_rejects_wrong_access_authority_before_identity_resoluti
         assert client.get('/auth/callback', params={'state': query['state'][0], 'code': 'synthetic'}).status_code == 400
         assert len(calls) == 1
         assert not any("/session-" in key for key in state["s3"].objects) if "s3" in state else not gateway.sessions.sessions
+
+
+def test_http_event_pages_pin_account_bound_cursor_and_reauthorize_every_request(hosted):
+    client,gateway,state,account_id=hosted
+    with client:
+        assert client.get('/api/runs/unknown/events',params={'account':account_id}).status_code==401
+        sign_in(client,state);session=client.get('/api/session').json()
+        headers={'Origin':'https://console.example.test','X-CSRF-Token':session['csrfToken'],'Idempotency-Key':str(uuid4())}
+        assert client.post('/api/accounts',json={'name':'Events'},headers=headers).status_code==201
+        store=state['stores'][account_id];run=store.runs()[0]
+        first=store.append_event(run['id'],'one',{'kind':'synthetic','text':'exact 雪'})
+        second=store.append_event(run['id'],'two',{'kind':'synthetic'})
+        url=f"/api/runs/{run['id']}/events"
+        result=client.get(url,params={'account':account_id,'after':first['sequence'],'limit':1})
+        assert result.status_code==200 and 'no-store' in result.headers['cache-control']
+        assert result.json()=={'events':[{'sequence':second['sequence'],'sourceId':'two','payload':{'kind':'synthetic'}}]}
+        assert client.get(url,params={'account':str(uuid4())}).status_code==403
+        state['accounts']=[]
+        assert client.get(url,params={'account':account_id}).status_code==403
+        assert client.get(url,params={'account':account_id,'after':-1}).status_code==422
+
+
+def test_http_event_page_outage_returns_no_private_events_and_enforces_response_budget(hosted):
+    client,gateway,state,account_id=hosted
+    with client:
+        sign_in(client,state);session=client.get('/api/session').json()
+        headers={'Origin':'https://console.example.test','X-CSRF-Token':session['csrfToken'],'Idempotency-Key':str(uuid4())}
+        assert client.post('/api/accounts',json={'name':'Events'},headers=headers).status_code==201
+        store=state['stores'][account_id];run=store.runs()[0]
+        store.append_event(run['id'],'large',{'kind':'synthetic','text':'x'*1048576})
+        url=f"/api/runs/{run['id']}/events"
+        assert client.get(url,params={'account':account_id}).status_code==413
+        def outage(*args,**kwargs):raise ProspectusUnavailable('synthetic unavailable')
+        gateway.accounts.authorize=outage
+        result=client.get(url,params={'account':account_id})
+        assert result.status_code==503 and 'events' not in result.json()

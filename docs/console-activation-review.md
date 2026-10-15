@@ -21,52 +21,34 @@ Current registry/resource policy grants only `prospectus-directory`. Cyclotron
 has no grant. The directory role/client cannot be reused. Central code pin
 `088de30d79185188294b412049b99ffa6ada7587` is the owner's supplied reference.
 
-## Caller-role recommendation and concrete alternatives
+## Recommended activation: separate BFF and worker roles
 
-**Recommend deliberate separate BFF and worker caller roles before activation.**
-The current central contract does not support this: duplicate product rows are
-rejected, and enrollment/session continuation bind to the exact principal.
-Changing only the registry uniqueness rule would leave workers unable to use
-BFF-enrolled sessions and would weaken a deliberate identity boundary if the
-principal comparison were simply removed.
-
-Proposed normal Lambda execution roles (not deployment/assumption broker roles):
+Recommend the concrete separate-role deployment in `deployment/template.json`.
+Both Lambda-only execution roles use temporary runtime credentials, without
+AssumeRole brokers, administration or central storage access:
 
 - `arn:aws:iam::682849160744:role/cyclotron-console-bff-runtime`
 - `arn:aws:iam::682849160744:role/cyclotron-console-worker-runtime`
 
-Both trust only service `lambda.amazonaws.com`, receive temporary credentials
-from Lambda's runtime, and receive no `sts:AssumeRole`, IAM administration, central
-storage access or directory entitlement. Functions would be named
-`cyclotron-console-bff` and `cyclotron-console-worker`. Normal Amplify backend/CDK
-resource provisioning creates roles; no bespoke deployment-role arrangement.
+Central owner implemented the explicit one-product enrollment/execution pair at
+`e2bb8ffb2f4288989bab6153d0394afecf8439a9`; documentation follow-up
+`6eafcf6291b6f0f59fafa05cec0fe10720b32aa0`. This is source-only, not live.
+Original BFF provenance remains intact. The worker is restricted to `/me` and
+account authorization, with the original session family/auth_time and current
+issuer/client/enrollment policy. There is no transitive delegation, directory
+access or worker enrollment. Proposed pair review revision is
+`cyclotron-execution-pair-v1-20261015`.
 
-Required central extension, owned by Accounts: one product registration with an
-explicit reviewed enrolling-principal/executing-principal relation. Preserve the
-original enrolling principal on alias/session records. Worker continuation must
-check that exact enrolled principal, original session family/auth_time, product,
-issuer, client and reviewed policy revision against the specifically approved
-relation. Distinguish enrollment permission from execution permission; worker
-cannot enroll or create an account. Account permissions remain fresh and scoped.
-Do not replace the check with an unrestricted same-product role set. Policy
-changes require explicit handling of existing enrollments, not silent migration.
+Our actual central native harness plus Python signed transport passes 15 checks,
+including restart continuity, worker principal preservation, forbidden routes,
+unknown role, wrong client/family, expiry, removed pair and logout. Central owner
+also reports 58 new delegation tests. These do not verify deployed IAM.
 
-Required central tests before this alternative can be enabled: BFF-enroll/worker
-execute positive flow; unknown principal, wrong product, unlisted role pair,
-worker challenge/resolve, wrong issuer/client/policy, different origin_jti or
-auth_time, changed Person, expired proof and revoked membership all fail. Retain
-directory isolation and existing same-principal regressions. Local guard tests
-here do not stand in for those central cross-role cryptographic/policy tests.
-
-**Fallback only with explicit approval:** both functions directly use one
-`arn:aws:iam::682849160744:role/cyclotron-console-runtime`. This matches the
-existing central principal binding. Both functions then receive the UNION of
-permissions below: worker can generate session envelope keys, mutate/revoke
-sessions, enroll identities and create accounts; BFF can consume queue messages
-and write runtime/budget coordination. IAM no longer contains those function
-boundaries. Human checks, conditional storage and separate publication grants
-remain required, but cannot restore an IAM separation after code compromise.
-There is no implicit approval for this union. No role option has been activated.
+Activation permits matching existing BFF-enrolled sessions under the same
+policy. A fresh-login-only rollout requires an enrollment-policy revision bump
+and reenrollment; do not silently promise that effect. Keep existing directory
+registration and policies intact when adding the reviewed Cyclotron pair.
+No shared-role permission union is proposed.
 
 ## Exact central invoke scope
 
@@ -75,7 +57,7 @@ Only `execute-api:Invoke` on the following method/path suffixes is requested.
 UUID wildcards are necessary at IAM level; BFF and central handlers validate
 lowercase UUIDv4 account IDs and independently enforce Person/membership/product.
 
-| BFF | Worker, after the reviewed central role relation exists |
+| BFF | Worker, under the reviewed central role relation |
 | --- | --- |
 | `/POST/v1/identities/google/challenge` | none |
 | `/POST/v1/identities/google/resolve` | none |
@@ -114,7 +96,7 @@ rebuildable card-catalog indexing can be added separately.
   head rewind. S3 policy must enforce appropriate conditional writes and TLS.
 - BFF console coordination:
   `*/console/coordination/console/*` only. Worker console plus separately named
-  `embedded`, `runtime`, `shared-batches`, `evaluation`, `reviewer` and
+  `workspace`, `runtime`, `shared-batches`, `evaluation`, `reviewer` and
   `optimizer` coordination domains. Each maps to the existing named repository
   composition; no SQL or fallback path. Current content-addressed payload prefix
   is shared by domains, so both principals can write immutable bytes there;
@@ -125,7 +107,7 @@ rebuildable card-catalog indexing can be added separately.
 - Separate versioned auth bucket
   `cyclotron-console-auth-682849160744-us-east-1`. Fixed scope
   `console-auth/sessions/`. BFF GetObject/PutObject on its `payloads/*` and
-  `coordination/oauth/*`; worker GetObject only on those same paths. No deletes or
+  `coordination/oauth/*`; worker GetObject only on payloads and `coordination/oauth/session-*/*`, excluding pending/quota heads. No deletes or
   list. Pending logins, sessions and quota use bounded canonical S3 journals,
   not local files or DynamoDB authority. S3 versions retain ciphertext after
   logout; current active/revision is authoritative. Retention/deletion policy
@@ -135,7 +117,7 @@ rebuildable card-catalog indexing can be added separately.
   ARN from the reviewed stack output, not an alias wildcard. BFF
   `kms:GenerateDataKey` and `kms:Decrypt`; worker `kms:Decrypt` only.
   Encryption context must include `application=cyclotron-console`,
-  `purpose=oauth-session`, `kind=pending|session`, `record=<64 lowercase hex>`.
+  `purpose=oauth-session`, `kind=pending|session`, `record=<64 lowercase hex>`. Worker decrypt is further limited to `kind=session`.
   No runtime key-policy/admin/encrypt-with-arbitrary-context grants. AES-256-GCM
   authenticates the same context and exact KMS KeyId is checked. Key ARN remains
   unresolved until the reviewed stack is synthesized/provisioned.
@@ -146,11 +128,11 @@ rebuildable card-catalog indexing can be added separately.
   account/run/job references, never JWTs or actor authority. Worker rereads
   canonical job/actor and claims inside its own invocation. An SQS retry is not
   permission to repeat a paid request. DLQ redrive is operator reconciliation,
-  not a reset. Queue consumer/runtime composition is still release work.
+  not a reset. Queue consumer/runtime composition is implemented and tested locally.
 - Log groups `/aws/lambda/cyclotron-console-bff` and
   `/aws/lambda/cyclotron-console-worker`, with CreateLogStream/PutLogEvents only
   on respective groups. Infrastructure creates groups and reviewed retention.
-  Access logs must omit OAuth callback query strings, cookies and token headers.
+  Application and Gateway access logging are disabled in this template; Lambda error output omits proof bodies. Amplify managed access-log treatment of callback query strings still needs operational review: no universal redaction claim is made. PKCE and single-use callback state remain required.
 
 Whole-domain immutable rewrites and scoped head contention remain material:
 previous synthetic one-classifier initialize/decide/review/close used 90 GET and
@@ -174,17 +156,68 @@ review before registration. Existing Google client/project/secrets are reused
 only by their owner; no values are copied or exposed. Callback allowlist changes
 may require user handoff. No email-only automatic linking.
 
-`amplify.yml` now builds/packages the EXISTING React web console into
-`trace-ui/console-dist`. It performs no backend deployment or permission mutation.
-The Python BFF remains same-origin via specific `/auth/*`, `/api/*`, `/graphql`
-and `/runs/*` routes to a reviewed ephemeral backend, before any SPA rewrite.
-No live backend target/rewrite is configured yet. Static hosting alone is not
-functional sign-in. Existing GraphQL subscriptions use WebSockets: static
-Amplify plus a plain HTTP Lambda gateway does not establish that transport.
-A reviewed streaming bridge or an explicit authenticated polling UI adjustment
-is still required; no silent polling/transport downgrade was implemented here.
+`amplify.yml` builds/packages the existing React console into
+`trace-ui/console-dist`. Standard SAM packaging supplies the Python backend;
+normal Amplify hosting uses explicit HTTPS reverse-proxy rules from
+`scripts/render_amplify_rules.py` before the SPA rewrite. This does not require a
+bespoke deployment role. No backend target or rewrite has been activated.
 
-Hosted worker dispatch, frozen-run/priming composition, scoped repair procedure,
-full stack synthesis, bounded actual-cloud conditional-write/failure trial and
-Google sign-in/account-switch/browser proof remain activation prerequisites.
-Local SQLite stays supported. Cloud SQLite/EC2 server is not a fallback.
+Hosted transport explicitly uses authenticated HTTP event polling: bounded
+100-event/1MiB pages, about two seconds between idle reads, fresh authorization
+each page, abort on account change and private-data teardown on 401/403. Native
+WebSockets remain supported. Hosted WebSocket streaming is not claimed.
+
+## Completed local composition and limits
+
+`HostedRuntime` composes encrypted S3 OAuth sessions, scoped S3 catalogs and
+frozen priming, BFF enqueue, SQS worker invocation, native WorkspaceSession,
+paid-attempt ledgers and guarded event writes. Original actor authorization is
+rechecked after ownership and before provider dispatch/business side effects.
+Unknown claims remain protected and require reconciliation; no TTL takeover or
+automatic paid retry is provided. SQS uses batch 1, two workers, three failed
+receives before DLQ. Sessions retain the original access token, maximum one hour;
+there is no automatic refresh or worker reenrollment. Expiry can interrupt work
+and leave a protected claim for operator review.
+
+The first environment composition disables live run/provider commands, with no
+environment toggle granting paid execution. Tests inject synthetic authority and
+providers. Comparison/provider resume paths are not a hosted paid-work release.
+No provider credentials or real charges are requested in this activation.
+
+Whole-workspace snapshots remain bounded (default 4MiB, 10000 records, one million
+commits); each idle event poll rereads the scoped journal. This is a bounded
+preproduction implementation, not a large-catalog latency/cost claim. The
+DynamoDB card catalog remains optional and rebuildable; it is not authoritative.
+S3 authority is settled. Local SQLite remains supported; hosted composition
+forbids it.
+
+## Consolidated approval scope and rollout gates
+
+Review `deployment/template.json` for the exact persistent changes: two retained
+versioned private S3 buckets, retained session KMS key and alias, command queue
+and DLQ, two narrowly scoped Lambda execution roles, two Lambda functions,
+14-day log groups and an HTTP API. Runtime storage policies enforce TLS and
+conditional publication; neither role can delete/list/administer buckets.
+Normal SAM artifact upload uses an approved deployment artifact bucket; no
+bespoke deployment-role engineering is requested.
+
+Approval must cover the dedicated Google-only console public client in the
+existing central pool, exact callback/logout/scopes above, federation review
+`cyclotron-google-only-unlinked-v1-20261015`, and the explicit BFF/worker pair
+review `cyclotron-execution-pair-v1-20261015`. Central owner then adds one
+`cyclotron` registration with only console read/write, preserves directory,
+updates the API exact-principal policy and rolls out tested pair code. Caller IAM
+is the exact method/path table above. Client ID and managed-login origin remain
+unresolved owner outputs; no directory client is reused.
+
+Normal new Amplify app/repository connection, generated backend proxy rules and
+`lab.cyclotron.anth.us` DNS/certificate mapping are included in hosting review.
+The authoritative `anth.us` DNS account/zone still needs locating. Existing
+marketing/CRM apps are excluded. Review managed access-log callback retention,
+ciphertext retention and operator reconciliation before activation.
+
+After approval, require stack/change-set review, bounded actual-S3 conditional
+write/uncertain-receipt trials, real Google sign-in, create/select account,
+allowed/denied tenant, viewer, account switching and logged-out browser proof.
+Only then report the public URL as running. Current verified preview is local
+and explicitly synthetic at `http://127.0.0.1:8916/`.

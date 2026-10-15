@@ -1,4 +1,4 @@
-"""Local GraphQL workspace; SQLite is authoritative for API trace history."""
+"""Existing workspace API with explicit native or account-scoped storage."""
 import asyncio
 from contextlib import asynccontextmanager
 from hashlib import sha256
@@ -346,7 +346,12 @@ class Mutation:
                              kind: str, payload: JSON | None = None) -> Job:
         if not info.context.get('service'):
             raise ValueError('labeling worker is not available')
-        row = await call(info,'command',str(run_id),request_id,kind,payload or {})
+        if info.context.get('account_access'):
+            service=info.context['service']
+            if not hasattr(service,'submit_command'):raise ValueError('hosted command composition unavailable')
+            row=await service.submit_command(info.context.get('verified_session'),str(run_id),request_id,kind,payload or {})
+        else:
+            row = await call(info,'command',str(run_id),request_id,kind,payload or {})
         return Job(id=row['id'],kind=row['kind'],status=row['status'],result=row['result'])
 
 
@@ -370,7 +375,10 @@ class AccountAuthorization(SchemaExtension):
         if access:
             operation = 'console:write' if self.execution_context.operation_type.value == 'mutation' else 'console:read'
             workspace = await access(context['connection'], operation)
-            context.update(store=workspace.store, service=workspace.service, account_id=workspace.account_id)
+            context.update(store=workspace.store, service=workspace.service, account_id=workspace.account_id,
+                           verified_session=getattr(workspace,"request_session",None))
+            if getattr(workspace,"priming",None) is not None:
+                context['priming_service']=lambda:workspace.priming
         yield
 
     async def on_stream_result(self, result):
@@ -387,7 +395,8 @@ schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscrip
     extensions=[AccountAuthorization])
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None):
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, public_origin=None, event_transport="websocket"):
+    if event_transport not in ("websocket","poll"):raise ValueError("explicit supported event transport required")
     if account_access and priming is not None:
         raise ValueError('hosted account access cannot use a global priming service')
     configured_priming=priming
@@ -421,7 +430,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     def same_origin(connection):
         origin = connection.headers.get('origin')
-        return not origin or urlsplit(origin).netloc == connection.headers.get('host')
+        return not origin or (origin == public_origin if public_origin is not None else urlsplit(origin).netloc == connection.headers.get('host'))
 
     @asynccontextmanager
     async def lifespan(app):
@@ -490,7 +499,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.get('/',response_class=HTMLResponse)
     async def index():
-        account_mode = ' data-account-mode="hosted"' if account_access else ''
+        account_mode = (' data-account-mode="hosted" data-event-transport="'+event_transport+'"') if account_access else ''
         return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"{account_mode}></div><script src="{asset_url("web.js")}"></script></body></html>'
 
     @app.get('/runs/{run_id}/timeline',response_class=HTMLResponse)

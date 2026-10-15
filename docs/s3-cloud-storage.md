@@ -273,3 +273,31 @@ that a guard denied after lock waiting touches no engine S3 state or provider.
 Central cross-role policy is a separate pending owner change, not proven by these
 same-principal synthetic tests. See `console-activation-review.md` for exact IAM
 alternatives, current infrastructure observations and remaining release work.
+
+## Hosted composition checkpoint (supersedes earlier release-work notes)
+
+The earlier adapter checkpoints above are historical. Hosted worker/session
+composition is now implemented in `hosted_runtime.py`, `hosted_console_service.py`
+and `hosted_command_worker.py`, using `S3WorkspaceStores` with the existing native
+WorkspaceSession and frozen priming. The worker claims the exact canonical job
+inside its invocation; original human/session authorization and ownership are
+rechecked before provider dispatch and business writes. Encrypted sessions remain
+in S3/KMS; queue messages carry references only. Explicit bounded HTTP event
+polling is freshly account-authorized per page, and native WebSockets are retained.
+
+Separate BFF/worker delegation is locally tested against the actual central
+native harness at e2bb8ff (15 checks). It is not activated centrally. The latest
+focused hosted/session/transport backend set passes 89 tests; native workspace,
+runtime, learning-window and priming regressions pass 74; cross-owner publication
+compatibility passes 83. Sets may overlap with historical counts; do not sum them.
+Actual packaged Linux Python 3.13 Gateway/S3/worker smoke tests use synthetic
+providers, no network and forbidden SQLite/local persistence. Browser proof covers
+synthetic owner feedback, viewer switching and logout.
+
+Reviewable SAM resources, pinned Linux artifact and normal Amplify packaging are
+prepared. Actual-cloud conditional-write trials, Google client/policy approval,
+central activation, IAM provisioning, DNS and hosted browser proof remain gates.
+Paid/provider commands are disabled in the first environment composition. No S3
+claim implies unrestricted scale: whole-workspace bounded rewrites and per-poll
+reads remain material. See `console-activation-review.md` and `deployment/README.md`
+for the consolidated inactive proposal, limits and operational requirements.

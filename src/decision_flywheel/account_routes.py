@@ -2,9 +2,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 import hmac
+import json
 from urllib.parse import urlencode
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 import httpx
 
@@ -48,7 +49,7 @@ class HostedAccounts:
         account_id = connection.query_params.get('account')
         if not session or not session.person_id or not account_id:
             return None
-        return VerifiedAccountSession(session.access_token, session.person_id, account_id)
+        return VerifiedAccountSession(session.access_token, session.person_id, account_id, session_ref=session.session_ref)
 
     async def _require(self, request):
         session = await self._session(request)
@@ -198,6 +199,27 @@ class HostedAccounts:
             if not session:
                 return {'authenticated': False, 'loginUrl': '/auth/login'}
             return await self._state(session)
+
+        @app.get('/api/runs/{run_id}/events')
+        async def event_page(request: Request, run_id: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)):
+            await self._require(request)
+            workspace = await self.access(request, 'console:read')
+            try:
+                rows = await asyncio.to_thread(workspace.store.events, run_id, after=after, limit=limit)
+            except ValueError:
+                raise HTTPException(404, 'unknown run') from None
+            events = []
+            length = 16
+            for row in rows:
+                event = {'sequence': row['sequence'], 'sourceId': row['source_id'], 'payload': row['payload']}
+                size = len(json.dumps(event, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode()) + 1
+                if length + size > 1048576:
+                    if not events:
+                        raise HTTPException(413, 'event exceeds page budget; operator review required')
+                    break
+                events.append(event)
+                length += size
+            return JSONResponse({'events': events}, headers={'Cache-Control': 'private, no-store'})
 
         @app.post('/api/accounts/select')
         async def select(request: Request):

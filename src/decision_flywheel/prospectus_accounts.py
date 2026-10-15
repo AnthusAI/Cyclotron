@@ -130,6 +130,7 @@ class VerifiedAccountSession:
     access_token: str = field(repr=False)
     person_id: str
     account_id: str
+    session_ref: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,8 @@ class AccountWorkspace:
     store: object
     service: object = None
     account_id: str = ''
+    request_session: VerifiedAccountSession | None = field(default=None, repr=False)
+    priming: object = field(default=None, repr=False)
 
 
 class AccountWorkspaceAccess:
@@ -163,4 +166,5 @@ class AccountWorkspaceAccess:
         import asyncio
         await asyncio.to_thread(self.accounts.authorize, session.access_token,
             session.account_id, session.person_id, operation)
-        return replace(self.workspace_for_account(session.account_id), account_id=session.account_id)
+        workspace = await asyncio.to_thread(self.workspace_for_account, session.account_id)
+        return replace(workspace, account_id=session.account_id, request_session=session)

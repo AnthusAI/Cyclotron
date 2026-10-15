@@ -43,9 +43,11 @@ class CyclotronRuntime:
     """Compose and execute source-neutral cyclotron sessions for one host."""
 
     def __init__(self, store, directory: str | Path, *, model_factory: Callable,
-                 sink_factory: Callable, redact: Sequence[str] = ()):
+                 sink_factory: Callable, redact: Sequence[str] = (), storage_factory=None, execution_guard=None):
         self.store = store
-        self.directory = Path(directory)
+        self.directory = Path(directory) if directory is not None else None
+        self.storage_factory,self.execution_guard=storage_factory,execution_guard
+        if self.directory is None and storage_factory is None:raise ValueError("explicit cloud storage factory required")
         self.model_factory = model_factory
         self.sink_factory = sink_factory
         self.redact = tuple(redact)
@@ -172,8 +174,9 @@ class CyclotronRuntime:
             # buffered trace behind.
             configure_batch(200)
         workspace = WorkspaceSession(
-            self.store, run, self.directory / run_id, model, optimizer,
-            observer, redact=self.redact,
+            self.store, run, self.directory / run_id if self.directory is not None else None, model, optimizer,
+            observer, redact=self.redact, storage=self.storage_factory(run_id) if self.storage_factory else None,
+            execution_guard=self.execution_guard,
         )
         return CyclotronSession(workspace)
 
@@ -190,6 +193,7 @@ class CyclotronRuntime:
         if not isinstance(session, CyclotronSession):
             raise ValueError("cyclotron runtime requires a cyclotron session")
         workspace = session.workspace
+        await workspace.authorize()
         workspace.config = dict(config)
         workspace.shared.max_requests = config["max_requests"]
         for wheel in workspace.wheels.values():

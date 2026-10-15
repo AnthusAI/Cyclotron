@@ -58,20 +58,22 @@ class QueuedAccountAuthorization:
         except Exception: raise AccountAccessDenied('invalid queued actor') from None
 
         async def authorize():
-            session = await asyncio.to_thread(self.sessions.get_ref, actor.session_ref)
-            if (session is None or session.person_id != actor.person_id or session.subject != actor.subject
-                    or not hmac.compare_digest(_proof(session, actor), actor.proof)):
-                raise AccountAccessDenied('queued session changed or expired')
-            claims = await asyncio.to_thread(self.verifier.access, session.access_token)
-            if claims.get('sub') != actor.subject:
-                raise AccountAccessDenied('queued identity changed')
-            person = await asyncio.to_thread(self.identities.me, session.access_token)
-            if not isinstance(person, dict) or person.get('id') != actor.person_id:
-                raise AccountAccessDenied('queued identity enrollment changed')
-            await asyncio.to_thread(self.accounts.authorize, session.access_token,
-                                    actor.account_id, actor.person_id, actor.operation)
-            # Resolves current account+run binding, not session's selected-account preference.
-            binding = await asyncio.to_thread(self.binding_for_run, actor.account_id, actor.run_id)
-            if binding != actor.binding:
-                raise AccountAccessDenied('queued workspace binding changed')
+            await asyncio.to_thread(self.check, actor)
         return authorize
+
+    def check(self, actor):
+        """Blocking equivalent for isolated worker effect boundaries, never ASGI."""
+        self.guard(actor)  # Validate shape without authorizing or executing a closure.
+        session = self.sessions.get_ref(actor.session_ref)
+        if (session is None or session.person_id != actor.person_id or session.subject != actor.subject
+                or not hmac.compare_digest(_proof(session, actor), actor.proof)):
+            raise AccountAccessDenied('queued session changed or expired')
+        claims = self.verifier.access(session.access_token)
+        if claims.get('sub') != actor.subject:
+            raise AccountAccessDenied('queued identity changed')
+        person = self.identities.me(session.access_token)
+        if not isinstance(person, dict) or person.get('id') != actor.person_id:
+            raise AccountAccessDenied('queued identity enrollment changed')
+        self.accounts.authorize(session.access_token, actor.account_id, actor.person_id, actor.operation)
+        if self.binding_for_run(actor.account_id, actor.run_id) != actor.binding:
+            raise AccountAccessDenied('queued workspace binding changed')

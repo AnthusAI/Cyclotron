@@ -46,29 +46,42 @@ def freeze_configuration(store,config,*,selection_policy_override=False):
 
 class WorkspaceSession:
     current_cycle=None  # cycles are durably suspended between prediction and feedback
-    def __init__(self,store,run,directory,model,optimizer,observer,*,redact=()):
+    def __init__(self,store,run,directory,model,optimizer,observer,*,redact=(),storage=None,execution_guard=None):
         self.store,self.run,self.config,self.directory,self.observer=store,run,run['config'],directory,observer
-        directory.mkdir(parents=True,exist_ok=True)
-        self.items={row['id']:row for row in store.items(run['id'])}
-        self.shared=SharedDecisions(directory/'shared.sqlite3',model,max_requests=self.config['max_requests'],observer=lambda event:self.emit('transport',event))
-        self.wheels={}
-        from .priming_context import decode_priming
-        self.priming_examples=decode_priming(self.config.get('priming_examples',{}))
-        for classifier in self.config['classifiers']:
-            identifier=classifier['id'];definition=classifier['config']
-            task=DecisionTask(identifier,tuple(row['label'] for row in definition['classes']),definition['question'],definition.get('input_field','text'))
-            path=hashlib.sha256(identifier.encode()).hexdigest()+'.sqlite3'
-            # Each wheel owns its observer; only the paid transport and its
-            # budget are shared. Reusing the agent chains every wheel's traces.
-            seeded=tuple(DecisionTask(q['name'],tuple(q['labels']),q['instructions'],task.input_field)
-                         for q in self.config.get('seed_supporting_questions',{}).get(identifier,[]))
-            initial=ClassifierConfig(task,rubric=definition.get('seed_rubric',''),tasks=seeded,example_ids=tuple(row.item.id for row in self.priming_examples.get(identifier,())))
-            self.wheels[identifier]=DecisionFlywheel(directory/path,initial,self.shared.adapter(identifier),copy(optimizer),
-                max_requests=self.config['max_requests'],observer=lambda event,cid=identifier:self.emit(cid,event),redact=redact,
-                selection_policy=SelectionPolicy(**definition.get('selection_policy',{'primary':'f1','aggregation':'macro'})),min_evaluation_per_class=2)
-        install_sibling_checks(self.wheels,self.shared,self.partitions,SiblingPolicy(**self.config.get('sibling_policy',{})))
-        transport=getattr(optimizer,'complete',None)
-        if hasattr(transport,'calls'):transport.calls=sum(sum(e['kind']=='optimizer-request' for e in wheel.history(100000)) for wheel in self.wheels.values())
+        self.storage,self.execution_guard=storage,execution_guard
+        if storage is None:
+            if directory is None:raise ValueError('explicit complete cloud workspace storage required')
+            directory.mkdir(parents=True,exist_ok=True)
+        else:
+            if directory is not None:raise ValueError('cloud workspace has no native directory')
+            from .s3_optimizer_transport import require_durable_optimizer
+            require_durable_optimizer(optimizer)
+            storage.acquire(self.config)
+        try:
+            self.items={row['id']:row for row in store.items(run['id'])}
+            self.shared=SharedDecisions(directory/'shared.sqlite3' if storage is None else None,model,max_requests=self.config['max_requests'],observer=lambda event:self.emit('transport',event),storage=None if storage is None else storage.shared)
+            self.wheels={}
+            from .priming_context import decode_priming
+            self.priming_examples=decode_priming(self.config.get('priming_examples',{}))
+            for classifier in self.config['classifiers']:
+                identifier=classifier['id'];definition=classifier['config']
+                task=DecisionTask(identifier,tuple(row['label'] for row in definition['classes']),definition['question'],definition.get('input_field','text'))
+                path=hashlib.sha256(identifier.encode()).hexdigest()+'.sqlite3'
+                # Each wheel owns its observer; only the paid transport and its
+                # budget are shared. Reusing the agent chains every wheel's traces.
+                seeded=tuple(DecisionTask(q['name'],tuple(q['labels']),q['instructions'],task.input_field)
+                             for q in self.config.get('seed_supporting_questions',{}).get(identifier,[]))
+                initial=ClassifierConfig(task,rubric=definition.get('seed_rubric',''),tasks=seeded,example_ids=tuple(row.item.id for row in self.priming_examples.get(identifier,())))
+                self.wheels[identifier]=DecisionFlywheel(directory/path if storage is None else None,initial,self.shared.adapter(identifier),copy(optimizer),
+                    max_requests=self.config['max_requests'],observer=lambda event,cid=identifier:self.emit(cid,event),redact=redact,
+                    selection_policy=SelectionPolicy(**definition.get('selection_policy',{'primary':'f1','aggregation':'macro'})),min_evaluation_per_class=2,
+                    storage=None if storage is None else storage.runtime(identifier))
+            install_sibling_checks(self.wheels,self.shared,self.partitions,SiblingPolicy(**self.config.get('sibling_policy',{})))
+            transport=getattr(optimizer,'complete',None)
+            if hasattr(transport,'calls'):transport.calls=sum(sum(e['kind']=='optimizer-request' for e in wheel.history(100000)) for wheel in self.wheels.values())
+        except BaseException:
+            if storage is not None:storage.close()
+            raise
 
     def emit(self,identifier,event):
         event={**event,'classifier_id':identifier}
@@ -90,6 +103,7 @@ class WorkspaceSession:
     def close(self):
         for wheel in self.wheels.values():wheel.close()
         self.shared.close()
+        if self.storage is not None:self.storage.close()
 
     def skip(self,payload):
         current=self.store.current_item(self.run['id'])
@@ -109,7 +123,16 @@ class WorkspaceSession:
         training,development,protected=feedback_partitions(self.wheels[identifier],{item_id:row['values'] for item_id,row in self.items.items()},self.config['seed'])
         return (*self.priming_examples.get(identifier,()),*training),development,protected
 
+    async def authorize(self):
+        if self.execution_guard is not None:
+            import inspect
+            result=self.execution_guard()
+            if inspect.isawaitable(result):result=await result
+            if result is not None:raise ValueError('execution guard must return None or raise')
+        if self.storage is not None:self.storage.refresh()
+
     async def prepare(self):
+        await self.authorize()
         current=self.store.current_item(self.run['id'])
         if current:return current
         row=next(iter(self.store.unreviewed_items(self.run['id'])),None)
@@ -117,6 +140,7 @@ class WorkspaceSession:
         target=Item(row['id'],row['values']);now=datetime.now(timezone.utc)
         results,cyclotron_fingerprint=await decide_with_shared_context(self.wheels,self.shared,target,self.partitions,now=now,
             checkpoint=lambda:self.store.checkpoint_cyclotron(self.run['id'],self.wheels))
+        await self.authorize()
         predictions={}
         for identifier,result in results.items():
             wheel=self.wheels[identifier]
@@ -132,6 +156,7 @@ class WorkspaceSession:
         return {'item':row,'prediction':shown}
 
     async def feedback(self,payload,request_id):
+        await self.authorize()
         current=self.store.current_item(self.run['id'])
         if not current or payload.get('item_id')!=current['item']['id'] or payload.get('presentation_id')!=current['prediction']['presentation_id']:
             raise ValueError('feedback must reference the displayed batch prediction')
@@ -150,6 +175,7 @@ class WorkspaceSession:
             raise ValueError('provide every missing historical classifier label before continuing')
         labels=[*labels,*[{'classifier_id':row['classifier_id'],'label':row['label'],'comment':row['comment'],'source_request_id':row['request_id']} for row in inherited]]
         for label in labels:
+            await self.authorize()
             identifier=label['classifier_id'];wheel=self.wheels[identifier]
             feedback_id=f'{request_id}:{identifier}'
             existing=next((e['feedback'] for e in wheel.history(100000) if e['kind']=='human-feedback' and e['feedback']['id']==feedback_id),None)
@@ -192,11 +218,13 @@ class WorkspaceSession:
             if identifier not in {row['classifier_id'] for row in labels}:
                 cycle=wheel.resume_cycle(target)
                 if cycle:cycle.__exit__(None,None,None)
+        await self.authorize()
         self.store.update_item(self.run['id'],item['id'],reviewed=True)
         self.store.checkpoint_cyclotron(self.run['id'],self.wheels)
         return {'reviewed':item['id'],'optimization_warnings':warnings}
 
     async def resume_optimization(self):
+        await self.authorize()
         results=[]
         for identifier,wheel in self.wheels.items():
             feedback=next((e['feedback'] for e in reversed(wheel.history(100000)) if e['kind']=='human-feedback' and e.get('action')=='submitted'),None)

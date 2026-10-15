@@ -433,6 +433,13 @@ class S3ConsoleStorage:
             if previous is not None and previous!=provenance:raise ValueError('command already bound to another actor')
             value['actors'][job['id']]=provenance
         return job
+    def command_envelope(self,job_id):
+        from .queued_account_authorization import QueuedActor
+        value=self._read();job=one(value,'web_jobs',id=job_id)
+        if job is None:raise ValueError('unknown command')
+        actor=value['actors'].get(job_id)
+        if actor is None:raise ValueError('queued actor absent; legacy job cannot execute')
+        return decoded(job,'payload','result'),QueuedActor(**actor)
     def command_actor(self,job_id,owner,fence):
         from .queued_account_authorization import QueuedActor
         self.for_command(job_id,owner,fence)
@@ -449,12 +456,12 @@ class S3ConsoleStorage:
                 'hasActor':job_id in value['actors'],'automaticTakeover':False}
     def jobs(self,run_id):
         value=self._read();self._run(value,run_id);return [decoded(r,'payload','result') for r in reversed(rows(value,'web_jobs',run_id=run_id))][:20]
-    def claim_command(self,*,owner=None):
+    def claim_command(self,*,owner=None,job_id=None):
         if owner is None:raise ValueError('cloud command claim requires an explicit worker operation owner')
         uuid(owner)
         def apply(value):
             if any(c['owner']==owner for c in value['claims'].values()):raise ValueError('worker operation owner already claimed; reconcile its result')
-            job=next((r for r in rows(value,'web_jobs') if r['status']=='pending'),None)
+            job=next((r for r in rows(value,'web_jobs') if r['status']=='pending' and (job_id is None or r['id']==job_id)),None)
             if job is None:return None
             previous=value['claims'].get(job['id']);fence=previous['fence']+1 if previous else 1
             value['claims'][job['id']]={'owner':owner,'fence':fence};job['status']='running'
@@ -633,7 +640,7 @@ class _CommandView:
         'inherited_labels','checkpoint_cyclotron','cyclotron_checkpoints','matched_evaluation_inputs','matched_evaluation_target'}
     def __init__(self,store,claim,run_id):self._store=store;self._authority=claim;self._run_id=run_id
     def __getattr__(self,name):
-        if name not in self.RUN_METHODS|{'item_labels','finish_command'}:raise AttributeError(name)
+        if name not in self.RUN_METHODS|{'item_labels','label_item','retract_item_label','finish_command'}:raise AttributeError(name)
         target=getattr(self._store,name)
         if not callable(target):return target
         def invoke(*args,**kwargs):
@@ -641,6 +648,24 @@ class _CommandView:
             if name=='finish_command' and (args[0] if args else kwargs.get('job_id'))!=self._authority[0]:raise ValueError('command identity boundary refused')
             token=self._store._claim.set(self._authority)
             try:
+                if name in ('label_item','retract_item_label'):
+                    import inspect
+                    params=inspect.signature(target).bind(*args,**kwargs).arguments
+                    value=self._store._read();job=one(value,'web_jobs',id=self._authority[0])
+                    config=load_config(self._store._run(value,self._run_id)['config'])
+                    if name=='label_item':
+                        fields=params
+                        if job['kind'] not in ('label','correct','replay-next'):raise ValueError('command does not authorize a catalog vote')
+                    else:
+                        fields=one(value,'item_feedback',request_id=params['feedback_request_id'])
+                        if job['kind']!='undo' or fields is None:raise ValueError('command does not authorize a catalog retraction')
+                    classifier=next((c for c in config.get('classifiers',[]) if c['id']==fields['classifier_id']),None)
+                    item=one(value,'web_items',run_id=self._run_id,id=fields['item_id'])
+                    if (classifier is None or classifier['revision']!=fields['classifier_revision']
+                            or config.get('item_list_id')!=fields['list_id'] or item is None
+                            or json.loads(item['payload'])['revision']!=fields['item_revision']):raise ValueError('catalog write outside frozen command inputs')
+                    prefix=job['request_id'] if job['kind']!='replay-next' else 'replay:'+fields['item_id']
+                    if params['request_id']!=prefix+':'+fields['classifier_id']:raise ValueError('catalog write outside command identity')
                 if name=='finish_command':
                     kwargs.setdefault('owner',self._authority[1]);kwargs.setdefault('fence',self._authority[2])
                 return target(*args,**kwargs)

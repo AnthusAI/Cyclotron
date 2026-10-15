@@ -180,3 +180,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 project/.overlay/
+
+# Reproducible cloud deployment outputs
+deployment/.build/
+deployment/console-backend.zip
+deployment/console-backend.manifest.json

@@ -79,3 +79,21 @@ def test_cloud_sdk_rejects_unmetered_optimizer_before_creating_a_namespace(monke
     with pytest.raises(ValueError,match='paid-call transport'):
         Cyclotron.open(None,DEFINITION,Model(),agent([]),storage=s)
     assert client.calls==[]
+
+
+def test_per_invocation_guard_denial_precedes_reservation_and_is_rechecked_before_dispatch():
+    from .s3_optimizer_transport import S3OptimizerTransport
+    calls=[];checks=[]
+    base=wrapped(lambda messages:calls.append(messages))
+    def denied():raise PermissionError('revoked')
+    guarded=base.with_execution_guard(denied)
+    before=len(base.storage.journal.payloads.client.calls)
+    with pytest.raises(PermissionError):guarded([{'role':'user','content':'synthetic'}])
+    assert calls==[] and len(base.storage.journal.payloads.client.calls)==before
+    assert base.calls==0
+    def revoke_at_dispatch():
+        checks.append(True)
+        if len(checks)==2:raise PermissionError('revoked while reserving')
+    guarded=base.with_execution_guard(revoke_at_dispatch)
+    with pytest.raises(PermissionError):guarded([{'role':'user','content':'synthetic'}])
+    assert calls==[] and base.calls==1
