@@ -67,4 +67,4 @@ remains pending activation. Generated archives are retained locally and ignored.
 
 Current no-list initialization refresh passes 31 targeted journal/session/hosted
 checks. Approved cloud activation is tracked in docs/console-cloud-activation.md;
-actual AWS proof is pending stack creation at this checkpoint.
+actual S3/KMS bounded proof now passes; runtime IAM/Google proof remains pending.

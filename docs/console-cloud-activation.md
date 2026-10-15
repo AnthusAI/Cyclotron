@@ -35,3 +35,44 @@ Committed code and Kanbus remain local; no remote branch or PR has been pushed.
 Preserve this branch and coordinate landing with concurrent priming/publication
 work. scripts/verify_cloud_storage.py is the bounded synthetic actual-AWS trial
 for CAS, unconditional-write denial, lost receipt and KMS context binding.
+
+## Foundation and actual-AWS checkpoint
+
+Foundation stack cyclotron-console is CREATE_COMPLETE:
+`arn:aws:cloudformation:us-east-1:682849160744:stack/cyclotron-console/8da58320-c8e0-11f1-984f-0afff73fed87`.
+Both exact BFF/worker role ARNs were retrieved and their trusts contain only
+lambda.amazonaws.com. Key ARN:
+`arn:aws:kms:us-east-1:682849160744:key/3d92f6f1-640e-474f-843a-cdc49e4301b8`.
+Command queue URL:
+`https://sqs.us-east-1.amazonaws.com/682849160744/cyclotron-console-commands`.
+
+Amplify production job 1 SUCCEED; DNS change INSYNC; domain association remains
+PENDING_DEPLOYMENT. Static assets alone are not functional authentication.
+
+Actual S3/KMS trial PASS under operator temporary Endymion credentials: isolated
+synthetic account namespace f568c308-4edd-4e2f-ae3a-9fb1e350a5fa, 11 GET/9 PUT,
+stale CAS denied, unconditional head overwrite denied by bucket policy, simulated
+lost response remains uncertain, wrong KMS context denied. No provider calls or
+object deletion. This does not prove deployed runtime IAM or Google sign-in.
+AWS CLI temporary credentials were consumed in memory, never printed or saved;
+the older Python SDK SSO cache could not refresh independently.
+
+## New quota blocker — action stopped
+
+Actual Lambda account concurrency quota is 10. AWS requires 100 unreserved units
+alongside the approved BFF5/worker2 reserved caps. A request for 107 was rejected
+by AWS because this quota API requires a desired value above its nominal default
+1000. The subsequent proposed request for the minimum accepted 1001 was rejected
+before execution by automatic approval review: account-wide future compute/cost
+blast radius exceeds the specified 5/2 function scope. No1001 request was sent.
+Explicit user approval has been requested; do not retry or bypass this denial,
+including by dropping the approved function caps. Continue unaffected central,
+DNS and storage work. Functions/API still await dedicated client ID plus quota
+resolution. No private/public source push or PR has occurred.
+
+Public TLS request to https://lab.cyclotron.anth.us/ returned HTTP200 with
+certificate verification enabled. Actual browser loaded the Cyclotron static
+shell and correctly displayed “The account request failed. Try again.” because
+the backend/API is not deployed/configured yet. No private workspace appeared.
+Screenshot: deployment/cloud-static-blocked-proof.jpg. This is explicitly a
+partial static deployment, not working Google sign-in or account integration.

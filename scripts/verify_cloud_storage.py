@@ -6,6 +6,7 @@ instead of deleting history. This is storage/KMS evidence, not runtime IAM proof
 import argparse
 from hashlib import sha256
 import json
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 import botocore.session
@@ -24,7 +25,13 @@ def main():
     document=json.loads(Path(args.outputs).read_text());stack=document['Stacks'][0]
     assert stack['StackName']=='cyclotron-console'
     outputs={row['OutputKey']:row['OutputValue'] for row in stack['Outputs']}
-    session=botocore.session.get_session();session.set_config_variable('profile','cyclotron-production')
+    # Consume AWS CLI's current Endymion temporary credentials in memory only;
+    # older SDK SSO caches can disagree with the current CLI login provider.
+    result=subprocess.run(['aws','configure','export-credentials','--profile','cyclotron-production','--format','process'],capture_output=True,text=True,check=True)
+    credentials=json.loads(result.stdout)
+    assert credentials.get('SessionToken')
+    session=botocore.session.get_session()
+    session.set_credentials(credentials['AccessKeyId'],credentials['SecretAccessKey'],credentials['SessionToken'])
     options=Config(retries={'total_max_attempts':1},connect_timeout=5,read_timeout=15,signature_version='s3v4')
     sts=session.create_client('sts',region_name='us-east-1')
     assert sts.get_caller_identity()['Account']=='682849160744'
