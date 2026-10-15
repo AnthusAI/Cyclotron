@@ -3,7 +3,7 @@
   "title": "M1: Shared publication contracts and deep Papyrus Cyclotron controls",
   "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nSingle ownership of cross-mode identity/binding, versioned decision/review, and real reusable UI contracts. Both deployment initiatives depend on this milestone; do not duplicate its stories under embedded mode. Reuse the existing Papyrus integration epic, multi-output engine work, status schema, review/status components, versioning and package work.\n\nFuture Definition of Done: reviewed mode-neutral contracts and conformance acceptance cases; actual Papyrus UI exposes item/output history, explicit labels and explanations, per-classifier metrics/calibration/review routing and inspectable steering/promotions using real shared components. Transport/storage choice may differ; operator semantics and auditability must agree. No new framework by assumption.\n\nOpen design questions (not decisions): stable item/revision, classifier/output and publication/deployment identities; binding configuration and changes; account/tenant permissions; service-role authentication without long-lived keys; per-output feedback and learning isolation; shared-item deduplication and provenance; versioned predictions and stale review handling; retry/idempotency, availability and recovery; remote/embedded mode parity. Choose no identity algorithm, auth provider, cloud topology or storage technology by filing these cards.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,9 +12,40 @@
     "deployment-mode-planning"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "84c281b7-b7d2-4b2b-8c5a-c24dcc8fc331",
+      "author": "home",
+      "text": "Ryan explicitly authorizes local implementation and testing of BOTH modes: \"Oh okay, well we can start those. We are going to work on testing both ways.\" This supersedes the earlier planning-only implementation hold for local work. First vertical slice: shared publication contract over real Cyclotron facade, direct embedded and local HTTP remote-lab invocation, deterministic offline models, scoped labels/explanations/history/status, retry identity and restart. First specs failed because publication_lab did not exist; initial implementation now passes nine local tests. No paid calls, new cloud resources/permissions, production hosting or public push authorized. Persistence remains injected and owned by /task-4 storage conversion (45f8ee15057a069eb961b6a01e0240ca29fb1476; docs/storage-portability.md read). No competing adapter or persistent EC2 SQLite hosting. Local SQLite is only existing test-fixture storage; hosted activation remains unavailable pending full storage conversion/coordinator decisions. Papyrus UI integration remains coordinated via parent with /task-2 owner.",
+      "created_at": "2026-10-15T15:39:36.262018Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "4077469b-ac94-4b25-b948-906893241af1",
+      "author": "home",
+      "text": "First reusable slice committed: core 1cbe194; Papyrus companion c471eb7, story PPY-c26cf96b-f516-41fd-89c0-960c08467d73. Thirteen new contract tests execute actual deterministic SDK classifiers via direct embedded and in-process HTTP/ASGI remote paths. Coverage: common item/divergent publication outputs; host-verified account/publication capabilities; explicit label/reason/explanation/provenance; displayed prediction/binding pins; restart and retry idempotency; lost HTTP acknowledgement after actual committed review; corrections with original explanations in scoped stable-cursor events; malformed/origin/size denial. Relevant SDK/store regression: 39 passed. Core UI: 250 tests across 57 files passed, package suite initially failed due npm cache permissions then passed 3/3 with temporary npm cache (253 total); types pass. Papyrus: 4 existing research/web orchestration-to-mode integration specs pass with outbound network guard, SSR/payload contract checks, focused types and changed-file lint pass. Shared ReviewControl now supports optional requireExplanation (default behavior unchanged); Papyrus data-only panel requires explicit rationale and supports review corrections. No production route, synthetic production classifier, storage adapter, live provider call or EC2 hosting enabled. Scope after Ryan latest direction: tested publication/merge/rollout authorized through release owner for Papyrus/Pilobolus/Threat Intelligence; Anth.us excluded, no secret transmission/IAM/OAuth expansion/paid tests. Ready for source consumption; release dependencies remain storage owner conversion/coordinator, verified service-role and human auth, deployment binding configuration, output-scoped steering (global review-rate override intentionally not exposed as per-publication), durable historical binding/source revision composition. Do not mark either initiative complete. See docs/publication-deployment-contract.md and Papyrus docs/publication-cyclotron-controls.md.",
+      "created_at": "2026-10-15T15:52:32.807503Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
   "created_at": "2026-10-15T13:33:20.116542Z",
-  "updated_at": "2026-10-15T13:33:20.116577Z",
+  "updated_at": "2026-10-15T15:52:32.807539Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
@@ -26,5 +57,8 @@
   },
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

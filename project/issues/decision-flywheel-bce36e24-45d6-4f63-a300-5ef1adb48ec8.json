@@ -3,7 +3,7 @@
   "title": "Preserve versioned feedback identity and retry semantics across both modes",
   "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a editor, I want auditable version-pinned decisions and explicit feedback acknowledgements, so that corrections and retries cannot mislabel a changed output or duplicate learning.\n\nFeature: Versioned feedback contract\n  Scenario: Correct an explicit human label\n    Given a reviewed item and an identified classifier/prediction revision\n    When an authorized editor corrects that output's label and explanation\n    Then the prior feedback remains auditable and the correction identifies its target revision\n    And sibling outputs receive no implicit feedback\n  Scenario: Retry after an uncertain acknowledgement\n    Given a feedback request whose acknowledgement was lost\n    When the client retries the same request identity\n    Then the client can determine its accepted, rejected or pending outcome\n    And the authoritative owner records no duplicate feedback or learning transition\n  Scenario: Review an old prediction after a classifier change\n    Given the classifier definition or publication binding changed after prediction\n    When feedback for the older prediction arrives\n    Then history retains the old revision and an explicit reviewed policy governs reuse\n    And feedback is not silently applied to a different question or output\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: version envelope and stale-review policy, acknowledgement/status API, idempotency scope/retention, correction/retraction semantics and mode conformance. Reuse definition-version and SDK history work.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
   ],
   "comments": [],
   "created_at": "2026-10-15T13:33:20.291153Z",
-  "updated_at": "2026-10-15T13:33:20.916582Z",
+  "updated_at": "2026-10-15T15:39:36.121091Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

@@ -3,7 +3,7 @@
   "title": "Authorize deployment service roles and editors without long-lived lab keys",
   "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a account administrator, I want scoped deployment and human access to remote outputs, so that sites share the lab without exposing other tenants or durable credentials.\n\nFeature: Scoped remote lab access\n  Scenario: A deployment requests its configured outputs\n    Given a deployment service role authorized for a reviewed publication/output scope\n    When it authenticates to the remote lab using the approved mechanism\n    Then it can request only the permitted decisions and history\n    And it does not require a long-lived shared lab key\n  Scenario: Unauthorized cross-publication feedback\n    Given a deployment or editor lacks permission for another publication's output\n    When it attempts to read restricted history or submit a label or steering command\n    Then access is denied without changing labels, learning or classifier configuration\n  Scenario: Expired or revoked authority\n    Given a role or human session is expired or revoked\n    When it attempts a lab operation\n    Then the request fails explicitly without falling back to a broader identity\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: account/tenant boundary, actor attribution, token exchange/federation/service-role mechanism, expiry/revocation and read/review/steer/admin capabilities. This is not authorization to create IAM roles, keys or cloud policy.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -14,7 +14,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-10-15T13:33:20.388409Z",
-  "updated_at": "2026-10-15T13:33:20.388443Z",
+  "updated_at": "2026-10-15T15:39:36.169738Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
@@ -26,5 +26,8 @@
   },
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }
