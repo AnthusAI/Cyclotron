@@ -24,10 +24,17 @@
       "text": "Durable identity compatibility verified against actual central filesystemRoot harness/native Virtuus FileStore+JournaledStore bridge. scripts/verify_google_identity_contract.py --filesystem restarts central with same disposable root/public JWKS/config while two BFF sessions stay open: same Person, selected synthetic account and scoped GraphQL access preserved; exact proof retry after restart200, changed proof409; invalid proof/profile and session-family checks retained. Original memory harness also rerun. Only identity enrollment persisted: account/membership adapter remains memory fixture, workspace temporary SQLite. No assertion of account durability/S3/cloud/IAM/real Google or native interruption invariants. No runtime console changes, only reproducible script/docs. Central owner separately owns crash/race/native journal tests. No cloud changes or public push.",
       "created_at": "2026-10-14T23:58:59.570158Z",
       "comment_type": "default"
+    },
+    {
+      "id": "413cd2fe-4aae-4c52-8e69-3f0625322bbc",
+      "author": "home",
+      "text": "Remaining real-handler continuity proof PASS. scripts/verify_google_identity_contract.py --filesystem --accounts-handler sends Python BFF account traffic through actual accountHandler -> AccountsService -> googlePersonDirectory, shared durable identity repo, central MemoryAccountStore only. Two pools same canonical Person; each product creates/lists/selects/authorizes its own account and scoped GraphQL fixture. Same account-create key/input returns same ID, changed input denied. Pool1 cannot select pool0 account without caller-product entitlement despite same Person/membership; no auto-grant. After central restart Person/session family and exact proof receipt persist, but MemoryAccountStore resets: account lists empty, selections cleared, old account select403 despite surviving local fixture store. Actual-handler, durable-identity/Python-account-fixture, and original memory modes all rerun PASS with negative proof/replay/family checks. Account/membership durability, live S3/Google/IAM and deployed Lambda not established. No runtime console/adapter/cloud changes or public push; only script/docs/tracking.",
+      "created_at": "2026-10-15T00:03:06.385380Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T22:55:50.327741Z",
-  "updated_at": "2026-10-14T23:58:59.570184Z",
+  "updated_at": "2026-10-15T00:03:06.385409Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

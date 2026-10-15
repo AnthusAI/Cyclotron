@@ -100,12 +100,36 @@ changed-proof behavior. This filesystem mode and the original memory mode both
 passed locally. No runtime console code change was needed.
 
 Only **central identity enrollment** uses the durable filesystem in this proof.
-The account/membership adapter remains an explicit in-memory fixture and the
-workspace is temporary SQLite. It does not prove account-storage durability,
+Without `--accounts-handler`, the account/membership adapter is an explicit
+Python in-memory fixture outside the restarted process, and the workspace is
+temporary SQLite. It does not prove account-storage durability,
 multi-process console sessions, a live S3 backend, or deployed Google/IAM
 configuration. Native journal interruption and cross-process enrollment safety
 are separate central-repository tests; this script establishes the BFF contract
 across a central restart after successful publication.
+
+Add `--filesystem --accounts-handler` to select the central harness's
+`accountsFixture:true` option. This sends all BFF account calls through the real
+`accountHandler` → `AccountsService` → `googlePersonDirectory`, backed by the same
+durable identity repository. Only account/membership persistence is substituted
+with the central `MemoryAccountStore`; no Python account-service fake handles
+those requests. No old `/v1/identities/resolve` endpoint is used.
+
+This mode passed: both pools resolved the same canonical Person; each could
+create, list, select and authorize its own product's account and open a scoped
+temporary GraphQL workspace. Repeating identical account creation returned the
+same account; changing its input under the same request key was refused. The
+second product could not select the first product's account, despite sharing its
+Person and membership, because it had no entitlement for that product. No
+automatic cross-product entitlement was introduced to make the test pass.
+
+Restarting central preserved identity/session-family and proof receipts but
+deliberately lost `MemoryAccountStore`: both BFF account lists became empty,
+selected accounts cleared, and old account selection returned 403 even though
+the local temporary workspace still existed. This verifies actual account-handler
+and shared-PersonDirectory compatibility in the optional local factory. It does
+not establish durable accounts/memberships or activate the existing deployed
+account Lambda. The original two modes also remain available for comparison.
 
 ## Existing account boundary
 

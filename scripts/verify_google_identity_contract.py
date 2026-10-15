@@ -1,11 +1,12 @@
 """Exercise the real Python BFF against Prospectus's isolated identity factory.
 
-Usage: PYTHONPATH=src python scripts/verify_google_identity_contract.py PATH_TO_PROSPECTUS [--filesystem]
+Usage: PYTHONPATH=src python scripts/verify_google_identity_contract.py PATH_TO_PROSPECTUS [--filesystem [--accounts-handler]]
 Requires the optional accounts/web Python dependencies, Node and that checkout's
 locked tsx installation. Uses synthetic RSA keys, disposable memory/filesystem
 storage, mock HTTP and a JSON-lines child only. Filesystem mode also needs the
 central checkout's built native Virtuus bridge. Gateway IAM context is a fixture,
-not deployed IAM proof. Accounts remain an in-memory fixture in both modes.
+not deployed IAM proof. Accounts remain an in-memory fixture in all modes;
+--accounts-handler selects actual central account logic over that memory store.
 """
 import argparse
 import json
@@ -66,7 +67,7 @@ class Harness:
         assert self.call(configuration) == {'configured': True}
 
 
-def verify(repository, *, filesystem=False):
+def verify(repository, *, filesystem=False, accounts_handler=False):
     now = int(time.time())
     products, private_keys, public_keys = [], {}, {}
     for index, product in enumerate(('cyclotron', 'papyrus')):
@@ -102,6 +103,8 @@ def verify(repository, *, filesystem=False):
     configuration = dict(op='configure', nowSeconds=now, products=products, keys=public_keys)
     if filesystem:
         configuration['filesystemRoot'] = str(Path(identity_directory.name).resolve())
+    if accounts_handler:
+        configuration['accountsFixture'] = True
     harness = Harness(repository)
     try:
         assert harness.call(configuration) == {'configured': True}
@@ -116,9 +119,10 @@ def verify(repository, *, filesystem=False):
                         resolutions.append(request_event)
                     result = harness.call(dict(op='request', event=request_event))
                     return httpx.Response(result['statusCode'], headers=result['headers'], content=result['body'])
-                identity = GoogleIdentityClient(SigV4Transport('https://synthetic-identity.example.invalid', 'us-east-1',
+                signed = SigV4Transport('https://synthetic-identity.example.invalid', 'us-east-1',
                     session=SimpleNamespace(get_credentials=lambda: Credentials('synthetic', 'fake', 'temporary')),
-                    client=httpx.Client(transport=httpx.MockTransport(central))))
+                    client=httpx.Client(transport=httpx.MockTransport(central)))
+                identity = GoogleIdentityClient(signed)
                 def account_transport(method, path, access_token, body=None, key=None):
                     person = identity.me(access_token)
                     if not person:
@@ -145,7 +149,7 @@ def verify(repository, *, filesystem=False):
                 verifier = CognitoTokenVerifier(product['issuer'], product['clientIds'][0], jwks={'keys': list(public_keys[product['issuer']].values())})
                 config = OAuthConfig(product['issuer'], product['clientIds'][0], 'https://synthetic.auth.example.invalid',
                     f'https://synthetic{index}.example.invalid')
-                gateway = HostedAccounts(config, AccountsClient(account_transport, product=product['product']),
+                gateway = HostedAccounts(config, AccountsClient(signed if accounts_handler else account_transport, product=product['product']),
                     lambda identifier: AccountWorkspace(stores[identifier]), verifier=verifier, google_identity=identity,
                     token_client=httpx.AsyncClient(transport=httpx.MockTransport(exchange)))
                 app = create_app(None, account_access=gateway.access)
@@ -172,22 +176,52 @@ def verify(repository, *, filesystem=False):
                 created = first.post('/api/accounts', json={'name': 'Synthetic shared team'}, headers=headers)
                 assert created.status_code == 201
                 account_id = created.json()['selectedAccountId']
+                if accounts_handler:
+                    assert first.post('/api/accounts', json={'name': 'Synthetic shared team'}, headers=headers).json()['selectedAccountId'] == account_id
+                    assert first.post('/api/accounts', json={'name': 'Changed replay'}, headers=headers).status_code == 403
+                    assert len(first.get('/api/session').json()['accounts']) == 1
+                    stores[account_id] = WebStore(Path(directory) / (account_id + '.sqlite'))
+                    stores[account_id].create_run('Shared synthetic workspace', 'recorded', {})
                 login(second, second_state)
                 second_session = second.get('/api/session').json()
                 assert first_session['personId'] == second_session['personId']
-                assert second_session['accounts'][0]['id'] == account_id
                 headers = {'Origin': second_gateway.config.public_origin, 'X-CSRF-Token': second_session['csrfToken']}
-                assert second.post('/api/accounts/select', json={'accountId': account_id}, headers=headers).status_code == 200
-                assert second.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == 'Shared synthetic workspace'
+                second_account_id, second_name = account_id, 'Shared synthetic workspace'
+                if accounts_handler:
+                    # Same Person/membership does not grant a second product's
+                    # entitlement. Exercise the real denial instead of seeding
+                    # an implicit grant into the synthetic account adapter.
+                    assert second_session['accounts'] == []
+                    assert second.post('/api/accounts/select', json={'accountId': account_id}, headers=headers).status_code == 403
+                    created_second = second.post('/api/accounts', json={'name': 'Papyrus synthetic team'},
+                        headers=headers | {'Idempotency-Key': str(uuid4())})
+                    assert created_second.status_code == 201
+                    second_account_id = created_second.json()['selectedAccountId']
+                    assert second_account_id != account_id
+                    second_name = 'Papyrus synthetic workspace'
+                    stores[second_account_id] = WebStore(Path(directory) / (second_account_id + '.sqlite'))
+                    stores[second_account_id].create_run(second_name, 'recorded', {})
+                else:
+                    assert second_session['accounts'][0]['id'] == account_id
+                assert second.post('/api/accounts/select', json={'accountId': second_account_id}, headers=headers).status_code == 200
+                assert second.post('/graphql', params={'account': second_account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == second_name
+                assert first.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == 'Shared synthetic workspace'
                 if filesystem:
-                    # Restart central identity only. BFF cookies/sessions and
-                    # the explicitly synthetic accounts adapter stay in memory.
+                    # Identity is durable; real-handler MemoryAccountStore is
+                    # deliberately reset. External Python account fixture mode
+                    # stays in memory outside the restarted central process.
                     harness.restart(configuration)
-                    assert first.get('/api/session').json()['personId'] == first_session['personId']
+                    restored_first = first.get('/api/session').json()
+                    assert restored_first['personId'] == first_session['personId']
                     restored = second.get('/api/session').json()
                     assert restored['personId'] == first_session['personId']
-                    assert restored['selectedAccountId'] == account_id
-                    assert second.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == 'Shared synthetic workspace'
+                    if accounts_handler:
+                        assert restored_first['accounts'] == restored['accounts'] == []
+                        assert restored_first['selectedAccountId'] is None and restored['selectedAccountId'] is None
+                        assert second.post('/api/accounts/select', json={'accountId': second_account_id}, headers=headers).status_code == 403
+                    else:
+                        assert restored['selectedAccountId'] == second_account_id
+                        assert second.post('/graphql', params={'account': second_account_id}, json={'query': '{runs{name}}'}).json()['data']['runs'][0]['name'] == second_name
                 assert first.get('/auth/callback', params=callback).status_code == 400
                 assert len(resolutions) == 2  # state replay did not reach central
                 assert harness.call(dict(op='request', event=resolutions[0]))['statusCode'] == 200
@@ -213,11 +247,16 @@ def verify(repository, *, filesystem=False):
                     login(client, state, expected=400)
                     assert client.get('/api/session').json()['authenticated'] is False
                 rejected += 1
-            print(json.dumps(dict(result='PASS', pools=2, canonicalPeople=1, syntheticAccountContinuity=True,
+            print(json.dumps(dict(result='PASS', pools=2, canonicalPeople=1, accountPersonContinuity=True,
                 invalidProofCases=rejected, localStateReplay='denied', centralExactRetry='idempotent',
                 centralChangedProof='409', continuationFamily='enforced',
                 identityStorage='virtuus-filesystem' if filesystem else 'memory',
-                centralRestartVerified=filesystem, accountStorage='memory-fixture',
+                centralRestartVerified=filesystem, accountStorage='central-memory-fixture' if accounts_handler else 'python-memory-fixture',
+                accountHandler='actual' if accounts_handler else 'synthetic',
+                accountPersonDirectory='actual' if accounts_handler else 'synthetic',
+                accountCreateRetry='verified' if accounts_handler else 'not-checked',
+                crossProductEntitlement='denied' if accounts_handler else 'synthetic-grant',
+                accountResetAfterRestart=filesystem and accounts_handler,
                 deployedIamVerified=False, liveGoogleVerified=False)))
     finally:
         harness.close()
@@ -228,5 +267,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('prospectus', type=Path)
     parser.add_argument('--filesystem', action='store_true', help='Use disposable durable identity files and restart the central harness')
+    parser.add_argument('--accounts-handler', action='store_true', help='Use real central account handler/PersonDirectory over MemoryAccountStore; requires --filesystem')
     arguments = parser.parse_args()
-    verify(arguments.prospectus.resolve(), filesystem=arguments.filesystem)
+    if arguments.accounts_handler and not arguments.filesystem:
+        parser.error('--accounts-handler requires --filesystem')
+    verify(arguments.prospectus.resolve(), filesystem=arguments.filesystem, accounts_handler=arguments.accounts_handler)
