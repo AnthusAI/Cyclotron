@@ -221,3 +221,26 @@ store.close()
     result = subprocess.run([sys.executable,'-c',script,str(tmp_path/'local.sqlite')],
         env=os.environ.copy(),capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr
+
+
+def test_learning_abandonment_preserves_charged_attempts_and_only_fences_its_own_operation(tmp_path):
+    store=SQLiteBatchStorage(tmp_path/'shared.sqlite')
+    first,second,other=str(uuid4()),str(uuid4()),str(uuid4())
+    store.reserve('a'*64,3,first);store.claim('a'*64,first)
+    marker=store.operation_mark()
+    store.reserve('b'*64,3,other);store.claim('b'*64,other)
+    assert store.pending_operations()==[(marker,'a'*64,first),(marker+1,'b'*64,other)]
+    with pytest.raises(BatchConflict): store.abandon_learning('a'*64,other)
+    store.abandon_learning('a'*64,first)
+    assert store.requests()==2 and store.get('a'*64).status=='interrupted'
+    assert store.pending_operations()==[(marker+1,'b'*64,other)]
+    with pytest.raises(BatchInProgress): store.reserve('b'*64,3,second,retry_failed=True)
+    store.close()
+    store=SQLiteBatchStorage(tmp_path/'shared.sqlite')
+    row=store.reserve('a'*64,3,second)
+    assert row.generation==2 and store.requests()==3
+    assert store.export()['history'][0][3:]==['interrupted','{"learning_abandoned":true}',first]
+    with pytest.raises(BatchConflict): store.settle('a'*64,first,'complete','{}')
+    store.abandon_learning('a'*64,second)
+    with pytest.raises(RuntimeError,match='ceiling'): store.reserve('a'*64,3,str(uuid4()))
+    store.close()

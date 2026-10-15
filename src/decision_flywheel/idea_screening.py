@@ -195,10 +195,12 @@ def validate_proposals(proposals, control, count):
     return proposals
 
 
-def ask_proposals(wheel, briefing, control, count):
+async def ask_proposals(wheel, briefing, control, count):
     """One optimizer call for up to ``count`` distinct proposals; optimizers without propose_many give one."""
+    from .optimizer_agent import ask_optimizer
     many = getattr(wheel.optimizer, "propose_many", None)
-    proposals = many(briefing) if many else [wheel.optimizer.propose(briefing)]
+    proposals = (await ask_optimizer(wheel.optimizer, "propose_many", briefing) if many
+                 else [await ask_optimizer(wheel.optimizer, "propose", briefing)])
     return validate_proposals(proposals, control, count)
 
 

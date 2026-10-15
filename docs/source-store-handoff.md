@@ -117,3 +117,39 @@ tests**. The integration owner's read-only publication/Papyrus harness passed
 adding legacy reviewer-schema upgrades, simultaneous-vote exclusion, injected
 evaluation clock/trace/batch factories, native restart and File/injected-S3
 transport. These are overlapping focused suites, not a full build or cloud proof.
+
+## Current-core async learning parity
+
+The storage branch now includes the existing async transport and safe learning
+window behavior from `ac451753fa156a139c8a1e5a8012298afb89892e`,
+`28acb77d143198e621ff3b985d3fce3b378af6b9`, and
+`68fcb3ea2fe817cb62970ff28a4b3d676cc2f821`. Provider calls remain on the event
+loop; observers remain on that thread. Unguarded deferred passes lend the native
+lock during asynchronous optimizer calls, restore the complete sibling context,
+and discard superseded proposals. Reviews arriving during a pass keep it queued;
+each output runs at most once per learn call. The supersession count bounds
+repeated lent windows. Per-task batch attribution, terminal cancellation traces,
+and exclusion of other operations' pending work are retained.
+
+A pass with an explicit `execution_guard` keeps ownership through provider calls.
+Its guard runs before state access on each separately owned pass. It does not
+lend ownership and then attempt partial authorization during exception cleanup.
+This is intentionally more conservative concurrency for guarded calls; no guard
+is retained globally, and the next queued operation runs its own current guard.
+
+`PendingStorage` groups fixed derived-artifact operations. Native operation marks
+and unchanged key/ordinal checks prevent cleanup of work created during a lent
+interval. Shared batches use their charged attempt ordinals and fenced owner,
+not the replaceable cache row ordinal. A stopped pass's own batch is settled as
+interrupted with an explicit learning-abandonment marker after its audit event;
+charged attempts, budgets, ownership and generation history remain intact. Only
+that marker permits the existing learning-policy exception to repeat a paid
+request. Other interrupted work still needs explicit retry or reconciliation.
+This exception does not claim exactly-once external model execution.
+
+Embedded root records now export `cyclotron-embedded-root/v2`, including the
+`learning_queue.superseded` column. Opening a known old native root adds that
+column with zero. Native restore explicitly validates and upgrades v1 snapshots;
+v2 snapshots retain the exact count. Unknown schema remains rejected. Neither
+this parity update nor the earlier repository extraction selects cloud authority.
+Priming's own API/catalog schema delta remains a separate integration step.

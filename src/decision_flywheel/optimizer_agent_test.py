@@ -142,3 +142,92 @@ def test_a_disabled_optimizer_refuses_structural_work_without_a_provider_call():
     optimizer = DisabledOptimizer()
     with pytest.raises(RuntimeError, match="optimizer is disabled"):
         optimizer.propose(None)
+
+
+def _briefing():
+    from .models import DecisionTask
+    return FeedbackBriefing.build(DecisionTask("t", ("yes", "no"), "Q?"), (), current={"rubric": ""}, protected=())
+
+
+def test_an_async_transport_is_awaited_and_events_stay_on_the_loop_thread():
+    import asyncio
+    import threading
+    threads, events = [], []
+
+    async def complete(messages):
+        await asyncio.sleep(0)
+        return OptimizerReply('{"rationale":"r","rubric":"x"}', "async-model")
+
+    def observe(event):
+        threads.append(threading.get_ident())
+        events.append(event["kind"])
+
+    async def scenario():
+        loop_thread = threading.get_ident()
+        proposal = await OptimizerAgent(complete, observer=observe).propose_async(_briefing())
+        return loop_thread, proposal
+    loop_thread, proposal = asyncio.run(scenario())
+    assert proposal == {"rationale": "r", "rubric": "x"}
+    assert events == ["optimizer-request", "optimizer-response"] and set(threads) == {loop_thread}
+
+
+def test_a_synchronous_transport_behaves_exactly_as_before_through_the_async_methods():
+    import asyncio
+    calls, events = [], []
+    agent = OptimizerAgent(lambda messages: calls.append(messages) or OptimizerReply('{"rubric":"x"}', "m"),
+                           observer=lambda event: events.append(event["kind"]))
+    assert asyncio.run(agent.propose_async(_briefing())) == agent.propose(_briefing()) == {"rubric": "x"}
+    assert len(calls) == 2 and events == ["optimizer-request", "optimizer-response"] * 2
+
+
+def test_an_async_only_transport_refuses_the_synchronous_methods():
+    async def complete(messages):
+        return OptimizerReply("{}", "m")
+    with pytest.raises(TypeError, match="asynchronous"):
+        OptimizerAgent(complete).propose(_briefing())
+
+
+def test_a_failed_async_call_is_recorded_like_a_failed_sync_call():
+    import asyncio
+    events = []
+
+    async def complete(messages):
+        raise ConnectionError("down")
+    with pytest.raises(RuntimeError, match="optimizer request failed"):
+        asyncio.run(OptimizerAgent(complete, observer=lambda e: events.append(e)).propose_async(_briefing()))
+    assert events[-1]["kind"] == "optimizer-failed" and events[-1]["error_type"] == "ConnectionError"
+
+
+def test_optimizers_without_async_methods_are_called_synchronously():
+    import asyncio
+    from .optimizer_agent import ask_optimizer
+
+    class Legacy:
+        def propose(self, briefing):
+            return {"rubric": "legacy"}
+    assert asyncio.run(ask_optimizer(Legacy(), "propose", _briefing())) == {"rubric": "legacy"}
+
+
+def test_an_acomplete_attribute_that_is_not_a_coroutine_function_does_not_make_a_transport_async():
+    from unittest.mock import Mock
+    transport = Mock(return_value=OptimizerReply('{"rubric":"x"}', "m"))
+    transport.acomplete = Mock()   # a mock has every attribute; it is not an async transport
+    assert OptimizerAgent(transport).propose(_briefing()) == {"rubric": "x"}
+    transport.acomplete.assert_not_called()
+
+
+def test_a_cancelled_async_call_is_recorded_and_the_cancellation_propagates():
+    import asyncio
+    events = []
+
+    async def complete(messages):
+        await asyncio.sleep(10)
+
+    async def scenario():
+        task = asyncio.create_task(OptimizerAgent(complete, observer=events.append).propose_async(_briefing()))
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    asyncio.run(scenario())
+    assert [e["kind"] for e in events] == ["optimizer-request", "optimizer-cancelled"]

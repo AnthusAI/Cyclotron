@@ -95,3 +95,9 @@ Validation: **113 focused native execution/embedded/account tests passed**. The
 read-only cross-owner publication checkout also passed **14 contract tests**
 against this engine source. No full build or full regression was run for this
 small execution-boundary change while the Accounts build is active.
+
+Deferred learning with a guard retains the execution lock during asynchronous
+optimizer calls. Unguarded local learning can lend that lock using the existing
+learning-window protocol. Guarded calls use conservative concurrency so a
+reacquisition cannot run cancellation/event cleanup after a failed authorization
+check. Every separately owned pass still invokes its per-call guard first.

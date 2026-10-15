@@ -162,6 +162,8 @@ class DecisionFlywheel:
         # Native compatibility for existing embedded snapshots and local tools.
         # Runtime algorithms use domain repositories; this is not a cloud mode.
         self.db = self.runtime_storage.db
+        from .pending_storage import SQLitePendingStorage
+        self.pending_storage = SQLitePendingStorage(self.db)
         from .runtime_cache_storage import SQLiteRuntimeCacheStorage
         self.runtime_cache = SQLiteRuntimeCacheStorage(self.db)
         from .learning_storage import SQLiteLearningStorage, SQLiteFeatureStorage, SQLiteControlStorage
@@ -719,7 +721,8 @@ class DecisionFlywheel:
                 protected=tuple(row.item for row in development) + tuple(protected),
                 human_explanations=self.optimizer_context["human_explanations"])
             if candidate_proposal is None:
-                proposal = self.optimizer.propose(briefing)
+                from .optimizer_agent import ask_optimizer
+                proposal = await ask_optimizer(self.optimizer, 'propose', briefing)
             else:
                 proposal = dict(candidate_proposal)
                 self._emit({"kind": "hypothesis-retry", "hypothesis_id": _hash(proposal),
@@ -792,6 +795,11 @@ class DecisionFlywheel:
                                 _json({"result": result, "active": asdict(self.active),
                                         "answer_dependencies": self.collected_answer_dependencies()}))
             return result
+        except BaseException as error:
+            # Superseded or cancelled: close the round in the trace; the pass removes its pending row.
+            from .observability import _stopped
+            self._emit({"kind": "round-stopped", "status": _stopped(error), "promoted": False})
+            raise
 
     def promote_trial(self, trial_fingerprint, training, development):
         row = self.runtime_cache.round(trial_fingerprint)

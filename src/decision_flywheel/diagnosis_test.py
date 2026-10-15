@@ -1,4 +1,5 @@
 """Root-cause diagnosis and element screening (Stage 2d): fake optimizers and a fake decision model only, no network."""
+import asyncio
 import json
 import math
 import random
@@ -302,11 +303,11 @@ def test_a_bad_reply_is_retried_once_with_the_error_and_the_calls_are_counted(tm
         wheel, *_ = await prepared(tmp_path, Flaky(), train=20, dev=4, protected=2)
         asker = Asker(wheel, (), ())
         current = {"diagnosis_phase": "independent"}
-        assert asker.ask(current, lambda r: validate_diagnosis(r, {"a1", "a2"}))[0]["name"] == "h"
+        assert (await asker.ask(current, lambda r: validate_diagnosis(r, {"a1", "a2"})))[0]["name"] == "h"
         assert asker.calls == 2 and "previous_reply_error" in wheel.optimizer.seen[1]
         assert "previous_reply_error" not in wheel.optimizer.seen[0]
         replies[:] = [{"hypotheses": []}, {"hypotheses": []}, good_diagnosis()]
-        assert asker.ask(current, lambda r: validate_diagnosis(r, {"a1", "a2"})) is None   # bounded: one retry only
+        assert await asker.ask(current, lambda r: validate_diagnosis(r, {"a1", "a2"})) is None   # bounded: one retry only
         assert asker.calls == 4 and len(replies) == 1
         assert len(events(wheel, "diagnosis-reply-rejected")) == 3
         wheel.close()
@@ -588,7 +589,7 @@ def test_proposals_see_the_diagnosis_and_their_addresses_are_validated(tmp_path)
          {"operator": "combine", "rationale": "c", "rubric": " ".join(f"gamma{k}" for k in range(30)),
           "addresses": ["r1.c1", "r1.c2"]},
          {"operator": "combine", "rationale": "d", "rubric": " ".join(f"delta{k}" for k in range(30))}]))
-    proposals, lineage = ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), (), fake_diagnosis())
+    proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), (), fake_diagnosis()))
     current = wheel.optimizer.briefings[0]
     block = current["diagnosis"]
     assert block["confusion_summary"] == "SUMMARY TEXT" and block["passing_cause_ids"] == ["r1.c1", "r1.c2"]
@@ -663,7 +664,7 @@ def test_the_default_is_off_and_leaves_the_saved_form_and_behaviour_unchanged(tm
     assert IdeaScreeningConfig.from_json(config.as_json()) == config
     from .shadow_evaluation_test import make
     wheel, _ = make(tmp_path, config)
-    ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ())
+    asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ()))
     assert "diagnosis" not in wheel.optimizer.briefings[0]
     assert "cause_outcomes" not in optimizer_context(wheel, HypothesisLedger(wheel.db), [], frozenset())
     wheel.close()

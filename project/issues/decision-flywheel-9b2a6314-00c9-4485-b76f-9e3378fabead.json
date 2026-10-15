@@ -120,10 +120,22 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "ec75ad9d-bbf7-4763-bc79-e30d202bb78c",
+      "author": "home",
+      "text": "Current-core async parity merged from ac45175/28acb77/68fcb3e through shared storage boundaries. Preserves task-local usage attribution, cancellation/terminal traces, bounded supersession and per-output queue fairness. Pending artifacts now named repository operations; shared abandonment preserves paid attempts/owners/history rather than deleting rows. Guarded learn retains ownership during provider calls and rechecks every separately owned pass; unguarded local async windows remain. Root v2 includes superseded; explicit validated v1 import/native upgrade added. Focused proofs: 56 async/optimizer, 67 boundary, 60 guard/migration/charged-attempt (overlap), 92 learning consumer, 83 cross-owner publication tests pass. No full suite/heavy build/cloud authority/IAM/deployment; priming own delta is next.",
+      "created_at": "2026-10-15T18:50:53.109502Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T18:42:35.154348Z",
+  "updated_at": "2026-10-15T18:50:53.109534Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

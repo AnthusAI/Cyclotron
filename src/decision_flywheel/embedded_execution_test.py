@@ -184,3 +184,32 @@ def test_host_guard_rechecks_central_membership_and_separate_pinned_publication_
             with pytest.raises(AccountAccessDenied): await task
             assert engine.decision_log()==[] and model.calls==0
         run(scenario())
+
+
+def test_guarded_learning_keeps_ownership_through_provider_calls_and_next_caller_reauthorizes(tmp_path):
+    from .embedded_learning_window_test import GatedTransport,store,checklist,OUTPUTS
+    transport=GatedTransport()
+    with store(tmp_path,transport) as engine:
+        for index in range(12): checklist(engine,index,OUTPUTS[:1])
+        checks=[]
+        async def scenario():
+            transport.renew()
+            def guard():
+                assert engine._lock.locked()
+                checks.append('learn')
+            learning=asyncio.create_task(engine.learn(execution_guard=guard))
+            await asyncio.wait_for(transport.entered.wait(),5)
+            assert engine._lock.locked()
+            def revoked():
+                checks.append('next')
+                raise PermissionError('revoked while queued')
+            queued=asyncio.create_task(engine.decide(item('queued'),execution_guard=revoked))
+            await asyncio.sleep(0)
+            assert not queued.done() and checks==['learn']
+            transport.gate.set()
+            await asyncio.wait_for(learning,5)
+            before=engine.db.total_changes
+            with pytest.raises(PermissionError,match='revoked while queued'): await queued
+            assert engine.db.total_changes==before
+        run(scenario())
+        assert checks[0]=='learn' and checks.count('next')==1

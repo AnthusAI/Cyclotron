@@ -1,4 +1,5 @@
 """Proposal operators (Stage 2c): fake optimizers and a fake decision model only, no network."""
+import asyncio
 import hashlib
 import json
 
@@ -129,12 +130,12 @@ def test_an_optimizer_without_operators_gets_the_plain_request_with_the_mix_tota
     from .shadow_evaluation_test import Fake
     wheel, _ = make(tmp_path)
     fake = wheel.optimizer
-    proposals, lineage = ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ())
+    proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ()))
     assert isinstance(fake, Fake) and lineage is None and len(proposals) == 3  # Fake offers three rubrics
     assert fake.briefings[0]["proposals_requested"] == 6
     assert events(wheel, "proposal-operator-skipped")[0]["operator"] == "all"
     dev, _ = make(tmp_path, IdeaScreeningConfig(enabled=True, mode="dev_screen", proposals_per_round=2), name="d.sqlite")
-    ask_round(dev, builder(dev), {}, "rubric", [], TRAIN, (), ())
+    asyncio.run(ask_round(dev, builder(dev), {}, "rubric", [], TRAIN, (), ()))
     assert dev.optimizer.briefings[0]["proposals_requested"] == 2 and "operator_requests" not in dev.optimizer.briefings[0]
 
 
@@ -157,7 +158,7 @@ def test_the_novelty_gate_rejects_near_duplicates_retries_once_and_accepts_diffe
     wheel.active.config.rubric  # incumbent is "base"; use BASE as the incumbent text via a prior idea
     ControlScheduler(wheel).admit_proposals("rubric", [{"rationale": "p", "rubric": BASE}], TRAIN, 0)
     ideas = [i for i in ControlScheduler(wheel).ideas()]
-    proposals, lineage = ask_round(wheel, builder(wheel), {}, "rubric", ideas, TRAIN, (), ())
+    proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", ideas, TRAIN, (), ()))
     # one call plus one retry; the retry asks only for the rejected count; the survivor is the different one
     assert len(wheel.optimizer.briefings) == 2
     assert wheel.optimizer.briefings[1]["operator_requests"]["bold"]["count"] == 1
@@ -168,7 +169,7 @@ def test_the_novelty_gate_rejects_near_duplicates_retries_once_and_accepts_diffe
     # no retries configured: a single call
     wheel2, _ = make(tmp_path, shadow_config(proposal_mix={"bold": 1}, novelty_retries=0), name="n.sqlite",
                      optimizer=Operators([{"operator": "bold", "rationale": "r", "rubric": "base"}]))
-    assert ask_round(wheel2, builder(wheel2), {}, "rubric", [], TRAIN, (), ())[0] == []
+    assert asyncio.run(ask_round(wheel2, builder(wheel2), {}, "rubric", [], TRAIN, (), ()))[0] == []
     assert len(wheel2.optimizer.briefings) == 1
 
 
@@ -177,7 +178,7 @@ def test_one_call_per_round_when_nothing_is_rejected(tmp_path):
         {"operator": "mutate", "rationale": "m", "rubric": "base plus a clause about sports results being final"},
         {"operator": "bold", "rationale": "b1", "rubric": bold(1)}, {"operator": "bold", "rationale": "b2", "rubric": bold(2)},
         ]))
-    proposals, lineage = ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ())
+    proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ()))
     assert len(wheel.optimizer.briefings) == 1 and len(proposals) == 3
     assert [m["operator"] for m in lineage] == ["mutate", "bold", "bold"]
     assert wheel.optimizer.briefings[0]["proposals_requested"] == 3
@@ -233,14 +234,14 @@ def test_the_target_operator_sends_the_stories_in_the_call_and_skips_without_any
         [{"operator": "bold", "rationale": "b", "rubric": bold(1)}],
         [{"operator": "bold", "rationale": "b", "rubric": bold(2)}, {"operator": "target", "rationale": "t",
                                                                       "rubric": bold(3)}]))
-    ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ())
+    asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ()))
     assert "target" not in wheel.optimizer.briefings[0]["operator_requests"]
     skipped = events(wheel, "proposal-operator-skipped")
     assert skipped[0]["operator"] == "target" and "wrong" in skipped[0]["reason"]
     training = [story(i, "include" if i % 2 else "exclude") for i in range(1, 5)]
     seed_errors(wheel, [(f"g{i}", "include" if i % 2 else "exclude", "exclude" if i % 2 else "include")
                         for i in range(1, 5)])
-    proposals, lineage = ask_round(wheel, builder(wheel, training), {}, "rubric", [], training, (), ())
+    proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel, training), {}, "rubric", [], training, (), ()))
     sent = wheel.optimizer.briefings[1]["operator_requests"]["target"]
     assert len(sent["stories"]) == 2 and {"true_label", "human_explanation", "excerpt"} <= set(sent["stories"][0])
     assert [m["operator"] for m in lineage] == ["bold", "target"]
@@ -278,7 +279,7 @@ def test_combine_sends_both_parents_and_records_them_and_is_skipped_with_an_even
         [{"operator": "bold", "rationale": "b", "rubric": bold(1)}],
         [{"operator": "bold", "rationale": "b", "rubric": bold(2)},
          {"operator": "combine", "rationale": "c", "rubric": bold(3)}]))
-    ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ())
+    asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", [], TRAIN, (), ()))
     skipped = events(wheel, "proposal-operator-skipped")
     assert skipped[0]["operator"] == "combine" and "fewer than two eligible ideas" in skipped[0]["reason"]
     assert "combine" not in wheel.optimizer.briefings[0]["operator_requests"]
@@ -292,7 +293,7 @@ def test_combine_sends_both_parents_and_records_them_and_is_skipped_with_an_even
     record(ledger, one, {1, 2, 3, 9, 10})
     record(ledger, two, {3, 4, 5, 9, 10})
     record(ledger, incumbent_id(wheel), {9, 10})
-    proposals, lineage = ask_round(wheel, builder(wheel), {}, "rubric", ideas, TRAIN, (), ())
+    proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", ideas, TRAIN, (), ()))
     block = wheel.optimizer.briefings[1]["operator_requests"]["combine"]
     assert {p["id"] for p in block["parents"]} <= {one, two, incumbent_id(wheel)} and len(block["parents"]) == 2
     assert all(p["rubric"] and "fixes_that_the_other_misses" in p for p in block["parents"])
@@ -313,7 +314,7 @@ def test_the_prompt_payload_is_capped(tmp_path):
     for idea in sched.ideas():
         record(ledger, idea["id"], {1, 2, 3, 9} if idea["rationale"] == "one" else {3, 4, 5, 9})
     record(ledger, incumbent_id(wheel), {9})
-    ask_round(wheel, builder(wheel, training), {}, "rubric", sched.ideas(), training, (), ())
+    asyncio.run(ask_round(wheel, builder(wheel, training), {}, "rubric", sched.ideas(), training, (), ()))
     requests = wheel.optimizer.briefings[0]["operator_requests"]
     assert len(requests["target"]["stories"]) == 20
     assert all(len(s["excerpt"]) <= OPERATOR_CAPS["story_chars"] for s in requests["target"]["stories"])

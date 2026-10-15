@@ -165,3 +165,27 @@ def test_legacy_reviewer_column_upgrades_remain_migratable(tmp_path):
     review_codec().restore(db,snapshot)
     assert db.execute("SELECT authors,journal_ref FROM articles WHERE id='old'").fetchone()==('Not provided',None)
     db.close();owner.close()
+
+
+def test_embedded_v1_queue_upgrade_and_v2_migration_preserve_bounded_supersession(tmp_path):
+    from .embedded_storage import SQLiteEmbeddedStorage,SCHEMA_SQL
+    old=sqlite3.connect(tmp_path/'old.sqlite')
+    old.executescript(SCHEMA_SQL.replace(', superseded INTEGER NOT NULL DEFAULT 0',''))
+    old.execute("INSERT INTO learning_queue(classifier,since_count,queued_at) VALUES ('topic',7,'exact clock')")
+    old.commit()
+    snapshot=embedded_codec(1).export(old);old.close()
+    destination=SQLiteEmbeddedStorage(tmp_path/'imported.sqlite')
+    destination.restore_storage(snapshot)
+    assert destination.learning_rows()==[(1,'topic',7,0)]
+    with destination.transaction():
+        destination.supersede_learning(1);destination.supersede_learning(1)
+    current=destination.export_storage()
+    assert current['schema']=='cyclotron-embedded-root/v2'
+    restored=SQLiteEmbeddedStorage(tmp_path/'restored.sqlite')
+    restored.restore_storage(current)
+    assert restored.learning_rows()==[(1,'topic',7,2)]
+    destination.close();restored.close()
+    native=SQLiteEmbeddedStorage(tmp_path/'old.sqlite')
+    assert native.learning_rows()==[(1,'topic',7,0)]
+    assert native.export_storage()['schema']=='cyclotron-embedded-root/v2'
+    native.close()

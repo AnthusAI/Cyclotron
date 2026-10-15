@@ -53,6 +53,9 @@ class BatchStorage(Protocol):
     def reserve(self, fingerprint: str, maximum: int, owner: str, *, policy='reuse', retry_failed=False) -> BatchRecord: ...
     def claim(self, fingerprint: str, owner: str) -> bool: ...
     def settle(self, fingerprint: str, owner: str, status: str, payload: str | None = None) -> BatchRecord: ...
+    def operation_mark(self) -> int: ...
+    def pending_operations(self) -> list[tuple[int,str,str]]: ...
+    def abandon_learning(self,fingerprint: str,owner: str) -> BatchRecord: ...
     def page(self, *, after: str | None = None, limit: int = 100) -> tuple[list[BatchRecord], str | None]: ...
     def export(self, *, max_records: int = 10000) -> dict: ...
     def restore(self, snapshot: dict) -> None: ...
@@ -169,7 +172,7 @@ class SQLiteBatchStorage:
             if row and row.status=='pending': raise BatchInProgress('shared request in progress; explicit reconciliation required')
             if policy=='cache_only' and (not row or row.status!='complete'): raise CacheMiss('complete batch not cached')
             if row and row.status=='complete' and policy!='refresh': return row
-            if row and row.status!='complete' and not retry_failed: raise RuntimeError('explicit retry required for interrupted batch')
+            if row and row.status!='complete' and not retry_failed and not (row.status=='interrupted' and row.payload=='{"learning_abandoned":true}'): raise RuntimeError('explicit retry required for interrupted batch')
             if self.requests()>=maximum: raise RuntimeError('run decision request ceiling reached')
             if row:
                 self.db.execute('INSERT INTO batch_history(key,generation,status,payload,owner) VALUES (?,?,?,?,?)',
@@ -194,6 +197,18 @@ class SQLiteBatchStorage:
             if status=='complete' and not row.claimed: raise BatchConflict('completion requires dispatch claim')
             self.db.execute('UPDATE batches SET status=?,payload=?,revision=revision+1 WHERE key=?',(status,payload,fingerprint))
             return self._get(fingerprint)
+
+    def operation_mark(self):
+        with self.lock: return self.db.execute('SELECT COALESCE(MAX(id),0) FROM attempts').fetchone()[0]
+
+    def pending_operations(self):
+        with self.lock:
+            return self.db.execute("SELECT attempts.id,batches.key,batches.owner FROM batches JOIN attempts ON attempts.key=batches.key AND attempts.owner=batches.owner WHERE batches.status='pending'").fetchall()
+
+    def abandon_learning(self,fingerprint,owner):
+        # Explicit SDK policy exception: preserve charged attempts and ownership
+        # history while allowing this stopped pass's own request to be repeated.
+        return self.settle(fingerprint,owner,'interrupted','{"learning_abandoned":true}')
 
     def page(self, *, after=None, limit=100):
         if type(limit) is not int or not 1<=limit<=1000: raise ValueError('bounded page required')

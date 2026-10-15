@@ -1,12 +1,15 @@
 """Known embedded/reviewer/evaluation codecs over one shared migration engine."""
 import json
 import sqlite3
+import re
 from .catalog_archive import CatalogArchive
 from .native_domain_snapshot import NativeDomainCodec
 
 
 def _embedded_records(snapshot):
     tables=snapshot['tables']
+    if any(type(row.get('superseded',0)) is not int or row.get('superseded',0)<0 for row in tables['learning_queue']):
+        raise ValueError('invalid superseded-pass count')
     items={row['id'] for row in tables['items']}
     decisions={row['id'] for row in tables['decisions']}
     usages={row['id'] for row in tables['usage']}
@@ -24,11 +27,13 @@ def _embedded_records(snapshot):
     if any(row['usage_id'] not in usages for row in tables['usage_shares']): raise ValueError('embedded usage share references unknown request')
 
 
-def embedded_codec():
+def embedded_codec(version=2):
     from .embedded_storage import SCHEMA_SQL
-    return NativeDomainCodec('cyclotron-embedded-root/v1',lambda db:db.executescript(SCHEMA_SQL),
+    if version not in (1,2): raise ValueError('unsupported embedded codec version')
+    if version==1: SCHEMA_SQL=SCHEMA_SQL.replace(', superseded INTEGER NOT NULL DEFAULT 0','')
+    return NativeDomainCodec(f'cyclotron-embedded-root/v{version}',lambda db:db.executescript(SCHEMA_SQL),
         json_columns={'meta':('value',),'items':('item_values',),'decisions':('payload',),
-                      'reviews':('payload',),'events':('payload',)},validate_records=_embedded_records)
+                      'reviews':('payload',),'events':('payload',)},validate_records=_embedded_records,flexible_columns=True)
 
 
 def review_codec():
@@ -56,7 +61,7 @@ class DomainArchive(CatalogArchive):
         self.codec=codec
         self.columns=codec.columns
         self.snapshot_schema=codec.schema
-        self.manifest_schema=codec.schema.removesuffix('/v1')+'-manifest/v1'
+        self.manifest_schema=re.sub(r'/v[0-9]+$','',codec.schema)+'-manifest/v1'
         self.schema_field='domainSchema'
         self.metadata_field='nativeMetadata'
         self.snapshot_metadata_field='metadata'

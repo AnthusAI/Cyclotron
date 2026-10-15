@@ -4,7 +4,7 @@ from dataclasses import asdict
 from datetime import datetime,timezone
 
 from .flywheel import _hash, _json, track_answer_dependencies
-from .optimizer_agent import FeedbackBriefing
+from .optimizer_agent import FeedbackBriefing, ask_optimizer
 from .question_measurement import measure_questions
 from .candidate_fitting import fit_candidate
 from .control_scheduler import ControlScheduler
@@ -159,7 +159,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         if config.diagnosis.enabled:
             from .diagnosis import run_diagnosis
             diagnosis = await run_diagnosis(wheel, training, development, protected)
-        screen_proposals, screen_lineage = ask_round(
+        screen_proposals, screen_lineage = await ask_round(
             wheel, lambda extra: stage_briefing(wheel, stage, training, development, protected, extra=extra),
             optimizer_context(wheel, HypothesisLedger(storage=wheel.hypothesis_storage), own, hidden), "rubric", own, training, development,
             protected, diagnosis)
@@ -174,7 +174,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         recorded = next((event for event in reversed(wheel.history(1000))
                          if event["kind"] == "optimizer-response" and
                          event.get("briefing_fingerprint") == briefing.fingerprint), None) if retry_interrupted else None
-        proposal = json.loads(recorded["content"]) if recorded else wheel.optimizer.propose(briefing)
+        proposal = json.loads(recorded["content"]) if recorded else await ask_optimizer(wheel.optimizer, 'propose', briefing)
         wheel.learning_storage.update_payload('rubric',key,_json({'proposal':proposal}))
         if recorded:
             wheel._emit({"kind": "optimizer-response-reused", "briefing_fingerprint": briefing.fingerprint,

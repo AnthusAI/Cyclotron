@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 from typing import Protocol
 
-SCHEMA_SQL = '\n            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, item_values TEXT NOT NULL, fingerprint TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, item_fingerprint TEXT NOT NULL,\n                state TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE INDEX IF NOT EXISTS decisions_by_item ON decisions(item_id);\n            CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,\n                classifier TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,\n                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,\n                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,\n                source TEXT);\n            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,\n                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));\n        '
+SCHEMA_SQL = '\n            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, item_values TEXT NOT NULL, fingerprint TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, item_fingerprint TEXT NOT NULL,\n                state TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE INDEX IF NOT EXISTS decisions_by_item ON decisions(item_id);\n            CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,\n                classifier TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,\n                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL, superseded INTEGER NOT NULL DEFAULT 0);\n            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,\n                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,\n                source TEXT);\n            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,\n                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));\n        '
 
 
 class EmbeddedStorage(Protocol):
@@ -44,6 +44,10 @@ class EmbeddedStorage(Protocol):
     def enqueue_learning(self,classifier: str,since_count: int,at: str) -> None: ...
     def pending_learning(self) -> list[str]: ...
     def next_learning(self) -> tuple | None: ...
+    def learning_rows(self) -> list[tuple]: ...
+    def supersede_learning(self,seq: int) -> None: ...
+    def requeue_learning(self,seq: int,covered: int) -> None: ...
+    def review_count(self,classifier: str) -> int: ...
     def delete_learning(self,seq: int) -> None: ...
     def close(self) -> None: ...
     def export_storage(self,*,max_records=10000,max_bytes=64000000) -> dict: ...
@@ -55,6 +59,9 @@ class SQLiteEmbeddedStorage:
         Path(path).parent.mkdir(parents=True,exist_ok=True)
         self.db=sqlite3.connect(path,timeout=30)
         self.db.executescript(SCHEMA_SQL)
+        if "superseded" not in {row[1] for row in self.db.execute("PRAGMA table_info(learning_queue)")}:
+            with self.db:
+                self.db.execute("ALTER TABLE learning_queue ADD COLUMN superseded INTEGER NOT NULL DEFAULT 0")
 
     @contextmanager
     def transaction(self):
@@ -100,6 +107,10 @@ class SQLiteEmbeddedStorage:
     def enqueue_learning(self,classifier,since_count,at): self.db.execute('INSERT OR IGNORE INTO learning_queue(classifier,since_count,queued_at) VALUES (?,?,?)',(classifier,since_count,at))
     def pending_learning(self): return [row[0] for row in self.db.execute('SELECT classifier FROM learning_queue ORDER BY seq')]
     def next_learning(self): return self.db.execute('SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1').fetchone()
+    def learning_rows(self): return self.db.execute('SELECT seq,classifier,since_count,superseded FROM learning_queue ORDER BY seq').fetchall()
+    def supersede_learning(self,seq): self.db.execute('UPDATE learning_queue SET superseded=superseded+1 WHERE seq=?',(seq,))
+    def requeue_learning(self,seq,covered): self.db.execute('UPDATE learning_queue SET since_count=?,superseded=0 WHERE seq=?',(covered,seq))
+    def review_count(self,classifier): return self.db.execute('SELECT COUNT(*) FROM reviews WHERE classifier=?',(classifier,)).fetchone()[0]
     def delete_learning(self,seq): self.db.execute('DELETE FROM learning_queue WHERE seq=?',(seq,))
 
     def export_storage(self,*,max_records=10000,max_bytes=64000000):
@@ -108,4 +119,9 @@ class SQLiteEmbeddedStorage:
 
     def restore_storage(self,snapshot,*,max_records=10000,max_bytes=64000000):
         from .domain_snapshots import embedded_codec
+        if snapshot.get('schema')=='cyclotron-embedded-root/v1':
+            from copy import deepcopy
+            snapshot=deepcopy(embedded_codec(1).validate(snapshot,max_records=max_records,max_bytes=max_bytes))
+            snapshot['schema']='cyclotron-embedded-root/v2'
+            for row in snapshot['tables']['learning_queue']: row['superseded']=0
         return embedded_codec().restore(self.db,snapshot,max_records=max_records,max_bytes=max_bytes)
