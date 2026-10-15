@@ -35,10 +35,12 @@ class NativeOutputEvaluator:
 
 
 class PublicationSteering:
-    def __init__(self,records,evaluators,*,owner_lock,allow_evaluation=False,max_result_bytes=64_000):
-        if not hasattr(owner_lock,'__aenter__'):raise ValueError('existing engine owner lock required')
+    def __init__(self,records,evaluators,*,owner_lock=None,owner_execution=None,allow_evaluation=False,max_result_bytes=64_000):
+        if (owner_lock is None)==(owner_execution is None):raise ValueError('exactly one existing engine execution owner required')
+        if owner_lock is not None and not hasattr(owner_lock,'__aenter__'):raise ValueError('existing engine owner lock required')
+        if owner_execution is not None and not callable(owner_execution):raise ValueError('public execution scope factory required')
         if any(cid!=value.output_id for cid,value in evaluators.items()):raise ValueError('scoped evaluator identity mismatch')
-        self.records=records;self.evaluators=MappingProxyType(dict(evaluators));self.owner_lock=owner_lock
+        self.records=records;self.evaluators=MappingProxyType(dict(evaluators));self.owner_lock=owner_lock;self.owner_execution=owner_execution
         self.allow_evaluation=allow_evaluation
         if type(max_result_bytes) is not int or not 1<=max_result_bytes<=MAX_BYTES:raise ValueError('bounded positive steering result byte budget required')
         self.max_result_bytes=max_result_bytes
@@ -48,7 +50,7 @@ class PublicationSteering:
         if len(rows)>1:raise PublicationError('steering operation receipt conflict')
         return rows[0] if rows else None
 
-    async def command(self,actor,binding,payload):
+    async def command(self,actor,binding,payload,*,execution=None,execution_guard=None):
         publication=binding.publication_id
         if not isinstance(actor,PublicationActor) or actor.account_id!=self.records.account_id or not {(publication,'steer'),(publication,'read')}<=actor.grants:
             raise PublicationError('publication steering capability refused',403)
@@ -66,10 +68,12 @@ class PublicationSteering:
                 raise PublicationError('explicit native proposal fields required',400)
         else:text(payload['trialFingerprint'],'trial identity')
         if len(canonical(payload).encode())>MAX_BYTES:raise PublicationError('steering command exceeds byte limit',413)
-        try:self.records.binding_revision(binding,payload['bindingRef'])
-        except ValueError as exc:raise PublicationError('steering binding reference does not match') from exc
         operation_id=digest([actor.account_id,publication,actor.actor_id,payload['requestId']]);signature=digest(payload)
-        async with self.owner_lock:
+        execution=execution or self.owner_execution
+        async with execution(execution_guard=execution_guard) if execution is not None else self.owner_lock:
+            if execution_guard is not None and execution is None:raise PublicationError('guarded execution owner required',503)
+            try:self.records.binding_revision(binding,payload['bindingRef'])
+            except ValueError as exc:raise PublicationError('steering binding reference does not match') from exc
             try:self.records.check_binding(binding)
             except ValueError as exc:raise PublicationError('historical publication output ownership conflicts') from exc
             complete=self.found('steering-complete',operation_id)

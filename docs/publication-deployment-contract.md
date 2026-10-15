@@ -261,3 +261,31 @@ the native SDK. They do not prove revocation after an SDK command has queued on
 its internal owner lock. A supported public owned-operation authorization hook
 remains a storage/core-owner integration dependency. There is no distributed
 cloud authority or hosted SQLite fallback in this increment.
+
+### Guarded Papyrus composition checkpoint
+
+The queued-operation dependency now has a public core hook at owner revision
+`0b903779222fdab842caa077fd8bc645e96e23e4`. Publication integration consumes this
+revision through `PublicationLab.command(..., execution_guard=trusted_guard)`.
+Native decide/review preflight reads run inside their guarded owner scope;
+read-only publication operations use `engine.execution(...)`. Post-core provenance
+writes acquire a new guarded scope and report `reconciliation_required` if that
+settlement cannot complete. No native result is claimed rolled back. Steering can
+use `PublicationSteering(..., owner_execution=engine.execution)` instead of a
+private lock, with fresh authorization before binding/catalog reads and dispatch.
+Never nest native async lock-owning engine calls in an execution scope.
+
+`PublicationAccess` may carry the trusted per-call execution guard.
+`create_publication_host` requires one by default. Only explicitly synthetic,
+single-process contract fixtures may set `require_execution_guard=False`; that
+opt-out is not a production backend or authorization fallback. The Papyrus
+`PublicationBFF` resolver supplies a fresh account/person/publication/binding guard
+and refuses an engine without the supported public hook. Account roles still
+confer no implicit publication grants. Earlier notes marking the hook unavailable
+are superseded by this checkpoint; cloud authority/route activation remain pending.
+
+Verify cross-owner integration with
+`python scripts/verify_publication_execution_contract.py <owner-core> <papyrus>`.
+The harness loads this checkout's publication modules against the owner's actual
+engine, without copying or editing its source. Local offline checks do not prove
+cloud conditional mutations or deployed session configuration.

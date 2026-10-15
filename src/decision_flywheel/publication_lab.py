@@ -6,6 +6,7 @@ Local HTTP tests are not an authorization to host the SQLite engine remotely.
 """
 from dataclasses import dataclass, replace
 import hashlib
+import inspect
 import json
 from types import MappingProxyType
 from urllib.parse import quote
@@ -100,7 +101,7 @@ class PublicationLab:
             for cid in binding.outputs}
         return result
 
-    async def command(self, actor, publication, operation, payload):
+    async def command(self, actor, publication, operation, payload, *, execution_guard=None):
         if not isinstance(operation, str):
             raise PublicationError('operation must be text', 400)
         capability = CAPABILITIES.get(operation)
@@ -109,6 +110,15 @@ class PublicationLab:
         binding = self.authorize(actor, publication, capability)
         if not isinstance(payload, dict):
             raise PublicationError('structured operation payload required', 400)
+        if execution_guard is not None and operation in ('status','history','events','replay'):
+            async with self.engine.execution(execution_guard=execution_guard):
+                return await self.command(actor,publication,operation,payload)
+        async def guarded(preflight):
+            if execution_guard is not None:
+                result=execution_guard()
+                if inspect.isawaitable(result):result=await result
+                if result is not None:raise TypeError('execution guard must return None or raise')
+            preflight()
         envelope = {'contractVersion':CONTRACT, 'accountId':self.account_id, 'publicationId':publication, 'bindingRevision':binding.revision,
                     'features':{'frozenContext':self.records is not None,'replayExport':self.records is not None,'steering':self.steering is not None},
                     'outputs':[{'id':cid, 'question':self.specs[cid].question,
@@ -130,13 +140,26 @@ class PublicationLab:
                     raise PublicationError('item exceeds size limit', 413)
                 target=Item(item['id'],json.loads(json.dumps(item['values'],allow_nan=False)))
                 prepared=None
-                if self.records is not None:
-                    prepared=self.records.prepare(binding,target,payload['context'])
-                    for row in self.engine.decision_log():
-                        if row['decision']['itemId']==target.id and row['item']!=dict(target.values) and any(value.get('label') is not None for value in row['reviews'].values()):
-                            raise PublicationError('labeled source revision cannot change until revision-specific learning is supported')
-                decision = await self.engine.decide(target)
-                context=self.records.freeze(decision.decision_id,decision.created_at,prepared,prediction=self.project(decision,binding)) if prepared is not None else None
+                def preflight():
+                    nonlocal prepared
+                    if self.records is not None:
+                        prepared=self.records.prepare(binding,target,payload['context'])
+                        for row in self.engine.decision_log():
+                            if row['decision']['itemId']==target.id and row['item']!=dict(target.values) and any(value.get('label') is not None for value in row['reviews'].values()):
+                                raise PublicationError('labeled source revision cannot change until revision-specific learning is supported')
+                if execution_guard is None:
+                    preflight();decision=await self.engine.decide(target)
+                else:
+                    decision=await self.engine.decide(target,execution_guard=lambda:guarded(preflight))
+                context=None
+                if prepared is not None:
+                    def freeze():return self.records.freeze(decision.decision_id,decision.created_at,prepared,prediction=self.project(decision,binding))
+                    if execution_guard is None:context=freeze()
+                    else:
+                        try:
+                            async with self.engine.execution(execution_guard=execution_guard):context=freeze()
+                        except Exception as exc:
+                            raise PublicationError('decision completed; provenance outcome requires reconciliation',code='reconciliation_required') from exc
                 return {**envelope, 'decision':self.project(decision, binding),**({'context':context} if context else {})}
             if operation == 'review':
                 expected = {'bindingRevision','decisionId','classifier','predictionVersion','predictionFingerprint',
@@ -149,25 +172,35 @@ class PublicationLab:
                     raise PublicationError('classifier is outside publication binding', 403)
                 for key in ('decisionId','requestId','label','explanation'):
                     text(payload[key], key)
-                decision = self.engine.decision(payload['decisionId'])
-                predicted = decision.results[cid]
-                if type(payload['predictionVersion']) is not int or (predicted.version, predicted.fingerprint) != (payload['predictionVersion'], payload['predictionFingerprint']):
-                    raise PublicationError('displayed prediction revision does not match')
                 context=None
-                if self.records is not None:
-                    context=self.records.context(payload['contextId'],publication,decision.decision_id)
-                    if context['binding']['values']['revision']!=binding.revision:
-                        raise PublicationError('historical binding is read-only; obtain a current decision context')
-                    rows=self.engine.decision_log()
-                    current=next(row for row in rows if row['decision']['decisionId']==decision.decision_id)
-                    if current['item']!=context['source']['values']:
-                        raise PublicationError('superseded source is read-only; revision-specific review is unavailable')
+                def preflight():
+                    nonlocal context
+                    decision=self.engine.decision(payload['decisionId'])
+                    predicted=decision.results[cid]
+                    if type(payload['predictionVersion']) is not int or (predicted.version,predicted.fingerprint)!=(payload['predictionVersion'],payload['predictionFingerprint']):
+                        raise PublicationError('displayed prediction revision does not match')
+                    if self.records is not None:
+                        context=self.records.context(payload['contextId'],publication,decision.decision_id)
+                        if context['binding']['values']['revision']!=binding.revision:
+                            raise PublicationError('historical binding is read-only; obtain a current decision context')
+                        current=next(row for row in self.engine.decision_log() if row['decision']['decisionId']==decision.decision_id)
+                        if current['item']!=context['source']['values']:
+                            raise PublicationError('superseded source is read-only; revision-specific review is unavailable')
                 # Request IDs cannot collide across publication/actor scopes.
-                identity = hashlib.sha256(json.dumps([self.account_id, publication, actor.actor_id, payload['requestId'],*([context['contextId']] if context else [])],separators=(',',':')).encode()).hexdigest()
-                review = await self.engine.review(decision.decision_id, payload['label'], classifier=cid,
-                    explanation=payload['explanation'], reason_code=payload['reasonCode'], reviewer=actor.actor_id,
-                    review_id='publication-'+identity)
-                if context is not None:self.records.review(context,review.to_json(),source_cursor=self.review_cursor(review.review_id))
+                identity=hashlib.sha256(json.dumps([self.account_id,publication,actor.actor_id,payload['requestId'],*([payload['contextId']] if self.records is not None else [])],separators=(',',':')).encode()).hexdigest()
+                kwargs={'classifier':cid,'explanation':payload['explanation'],'reason_code':payload['reasonCode'],
+                        'reviewer':actor.actor_id,'review_id':'publication-'+identity}
+                if execution_guard is None:preflight()
+                else:kwargs['execution_guard']=lambda:guarded(preflight)
+                review=await self.engine.review(payload['decisionId'],payload['label'],**kwargs)
+                if context is not None:
+                    def receipt():self.records.review(context,review.to_json(),source_cursor=self.review_cursor(review.review_id))
+                    if execution_guard is None:receipt()
+                    else:
+                        try:
+                            async with self.engine.execution(execution_guard=execution_guard):receipt()
+                        except Exception as exc:
+                            raise PublicationError('review completed; provenance outcome requires reconciliation',code='reconciliation_required') from exc
                 return {**envelope, 'review':review.to_json()}
             if operation == 'replay':
                 if payload or self.records is None:raise PublicationError('frozen replay records require configured provenance and an empty payload',400)
@@ -176,7 +209,7 @@ class PublicationLab:
             if operation == 'steer':
                 if self.steering is None:raise PublicationError('output-scoped steering is not configured',503)
                 self.authorize(actor,publication,'read')
-                result=await self.steering.command(actor,binding,payload)
+                result=await self.steering.command(actor,binding,payload,**({'execution':self.engine.execution,'execution_guard':execution_guard} if execution_guard is not None else {}))
                 return {**envelope,'steering':result}
             if operation == 'events':
                 if set(payload) != {'after','limit'}:
@@ -293,15 +326,16 @@ class PublicationAccess:
     """Trusted host resolution of an already-open lab and verified actor."""
     lab: PublicationLab
     actor: PublicationActor
+    execution_guard: object = None
 
 
-def create_publication_host(resolve_access):
+def create_publication_host(resolve_access, *, require_execution_guard=True):
     """Resolve fresh account/publication grants for each bounded operation.
 
     The host owns session verification and engine lifecycle. No cached membership,
     fallback lab, credential issuer, or storage backend is provided here.
     """
-    return _create_publication_http(resolve_access=resolve_access)
+    return _create_publication_http(resolve_access=resolve_access,require_execution_guard=require_execution_guard)
 
 
 def create_publication_app(lab, *, authorize):
@@ -314,7 +348,7 @@ def create_publication_app(lab, *, authorize):
     return _create_publication_http(lab=lab, authorize=authorize)
 
 
-def _create_publication_http(*, lab=None, authorize=None, resolve_access=None):
+def _create_publication_http(*, lab=None, authorize=None, resolve_access=None, require_execution_guard=False):
     import inspect
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
@@ -345,22 +379,27 @@ def _create_publication_http(*, lab=None, authorize=None, resolve_access=None):
             if not isinstance(operation,str) or operation not in CAPABILITIES or not isinstance(body['payload'],dict):
                 raise PublicationError('unknown publication operation or payload',400)
             selected_lab = lab
+            execution_guard = None
             if resolve_access is not None and not request.headers.get('x-cyclotron-account'):
                 raise PublicationError('expected account pin required',400)
             if resolve_access is not None:
                 try:
                     access = resolve_access(request, publication, CAPABILITIES[operation])
                     if inspect.isawaitable(access): access = await access
+                except PublicationError:raise
                 except Exception:
                     raise PublicationError('host authorization unavailable',503) from None
                 if not isinstance(access,PublicationAccess) or not isinstance(access.lab,PublicationLab):
                     raise PublicationError('host authorization required',403)
                 selected_lab,actor = access.lab,access.actor
+                execution_guard = access.execution_guard
+                if require_execution_guard and not callable(execution_guard):
+                    raise PublicationError('execution authorization guard required',503)
             selected_lab.authorize(actor,publication,CAPABILITIES[operation])
             expected_account = request.headers.get('x-cyclotron-account')
             if expected_account is not None and expected_account != selected_lab.account_id:
                 raise PublicationError('selected account changed',409,code='account_changed')
-            result = await selected_lab.command(actor, publication, operation, body['payload'])
+            result = await selected_lab.command(actor, publication, operation, body['payload'],**({'execution_guard':execution_guard} if execution_guard is not None else {}))
             if len(json.dumps(result, allow_nan=False).encode()) > MAX_BYTES:
                 raise PublicationError('response exceeds contract size limit', 413)
             return JSONResponse(result, headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})

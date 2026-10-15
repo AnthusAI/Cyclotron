@@ -21,7 +21,7 @@ def test_request_scoped_account_switching_revocation_and_unavailability_fail_clo
                 if not selected['allowed']:return None
                 actor=PublicationActor(selected['account'],'verified-person',frozenset((publication,action) for action in ('read','decide','review')))
                 return PublicationAccess(labs[selected['account']],actor)
-            app=create_publication_host(access)
+            app=create_publication_host(access,require_execution_guard=False)
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://offline.test') as http:
                 ca=HTTPPublicationClient(http,account_id='account-a')
                 first=await ca.command('threat-intelligence','decide',{'item':ITEM,'bindingRevision':'binding-1'})
@@ -53,7 +53,7 @@ def test_client_identity_fields_and_mismatched_host_access_never_select_another_
         with Cyclotron.open(tmp_path/'engine',DEFINITION,model) as engine:
             lab=PublicationLab(engine,account_id='account-a',bindings=BINDINGS)
             actor=PublicationActor('account-b','person',frozenset({('threat-intelligence','decide')}))
-            app=create_publication_host(lambda *args:PublicationAccess(lab,actor))
+            app=create_publication_host(lambda *args:PublicationAccess(lab,actor),require_execution_guard=False)
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://offline.test',headers={'X-Cyclotron-Account':'account-a'}) as http:
                 path='/publications/threat-intelligence/operations'
                 body={'contractVersion':'cyclotron-publication/v1','operation':'decide','payload':{'item':ITEM,'bindingRevision':'binding-1'}}
@@ -72,7 +72,7 @@ def test_cancelled_authorization_dispatches_nothing_and_explicit_retry_resolves_
             async def resolve(*args):
                 calls.append(args[2]);entered.set();await release.wait()
                 return PublicationAccess(lab,actor)
-            app=create_publication_host(resolve)
+            app=create_publication_host(resolve,require_execution_guard=False)
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://offline.test') as http:
                 client=HTTPPublicationClient(http,account_id='account-a')
                 payload={'item':ITEM,'bindingRevision':'binding-1'}
@@ -101,4 +101,19 @@ def test_dynamic_host_requires_account_pin_and_valid_contract_before_resolving_a
             assert (await http.post(path,json={**body,'operation':[]},headers=headers)).status_code==400
             assert (await http.post(path,json=body,headers={**headers,'Origin':'https://other.invalid'})).status_code==403
             assert calls==[]
+    asyncio.run(scenario())
+
+
+def test_dynamic_host_requires_a_trusted_execution_guard_by_default(tmp_path):
+    async def scenario():
+        model=OfflineModel()
+        with Cyclotron.open(tmp_path/'engine',DEFINITION,model) as engine:
+            lab=PublicationLab(engine,account_id='account-a',bindings=BINDINGS)
+            actor=PublicationActor('account-a','person',frozenset({('threat-intelligence','decide')}))
+            app=create_publication_host(lambda *args:PublicationAccess(lab,actor))
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://offline.test') as http:
+                client=HTTPPublicationClient(http,account_id='account-a')
+                with pytest.raises(PublicationError) as refused:
+                    await client.command('threat-intelligence','decide',{'bindingRevision':'binding-1','item':ITEM})
+                assert refused.value.status==503 and model.calls==0 and engine.decision_log()==[]
     asyncio.run(scenario())
