@@ -40,6 +40,8 @@ export type ReviewControlProps={
   value?:{label:string|null;reasonCode?:string|null;explanation?:string|null}
   disabled?:boolean
   compact?:boolean
+  /** Host policy for explicit human classification rationales. */
+  requireExplanation?:boolean
   onReview?:(review:ReviewControlReview)=>void
   onUndo?:(target:{itemId:string;decisionId:string})=>void
 }
@@ -51,7 +53,7 @@ const percent=(value:number)=>`${Math.round(value*100)}%`
  * a label, a reason code and an explanation, and reports them through
  * `onReview`. It never calls a server. Styles: `cyclotron/styles/shared.css`.
  */
-export function ReviewControl({itemId,decision,question,reviewReason,mode,positiveLabel,reasons=[],value,disabled=false,compact=false,onReview,onUndo}:ReviewControlProps){
+export function ReviewControl({itemId,decision,question,reviewReason,mode,positiveLabel,reasons=[],value,disabled=false,compact=false,requireExplanation=false,onReview,onUndo}:ReviewControlProps){
   // Ids derive from the item and decision so server and client renders agree
   // even when a host page's component trees differ (React's useId would not).
   const id=`cyclotron-review-${`${itemId}-${decision.decisionId}`.replace(/[^A-Za-z0-9_-]/g,'_')}`
@@ -71,7 +73,7 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
 
   const reason=reasons.find(row=>row.code===reasonCode)
   const needsReason=thumbs&&choice===negative&&reasons.length>0
-  const ready=choice!==null&&(!needsReason||Boolean(reason))
+  const ready=choice!==null&&(!needsReason||Boolean(reason))&&(!requireExplanation||Boolean(explanation.trim()))
   const label=reason?.noLabel?null:choice
   const sure=decision.confidence==null?'confidence unknown':`${percent(decision.confidence)} sure`
   const submit=()=>{
@@ -123,8 +125,8 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
       </select>
     </label>:null}
     <label className="cyclotron-review-field" htmlFor={`${id}-explanation`}>
-      <span>Explanation (optional)</span>
-      <textarea id={`${id}-explanation`} rows={compact?1:2} value={explanation} disabled={disabled}
+      <span>Explanation ({requireExplanation?'required':'optional'})</span>
+      <textarea id={`${id}-explanation`} rows={compact?1:2} value={explanation} disabled={disabled} required={requireExplanation}
         placeholder="Why? The cyclotron learns from this." onChange={event=>setExplanation(event.target.value)} />
     </label>
     <div className="cyclotron-review-actions">

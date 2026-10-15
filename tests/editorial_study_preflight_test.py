@@ -130,3 +130,32 @@ def test_the_rubric_trigger_defaults_to_six_label_transitions(tmp_path):
                    "--output", str(output)])
     protocol = json.loads((output / "protocol.json").read_text())
     assert protocol["rubric_trigger"]["every"] == 6 and protocol["rubric_trigger"]["basis"] == "label_transitions"
+
+
+def test_the_foundry_provider_records_its_deployment_label_and_rubric_placement(tmp_path):
+    operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
+    operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
+    protocols = {}
+    for placement in (None, "state"):
+        output = tmp_path / f"study-{placement}"
+        extra = ["--decision-rubric-placement", placement] if placement else []
+        _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
+                       "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
+                       "--output", str(output), "--decision-provider", "foundry",
+                       "--decision-model", "my-deployment", *extra])
+        protocols[placement] = json.loads((output / "protocol.json").read_text())
+    assert protocols[None]["decision_provider"] == "foundry" and protocols[None]["decision_model"] == "my-deployment"
+    assert protocols[None]["decision_rubric_placement"] == "criteria"
+    assert protocols["state"]["decision_rubric_placement"] == "state"
+
+
+def test_other_providers_do_not_record_a_rubric_placement_and_foundry_needs_a_deployment_label(tmp_path):
+    import pytest
+    operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
+    operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
+    base = ["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
+            "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha]
+    _study().main([*base, "--output", str(tmp_path / "jev"), "--decision-provider", "jev", "--decision-model", "j"])
+    assert "decision_rubric_placement" not in json.loads((tmp_path / "jev" / "protocol.json").read_text())
+    with pytest.raises(SystemExit):
+        _study().main([*base, "--output", str(tmp_path / "bad"), "--decision-provider", "foundry"])

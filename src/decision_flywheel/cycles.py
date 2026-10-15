@@ -43,7 +43,7 @@ class Cycle:
         wheel = self.wheel
         if wheel._cycle_running:
             raise RuntimeError('one operational cycle may run at a time')
-        number = wheel.db.execute("SELECT COALESCE(MAX(json_extract(payload,'$.cycle_number')),0)+1 FROM runtime_events").fetchone()[0]
+        number = wheel.runtime_storage.next_cycle_number()
         self.context = {'cycle_id': str(uuid4()), 'cycle_number': number,
                         'cycle_item_id': self.item.id if self.item else None}
         self.token = wheel._cycle_context.set(self.context)

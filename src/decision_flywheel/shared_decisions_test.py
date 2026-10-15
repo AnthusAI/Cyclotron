@@ -9,6 +9,34 @@ from .selection_policy import SelectionPolicy as _SP
 _BRIER = _SP('balanced_brier')
 
 
+def test_shared_requests_use_injected_storage_without_opening_another_database(tmp_path, monkeypatch):
+    import sqlite3
+    from .batch_storage import SQLiteBatchStorage
+    backing = SQLiteBatchStorage(tmp_path/'backing.sqlite')
+    class Storage:
+        def __getattr__(self, name):
+            if name == 'db': raise AttributeError(name)
+            return getattr(backing,name)
+    class Model:
+        model_identity = 'synthetic'
+        calls = 0
+        async def classify_many(self, configs, *args, **kwargs):
+            self.calls += 1
+            return BatchedAnswers({cid:{'decision':DecisionResult('yes',{'yes':.8,'no':.2})}
+                for cid in configs},'synthetic',{},1)
+    def forbidden(*args, **kwargs): raise AssertionError('storage consumer opened SQLite')
+    monkeypatch.setattr(sqlite3,'connect',forbidden)
+    model = Model()
+    shared = SharedDecisions(None,model,max_requests=1,observer=lambda _:None,storage=Storage())
+    config = ClassifierConfig(DecisionTask('topic',('yes','no'),'Relevant?'))
+    target = Item('target',{'text':'Synthetic'})
+    asyncio.run(shared.prepare({'a':config},target,{'a':()}))
+    asyncio.run(shared.prepare({'a':config},target,{'a':()}))
+    assert model.calls == shared.requests == 1
+    assert shared.adapter('a').answer_dependency_current({'request_fingerprint':shared.identity,'generation':1})
+    shared.close()
+
+
 @pytest.mark.parametrize('example_ids', [(), ('target',)])
 def test_shared_no_context_models_allow_zero_effective_examples_with_a_training_pool(tmp_path, example_ids):
     from .models import ModelCapabilities, LabeledItem

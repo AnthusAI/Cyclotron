@@ -12,6 +12,19 @@ const reasons:ReviewReason[]=[
   {code:'duplicate',text:'Duplicate',noLabel:true},
 ]
 
+it('requires an explicit explanation when the host requests one',()=>{
+ const onReview=vi.fn()
+ render(<ReviewControl itemId="reference-publication" decision={decision} requireExplanation onReview={onReview}/>)
+ fireEvent.click(screen.getByRole('button',{name:'Yes: include'}))
+ expect(screen.getByRole('button',{name:'Submit review'})).toBeDisabled()
+ expect(screen.getByLabelText('Explanation (required)')).toBeRequired()
+ fireEvent.change(screen.getByLabelText('Explanation (required)'),{target:{value:'  '}})
+ expect(screen.getByRole('button',{name:'Submit review'})).toBeDisabled()
+ fireEvent.change(screen.getByLabelText('Explanation (required)'),{target:{value:'Original evidence for this publication.'}})
+ fireEvent.click(screen.getByRole('button',{name:'Submit review'}))
+ expect(onReview).toHaveBeenCalledWith(expect.objectContaining({explanation:'Original evidence for this publication.'}))
+})
+
 it('shows the decision, its confidence and why it was sent to review',()=>{
   render(<ReviewControl itemId="ref-1" decision={decision} question="Is this relevant to the publication?" reviewReason="Random audit sample." />)
   expect(screen.getByRole('heading',{name:'Is this relevant to the publication?'})).toBeVisible()

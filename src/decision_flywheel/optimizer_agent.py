@@ -7,8 +7,11 @@ reasoning. Payloads contain private human feedback: persist locally, not in git.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, field
+import asyncio
 import hashlib
+import inspect
 import json
 from time import perf_counter
 
@@ -223,45 +226,106 @@ class OptimizerAgent:
                     {"role": "user", "content": briefing.encoded}]
         return messages
 
-    def _reply_content(self, briefing: FeedbackBriefing) -> str:
+    def _async_transport(self):
+        """The transport's awaitable form, or None for a synchronous transport.
+
+        A transport is asynchronous when it has an ``acomplete`` method or is
+        itself an ``async`` callable. Either way it is awaited on the event
+        loop, so observer events (which a flywheel writes to SQLite) are
+        always emitted on the loop thread, before and after the call.
+        """
+        acomplete = getattr(self.complete, "acomplete", None)
+        if inspect.iscoroutinefunction(acomplete):
+            return acomplete
+        if inspect.iscoroutinefunction(self.complete) or inspect.iscoroutinefunction(
+                getattr(self.complete, "__call__", None)):
+            return self.complete
+        return None
+
+    def _request(self, briefing):
         messages = self.request_messages(briefing)
         base = {"briefing_fingerprint": briefing.fingerprint,
                 "requested_model": getattr(self.complete, "model", None)}
         self.observer({**base, "kind": "optimizer-request", "messages": messages})
-        started = perf_counter()
-        try:
-            reply = self.complete(messages)
-        except Exception as error:
-            self.observer({**base, "kind": "optimizer-failed", "error_type": type(error).__name__})
-            raise RuntimeError("optimizer request failed; see the recorded error type") from None
+        return messages, base
+
+    def _failed(self, base, error):
+        self.observer({**base, "kind": "optimizer-failed", "error_type": type(error).__name__})
+        return RuntimeError("optimizer request failed; see the recorded error type")
+
+    def _replied(self, base, reply, started) -> str:
         self.observer({**base, "kind": "optimizer-response", "content": reply.content,
                        "latency_ms": (perf_counter() - started) * 1000,
                        "model": reply.model, "usage": dict(reply.usage),
                        "tool_calls": list(reply.tool_calls)})
         return reply.content
 
-    def propose(self, briefing: FeedbackBriefing) -> dict:
+    def _reply_content(self, briefing: FeedbackBriefing) -> str:
+        if self._async_transport() is not None and not _has_sync_call(self.complete):
+            raise TypeError("this optimizer transport is asynchronous; use the *_async optimizer methods")
+        messages, base = self._request(briefing)
+        started = perf_counter()
         try:
-            proposal = json.loads(self._reply_content(briefing))
+            reply = self.complete(messages)
+        except Exception as error:
+            raise self._failed(base, error) from None
+        return self._replied(base, reply, started)
+
+    async def _reply_content_async(self, briefing: FeedbackBriefing) -> str:
+        """Like the synchronous call, but awaits an asynchronous transport so the event loop stays free."""
+        transport = self._async_transport()
+        if transport is None:
+            return self._reply_content(briefing)  # synchronous transports behave exactly as before
+        messages, base = self._request(briefing)
+        started = perf_counter()
+        # An application may lend the provider call a window (for example to
+        # release its store lock); events are recorded outside that window.
+        window = getattr(self, "call_window", None)
+        try:
+            async with (window() if window is not None else nullcontext()):
+                reply = await transport(messages)
+        except OptimizationSuperseded as superseded:
+            # The provider answered, but the state the call was made for changed meanwhile.
+            self.observer({**base, "kind": "optimizer-superseded", "reason": str(superseded),
+                           "latency_ms": (perf_counter() - started) * 1000})
+            raise
+        except asyncio.CancelledError:
+            self.observer({**base, "kind": "optimizer-cancelled", "latency_ms": (perf_counter() - started) * 1000})
+            raise
+        except Exception as error:
+            raise self._failed(base, error) from None
+        return self._replied(base, reply, started)
+
+    @staticmethod
+    def _object(content) -> dict:
+        try:
+            value = json.loads(content)
         except (TypeError, json.JSONDecodeError):
             raise ValueError("optimizer reply must be a JSON object") from None
-        if not isinstance(proposal, dict):
+        if not isinstance(value, dict):
             raise ValueError("optimizer reply must be a JSON object")
-        return proposal
+        return value
+
+    def propose(self, briefing: FeedbackBriefing) -> dict:
+        return self._object(self._reply_content(briefing))
+
+    async def propose_async(self, briefing: FeedbackBriefing) -> dict:
+        return self._object(await self._reply_content_async(briefing))
 
     def propose_many(self, briefing: FeedbackBriefing) -> list[dict]:
         """Several proposals from one call; briefing.current.proposals_requested is the ceiling."""
         return parse_proposals(self._reply_content(briefing), briefing.payload["current"]["proposals_requested"])
 
+    async def propose_many_async(self, briefing: FeedbackBriefing) -> list[dict]:
+        return parse_proposals(await self._reply_content_async(briefing),
+                               briefing.payload["current"]["proposals_requested"])
+
     def diagnose(self, briefing: FeedbackBriefing) -> dict:
         """One root-cause diagnosis call (Stage 2d); the caller validates the reply's fields."""
-        try:
-            reply = json.loads(self._reply_content(briefing))
-        except (TypeError, json.JSONDecodeError):
-            raise ValueError("optimizer reply must be a JSON object") from None
-        if not isinstance(reply, dict):
-            raise ValueError("optimizer reply must be a JSON object")
-        return reply
+        return self._object(self._reply_content(briefing))
+
+    async def diagnose_async(self, briefing: FeedbackBriefing) -> dict:
+        return self._object(await self._reply_content_async(briefing))
 
     def calls_remaining(self):
         """Paid optimizer calls the injected transport still allows, or None when it states no ceiling."""
@@ -272,6 +336,38 @@ class OptimizerAgent:
         """One call, proposals labeled by operator; briefing.current.operator_requests holds {operator: {count, ...}}."""
         requested = {op: spec["count"] for op, spec in briefing.payload["current"]["operator_requests"].items()}
         return parse_operator_proposals(self._reply_content(briefing), requested)
+
+    async def propose_operators_async(self, briefing: FeedbackBriefing) -> list[dict]:
+        requested = {op: spec["count"] for op, spec in briefing.payload["current"]["operator_requests"].items()}
+        return parse_operator_proposals(await self._reply_content_async(briefing), requested)
+
+
+class OptimizationSuperseded(BaseException):
+    """A learning pass's state changed while its optimizer call was in flight.
+
+    It derives from BaseException, like cancellation, so that no step, round
+    or stage handler records it as an ordinary failure: the pass unwinds,
+    nothing derived from the stale state is cached, and the pass stays
+    queued to run again.
+    """
+
+
+def _has_sync_call(transport) -> bool:
+    """A transport with ``acomplete`` may still be callable synchronously (the OpenAI and LiteLLM adapters are)."""
+    call = getattr(transport, "__call__", None)
+    return callable(transport) and not inspect.iscoroutinefunction(transport) and not inspect.iscoroutinefunction(call)
+
+
+async def ask_optimizer(optimizer, method: str, briefing: FeedbackBriefing):
+    """Call ``optimizer.<method>``, awaiting its ``<method>_async`` form when it has one.
+
+    Optimizers without async methods (custom or disabled ones) are called
+    synchronously, exactly as before.
+    """
+    asynchronous = getattr(optimizer, f"{method}_async", None)
+    if asynchronous is not None:
+        return await asynchronous(briefing)
+    return getattr(optimizer, method)(briefing)
 
 
 def parse_operator_proposals(content, requested: Mapping[str, int]) -> list[dict]:

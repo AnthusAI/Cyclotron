@@ -47,44 +47,30 @@ def _now():
 
 
 class HypothesisLedger:
-    def __init__(self, db, *, clock=_now):
-        self.db, self.clock = db, clock
-        db.executescript("""
-            CREATE TABLE IF NOT EXISTS idea_evaluations (idea_id TEXT, item_id TEXT, correct INTEGER, label TEXT,
-                choice TEXT, confidence REAL, context_version TEXT, evaluated_at TEXT,
-                PRIMARY KEY (idea_id, item_id, context_version));
-            CREATE TABLE IF NOT EXISTS idea_verdicts (idea_id TEXT, at TEXT, verdict TEXT, reason TEXT, evidence TEXT);
-        """)
+    def __init__(self, db=None, *, clock=_now, storage=None):
+        from .hypothesis_storage import SQLiteHypothesisStorage
+        if storage is None and db is None: raise ValueError('hypothesis storage required')
+        self.storage = storage if storage is not None else SQLiteHypothesisStorage(db)
+        self.clock = clock
+        self.storage.ensure()
 
     def record_evaluations(self, idea_id, rows, context_version):
-        """Rows are dicts with item_id and correct (optionally label, choice, confidence). Same key replaces."""
+        """Rows replace the same idea/item/context evidence identity."""
         at = self.clock()
-        with self.db:
-            self.db.executemany(
-                "INSERT OR REPLACE INTO idea_evaluations VALUES (?,?,?,?,?,?,?,?)",
-                [(idea_id, str(r["item_id"]), int(bool(r["correct"])), r.get("label"), r.get("choice"),
-                  r.get("confidence"), context_version, at) for r in rows])
+        self.storage.record_evaluations([(idea_id, str(r['item_id']), int(bool(r['correct'])),
+            r.get('label'), r.get('choice'), r.get('confidence'), context_version, at) for r in rows])
 
     def record_verdict(self, idea_id, verdict, reason, evidence=None):
-        if verdict not in VERDICTS:
-            raise ValueError(f"unknown verdict {verdict!r}")
-        with self.db:
-            self.db.execute("INSERT INTO idea_verdicts VALUES (?,?,?,?,?)",
-                            (idea_id, self.clock(), verdict, reason, _json(evidence or {})))
+        if verdict not in VERDICTS: raise ValueError(f'unknown verdict {verdict!r}')
+        self.storage.append_verdict((idea_id, self.clock(), verdict, reason, _json(evidence or {})))
 
     def verdicts(self, idea_id):
-        return [{"at": at, "verdict": v, "reason": r, "evidence": json.loads(e or "{}")} for at, v, r, e in
-                self.db.execute("SELECT at,verdict,reason,evidence FROM idea_verdicts WHERE idea_id=? ORDER BY rowid",
-                                (idea_id,))]
+        return [{'at':at,'verdict':v,'reason':r,'evidence':json.loads(e or '{}')}
+            for at,v,r,e in self.storage.verdicts(idea_id)]
 
     def _latest(self, idea_id, exclude=frozenset(), context_version=None):
-        """item_id -> correct, newest evaluation per item (across context versions, or only ``context_version``),
-        minus ``exclude``."""
-        sql, args = "SELECT item_id,correct FROM idea_evaluations WHERE idea_id=?", [idea_id]
-        if context_version is not None:
-            sql, args = sql + " AND context_version=?", [*args, context_version]
-        rows = self.db.execute(sql + " ORDER BY evaluated_at, rowid", args)
-        return {item: bool(c) for item, c in rows if item not in exclude}
+        """Latest per-item evidence, optionally restricted to one context."""
+        return {item:bool(correct) for item,correct in self.storage.latest(idea_id,context_version) if item not in exclude}
 
     def items_evaluated(self, idea_id):
         return frozenset(self._latest(idea_id))
@@ -105,10 +91,7 @@ class HypothesisLedger:
 
     def running_score(self, idea_id, since=None, *, strict=False):
         """Beta(1,1) posterior over accuracy, optionally only evaluations at/after (or strictly after) ``since``."""
-        sql, args = "SELECT correct FROM idea_evaluations WHERE idea_id=?", [idea_id]
-        if since is not None:
-            sql, args = sql + (" AND evaluated_at>?" if strict else " AND evaluated_at>=?"), [*args, since]
-        marks = [c for (c,) in self.db.execute(sql, args)]
+        marks = self.storage.marks(idea_id,since,strict=strict)
         n, k = len(marks), sum(marks)
         low, high = beta_interval(k, n)
         return {"n": n, "correct": k, "mean": (k + 1) / (n + 2), "low": low, "high": high}
@@ -116,7 +99,7 @@ class HypothesisLedger:
     def revive_candidates(self, *, min_items=20, min_mean=0.6):
         """Screened-out ideas whose evaluations since that verdict look promising."""
         out = []
-        for (idea_id,) in self.db.execute("SELECT DISTINCT idea_id FROM idea_verdicts ORDER BY idea_id").fetchall():
+        for idea_id in self.storage.verdict_idea_ids():
             history = self.verdicts(idea_id)
             if history[-1]["verdict"] != "screened_out":
                 continue
@@ -127,11 +110,8 @@ class HypothesisLedger:
         return sorted(out, key=lambda r: (-r["mean"], r["idea_id"]))
 
     def _idea_payload(self, idea_id):
-        try:
-            row = self.db.execute("SELECT payload FROM control_ideas WHERE id=?", (idea_id,)).fetchone()
-        except Exception:
-            row = None
-        return json.loads(row[0]) if row else None
+        payload = self.storage.idea_payload(idea_id)
+        return json.loads(payload) if payload else None
 
     def _idea_text(self, idea_id, width=120):
         idea = self._idea_payload(idea_id)
@@ -140,10 +120,7 @@ class HypothesisLedger:
         return " ".join(str(idea.get("rationale") or idea.get("proposal") or "").split())[:width]
 
     def _idea_ids(self, context_version=None):
-        sql, args = "SELECT DISTINCT idea_id FROM idea_evaluations", []
-        if context_version is not None:
-            sql, args = sql + " WHERE context_version=?", [context_version]
-        return [i for (i,) in self.db.execute(sql, args)]
+        return self.storage.idea_ids(context_version)
 
     def summary_for_optimizer(self, *, limit=10, incumbent_id=None, max_item_ids=5, exclude_items=frozenset(),
                               context_version=None, skip_ids=frozenset()):
@@ -210,12 +187,9 @@ class HypothesisLedger:
         """Per operator: ideas proposed, ideas advanced (ever 'advanced' or 'promoted'), ideas promoted, and the mean
         forward net gain (fixed minus broke versus the incumbent of the time) over ideas whose verdicts recorded one;
         None when no idea of that operator has such evidence. Ideas without an operator are not counted."""
-        try:
-            rows = self.db.execute("SELECT payload FROM control_ideas ORDER BY id").fetchall()
-        except Exception:
-            return {}
+        rows = self.storage.idea_payloads()
         out = {}
-        for (payload,) in rows:
+        for payload in rows:
             idea = json.loads(payload)
             if not idea.get("operator"):
                 continue
@@ -234,44 +208,28 @@ class HypothesisLedger:
 
     # -- diagnosis (Stage 2d) ---------------------------------------------------------------------------------
     def _diagnosis_tables(self):
-        self.db.executescript("""
-            CREATE TABLE IF NOT EXISTS diagnosis_causes (cause_id TEXT PRIMARY KEY, round INTEGER, payload TEXT);
-            CREATE TABLE IF NOT EXISTS element_evaluations (element TEXT, round INTEGER, question TEXT, source TEXT,
-                n INTEGER, auc_label REAL, mean_log_loss_gain REAL, lower_log_loss_gain REAL,
-                mean_accuracy_gain REAL, kept INTEGER, reason TEXT, payload TEXT, evaluated_at TEXT,
-                PRIMARY KEY (element, round));
-        """)
+        self.storage.ensure_diagnosis()
 
     def record_cause(self, round_number, cause):
-        """Store a cause (a plain dict with a unique ``id``); the same id replaces."""
         self._diagnosis_tables()
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO diagnosis_causes VALUES (?,?,?)",
-                            (cause["id"], round_number, _json(cause)))
+        self.storage.save_cause((cause['id'],round_number,_json(cause)))
 
     def causes(self, round_number=None):
         self._diagnosis_tables()
-        sql, args = "SELECT payload FROM diagnosis_causes", []
-        if round_number is not None:
-            sql, args = sql + " WHERE round=?", [round_number]
-        return [json.loads(p) for (p,) in self.db.execute(sql + " ORDER BY round, cause_id", args)]
+        return [json.loads(payload) for payload in self.storage.causes(round_number)]
 
     def record_element_evaluation(self, element, round_number, *, question, source, n, metrics, kept, reason):
         self._diagnosis_tables()
-        cv = metrics.get("cv") or {}
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO element_evaluations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                            (element, round_number, question, source, n, metrics.get("auc_label"),
-                             cv.get("mean_log_loss_gain"), cv.get("lower_log_loss_gain"),
-                             cv.get("mean_accuracy_gain"), int(bool(kept)), reason, _json(metrics), self.clock()))
+        cv=metrics.get('cv') or {}
+        self.storage.save_element((element,round_number,question,source,n,metrics.get('auc_label'),
+            cv.get('mean_log_loss_gain'),cv.get('lower_log_loss_gain'),cv.get('mean_accuracy_gain'),
+            int(bool(kept)),reason,_json(metrics),self.clock()))
 
     def element_evaluations(self, *, kept=None):
         """Latest evaluation per element (newest round wins), optionally only kept or only not kept."""
         self._diagnosis_tables()
         out = {}
-        for row in self.db.execute("SELECT element,round,question,source,n,auc_label,mean_log_loss_gain,"
-                                   "lower_log_loss_gain,mean_accuracy_gain,kept,reason,payload FROM element_evaluations "
-                                   "ORDER BY round, rowid"):
+        for row in self.storage.elements():
             out[row[0]] = {"element": row[0], "round": row[1], "question": row[2], "source": row[3], "n": row[4],
                            "auc_label": row[5], "mean_log_loss_gain": row[6], "lower_log_loss_gain": row[7],
                            "mean_accuracy_gain": row[8], "kept": bool(row[9]), "reason": row[10],
@@ -283,10 +241,7 @@ class HypothesisLedger:
         and its latest recorded forward fixed/broke versus the incumbent of the time (None when the idea has no such
         evidence yet). Causes no idea addressed appear with an empty list."""
         stored = {c["id"]: c for c in self.causes()}
-        try:
-            payloads = [json.loads(p) for (p,) in self.db.execute("SELECT payload FROM control_ideas ORDER BY id")]
-        except Exception:
-            payloads = []
+        payloads = [json.loads(p) for p in self.storage.idea_payloads()]
         out = {cid: {"name": c.get("name"), "cell": c.get("cell"), "confirmed": c.get("confirmed"),
                      "trial_passed": (c.get("trial") or {}).get("passed"), "ideas": []} for cid, c in stored.items()}
         for idea in payloads:
@@ -312,10 +267,7 @@ class HypothesisLedger:
         """item -> {label, choices (wrong answers seen)} for items each given idea answered wrongly."""
         out = {}
         for idea_id in ids:
-            sql = ("SELECT item_id,label,choice FROM idea_evaluations WHERE idea_id=? AND correct=0"
-                   + (" AND context_version=?" if context_version is not None else "") + " ORDER BY evaluated_at, rowid")
-            args = [idea_id] + ([context_version] if context_version is not None else [])
-            for item, label, choice in self.db.execute(sql, args):
+            for item,label,choice in self.storage.wrong(idea_id,context_version):
                 if item not in exclude_items:
                     rec = out.setdefault(item, {"label": label, "choices": []})
                     rec["choices"].append(choice)
@@ -335,11 +287,7 @@ class HypothesisLedger:
                 rows.append({"item_id": item, "label": rec["label"], "kind": "stubborn",
                              "choice": max(set(rec["choices"]), key=lambda c: (rec["choices"].count(c), str(c)))})
         if incumbent_id:
-            sql = ("SELECT item_id,label,choice FROM idea_evaluations WHERE idea_id=? AND correct=0"
-                   + (" AND context_version=?" if context_version is not None else "")
-                   + " ORDER BY evaluated_at DESC, rowid DESC LIMIT ?")
-            args = [incumbent_id] + ([context_version] if context_version is not None else []) + [recent]
-            for item, label, choice in self.db.execute(sql, args):
+            for item,label,choice in self.storage.wrong(incumbent_id,context_version,recent=recent):
                 if item not in seen and item not in exclude_items:
                     seen.add(item)
                     rows.append({"item_id": item, "label": label, "choice": choice, "kind": "incumbent-error"})
