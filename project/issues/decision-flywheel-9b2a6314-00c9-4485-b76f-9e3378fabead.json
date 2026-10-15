@@ -180,10 +180,25 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "784f33d5-bb98-4074-bb30-0f1c05034176",
+      "author": "home",
+      "text": "Checkpoint c677adc on codex/prospectus-console: encrypted bounded canonical S3 OAuth sessions and pending PKCE proof, one-use CAS consumption, cross-process logout/stale-save protection, async route integration; original-session queued actor guard with fresh JWT/me/account/binding checks; atomic S3 console v2 job/actor provenance, fail-closed v1 migration and read-only scoped recovery report. 128 focused tests pass; cross-owner publication/Papyrus harness 83 pass (separate suite); existing UI production build and signed-out loopback browser preview verified. No cloud activation, provider charges, IAM/OAuth/DNS writes or public push. docs/console-activation-review.md records verified AWS682849160744 read-only facts and exact proposed IAM/S3/KMS/SQS/API/OAuth scopes. Recommend separately reviewed BFF/worker role relation centrally; current single-principal registry cannot reuse BFF enrollment across roles. Shared-role union is an explicit approval fallback, not activated. Remaining hosted dispatcher/frozen-run and priming composition, repair procedure, WebSocket hosting, infrastructure synthesis and live Google/browser proof. S3 authority is settled; DDB index-only, local SQLite preserved. Story remains in_progress; not release-ready.\n",
+      "created_at": "2026-10-15T20:10:02.623577Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T19:45:57.568287Z",
+  "updated_at": "2026-10-15T20:10:02.623622Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

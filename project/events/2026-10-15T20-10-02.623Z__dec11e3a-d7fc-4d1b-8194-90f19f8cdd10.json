@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "dec11e3a-d7fc-4d1b-8194-90f19f8cdd10",
+  "issue_id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-15T20:10:02.623Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "784f33d5-bb98-4074-bb30-0f1c05034176",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "cyclotron-console",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}
