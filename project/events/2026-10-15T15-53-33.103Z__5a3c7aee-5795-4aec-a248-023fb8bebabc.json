@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "5a3c7aee-5795-4aec-a248-023fb8bebabc",
+  "issue_id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-15T15:53:33.103Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Ryan explicitly selected full cloud-native storage portability and rejected server-hosted SQLite. This supersedes checkpoint-only design. Preserve complete zero-cloud local SQLite behavior and Python/API/UI. Inventory every catalog/item/label/explanation/prediction/cycle/history/learning/job/lease/cache/session path. Shared backend contract, native SQLite parity, immutable S3 payloads and rebuildable DynamoDB index. Cloud coordination authority is undecided: approving a DDB index does NOT approve authoritative DDB CAS/counters/claims. Compare bounded canonical S3 per-run CAS ledger with additional DDB transaction authority before implementing either coordinator. First cohesive slice: shared decision batches, durable paid-attempt ceiling, cache generations/history and restart; all remaining authoritative stores must convert before hosted cloud mode can be enabled. Contract tests: concurrency/idempotency/pagination/scoped isolation/recovery/migration fidelity. Existing console account integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28. Preserve priming branches, no Kanbus issue encoding or TypeScript rewrite. No EC2 SQLite host, cloud resources/IAM/OAuth/deploy/public push; Papyrus remote/embedded initiatives remain separate planning.",
+        "to": "Ryan explicitly selected full cloud-native storage portability and rejected server-hosted SQLite. This supersedes checkpoint-only design. Preserve complete zero-cloud local SQLite behavior and Python/API/UI. Inventory every catalog/item/label/explanation/prediction/cycle/history/learning/job/lease/cache/session path. Shared backend contract, native SQLite parity, immutable S3 payloads and rebuildable DynamoDB index. Cloud coordination authority is undecided: approving a DDB index does NOT approve authoritative DDB CAS/counters/claims. Compare bounded canonical S3 per-run CAS ledger with additional DDB transaction authority before implementing either coordinator. First cohesive slice: shared decision batches, durable paid-attempt ceiling, cache generations/history and restart; all remaining authoritative stores must convert before hosted cloud mode can be enabled. Contract tests: concurrency/idempotency/pagination/scoped isolation/recovery/migration fidelity. Existing console account integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28. Preserve priming branches, no Kanbus issue encoding or TypeScript rewrite. No EC2 SQLite workaround. Ryan authorized tested publication/merge/deployment once conversion/dependencies are ready, without selecting S3-only vs additional DDB coordination authority. New persistent IAM/OAuth grants still require exact action-time approval; no partial-cloud activation. Papyrus remote/embedded integration owner works in existing priming worktrees and consumes these shared adapters; no competing adapters or consumer forks."
+      }
+    }
+  }
+}

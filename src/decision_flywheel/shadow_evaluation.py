@@ -75,12 +75,11 @@ class ShadowEvaluator:
 
     # -- small state -----------------------------------------------------------------------------------------
     def _state(self, key, default=None):
-        row = self.wheel.db.execute("SELECT value FROM runtime_state WHERE key=?", (key,)).fetchone()
-        return json.loads(row[0]) if row else default
+        value = self.wheel.runtime_storage.state(key)
+        return json.loads(value) if value is not None else default
 
     def _set_state(self, key, value):
-        with self.wheel.db:
-            self.wheel.db.execute("INSERT OR REPLACE INTO runtime_state VALUES (?, ?)", (key, _json(value)))
+        self.wheel.runtime_storage.put_state(key, _json(value))
 
     def seq(self):
         return self._state("shadow_seq", 0)

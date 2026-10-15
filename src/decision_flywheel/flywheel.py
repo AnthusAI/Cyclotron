@@ -14,7 +14,6 @@ import hashlib
 import json
 import math
 from pathlib import Path
-import sqlite3
 from functools import wraps
 from typing import Protocol
 
@@ -158,19 +157,11 @@ class DecisionFlywheel:
             raise ValueError("max_requests must be positive")
         if type(max_request_bytes) is not int or max_request_bytes < 1:
             raise ValueError("max_request_bytes must be positive")
-        path = Path(database)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # WAL lets readers (a progress query, an exporter) never block a commit;
-        # the busy timeout covers the rare checkpoint or second writer.
-        self.db = sqlite3.connect(path, timeout=STORE_BUSY_TIMEOUT_SECONDS)
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.executescript("""
-            CREATE TABLE IF NOT EXISTS runtime_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS runtime_events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
-            CREATE TABLE IF NOT EXISTS runtime_answer_history (id INTEGER PRIMARY KEY, key TEXT NOT NULL, status TEXT NOT NULL, payload TEXT);
-            CREATE TABLE IF NOT EXISTS runtime_rounds (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
-        """)
+        from .runtime_storage import SQLiteRuntimeStateStorage
+        self.runtime_storage = SQLiteRuntimeStateStorage(database, timeout=STORE_BUSY_TIMEOUT_SECONDS)
+        # Native compatibility for learning/caches not converted yet. This is
+        # not an SQL shim and does not expose a partial cloud runtime mode.
+        self.db = self.runtime_storage.db
         if optimizer is None:
             from .optimizer_agent import DisabledOptimizer
             optimizer = DisabledOptimizer()
@@ -186,14 +177,13 @@ class DecisionFlywheel:
         self.redact = tuple(value for value in redact if value)
         self.max_requests, self.max_request_bytes, self.requests = max_requests, max_request_bytes, 0
         expected = _json({"task": initial.task.fingerprint, "model": model.model_identity})
-        saved = self.db.execute("SELECT value FROM runtime_state WHERE key='contract'").fetchone()
-        if saved and saved[0] != expected:
-            self.db.close()
-            raise ValueError("runtime task/model contract does not match the saved study")
-        with self.db:
-            self.db.execute("INSERT OR IGNORE INTO runtime_state VALUES ('contract', ?)", (expected,))
-        active = self.db.execute("SELECT value FROM runtime_state WHERE key='active'").fetchone()
-        self.active = _restore(json.loads(active[0])) if active else FittedClassifier(initial)
+        try:
+            self.runtime_storage.bind_contract(expected)
+        except ValueError:
+            self.runtime_storage.close()
+            raise
+        active = self.runtime_storage.state('active')
+        self.active = _restore(json.loads(active)) if active else FittedClassifier(initial)
         prior_observer = optimizer.observer
         def observe(event):
             clean = self._emit(event)
@@ -201,9 +191,9 @@ class DecisionFlywheel:
         # The library persists actual optimizer messages before the UI callback.
         self.optimizer_observer = prior_observer
         optimizer.observer = observe
-        saved_policy = self.db.execute("SELECT value FROM runtime_state WHERE key='selection_policy'").fetchone()
+        saved_policy = self.runtime_storage.state('selection_policy')
         if self.selection_policy is None and saved_policy:
-            self.selection_policy = SelectionPolicy(**json.loads(saved_policy[0]))
+            self.selection_policy = SelectionPolicy(**json.loads(saved_policy))
         implicit_default = self.selection_policy is None
         if implicit_default:
             # Default objective is accuracy; a policy saved by an earlier run (above) always wins.
@@ -211,26 +201,24 @@ class DecisionFlywheel:
             self.selection_policy = SelectionPolicy(primary='accuracy')
         if not implicit_default:
             encoded = _json(asdict(self.selection_policy))
-            if not saved_policy or saved_policy[0] != encoded:
-                with self.db:
-                    self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('selection_policy', ?)", (encoded,))
+            if not saved_policy or saved_policy != encoded:
+                self.runtime_storage.put_state('selection_policy', encoded)
                 self._emit({'kind':'selection-policy-configured', 'selection_policy':asdict(self.selection_policy),
-                            'previous':json.loads(saved_policy[0]) if saved_policy else None})
+                            'previous':json.loads(saved_policy) if saved_policy else None})
 
         from .idea_screening import IdeaScreeningConfig
         if idea_screening is not None and not isinstance(idea_screening, IdeaScreeningConfig):
             raise ValueError('idea_screening must be IdeaScreeningConfig')
-        saved_screening = self.db.execute("SELECT value FROM runtime_state WHERE key='idea_screening'").fetchone()
-        self.idea_screening = idea_screening or (IdeaScreeningConfig.from_json(json.loads(saved_screening[0]))
+        saved_screening = self.runtime_storage.state('idea_screening')
+        self.idea_screening = idea_screening or (IdeaScreeningConfig.from_json(json.loads(saved_screening))
                                                  if saved_screening else IdeaScreeningConfig())
         self._screening_unsupported_logged = False
         if idea_screening is not None:
             encoded = _json(idea_screening.as_json())
-            if not saved_screening or saved_screening[0] != encoded:
-                with self.db:
-                    self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('idea_screening', ?)", (encoded,))
+            if not saved_screening or saved_screening != encoded:
+                self.runtime_storage.put_state('idea_screening', encoded)
                 self._emit({'kind': 'idea-screening-configured', 'idea_screening': idea_screening.as_json(),
-                            'previous': json.loads(saved_screening[0]) if saved_screening else None})
+                            'previous': json.loads(saved_screening) if saved_screening else None})
 
     def screening_enabled(self):
         """Opt-in idea screening, supported only when accuracy is the primary objective (else legacy path)."""
@@ -250,12 +238,12 @@ class DecisionFlywheel:
 
     def close(self):
         self.optimizer.observer = self.optimizer_observer
-        self.db.close()
+        self.runtime_storage.close()
 
     @property
     def optimizer_context(self):
-        saved = self.db.execute("SELECT value FROM runtime_state WHERE key='optimizer_context'").fetchone()
-        return json.loads(saved[0]) if saved else {"human_explanations": [], "evaluation_context_exposed": False}
+        saved = self.runtime_storage.state('optimizer_context')
+        return json.loads(saved) if saved else {"human_explanations": [], "evaluation_context_exposed": False}
 
     def set_optimizer_context(self, human_explanations, *, evaluation_context_exposed=False):
         """Persist explicitly supplied human guidance, separate from fit labels.
@@ -274,8 +262,7 @@ class DecisionFlywheel:
         context = {"human_explanations": list(dict.fromkeys(human_explanations)),
                    "evaluation_context_exposed": previous["evaluation_context_exposed"] or evaluation_context_exposed}
         if context != previous:
-            with self.db:
-                self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('optimizer_context', ?)", (_json(context),))
+            self.runtime_storage.put_state('optimizer_context', _json(context))
             self._emit({"kind": "optimizer-context-updated", **context})
 
     def _emit(self, event):
@@ -284,24 +271,16 @@ class DecisionFlywheel:
         for value in self.redact:
             text = text.replace(json.dumps(value, ensure_ascii=False)[1:-1], "[REDACTED]")
         event = json.loads(text)
-        with self.db:
-            record = self.db.execute("INSERT INTO runtime_events(payload) VALUES (?)", (_json(event),))
-        event["event_id"] = record.lastrowid
+        event["event_id"] = self.runtime_storage.append_event(_json(event))
         self.observer(event)
         return event
 
     def history(self, limit: int = 100) -> tuple[dict, ...]:
-        rows = self.db.execute("SELECT id,payload FROM runtime_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return tuple({**json.loads(payload), "event_id": event_id} for event_id, payload in reversed(rows))
+        return self.runtime_storage.history(limit)
 
     def trace_events(self, *, after_event_id=0, limit=100):
-        """Ordered local events with a durable database-scoped reconnect cursor."""
-        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("trace cursor must be nonnegative and page size between 1 and 1000")
-        rows = self.db.execute("SELECT id,payload FROM runtime_events WHERE id>? ORDER BY id LIMIT ?",
-                               (after_event_id, limit)).fetchall()
-        return {"events": [{**json.loads(payload), "event_id": event_id} for event_id, payload in rows],
-                "cursor": rows[-1][0] if rows else after_event_id}
+        """Ordered events with the same durable database-scoped cursor."""
+        return self.runtime_storage.trace_events(after_event_id=after_event_id,limit=limit)
 
     async def step(self, stage, training, development, **kwargs):
         from .observability import step
@@ -345,12 +324,11 @@ class DecisionFlywheel:
 
     def hypotheses(self) -> tuple[dict, ...]:
         """Retain proposed structures and outcomes, including older saved rounds."""
-        rows = self.db.execute("""SELECT payload FROM runtime_events
-            WHERE json_extract(payload, '$.kind') IN
-            ('round-started','proposal-validated','promoted','candidate-qualified','candidate-rejected','round-failed') ORDER BY id""").fetchall()
+        rows = self.runtime_storage.event_payloads((
+            'round-started','proposal-validated','promoted','candidate-qualified','candidate-rejected','round-failed'))
         found, current = {}, None
-        for row in rows:
-            event = json.loads(row[0])
+        for payload in rows:
+            event = json.loads(payload)
             if event["kind"] == "round-started":
                 current = None
             elif event["kind"] == "proposal-validated":
@@ -400,8 +378,7 @@ class DecisionFlywheel:
                                 not self.answer_dependencies_current(classifier.answer_dependencies)):
             raise ValueError('decision answers changed; refit the learned head')
         payload = _json(asdict(classifier))
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO runtime_state VALUES ('active', ?)", (payload,))
+        self.runtime_storage.put_state('active', payload)
         self.active = classifier
         from .classifier_snapshot import compact_snapshot
         self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,

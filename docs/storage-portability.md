@@ -210,3 +210,36 @@ Catalog checkpoint full Python regression: **1,419 passed, one skipped**, with
 16 existing pytest-bdd deprecation warnings. `git diff --check` passed. Both
 priming worktree heads remain unchanged (`f5ef70a`, `bad2b5b`). No cloud service,
 IAM/OAuth/DNS configuration, public push or deployment was changed.
+
+## Definitions, runs and runtime state checkpoint
+
+The existing seven definition operations and twenty-five run/command operations
+now delegate to `DefinitionStorage` and `RunStorage`. Native SQL composition and
+existing API signatures remain intact. Classifier/definition advancement and
+run creation with frozen inputs still share native transactions. Event ingestion
+and immutable summary completion additionally begin an immediate transaction so
+concurrent identical retries serialize. This does not add cloud worker fencing:
+command claim/finish signatures and the current native recovery policy remain
+unchanged. A cloud attempt-token protocol still needs conversion and review.
+
+`WebStore.export_storage`/`restore_storage` cover the twenty known console-domain
+tables in one native read/write transaction. Record ordinals retain run/item order,
+first pending dispatch and latest-job completion semantics. Three sequence
+watermarks retain feedback, event and checkpoint identities. Canonical manifests
+transport per-record bytes using the existing archive implementation, with
+console-specific versioned validation; catalog v1 transport remains compatible.
+Unknown schema additions fail closed. This covers console composition, not the
+separate runtime/embedded/reviewer databases.
+
+`RuntimeStateStorage` now owns core contract binding, active classifier state,
+selection/screening/optimizer guidance and monitoring evidence. Contract binding
+is atomic. The core history/reconnect APIs and shadow evaluation use this shared
+boundary. Answer caches, rounds, cycles, training and feature repositories still
+use the native connection and are not declared converted. No partial cloud
+runtime constructor or authority fallback is exposed.
+
+See [consumer and integration handoff](storage-consumer-handoff.md) for stable
+APIs, native-only composition hooks, migration formats, integration ownership and
+remaining hosted prerequisites. Ryan's later publication/deployment authorization
+is recorded there; the coordination decision and action-time IAM/OAuth review
+remain separate. Neither authorization has been used to activate partial hosting.

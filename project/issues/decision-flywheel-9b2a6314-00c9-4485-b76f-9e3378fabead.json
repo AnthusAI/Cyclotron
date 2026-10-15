@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
   "title": "Make Cyclotron persistence portable across SQLite and DynamoDB",
-  "description": "Ryan explicitly selected full cloud-native storage portability and rejected server-hosted SQLite. This supersedes checkpoint-only design. Preserve complete zero-cloud local SQLite behavior and Python/API/UI. Inventory every catalog/item/label/explanation/prediction/cycle/history/learning/job/lease/cache/session path. Shared backend contract, native SQLite parity, immutable S3 payloads and rebuildable DynamoDB index. Cloud coordination authority is undecided: approving a DDB index does NOT approve authoritative DDB CAS/counters/claims. Compare bounded canonical S3 per-run CAS ledger with additional DDB transaction authority before implementing either coordinator. First cohesive slice: shared decision batches, durable paid-attempt ceiling, cache generations/history and restart; all remaining authoritative stores must convert before hosted cloud mode can be enabled. Contract tests: concurrency/idempotency/pagination/scoped isolation/recovery/migration fidelity. Existing console account integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28. Preserve priming branches, no Kanbus issue encoding or TypeScript rewrite. No EC2 SQLite host, cloud resources/IAM/OAuth/deploy/public push; Papyrus remote/embedded initiatives remain separate planning.",
+  "description": "Ryan explicitly selected full cloud-native storage portability and rejected server-hosted SQLite. This supersedes checkpoint-only design. Preserve complete zero-cloud local SQLite behavior and Python/API/UI. Inventory every catalog/item/label/explanation/prediction/cycle/history/learning/job/lease/cache/session path. Shared backend contract, native SQLite parity, immutable S3 payloads and rebuildable DynamoDB index. Cloud coordination authority is undecided: approving a DDB index does NOT approve authoritative DDB CAS/counters/claims. Compare bounded canonical S3 per-run CAS ledger with additional DDB transaction authority before implementing either coordinator. First cohesive slice: shared decision batches, durable paid-attempt ceiling, cache generations/history and restart; all remaining authoritative stores must convert before hosted cloud mode can be enabled. Contract tests: concurrency/idempotency/pagination/scoped isolation/recovery/migration fidelity. Existing console account integration decision-flywheel-73a50b5e-7f10-4908-aed5-45f87e02da28. Preserve priming branches, no Kanbus issue encoding or TypeScript rewrite. No EC2 SQLite workaround. Ryan authorized tested publication/merge/deployment once conversion/dependencies are ready, without selecting S3-only vs additional DDB coordination authority. New persistent IAM/OAuth grants still require exact action-time approval; no partial-cloud activation. Papyrus remote/embedded integration owner works in existing priming worktrees and consumes these shared adapters; no competing adapters or consumer forks.",
   "type": "story",
   "status": "in_progress",
   "priority": 1,
@@ -65,10 +65,29 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "16cf0eca-f670-4764-980d-4879a9e48ad2",
+      "author": "home",
+      "text": "Independent continuation after45f8ee: existing seven definition and25 run/event/command operations now delegate to DefinitionStorage/RunStorage with native SQLite implementations; native-only definition hooks retain cross-domain transactions. Native event/summary retries now serialize. New console export/restore covers20 known domain tables in one snapshot/transaction, retaining row ordinals (dispatch/item/latest-job order), raw JSON, frozen definition/member pins and3 sequence watermarks. Unknown tables/columns/triggers/views reject instead of losing future priming data. ConsoleArchive uses the SAME immutable record transport as unchanged catalog-v1 format, with no cloud coordinator/head. Core active/config/context/evidence and shadow state now use RuntimeStateStorage; cache/round/cycle/training/feature repositories remain native and no partial cloud constructor exists. 131 focused tests pass;24 affected comparison-recovery/new storage tests pass after correcting facade decoder reuse. Final full regression rerun running. Stable shared consumer handoff + hosted prerequisites are in docs/storage-consumer-handoff.md; integration owner must not fork classifiers/storage. Latest tested-publication/deployment authorization recorded, but dependencies are not ready; no cloud/push/deploy or IAM/OAuth changes. Authority design remains pending and independent work continues.\n",
+      "created_at": "2026-10-15T15:55:00.897976Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
+    },
+    {
+      "id": "05f1e7ad-5559-46f4-9198-44e515d4b938",
+      "author": "home",
+      "text": "Final native checkpoint validation: full make test passes 1434 tests, 1 skipped (16 warnings); separate cross-owner embedded/HTTP publication contract passes all 13 tests using this checkout core. Definition/run storage interfaces, runtime state/event boundary and bounded console migration/archive are ready for consumers. Live classifier/job/learning storage remains SQLite; DynamoDB is only rebuildable discovery and S3 immutable payload transport. No cloud backend activation or deployment; pending coordination decision and remaining runtime/learning/cache conversion plus reviewed IAM/OAuth/central dependencies remain explicit in docs/storage-consumer-handoff.md.",
+      "created_at": "2026-10-15T16:04:22.633738Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T15:33:22.050124Z",
+  "updated_at": "2026-10-15T16:04:22.634293Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
