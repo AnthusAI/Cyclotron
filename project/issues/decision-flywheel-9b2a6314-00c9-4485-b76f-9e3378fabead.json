@@ -96,10 +96,22 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "b0a671bf-29d7-4dab-b26c-dec01dc54a62",
+      "author": "home",
+      "text": "Completed the entire independent learning/feature/hypothesis/control native conversion batch, plus forward-evaluation and remaining cycle/replay/diagnosis evidence reads. Shared algorithms consume LearningStorage (five fixed artifact kinds), FeatureStorage, ControlStorage, HypothesisStorage, ShadowStorage and RuntimeStateStorage; direct wheel SQL is gone from these algorithms. Legacy constructors/schemas retained; completion+aliases+pending-marker clearing atomic; timestamp/row order and evaluation firewalls unchanged. Added complete cyclotron-runtime/v1 snapshot for all20 known per-classifier runtime tables with raw JSON/ordinals/lazy schemas/pending work, bounded one-snapshot export, prevalidated atomic empty-destination restore and shared immutable File/injected-S3 transport. Unknown/changed schema and over-budget data reject; interrupted restore rolls back schema+rows. Real cache-only reopen uses no provider. Validation:199 focused repository/learning consumers,100 native/embedded consumers, final34 diagnosis/boundary checks,14 final migration checks and83 read-only cross-owner Papyrus/publication checks pass (overlapping focused suites; not a summed total). No heavy full suites/builds, integration edits, live grants/resources/public push/deployment. Current handoff docs/learning-storage-handoff.md. Remaining independent conversions: embedded root/derived cursors, reviewer source store, frozen-evaluation clock/trace. Live cloud implementations/worker/session durability still incomplete; coordination authority choice remains paused. Story stays in_progress.",
+      "created_at": "2026-10-15T18:25:59.999432Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T16:09:34.287276Z",
+  "updated_at": "2026-10-15T18:25:59.999462Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

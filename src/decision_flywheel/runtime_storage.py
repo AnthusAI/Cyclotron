@@ -1,7 +1,7 @@
-"""Runtime state and evidence contract; learning/cache conversion is unfinished.
+"""Runtime state and evidence contract with a native SQLite implementation.
 
-The native core composes this with its remaining SQLite learning repositories.
-No cloud runtime constructor or partially portable authority selector is exposed.
+The native host composes cache, learning and forward-evaluation repositories on
+this connection. No cloud constructor or distributed authority is selected here.
 """
 from collections.abc import Iterable
 import json
@@ -18,6 +18,8 @@ class RuntimeStateStorage(Protocol):
     def history(self, limit: int = 100) -> tuple[dict,...]: ...
     def trace_events(self, *, after_event_id=0, limit=100) -> dict: ...
     def event_payloads(self, kinds: tuple[str,...]) -> Iterable[str]: ...
+    def events_of(self, kinds: tuple[str,...]) -> tuple[dict,...]: ...
+    def next_cycle_number(self) -> int: ...
     def close(self) -> None: ...
 
 
@@ -72,5 +74,22 @@ class SQLiteRuntimeStateStorage:
         query="SELECT payload FROM runtime_events WHERE json_extract(payload,'$.kind') IN ("+','.join('?' for _ in kinds)+') ORDER BY id'
         cursor=self.db.execute(query,kinds)
         for row in cursor: yield row[0]
+
+    def events_of(self,kinds):
+        if not isinstance(kinds,tuple) or not 1<=len(kinds)<=100 or any(not isinstance(kind,str) for kind in kinds):
+            raise ValueError('explicit bounded event kinds required')
+        sql="SELECT id,payload FROM runtime_events WHERE json_extract(payload,'$.kind') IN ("+','.join('?' for _ in kinds)+') ORDER BY id'
+        return tuple({**json.loads(payload),'event_id':identifier} for identifier,payload in self.db.execute(sql,kinds))
+
+    def next_cycle_number(self):
+        return self.db.execute("SELECT COALESCE(MAX(json_extract(payload,'$.cycle_number')),0)+1 FROM runtime_events").fetchone()[0]
+
+    def export_storage(self,*,max_records=10000,max_bytes=64000000):
+        from .runtime_snapshot import export_runtime
+        return export_runtime(self.db,max_records=max_records,max_bytes=max_bytes)
+
+    def restore_storage(self,snapshot,*,max_records=10000,max_bytes=64000000):
+        from .runtime_snapshot import restore_runtime
+        return restore_runtime(self.db,snapshot,max_records=max_records,max_bytes=max_bytes)
 
     def close(self): self.db.close()

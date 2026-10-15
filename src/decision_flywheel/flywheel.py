@@ -159,11 +159,19 @@ class DecisionFlywheel:
             raise ValueError("max_request_bytes must be positive")
         from .runtime_storage import SQLiteRuntimeStateStorage
         self.runtime_storage = SQLiteRuntimeStateStorage(database, timeout=STORE_BUSY_TIMEOUT_SECONDS)
-        # Native compatibility for learning tables not converted yet. This is
-        # not an SQL shim and does not expose a partial cloud runtime mode.
+        # Native compatibility for existing embedded snapshots and local tools.
+        # Runtime algorithms use domain repositories; this is not a cloud mode.
         self.db = self.runtime_storage.db
         from .runtime_cache_storage import SQLiteRuntimeCacheStorage
         self.runtime_cache = SQLiteRuntimeCacheStorage(self.db)
+        from .learning_storage import SQLiteLearningStorage, SQLiteFeatureStorage, SQLiteControlStorage
+        from .hypothesis_storage import SQLiteHypothesisStorage
+        self.learning_storage = SQLiteLearningStorage(self.db)
+        self.feature_storage = SQLiteFeatureStorage(self.db)
+        self.control_storage = SQLiteControlStorage(self.db)
+        self.hypothesis_storage = SQLiteHypothesisStorage(self.db, controls=self.control_storage)
+        from .shadow_storage import SQLiteShadowStorage
+        self.shadow_storage = SQLiteShadowStorage(self.db)
         if optimizer is None:
             from .optimizer_agent import DisabledOptimizer
             optimizer = DisabledOptimizer()
@@ -361,7 +369,7 @@ class DecisionFlywheel:
         from .feature_bank import FeatureBank
         active = [{"name": t.name, "instructions": t.instructions, "labels": list(t.labels)}
                   for t in self.active.config.tasks]
-        return FeatureBank(self.db).entries(active_tasks=active)
+        return FeatureBank(storage=self.feature_storage).entries(active_tasks=active)
 
     async def optimize_stage(self, stage, training, development, **kwargs):
         from .staged_optimization import optimize_stage
@@ -453,9 +461,13 @@ class DecisionFlywheel:
                                  ('optimization_stages', 'id'), ('question_measurements', 'id'),
                                  ('example_measurements', 'id')}:
             raise ValueError('unknown derived cache')
+        kinds={'classifier_training':'classifier','optimization_stages':'rubric',
+               'question_measurements':'questions','example_measurements':'examples'}
+        def read(identifier):
+            return (self.runtime_cache.round(identifier) if table=='runtime_rounds' else
+                    self.learning_storage.artifact(kinds[table],identifier))
         while True:
-            row = (self.runtime_cache.round(key) if table == 'runtime_rounds' else
-                   self.db.execute(f'SELECT status,payload FROM {table} WHERE {column}=?', (key,)).fetchone())
+            row = read(key)
             if not row or row[0] != 'complete':
                 return key, row
             payload = json.loads(row[1])
@@ -465,8 +477,7 @@ class DecisionFlywheel:
                 return key, row
             previous = key
             key = _hash({'previous_artifact': previous, 'response_revision': 1})
-            exists = (self.runtime_cache.round(key) if table == 'runtime_rounds' else
-                      self.db.execute(f'SELECT 1 FROM {table} WHERE {column}=?', (key,)).fetchone())
+            exists = read(key)
             if not exists:
                 self._emit({'kind': 'derived-cache-invalidated', 'artifact_type': table,
                             'previous_artifact': previous, 'artifact_fingerprint': key,

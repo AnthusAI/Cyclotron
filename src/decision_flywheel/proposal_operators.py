@@ -94,8 +94,7 @@ def combine_block(wheel, ledger, ideas, count):
     from .shadow_evaluation import SHADOW
     inc = incumbent_id(wheel)
     by_id = {i["id"]: i for i in ideas if _rubric_of(i)}
-    old = {i for (i,) in wheel.db.execute("SELECT incumbent_id FROM shadow_incumbents")} - {inc} \
-        if wheel.db.execute("SELECT 1 FROM sqlite_master WHERE name='shadow_incumbents'").fetchone() else set()
+    old = wheel.shadow_storage.incumbent_ids() - {inc}
     done = {frozenset(i["parents"]) for i in ideas if i.get("operator") == "combine" and len(i.get("parents", ())) == 2}
     pair = ledger.complementary_pair(incumbent_id=inc, ids=[*by_id, inc], context_version=SHADOW, skip_ids=old,
                                      exclude_pairs=done)
@@ -202,7 +201,7 @@ def ask_round(wheel, build_briefing, context, control, ideas, training, developm
         wheel._emit({"kind": "proposal-operator-skipped", "operator": "all",
                      "reason": "the optimizer has no propose_operators; used the plain multi-proposal request"})
         return ask_proposals(wheel, build_briefing({"proposals_requested": total, **context}), control, total), None
-    ledger = HypothesisLedger(wheel.db)
+    ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
     requests, parents, skipped = plan_round(wheel, ledger, ideas, training, development, protected, mix, diagnosis)
     cause_ids = None
     if diagnosis:

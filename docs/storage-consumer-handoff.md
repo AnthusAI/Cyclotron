@@ -190,3 +190,15 @@ and before operation state access/dispatch. See
 [the exact host contract](embedded-execution-authorization.md) for non-reentrancy,
 fresh account/publication/binding checks, cancellation and reconciliation scope.
 This independent change does not select a cloud coordinator or activate hosting.
+
+## Learning and runtime migration completion
+
+The native learning/feature/hypothesis/control conversion is now complete, with
+forward-evaluation and cycle/diagnosis evidence reads also behind repositories.
+Algorithms remain shared; only native adapters issue SQL. A complete bounded
+`cyclotron-runtime/v1` snapshot covers all 20 known per-classifier runtime tables,
+including raw payloads, ordinals, pending work and lazy table absence.
+See [the current learning/storage handoff](learning-storage-handoff.md) for exact
+interfaces, empty-destination restore, immutable File/S3 transport, focused proof
+and the separate embedded/reviewer/evaluation/cloud boundaries. This supersedes
+earlier checkpoint notes listing these core learning paths as unconverted.

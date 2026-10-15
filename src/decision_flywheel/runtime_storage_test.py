@@ -54,3 +54,15 @@ def test_racing_first_contract_binds_cannot_overwrite_each_other(tmp_path):
             except ValueError: return False
         finally: store.close()
     with ThreadPoolExecutor(max_workers=2) as pool: assert sorted(pool.map(bind,(0,1)))==[False,True]
+
+
+def test_learning_event_views_preserve_source_ids_and_next_cycle_number(tmp_path):
+    storage=SQLiteRuntimeStateStorage(tmp_path/'runtime.sqlite')
+    assert storage.next_cycle_number()==1
+    storage.append_event('{"kind":"cycle-started","cycle_number":7}')
+    storage.append_event('{"kind":"prediction","target_id":"a","decision_model_label":"include"}')
+    storage.append_event('{"kind":"human-feedback","feedback":{"item_id":"a"}}')
+    assert storage.next_cycle_number()==8
+    assert [row['event_id'] for row in storage.events_of(('prediction','human-feedback'))]==[2,3]
+    with pytest.raises(ValueError): storage.events_of(())
+    storage.close()

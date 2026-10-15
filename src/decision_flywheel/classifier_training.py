@@ -58,15 +58,14 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     if group_plan:
         evidence.update(group_plan=group_plan, max_group_configurations=max_group_configurations)
     key = _hash(evidence)
-    wheel.db.execute("CREATE TABLE IF NOT EXISTS classifier_training (id TEXT PRIMARY KEY, status TEXT, payload TEXT)")
+    wheel.learning_storage.ensure('classifier')
     key, saved = wheel.cached_artifact('classifier_training', 'id', key)
     if saved and saved[0] == "complete":
         return json.loads(saved[1])
     if saved and not retry_interrupted:
         return {"stage": "classifier", "promoted": False, "reason": "interrupted training requires explicit retry"}
     now = datetime.fromisoformat(json.loads(saved[1])["time"]) if saved else datetime.now(timezone.utc)
-    with wheel.db:
-        wheel.db.execute("INSERT OR REPLACE INTO classifier_training VALUES (?, 'pending', ?)", (key, _json({"time": now.isoformat()})))
+    wheel.learning_storage.begin('classifier',key,_json({'time':now.isoformat()}))
     wheel._emit({"kind": "classifier-training-started", "configurations": len(configs),
                  "weightings": ["natural", "equal_class"], **({'feature_group_plan': group_plan} if group_plan else {})})
     previous_weighting = wheel.training_class_weighting
@@ -129,11 +128,8 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                   "reason": (best['reason'] if wheel.selection_policy else "lower balanced Brier with no per-class recall regression") if best else "no candidate passed promotion safeguards"}
         if group_plan:
             result['feature_group_plan'] = group_plan
-        with wheel.db:
-            wheel.db.execute("UPDATE classifier_training SET status='complete',payload=? WHERE id=?", (_json(result), key))
-            if result["promoted"]:
-                wheel.db.execute("INSERT OR REPLACE INTO classifier_training VALUES (?, 'complete', ?)",
-                    (_hash({**evidence, "version": wheel.active.fingerprint}), _json(result)))
+        aliases=(_hash({**evidence,'version':wheel.active.fingerprint}),) if result['promoted'] else ()
+        wheel.learning_storage.complete('classifier',key,_json(result),aliases=aliases)
         wheel._emit({"kind": "classifier-training-completed", **result})
         return result
     finally:

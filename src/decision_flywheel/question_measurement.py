@@ -104,7 +104,7 @@ async def measure_questions(wheel, training, questions, *, protected, propensiti
                  "model_context": wheel.model_context(config, training),
                  "pool": wheel._evidence(training), "protected": sorted(item.id for item in protected),
                  "limit": limit, "ranking": "soft-contingency-oof-v1", "propensities": propensities})
-    wheel.db.execute("CREATE TABLE IF NOT EXISTS question_measurements (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
+    wheel.learning_storage.ensure('questions')
     key, saved = wheel.cached_artifact('question_measurements', 'id', key)
     if saved and saved[0] == "complete":
         return json.loads(saved[1])
@@ -112,10 +112,8 @@ async def measure_questions(wheel, training, questions, *, protected, propensiti
         return {"count": len(window), "rankings": [], "reason": "backfill interrupted; explicit retry authorization required"}
     progress = json.loads(saved[1]) if saved and saved[1] else {}
     now = datetime.fromisoformat(progress["request_time"]) if progress else datetime.now(timezone.utc)
-    with wheel.db:
-        wheel.db.execute("INSERT OR REPLACE INTO question_measurements VALUES (?, 'pending', ?)",
-                         (key, _json({"request_time": now.isoformat()})))
-    bank = FeatureBank(wheel.db)
+    wheel.learning_storage.begin('questions',key,_json({'request_time':now.isoformat()}))
+    bank = FeatureBank(storage=wheel.feature_storage)
     for question in questions:
         bank.register(question, rationale="separate question-discovery stage", evidence=wheel._evidence(window))
     wheel._emit({"kind": "question-backfill-started", "stage": "questions", "count": len(window), "limit": limit,
@@ -148,7 +146,6 @@ async def measure_questions(wheel, training, questions, *, protected, propensiti
               "baseline_version": baseline.fingerprint, "rankings": rankings, "promoted": False,
               "answer_dependencies": wheel.collected_answer_dependencies(),
               "selection_policy": "chronological recent window with backward three-per-class reserve"}
-    with wheel.db:
-        wheel.db.execute("UPDATE question_measurements SET status='complete',payload=? WHERE id=?", (_json(report), key))
+    wheel.learning_storage.complete('questions',key,_json(report))
     wheel._emit({"kind": "question-ranking-completed", **report})
     return report

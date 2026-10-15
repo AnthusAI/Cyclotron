@@ -73,7 +73,7 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
         'cache_options':asdict(wheel.cache_options),
         'evaluation_weighting':wheel.evaluation_weighting,
         'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None})
-    wheel.db.execute('CREATE TABLE IF NOT EXISTS example_measurements (id TEXT PRIMARY KEY,status TEXT,payload TEXT)')
+    wheel.learning_storage.ensure('examples')
     key,saved=wheel.cached_artifact('example_measurements','id',key)
     if saved and saved[0]=='complete' and wheel.cache_options.policy!='refresh':return json.loads(saved[1])
     now=datetime.fromisoformat(json.loads(saved[1])['evaluation_time']) if saved else datetime.now(timezone.utc)
@@ -90,8 +90,7 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
         'sample_ids':[r.item.id for r in rows],'trial_count':len(swaps),'uncached_request_upper_bound':bound})
     if wheel.cache_options.policy!='cache_only' and wheel.requests+bound>wheel.max_requests:
         return {'stage':'examples','rankings':[],'recommended_proposal':None,'reason':'swap experiments exceed remaining request ceiling','request_upper_bound':bound}
-    with wheel.db:
-        wheel.db.execute("INSERT OR REPLACE INTO example_measurements VALUES (?,'pending',?)",(key,_json({'evaluation_time':now.isoformat()})))
+    wheel.learning_storage.begin('examples',key,_json({'evaluation_time':now.isoformat()}))
     base_batches=[await wheel._answers(baseline.config,row.item,training,now) for row in rows]
     base_metrics=_metrics(baseline,rows,base_batches);base_means=_question_means(baseline.config,rows,base_batches)
     base_decision_metrics=_metrics(replace(baseline,head=None),rows,base_batches)
@@ -133,7 +132,6 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
         'incumbent':base_metrics,'incumbent_decision_metrics':base_decision_metrics,
         'baseline_question_means':base_means,'promotion_metric':metric,'rankings':rankings,
         'recommended_proposal':{'example_ids':winners[0]['example_ids'],'rationale':'Best measured one-example swap on matched development items'} if winners else None}
-    with wheel.db:
-        wheel.db.execute("UPDATE example_measurements SET status='complete',payload=? WHERE id=?",(_json(report),key))
+    wheel.learning_storage.complete('examples',key,_json(report))
     wheel._emit({'kind':'example-ranking-completed',**report})
     return report

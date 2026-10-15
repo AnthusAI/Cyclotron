@@ -22,8 +22,8 @@ as Kanbus issues. Remote/embedded Papyrus initiatives are separate planning.
 | Commands and recovery | `web_jobs`, `WebWorker` | One active command/run; atomic claim; fenced completion; no automatic replay of uncertain paid work |
 | API trace/history and comparison inputs | `web_events`, `replay_feedback`, `cyclotron_checkpoints`, `matched_evaluation_inputs`, `matched_evaluation_authorizations` | Stable event source IDs, ordered resumable cursor, immutable approved plan/budget |
 | Core learned state and caches | `DecisionFlywheel`: `runtime_state`, `runtime_events`, `runtime_answers`, `runtime_answer_history`, `runtime_rounds` | Contract/active head, exact answer identity, attempt reservation, prior generations and promotion evidence |
-| Cycles and learning evidence | `cycles.py`, `cycle_replay.py`, `classifier_training.py`, `control_scheduler.py`, `diagnosis.py`, `example_attribution.py`, `hypothesis_ledger.py`, `idea_screening.py`, `proposal_operators.py`, `question_measurement.py`, `shadow_evaluation.py`, `staged_optimization.py` use the wheel's SQLite connection | Audit/learning cursors, training/development/held-out firewalls and reproducible fingerprints are authoritative, not disposable indexes |
-| Feature bank | `feature_bank.py`, in wheel database | Exact feature identities/provenance; no silently dropped candidate history |
+| Cycles and learning evidence | Shared algorithms consume `LearningStorage`, `ControlStorage`, `HypothesisStorage`, `ShadowStorage` and `RuntimeStateStorage`; native adapters retain the existing SQLite records | Audit/learning cursors, training/development/held-out firewalls and reproducible fingerprints are authoritative, not disposable indexes |
+| Feature bank | Existing `FeatureBank` consumes `FeatureStorage`; native SQLite records in wheel database | Exact feature identities/provenance; no silently dropped candidate history |
 | Embedded multi-classifier state | `Cyclotron`: `meta`, `items`, `decisions`, `reviews`, `events`, `learning_queue`, `usage`, `usage_shares`; per-classifier wheel DBs | Review identity, per-classifier source cursor+derived state atomicity, learning-queue ownership, usage accounting |
 | Shared request cache and paid ceiling | `SharedDecisions`: `batches`, `attempts`, `batch_history` | Atomically reserve attempt and budget; exclusive in-flight owner; retained generations; stale completion rejected |
 | Frozen evaluation execution | `matched_run_evaluation.py`: `evaluation.sqlite3` execution clock/trace and before/after shared caches | Frozen clock/plan, cumulative budget across endpoints, no accidental fitting or duplicate calls on recovery |
@@ -243,3 +243,14 @@ APIs, native-only composition hooks, migration formats, integration ownership an
 remaining hosted prerequisites. Ryan's later publication/deployment authorization
 is recorded there; the coordination decision and action-time IAM/OAuth review
 remain separate. Neither authorization has been used to activate partial hosting.
+
+## Completed native learning/runtime boundary
+
+The current [learning storage handoff](learning-storage-handoff.md) supersedes the
+earlier checkpoint's unfinished core learning/feature/hypothesis/control list.
+Those algorithms, including forward evaluation and cycle/diagnosis evidence
+reads, now consume domain repositories. Native `cyclotron-runtime/v1` migration
+retains all 20 known per-classifier runtime tables in one bounded snapshot and
+atomic empty-destination restore. This remains separate from the embedded root,
+shared cache, reviewer, frozen-evaluation and hosted session/worker compositions.
+No live cloud authority or backend selection follows from native conversion.
