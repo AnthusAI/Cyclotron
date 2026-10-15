@@ -27,14 +27,9 @@ class SQLiteRuntimeStateStorage:
         path.parent.mkdir(parents=True,exist_ok=True)
         self.db=sqlite3.connect(path,timeout=timeout)
         self.db.execute('PRAGMA journal_mode=WAL')
-        # The last three native tables support the unchanged answer/learning
-        # composition. They are not part of RuntimeStateStorage's interface.
         self.db.executescript('''
             CREATE TABLE IF NOT EXISTS runtime_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS runtime_events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
-            CREATE TABLE IF NOT EXISTS runtime_answer_history (id INTEGER PRIMARY KEY, key TEXT NOT NULL, status TEXT NOT NULL, payload TEXT);
-            CREATE TABLE IF NOT EXISTS runtime_rounds (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
         ''')
 
     def bind_contract(self,expected):

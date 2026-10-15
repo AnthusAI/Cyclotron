@@ -84,10 +84,22 @@
       "text": "Final native checkpoint validation: full make test passes 1434 tests, 1 skipped (16 warnings); separate cross-owner embedded/HTTP publication contract passes all 13 tests using this checkout core. Definition/run storage interfaces, runtime state/event boundary and bounded console migration/archive are ready for consumers. Live classifier/job/learning storage remains SQLite; DynamoDB is only rebuildable discovery and S3 immutable payload transport. No cloud backend activation or deployment; pending coordination decision and remaining runtime/learning/cache conversion plus reviewed IAM/OAuth/central dependencies remain explicit in docs/storage-consumer-handoff.md.",
       "created_at": "2026-10-15T16:04:22.633738Z",
       "comment_type": "default"
+    },
+    {
+      "id": "4968ac46-61c1-4c8b-b98a-89ac1560334e",
+      "author": "home",
+      "text": "Continued after eb72b21: RuntimeCacheStorage now owns answer reads/history/pending/failure/refresh and trial read/begin/reset/complete/saved-training-candidate operations. Flywheel plus classifier training/example attribution consumers delegate all runtime answer/round SQL to this domain repository. Native schemas/raw payloads and existing retry/transaction semantics preserved; identity refresh rollback tested. 152 focused storage/learning/embedded/comparison consumers pass, plus all 13 external embedded/HTTP publication contract specs. Prior full regression belongs to eb72b21, not rerun for this continuation. This does NOT activate a cloud adapter or distributed budget/claim ownership. Deployment held; authoritative coordinator decision requested from Ryan while remaining conversion continues. No AWS/IAM/OAuth/deploy/publication changes.",
+      "created_at": "2026-10-15T16:09:34.285342Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T16:04:22.634293Z",
+  "updated_at": "2026-10-15T16:09:34.287276Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

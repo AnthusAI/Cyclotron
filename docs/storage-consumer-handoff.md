@@ -156,3 +156,27 @@ Full native regression after the storage extraction: **1,434 passed, one skipped
 (`make test`, 16 warnings). The separate cross-owner publication contract check
 passed all 13 tests. These results validate native parity and the current consumer
 contract; they do not establish a live DynamoDB runtime or a cloud deployment.
+
+## Answer-cache and trial boundary continuation
+
+`runtime_cache_storage.py` defines `RuntimeCacheStorage` and its native SQLite
+implementation for answers, retained answer revisions and learning trials. The
+engine routes response dependencies, refresh/failure/completion, trial replay,
+explicit interrupted-trial reset and trial completion through this repository.
+The original native tables and transaction boundaries remain intact. Moving a
+refreshed response to its new provider identity atomically restores the old
+response and publishes the new one; failures roll the whole move back.
+
+The host still composes native learning repositories on the same connection.
+This boundary preserves the existing local retry and process-local budget
+semantics; it does not add distributed ownership, cloud paid-attempt budgets or
+a selectable cloud constructor. Remaining learning/feature/embedded/reviewer/
+evaluation stores, cloud domain adapters and durable worker/session wiring still
+need conversion. The open coordinator decision remains necessary before those
+cloud transaction implementations can be finished.
+
+Validation for this continuation: **152 focused consumer/storage tests passed**,
+including answer refresh/retry, response-identity rollback, learning and embedded
+consumers, and comparison recovery. The cross-owner embedded/HTTP publication
+contract passed all **13 tests** against this checkout. The prior full 1,434-test
+result belongs to checkpoint `eb72b21`; it was not rerun for this extraction.

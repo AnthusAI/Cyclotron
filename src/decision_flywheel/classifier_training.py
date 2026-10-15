@@ -92,13 +92,12 @@ async def train_classifier(wheel, training, development, *, protected, propensit
                      'selection':selection,'promotion_metric':policy.primary,
                      'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
                      'recall_safeguard_passed':safe,'reason':selection['reason'] if improved else 'raw decision candidate did not pass selection'}
-            with wheel.db:
-                wheel.db.execute("INSERT OR REPLACE INTO runtime_rounds VALUES (?, 'complete', ?)",
-                    (trial_key,_json({'result':trial,'fitted_candidate':asdict(raw),
+            wheel.runtime_cache.save_completed_round(trial_key,
+                    _json({'result':trial,'fitted_candidate':asdict(raw),
                         'answer_dependencies':wheel.collected_answer_dependencies(),
                         'candidate_model_context':wheel.model_context(raw.config, training),
                         'baseline_version':wheel.active.fingerprint,'training_evidence':wheel._evidence(training),
-                        'development_evidence':wheel._evidence(development)})))
+                        'development_evidence':wheel._evidence(development)}))
             wheel._emit({'kind':'candidate-evaluated',**trial})
             trials.append(trial)
         for name, definitions in configs:

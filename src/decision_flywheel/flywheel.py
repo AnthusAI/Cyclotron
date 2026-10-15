@@ -159,9 +159,11 @@ class DecisionFlywheel:
             raise ValueError("max_request_bytes must be positive")
         from .runtime_storage import SQLiteRuntimeStateStorage
         self.runtime_storage = SQLiteRuntimeStateStorage(database, timeout=STORE_BUSY_TIMEOUT_SECONDS)
-        # Native compatibility for learning/caches not converted yet. This is
+        # Native compatibility for learning tables not converted yet. This is
         # not an SQL shim and does not expose a partial cloud runtime mode.
         self.db = self.runtime_storage.db
+        from .runtime_cache_storage import SQLiteRuntimeCacheStorage
+        self.runtime_cache = SQLiteRuntimeCacheStorage(self.db)
         if optimizer is None:
             from .optimizer_agent import DisabledOptimizer
             optimizer = DisabledOptimizer()
@@ -415,7 +417,7 @@ class DecisionFlywheel:
     def answer_dependency(self, config, target, training, now):
         """Reference the exact consumed response, without copying article text."""
         key = self._answer_key(config, target, training, now)
-        row = self.db.execute('SELECT status,payload FROM runtime_answers WHERE key=?', (key,)).fetchone()
+        row = self.runtime_cache.answer(key)
         if not row or row[0] != 'complete':
             raise ValueError('a fit requires a complete recorded decision response')
         dependency = {'request_fingerprint': key, 'response_fingerprint': _hash(json.loads(row[1]))}
@@ -428,8 +430,7 @@ class DecisionFlywheel:
         """Check consumed response revisions locally; never call a provider."""
         check = getattr(self.model, 'answer_dependency_current', None)
         for dependency in dependencies:
-            row = self.db.execute('SELECT status,payload FROM runtime_answers WHERE key=?',
-                                 (dependency['request_fingerprint'],)).fetchone()
+            row = self.runtime_cache.answer(dependency['request_fingerprint'])
             if not row or row[0] != 'complete' or _hash(json.loads(row[1])) != dependency['response_fingerprint']:
                 return False
             provider = dependency.get('provider_dependency')
@@ -453,7 +454,8 @@ class DecisionFlywheel:
                                  ('example_measurements', 'id')}:
             raise ValueError('unknown derived cache')
         while True:
-            row = self.db.execute(f'SELECT status,payload FROM {table} WHERE {column}=?', (key,)).fetchone()
+            row = (self.runtime_cache.round(key) if table == 'runtime_rounds' else
+                   self.db.execute(f'SELECT status,payload FROM {table} WHERE {column}=?', (key,)).fetchone())
             if not row or row[0] != 'complete':
                 return key, row
             payload = json.loads(row[1])
@@ -463,7 +465,9 @@ class DecisionFlywheel:
                 return key, row
             previous = key
             key = _hash({'previous_artifact': previous, 'response_revision': 1})
-            if not self.db.execute(f'SELECT 1 FROM {table} WHERE {column}=?', (key,)).fetchone():
+            exists = (self.runtime_cache.round(key) if table == 'runtime_rounds' else
+                      self.db.execute(f'SELECT 1 FROM {table} WHERE {column}=?', (key,)).fetchone())
+            if not exists:
                 self._emit({'kind': 'derived-cache-invalidated', 'artifact_type': table,
                             'previous_artifact': previous, 'artifact_fingerprint': key,
                             'reason': 'consumed decision responses changed or dependencies were not recorded'})
@@ -521,7 +525,7 @@ class DecisionFlywheel:
             raise ValueError("complete decision request exceeds the configured byte safety ceiling")
         identity = getattr(self.model, 'cache_identity', None)
         key = self._answer_key(config, target, training, now)
-        row = self.db.execute("SELECT status,payload FROM runtime_answers WHERE key=?", (key,)).fetchone()
+        row = self.runtime_cache.answer(key)
         self._emit({"kind": "decision-cache", "request_fingerprint": key,
                     "policy": options.policy, "status": row[0] if row else "missing",
                     "retry_failed": options.retry_failed})
@@ -540,10 +544,7 @@ class DecisionFlywheel:
             from .observability import RequestBudgetExhausted
             raise RequestBudgetExhausted("decision-model request ceiling reached")
         self.requests += 1
-        with self.db:
-            if row:
-                self.db.execute("INSERT INTO runtime_answer_history(key,status,payload) VALUES (?,?,?)", (key, *row))
-            self.db.execute("INSERT OR REPLACE INTO runtime_answers VALUES (?, 'pending', NULL)", (key,))
+        self.runtime_cache.begin_answer(key, row)
         self._emit({"kind": "features-requested", "target_id": target.id, "request_fingerprint": key,
                     "requests": self.requests, "ceiling": self.max_requests})
         try:
@@ -553,25 +554,13 @@ class DecisionFlywheel:
             # Validate full coverage before committing a reusable cache entry.
             self._features(config, batch)
         except Exception as error:
-            with self.db:
-                self.db.execute("UPDATE runtime_answers SET status='failed' WHERE key=?", (key,))
+            self.runtime_cache.fail_answer(key)
             self._emit({"kind": "features-failed", "target_id": target.id, "error_type": type(error).__name__})
             raise RuntimeError("decision feature request failed; see recorded error type") from None
-        with self.db:
-            if identity:
-                current_key = _hash({"model": identity(config, target, training, now=now), "request": request})
-                if current_key != key:
-                    # Shared refresh advances the durable answer generation.
-                    # Retain the old answer under its old identity, not a
-                    # pending alias that poisons subsequent reuse.
-                    if row:
-                        self.db.execute("UPDATE runtime_answers SET status=?,payload=? WHERE key=?", (*row,key))
-                    else:
-                        self.db.execute("DELETE FROM runtime_answers WHERE key=?", (key,))
-                    key = current_key
-                    self.db.execute("INSERT OR REPLACE INTO runtime_answers VALUES (?, 'pending', NULL)", (key,))
-            self.db.execute("UPDATE runtime_answers SET status='complete',payload=? WHERE key=?",
-                            (_json(asdict(batch)), key))
+        current_key = (_hash({"model": identity(config, target, training, now=now), "request": request})
+                       if identity else key)
+        self.runtime_cache.complete_answer(key, _json(asdict(batch)), previous=row, current_key=current_key)
+        key = current_key
         self._emit({"kind": "features-completed", "target_id": target.id, "model": batch.model,
                     "request_fingerprint": key, "answers": asdict(batch)["answers"], "cached": False,
                     "usage": batch.usage, "latency_ms": batch.latency_ms})
@@ -692,8 +681,7 @@ class DecisionFlywheel:
                 return result
             # Only this round is authorized again. Failed/pending decision
             # requests retain their separate no-silent-repayment guard.
-            with self.db:
-                self.db.execute("DELETE FROM runtime_rounds WHERE key=? AND status='pending'", (round_key,))
+            self.runtime_cache.reset_pending_round(round_key)
             self._emit({"kind": "round-retry-authorized", "round_fingerprint": round_key})
         counts = {label: sum(row.label == label for row in training) for label in self.initial.task.labels}
         development_counts = {label: sum(row.label == label for row in development) for label in self.initial.task.labels}
@@ -704,8 +692,7 @@ class DecisionFlywheel:
             self._emit({"kind": "waiting-for-labels", "counts": counts, "development_count": len(development), **result})
             return result
         now = evaluation_time or datetime.now(timezone.utc)
-        with self.db:
-            self.db.execute("INSERT INTO runtime_rounds VALUES (?, 'pending', NULL)", (round_key,))
+        self.runtime_cache.begin_round(round_key)
         self._emit({"kind": "round-started", "training_count": len(training), "development_count": len(development)})
         try:
             briefing = FeedbackBriefing.build(self.initial.task, training,
@@ -774,14 +761,13 @@ class DecisionFlywheel:
                 self._activate(candidate)
             self._emit({"kind": "promoted" if promoted else "candidate-qualified" if improved else "candidate-rejected",
                         "version": self.active.fingerprint, **result})
-            with self.db:
-                self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
-                                (_json({"result": result, "active": asdict(self.active),
+            self.runtime_cache.complete_round(round_key,
+                                _json({"result": result, "active": asdict(self.active),
                                         "fitted_candidate": asdict(candidate), "baseline_version": baseline_version,
                                         "candidate_model_context": self.model_context(candidate.config, training),
                                         "answer_dependencies": self.collected_answer_dependencies(),
                                         "training_evidence": self._evidence(training),
-                                        "development_evidence": self._evidence(development)}), round_key))
+                                        "development_evidence": self._evidence(development)}))
             return result
 
         except Exception as error:
@@ -791,14 +777,13 @@ class DecisionFlywheel:
                 raise
             result = {"promoted": False, "reason": "round failed", "error_type": type(error).__name__}
             self._emit({"kind": "round-failed", **result})
-            with self.db:
-                self.db.execute("UPDATE runtime_rounds SET status='complete',payload=? WHERE key=?",
-                                (_json({"result": result, "active": asdict(self.active),
-                                        "answer_dependencies": self.collected_answer_dependencies()}), round_key))
+            self.runtime_cache.complete_round(round_key,
+                                _json({"result": result, "active": asdict(self.active),
+                                        "answer_dependencies": self.collected_answer_dependencies()}))
             return result
 
     def promote_trial(self, trial_fingerprint, training, development):
-        row = self.db.execute("SELECT status,payload FROM runtime_rounds WHERE key=?", (trial_fingerprint,)).fetchone()
+        row = self.runtime_cache.round(trial_fingerprint)
         if not row or row[0] != "complete":
             raise ValueError("trial is not complete")
         saved = json.loads(row[1])

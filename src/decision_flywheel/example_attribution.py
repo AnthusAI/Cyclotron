@@ -84,7 +84,7 @@ async def measure_example_swaps(wheel, training, development, *, protected, prop
             request=config.request(row.item,training,now=now)
             model_identity=identity(config,row.item,training,now=now) if identity else wheel.model.model_identity
             request_key=_hash({'model':model_identity,'request':request})
-            cached=wheel.db.execute('SELECT status FROM runtime_answers WHERE key=?',(request_key,)).fetchone()
+            cached=wheel.runtime_cache.answer(request_key)
             bound+=wheel.cache_options.policy=='refresh' or not cached or cached[0]!='complete'
     wheel._emit({'kind':'example-swaps-planned','stage':'examples','measurement_fingerprint':key,
         'sample_ids':[r.item.id for r in rows],'trial_count':len(swaps),'uncached_request_upper_bound':bound})
