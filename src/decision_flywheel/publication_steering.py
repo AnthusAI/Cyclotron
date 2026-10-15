@@ -35,11 +35,13 @@ class NativeOutputEvaluator:
 
 
 class PublicationSteering:
-    def __init__(self,records,evaluators,*,owner_lock,allow_evaluation=False):
+    def __init__(self,records,evaluators,*,owner_lock,allow_evaluation=False,max_result_bytes=64_000):
         if not hasattr(owner_lock,'__aenter__'):raise ValueError('existing engine owner lock required')
         if any(cid!=value.output_id for cid,value in evaluators.items()):raise ValueError('scoped evaluator identity mismatch')
         self.records=records;self.evaluators=MappingProxyType(dict(evaluators));self.owner_lock=owner_lock
         self.allow_evaluation=allow_evaluation
+        if type(max_result_bytes) is not int or not 1<=max_result_bytes<=MAX_BYTES:raise ValueError('bounded positive steering result byte budget required')
+        self.max_result_bytes=max_result_bytes
 
     def found(self,kind,operation_id):
         rows=[row['data'] for row in self.records.records() if row['kind']==kind and row['data']['operationId']==operation_id]
@@ -88,15 +90,27 @@ class PublicationSteering:
                     and row['data']['receipt']['result'].get('trial_fingerprint')==payload['trialFingerprint']]
                 if not authorized:raise PublicationError('trial was not evaluated for this publication binding')
             intent={'operationId':operation_id,'signature':signature,'publicationId':publication,'actorId':actor.actor_id,'payload':copied(payload)}
+            at=datetime.now(timezone.utc).isoformat(timespec='microseconds')
+            receipt={'operationId':operation_id,'publicationId':publication,'classifier':cid,'bindingRevision':binding.revision,
+                     'bindingRef':payload['bindingRef'],'action':action,'explanation':payload['explanation'],'setBy':actor.actor_id}
+            try:
+                pending_record=self.records.preview('steering-pending',intent,at)
+                # A JSON string of this size bounds any accepted serialized
+                # result, with conservative extra quote bytes and row metadata.
+                terminal_record=self.records.preview('steering-complete',{'operationId':operation_id,'signature':signature,
+                    'receipt':{**receipt,'result':'x'*self.max_result_bytes}},at)
+                self.records.ensure_capacity([pending_record,terminal_record])
+            except ValueError as exc:
+                raise PublicationError('steering receipt capacity unavailable; nothing dispatched',413) from exc
             # Host guarantees one existing engine writer. This catalog append is
             # not presented as a distributed CAS/dispatch reservation.
-            self.records.put('steering-pending',intent,datetime.now(timezone.utc).isoformat())
+            self.records.put('steering-pending',intent,at)
             try:
                 result=await evaluator.execute(action,payload)
-                receipt={'operationId':operation_id,'publicationId':publication,'classifier':cid,'bindingRevision':binding.revision,
-                         'bindingRef':payload['bindingRef'],'action':action,'explanation':payload['explanation'],'setBy':actor.actor_id,'result':result}
+                if len(canonical(result).encode())>self.max_result_bytes:raise ValueError('steering result exceeds declared byte budget')
+                receipt={**receipt,'result':result}
                 receipt=copied(receipt)
-                self.records.put('steering-complete',{'operationId':operation_id,'signature':signature,'receipt':receipt},datetime.now(timezone.utc).isoformat())
+                self.records.put('steering-complete',{'operationId':operation_id,'signature':signature,'receipt':receipt},datetime.now(timezone.utc).isoformat(timespec='microseconds'))
             except Exception as exc:
                 raise PublicationError('steering outcome is uncertain; explicit reconciliation required',code='reconciliation_required') from exc
             return receipt

@@ -83,3 +83,18 @@ def test_private_binding_fields_and_reused_mapping_revisions_are_refused(tmp_pat
     store.upsert_list_items('bindings',[{'id':'publication-a','occurred_at':'2026-01-03T00:00:00Z','values':{'accountId':'account-a','publicationId':'publication-a','revision':'binding-2','outputs':['intel'],'privateTransport':{'fixture':'must not be exposed'}}}])
     with pytest.raises(ValueError,match='private transport'):
         records.binding_revision(PublicationBinding('publication-a',('intel',),'binding-2'),records.reference('bindings','publication-a',2).to_json())
+
+
+@pytest.mark.parametrize('budget',['records','bytes'])
+def test_capacity_failure_does_not_acknowledge_an_unreadable_record(tmp_path,budget):
+    from .publication_records import canonical
+    store,records,source,binding=setup_records(tmp_path)
+    prepared=records.prepare(PublicationBinding('publication-a',('intel',),'binding-1'),Item('source-1',{'text':'original abstract','source_uri':'https://example.invalid/paper'}),{'sourceRef':source.to_json(),'bindingRef':binding.to_json()})
+    first=records.freeze('decision-1','2026-01-02T00:00:00Z',prepared,prediction=PREDICTION)
+    if budget=='records':records.max_records=1
+    else:records.max_bytes=len(canonical(store.snapshot_items('publication-records')).encode())
+    assert records.freeze('decision-1','2026-01-02T00:00:00Z',prepared,prediction=PREDICTION)==first
+    with pytest.raises(ValueError,match='budget'):
+        records.put('fixture',{'must':'not be acknowledged'},'2026-01-02T00:00:01Z')
+    assert len(store.snapshot_items('publication-records'))==1
+    assert records.context(first['contextId'],'publication-a','decision-1')==first

@@ -211,3 +211,20 @@ issuer or paid provider validation is supplied.
 Reconciliation failures carry `code: reconciliation_required` through HTTP. The
 remote client preserves that state and never describes an ambiguous dispatch as
 a confirmed refusal or automatically retries it.
+
+### Capacity guard after recovery
+
+Record publication checks the prospective native catalog rows, including revision,
+fingerprint and serialized list overhead, against aggregate record/byte budgets
+**before writing**. An unchanged content-addressed retry fits the same membership
+and remains readable at the exact budget boundary. The injected catalog remains
+the only physical store; this adds no adapter or distributed reservation.
+
+Before native steering dispatch, the single-owner gateway checks room for both
+intent and completion rows and a conservative bounded result allowance. The
+configurable `max_result_bytes` defaults to 64,000, bounded by the overall 2 MB
+contract limit. Results exceeding that declared allowance are never truncated or
+acknowledged as complete; they leave an explicit reconciliation state. Pending
+and completed receipt lookup still precede dispatch, so receipt recovery does not
+need new execution capacity or another evaluation. This is local single-owner
+preflight, not a substitute for the pending cloud coordinator decision.

@@ -96,3 +96,21 @@ def test_lost_settlement_acknowledgement_recovers_receipt_without_another_execut
         with pytest.raises(ValueError,match='historical output ownership'):
             records.check_binding(PublicationBinding('other-publication',('intel',),'binding-2'))
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('budget',['records','bytes'])
+def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path,budget):
+    async def scenario():
+        _,records,_,binding_ref=setup_records(tmp_path)
+        if budget=='records':records.max_records=1
+        else:records.max_bytes=20_000
+        class Evaluator:
+            output_id='intel';active_fingerprint='active-1';calls=0
+            async def execute(self,*args):self.calls+=1;return {}
+        evaluator=Evaluator();binding=PublicationBinding('publication-a',('intel',),'binding-1')
+        actor=PublicationActor('account-a','editor-a',frozenset({('publication-a','steer'),('publication-a','read')}))
+        payload={'bindingRevision':'binding-1','bindingRef':binding_ref.to_json(),'classifier':'intel','requestId':'no-capacity','expectedFingerprint':'active-1','action':'evaluate','proposal':{'rubric':'Draft'},'explanation':'Human request.'}
+        gateway=PublicationSteering(records,{'intel':evaluator},owner_lock=asyncio.Lock(),allow_evaluation=True)
+        with pytest.raises(PublicationError,match='nothing dispatched'):await gateway.command(actor,binding,payload)
+        assert evaluator.calls==0 and records.records()==[]
+    asyncio.run(scenario())

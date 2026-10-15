@@ -5,6 +5,7 @@ item identities and evaluation partitions are unchanged. Content addresses name
 only immutable context/receipt envelopes, not new operational item identities.
 """
 from dataclasses import dataclass, asdict
+from datetime import datetime,timezone
 import hashlib
 import json
 
@@ -84,21 +85,47 @@ class PublicationRecords:
                 if prior['publicationId']==binding.publication_id and prior['revision']==binding.revision and prior['outputs']!=list(binding.outputs):
                     raise ValueError('binding revision identity cannot be reused for changed output mapping')
 
-    def put(self,kind,data,at):
+    def preview(self,kind,data,at):
         values=copied({'schema':'cyclotron-publication-record/v1','kind':kind,'accountId':self.account_id,'createdAt':at,'data':data})
         if len(canonical(values).encode())>self.max_bytes:raise ValueError('publication record exceeds byte budget')
         identifier='publication-'+digest(values)
-        self.catalog.upsert_list_items(self.record_list,[{'id':identifier,'occurred_at':at,'values':values}])
-        return identifier
+        occurred=datetime.fromisoformat(at.replace('Z','+00:00'))
+        occurred=occurred.replace(tzinfo=timezone.utc) if occurred.tzinfo is None else occurred.astimezone(timezone.utc)
+        return {'id':identifier,'occurred_at':occurred.isoformat(),'values':values}
 
-    def records(self):
-        rows=self.catalog.snapshot_items(self.record_list)
+    def check_budget(self,rows):
         if len(rows)>self.max_records or len(canonical(rows).encode())>self.max_bytes:raise ValueError('publication record discovery budget exceeded')
-        result=[]
+
+    def ensure_capacity(self,items):
+        # Exact local catalog-row accounting under the existing single owner;
+        # this preflight is not a distributed reservation or claim.
+        rows=list(self._rows());existing=frozenset(row['id'] for row in rows);known=set(existing)
+        for item in items:
+            if item['id'] not in known:
+                rows.append({**item,'revision':1,'fingerprint':digest(item)});known.add(item['id'])
+        self.check_budget(rows)
+        return existing
+
+    def put(self,kind,data,at):
+        item=self.preview(kind,data,at)
+        existing=self.ensure_capacity([item])
+        if item['id'] not in existing:self.catalog.upsert_list_items(self.record_list,[item])
+        return item['id']
+
+    def _rows(self):
+        rows=self.catalog.snapshot_items(self.record_list)
+        self.check_budget(rows)
         for row in rows:
             values=row['values']
             if row['revision']!=1 or values.get('schema')!='cyclotron-publication-record/v1' or values.get('accountId')!=self.account_id or row['id']!='publication-'+digest(values):
                 raise ValueError('publication immutable record changed or escaped account scope')
+        return rows
+
+    def records(self):
+        rows=self._rows()
+        result=[]
+        for row in rows:
+            values=row['values']
             result.append({'recordId':row['id'],**values})
         return result
 
