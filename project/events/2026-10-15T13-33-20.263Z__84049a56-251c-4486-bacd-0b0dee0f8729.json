@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "84049a56-251c-4486-bacd-0b0dee0f8729",
+  "issue_id": "decision-flywheel-7b2189c2-4adc-4135-8baf-3952cb0b1cef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:33:20.263Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Expose deep classifier review and steering through shared Papyrus controls",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a publication editor, I want real shared Cyclotron controls for labels, explanations, monitoring and steering, so that I can understand and improve the bound classifier in either mode.\n\nFeature: Shared operator experience\n  Scenario Outline: Inspect and steer a bound output\n    Given an authorized editor using <mode> mode and a selected publication output\n    When the editor opens its Cyclotron controls in Papyrus\n    Then the UI exposes decision history and explicit human labels with explanations\n    And it exposes versioned classifier status, calibration, review routing and learning activity\n    And steering actions show their target output, effect and resulting audit history\n    And unmeasured metrics and unavailable data are identified honestly\n    Examples:\n      | mode     |\n      | remote   |\n      | embedded |\n  Scenario: Preserve optional priming\n    Given no curated examples have been imported\n    When the editor uses the publication\n    Then priming is offered optionally and does not block normal operation\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nReuse existing labeling-review/review-control, cyclotron-status, classifier metrics, timeline and inspectable steering components. This story covers missing integration/contract depth, not rewriting completed components. Retain transformation feedback separately from human classification rationale.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a16042c9-7357-42d1-a8ca-08387b8931bf",
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "440a8830-f931-43c3-a21b-a68a7395888e",
+  "issue_id": "decision-flywheel-c0e10144-f38d-4a3a-b7c9-424524ea2fef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:33:20.416Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Make remote outages and duplicate deliveries visible without fabricated decisions",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a Papyrus operator, I want explicit retry and availability states, so that a lab outage cannot look like editorial rejection or successful learning.\n\nFeature: Remote availability and retry\n  Scenario: Lab is unavailable\n    Given a bound publication cannot reach its remote lab\n    When a new reference needs vetting\n    Then Papyrus displays an explicit pending or unavailable state under the reviewed policy\n    And it does not fabricate an accept, reject, human label or learning result\n  Scenario: Replay a timed-out decision request\n    Given a decision may have completed before its response was lost\n    When the deployment retries the same request\n    Then it can reconcile the versioned result without duplicating the common item or learning\n  Scenario: Recover after disconnection\n    Given operations have uncertain acknowledgements\n    When connectivity returns\n    Then acknowledged, pending and failed operations are distinguishable\n    And stale results do not silently replace newer classifier history\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: queued versus synchronous operation, cache freshness, publication fallback policy, retry budgets, ordering, outage UI and recovery ownership. No availability promise or transport selected yet.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-c3bfa7ca-e429-40ee-a5b6-0e28d5a9944c",
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

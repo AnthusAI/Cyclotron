@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "d00e918b-2ef0-4c09-bb68-3bb1382e9f85",
+  "issue_id": "decision-flywheel-a294bd32-0fb3-4b43-9bc0-3d69b25bd022",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:33:20.510Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Use shared monitoring and steering in DataParade limited posts",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a DataParade editor, I want the complete shared Cyclotron operator experience beside limited posts, so that embedded mode remains understandable and steerable without a lab UI.\n\nFeature: DataParade embedded operator acceptance\n  Scenario: Inspect and steer the limited-posts classifier\n    Given the deployment owns its embedded posts classifier and an authorized editor opens its controls\n    When the editor inspects a candidate and its decision\n    Then real shared components expose versioned prediction, explicit labels and explanations\n    And classifier monitoring and steering are available with the same observable semantics as remote mode\n    And the action targets the local deployment's classifier data\n  Scenario: No examples or measurements yet\n    Given the small posts section has no curated examples or measured alignment\n    When an editor opens the controls\n    Then missing measurements are identified honestly\n    And optional research-paper or web priming remains separate from normal operation\n  Scenario: Contract parity\n    Given the shared conformance scenarios and equivalent authorized fixture state\n    When they run against embedded and remote adapters\n    Then labels, explanation history, version identity and steering outcomes satisfy the same reviewed contract\n    And embedded mode makes no remote-lab or external-store dependency mandatory\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nConsume shared UI/contract story once; this story is application/mode acceptance, not a second component implementation. Open: navigation placement, local capabilities and limits for a small deployment. Preserve unified local preview work as evidence, not proof of production readiness.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a325c6a6-3b5c-46a9-b38a-ac7b933de13c",
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

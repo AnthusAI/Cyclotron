@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "22ec3f86-749e-44d8-b39d-39bcd41b3703",
+  "issue_id": "decision-flywheel-a325c6a6-3b5c-46a9-b38a-ac7b933de13c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:33:20.199Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "M2: DataParade limited-posts integration with shared operator controls",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nFuture milestone: demonstrate embedded mode in a DataParade-style limited posts section using the same real shared labeling, explanation, monitoring and steering components. Consume the shared contract/UI milestone rather than duplicating components or stories.\n\nFuture Definition of Done: a local publication operator can inspect predictions/history, submit and correct explicit feedback, inspect metrics and steer safely; unmeasured states remain honest. Contract-parity evidence compares the same observable scenarios in both modes without requiring remote storage for embedded mode. No requirement for automatic migration or replication between modes.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-046a06ad-f064-4907-96e1-b6e5941d0938",
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

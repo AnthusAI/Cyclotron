@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "51e08cbd-2034-46cd-a354-9aeaba40fe24",
+  "issue_id": "decision-flywheel-c3bfa7ca-e429-40ee-a5b6-0e28d5a9944c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:33:20.145Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "M2: Remote lab authority and publication-bound reference decisions",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nFuture milestone: one remote cyclotron consumes common reference items, predicts independently for multiple publication outputs, and serves authorized Papyrus deployments. The remote lab alone owns canonical history, labels, learning and classifier state.\n\nFuture Definition of Done: two publications can disagree on the same item; authorized feedback affects only intended outputs; clients clearly show pending/unavailable states during outages; duplicate delivery/retries do not invent labels or duplicate learning. Authentication mechanism, tenancy boundary, binding schema and availability policy require design review.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce",
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

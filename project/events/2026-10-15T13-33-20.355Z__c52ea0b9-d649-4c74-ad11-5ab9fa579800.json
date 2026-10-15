@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "c52ea0b9-d649-4c74-ad11-5ab9fa579800",
+  "issue_id": "decision-flywheel-0a0e710f-497c-4e09-8e0f-a4b9eb30de8e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:33:20.355Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Keep canonical labels and learning in the remote lab with output isolation",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a publication editor, I want remote canonical history and output-scoped feedback, so that local UI state cannot overwrite another publication or become competing truth.\n\nFeature: Remote authoritative classifier history\n  Scenario: Label one publication output\n    Given two deployments read the same common item from the remote lab\n    When an authorized editor labels publication A's output and explains the choice\n    Then the remote lab stores the canonical label, explanation, actor and target revision\n    And only the intended output receives that explicit feedback for learning\n    And publication B remains unlabeled unless explicitly reviewed\n  Scenario: Reopen a deployment\n    Given the remote lab accepted a review before a client restarted\n    When that deployment reconnects\n    Then its history is loaded from the remote lab's acknowledged record\n    And a local cache does not silently replace canonical labels or classifier state\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: per-output learning isolation where shared supporting features exist, audit/correction permissions, cache scope and authoritative event ownership. No forced cross-publication label sharing.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-c3bfa7ca-e429-40ee-a5b6-0e28d5a9944c",
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

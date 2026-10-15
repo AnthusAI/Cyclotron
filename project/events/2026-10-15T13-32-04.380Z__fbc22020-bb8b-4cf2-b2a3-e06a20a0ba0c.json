@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "fbc22020-bb8b-4cf2-b2a3-e06a20a0ba0c",
+  "issue_id": "decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-15T13:32:04.380Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Shared remote Cyclotron lab for publication-specific Papyrus vetting",
+    "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nPurpose: Papyrus, Threat Intelligence, Pilobolus, Anthus and other Anthus sites share one remote cyclotron that processes common input items with multiple classifier outputs. Each bound output predicts the appropriate publication-specific accept/reject decision. Each Papyrus deployment/publication sees and steers only its authorized outputs. Canonical decision history, explicit human labels/explanations, learning state and classifier storage live in the remote lab; clients do not become competing authoritative stores.\n\nMilestones: shared contract/components once (also consumed by the embedded initiative), then remote publication binding and operational acceptance. Existing multi-output core is a reuse foundation, not evidence that cross-deployment auth/storage integration is complete.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.\n\nOpen design questions (not decisions): stable item/revision, classifier/output and publication/deployment identities; binding configuration and changes; account/tenant permissions; service-role authentication without long-lived keys; per-output feedback and learning isolation; shared-item deduplication and provenance; versioned predictions and stale review handling; retry/idempotency, availability and recovery; remote/embedded mode parity. Choose no identity algorithm, auth provider, cloud topology or storage technology by filing these cards.\n\nPlanning completion: linked milestone epics and Gherkin stories, explicit ownership boundaries and unanswered decisions ready for Ryan review. Future delivery completion requires authorized end-to-end evidence across at least two differently bound publications, including isolation and outage/retry cases.",
+    "issue_type": "initiative",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": [
+      "deployment-mode-planning"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

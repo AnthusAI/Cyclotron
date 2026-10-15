@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "dfa59258-f836-4340-9987-3de2b75da59e",
+  "issue_id": "decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-15T13:33:21.186Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "af0ce77c-8a56-4e8f-9146-06176e91d4f7",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Cyclotron Deployment Mode Planning",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}
