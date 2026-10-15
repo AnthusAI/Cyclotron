@@ -58,10 +58,22 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "836e63e5-b7a6-4556-94a5-8856d3763842",
+      "author": "home",
+      "text": "Hosted composition checkpoint 93f3cad5ad2f57670847a5522f053fd33a58282d: existing console BFF -> S3 canonical job/actor -> per-invocation SQS worker -> authenticated bounded HTTP event polling composed. S3 WorkspaceSession retains frozen priming, paid ledgers, original actor and fresh post-ownership/provider/side-effect authorization. Separate BFF/worker actual central e2bb8ff harness 15 checks pass; no central edits or live grants. Latest backend89, native workspace/window/priming74, cross-owner publication83, frontend transport15 pass (sets not cumulative). Production UI build, cfn-lint and actual packaged Linux Python3.13 network-disabled Gateway/S3/worker checks pass; SQLite forbidden and rationale preserved. Browser synthetic owner prepare/feedback -> viewer account switch/read-only -> logout verified at 127.0.0.1:8916; no Google/AWS/provider calls. deployment/README.md records final artifact SHA; docs/console-activation-review.md consolidates exact separate-role IAM/storage/queue/OAuth/central/DNS scope, existing-session activation effect and operational limits. S3 authority settled; DDB optional rebuildable index. No AWS writes/OAuth edits/DNS/push/deployment. Dedicated client/login origin, exact persistent activation approval, central owner rollout, DNS ownership and actual-cloud/Google browser proof remain gates. Paid commands disabled in initial environment composition. Keep in_progress until landing/activation.\n",
+      "created_at": "2026-10-15T20:59:54.117495Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-15T20:10:07.626347Z",
+  "updated_at": "2026-10-15T20:59:54.117533Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
