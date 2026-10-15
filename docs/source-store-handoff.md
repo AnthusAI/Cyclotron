@@ -190,3 +190,14 @@ fail-closed and explicit-storage-selection checks. The final focused safety reru
 accepted source/HTTP/file context, rationale, frozen snapshot and no-retrofit
 behavior. This is synthetic cross-owner evidence, not a live provider or cloud
 claim. No heavy build/full suite was run.
+
+
+## S3 authority decision and implemented cloud slice
+
+The user resolved the authority question: S3 contains text/canonical records and
+DynamoDB remains the card catalog. [s3-cloud-storage.md](s3-cloud-storage.md)
+documents the implemented S3 CAS journal, paid-request ledger, complete core
+runtime repositories and injected S3 embedded SDK composition. Synthetic tests
+block both SQLite connections and local-directory creation during actual SDK
+predict/review/reopen/priming flows. This supersedes the earlier paused authority
+choice; it does not activate the still-incomplete hosted console composition.

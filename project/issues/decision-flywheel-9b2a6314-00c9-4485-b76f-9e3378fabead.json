@@ -144,10 +144,22 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "f80bb34b-e2d0-4a9d-a4e4-36b16d999512",
+      "author": "home",
+      "text": "User resolved cloud authority: canonical records/text in S3, DynamoDB card catalog only; no authoritative DDB and no hosted SQLite. Implemented bounded immutable S3 transactions with conditional heads/anchors, complete S3 shared paid-attempt/owner/claim/history adapter, core runtime repositories with fenced no-timeout ownership, and S3 embedded root/runtime/shared composition. Actual SDK decide-human-review-close-reopen+priming synthetic test forbids SQLite connections and local-directory creation; cloud ceiling absolute across reopen. Uncertain writes poison runtime/root handles; uncertain claims never dispatch, and automatic learning cleanup cannot repay claimed cloud work. Hidden SDK retries rejected (single attempt required). 80 focused cloud/guard/window proofs plus 63 earlier core overlap pass; final expanded tests running. Canonical S3 implementation underway; console catalog/run/command cloud adapters, optimizer paid reservation, recovery tooling, sessions/hosting and live cloud policy verification remain. No cloud resources/push/deploy/provider calls.",
+      "created_at": "2026-10-15T19:17:35.834598Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T18:59:23.258364Z",
+  "updated_at": "2026-10-15T19:17:35.835068Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

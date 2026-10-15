@@ -53,7 +53,7 @@ canonical-payload convention is S3 with a rebuildable DynamoDB catalog/index.
 Implementing authoritative DynamoDB claims/counters would be a distinct semantic
 choice, **not approved by approving a DynamoDB index**. No such coordinator is
 silently enabled. Interface/SQLite parity and immutable S3 payload work proceed
-independently while this choice is reconciled.
+independently. The user has now resolved this choice: S3 is canonical, DynamoDB is the card catalog. The S3 CAS implementation and limits are recorded in [s3-cloud-storage.md](s3-cloud-storage.md).
 
 Correctness needs an atomic boundary combining the run's paid ceiling, request
 generation and exclusive dispatch claim. Minimal alternatives are:
@@ -87,8 +87,9 @@ compositions, then hosted session and execution wiring.
 
 ## Explicit unresolved choices
 
-- Select and review the canonical S3 coordination-document or authoritative
-  DynamoDB transaction alternative above, including recovery/export semantics.
+- S3 coordination is selected; implement and review its remaining domain adapters,
+  recovery/export semantics, limits and deployment policy. Authoritative DynamoDB
+  coordination is not approved.
 - Decide whether future catalog JSON uses Virtuus's ordinary-path canonical
   publication or immutable S3 payloads with transactional heads. Existing runtime
   caches have no ordinary-file JSON format to preserve, but public bundle formats do.

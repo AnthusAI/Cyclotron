@@ -125,7 +125,7 @@ class DecisionFlywheel:
                  redact: Sequence[str] = (), evaluation_weighting: str = "equal_class",
                  training_class_weighting: str = "natural", min_evaluation_per_class: int = 1,
                  cache_options=None, context_validation_floor: int = 20, evaluation_policy=None, selection_policy=None,
-                 idea_screening=None):
+                 idea_screening=None, storage=None):
         from .selection_policy import SelectionPolicy
         if selection_policy is not None and not isinstance(selection_policy, SelectionPolicy):
             raise ValueError('selection_policy must be SelectionPolicy')
@@ -157,23 +157,32 @@ class DecisionFlywheel:
             raise ValueError("max_requests must be positive")
         if type(max_request_bytes) is not int or max_request_bytes < 1:
             raise ValueError("max_request_bytes must be positive")
-        from .runtime_storage import SQLiteRuntimeStateStorage
-        self.runtime_storage = SQLiteRuntimeStateStorage(database, timeout=STORE_BUSY_TIMEOUT_SECONDS)
-        # Native compatibility for existing embedded snapshots and local tools.
-        # Runtime algorithms use domain repositories; this is not a cloud mode.
-        self.db = self.runtime_storage.db
-        from .pending_storage import SQLitePendingStorage
-        self.pending_storage = SQLitePendingStorage(self.db)
-        from .runtime_cache_storage import SQLiteRuntimeCacheStorage
-        self.runtime_cache = SQLiteRuntimeCacheStorage(self.db)
-        from .learning_storage import SQLiteLearningStorage, SQLiteFeatureStorage, SQLiteControlStorage
-        from .hypothesis_storage import SQLiteHypothesisStorage
-        self.learning_storage = SQLiteLearningStorage(self.db)
-        self.feature_storage = SQLiteFeatureStorage(self.db)
-        self.control_storage = SQLiteControlStorage(self.db)
-        self.hypothesis_storage = SQLiteHypothesisStorage(self.db, controls=self.control_storage)
-        from .shadow_storage import SQLiteShadowStorage
-        self.shadow_storage = SQLiteShadowStorage(self.db)
+        if storage is None:
+            from .runtime_storage import SQLiteRuntimeStateStorage
+            self.runtime_storage = SQLiteRuntimeStateStorage(database, timeout=STORE_BUSY_TIMEOUT_SECONDS)
+            # Native compatibility for existing embedded snapshots and local tools.
+            # Runtime algorithms use domain repositories; this is not a cloud mode.
+            self.db = self.runtime_storage.db
+            from .pending_storage import SQLitePendingStorage
+            self.pending_storage = SQLitePendingStorage(self.db)
+            from .runtime_cache_storage import SQLiteRuntimeCacheStorage
+            self.runtime_cache = SQLiteRuntimeCacheStorage(self.db)
+            from .learning_storage import SQLiteLearningStorage, SQLiteFeatureStorage, SQLiteControlStorage
+            from .hypothesis_storage import SQLiteHypothesisStorage
+            self.learning_storage = SQLiteLearningStorage(self.db)
+            self.feature_storage = SQLiteFeatureStorage(self.db)
+            self.control_storage = SQLiteControlStorage(self.db)
+            self.hypothesis_storage = SQLiteHypothesisStorage(self.db, controls=self.control_storage)
+            from .shadow_storage import SQLiteShadowStorage
+            self.shadow_storage = SQLiteShadowStorage(self.db)
+        else:
+            # The injected composition must provide every domain. Never fill a
+            # missing cloud repository with a local database.
+            names=('runtime_storage','pending_storage','runtime_cache','learning_storage',
+                   'feature_storage','control_storage','hypothesis_storage','shadow_storage')
+            repositories={name:getattr(storage,name) for name in names}
+            for name,repository in repositories.items():setattr(self,name,repository)
+            self.db=None  # Native compatibility handle is unavailable in cloud mode.
         if optimizer is None:
             from .optimizer_agent import DisabledOptimizer
             optimizer = DisabledOptimizer()

@@ -343,7 +343,7 @@ class Cyclotron:
                  priming_examples: Mapping[str, Sequence[LabeledItem]] | None = None,
                  seed_supporting_questions: Mapping[str, Sequence[Mapping[str, Any] | DecisionTask]] | None = None,
                  share_supporting_questions: bool | None = None, learning: str = "inline",
-                 max_superseded_passes: int = 3):
+                 max_superseded_passes: int = 3, storage=None):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
         if type(max_requests) is not int or max_requests < 1:
@@ -372,14 +372,17 @@ class Cyclotron:
         self.max_superseded_passes = max_superseded_passes
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
-        self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.storage=storage
+        if storage is not None and (directory is not None or lease is not None):
+            raise ValueError('injected cloud stores cannot use a local directory or file lease')
+        self.directory = Path(directory) if storage is None else None
+        if self.directory is not None:self.directory.mkdir(parents=True, exist_ok=True)
         self.wheels: dict[str, DecisionFlywheel] = {}
         self.shared = None
         self.db = None
         # The lease comes first: nothing is opened, and no model is called,
         # while another writer holds the store.
-        self.lease = lease if lease is not None else FileLease(self.directory)
+        self.lease = storage.lease if storage is not None else lease if lease is not None else FileLease(self.directory)
         self.lease.acquire()
         try:
             self._open(model, optimizer, max_requests, redact)
@@ -396,9 +399,12 @@ class Cyclotron:
 
     def _open(self, model, optimizer, max_requests, redact):
         definition = self.definition
-        from .embedded_storage import SQLiteEmbeddedStorage
-        self.root_storage = SQLiteEmbeddedStorage(self.directory/'cyclotron.sqlite3')
-        self.db = self.root_storage.db  # Native snapshot compatibility only.
+        if self.storage is None:
+            from .embedded_storage import SQLiteEmbeddedStorage
+            self.root_storage = SQLiteEmbeddedStorage(self.directory/'cyclotron.sqlite3')
+        else:
+            self.root_storage=self.storage.root_storage
+        self.db = getattr(self.root_storage,'db',None)  # Native snapshot compatibility only.
         saved = self.root_storage.meta('definition')
         if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
             raise ValueError("this store belongs to a different cyclotron definition")
@@ -418,19 +424,20 @@ class Cyclotron:
         self.priming_examples = decode_priming(saved_priming)
         self._batch_log: ContextVar[list | None] = ContextVar(f"cyclotron_batches_{id(self)}", default=None)
         self._batches = []
-        self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
+        self.shared = SharedDecisions(self.directory / "shared.sqlite3" if self.directory is not None else None, model, max_requests=0,
                                       observer=self._on_batch,
-                                      share_supporting_questions=self._sharing(created=saved is None))
+                                      share_supporting_questions=self._sharing(created=saved is None),
+                                      storage=self.storage.batch_storage if self.storage is not None else None)
         # The shared ceiling counts every attempt in the store's lifetime; this
         # open authorizes max_requests more.
-        self.shared.max_requests = self.shared.requests + max_requests
+        self.shared.max_requests = self.shared.requests + max_requests if self.storage is None else max_requests
         self.specs = {spec.id: spec for spec in definition.classifiers}
         self.versions: dict[str, VersionTracker] = {}
         self._seen: dict[str, int] = {}
-        (self.directory / "classifiers").mkdir(exist_ok=True)
-        paths = _store_paths(self.directory, definition)
+        if self.directory is not None:(self.directory / "classifiers").mkdir(exist_ok=True)
+        paths = _store_paths(self.directory, definition) if self.directory is not None else {}
         for spec in definition.classifiers:
-            path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"]
+            path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"] if self.directory is not None else None
             wheel = DecisionFlywheel(
                 path, ClassifierConfig(spec.task, example_ids=tuple(row.item.id for row in self.priming_examples.get(spec.id,())), rubric=self._seed(spec.id),
                                        tasks=self._seed_questions(spec, created=saved is None)),
@@ -438,7 +445,8 @@ class Cyclotron:
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
                 self.shared.adapter(spec.id), self._optimizer_for(optimizer, spec.id),
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
-                min_evaluation_per_class=2)
+                min_evaluation_per_class=2,
+                storage=self.storage.runtime_for_classifier(spec.id) if self.storage is not None else None)
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
@@ -512,7 +520,7 @@ class Cyclotron:
         if self.shared is not None:
             self.shared.close()
             self.shared = None
-        if self.db is not None:
+        if getattr(self,'root_storage',None) is not None:
             self.root_storage.close()
             self.db = None
         if self.lease is not None:
@@ -1178,6 +1186,7 @@ class Cyclotron:
         path = Path(path)
         manifest = {"schema": STORE_SCHEMA, "cyclotron": self.definition.id,
                     "definition_fingerprint": self.definition.fingerprint, "created_at": _now(), "files": []}
+        if self.storage is not None:raise ValueError('cloud records require canonical S3 export, not a SQLite binary snapshot')
         connections = {"cyclotron.sqlite3": self.db, "shared.sqlite3": self.shared.db}
         for spec in self.definition.classifiers:
             name = "classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"
