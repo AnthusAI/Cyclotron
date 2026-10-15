@@ -102,10 +102,40 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "2252962d-6922-4d3b-a735-fea8f3c2c6fb",
+      "author": "home",
+      "text": "Consumed public execution_guard contract from pinned owner revision 0b903779222fdab842caa077fd8bc645e96e23e4 without editing owner worktree. PublicationLab guarded preflight reads run after fresh authority under native ownership; sync monitoring/history/events/replay and post-core provenance use separate public guarded scopes. Steering now supports public owner_execution factory. Dynamic host requires trusted guard by default; explicit synthetic fixtures opt out. Cross-owner actual SDK/ASGI integration 82 passed including Papyrus BFF queued account/person/binding/grant/outage revocation, cancellation, missing post-core provenance reconciliation and steering; local gateway/host 10 passed. Final added default-guard refusal assertion pending focused rerun. No cloud activation, storage adapter or heavy build.",
+      "created_at": "2026-10-15T18:15:42.038869Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "e3e6af3f-6fb8-4589-8b2c-19bff1656e25",
+      "author": "home",
+      "text": "Final source checkpoints: Cyclotron 1e2a7a7 on codex/priming-http-import; Papyrus a23d6f4 on feature/PPY-7227ac-cyclotron-priming; requires owner core 0b903779222fdab842caa077fd8bc645e96e23e4. Cross-owner SDK/ASGI harness now 83 PASS including default missing-guard refusal. TS client/shared-control tests and focused lint PASS. Release owner and storage/core owner received pins/contracts. Public post-lock authorization dependency resolved in integration; production route/session/grant composition and storage authority remain pending. No build, push, merge, deployment or cloud activation in this increment.",
+      "created_at": "2026-10-15T18:16:51.689570Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-15T13:33:20.116542Z",
-  "updated_at": "2026-10-15T18:05:18.882479Z",
+  "updated_at": "2026-10-15T18:16:51.689601Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
