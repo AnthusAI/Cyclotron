@@ -72,10 +72,40 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "04d12adb-a738-43ca-baf8-6af7d478b3be",
+      "author": "home",
+      "text": "Next lightweight acceptance increment: fresh per-request authorized account/lab resolution without a membership/session store; explicit response account identity and client account pinning; cancellation and reauthorization at scoped steering owner-lock acquisition. Tests use actual SDK/offline models and in-process HTTP with scripted host authorization, not live IAM/OAuth or deployed service-role proof. Existing AccountsClient/AccountWorkspaceAccess from storage owner inspected read-only; do not duplicate them or infer publication permissions from console roles. Public SDK owned-operation hook is still required to guarantee action-time authorization after its internal queue for decide/review, and cloud coordination/runtime conversion still blocks hosted activation. No full suite, native/container build or server restart planned.",
+      "created_at": "2026-10-15T17:00:57.347674Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "3831bce8-0c3d-4e98-9f36-563a35d31330",
+      "author": "home",
+      "text": "Implemented request-scoped PublicationAccess/create_publication_host over injected existing labs. Fresh resolver checks each operation; expected account pin prevents stale writes after account switching; host-derived account envelope, sanitized outage refusal and cancellation-before-dispatch. No new persistence, credentials, backend selection or cloud activation. Focused actual SDK/ASGI tests: publication_host + publication_lab + publication_composition, 27 passed, single process with BLAS threads limited to one. Papyrus release-owner BFF/account-aware component identity remains unwired. Public owner-lock action-time reauthorization hook remains core/storage-owner dependency; pending cloud authority remains unchanged.",
+      "created_at": "2026-10-15T18:05:18.882441Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-15T13:33:20.116542Z",
-  "updated_at": "2026-10-15T16:36:36.292309Z",
+  "updated_at": "2026-10-15T18:05:18.882479Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
