@@ -114,11 +114,11 @@ class PrimingService:
             if 'credential' in str(exc):raise
             rows=[];status='invalid';errors=[{'row':0,'field':'file','message':str(exc)}]
         draft,created=self._begin(identifier,contract,{'kind':'file','format':kind,'content':content})
-        if not created:return draft
+        if not created and draft['status']!='starting':return draft
         draft.update(status=status,rows=rows,errors=errors)
         with self.storage.transaction() as db:
             current=self._read(db,identifier)
-            if current['status']=='cancelled':return current
+            if current['status']!='starting' or current['version']!=draft['version']:return current
             try:self._write(db,draft)
             except ValueError:
                 draft.update(status='invalid',rows=[],errors=[{'row':0,'field':'file','message':'Expanded preview exceeds the aggregate draft limit. Split this file into smaller batches.'}])

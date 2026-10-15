@@ -156,10 +156,22 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "b7c34c2a-5afe-4633-8f91-e8543eea5631",
+      "author": "home",
+      "text": "S3 console domain adapter now implemented locally: atomic classifier+active-definition advancement; revisioned catalog/human feedback/retractions; frozen run+pins; events/items/status/summary; editions/checkpoints; priming draft acceptance. Full v2 native console snapshot import/export uses pure record validation, no SQLite. Worker command claims require confirmed per-process receipt and owner/fence; restricted command/run-bound view rechecks running claim within every mutation CAS; lost claim receipt cannot grant by reread; no global timeout recovery. Existing file import starting-state retry now reconciles lost draft creation without implicit acceptance. 74 focused console/priming/account checks pass, including23 existing public domain contracts on S3 with SQLite/mkdir forbidden and actual synthetic-session/central-auth GraphQL workspace switch/denials before S3 access. No Google/live cloud/deployment claim. Workspace whole-value CAS is bounded and write-amplifying; sharded immutable manifests proposed for scaling, DDB remains index. Ephemeral worker/recovery, optimizer reservations, auxiliary stores, sessions and live cloud verification still pending; continuing authorized work.",
+      "created_at": "2026-10-15T19:29:57.553892Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T19:17:35.835068Z",
+  "updated_at": "2026-10-15T19:29:57.553953Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

@@ -119,3 +119,47 @@ conditional SDK parameter validation through botocore Stubber, ownership fencing
 limit rollback, uncertain-handle poisoning, priming and an absolute reopened
 cloud request ceiling. Fake providers and injected S3 boundaries only; no real
 provider, AWS write, heavy build or full suite is represented by these results.
+
+## Console domain adapter checkpoint
+
+`S3ConsoleStorage` now supplies classifier/item revisions, feedback and retractions,
+immutable displayed predictions, user definitions/activation, frozen run creation,
+items/status/events/summaries, editions/checkpoints and priming transactions. The
+classifier revision and every active definition advancement commit in one S3 CAS;
+run inputs and definition pins commit together. Complete v2 native console
+snapshots import/export through pure record validation with no SQLite connection.
+
+The console value is bounded per authorized workspace. This initial adapter
+rewrites its complete bounded record value per transaction, including history.
+It is not a scalable unbounded account database: saturation stops with an error.
+The same explicit head-contention/write-amplification and continuation limitations
+apply. Sharded immutable record manifests are the proposed next scaling step;
+DDB must remain an index and cannot become their activation authority.
+
+Cloud command claims require an explicit UUID worker-operation owner. A confirmed
+claim grants a process-local capability; a lost receipt or new process cannot
+obtain execution permission by merely observing a running row. `for_command`
+returns a limited per-call view bound to the command, run, owner and fence. Its
+mutations test current running ownership inside the same head CAS as the data
+change. Settlement requires the confirmed owner/fence and commits terminal
+command state with run exhaustion. Stale views cannot write, and views cannot
+escape through a raw store/SQL connection. Global startup timeout recovery is
+refused. Reviewed scoped recovery and actual ephemeral worker binding remain
+required; the legacy worker cannot silently run this adapter unfenced.
+
+Priming acceptance uses the same transaction as its draft/catalog/human feedback.
+A file draft whose creation committed but lost its receipt can retry the same
+raw input from `starting` to preview. It cannot replace an accepted/cancelled or
+newer draft and never implicitly accepts examples. External transformation calls
+remain outside the transaction.
+
+Synthetic proof at this checkpoint: 74 focused console/priming/account checks
+pass, including 23 existing public native-domain contracts rerun against S3 with
+SQLite and directory creation blocked. An actual hosted-mode GraphQL app with
+synthetic verified sessions and central authorization switches two scoped S3
+workspaces; logged-out, revoked, unknown-account and viewer-write requests are
+denied before any S3 data access. This is not real Google/Cognito/IAM/browser or
+deployment proof. Hosted priming still fails closed pending scoped composition.
+Comparison command lifecycle, optimizer reservation, remaining auxiliary stores,
+reviewed recovery, durable sessions, deployment and actual cloud verification
+remain. No persistent IAM/S3 policy changes or hosted SQLite fallback occurred.
