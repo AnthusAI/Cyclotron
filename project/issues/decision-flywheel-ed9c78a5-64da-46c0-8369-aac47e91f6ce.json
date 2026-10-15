@@ -70,10 +70,25 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "8e9b125e-c9d9-4d8a-a12f-57cbba0cc42d",
+      "author": "home",
+      "text": "Recovery checkpoint: M1 reboot caused exec-server loss, not source checkpoint loss. Core follow-on 3ed844b and Papyrus 15b4426 survived. Release-blocking archive capacity issue is now fixed in ecc55eb: prospective record/count/byte budgets checked before write; unchanged content-addressed retries do not rewrite native records; steering checks intent plus bounded completion capacity before dispatch, with configurable max_result_bytes default 64000 (overall contract bound 2 MB). Insufficient count/bytes causes zero evaluator calls and no pending publication. Existing single-owner lock remains required; this is not distributed CAS or a new storage adapter. After reboot ran only lightweight single-process checks with BLAS/OMP threads 1: 13 record/steering tests pass, plus 9 embedded/HTTP composition tests; no heavy native/container build, full suite restart, server restart or unrelated process termination. Pre-reboot evidence: 58 core focused tests, four Papyrus curation-to-mode integration tests, SSR/payload checks, TypeScript and lint. Follow-on adds actual scoped native trial/evaluated promotion, immutable source+binding+prediction joins, source-correct scoped replay into a fresh SDK, old-context read-only UI and retraction reconciliation. Owner CatalogStorage checkpoint 45f8ee15 interoperated in a temporary read-only-source check. Runtime-specific historical learning still fails closed for changed labeled sources; global review-rate override is not publication steering. Storage/runtime conversion, public owner-lock composition, coordinator decision and verified auth/route wiring remain pending before hosted activation. No live/paid classifier evidence, new resources, IAM/OAuth changes or deployment. Both initiatives remain in progress; ready source handoff is core 3ed844b + ecc55eb and Papyrus 15b4426, based on prior 1cbe194/c471eb7.",
+      "created_at": "2026-10-15T16:36:36.256134Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Publication Deployment Modes",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-15T13:32:04.380032Z",
-  "updated_at": "2026-10-15T15:52:32.769056Z",
+  "updated_at": "2026-10-15T16:36:36.256173Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
