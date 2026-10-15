@@ -108,10 +108,22 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "e0a23188-c0e1-4af8-962c-def644d29683",
+      "author": "home",
+      "text": "Completed independent embedded root, reviewer and frozen-evaluation source repository conversion. EmbeddedStorage named ops + root-domain transactions preserve existing8tables, ordered reviews/events/usage/deferred queue and per-classifier derived source cursor. Failed derived page also restores in-memory seen/version so same-process retry cannot skip review. ReviewStorage preserves Article/presentation/feedback/audit semantics, native legacy upgrades, atomic study bind and active vote/undo transactions. EvaluationStorage freezes clock/idempotent trace; evaluator uses existing BatchStorage factory for both caches/counts, no parallel counter. Added shared NativeDomainCodec + known codecs/DomainArchive for8root/4review/2evaluation tables, raw records/ordinals, trace AUTOINCREMENT watermark, FK/identity/check validation, bounds and atomic empty-destination restore.174 focused consumers+83 cross-owner pass; final focused migration/boundary rerun passes separately. No heavy builds/cloud/grants/public push/integration edits. Exact source-store handoff docs/source-store-handoff.md. Existing priming inputs7a76d970995aabacec85400719cf4be17baecf8e/ead4b382e2f7e0417a7848cb2151b9051d2249f4 and Papyrus ebdbff1 remain explicit compatibility gate: root raw meta preservation alone is not priming API/catalog compatibility. Live cloud adapters, ownership/session/worker durability and authority decision remain incomplete/paused. Story stays in_progress.",
+      "created_at": "2026-10-15T18:42:35.153953Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T21:37:22.661761Z",
-  "updated_at": "2026-10-15T18:25:59.999462Z",
+  "updated_at": "2026-10-15T18:42:35.154348Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

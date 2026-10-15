@@ -2,7 +2,6 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 import json
 
 from .matched_run_plan import plan_matched_runs, fingerprint
@@ -54,7 +53,8 @@ def _endpoint(source):
     return fitted, items, training
 
 
-async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_requests, observer,retry_failed=False):
+async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_requests, observer,retry_failed=False,
+                                execution_storage=None,batch_storage_factory=None):
     """Execute an approved preflight; repeat invocations reuse complete requests.
 
     The application supplies models and routes observer events to its API. The
@@ -76,37 +76,36 @@ async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_reque
                 raise ValueError('frozen head does not match the joint decision feature context; replay and refit this endpoint')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(directory / 'evaluation.sqlite3') as db:
-        db.execute('CREATE TABLE IF NOT EXISTS execution(plan TEXT PRIMARY KEY, clock TEXT NOT NULL)')
-        db.execute('CREATE TABLE IF NOT EXISTS trace(id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE, payload TEXT NOT NULL)')
-        db.execute('INSERT OR IGNORE INTO execution VALUES (?,?)',
-                   (plan['fingerprint'], datetime.now(timezone.utc).isoformat()))
-        clock = datetime.fromisoformat(db.execute('SELECT clock FROM execution WHERE plan=?',
-                                                 (plan['fingerprint'],)).fetchone()[0])
+    from .evaluation_storage import SQLiteEvaluationStorage
+    execution=execution_storage if execution_storage is not None else SQLiteEvaluationStorage(directory/'evaluation.sqlite3')
+    clock=datetime.fromisoformat(execution.bind_clock(plan['fingerprint'],datetime.now(timezone.utc).isoformat()))
     def emit(event):
-        # Acknowledgement may fail after a paid response. Re-delivery keeps the
-        # same identity and payload instead of inventing a replacement event.
+        # Re-delivery after acknowledgement failure retains the original ID and
+        # exact persisted payload, including its first timestamp.
         identity=fingerprint({'plan':plan['fingerprint'],'event':event})
-        with sqlite3.connect(directory / 'evaluation.sqlite3') as db:
-            db.execute('INSERT OR IGNORE INTO trace(key,payload) VALUES (?,?)',
-                (identity,json.dumps({**event,'timestamp':event.get('timestamp') or datetime.now(timezone.utc).isoformat()},allow_nan=False)))
-            row=db.execute('SELECT id,payload FROM trace WHERE key=?',(identity,)).fetchone()
-        observer({**json.loads(row[1]),'event_id':row[0]})
-        return row[0]
+        identifier,payload=execution.append_trace(identity,json.dumps(
+            {**event,'timestamp':event.get('timestamp') or datetime.now(timezone.utc).isoformat()},allow_nan=False))
+        observer({**json.loads(payload),'event_id':identifier})
+        return identifier
     metrics = {cid: {} for cid in plan['classifier_ids']}
     requests = new_requests = 0
     records = []
     cache_paths={side:directory/f"{plan['fingerprint']}-{side}.sqlite3" for side in ('before','after')}
-    attempts={side:0 for side in cache_paths}
-    for side,path in cache_paths.items():
-        if path.exists():
-            with sqlite3.connect(path) as db:attempts[side]=db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0]
+    from .batch_storage import SQLiteBatchStorage
+    open_batches=batch_storage_factory if batch_storage_factory is not None else lambda side:SQLiteBatchStorage(cache_paths[side])
+    attempts={}
+    # Each factory call transfers one fresh handle; reuse the same fixed side's
+    # durable namespace. Read totals through BatchStorage, never a SQL counter.
+    for side in cache_paths:
+        storage=open_batches(side)
+        try: attempts[side]=storage.requests()
+        finally: storage.close()
     for side in ('before', 'after'):
         fitted, items, training = frozen[side]
         configs = {cid: classifier.config for cid, classifier in fitted.items()}
         shared = SharedDecisions(cache_paths[side], models[side],
             max_requests=max_requests-sum(count for key,count in attempts.items() if key!=side),
-            observer=lambda event: emit({**event, 'endpoint': side}))
+            observer=lambda event: emit({**event, 'endpoint': side}),storage=open_batches(side))
         start_requests = shared.requests
         output = {cid: [] for cid in metrics}
         try:

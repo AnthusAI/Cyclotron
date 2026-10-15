@@ -202,3 +202,14 @@ See [the current learning/storage handoff](learning-storage-handoff.md) for exac
 interfaces, empty-destination restore, immutable File/S3 transport, focused proof
 and the separate embedded/reviewer/evaluation/cloud boundaries. This supersedes
 earlier checkpoint notes listing these core learning paths as unconverted.
+
+## Embedded/reviewer/evaluation source boundaries
+
+The next native conversion now covers the embedded root's eight tables, reviewer
+source's four tables and evaluation clock/trace's two tables. SDK/source algorithms
+use domain repositories; derived root pages and their source cursors commit
+together, with in-memory rollback on failed derivation. Bounded empty-destination
+migrations preserve raw rows, ordinals and evaluation trace sequence watermarks.
+See [the source-store handoff](source-store-handoff.md) for exact native/factory
+interfaces and the existing priming compatibility inputs. Live cloud ownership,
+worker/session durability and the authority decision remain separate.

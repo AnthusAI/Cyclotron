@@ -23,7 +23,7 @@ open (or call) catches up.
 from __future__ import annotations
 
 import asyncio
-from copy import copy
+from copy import copy, deepcopy
 from contextlib import asynccontextmanager
 import inspect
 from dataclasses import asdict, dataclass, field, replace
@@ -377,30 +377,14 @@ class Cyclotron:
 
     def _open(self, model, optimizer, max_requests, redact):
         definition = self.definition
-        self.db = sqlite3.connect(self.directory / "cyclotron.sqlite3")
-        self.db.executescript("""
-            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, item_values TEXT NOT NULL, fingerprint TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, item_fingerprint TEXT NOT NULL,
-                state TEXT NOT NULL, payload TEXT NOT NULL);
-            CREATE INDEX IF NOT EXISTS decisions_by_item ON decisions(item_id);
-            CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,
-                classifier TEXT NOT NULL, payload TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,
-                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,
-                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
-                source TEXT);
-            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,
-                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));
-        """)
-        saved = self.db.execute("SELECT value FROM meta WHERE key='definition'").fetchone()
+        from .embedded_storage import SQLiteEmbeddedStorage
+        self.root_storage = SQLiteEmbeddedStorage(self.directory/'cyclotron.sqlite3')
+        self.db = self.root_storage.db  # Native snapshot compatibility only.
+        saved = self.root_storage.meta('definition')
         if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
             raise ValueError("this store belongs to a different cyclotron definition")
-        with self.db:
-            self.db.execute("INSERT OR IGNORE INTO meta VALUES ('definition', ?)",
-                            (_json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}),))
+        with self.root_storage.transaction():
+            self.root_storage.insert_meta('definition',_json({'fingerprint': definition.fingerprint, 'definition': asdict(definition)}),ignore=True)
         self._batches: list[tuple[int, int, int]] = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3", model, max_requests=0,
                                       observer=self._on_batch,
@@ -438,12 +422,12 @@ class Cyclotron:
         optimizer owns it from then on.
         """
         key = f"seed_rubric:{classifier}"
-        row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        row = self.root_storage.meta(key)
         if row is not None:
             return json.loads(row[0])
         seed = self.seed_rubrics.get(classifier, "")
-        with self.db:
-            self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(seed)))
+        with self.root_storage.transaction():
+            self.root_storage.insert_meta(key,_json(seed))
         return seed
 
     def _sharing(self, *, created: bool) -> bool:
@@ -453,12 +437,12 @@ class Cyclotron:
         before sharing existed keeps asking every copy separately, so its
         requests, answers and ML model features never change on upgrade.
         """
-        row = self.db.execute("SELECT value FROM meta WHERE key='share_supporting_questions'").fetchone()
+        row = self.root_storage.meta('share_supporting_questions')
         if row is not None:
             return json.loads(row[0])
         sharing = (self.requested_sharing is not False) if created else False
-        with self.db:
-            self.db.execute("INSERT INTO meta VALUES ('share_supporting_questions', ?)", (_json(sharing),))
+        with self.root_storage.transaction():
+            self.root_storage.insert_meta('share_supporting_questions',_json(sharing))
         return sharing
 
     def _seed_questions(self, spec: ClassifierSpec, *, created: bool) -> tuple[DecisionTask, ...]:
@@ -469,11 +453,11 @@ class Cyclotron:
         an empty seed, so reopening it never changes its initial context.
         """
         key = f"seed_supporting_questions:{spec.id}"
-        row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        row = self.root_storage.meta(key)
         if row is None:
             raw = self.seed_supporting_questions.get(spec.id, []) if created else []
-            with self.db:
-                self.db.execute("INSERT INTO meta VALUES (?,?)", (key, _json(raw)))
+            with self.root_storage.transaction():
+                self.root_storage.insert_meta(key,_json(raw))
         else:
             raw = json.loads(row[0])
         return tuple(DecisionTask(q["name"], tuple(q["labels"]), q["instructions"], spec.input_field) for q in raw)
@@ -497,7 +481,7 @@ class Cyclotron:
             self.shared.close()
             self.shared = None
         if self.db is not None:
-            self.db.close()
+            self.root_storage.close()
             self.db = None
         if self.lease is not None:
             self.lease.release()
@@ -556,11 +540,10 @@ class Cyclotron:
                     return decision
                 if state == "open":
                     self._close_waiting_cycles(item.id, decision.decision_id, "superseded by a new decision")
-                with self.db:
-                    self.db.execute("UPDATE decisions SET state='superseded' WHERE id=?", (decision.decision_id,))
-            with self.db:
-                self.db.execute("INSERT OR REPLACE INTO items VALUES (?,?,?)",
-                                (item.id, _json(dict(item.values)), fingerprint))
+                with self.root_storage.transaction():
+                    self.root_storage.set_decision_state(decision.decision_id,'superseded')
+            with self.root_storage.transaction():
+                self.root_storage.put_item(item.id,_json(dict(item.values)),fingerprint)
             # A suspended cycle from an interrupted decide is resumed here, and
             # the shared request cache answers it without a new model call.
             results, _ = await decide_with_shared_context(self.wheels, self.shared, item, self._partitions,
@@ -637,7 +620,7 @@ class Cyclotron:
                                                {cid: self.versions[cid].version for cid in self.specs})
             if output is not None:
                 events.append(self._rate_event(state, now, state.reason, output=output))
-        decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+        decided = self.root_storage.decision_count()
         while state.checked_windows < decided // self.program.window:
             window = state.checked_windows + 1
             evidence = self._window_evidence(window)
@@ -645,8 +628,8 @@ class Cyclotron:
             if change:
                 events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window,
                                                **({"output": evidence["output"]} if "output" in evidence else {})))
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
+        with self.root_storage.transaction():
+            self.root_storage.put_meta('review_program_state',_json(state.to_json()))
             appended = [self._append(event) for event in events]
         for event in appended:
             self.observer(event)
@@ -669,8 +652,8 @@ class Cyclotron:
         state.override = {"rate": float(rate), "expires_at": expires_at.isoformat() if expires_at else None,
                           "set_by": set_by, "set_at": _now()}
         now = datetime.now(timezone.utc)
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
+        with self.root_storage.transaction():
+            self.root_storage.put_meta('review_program_state',_json(state.to_json()))
             event = self._append(self._rate_event(state, now, f"Manual rate of {round(rate * 100)}% set by {set_by}."))
         self.observer(event)
 
@@ -681,13 +664,13 @@ class Cyclotron:
             return
         state.override = None
         now = datetime.now(timezone.utc)
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('review_program_state', ?)", (_json(state.to_json()),))
+        with self.root_storage.transaction():
+            self.root_storage.put_meta('review_program_state',_json(state.to_json()))
             event = self._append(self._rate_event(state, now, f"Manual rate cleared by {set_by}."))
         self.observer(event)
 
     def _program_state(self) -> ProgramState:
-        row = self.db.execute("SELECT value FROM meta WHERE key='review_program_state'").fetchone()
+        row = self.root_storage.meta('review_program_state')
         return ProgramState.from_json(json.loads(row[0]) if row else None)
 
     def _rate_event(self, state: ProgramState, now: datetime, reason: str, **details) -> dict:
@@ -717,8 +700,7 @@ class Cyclotron:
         cid = classifier or self._primary().id
         size = self.program.window
         rows = []
-        for decision_id, payload in self.db.execute(
-                "SELECT id,payload FROM decisions ORDER BY rowid LIMIT ? OFFSET ?", (size, (window - 1) * size)):
+        for decision_id, payload in self.root_storage.window_decisions(size,(window - 1) * size):
             review = self._active_review(decision_id, cid)
             if review is None or review.selected_by not in ("program", "audit"):
                 continue
@@ -733,11 +715,11 @@ class Cyclotron:
         state = self._program_state()
         override = Override(**state.override) if state.override else None
         active = override is not None and override.active(now)
-        decided = self.db.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+        decided = self.root_storage.decision_count()
         until = self.program.window - decided % self.program.window
         week_ago = (now - timedelta(days=7)).isoformat()
         decisions = []
-        for (payload,) in self.db.execute("SELECT payload FROM decisions"):
+        for (payload,) in self.root_storage.decision_payloads():
             decision = json.loads(payload)
             if decision["createdAt"] >= week_ago:
                 values = [r["confidence"] for r in decision["classifiers"].values()]
@@ -756,9 +738,8 @@ class Cyclotron:
                           expected_reviews_per_week=expected_item_reviews(self.program, rate, decisions))
 
     def _insert_decision(self, decision: Decision, fingerprint: str) -> None:
-        with self.db:
-            self.db.execute("INSERT INTO decisions VALUES (?,?,?,?,?)",
-                            (decision.decision_id, decision.item_id, fingerprint, "open", _json(decision.to_json())))
+        with self.root_storage.transaction():
+            self.root_storage.insert_decision((decision.decision_id, decision.item_id, fingerprint, 'open', _json(decision.to_json())))
             self._record_batches(decision.decision_id)
             event = self._append({"kind": "decision", "decision": decision.to_json()})
         self.observer(event)
@@ -771,10 +752,9 @@ class Cyclotron:
     def _record_batches(self, decision_id: str) -> None:
         """Attribute the paid requests of this call to its decision (caller's transaction)."""
         for prompt, cached, output, shares in self._batches:
-            row = self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
-                                  " VALUES (?,?,?,?,?,?)", (decision_id, "decision_model", prompt, cached, output, "shared-batch"))
+            row = self.root_storage.insert_usage(decision_id,'decision_model',prompt,cached,output,'shared-batch')
             for classifier, share in (shares or {}).items():
-                self.db.execute("INSERT INTO usage_shares VALUES (?,?,?)", (row.lastrowid, classifier, share))
+                self.root_storage.insert_usage_share(row,classifier,share)
         self._batches = []
 
     def usage(self, prices: Mapping[str, Mapping[str, float]], *, window: int = 100) -> dict[str, Any]:
@@ -793,12 +773,11 @@ class Cyclotron:
         if set(prices) != {"decision_model", "optimizer"}:
             raise ValueError("prices must give decision_model and optimizer list prices")
         position = {decision_id: index for index, (decision_id,) in
-                    enumerate(self.db.execute("SELECT id FROM decisions ORDER BY rowid"))}
-        times = [json.loads(payload)["createdAt"] for (payload,) in self.db.execute("SELECT payload FROM decisions ORDER BY rowid")]
+                    enumerate(self.root_storage.decision_ids())}
+        times = [json.loads(payload)["createdAt"] for (payload,) in self.root_storage.decision_payloads()]
         windows: dict[int, dict] = {}
         total = {"decision_model": _empty(), "optimizer": _empty()}
-        for decision_id, model, prompt, cached, output in self.db.execute(
-                "SELECT decision_id,model,input_tokens,cached_input_tokens,output_tokens FROM usage ORDER BY id"):
+        for decision_id, model, prompt, cached, output in self.root_storage.usage_counts():
             index = position.get(decision_id)
             targets = [total[model]]
             if index is not None:
@@ -830,10 +809,9 @@ class Cyclotron:
         ids = list(self.specs)
         per = {cid: {"decision_model": _empty(), "optimizer": _empty()} for cid in ids}
         shares: dict[int, dict[str, float]] = {}
-        for usage_id, classifier, share in self.db.execute("SELECT usage_id,classifier,share FROM usage_shares"):
+        for usage_id, classifier, share in self.root_storage.usage_shares():
             shares.setdefault(usage_id, {})[classifier] = share
-        for usage_id, model, prompt, cached, output, source in self.db.execute(
-                "SELECT id,model,input_tokens,cached_input_tokens,output_tokens,source FROM usage ORDER BY id"):
+        for usage_id, model, prompt, cached, output, source in self.root_storage.usage_by_output():
             if model == "optimizer":
                 owner = (source or "").rsplit(":", 1)[0]
                 split = {owner: 1.0} if owner in per else {cid: 1 / len(ids) for cid in ids}
@@ -859,7 +837,7 @@ class Cyclotron:
         rows = []
         values = self._item_values()
         for number, (decision_id, state, payload) in enumerate(
-                self.db.execute("SELECT id,state,payload FROM decisions ORDER BY rowid").fetchall(), start=1):
+                self.root_storage.decision_rows(), start=1):
             reviews = {}
             for cid in self.specs:
                 review = self._active_review(decision_id, cid)
@@ -874,7 +852,7 @@ class Cyclotron:
         return rows
 
     def decision(self, decision_id: str) -> Decision:
-        row = self.db.execute("SELECT payload FROM decisions WHERE id=?", (decision_id,)).fetchone()
+        row = self.root_storage.decision(decision_id)
         if row is None:
             raise KeyError(f"unknown decision {decision_id}")
         return Decision.from_json(json.loads(row[0]))
@@ -983,7 +961,7 @@ class Cyclotron:
                     cycle.__exit__(type(error), error, None)
                 raise
             self._sync()
-            with self.db:
+            with self.root_storage.transaction():
                 self._record_batches(decision_id)
             reviews = {cid: replace(self._review(ids[cid]), optimization_warnings=tuple(warnings[cid]))
                        for cid in entries}
@@ -1099,7 +1077,7 @@ class Cyclotron:
         if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
             raise ValueError("cursor must be nonnegative and page size between 1 and 1000")
         self._sync()
-        rows = self.db.execute("SELECT id,payload FROM events WHERE id>? ORDER BY id LIMIT ?", (after, limit)).fetchall()
+        rows = self.root_storage.events(after,limit)
         return {"events": [{**json.loads(payload), "cursor": event_id} for event_id, payload in rows],
                 "cursor": rows[-1][0] if rows else after}
 
@@ -1107,7 +1085,7 @@ class Cyclotron:
         """Every active label with its item: what an application can replay into a new store."""
         values = self._item_values()
         rows = []
-        for decision_id, item_id in self.db.execute("SELECT id,item_id FROM decisions ORDER BY rowid"):
+        for decision_id, item_id in self.root_storage.decision_items():
             for cid in self.specs:
                 review = self._active_review(decision_id, cid)
                 if review is not None:
@@ -1213,22 +1191,32 @@ class Cyclotron:
         the classifier store after a crash.
         """
         for cid, wheel in self.wheels.items():
-            cursor_row = self.db.execute("SELECT value FROM meta WHERE key=?", (f"cursor:{cid}",)).fetchone()
+            cursor_row = self.root_storage.meta(f'cursor:{cid}')
             cursor = int(cursor_row[0]) if cursor_row else 0
             appended = []
             while True:
                 page = wheel.trace_events(after_event_id=self._seen[cid], limit=1000)
                 if not page["events"]:
                     break
-                with self.db:
-                    for event in page["events"]:
-                        change = self.versions[cid].feed(event)
-                        if event["event_id"] > cursor:
-                            appended.extend(self._derive(cid, event, change))
-                    self._seen[cid] = page["cursor"]
-                    if page["cursor"] > cursor:
-                        cursor = page["cursor"]
-                        self.db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (f"cursor:{cid}", str(cursor)))
+                previous_tracker=deepcopy(self.versions[cid])
+                page_events=[]
+                next_cursor=max(cursor,page['cursor'])
+                try:
+                    with self.root_storage.transaction():
+                        for event in page['events']:
+                            change=self.versions[cid].feed(event)
+                            if event['event_id']>cursor:
+                                page_events.extend(self._derive(cid,event,change))
+                        if next_cursor>cursor:
+                            self.root_storage.put_meta(f'cursor:{cid}',str(next_cursor))
+                except BaseException:
+                    # A rolled-back derived page must also roll back the
+                    # in-memory source position/version before an in-process retry.
+                    self.versions[cid]=previous_tracker
+                    raise
+                self._seen[cid]=page['cursor']
+                cursor=next_cursor
+                appended.extend(page_events)
             for event in appended:
                 self.observer(event)
 
@@ -1252,24 +1240,19 @@ class Cyclotron:
         if review is not None:
             if self._review(review.review_id) is not None:
                 return []
-            self.db.execute("INSERT INTO reviews(id,decision_id,classifier,payload) VALUES (?,?,?,?)",
-                            (review.review_id, review.decision_id, classifier, _json(self._review_payload(review))))
+            self.root_storage.insert_review(review.review_id,review.decision_id,classifier,_json(self._review_payload(review)))
             requested = self._requested_outputs(review.decision_id)
             reviewed = all(self._last_review_kind(review.decision_id, cid) in ("label", "correction", "no-label")
                            for cid in requested)
-            self.db.execute("UPDATE decisions SET state=? WHERE id=? AND state!='superseded'",
-                            ("reviewed" if reviewed else "open", review.decision_id))
+            self.root_storage.set_decision_state(review.decision_id,'reviewed' if reviewed else 'open',unless_superseded=True)
             return [self._append({"kind": "review", "review": review.to_json()})]
         if kind == "optimizer-response":
             # A deferred learning pass has no item; it counts toward the latest decision.
-            row = (self.db.execute("SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1",
-                                   (event["cycle_item_id"],)).fetchone() if event.get("cycle_item_id")
-                   else self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone())
+            row = (self.root_storage.latest_id(event['cycle_item_id']) if event.get("cycle_item_id")
+                   else self.root_storage.latest_id())
             if row is not None:
                 prompt, cached, output = _usage_counts(event.get("usage"))
-                self.db.execute("INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source)"
-                                " VALUES (?,?,?,?,?,?)", (row[0], "optimizer", prompt, cached, output,
-                                                         f"{classifier}:{event.get('event_id')}"))
+                self.root_storage.insert_usage(row[0],'optimizer',prompt,cached,output,f"{classifier}:{event.get('event_id')}")
         if change is not None:
             tracker = self.versions[classifier]
             return [self._append({"kind": change.kind, "classifier": classifier, "version": change.to_version,
@@ -1281,14 +1264,14 @@ class Cyclotron:
     def _append(self, event: Mapping[str, Any]) -> dict:
         """Add one event to the subscribe log inside the caller's transaction."""
         event = {"cyclotronId": self.definition.id, "at": _now(), **event}
-        row = self.db.execute("INSERT INTO events(payload) VALUES (?)", (_json(event),))
-        return {**event, "cursor": row.lastrowid}
+        row = self.root_storage.append_event(_json(event))
+        return {**event, "cursor": row}
 
     # Internals ------------------------------------------------------------
 
     def _requested_outputs(self, decision_id: str) -> tuple[str, ...]:
         """The outputs a decision is waiting on: those sent to review, or every output."""
-        row = self.db.execute("SELECT payload FROM decisions WHERE id=?", (decision_id,)).fetchone()
+        row = self.root_storage.decision(decision_id)
         requested = _selection(json.loads(row[0])["review"]).requested if row else None
         return tuple(requested) if requested else tuple(self.specs)
 
@@ -1304,14 +1287,13 @@ class Cyclotron:
 
     def _item_values(self) -> dict[str, dict]:
         return {item_id: json.loads(values) for item_id, values in
-                self.db.execute("SELECT id,item_values FROM items ORDER BY rowid")}
+                self.root_storage.items()}
 
     def _item_fingerprint(self, decision_id: str) -> str:
-        return self.db.execute("SELECT item_fingerprint FROM decisions WHERE id=?", (decision_id,)).fetchone()[0]
+        return self.root_storage.decision_fingerprint(decision_id)
 
     def _latest_decision(self, item_id: str):
-        row = self.db.execute("SELECT state,payload FROM decisions WHERE item_id=? AND state!='superseded' "
-                              "ORDER BY rowid DESC LIMIT 1", (item_id,)).fetchone()
+        row = self.root_storage.latest_decision(item_id)
         return None if row is None else (row[0], Decision.from_json(json.loads(row[1])))
 
     def _classifier(self, decision: Decision, classifier: str | None) -> str:
@@ -1333,14 +1315,13 @@ class Cyclotron:
         return Review(**{**values, "optimization_warnings": tuple(values.get("optimization_warnings", ()))})
 
     def _review(self, review_id: str) -> Review | None:
-        row = self.db.execute("SELECT payload FROM reviews WHERE id=?", (review_id,)).fetchone()
+        row = self.root_storage.review(review_id)
         return None if row is None else self._load_review(row[0])
 
     def _active_review(self, decision_id: str, classifier: str) -> Review | None:
         """The latest labeled review that has not been undone, if any."""
         active = None
-        for (payload,) in self.db.execute("SELECT payload FROM reviews WHERE decision_id=? AND classifier=? ORDER BY seq",
-                                          (decision_id, classifier)):
+        for (payload,) in self.root_storage.reviews(decision_id,classifier):
             review = self._load_review(payload)
             if review.kind in ("label", "correction"):
                 active = review
@@ -1349,8 +1330,7 @@ class Cyclotron:
         return active
 
     def _last_review_kind(self, decision_id: str, classifier: str) -> str | None:
-        row = self.db.execute("SELECT payload FROM reviews WHERE decision_id=? AND classifier=? ORDER BY seq DESC LIMIT 1",
-                              (decision_id, classifier)).fetchone()
+        row = self.root_storage.last_review(decision_id,classifier)
         return None if row is None else json.loads(row[0])["kind"]
 
     @staticmethod
@@ -1378,14 +1358,13 @@ class Cyclotron:
     def _enqueue_learning(self, classifier: str) -> None:
         """Queue one output's learning pass; queued reviews of one output share a pass."""
         training, development, _ = self._partitions(classifier)
-        with self.db:
+        with self.root_storage.transaction():
             # The earliest unlearned count is kept, so the pass sees every cadence boundary crossed since.
-            self.db.execute("INSERT OR IGNORE INTO learning_queue(classifier,since_count,queued_at) VALUES (?,?,?)",
-                            (classifier, len(training) + len(development) - 1, _now()))
+            self.root_storage.enqueue_learning(classifier,len(training) + len(development) - 1,_now())
 
     def pending_learning(self) -> list[str]:
         """Outputs with a queued learning pass, oldest first."""
-        return [row[0] for row in self.db.execute("SELECT classifier FROM learning_queue ORDER BY seq")]
+        return self.root_storage.pending_learning()
 
     async def learn(self, *, limit: int | None = None, execution_guard: ExecutionGuard | None = None) -> list[dict[str, Any]]:
         """Run queued learning passes, one output at a time, oldest first.
@@ -1404,7 +1383,7 @@ class Cyclotron:
         done = []
         while limit is None or len(done) < limit:
             async with self.execution(execution_guard=execution_guard):
-                row = self.db.execute("SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1").fetchone()
+                row = self.root_storage.next_learning()
                 if row is None:
                     break
                 seq, cid, since = row
@@ -1419,16 +1398,16 @@ class Cyclotron:
                 except Exception as error:
                     cycle.__exit__(type(error), error, None)
                     raise
-                latest = self.db.execute("SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1").fetchone()
+                latest = self.root_storage.latest_id()
                 if latest is not None:
-                    with self.db:
+                    with self.root_storage.transaction():
                         # Decision-model requests made while learning count toward the latest decision.
                         self._record_batches(latest[0])
                 record = {"classifier": cid, "since_count": since, "warnings": warnings,
                           "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
                 wheel._emit({"kind": "deferred-learning-completed", **record})
-                with self.db:
-                    self.db.execute("DELETE FROM learning_queue WHERE seq=?", (seq,))
+                with self.root_storage.transaction():
+                    self.root_storage.delete_learning(seq)
                 self._sync()
                 done.append(record)
         return done
