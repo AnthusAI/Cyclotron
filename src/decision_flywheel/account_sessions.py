@@ -135,6 +135,8 @@ class ConsoleSession:
     csrf_token: str = field(repr=False)
     person_id: str | None = None
     account_id: str | None = None
+    session_ref: str | None = field(default=None, repr=False, compare=False)
+    storage_revision: int = field(default=0, repr=False, compare=False)
 
 
 class OAuthSessions:
@@ -190,6 +192,7 @@ class OAuthSessions:
             identifier = secrets.token_urlsafe(48)
             session = ConsoleSession(access_token, claims['sub'],
                 min(float(claims['exp']), self.clock() + self.max_age), secrets.token_urlsafe(32))
+            session.session_ref = digest(identifier)
             self.sessions[digest(identifier)] = session
             return identifier, session
 
@@ -202,3 +205,18 @@ class OAuthSessions:
         with self.lock:
             if isinstance(identifier, str):
                 self.sessions.pop(digest(identifier), None)
+
+    def save(self, session):
+        with self.lock:
+            self._purge()
+            if self.sessions.get(session.session_ref) is not session:
+                raise SessionRejected('session changed; refresh authentication')
+
+    @staticmethod
+    def reference(identifier):
+        return digest(identifier)
+
+    def get_ref(self, reference):
+        with self.lock:
+            self._purge()
+            return self.sessions.get(reference)

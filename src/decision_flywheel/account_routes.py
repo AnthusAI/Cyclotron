@@ -27,7 +27,7 @@ class HostedAccounts:
 
     async def _session(self, connection):
         identifier = connection.cookies.get(self.config.cookie_name)
-        session = self.sessions.get(identifier)
+        session = await asyncio.to_thread(self.sessions.get, identifier)
         if not session:
             return None
         try:
@@ -40,7 +40,7 @@ class HostedAccounts:
                     raise SessionRejected('session identity enrollment changed')
             return session
         except (SessionRejected, AccountAccessDenied):
-            self.sessions.revoke(identifier)
+            await asyncio.to_thread(self.sessions.revoke, identifier)
             return None
 
     async def resolve_session(self, connection):
@@ -59,7 +59,7 @@ class HostedAccounts:
     async def _csrf(self, request):
         session = await self._require(request)
         csrf = request.headers.get('x-csrf-token', '')
-        if request.headers.get('origin') != self.config.public_origin or not hmac.compare_digest(csrf, session.csrf_token):
+        if request.headers.get('origin') != self.config.public_origin or not csrf.isascii() or not hmac.compare_digest(csrf, session.csrf_token):
             raise HTTPException(403, 'request origin or session check failed')
         return session
 
@@ -86,7 +86,10 @@ class HostedAccounts:
             raise ProspectusUnavailable('invalid account identity response')
         if self.google_identity and (person is None or person['id'] != session.person_id):
             raise AccountAccessDenied('account identity service is not aligned')
-        session.person_id = person['id'] if person else None
+        person_id = person['id'] if person else None
+        if session.person_id != person_id:
+            session.person_id = person_id
+            await asyncio.to_thread(self.sessions.save, session)
         return cleaned
 
     async def _state(self, session):
@@ -98,6 +101,7 @@ class HostedAccounts:
                     session.account_id, session.person_id, 'console:read')
             except AccountAccessDenied:
                 session.account_id = None
+                await asyncio.to_thread(self.sessions.save, session)
             if session.account_id:
                 try:
                     await asyncio.to_thread(self.accounts.authorize, session.access_token,
@@ -122,6 +126,10 @@ class HostedAccounts:
 
         app.router.lifespan_context = lifespan
 
+        @app.exception_handler(SessionRejected)
+        async def stale_session(request, error):
+            return JSONResponse({"detail": "session changed; refresh authentication"}, status_code=401)
+
         @app.exception_handler(AccountAccessDenied)
         async def denied(request, error):
             return JSONResponse({'detail': 'account access refused'}, status_code=403)
@@ -134,7 +142,7 @@ class HostedAccounts:
         async def login():
             try:
                 challenge = await asyncio.to_thread(self.google_identity.challenge) if self.google_identity else None
-                pending = self.sessions.begin(challenge)
+                pending = await asyncio.to_thread(self.sessions.begin, challenge)
             except SessionRejected:
                 raise HTTPException(503, 'sign-in unavailable; try again') from None
             query = urlencode({'client_id': self.config.client_id, 'response_type': 'code',
@@ -149,7 +157,7 @@ class HostedAccounts:
         @app.get('/auth/callback')
         async def callback(request: Request):
             try:
-                pending = self.sessions.consume(request.query_params.get('state'), request.cookies.get(self.config.transaction_cookie))
+                pending = await asyncio.to_thread(self.sessions.consume, request.query_params.get('state'), request.cookies.get(self.config.transaction_cookie))
                 code = request.query_params.get('code')
                 if not code or len(code) > 2048 or request.query_params.get('error'):
                     raise SessionRejected('invalid authorization response')
@@ -169,10 +177,11 @@ class HostedAccounts:
                     person = await asyncio.to_thread(self.google_identity.resolve, access_token, id_token, pending.challenge_id)
                 else:
                     claims = await asyncio.to_thread(self.verifier.token_pair, access_token, id_token, pending.nonce)
-                identifier, session = self.sessions.create(access_token, claims)
+                identifier, session = await asyncio.to_thread(self.sessions.create, access_token, claims)
                 if self.google_identity:
                     session.person_id = person['id']
-                self.sessions.revoke(request.cookies.get(self.config.cookie_name))
+                    await asyncio.to_thread(self.sessions.save, session)
+                await asyncio.to_thread(self.sessions.revoke, request.cookies.get(self.config.cookie_name))
                 response = RedirectResponse('/', status_code=303)
                 response.set_cookie(self.config.cookie_name, identifier,
                     max_age=max(0, int(session.expires_at - self.sessions.clock())),
@@ -202,6 +211,7 @@ class HostedAccounts:
             await asyncio.to_thread(self.accounts.authorize, session.access_token,
                 account_id, session.person_id, 'console:read')
             session.account_id = account_id
+            await asyncio.to_thread(self.sessions.save, session)
             return {'selectedAccountId': account_id}
 
         @app.post('/api/accounts')
@@ -223,12 +233,13 @@ class HostedAccounts:
             await asyncio.to_thread(self.accounts.authorize, session.access_token,
                 account['id'], session.person_id, 'console:read')
             session.account_id = account['id']
+            await asyncio.to_thread(self.sessions.save, session)
             return JSONResponse({'selectedAccountId': session.account_id}, status_code=201)
 
         @app.post('/auth/logout')
         async def logout(request: Request):
             await self._csrf(request)
-            self.sessions.revoke(request.cookies.get(self.config.cookie_name))
+            await asyncio.to_thread(self.sessions.revoke, request.cookies.get(self.config.cookie_name))
             response = JSONResponse({'authenticated': False})
             response.delete_cookie(self.config.cookie_name, path='/', secure=self.config.secure, httponly=True, samesite='lax')
             return response

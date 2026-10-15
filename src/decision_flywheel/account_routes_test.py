@@ -14,8 +14,8 @@ from .web_api import create_app
 from .web_store import WebStore
 
 
-@pytest.fixture
-def hosted(tmp_path, identity):
+@pytest.fixture(params=["memory", "s3"])
+def hosted(tmp_path, identity, request):
     verifier, token = identity
     state = {'person': None, 'accounts': [], 'calls': [], 'exchanges': [], 'nonce': None}
     account_id = str(uuid4())
@@ -48,6 +48,14 @@ def hosted(tmp_path, identity):
     config = OAuthConfig(ISSUER, CLIENT, 'https://synthetic.auth.us-east-1.amazoncognito.com', 'https://console.example.test')
     gateway = HostedAccounts(config, AccountsClient(central), lambda identifier: AccountWorkspace(state['stores'][identifier]),
         verifier=verifier, token_client=httpx.AsyncClient(transport=httpx.MockTransport(exchange)))
+    if request.param == 's3':
+        from .s3_sessions import S3OAuthSessions
+        from .s3_sessions_test import Cipher
+        from .s3_journal_test import ConditionalS3, journal
+        s3 = ConditionalS3()
+        state["s3"] = s3
+        gateway.sessions = S3OAuthSessions(verifier,
+            journal_for=lambda kind, ref: journal(s3, name=kind+'-'+ref), cipher=Cipher())
     app = create_app(None, account_access=gateway.access)
     gateway.install(app)
     return TestClient(app, base_url=config.public_origin), gateway, state, account_id
@@ -281,7 +289,7 @@ def test_challenge_outage_does_not_redirect_or_create_local_pending_login(hosted
     with client:
         result = client.get('/auth/login', follow_redirects=False)
         assert result.status_code == 503 and 'location' not in result.headers
-        assert not gateway.sessions.pending and not gateway.sessions.sessions
+        assert not state["s3"].objects if "s3" in state else not gateway.sessions.pending and not gateway.sessions.sessions
 
 
 @pytest.mark.parametrize('changes', [dict(client_id='wrong'), dict(iss='https://wrong.example.test')])
@@ -294,4 +302,5 @@ def test_google_callback_rejects_wrong_access_authority_before_identity_resoluti
         query = parse_qs(urlsplit(login.headers['location']).query)
         state['nonce'] = query['nonce'][0]
         assert client.get('/auth/callback', params={'state': query['state'][0], 'code': 'synthetic'}).status_code == 400
-        assert len(calls) == 1 and not gateway.sessions.sessions
+        assert len(calls) == 1
+        assert not any("/session-" in key for key in state["s3"].objects) if "s3" in state else not gateway.sessions.sessions

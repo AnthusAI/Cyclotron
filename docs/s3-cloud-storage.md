@@ -246,3 +246,30 @@ applicable, separate publication grants/current binding. Command claims alone
 confer neither. Persisted trusted actor/session provenance and scoped session
 continuation are still part of that worker/session integration, not supplied by
 browser payloads or this storage adapter.
+
+## Durable session and queued actor checkpoint
+
+`S3OAuthSessions` now encrypts pending OAuth proof and access/CSRF tokens before
+publishing bounded S3 journal records. KMS envelope encryption binds exact key,
+application, kind and hashed reference. OAuth consumption requires a confirmed
+CAS and remains one-use across processes. Logout cannot be undone by stale saves;
+Person and original token are immutable once bound. Routes explicitly persist
+updates and offload blocking S3/KMS calls from the event loop. Session expiry is
+still bounded by the original access token and one hour: no refresh continuation
+or worker reenrollment is introduced. Public quota contention/outage fails closed.
+
+`QueuedAccountAuthorization` captures the original session reference, actor,
+account, run, binding and operation in an integrity proof made with the retained
+access token. No JWT is stored in job provenance. Each guard rereads the encrypted
+session, verifies its JWT, checks central `/me`, authorizes the pinned account and
+resolves the current binding. A tab's selected-account preference cannot retarget
+work. `S3ConsoleStorage` v2 atomically commits job and actor; v1 upgrades contain
+no invented actors and existing jobs cannot be adopted through idempotency retry.
+Claim receipt fencing protects actor retrieval. `command_recovery` is read-only
+scoped diagnostic evidence, not an automatic claim/paid-request reset.
+
+These seams are not yet a hosted worker composition. The actual S3 SDK tests show
+that a guard denied after lock waiting touches no engine S3 state or provider.
+Central cross-role policy is a separate pending owner change, not proven by these
+same-principal synthetic tests. See `console-activation-review.md` for exact IAM
+alternatives, current infrastructure observations and remaining release work.

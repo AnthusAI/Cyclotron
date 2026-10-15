@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime,timezone
+from dataclasses import asdict,replace
 from hashlib import sha256
 import json
 from uuid import uuid4
@@ -20,8 +21,8 @@ from .run_storage import _UNSET
 
 def now():return datetime.now(timezone.utc).isoformat()
 def initial():
-    return {'schema':'cyclotron-s3-console/v1','snapshot':{'schema':SCHEMA,'tables':{k:[] for k in TABLES},
-            'sequences':{k:0 for k in SEQUENCES}},'claims':{}}
+    return {'schema':'cyclotron-s3-console/v2','snapshot':{'schema':SCHEMA,'tables':{k:[] for k in TABLES},
+            'sequences':{k:0 for k in SEQUENCES}},'claims':{},'actors':{}}
 def rows(value,domain,**fields):return [r for r in value['snapshot']['tables'][domain] if all(r[k]==v for k,v in fields.items())]
 def one(value,domain,**fields):return next(iter(rows(value,domain,**fields)),None)
 def clean(row):return {k:deepcopy(v) for k,v in row.items() if k!='_rowid'}
@@ -47,16 +48,27 @@ class S3ConsoleStorage:
         self._claim=ContextVar('s3_console_claim',default=None)
         self._granted=set()
     def _validate(self,value):
-        if not isinstance(value,dict) or set(value)!=set(initial()) or value['schema']!='cyclotron-s3-console/v1' or not isinstance(value['claims'],dict):raise ValueError('invalid canonical console transaction')
+        if not isinstance(value,dict) or set(value)!=set(initial()) or value['schema']!='cyclotron-s3-console/v2' or not isinstance(value['claims'],dict) or not isinstance(value['actors'],dict):raise ValueError('invalid canonical console transaction')
         validate_console(value['snapshot'],max_records=self.max_records,max_bytes=self.journal.max_bytes)
-        if sum(map(len,value['snapshot']['tables'].values()))+len(value['claims'])>self.max_records:raise ValueError('console record budget exceeded')
+        if sum(map(len,value['snapshot']['tables'].values()))+len(value['claims'])+len(value['actors'])>self.max_records:raise ValueError('console record budget exceeded')
         for job_id,claim in value['claims'].items():
             job=one(value,'web_jobs',id=job_id)
             if job is None or set(claim)!={'owner','fence'} or type(claim['fence']) is not int or claim['fence']<1:raise ValueError('invalid command claim')
             uuid(claim['owner'])
-    def initialize(self):self._validate(self.journal.initialize(initial()).value)
+        from .queued_account_authorization import QueuedActor
+        for job_id, actor in value['actors'].items():
+            job=one(value,'web_jobs',id=job_id)
+            if not isinstance(actor,dict):raise ValueError('invalid queued actor')
+            parsed=QueuedActor(**actor)
+            if job is None or parsed.run_id!=job['run_id'] or parsed.operation!='console:write':raise ValueError('queued actor run boundary refused')
+    @staticmethod
+    def _upgrade(value):
+        if isinstance(value,dict) and set(value)=={'schema','snapshot','claims'} and value['schema']=='cyclotron-s3-console/v1':
+            return {**value,'schema':'cyclotron-s3-console/v2','actors':{}}
+        return value
+    def initialize(self):self._validate(self._upgrade(self.journal.initialize(initial()).value))
     def _record(self):
-        record=self.journal.read();self._validate(record.value);return record
+        record=self.journal.read();record=replace(record,value=self._upgrade(record.value));self._validate(record.value);return record
     def _check_claim(self,value):
         claim=self._claim.get()
         if claim is None:return
@@ -407,6 +419,34 @@ class S3ConsoleStorage:
             if any(r['status'] in ('pending','running') for r in rows(value,'web_jobs',run_id=run_id)):raise ValueError('run already has work in progress')
             return decoded(insert(value,'web_jobs',dict(id=identifier,run_id=run_id,request_id=request_id,kind=kind,payload=raw,status='pending',result=None)),'payload','result')
         return self._mutate(apply)
+    def enqueue_authorized_command(self,run_id,request_id,kind,payload,actor):
+        from .queued_account_authorization import QueuedActor
+        if not isinstance(actor,QueuedActor) or actor.run_id!=run_id or actor.operation!='console:write':
+            raise ValueError('trusted run-bound queued actor required')
+        # Host captures/proves the actor before this transaction. Worker must
+        # verify it again; neither a queue delivery nor this record is a lease.
+        with self.transaction():
+            value=self._tx.get();existing=one(value,'web_jobs',run_id=run_id,request_id=request_id)
+            if existing is not None and existing['id'] not in value['actors']:raise ValueError('legacy command has no actor; cannot adopt it')
+            job=self.command(run_id,request_id,kind,payload)
+            previous=value['actors'].get(job['id']);provenance=asdict(actor)
+            if previous is not None and previous!=provenance:raise ValueError('command already bound to another actor')
+            value['actors'][job['id']]=provenance
+        return job
+    def command_actor(self,job_id,owner,fence):
+        from .queued_account_authorization import QueuedActor
+        self.for_command(job_id,owner,fence)
+        actor=self._read()['actors'].get(job_id)
+        if actor is None:raise ValueError('queued actor absent; legacy job cannot execute')
+        return QueuedActor(**actor)
+    def command_recovery(self,job_id):
+        # Operator diagnostic only: never a grant, claim reset or takeover.
+        value=self._read();job=one(value,'web_jobs',id=job_id)
+        if job is None:raise ValueError('unknown command')
+        claim=value['claims'].get(job_id,{})
+        return {'jobId':job_id,'runId':job['run_id'],'status':job['status'],
+                'owner':claim.get('owner'),'fence':claim.get('fence'),
+                'hasActor':job_id in value['actors'],'automaticTakeover':False}
     def jobs(self,run_id):
         value=self._read();self._run(value,run_id);return [decoded(r,'payload','result') for r in reversed(rows(value,'web_jobs',run_id=run_id))][:20]
     def claim_command(self,*,owner=None):

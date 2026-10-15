@@ -217,3 +217,45 @@ def test_actual_account_scoped_graphql_switches_s3_workspaces_and_denies_access_
     assert 'errors' in http.post('/graphql',json=query).json() and len(client.calls)==before
     http.cookies.set('synthetic-session','member');http.cookies.set('selected-account',str(uuid4()));before=len(client.calls)
     assert 'errors' in http.post('/graphql',json=query).json() and len(client.calls)==before
+
+
+def test_authorized_job_and_original_actor_commit_together_and_cannot_be_rebound():
+    from dataclasses import replace
+    from .queued_account_authorization_test import fixture
+    boundary,_,_,actor,_=fixture()
+    s=store();run=s.create_run('Live','live',{})
+    import asyncio
+    actor=asyncio.run(boundary.capture(boundary.sessions.get_ref(actor.session_ref),actor.account_id,run['id'],actor.binding))
+    job=s.enqueue_authorized_command(run['id'],'once','prepare',{},actor)
+    assert job==s.enqueue_authorized_command(run['id'],'once','prepare',{},actor)
+    with pytest.raises(ValueError):s.enqueue_authorized_command(run['id'],'once','prepare',{},replace(actor,person_id=str(uuid4())))
+    owner=str(uuid4());claimed=s.claim_command(owner=owner)
+    assert s.command_actor(job['id'],owner,claimed['claim_fence'])==actor
+    fresh=store(journal(s.journal.payloads.client,name='console'))
+    with pytest.raises(ValueError,match='receipt'):fresh.command_actor(job['id'],owner,claimed['claim_fence'])
+    assert fresh.command_recovery(job['id'])=={'jobId':job['id'],'runId':run['id'],'status':'running','owner':owner,'fence':1,'hasActor':True,'automaticTakeover':False}
+
+
+def test_legacy_jobs_have_no_invented_actor_and_cannot_enter_authorized_worker():
+    s=store();run=s.create_run('Live','live',{});job=s.command(run['id'],'legacy','prepare',{})
+    owner=str(uuid4());claimed=s.claim_command(owner=owner)
+    with pytest.raises(ValueError,match='actor'):s.command_actor(job['id'],owner,claimed['claim_fence'])
+
+
+def test_legacy_command_cannot_acquire_a_new_actor_through_an_idempotency_retry():
+    from .queued_account_authorization_test import fixture
+    import asyncio
+    boundary,_,_,actor,_=fixture();s=store();run=s.create_run('Live','live',{})
+    actor=asyncio.run(boundary.capture(boundary.sessions.get_ref(actor.session_ref),actor.account_id,run['id'],actor.binding))
+    s.command(run['id'],'legacy','prepare',{})
+    with pytest.raises(ValueError,match='legacy'):s.enqueue_authorized_command(run['id'],'legacy','prepare',{},actor)
+
+
+def test_v1_console_migrates_without_inventing_job_actors():
+    from .s3_console_storage import initial
+    j=journal(name='old-console');value=initial();value.pop('actors');value['schema']='cyclotron-s3-console/v1'
+    j.initialize(value);s=store(j)
+    run=s.create_run('Local import','live',{})
+    assert j.read().value['schema']=='cyclotron-s3-console/v2'
+    assert j.read().value['actors']=={}
+    assert s.run(run['id'])['name']=='Local import'

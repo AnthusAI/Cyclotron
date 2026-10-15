@@ -263,12 +263,18 @@ mode, signing in or listing accounts never creates a central person or account.
 The optional Google mode explicitly resolves/enrolls a canonical Person at
 sign-in; it still creates no account or membership merely by signing in.
 
-Access tokens remain in bounded server memory. The browser receives only an
+By default, access tokens remain in bounded server memory. A cloud host must inject
+`S3OAuthSessions` with the reviewed KMS cipher and scoped journals; it encrypts
+access/CSRF and pending PKCE proof before canonical S3 publication. Blocking storage
+work runs off the HTTP event loop, and route mutations explicitly save the session.
+The browser receives only an
 opaque HttpOnly, Secure, SameSite=Lax `__Host-` session cookie, plus a CSRF token
 in the same-origin session response. Sessions expire at the access-token expiry
 or one hour, whichever is sooner. Refresh tokens are not stored. Logout revokes
 the server session; a restart signs everyone out. This store is deliberately
-single-process. Multiple processes require a reviewed shared session store.
+single-process. `S3OAuthSessions` supplies the cross-process store but is not yet
+provisioned or wired into a production entry point. Sessions expire with the
+original access token; workers cannot reenroll or substitute another login.
 HTTP loopback cookies are available only through an explicit test configuration.
 
 `trace-ui/src/AccountConsole.tsx` wraps the existing workspace with sign-in,
@@ -295,13 +301,12 @@ hosted entry point remain pending. The normal local CLI deliberately does not
 enable account mode. Never deploy the synthetic preview harness used for local
 verification or use fixture keys as a production trust anchor.
 
-The current console requires a Python process, persistent SQLite state, and a
-serialized background worker. It cannot place authoritative databases in an
-ephemeral hosting directory. A persistent single-host deployment can preserve
-these semantics with one Uvicorn process and one writer/worker per workspace;
-live work should initially be disabled, worker creation bounded, and backups
-made using SQLite's backup API. Multiple hosts or independent writers require a
-separate storage and job-coordination design.
+Cloud deployment must use the canonical S3 adapters and ephemeral worker
+composition described in [s3-cloud-storage.md](s3-cloud-storage.md). DynamoDB is
+a rebuildable index. Hosted SQLite, an always-on SQLite server and a persistent
+single-host workaround are excluded. Local SQLite remains the native default.
+The earlier single-host proposal is superseded by the user's explicit cloud
+storage requirement.
 
 Before exposing the console, review the runtime host and temporary IAM identity,
 separate OAuth client/callback, worker lifecycle/quotas, backup restore, and DNS/TLS.
