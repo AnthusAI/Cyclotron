@@ -3,8 +3,8 @@
 Priming lets an operator deliberately find representative examples before a
 Cyclotron begins operating. It is optional. Runs and embedded stores still work
 without it. Imported examples are trusted only after an operator explicitly
-accepts complete items and supplies a configured label and explanation for each
-selected classifier. Transformation feedback is a separate record.
+accepts complete items and supplies a configured label for each
+selected classifier. Classification explanations are optional. Transformation feedback is a separate record.
 
 There are two input routes:
 
@@ -56,7 +56,7 @@ refused and never evaluated. A batch that expands beyond the draft limit reports
 an explicit error and must be split.
 
 Invalid imports never partially populate the catalog. Acceptance rechecks every
-label/explanation, classifier revision, item identity and size inside the
+label, any supplied explanation, classifier revision, item identity and size inside the
 transaction. It inserts the item and all labels together. Existing item identities
 are refused; corrections use the existing catalog workflow. Acceptance retries
 with the same content return the committed result rather than duplicate records.
@@ -115,7 +115,7 @@ If remote cancellation is uncertain, the local UI shows it as pending and offers
 a cancellation retry. Reuse transformer IDs only for the same endpoint contract.
 
 Cyclotron validates each completed candidate, shows its full **item values** for
-every selected classifier, and requires human labels/explanations before local
+every selected classifier, and requires human labels before local
 acceptance. This is the target representation, not a fabricated prediction or a
 claim to show a future provider's complete prompt. Raw input, file contents,
 transformation feedback and the accepted target values remain auditable in the
@@ -197,3 +197,11 @@ host must still deliberately choose priming when creating a new store. Acceptanc
 does not start operations. No-argument callbacks remain usable by hosts that only
 refresh their UI. This integration remains local until the existing priming API
 and records are represented in the shared storage-owner conversion.
+
+
+Classification explanations may be omitted, null or empty on import/acceptance.
+Acceptance still requires an explicit configured label for every selected output.
+Absent explanations are stored as an empty comment; frozen priming context omits
+`human_feedback` instead of inventing a rationale or weakening LabeledItem's
+nonempty-context invariant. Supplied explanatory text is preserved. Operational
+publication review requirements and transformation-correction reasons are unchanged.

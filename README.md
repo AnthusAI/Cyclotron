@@ -191,8 +191,8 @@ What an application should know:
 ## Optional curated examples
 
 Operators may import complete structured examples or use a customer-hosted HTTP
-curation service, preview/revise them, and explicitly accept labels and
-explanations before operation. Priming is optional and keeps examples separate
+curation service, preview/revise them, and explicitly accept labels with
+optional explanations before operation. Priming is optional and keeps examples separate
 from operational evaluation. See [the priming contract and workflow](docs/priming.md).
 
 ## Use the web components in an application

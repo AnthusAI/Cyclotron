@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "1e4c78cc-dd2f-4a0f-ad38-5a077a39b7a7",
+  "issue_id": "decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-15T21:03:52.075Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "e76ed0a7-360c-4328-a056-429861b7048a",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "CuratedExamplePriming",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}

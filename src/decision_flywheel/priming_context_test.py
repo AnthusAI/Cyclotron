@@ -37,8 +37,8 @@ def test_reopening_cannot_silently_replace_accepted_priming(tmp_path):
     with pytest.raises(ValueError,match='priming'):Cyclotron.open(tmp_path/'engine',DEFINITION,Model(),agent([]),priming_examples=changed)
 
 
-def test_priming_requires_explicit_rationale_and_known_label(tmp_path):
-    for n,row in enumerate([LabeledItem(Item('p',{'text':'p'}),'include'),LabeledItem(Item('p',{'text':'p'}),'invented',context={'human_feedback':'why'})]):
+def test_priming_requires_known_label(tmp_path):
+    for n,row in enumerate([LabeledItem(Item('p',{'text':'p'}),'invented',context={'human_feedback':'why'})]):
         with pytest.raises(ValueError):Cyclotron.open(tmp_path/str(n),DEFINITION,Model(),agent([]),priming_examples={'relevant':[row]})
 
 
@@ -64,3 +64,14 @@ def test_workspace_run_pins_accepted_examples_separately_and_refuses_operational
     finally:session.close()
     store.upsert_list_items('live',[{'id':'prime','occurred_at':'2026-10-14','values':{'text':'Overlapping identity'}}])
     with pytest.raises(ValueError,match='disjoint'):runtime.create_run('Leak',{'classifier_ids':['relevant'],'item_list_id':'live','priming_list_id':'examples'})
+
+
+@pytest.mark.parametrize('context',[{}, {'human_feedback':'Supplied reason'}])
+def test_label_only_priming_survives_sdk_reopen_without_invented_explanation(tmp_path,context):
+    examples={'relevant':[LabeledItem(Item('prime-optional',{'text':'Synthetic source'}),'include','trusted',context)]}
+    c=Cyclotron.open(tmp_path/'engine',DEFINITION,Model(),agent([]),priming_examples=examples)
+    try:assert c._partitions('relevant')[0][0].context==context
+    finally:c.close()
+    c=Cyclotron.open(tmp_path/'engine',DEFINITION,Model(),agent([]))
+    try:assert c._partitions('relevant')[0][0].context==context
+    finally:c.close()

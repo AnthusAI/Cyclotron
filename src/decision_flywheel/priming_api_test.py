@@ -39,3 +39,24 @@ def test_priming_api_preserves_auth_origin_and_credential_controls(tmp_path):
     response=client.post('/graphql',json=mutation,headers=headers).json()
     assert 'credential' in response['errors'][0]['message']
     assert 'provider-secret' not in json.dumps(response)
+
+
+def test_api_accepts_publish_with_absent_or_empty_explanation_and_reopens_saved_empty_comment(tmp_path):
+    from .priming import PrimingService
+    for n,vote in enumerate([{'label':'publish'},{'label':'publish','rationale':''}]):
+        database=tmp_path/f'optional-{n}.sqlite3'
+        store=WebStore(database);store.save_item_list('examples','Examples')
+        store.save_classifier('editor','Editorial',{'question':'Publish?','classes':[{'label':'publish'},{'label':'not publish'}]})
+        with TestClient(create_app(store)) as client:
+            def command(action,payload):
+                return client.post('/graphql',json={'query':'mutation($action:String!,$payload:JSON!){primingCommand(action:$action,payload:$payload)}','variables':{'action':action,'payload':payload}}).json()
+            row={'id':'synthetic','occurred_at':'2026-10-14','values':{'text':'Synthetic source'},'labels':{'editor':vote}}
+            draft=command('file',{'identifier':'optional','list_id':'examples','refs':[{'id':'editor','revision':1}],'kind':'json','content':base64.b64encode(json.dumps([row]).encode()).decode()})
+            assert 'errors' not in draft
+            accepted=command('accept',{'identifier':'optional','version':draft['data']['primingCommand']['version'],'labels':[{'editor':vote}]})
+            assert 'errors' not in accepted and accepted['data']['primingCommand']['status']=='accepted'
+        reopened=WebStore(database)
+        assert reopened.item_labels('examples','synthetic',1)[0]['comment']==''
+        service=PrimingService(reopened)
+        try:assert service.examples('examples',[{'id':'editor','revision':1}])['editor'][0].context=={}
+        finally:service.close()

@@ -6,7 +6,7 @@ afterEach(cleanup)
 const contract:PrimingContract={list_id:'examples',schema:{type:'object'},classifiers:[{id:'editor',revision:1,name:'Editorial',config:{question:'Publish?',classes:[{label:'publish'},{label:'not publish'}]}}],transformers:[{id:'papyrus',name:'Papyrus curation',fields:[{name:'url',label:'Source URL',required:true}]}]}
 const preview:PrimingDraft={id:'draft',version:1,status:'preview',contract,source:{kind:'transform'},rows:[{row:1,item:{id:'synthetic',values:{text:'<script>Synthetic untrusted content</script>'}},labels:{},model_representation:{editor:{text:'Synthetic decision content'}}}],errors:[],fields:[]}
 function client():PrimingClient{return {contract:vi.fn().mockResolvedValue(contract),template:vi.fn(),get:vi.fn().mockResolvedValue(preview),command:vi.fn().mockResolvedValue(preview)}}
-it('requires explicit labels and rationales after showing the exact model item and keeps feedback separate',async()=>{
+it('requires an explicit label with optional rationale after showing the exact model item and keeps feedback separate',async()=>{
  const api=client();render(<PrimingPanel client={api} listId="examples" classifiers={[{id:'editor',revision:1}]} pollInterval={0}/> )
  fireEvent.click(await screen.findByRole('button',{name:'From reference / URL'}))
  fireEvent.change(screen.getByLabelText('Source URL'),{target:{value:'https://example.invalid'}})
@@ -17,7 +17,8 @@ it('requires explicit labels and rationales after showing the exact model item a
  expect(screen.queryByText(/Predicted/)).toBeNull()
  const accept=screen.getByRole('button',{name:'Accept examples and labels'});expect(accept).toBeDisabled()
  fireEvent.click(screen.getByRole('button',{name:'Editorial: publish'}))
- expect(accept).toBeDisabled()
+ expect(accept).toBeEnabled()
+ expect(screen.getByLabelText('Explanation for Editorial')).not.toBeRequired()
  fireEvent.change(screen.getByLabelText('Explanation for Editorial'),{target:{value:'Explicit human reason'}})
  expect(accept).toBeEnabled()
  fireEvent.change(screen.getByLabelText('Transformation feedback'),{target:{value:'Wrong abstract'}})
@@ -79,4 +80,18 @@ it('hands the accepted draft and classifier pins to the host only after acknowle
  fireEvent.click(screen.getByRole('button',{name:'Accept examples and labels'}))
  await waitFor(()=>expect(onAccepted).toHaveBeenCalledWith(accepted))
  expect(onAccepted.mock.calls[0][0].contract.classifiers[0].id).toBe('editor')
+})
+
+it('accepts a selected label without an explanation and surfaces server rejection without losing it',async()=>{
+ const api=client();api.command=vi.fn().mockRejectedValueOnce(new Error('Save unavailable; nothing committed')).mockResolvedValue({...preview,status:'accepted'})
+ render(<PrimingPanel client={api} listId="examples" classifiers={[{id:'editor',revision:1}]} initialDraftId="draft" pollInterval={0}/> )
+ fireEvent.click(await screen.findByRole('button',{name:'Editorial: publish'}))
+ expect(screen.getByRole('button',{name:'Accept examples and labels'})).toBeEnabled()
+ fireEvent.click(screen.getByRole('button',{name:'Accept examples and labels'}))
+ expect(await screen.findByRole('alert')).toHaveTextContent('Save unavailable')
+ expect(screen.getByRole('button',{name:'Editorial: publish'})).toHaveAttribute('aria-pressed','true')
+ expect(screen.getByLabelText('Explanation for Editorial')).toHaveValue('')
+ fireEvent.click(screen.getByRole('button',{name:'Accept examples and labels'}))
+ expect(await screen.findByText('Examples and human labels saved.')).toBeVisible()
+ expect(api.command).toHaveBeenLastCalledWith('accept',expect.objectContaining({labels:[{editor:{label:'publish',rationale:''}}]}))
 })

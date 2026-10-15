@@ -15,7 +15,6 @@ def encode_priming(examples,tasks,*,redact=()):
             if not isinstance(row,LabeledItem) or row.source!='trusted' or not isinstance(row.item.id,str) or not row.item.id.strip():raise ValueError('priming needs labeled items with identities')
             tasks[cid].validate_target(row.item)
             if row.label not in tasks[cid].labels:raise ValueError('priming needs an explicit configured label')
-            if not row.context.get('human_feedback','').strip():raise ValueError('priming needs explicit human rationale')
             if row.item.id in seen:raise ValueError('duplicate priming item')
             seen.add(row.item.id);output[cid].append(asdict(row))
     data=encoded(output)
@@ -43,7 +42,7 @@ def catalog_priming(store,list_id,classifiers,operational_ids):
                 cid=classifier['id']
                 vote=db.execute('SELECT f.* FROM item_feedback f WHERE list_id=? AND item_id=? AND item_revision=? AND classifier_id=? AND classifier_revision=? ORDER BY sequence DESC LIMIT 1',(list_id,item['id'],row['revision'],cid,classifier['revision'])).fetchone()
                 if vote and not db.execute('SELECT 1 FROM item_feedback_retractions WHERE feedback_request_id=?',(vote['request_id'],)).fetchone():
-                    result[cid].append(LabeledItem(Item(item['id'],item['values']),vote['label'],'trusted',{'human_feedback':vote['comment']}))
+                    result[cid].append(LabeledItem(Item(item['id'],item['values']),vote['label'],'trusted',({'human_feedback':vote['comment']} if vote['comment'] and vote['comment'].strip() else {})))
     if not any(result.values()):raise ValueError('priming list has no accepted examples for the selected classifier revisions')
     tasks={c['id']:DecisionTask(c['id'],tuple(row['label'] for row in c['config']['classes']),c['config']['question'],c['config'].get('input_field','text')) for c in classifiers}
     return encode_priming(result,tasks)

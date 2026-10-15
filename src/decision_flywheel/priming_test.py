@@ -73,10 +73,10 @@ def test_cancellation_and_late_completion_never_import_and_retry_cancel_is_safe(
     assert store.list_items('examples')==[]
 
 
-def test_acceptance_requires_every_label_rationale_and_rolls_back_on_sql_failure(setup):
+def test_acceptance_requires_every_label_and_rolls_back_on_sql_failure(setup):
     store,s,_,responses=setup
     start(s);responses.append({'job_id':'job','status':'complete','candidate':ITEM});draft=s.poll('draft')
-    for labels in ({}, {'editor':{'label':'publish','rationale':' '},'scope':LABELS['scope']}):
+    for labels in ({}, {'editor':{'label':'invented'},'scope':LABELS['scope']}):
         with pytest.raises(ValueError):s.accept('draft',draft['version'],[labels])
     with store.connect() as db:db.execute("CREATE TRIGGER fail_label BEFORE INSERT ON item_feedback BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
     with pytest.raises(Exception,match='fixture failure'):s.accept('draft',draft['version'],[LABELS])
@@ -133,3 +133,15 @@ def test_file_credentials_are_rejected_before_a_raw_draft_is_persisted(setup):
     content=base64.b64encode(json.dumps([{**ITEM,'values':{'title':'Synthetic','text':'synthetic-provider-secret'},'labels':LABELS}]).encode()).decode()
     with pytest.raises(ValueError,match='credential'):s.start_file('secret','examples',refs(),'json',content)
     with store.connect() as db:assert db.execute('SELECT COUNT(*) FROM priming_drafts').fetchone()[0]==0
+
+
+def test_transform_accepts_label_only_and_empty_reason_and_exports_training_without_invented_feedback(setup):
+    store,s,_,responses=setup
+    start(s);responses.append({'job_id':'job','status':'complete','candidate':ITEM});draft=s.poll('draft')
+    labels={'editor':{'label':'publish'},'scope':{'label':'yes','rationale':''}}
+    accepted=s.accept('draft',draft['version'],[labels])
+    assert accepted['status']=='accepted'
+    assert {row['comment'] for row in store.item_labels('examples',ITEM['id'],1)}=={''}
+    examples=s.examples('examples',refs())
+    assert examples['editor'][0].label=='publish' and examples['scope'][0].label=='yes'
+    assert all('human_feedback' not in rows[0].context for rows in examples.values())
