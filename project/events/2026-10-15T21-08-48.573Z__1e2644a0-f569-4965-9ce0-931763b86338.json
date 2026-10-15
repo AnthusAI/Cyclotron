@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "1e2644a0-f569-4965-9ce0-931763b86338",
+  "issue_id": "decision-flywheel-9b2a6314-00c9-4485-b76f-9e3378fabead",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-15T21:08:48.573Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "fd2774be-2ec6-4d94-a42c-c64c6374c59d",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "cyclotron-console"
+    }
+  }
+}
