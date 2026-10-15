@@ -80,7 +80,7 @@ class HostedRuntime:
 
     def _journal(self,bucket,scope,domain,name):
         payloads=S3Payloads(self.s3,bucket,self.config.account,scope,max_bytes=self.config.max_bytes)
-        return S3Journal(payloads,domain,name,max_bytes=self.config.max_bytes,max_commits=self.config.max_commits)
+        return S3Journal(payloads,domain,name,max_bytes=self.config.max_bytes,max_commits=self.config.max_commits,create_only_initialization=True)
     def _auth_journal(self,kind,reference):
         return self._journal(self.config.auth_bucket,StorageScope('console-auth','sessions'),'oauth',kind+'-'+reference)
     def journal(self,account_id,domain,name):

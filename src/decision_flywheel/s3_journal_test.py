@@ -137,3 +137,49 @@ def test_real_botocore_request_model_accepts_conditional_heads_with_single_attem
         assert j._put(j.head_key,{'synthetic':False},'"created"')=='"updated"'
         stub.assert_no_pending_responses()
     client.close()
+
+
+def test_explicit_create_only_initialization_needs_no_list_permission_and_never_resets_hidden_heads():
+    from .s3_journal import S3Journal,JournalUnavailable,JournalUncertain
+    class NoListing(ConditionalS3):
+        def get_object(self,**request):
+            try:return super().get_object(**request)
+            except S3Error as error:
+                if error.response['Error']['Code']=='NoSuchKey':raise S3Error('AccessDenied')
+                raise
+    client=NoListing()
+    def open():
+        base=journal(client)
+        return S3Journal(base.payloads,'shared-batches','run-a',max_bytes=1000000,max_commits=100,create_only_initialization=True)
+    j=open();first=j.initialize({'charged':1})
+    assert open().read().value=={'charged':1}
+    assert open().initialize({'charged':0}).value=={'charged':1}
+    del client.objects[j.head_key]
+    before=len(client.calls)
+    with pytest.raises(JournalUnavailable):open().initialize({'charged':0})
+    assert not any(kind=='put' for kind,_ in client.calls[before:])
+    # A surviving head blocks recreating a deleted anchor even in no-list mode.
+    client=NoListing();j=open();j.initialize({'charged':2});del client.objects[j.anchor_key]
+    before=len(client.calls)
+    with pytest.raises(JournalUnavailable):open().initialize({'charged':0})
+    assert not any(kind=='put' for kind,_ in client.calls[before:])
+    # No confirmed anchor receipt means no head publication or execution grant.
+    client=NoListing();j=open();client.lose=lambda key:key==j.anchor_key
+    with pytest.raises(JournalUncertain):j.initialize({'charged':0})
+    assert j.head_key not in client.objects
+    with pytest.raises(JournalUnavailable):open().initialize({'charged':0})
+
+
+def test_ambiguous_creation_probe_still_cannot_overwrite_an_existing_unreadable_head():
+    from .s3_journal import S3Journal,JournalConflict
+    client=ConditionalS3();old=journal(client);old.initialize({'paid':1})
+    original=client.objects[old.head_key]
+    del client.objects[old.anchor_key]
+    get=client.get_object
+    def denied(**request):
+        if request['Key'] in (old.anchor_key,old.head_key):raise S3Error('AccessDenied')
+        return get(**request)
+    client.get_object=denied
+    new=S3Journal(old.payloads,'shared-batches','run-a',max_bytes=1000000,max_commits=100,create_only_initialization=True)
+    with pytest.raises(JournalConflict):new.initialize({'paid':0})
+    assert client.objects[old.head_key]==original

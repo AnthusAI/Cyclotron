@@ -56,11 +56,15 @@ Amplify managed callback-URL log retention remains an explicit review item.
 ## Verified local artifact checkpoint
 
 Final zip SHA256:
-`47e6587561f59202f27e0cbc90c462d0a8b632cabb3c13c4bce4e09367edeaaa`.
+`85b1bede4c3af9b1d1cf66f65ef79d2178780e57439e52af33c03b0129cd6cfe`.
 Wheel-lock SHA256:
 `d8135c26d4783a33998add2b9d1a029407a402624e0fe15637155f627934df51`.
-Archive: 28,593,477 bytes; unpacked: 58,934,690 bytes; 3,808 files.
-Both network-disabled official Lambda Python 3.13 container checks passed using
+Archive: 28,593,686 bytes; unpacked: 58,935,355 bytes; 3,808 files.
+The preceding optional-explanation artifact (47e65875) passed both network-disabled official Lambda Python 3.13 container checks using
 image digest `sha256:d5d5c74e3639a01fac254c9334a60604aa50327aa122b3ec26151e055a06a6a0`.
 The synthetic browser proof is `browser-viewer-proof.jpg`; real Google/AWS proof
 remains pending activation. Generated archives are retained locally and ignored.
+
+Current no-list initialization refresh passes 31 targeted journal/session/hosted
+checks. Approved cloud activation is tracked in docs/console-cloud-activation.md;
+actual AWS proof is pending stack creation at this checkpoint.

@@ -36,7 +36,7 @@ class JournalRecord:
     value: object
 
 class S3Journal:
-    def __init__(self,payloads,domain,name,*,max_bytes,max_commits):
+    def __init__(self,payloads,domain,name,*,max_bytes,max_commits,create_only_initialization=False):
         if not isinstance(payloads,S3Payloads):raise ValueError('injected scoped S3 payload adapter required')
         if any(not isinstance(v,str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,128}',v) for v in (domain,name)):
             raise ValueError('fixed domain and run namespace required')
@@ -51,11 +51,13 @@ class S3Journal:
             retries=meta.config.retries or {}
             if retries.get('total_max_attempts')!=1:
                 raise ValueError('conditional S3 client requires total_max_attempts=1')
+        if type(create_only_initialization) is not bool:raise ValueError("explicit creation mode required")
+        self.create_only_initialization=create_only_initialization
         self.payloads=payloads;self.max_bytes=max_bytes;self.max_commits=max_commits
         self.namespace=f'{payloads.scope.key}/{domain}/{name}'
         prefix=f'{payloads.scope.key}/coordination/{domain}/{name}'
         self.head_key=prefix+'/head.json';self.anchor_key=prefix+'/anchor.json'
-    def _get(self,key,*,missing=False):
+    def _get(self,key,*,missing=False,creation_probe=False):
         stream=None
         try:
             response=self.payloads.client.get_object(Bucket=self.payloads.bucket,Key=key,ExpectedBucketOwner=self.payloads.owner)
@@ -66,7 +68,8 @@ class S3Journal:
             if len(content)!=length:raise ValueError('incomplete coordination object')
             return decode(content),etag
         except Exception as error:
-            if missing and getattr(error,'response',{}).get('Error',{}).get('Code')=='NoSuchKey':return None
+            code=getattr(error,'response',{}).get('Error',{}).get('Code')
+            if missing and (code=='NoSuchKey' or (creation_probe and code=='AccessDenied')):return None
             raise JournalUnavailable('canonical S3 coordination unavailable; do not initialize or dispatch') from None
         finally:
             if stream is not None:stream.close()
@@ -105,9 +108,12 @@ class S3Journal:
     def initialize(self,value):
         # Explicit new namespace only. The immutable anchor makes a missing head
         # after a crash/deletion unavailable rather than silently resetting money.
-        existing=self._get(self.anchor_key,missing=True)
+        # A no-ListBucket principal cannot distinguish missing from forbidden GET.
+        # Only explicit initialization may probe this ambiguity: successful
+        # create-only anchor AND head receipts establish creation, never the GET.
+        existing=self._get(self.anchor_key,missing=True,creation_probe=self.create_only_initialization)
         if existing is not None:return self.read()
-        if self._get(self.head_key,missing=True) is not None:
+        if self._get(self.head_key,missing=True,creation_probe=self.create_only_initialization) is not None:
             raise JournalUnavailable('head exists without namespace anchor; operator reconciliation required')
         # Enforce size before creating a namespace that would need reconciliation.
         if len(encode(value))+1024>self.max_bytes:raise JournalLimit('canonical journal byte budget exceeded')
