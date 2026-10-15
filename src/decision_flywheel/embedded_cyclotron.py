@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import asyncio
 from copy import copy
+from contextlib import asynccontextmanager
+import inspect
 from dataclasses import asdict, dataclass, field, replace
 import io
 import os
@@ -35,7 +37,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 from uuid import uuid4
 
 from .calibration_history import reviewed_prediction_bindings
@@ -56,6 +58,7 @@ from .sibling_check import SiblingPolicy, install_sibling_checks
 
 SELECTED_BY = REASONS
 LEARNING_MODES = ("inline", "deferred")
+ExecutionGuard = Callable[[], None | Awaitable[None]]
 _NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
@@ -500,16 +503,42 @@ class Cyclotron:
             self.lease.release()
             self.lease = None
 
+    @asynccontextmanager
+    async def execution(self, *, execution_guard: ExecutionGuard | None = None):
+        """Own execution and run a trusted per-call guard before state access.
+
+        The optional guard returns None on success, synchronously or after an
+        await. Denial, outage and cancellation propagate unchanged, releasing
+        ownership without running the body. No guard is retained on the engine.
+        Hosts recheck their pinned account/person, explicit publication grants
+        and current binding here; console roles alone grant no publication access.
+
+        Use this scope for synchronous reads/steering. Do not call lock-owning
+        async methods inside it: pass execution_guard to those methods instead.
+        The guard must not reenter the engine's async operations. Successful
+        authorization covers this execution, not later calls or deferred passes.
+        """
+        async with self._lock:
+            if execution_guard is not None:
+                if not callable(execution_guard):
+                    raise TypeError('execution_guard must be callable')
+                result = execution_guard()
+                if inspect.isawaitable(result):
+                    result = await result
+                if result is not None:
+                    raise TypeError('execution_guard must return None or raise to deny')
+            yield self
+
     # Decide ---------------------------------------------------------------
 
-    async def decide(self, item: Item) -> Decision:
+    async def decide(self, item: Item, *, execution_guard: ExecutionGuard | None = None) -> Decision:
         """Decide one item and say whether it goes to review.
 
         A decision a person may have seen is stable: an unchanged item keeps
         its decision, label and confidence until it is reviewed or a new
         version (not an ML model refit) is promoted. No model call is repeated.
         """
-        async with self._lock:
+        async with self.execution(execution_guard=execution_guard):
             if not isinstance(item, Item):
                 raise ValueError("decide needs an Item")
             self._batches = []
@@ -855,7 +884,8 @@ class Cyclotron:
     async def review(self, decision_id: str, label: str | None = _NO_LABEL, *, classifier: str | None = None,
                      labels: Mapping[str, str | None] | None = None,
                      explanation: str | None = None, reason_code: str | None = None, reviewer: str | None = None,
-                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False):
+                     selected_by: str | None = None, review_id: str | None = None, _replay: bool = False,
+                     execution_guard: ExecutionGuard | None = None):
         """Record a reviewer's label for a decision, or one checklist of labels for several outputs.
 
         The first label for a decision teaches the cyclotron; a later label is
@@ -884,7 +914,7 @@ class Cyclotron:
                 raise ValueError("labels maps classifier ids to labels")
         elif label is _NO_LABEL:
             raise ValueError("review needs a label (None to close without one) or labels")
-        async with self._lock:
+        async with self.execution(execution_guard=execution_guard):
             self._sync()
             self._batches = []
             decision = self.decision(decision_id)
@@ -1001,9 +1031,9 @@ class Cyclotron:
         return None
 
     async def undo_review(self, decision_id: str, *, classifier: str | None = None,
-                          review_id: str | None = None) -> Review:
+                          review_id: str | None = None, execution_guard: ExecutionGuard | None = None) -> Review:
         """Retract the active label for a decision and wait for a new review."""
-        async with self._lock:
+        async with self.execution(execution_guard=execution_guard):
             self._sync()
             decision = self.decision(decision_id)
             cid = self._classifier(decision, classifier)
@@ -1087,7 +1117,8 @@ class Cyclotron:
                                  "review_id": review.review_id})
         return rows
 
-    async def replay(self, labels: Sequence[Mapping[str, Any]]) -> int:
+    async def replay(self, labels: Sequence[Mapping[str, Any]], *,
+                     execution_guard: ExecutionGuard | None = None) -> int:
         """Rebuild learning from an application's recorded labels, in order.
 
         Each record needs ``item`` and ``label``, and may name the classifier,
@@ -1096,11 +1127,11 @@ class Cyclotron:
         """
         count = 0
         for record in labels:
-            decision = await self.decide(record["item"])
+            decision = await self.decide(record["item"], execution_guard=execution_guard)
             await self.review(decision.decision_id, record["label"], classifier=record.get("classifier"),
                               explanation=record.get("explanation"), reason_code=record.get("reason_code"),
                               reviewer=record.get("reviewer"), selected_by=record.get("selected_by"),
-                              review_id=record.get("review_id"), _replay=True)
+                              review_id=record.get("review_id"), _replay=True, execution_guard=execution_guard)
             count += 1
         return count
 
@@ -1356,7 +1387,7 @@ class Cyclotron:
         """Outputs with a queued learning pass, oldest first."""
         return [row[0] for row in self.db.execute("SELECT classifier FROM learning_queue ORDER BY seq")]
 
-    async def learn(self, *, limit: int | None = None) -> list[dict[str, Any]]:
+    async def learn(self, *, limit: int | None = None, execution_guard: ExecutionGuard | None = None) -> list[dict[str, Any]]:
         """Run queued learning passes, one output at a time, oldest first.
 
         With ``learning="deferred"``, ``review()`` records labels and returns;
@@ -1365,13 +1396,14 @@ class Cyclotron:
         reviews and decisions interleave between outputs. Each output's
         optimizer stages share the cyclotron's optimizer and its call limit.
         Returns one record per pass: the output, its warnings and duration.
-        A pass that raises stays queued.
+        A pass that raises stays queued. The per-call execution_guard runs
+        after ownership is acquired on every pass, before reading the queue.
         """
         if limit is not None and (type(limit) is not int or limit < 1):
             raise ValueError("limit must be a positive integer")
         done = []
         while limit is None or len(done) < limit:
-            async with self._lock:
+            async with self.execution(execution_guard=execution_guard):
                 row = self.db.execute("SELECT seq,classifier,since_count FROM learning_queue ORDER BY seq LIMIT 1").fetchone()
                 if row is None:
                     break

@@ -180,3 +180,13 @@ including answer refresh/retry, response-identity rollback, learning and embedde
 consumers, and comparison recovery. The cross-owner embedded/HTTP publication
 contract passed all **13 tests** against this checkout. The prior full 1,434-test
 result belongs to checkpoint `eb72b21`; it was not rerun for this extraction.
+
+## Public execution guard
+
+The SDK now exposes per-call `execution_guard=` on `decide`, `review`,
+`undo_review`, `learn` and `replay`, plus `engine.execution(execution_guard=...)`
+for synchronous reads/steering. The guard runs after native execution ownership
+and before operation state access/dispatch. See
+[the exact host contract](embedded-execution-authorization.md) for non-reentrancy,
+fresh account/publication/binding checks, cancellation and reconciliation scope.
+This independent change does not select a cloud coordinator or activate hosting.

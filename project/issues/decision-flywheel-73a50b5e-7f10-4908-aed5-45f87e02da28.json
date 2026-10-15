@@ -31,10 +31,22 @@
       "text": "Resumed local cross-app Google identity work per Ryan authorization. New detailed story decision-flywheel-7d63acc8-4474-411d-ba31-45b379285e77 records agreed central challenge/session contract and verified95 Python tests plus actual two-pool Python-to-TypeScript factory proof. Accounts storage integration remains separate and fail-closed on Person mismatch. Hosting/storage design decisions and public publication remain paused.",
       "created_at": "2026-10-14T23:04:10.202886Z",
       "comment_type": "default"
+    },
+    {
+      "id": "c632c871-8c7b-42a3-9584-a5f67c017b38",
+      "author": "home",
+      "text": "Public execution-ownership hook implemented in embedded core only: optional per-call execution_guard= on decide/review/undo_review/learn/replay; async engine.execution scope for synchronous reads/steering. Sync/async callback runs after lock before state access/dispatch, returns None or raises. No global/engine/contextvar stored callback. Denial/outage/cancellation propagate; per-pass learn and per-decision/review replay recheck. 113 focused native/embedded/account tests pass including all-store SQLite authorizer forbidding even SELECT after queued revocation, central AccountsClient synthetic membership/publication/binding/account/person changes, cancellation and no cross-call guard leakage. 14 read-only cross-owner publication contracts pass against this core. Exact host/nonreentrancy/provenance/reconciliation contract docs/embedded-execution-authorization.md. Integration owner implementing host consumption in its own files; no duplicate host/UI/storage adapter. Cloud coordinator remains pending; no heavy builds/cloud/IAM/OAuth changes. Independent remaining conversion includes learning/feature/hypothesis/control repositories and native parity/export; these do not require cloud authority choice.",
+      "created_at": "2026-10-15T18:10:51.899211Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "cyclotron-console"
+      }
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-14T23:04:10.202913Z",
+  "updated_at": "2026-10-15T18:10:51.899675Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
