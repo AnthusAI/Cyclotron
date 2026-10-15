@@ -1,0 +1,38 @@
+{
+  "id": "decision-flywheel-ea8d1861-4c12-4e9a-ae67-369db041c3d5",
+  "title": "Bind stable publication identities to explicit classifier outputs",
+  "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a Papyrus deployment operator, I want an explicit reviewed publication-to-output binding, so that common items can have independent editorial decisions.\n\nFeature: Publication output binding\n  Scenario: Same input, different publications\n    Given one common item revision and two publications bound to different classifier outputs\n    When an operator inspects each publication's decision\n    Then each decision identifies its item revision, publication, classifier output and prediction version\n    And acceptance by the first publication does not create a label for the second\n  Scenario: Ambiguous or changed binding\n    Given a missing, ambiguous or changed publication/output binding\n    When a publication requests a decision or submits feedback\n    Then it receives an explicit binding conflict or required configuration state\n    And no output is silently selected or relabeled\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: identity namespaces/ownership and lifecycle, mapping cardinality, binding revisions, deduplication versus source identity, and how binding changes affect historical views. Do not assume URL alone is stable identity.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a16042c9-7357-42d1-a8ca-08387b8931bf",
+  "labels": [
+    "deployment-mode-planning"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-ade3088c-39b2-4f4b-ba01-c3da64effc29",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-15T13:33:20.227291Z",
+  "updated_at": "2026-10-15T13:33:20.870918Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "Cyclotron Deployment Mode Planning",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

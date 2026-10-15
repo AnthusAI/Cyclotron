@@ -1,0 +1,62 @@
+{
+  "id": "decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce",
+  "title": "Shared remote Cyclotron lab for publication-specific Papyrus vetting",
+  "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nPurpose: Papyrus, Threat Intelligence, Pilobolus, Anthus and other Anthus sites share one remote cyclotron that processes common input items with multiple classifier outputs. Each bound output predicts the appropriate publication-specific accept/reject decision. Each Papyrus deployment/publication sees and steers only its authorized outputs. Canonical decision history, explicit human labels/explanations, learning state and classifier storage live in the remote lab; clients do not become competing authoritative stores.\n\nMilestones: shared contract/components once (also consumed by the embedded initiative), then remote publication binding and operational acceptance. Existing multi-output core is a reuse foundation, not evidence that cross-deployment auth/storage integration is complete.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.\n\nOpen design questions (not decisions): stable item/revision, classifier/output and publication/deployment identities; binding configuration and changes; account/tenant permissions; service-role authentication without long-lived keys; per-output feedback and learning isolation; shared-item deduplication and provenance; versioned predictions and stale review handling; retry/idempotency, availability and recovery; remote/embedded mode parity. Choose no identity algorithm, auth provider, cloud topology or storage technology by filing these cards.\n\nPlanning completion: linked milestone epics and Gherkin stories, explicit ownership boundaries and unanswered decisions ready for Ryan review. Future delivery completion requires authorized end-to-end evidence across at least two differently bound publications, including isolation and outage/retry cases.",
+  "type": "initiative",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [
+    "deployment-mode-planning"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+      "type": "relates-to"
+    },
+    {
+      "target": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+      "type": "relates-to"
+    },
+    {
+      "target": "decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [
+    {
+      "id": "af0ce77c-8a56-4e8f-9146-06176e91d4f7",
+      "author": "home",
+      "text": "Related Papyrus-side optional priming story: AnthusAI/Papyrus PPY-7227acea-e3f5-4bc2-b3c5-17f62568d49d (Embed optional Cyclotron priming with existing reference curation planners). Local implementation 4ca32a5, LAN preview fix 58eda83. The unified Papyrus/Kanbus/priming preview is separately owned by thread 01a13a66-f709-76a6-8466-7a98bc54a00f. These are reusable integration evidence, not deployment-mode implementation completion. Baseline for this planning-only board change: Cyclotron c47b36abd6ccf936cdef69d4fd4a7c79dc55ed89 on codex/priming-http-import, with code baseline origin/develop 547dc00084c6d4e390b9dad96f43b22767a9aa31. Shared primary checkout is older and untouched.",
+      "created_at": "2026-10-15T13:33:21.186752Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Cyclotron Deployment Mode Planning",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
+  "created_at": "2026-10-15T13:32:04.380032Z",
+  "updated_at": "2026-10-15T13:33:21.186776Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "Cyclotron Deployment Mode Planning",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

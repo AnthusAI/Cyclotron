@@ -1,0 +1,38 @@
+{
+  "id": "decision-flywheel-ed1aa504-6fa4-4a61-a883-1623c93839b1",
+  "title": "Run a complete publication decision and review cycle without a remote lab",
+  "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a embedded Papyrus deployment owner, I want local deployment-owned decisions, feedback and learning, so that a small publication can operate without a separate lab or external Cyclotron store.\n\nFeature: Embedded deployment authority\n  Scenario: Vet and review a local post candidate\n    Given a DataParade-style Papyrus deployment configured for embedded Cyclotron\n    And no remote lab endpoint or external Cyclotron storage is configured\n    When it decides on a post candidate and an authorized editor supplies a label and explanation\n    Then that deployment owns the prediction, human feedback, learning and classifier history\n    And its state can be inspected through the shared operator contract\n    And no lab synchronization or remote storage call is required\n  Scenario: Another deployment has a similarly named publication\n    Given two embedded deployments own separate classifier state\n    When one editor reviews a candidate\n    Then the other deployment's labels and learning do not change\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: what deployment-owned persistence means for the selected runtime, lifecycle/configuration and local account permissions. No separate lab storage, implicit replication or production storage migration.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1dd2385b-18c1-4d71-9c70-44cc88011603",
+  "labels": [
+    "deployment-mode-planning"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-f0285316-32eb-414c-92fa-4071e51e900f",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-15T13:33:20.451913Z",
+  "updated_at": "2026-10-15T13:33:21.116098Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "Cyclotron Deployment Mode Planning",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

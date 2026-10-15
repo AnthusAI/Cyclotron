@@ -1,0 +1,38 @@
+{
+  "id": "decision-flywheel-fc83312c-56da-46d9-bbb8-d9f4970788a2",
+  "title": "Vet common reference items independently for bound publications",
+  "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a multi-publication operator, I want one remote cyclotron to evaluate common items across publication outputs, so that references can be shared without forcing editorial agreement.\n\nFeature: Shared items and publication-specific predictions\n  Scenario: Divergent editorial decisions\n    Given one common reference item bound to publication A and publication B outputs\n    When the remote lab evaluates the item\n    Then A may receive accept while B receives reject\n    And both predictions retain their own classifier and version identity\n    And neither prediction is itself a human label\n  Scenario: Same reference arrives through two deployments\n    Given the same source is submitted with different deployment provenance\n    When the remote lab applies the reviewed deduplication policy\n    Then it preserves each source submission's provenance and item revision relationship\n    And it does not merge publication-specific decisions or feedback\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nOpen: common item canonicalization, revision/fingerprint and duplicate reconciliation policy. Reuse existing multi-output engine; no new engine or source scraper is presumed.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-c3bfa7ca-e429-40ee-a5b6-0e28d5a9944c",
+  "labels": [
+    "deployment-mode-planning"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-1f3a35a1-9303-4887-8341-8d88fa804684",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-15T13:33:20.316161Z",
+  "updated_at": "2026-10-15T13:33:21.136976Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "Cyclotron Deployment Mode Planning",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

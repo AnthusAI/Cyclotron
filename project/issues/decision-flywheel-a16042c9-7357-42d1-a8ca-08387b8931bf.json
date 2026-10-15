@@ -1,0 +1,30 @@
+{
+  "id": "decision-flywheel-a16042c9-7357-42d1-a8ca-08387b8931bf",
+  "title": "M1: Shared publication contracts and deep Papyrus Cyclotron controls",
+  "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nSingle ownership of cross-mode identity/binding, versioned decision/review, and real reusable UI contracts. Both deployment initiatives depend on this milestone; do not duplicate its stories under embedded mode. Reuse the existing Papyrus integration epic, multi-output engine work, status schema, review/status components, versioning and package work.\n\nFuture Definition of Done: reviewed mode-neutral contracts and conformance acceptance cases; actual Papyrus UI exposes item/output history, explicit labels and explanations, per-classifier metrics/calibration/review routing and inspectable steering/promotions using real shared components. Transport/storage choice may differ; operator semantics and auditability must agree. No new framework by assumption.\n\nOpen design questions (not decisions): stable item/revision, classifier/output and publication/deployment identities; binding configuration and changes; account/tenant permissions; service-role authentication without long-lived keys; per-output feedback and learning isolation; shared-item deduplication and provenance; versioned predictions and stale review handling; retry/idempotency, availability and recovery; remote/embedded mode parity. Choose no identity algorithm, auth provider, cloud topology or storage technology by filing these cards.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce",
+  "labels": [
+    "deployment-mode-planning"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-15T13:33:20.116542Z",
+  "updated_at": "2026-10-15T13:33:20.116577Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "Cyclotron Deployment Mode Planning",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

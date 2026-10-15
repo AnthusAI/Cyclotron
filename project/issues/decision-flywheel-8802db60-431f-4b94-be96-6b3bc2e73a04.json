@@ -1,0 +1,38 @@
+{
+  "id": "decision-flywheel-8802db60-431f-4b94-be96-6b3bc2e73a04",
+  "title": "Recover embedded history safely through restarts and concurrent execution",
+  "description": "PLANNING ONLY. Ryan requested filing and design before implementation. This issue is not authorization to build runtime features, deploy, change cloud permissions, publish packages, push, or migrate production data. Keep open pending design review and separate implementation authorization.\n\nAs a embedded deployment operator, I want durable local history with explicit ownership and recovery, so that scale-to-zero and retries cannot erase feedback or create multiple learning owners.\n\nFeature: Embedded persistence and recovery\n  Scenario: Restart after an acknowledged label\n    Given the deployment acknowledged an explicit human label and explanation\n    When its worker restarts or scales to zero and later resumes\n    Then the same deployment-owned history and classifier revision remain available\n    And the label is not re-created as a new learning event\n  Scenario: Concurrent writers\n    Given another execution owns the classifier's write authority\n    When a competing execution attempts a state-changing operation\n    Then ownership is resolved explicitly before conflicting learning or history writes\n  Scenario: Interrupted persistence\n    Given an operation is interrupted before its acknowledgement\n    When the deployment recovers and the client retries\n    Then it can determine the accepted, pending or failed outcome\n    And it never reports a silently incomplete import or label commit\n\nDesign review / future Definition of Done: review these observable acceptance cases with the shared contract; executable specs and implementation are future work after authorization.\nReuse portable store/snapshot/restore/lease issue; first verify its current implementation. Open: host persistence adapter, writer lease, atomicity boundary, backup/restore, durability acknowledgement and recovery policy. No external Cyclotron store is introduced.\n\nPreserve optional curated-example priming (decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a), its preview/revision/explicit-label acceptance contract, and separate existing scholarly research-paper and web-summary transformations. Priming must never become an onboarding gate. Common input items are distinct from publication-specific decisions; one publication accepting an item must never implicitly label another output.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1dd2385b-18c1-4d71-9c70-44cc88011603",
+  "labels": [
+    "deployment-mode-planning"
+  ],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-f0285316-32eb-414c-92fa-4071e51e900f",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-15T13:33:20.480597Z",
+  "updated_at": "2026-10-15T13:33:20.948308Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "Cyclotron Deployment Mode Planning",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

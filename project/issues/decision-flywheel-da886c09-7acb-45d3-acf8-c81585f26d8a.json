@@ -10,9 +10,25 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "06ae1640-4cfb-46a5-b7fd-2cd95a6aad20",
+      "author": "home",
+      "text": "Planning-only deployment-mode follow-up requested by Ryan: remote shared lab initiative decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce; deployment-owned embedded initiative decision-flywheel-046a06ad-f064-4907-96e1-b6e5941d0938. Both link the existing work rather than duplicating optional priming or reusable controls. Shared new contract/UI milestone is decision-flywheel-a16042c9-7357-42d1-a8ca-08387b8931bf, owned once under remote and consumed by embedded. Existing statuses and scope remain unchanged; these cards authorize no runtime implementation, production migration, push, deployment or cloud permission change.",
+      "created_at": "2026-10-15T13:33:21.268069Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Cyclotron Deployment Mode Planning",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
   "created_at": "2026-10-14T11:54:33.949970Z",
-  "updated_at": "2026-10-14T14:03:38.113464Z",
+  "updated_at": "2026-10-15T13:33:21.268096Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
