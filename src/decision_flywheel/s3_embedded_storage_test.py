@@ -84,3 +84,24 @@ def test_uncertain_root_commit_prevents_duplicate_derivation_until_a_fresh_owner
     assert restored.meta('cursor:classifier')==('8',)
     assert restored.events(0,100)==[(1,'{"kind":"derived-once"}')]
     restored.release()
+
+
+def test_owned_snapshot_refresh_detects_operator_fence_change_before_operation_state_or_provider():
+    from copy import deepcopy
+    from .s3_embedded_storage import S3CyclotronStores
+    from .s3_journal_test import ConditionalS3
+    from .s3_runtime_storage import RuntimeOwnershipError
+    from .embedded_cyclotron import Cyclotron
+    client=ConditionalS3();composition=S3CyclotronStores(journal(client,name='root'),max_records=1000,
+        journal_for=lambda domain,name:journal(client,name=domain+'-'+name))
+    model=Model();engine=Cyclotron.open(None,DEFINITION,model,storage=composition)
+    root=composition.root_storage;record=root.journal.read();value=deepcopy(record.value)
+    value['owner']=str(uuid4());value['fence']+=1
+    root.journal.commit(record,value)
+    with pytest.raises(RuntimeOwnershipError):asyncio.run(engine.decide(item('denied'),execution_guard=lambda:None))
+    assert model.calls==0 and root._cached is None
+    with pytest.raises(RuntimeOwnershipError):root.meta('definition')
+    # Simulated operator restores the previous owner only to clean this fixture;
+    # production has no online takeover/reset endpoint.
+    record=root.journal.read();value=deepcopy(record.value);value['owner'],value['fence']=root.authority
+    root.journal.commit(record,value);engine.close()

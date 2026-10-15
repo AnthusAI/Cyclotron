@@ -19,9 +19,9 @@ def empty():
         'meta':{},'items':{},'decisions':[],'reviews':[],'events':[],'learning':[],'usage':[],'shares':[]}}
 
 class S3EmbeddedStorage:
-    def __init__(self,journal,*,max_records):
+    def __init__(self,journal,*,max_records,cache_owned=False):
         if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1:raise ValueError('scoped journal and record budget required')
-        self.journal=journal;self.max_records=max_records;self.authority=None;self.poisoned=False
+        self.journal=journal;self.max_records=max_records;self.authority=None;self.poisoned=False;self.cache_owned=cache_owned;self._cached=None
         self._transaction=ContextVar('s3_embedded_transaction',default=None)
     def _validate(self,value):
         if not isinstance(value,dict) or set(value)!=set(empty()) or value['schema']!='cyclotron-s3-embedded/v1':raise ValueError('invalid canonical embedded root')
@@ -39,19 +39,24 @@ class S3EmbeddedStorage:
         record=self.journal.read();self._validate(record.value)
         if self.authority is not None or record.value['owner'] is not None:raise RuntimeOwnershipError('embedded root already owned; no timeout takeover')
         value=deepcopy(record.value);value['owner']=owner;value['fence']+=1
-        self.journal.commit(record,value);self.authority=(owner,value['fence'])
+        self._cached=self.journal.commit(record,value);self.authority=(owner,value['fence'])
     def release(self):
         if self.authority is None:return
         try:
             record=self.journal.read();self._validate(record.value);self._owned(record.value)
             value=deepcopy(record.value);value['owner']=None
             self.journal.commit(record,value)
-        finally:self.authority=None
+        finally:self.authority=None;self._cached=None
     def close(self):pass  # The enclosing execution lease releases ownership.
     def _record(self):
         if self.poisoned:raise RuntimeOwnershipError('uncertain root transaction; reopen/reconcile before continuing')
-        record=self.journal.read();self._validate(record.value);self._owned(record.value)
+        record=self._cached if self.cache_owned and self._cached is not None else self.journal.read()
+        self._validate(record.value);self._owned(record.value)
         return record
+    def refresh(self):
+        self._cached=None
+        if self.poisoned:raise RuntimeOwnershipError('uncertain root transaction; reopen/reconcile before continuing')
+        record=self.journal.read();self._validate(record.value);self._owned(record.value);self._cached=record
     def _data(self):
         value=self._transaction.get()
         return value['data'] if value is not None else self._record().value['data']
@@ -63,8 +68,8 @@ class S3EmbeddedStorage:
             yield self
             self._validate(value)
             if value!=record.value:
-                try:self.journal.commit(record,value)
-                except (JournalUncertain,JournalConflict):self.poisoned=True;raise
+                try:self._cached=self.journal.commit(record,value)
+                except (JournalUncertain,JournalConflict):self.poisoned=True;self._cached=None;raise
         finally:self._transaction.reset(token)
     def _write(self,fn):
         if self._transaction.get() is not None:return fn(self._data())
@@ -153,9 +158,10 @@ class S3CyclotronStores:
     Host binds all journals to an already-authorized scope and absolute shared
     request ceiling. No FileLease, local directory, SQLite or DDB fallback exists.
     """
+    requires_durable_optimizer=True
     def __init__(self,root_journal,*,journal_for,max_records):
         if not callable(journal_for):raise ValueError('fixed scoped journal factory required')
-        self.root_storage=S3EmbeddedStorage(root_journal,max_records=max_records)
+        self.root_storage=S3EmbeddedStorage(root_journal,max_records=max_records,cache_owned=True)
         self.journal_for=journal_for;self.max_records=max_records;self.owner=str(uuid4())
         self.lease=self;self.batch_storage=None;self.runtimes={}
     def _journal(self,domain,identifier):
@@ -175,7 +181,12 @@ class S3CyclotronStores:
             self.root_storage.release();raise
     def runtime_for_classifier(self,identifier):
         if identifier in self.runtimes:raise ValueError('classifier runtime already opened')
-        runtime=S3RuntimeStores(self._journal('runtime',identifier),max_records=self.max_records)
+        runtime=S3RuntimeStores(self._journal('runtime',identifier),max_records=self.max_records,cache_owned=True)
         runtime.initialize();runtime.acquire(self.owner);self.runtimes[identifier]=runtime
         return runtime
+    def execution_boundary(self):
+        # Called only after the public per-call human/tenant guard succeeds.
+        # Native ownership excludes other writers; CAS still fences every write.
+        self.root_storage.refresh()
+        for runtime in self.runtimes.values():runtime.refresh()
     def release(self):self.root_storage.release()

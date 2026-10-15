@@ -118,8 +118,10 @@ class ReviewStore:
             raise ValueError("audit rates must be probabilities")
         if rolling_audit_rate + final_audit_rate > 1:
             raise ValueError("combined audit rates cannot exceed one")
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = Path(path) if path is not None else None
+        if storage is None:
+            if self.path is None:raise ValueError('native reviewer requires a local path or explicit cloud storage')
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         from .review_storage import SQLiteReviewStorage
         self.storage = storage if storage is not None else SQLiteReviewStorage(self.path)
         self._connection = getattr(self.storage,'db',None)  # Native compatibility only.

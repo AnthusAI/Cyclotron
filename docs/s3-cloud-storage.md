@@ -163,3 +163,86 @@ deployment proof. Hosted priming still fails closed pending scoped composition.
 Comparison command lifecycle, optimizer reservation, remaining auxiliary stores,
 reviewed recovery, durable sessions, deployment and actual cloud verification
 remain. No persistent IAM/S3 policy changes or hosted SQLite fallback occurred.
+
+## Evaluation, reviewer and optimizer adapters
+
+`S3EvaluationStorage` holds an explicit fenced owner for the entire paired
+comparison, including both endpoint ledger reads and all budget reservations.
+It preserves the first frozen clock, first acknowledged trace payload and native
+sequence watermark/gaps. Native evaluation snapshots import/export with pure
+record validation. The evaluator accepts a complete injected composition with
+`directory=None`; it creates no local directory or SQLite fallback. The host
+must acquire this owner and release it in `finally`; a crashed owner is not
+stolen by timeout. Uncertain trace writes poison the handle; a confirmed release
+and fresh owner can retain the original committed event on retry.
+
+`S3ReviewStorage` retains native source snapshots, study seed/audit rates,
+immutable article content, shown prediction identity, human rationale and
+append-only vote/skip/undo actions. Study binding and human-action checks commit
+atomically. A conflicting human-action transaction asks the caller to refresh,
+never replays a form body automatically. Train/audit/eligibility algorithms remain
+in the existing ReviewStore, which accepts `path=None` with explicit storage.
+Raw native reviewer snapshots migrate without opening SQLite in cloud code.
+
+`S3OptimizerTransport` wraps the existing sync/async completion callable with a
+separate canonical S3 batch ledger and absolute paid-call ceiling. Each intentional
+call is a fresh generation, preserving repeated-prompt search behavior. A pending
+or uncertain generation blocks another call with that request fingerprint;
+cancellation or a lost dispatch receipt never authorizes automatic repayment.
+Raw replies/usage/tool calls persist in S3. Transport/model/settings identity,
+request/reply byte budgets and credential redactions are explicit host inputs.
+Provider SDK retries must remain disabled; this wrapper meters invocations and
+cannot detect undisclosed physical retries inside an arbitrary custom callable.
+The existing built-in provider setup already configures its retry policy.
+
+Enabled optimization in an S3 runtime/SDK composition now requires this durable
+paid-call wrapper; plain in-memory optimizer budgets are rejected before a cloud
+SDK namespace is created. A disabled optimizer remains valid for prediction-only
+flows. No paid provider was called in this verification.
+
+## Measured access cost and owned snapshot optimization
+
+A synthetic initialization + one decision + one human review + close, with one
+classifier and no optimizer, initially issued 279 GETs and 75 PUTs. It wrote
+121,697 bytes across PUTs; the largest object was 13,971 bytes. This is operation
+and byte accounting against the injected client, not measured AWS latency.
+
+The SDK now retains confirmed immutable root/runtime values within its exclusive
+ownership. After the human/tenant execution guard succeeds, each separately owned
+SDK operation refreshes root/runtime authority before state access. Every write
+still uses the canonical conditional head, and a conflict/uncertain outcome
+invalidates cached state. A failed authority refresh cannot fall back to an old
+value. Only the SDK composition enables this mode; direct runtime adapters keep
+fresh-read behavior unless the host explicitly owns its boundary. Shared paid
+claims/counters continue to read fresh S3 authority.
+
+The same synthetic flow now uses 90 GETs and 75 PUTs, with unchanged bytes and
+results. This removes redundant reads, but write amplification remains material.
+The concrete next scaling proposal is immutable per-record/page manifests with
+a single small scoped activation head, preserving the same conditional commit
+and budget/fence rules. Production sizing should follow a bounded real-cloud
+trial; do not interpret synthetic timing as production readiness.
+
+The complete focused adapter/native-boundary run passed 99 tests. Additional
+uncertainty/limit/optimizer/guard checks passed 67 tests before the owned-snapshot
+optimization; focused SDK/refresh checks cover fencing and denial after it.
+Comparison command orchestration, ephemeral worker/session binding, reviewed
+recovery/retention and real cloud access/build/browser verification still gate
+hosted deployment. No always-on SQLite, authoritative DynamoDB coordinator, cloud
+policy/resource change or paid live test was introduced.
+
+
+Final auxiliary/owned-snapshot checkpoint: 102 focused cloud adapter and native
+boundary checks pass; 66 focused core SDK/optimizer/authorization/window checks
+passed during the cache change, followed by 12 targeted ownership-refresh tests.
+The publication/Papyrus contract harness passes 83 tests against the final core source. These sets overlap and must not be added as distinct test counts.
+
+
+Worker binding must claim inside the actual worker invocation; a dispatcher
+cannot forward a claimed row to another process and treat observation as a
+receipt. Human/account authorization and service ownership remain separate:
+queue execution needs fresh central human/tenant authorization and, where
+applicable, separate publication grants/current binding. Command claims alone
+confer neither. Persisted trusted actor/session provenance and scoped session
+continuation are still part of that worker/session integration, not supplied by
+browser payloads or this storage adapter.

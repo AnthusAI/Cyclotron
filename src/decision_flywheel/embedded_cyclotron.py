@@ -373,6 +373,9 @@ class Cyclotron:
         self.definition, self.optimizer, self.program = definition, optimizer, review_program
         self.observer = observer or (lambda event: None)
         self.storage=storage
+        if getattr(storage,'requires_durable_optimizer',False):
+            from .s3_optimizer_transport import require_durable_optimizer
+            require_durable_optimizer(optimizer)
         if storage is not None and (directory is not None or lease is not None):
             raise ValueError('injected cloud stores cannot use a local directory or file lease')
         self.directory = Path(directory) if storage is None else None
@@ -544,6 +547,7 @@ class Cyclotron:
         """
         async with self._lock:
             await self._authorize_execution(execution_guard)
+            if self.storage is not None:self.storage.execution_boundary()
             yield self
 
     @staticmethod

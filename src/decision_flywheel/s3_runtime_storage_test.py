@@ -12,6 +12,18 @@ def stores(j=None):
     return result
 
 
+def cloud_agent(s):
+    from .flywheel_test import agent
+    from .s3_optimizer_transport import S3OptimizerTransport
+    from .s3_batch_storage import S3BatchStorage
+    complete=agent([])
+    ledger=S3BatchStorage(journal(s.journal.payloads.client,name='optimizer-budget'),max_records=1000)
+    ledger.initialize()
+    complete.complete=S3OptimizerTransport(complete.complete,ledger,identity={'provider':'synthetic','model':'fake-optimizer'},
+        max_calls=20,max_request_bytes=1000000,max_reply_bytes=1000000)
+    return complete
+
+
 def test_runtime_owner_is_exclusive_releases_explicitly_and_fences_the_old_handle():
     from .s3_runtime_storage import S3RuntimeStores,RuntimeOwnershipError
     first=stores();j=journal(first.journal.payloads.client,name='classifier-a')
@@ -50,11 +62,11 @@ def test_real_core_predict_restart_and_improve_use_only_injected_s3_repositories
     def forbidden(*args,**kwargs):raise AssertionError('cloud core opened SQLite')
     monkeypatch.setattr('sqlite3.connect',forbidden)
     s=stores();j=s.journal;model=FakeModel()
-    wheel=DecisionFlywheel(None,ClassifierConfig(TASK),model,agent([]),storage=s)
+    wheel=DecisionFlywheel(None,ClassifierConfig(TASK),model,cloud_agent(s),storage=s)
     asyncio.run(wheel.predict(DEV[0].item,TRAIN));calls=model.calls
     before=wheel.history(10000);wheel.close()
     s=stores(journal(j.payloads.client,name='classifier-a'))
-    wheel=DecisionFlywheel(None,ClassifierConfig(TASK),model,agent([]),storage=s)
+    wheel=DecisionFlywheel(None,ClassifierConfig(TASK),model,cloud_agent(s),storage=s)
     assert wheel.history(10000)==before
     asyncio.run(wheel.predict(DEV[0].item,TRAIN))
     assert model.calls==calls

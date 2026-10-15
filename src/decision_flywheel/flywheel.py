@@ -157,6 +157,9 @@ class DecisionFlywheel:
             raise ValueError("max_requests must be positive")
         if type(max_request_bytes) is not int or max_request_bytes < 1:
             raise ValueError("max_request_bytes must be positive")
+        if getattr(storage,'requires_durable_optimizer',False):
+            from .s3_optimizer_transport import require_durable_optimizer
+            require_durable_optimizer(optimizer)
         if storage is None:
             from .runtime_storage import SQLiteRuntimeStateStorage
             self.runtime_storage = SQLiteRuntimeStateStorage(database, timeout=STORE_BUSY_TIMEOUT_SECONDS)

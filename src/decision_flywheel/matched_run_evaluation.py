@@ -74,8 +74,11 @@ async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_reque
         for classifier in fitted.values():
             if classifier.head and classifier.head.provenance.source_model_provenance!=expected:
                 raise ValueError('frozen head does not match the joint decision feature context; replay and refit this endpoint')
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
+    complete_injection=execution_storage is not None and batch_storage_factory is not None
+    if directory is None and not complete_injection:
+        raise ValueError('cloud evaluation requires complete clock/trace and batch storage injection')
+    directory = Path(directory) if not complete_injection else None
+    if directory is not None:directory.mkdir(parents=True, exist_ok=True)
     from .evaluation_storage import SQLiteEvaluationStorage
     execution=execution_storage if execution_storage is not None else SQLiteEvaluationStorage(directory/'evaluation.sqlite3')
     clock=datetime.fromisoformat(execution.bind_clock(plan['fingerprint'],datetime.now(timezone.utc).isoformat()))
@@ -90,7 +93,7 @@ async def evaluate_matched_runs(plan, endpoints, models, directory, *, max_reque
     metrics = {cid: {} for cid in plan['classifier_ids']}
     requests = new_requests = 0
     records = []
-    cache_paths={side:directory/f"{plan['fingerprint']}-{side}.sqlite3" for side in ('before','after')}
+    cache_paths={side:directory/f"{plan['fingerprint']}-{side}.sqlite3" if directory is not None else None for side in ('before','after')}
     from .batch_storage import SQLiteBatchStorage
     open_batches=batch_storage_factory if batch_storage_factory is not None else lambda side:SQLiteBatchStorage(cache_paths[side])
     attempts={}

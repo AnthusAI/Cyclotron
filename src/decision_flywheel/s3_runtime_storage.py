@@ -6,7 +6,7 @@ mutation checks the same owner/fence stored with its data, never a DDB lease.
 """
 from copy import deepcopy
 import json
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid
+from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid,decode
 from .learning_storage import ARTIFACTS,artifact_table
 
 class RuntimeOwnershipError(RuntimeError):pass
@@ -20,14 +20,15 @@ def empty():
 
 def json_text(value):
     if not isinstance(value,str):raise ValueError('raw JSON text required')
-    json.loads(value)
+    decode(value)
     return value
 
 class S3RuntimeStores:
-    def __init__(self,journal,*,max_records,max_conflicts=8):
+    requires_durable_optimizer=True
+    def __init__(self,journal,*,max_records,max_conflicts=8,cache_owned=False):
         if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
             raise ValueError('canonical journal and bounded records/conflicts required')
-        self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts;self.authority=None;self.poisoned=False
+        self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts;self.authority=None;self.poisoned=False;self.cache_owned=cache_owned;self._cached=None
         self.runtime_storage=_State(self);self.runtime_cache=_Cache(self);self.learning_storage=_Learning(self)
         self.feature_storage=_Payloads(self,'features');self.control_storage=_Payloads(self,'controls')
         self.hypothesis_storage=_Hypothesis(self);self.shadow_storage=_Shadow(self);self.pending_storage=_Pending(self)
@@ -45,21 +46,28 @@ class S3RuntimeStores:
     def _owned(self,value):
         if self.authority is None or (value['owner'],value['fence'])!=self.authority:
             raise RuntimeOwnershipError('runtime execution ownership unavailable; no timeout takeover')
+    def refresh(self):
+        self._cached=None
+        if self.poisoned:raise RuntimeOwnershipError('uncertain runtime write; reopen/reconcile before continuing')
+        record=self.journal.read();self._validate(record.value);self._owned(record.value)
+        self._cached=record
     def _read(self):
         if self.poisoned:raise RuntimeOwnershipError('uncertain runtime write; reopen/reconcile before continuing')
-        current=self.journal.read();self._validate(current.value);self._owned(current.value)
+        current=self._cached if self.cache_owned and self._cached is not None else self.journal.read()
+        self._validate(current.value);self._owned(current.value)
         return current.value['data']
     def _change(self,fn,*,ownership=True,recovery=False):
         if self.poisoned and not recovery:raise RuntimeOwnershipError('uncertain runtime write; reopen/reconcile before continuing')
         for _ in range(self.max_conflicts):
-            record=self.journal.read();self._validate(record.value)
+            record=self._cached if self.cache_owned and self._cached is not None and ownership and not recovery else self.journal.read()
+            self._validate(record.value)
             if ownership:self._owned(record.value)
             value=deepcopy(record.value);result=fn(value)
             self._validate(value)
             if value==record.value:return result
-            try:self.journal.commit(record,value)
-            except JournalConflict:continue
-            except JournalUncertain:self.poisoned=True;raise
+            try:self._cached=self.journal.commit(record,value)
+            except JournalConflict:self._cached=None;continue
+            except JournalUncertain:self.poisoned=True;self._cached=None;raise
             return result
         raise RuntimeOwnershipError('runtime contention limit reached')
     def change(self,fn):return self._change(lambda value:fn(value['data'],value))
@@ -76,7 +84,7 @@ class S3RuntimeStores:
         if self.authority is None:return
         def release(value):value['owner']=None
         try:self._change(release,recovery=True)
-        finally:self.authority=None
+        finally:self.authority=None;self._cached=None
     @staticmethod
     def ordinal(value):value['ordinal']+=1;return value['ordinal']
 
