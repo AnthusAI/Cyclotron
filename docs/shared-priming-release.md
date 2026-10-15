@@ -3,7 +3,9 @@
 Local branch: `codex/priming-shared-release`. No remote branch, PR, tag, npm or
 PyPI publication was created. Approval target is precisely the public source
 branch **AnthusAI/Cyclotron:codex/priming-shared-release**, a **draft PR into main**,
-and, only after review/authorized merge, proposed **ui-v0.2.2**. The tag is not
+and, only after review/authorized merge and a reviewed package version bump to
+**0.2.2**, proposed **ui-v0.2.2**. The current0.2.1 manifest supports the Git-SHA
+review candidate; it is not ready to receive that tag. The tag is not
 required to install an immutable reviewed Git commit and is not created here.
 No cloud activation is part of this source review.
 

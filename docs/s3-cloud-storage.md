@@ -271,8 +271,9 @@ scoped diagnostic evidence, not an automatic claim/paid-request reset.
 These seams are not yet a hosted worker composition. The actual S3 SDK tests show
 that a guard denied after lock waiting touches no engine S3 state or provider.
 Central cross-role policy is a separate pending owner change, not proven by these
-same-principal synthetic tests. See `console-activation-review.md` for exact IAM
-alternatives, current infrastructure observations and remaining release work.
+same-principal synthetic tests. See `embedded-execution-authorization.md` for
+the public execution-guard contract. Cross-role IAM policy and infrastructure
+approval remain host-owned deployment work outside this source release.
 
 ## Hosted composition checkpoint (supersedes earlier release-work notes)
 
@@ -299,8 +300,9 @@ prepared. Actual-cloud conditional-write trials, Google client/policy approval,
 central activation, IAM provisioning, DNS and hosted browser proof remain gates.
 Paid/provider commands are disabled in the first environment composition. No S3
 claim implies unrestricted scale: whole-workspace bounded rewrites and per-poll
-reads remain material. See `console-activation-review.md` and `deployment/README.md`
-for the consolidated inactive proposal, limits and operational requirements.
+reads remain material. The protocol and recovery limits in this document and
+`source-store-handoff.md` define the public storage boundary. Deployment proposals,
+IAM provisioning and operational approval remain separate from this source release.
 
 
 Optional priming explanation follow-up: Publish requires the configured human

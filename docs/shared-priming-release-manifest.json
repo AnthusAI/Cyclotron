@@ -5,7 +5,7 @@
   "storage_core_source": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
   "publication_ui_source": "0123708a3ccb52e89bac5821a383b2643e530dcb",
   "python_version": "0.20.1 preserved from public main; no PyPI publication",
-  "ui_version": "0.2.1 existing manifest; proposed ui-v0.2.2 tag only after authorization/review",
+  "ui_version": "0.2.1 existing private manifest for Git-SHA review; proposed ui-v0.2.2 requires reviewed package0.2.2 bump plus authorization/review",
   "package_private": true,
   "files": [
     {
@@ -899,7 +899,8 @@
     {
       "path": "docs/s3-cloud-storage.md",
       "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
-      "sha256": "1d95b81ef06a0996c64c4566c9540e1e47225ed346a3967e24a6f0a3877fd749"
+      "sha256": "f901d24e1da4a4a856e86f98ef83e1065d812b70e6e25861276a0e6675a0f65a",
+      "note": "Deliberate public documentation adaptation: replace links to excluded activation/deployment docs with included execution/storage protocol boundaries; deployment approval remains host-owned."
     },
     {
       "path": "docs/source-store-handoff.md",
