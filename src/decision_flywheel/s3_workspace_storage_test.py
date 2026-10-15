@@ -56,16 +56,23 @@ def test_missing_cloud_storage_cannot_fall_back_and_reopened_budget_is_absolute(
     second.close()
 
 
-def test_s3_workspace_uses_frozen_accepted_priming_without_retrofit_or_partition_leak(monkeypatch):
+@pytest.mark.parametrize('vote',[
+    {'label':'science'}, {'label':'science','rationale':None},
+    {'label':'science','rationale':''}, {'label':'science','rationale':'   '},
+    {'label':'science','rationale':'Exact original rationale 雪'},
+])
+def test_s3_workspace_uses_frozen_accepted_priming_without_retrofit_or_partition_leak(monkeypatch,vote):
     import base64,json
     from .priming import PrimingService
     from .s3_workspace_storage import S3WorkspaceStores
     s,run=fixture();s.save_item_list('examples','Accepted examples')
     service=PrimingService(s,storage=s)
     row={'id':'prime','occurred_at':'2026-01-01','values':{'text':'Distinct accepted example'},
-         'labels':{'topic':{'label':'science','rationale':'Exact original rationale 雪'}}}
+         'labels':{'topic':vote}}
     draft=service.start_file('draft','examples',[{'id':'topic','revision':1}],'json',base64.b64encode(json.dumps([row]).encode()).decode())
     service.accept('draft',draft['version'],None)
+    supplied=vote.get('rationale') or ''
+    assert s.item_labels('examples','prime',1)[0]['comment']==supplied
     config=freeze_configuration(s,{'classifier_ids':['topic'],'item_list_id':'papers','priming_list_id':'examples','max_requests':1,
         'max_optimizer_calls':1,'optimize_every':100,'rubric_changes_every':2,'seed':'synthetic'})
     run=s.create_run('Frozen priming','live',config,items=s.list_items('papers'))
@@ -77,6 +84,6 @@ def test_s3_workspace_uses_frozen_accepted_priming_without_retrofit_or_partition
     session=WorkspaceSession(s,run,None,Model(),DisabledOptimizer(),lambda event:None,storage=stores)
     training,development,protected=session.partitions('topic')
     assert training[0].item.id=='prime' and training[0].label=='science'
-    assert training[0].context['human_feedback']=='Exact original rationale 雪'
+    assert training[0].context==({'human_feedback':supplied} if supplied.strip() else {})
     assert not development and all(item.id!='prime' for item in protected) and session.wheels['topic'].initial.example_ids==('prime',)
     session.close();service.close()

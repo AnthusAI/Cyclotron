@@ -15,7 +15,6 @@ def encode_priming(examples,tasks,*,redact=()):
             if not isinstance(row,LabeledItem) or row.source!='trusted' or not isinstance(row.item.id,str) or not row.item.id.strip():raise ValueError('priming needs labeled items with identities')
             tasks[cid].validate_target(row.item)
             if row.label not in tasks[cid].labels:raise ValueError('priming needs an explicit configured label')
-            if not row.context.get('human_feedback','').strip():raise ValueError('priming needs explicit human rationale')
             if row.item.id in seen:raise ValueError('duplicate priming item')
             seen.add(row.item.id);output[cid].append(asdict(row))
     data=encoded(output)
@@ -37,7 +36,9 @@ def catalog_priming(store,list_id,classifiers,operational_ids,*,storage=None):
         if not item.get('provenance',{}).get('priming'):continue
         if item['id'] in operational_ids:raise ValueError('priming and operational items must be disjoint')
         for cid,vote in row['votes'].items():
-            result[cid].append(LabeledItem(Item(item['id'],item['values']),vote['label'],'trusted',{'human_feedback':vote['comment']}))
+            comment=vote.get('comment')
+            context={'human_feedback':comment} if isinstance(comment,str) and comment.strip() else {}
+            result[cid].append(LabeledItem(Item(item['id'],item['values']),vote['label'],'trusted',context))
     if not any(result.values()):raise ValueError('priming list has no accepted examples for the selected classifier revisions')
     tasks={c['id']:DecisionTask(c['id'],tuple(row['label'] for row in c['config']['classes']),c['config']['question'],c['config'].get('input_field','text')) for c in classifiers}
     return encode_priming(result,tasks)

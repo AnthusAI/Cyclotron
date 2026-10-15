@@ -73,10 +73,10 @@ def test_cancellation_and_late_completion_never_import_and_retry_cancel_is_safe(
     assert store.list_items('examples')==[]
 
 
-def test_acceptance_requires_every_label_rationale_and_rolls_back_on_sql_failure(setup):
+def test_acceptance_requires_every_label_and_text_rationale_if_supplied_and_rolls_back_on_sql_failure(setup):
     store,s,_,responses=setup
     start(s);responses.append({'job_id':'job','status':'complete','candidate':ITEM});draft=s.poll('draft')
-    for labels in ({}, {'editor':{'label':'publish','rationale':' '},'scope':LABELS['scope']}):
+    for labels in ({}, {'editor':{'label':'publish','rationale':23},'scope':LABELS['scope']}):
         with pytest.raises(ValueError):s.accept('draft',draft['version'],[labels])
     with store.connect() as db:db.execute("CREATE TRIGGER fail_label BEFORE INSERT ON item_feedback BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
     with pytest.raises(Exception,match='fixture failure'):s.accept('draft',draft['version'],[LABELS])

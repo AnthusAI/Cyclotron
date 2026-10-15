@@ -48,7 +48,7 @@ def template(kind,schema,classifiers):
     wb=Workbook();ws=wb.active;ws.title='Examples';ws.append(names)
     ws.freeze_panes='A2';ws.auto_filter.ref=f'A1:{get_column_letter(len(names))}1'
     choices=wb.create_sheet('Labels');instructions=wb.create_sheet('Instructions')
-    instructions.append(['Fill Examples with schema-valid item fields. Labels and rationales are required for every selected classifier.'])
+    instructions.append(['Fill Examples with schema-valid item fields. Labels are required for every selected classifier; explanations are optional.'])
     instructions.append(['Use ISO 8601 dates. Objects and arrays use JSON. Formulas are rejected. Preview all rows before acceptance.'])
     for i,row in enumerate(classifiers,1):
         labels=[c['label'] for c in row['config']['classes']]
@@ -162,13 +162,16 @@ def validate_rows(rows,schema,classifiers,*,require_labels=True):
                 except ValueError as exc:errors.append(error(n,'values',str(exc)))
         labels=row.get('labels',{})
         if not isinstance(labels,dict):labels={};errors.append(error(n,'labels','Labels must be an object'))
+        labels=dict(labels)
         if set(labels)-{c['id'] for c in classifiers}:errors.append(error(n,'labels','Unknown classifier labels'))
         if require_labels:
             for classifier in classifiers:
                 cid=classifier['id'];data=labels.get(cid,{})
-                if not isinstance(data,dict):data={}
+                data=dict(data) if isinstance(data,dict) else {}
+                if data.get('rationale') is None:data['rationale']=''
+                labels[cid]=data
                 if data.get('label') not in [c['label'] for c in classifier['config']['classes']]:errors.append(error(n,cid+'.label','Choose an explicit configured label'))
-                if not isinstance(data.get('rationale'),str) or not data['rationale'].strip():errors.append(error(n,cid+'.rationale','Explicit human rationale required'))
+                if not isinstance(data.get('rationale'),str):errors.append(error(n,cid+'.rationale','Explanation must be text when supplied'))
         try:
             item=json.loads(encoded({k:v for k,v in row.items() if k not in ('labels','model_representation')}))
             item['occurred_at']=occurred

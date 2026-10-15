@@ -246,7 +246,7 @@ class PrimingService:
             if labels is not None and (not isinstance(labels,list) or len(labels)!=len(draft['rows'])):raise ValueError('labels must match preview rows')
             raw=[{**row['item'],'labels':labels[n] if labels is not None else row['labels']} for n,row in enumerate(draft['rows'])]
             rows,errors=validate_rows(raw,contract['schema'],classifiers)
-            if errors:raise ValueError('explicit human labels and rationales required for every row: '+encoded(errors))
+            if errors:raise ValueError('explicit human labels and valid optional explanations required for every row: '+encoded(errors))
             now=datetime.now(timezone.utc).isoformat()
             for row in rows:
                 item=row['item'];provenance=item.get('provenance',{})

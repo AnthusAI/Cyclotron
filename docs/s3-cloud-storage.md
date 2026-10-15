@@ -301,3 +301,19 @@ Paid/provider commands are disabled in the first environment composition. No S3
 claim implies unrestricted scale: whole-workspace bounded rewrites and per-poll
 reads remain material. See `console-activation-review.md` and `deployment/README.md`
 for the consolidated inactive proposal, limits and operational requirements.
+
+
+Optional priming explanation follow-up: Publish requires the configured human
+label, while omitted/null rationale normalizes to an empty stored string. Empty
+or whitespace-only comments contribute no `human_feedback` model-context key;
+nonempty supplied text remains exact, and frozen runs cannot be retrofitted by
+later catalog edits. Global `LabeledItem.context` validation remains unchanged.
+43 focused priming/API/injected-storage/S3 frozen-workspace tests pass. Shared
+PrimingPanel source is separately owned at 0123708a3ccb52e89bac5821a383b2643e530dcb;
+this storage port does not copy the publication UI overlay or alter operational
+publication review rules. No operator records or browser tabs were changed.
+Shared UI consumer artifact supplied directly to Papyrus by its owner:
+`cyclotron-0.2.1.tgz`, SHA256
+`403e8d24d2e69f666159518c567f49c1484001eacf181d7f3c939a732cfcb3b7`.
+The owner reports 31 native and 8 shared UI checks; these are separate from this
+branch's 43 focused storage/API checks.

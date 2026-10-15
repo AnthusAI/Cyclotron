@@ -40,12 +40,12 @@ def test_templates_have_schema_fields_label_choices_and_no_invented_examples():
         assert result['classifiers'][0]['labels']==['publish','not publish']
 
 
-def test_row_errors_identify_missing_fields_unknown_labels_and_blank_rationales():
-    broken={**ROW,'values':{'title':'Paper'},'labels':{'editor':{'label':'invented','rationale':' '}}}
+def test_row_errors_identify_missing_fields_unknown_labels_and_nontext_rationales():
+    broken={**ROW,'values':{'title':'Paper'},'labels':{'editor':{'label':'invented','rationale':23}}}
     valid,errors=validate_rows([ROW,broken],SCHEMA,CLASSIFIERS)
     assert len(valid)==1
     assert all(error['row']==2 for error in errors)
-    assert {error['field'] for error in errors}>={'values','editor.label','editor.rationale','scope.label','scope.rationale'}
+    assert {error['field'] for error in errors}>={'values','editor.label','editor.rationale','scope.label'}
 
 
 def test_malformed_jsonl_and_duplicate_ids_are_not_silently_accepted():

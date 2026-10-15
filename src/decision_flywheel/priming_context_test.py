@@ -37,9 +37,14 @@ def test_reopening_cannot_silently_replace_accepted_priming(tmp_path):
     with pytest.raises(ValueError,match='priming'):Cyclotron.open(tmp_path/'engine',DEFINITION,Model(),agent([]),priming_examples=changed)
 
 
-def test_priming_requires_explicit_rationale_and_known_label(tmp_path):
-    for n,row in enumerate([LabeledItem(Item('p',{'text':'p'}),'include'),LabeledItem(Item('p',{'text':'p'}),'invented',context={'human_feedback':'why'})]):
-        with pytest.raises(ValueError):Cyclotron.open(tmp_path/str(n),DEFINITION,Model(),agent([]),priming_examples={'relevant':[row]})
+def test_priming_accepts_no_rationale_but_requires_known_label_and_keeps_global_context_validation(tmp_path):
+    c=Cyclotron.open(tmp_path/'optional',DEFINITION,Model(),agent([]),priming_examples={
+        'relevant':[LabeledItem(Item('p',{'text':'p'}),'include')]})
+    try:assert c._partitions('relevant')[0][0].context=={}
+    finally:c.close()
+    with pytest.raises(ValueError):Cyclotron.open(tmp_path/'bad-label',DEFINITION,Model(),agent([]),priming_examples={
+        'relevant':[LabeledItem(Item('p',{'text':'p'}),'invented')]})
+    with pytest.raises(ValueError):LabeledItem(Item('p',{'text':'p'}),'include',context={'human_feedback':''})
 
 
 def test_workspace_run_pins_accepted_examples_separately_and_refuses_operational_overlap(tmp_path):
