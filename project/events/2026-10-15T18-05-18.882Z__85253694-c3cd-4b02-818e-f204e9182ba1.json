@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "85253694-c3cd-4b02-818e-f204e9182ba1",
+  "issue_id": "decision-flywheel-a16042c9-7357-42d1-a8ca-08387b8931bf",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-15T18:05:18.882Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "3831bce8-0c3d-4e98-9f36-563a35d31330",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6.1-sol",
+      "name": "Publication Deployment Modes",
+      "settings": {
+        "reasoning_effort": "medium"
+      }
+    }
+  }
+}
