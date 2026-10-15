@@ -25,10 +25,40 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "bc29e78e-5ce9-432f-9892-b54046e40c7a",
+      "author": "home",
+      "text": "Next acceptance slice connects acknowledged shared PrimingPanel acceptance to host selection: onAccepted receives accepted draft with item-list/classifier revision pins. Specs first show missing payload. Papyrus adds explicit immutable accepted-example snapshot to new relevance-store bootstrap, preserving optional no-priming operations and human rationale separation. No real Ryan-selected URLs found in original delegation or current priming story/docs; synthetic source/model tests will not be called real TI acceptance. No paid/cloud calls or storage adapter work.",
+      "created_at": "2026-10-15T18:25:19.316699Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Curated Example Priming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "13328fc6-d65e-4c77-a530-7557bc2aed17",
+      "author": "home",
+      "text": "Concrete priming acceptance source committed: core ead4b38 (accepted-draft callback/pins), Papyrus ebdbff1 (immutable accepted snapshot -> actual optional relevance sweep). Verification17 Papyrus,24 core priming,7 actual shared-panel tests PASS. Read-only preserved LAN catalog -> new disposable SDK proof:19 synthetic items/output, all rationales present, operational labels0, provider/source calls0. Explicitly not real TI acceptance. Original delegation/current story/docs had no selected exact URLs or human judgments; requested inputs. Release owner received pins/docs; storage owner received exact priming module/schema prerequisites and must merge/convert before cloud compatibility. No paid calls/cloud activation/server restart/heavy build.",
+      "created_at": "2026-10-15T18:31:17.465889Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "Curated Example Priming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T11:54:33.949970Z",
-  "updated_at": "2026-10-15T13:33:21.268096Z",
+  "updated_at": "2026-10-15T18:31:17.466263Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
