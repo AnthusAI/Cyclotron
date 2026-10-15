@@ -76,3 +76,23 @@ shell and correctly displayed “The account request failed. Try again.” becau
 the backend/API is not deployed/configured yet. No private workspace appeared.
 Screenshot: deployment/cloud-static-blocked-proof.jpg. This is explicitly a
 partial static deployment, not working Google sign-in or account integration.
+
+## Dedicated client and runtime preparation
+
+Parent relayed CRM PR7 merged f8463f3, Amplify job9 SUCCEED; PR8 central role-pair
+rollout remains owned solely by the CRM writer. Dedicated console public client
+is now 2uhgmi3c69nobpiauichdsdmo3, existing pool us-east-1_hlSyajw9S, login origin
+https://prospectus-712236451410.auth.us-east-1.amazoncognito.com.
+Independent describe-user-pool-client read (non-secret fields only) confirms:
+Google only; OAuth code flow; openid/email/profile; exact lab callback and root
+logout; token revocation enabled. No directory/CRM client was reused.
+
+Prepared runtime UPDATE change set approved-runtime-client-20261015:
+`arn:aws:cloudformation:us-east-1:682849160744:changeSet/approved-runtime-client-20261015/c15b292f-c3b7-423c-bf83-9f9cd52d6d83`.
+Status CREATE_COMPLETE means prepared, NOT executed. Its seven Add actions are
+the BFF/worker functions, two API invoke permissions, HTTP API/stage and SQS event
+mapping. No foundation resource replacement or privilege change is included.
+Processed template independently checked: exact separate roles, reserved caps
+BFF5/worker2, real client parameter and no live/provider environment toggle.
+Do not execute while the quota1001 request remains unapproved. The prior automatic
+approval rejection remains in force; no retry or cap-dropping workaround occurred.
