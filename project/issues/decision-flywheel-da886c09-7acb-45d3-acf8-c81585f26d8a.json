@@ -55,10 +55,25 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "e76ed0a7-360c-4328-a056-429861b7048a",
+      "author": "home",
+      "text": "Urgent Ryan instruction supersedes previous nonempty-rationale requirement: priming classification explanation optional end-to-end; explicit configured label remains required. Add specs first for label-only/empty explanation GraphQL acceptance, persisted empty comment, frozen SDK priming and actual shared UI enabled state/error visibility. Preserve operational publication-review requirements. Preserve human8901 catalog/open tab/unsaved state; no real label submission, no paid calls. Coordinate narrow delta with storage owner93f3 and integrated Papyrus owner22a2b7a; safe updated-page handoff must not erase old page state.",
+      "created_at": "2026-10-15T21:03:52.075780Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "CuratedExamplePriming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T11:54:33.949970Z",
-  "updated_at": "2026-10-15T18:31:17.466263Z",
+  "updated_at": "2026-10-15T21:03:52.075809Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
