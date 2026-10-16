@@ -77,6 +77,40 @@ are fixed when the store is created. Reopening a store never rewrites them, and
 a store created without seeds keeps none. Your decision model must answer every
 supporting question in the request.
 
+### Prime it with labeled examples
+
+If people have already labeled some items, pass them as `priming_examples` when
+the store is created. Each one is a `LabeledItem` with a configured label and
+an optional explanation in `context["human_feedback"]`:
+
+```python
+from decision_flywheel.models import Item, LabeledItem
+
+examples = {"relevant": [LabeledItem(Item("paper-1", {"text": "Primary research on supply-chain attacks."}),
+                                     "include", "trusted", {"human_feedback": "Cites the vendor's own logs."})]}
+primed = Cyclotron.open("var/cyclotrons/primed-relevance", definition, ScriptedModel(),
+                        optimizer=None, priming_examples=examples)
+assert primed.status().to_json()["cyclotron"]["primedExamples"] == 1
+primed.close()
+```
+
+The first decision request already carries them as training context. They
+are never decisions, reviews or measured alignment, and an item used to prime
+cannot also be decided. Priming is fixed when the store is created: reopening
+with different examples fails, so a new set of examples means a new store.
+`status().to_json()["cyclotron"]["primedExamples"]` says how many there are,
+and the status widget shows "Primed with N examples".
+
+To collect examples in the application, render `PrimingPanel` from
+`cyclotron/components/priming-panel` with `createPrimingClient` from
+`cyclotron/priming-client` bound to your authenticated GraphQL transport. The
+server side is `decision_flywheel.priming.PrimingService`: people paste a URL
+or upload CSV, JSON, JSONL or a spreadsheet, check what was extracted, choose
+a label for each output with an optional explanation, and accept.
+`PrimingService.examples(list_id, classifiers)` then returns the accepted
+examples for `priming_examples`. Fetching and extracting a URL is the
+application's transformer, not Cyclotron's.
+
 ## Decide
 
 ```python
@@ -379,7 +413,7 @@ the framework compile it:
 
 ```json
 "dependencies": {
-  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.1/cyclotron-0.2.1.tgz"
+  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.2/cyclotron-0.2.2.tgz"
 }
 ```
 
