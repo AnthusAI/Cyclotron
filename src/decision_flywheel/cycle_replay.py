@@ -10,11 +10,7 @@ CALIBRATION_KINDS=('prediction','displayed-prediction-reused','human-feedback')
 
 def _events_of(wheel,kinds):
     """Only the event kinds a per-cycle check reads; parsing every event made each cycle slower than the last."""
-    import json
-    marks=','.join('?'*len(kinds))
-    rows=wheel.db.execute(f"SELECT id,payload FROM runtime_events WHERE json_extract(payload,'$.kind') IN ({marks}) ORDER BY id",
-                          tuple(kinds)).fetchall()
-    return tuple({**json.loads(payload),'event_id':event_id} for event_id,payload in rows)
+    return wheel.runtime_storage.events_of(tuple(kinds))
 
 
 async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,

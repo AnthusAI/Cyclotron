@@ -51,6 +51,11 @@
         "fingerprint": {
           "type": "string",
           "description": "Content fingerprint of the active classifier, including its ML model."
+        },
+        "primedExamples": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Human-labeled examples this cyclotron was primed with when its store was created. They are training context only: never decisions, reviews or measured alignment."
         }
       }
     },

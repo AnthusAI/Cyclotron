@@ -36,9 +36,11 @@ def probability_diagnostics(classes, options, rows):
 
 
 class FeatureBank:
-    def __init__(self, db):
-        self.db = db
-        db.execute("CREATE TABLE IF NOT EXISTS feature_bank (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+    def __init__(self, db=None, *, storage=None):
+        from .learning_storage import SQLiteFeatureStorage
+        if storage is None and db is None: raise ValueError('feature storage required')
+        self.storage = storage if storage is not None else SQLiteFeatureStorage(db)
+        self.storage.ensure()
 
     def register(self, question, *, rationale, evidence):
         if set(question) != {"name", "instructions", "labels"}:
@@ -62,12 +64,11 @@ class FeatureBank:
         return key
 
     def _save(self, entry):
-        with self.db:
-            self.db.execute("INSERT OR REPLACE INTO feature_bank VALUES (?,?)", (entry["id"], _json(entry)))
+        self.storage.save(entry['id'],_json(entry))
 
     def entries(self, *, active_tasks=()):
         deployed = {question_id(question) for question in active_tasks}
-        entries = [json.loads(row[0]) for row in self.db.execute("SELECT payload FROM feature_bank ORDER BY id")]
+        entries = [json.loads(payload) for payload in self.storage.payloads()]
         for entry in entries:
             if entry["id"] in deployed:
                 entry["state"] = "deployed"

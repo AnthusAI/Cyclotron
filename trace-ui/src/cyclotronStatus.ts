@@ -7,8 +7,9 @@ export type ReviewRateState = 'full' | 'onboarding' | 'tapering' | 'steady' | 'r
 
 export type CyclotronStatus = {
   schema: 'cyclotron-status/v1'
-  /** version counts rubric, example and question changes; refits counts ML model refits since then. */
-  cyclotron: {id: string; classifier: string; version: number; refits: number; fingerprint: string}
+  /** version counts rubric, example and question changes; refits counts ML model refits since then.
+   * primedExamples counts the human-labeled examples the store was created with: training context, never measured. */
+  cyclotron: {id: string; classifier: string; version: number; refits: number; fingerprint: string; primedExamples?: number}
   asOf: string
   alignment: {
     window: number

@@ -28,7 +28,7 @@ from .classifier_training import train_classifier
 from .example_attribution import measure_example_swaps, plan_swaps
 from .cyclotron_status import CyclotronStatus, ReviewRate, ReviewRateOverride, status_from_flywheel
 from .review_program import ReviewProgram
-from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition, Decision, FileLease, Review, StoreLocked
+from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition, Decision, ExecutionGuard, FileLease, Review, StoreLocked
 
 
 def run_demo(*args, **kwargs):
@@ -38,7 +38,7 @@ def run_demo(*args, **kwargs):
 
 __all__ = [
     "CyclotronStatus", "ReviewRate", "ReviewRateOverride", "status_from_flywheel",
-    "ReviewProgram", "ClassifierSpec", "Cyclotron", "CyclotronDefinition", "Decision", "FileLease", "Review", "StoreLocked",
+    "ReviewProgram", "ClassifierSpec", "Cyclotron", "CyclotronDefinition", "Decision", "ExecutionGuard", "FileLease", "Review", "StoreLocked",
     "EvaluationPolicy",
     "SelectionPolicy",
     "LabelTransitionTrigger",
