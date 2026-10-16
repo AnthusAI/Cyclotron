@@ -117,6 +117,7 @@ class CyclotronStatus:
     last_change: LastChange | None
     pending: Pending
     refits: int = 0
+    primed_examples: int = 0
     schema: str = field(default=SCHEMA)
 
     def to_json(self) -> dict[str, Any]:
@@ -125,7 +126,8 @@ class CyclotronStatus:
         return {
             "schema": self.schema,
             "cyclotron": {"id": self.cyclotron_id, "classifier": self.classifier,
-                          "version": self.version, "refits": self.refits, "fingerprint": self.fingerprint},
+                          "version": self.version, "refits": self.refits, "fingerprint": self.fingerprint,
+                          "primedExamples": self.primed_examples},
             "asOf": self.as_of,
             "alignment": {"window": a.window, "labels": a.labels, "accuracy": a.accuracy,
                           "precision": a.precision, "recall": a.recall,

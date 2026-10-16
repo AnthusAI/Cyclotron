@@ -81,3 +81,15 @@ it('ships its styles in components.css',()=>{
   expect(css).toContain('.cyclotron-status[data-variant="strip"]')
   expect(css).toContain('.cyclotron-status-metric')
 })
+
+it('says how many examples primed the cyclotron, and nothing when none did',()=>{
+  const primed:CyclotronStatus={...status,cyclotron:{...status.cyclotron,primedExamples:19}}
+  render(<CyclotronStatusView status={primed} />)
+  expect(screen.getByTestId('cyclotron-status-primed')).toHaveTextContent('Primed with 19 examples')
+  cleanup()
+  render(<CyclotronStatusView status={{...status,cyclotron:{...status.cyclotron,primedExamples:1}}} variant="card" />)
+  expect(screen.getByTestId('cyclotron-status-primed')).toHaveTextContent('Primed with 1 example before its first decision. They train it but never count in these measurements.')
+  cleanup()
+  render(<CyclotronStatusView status={status} />)
+  expect(screen.queryByTestId('cyclotron-status-primed')).toBeNull()
+})

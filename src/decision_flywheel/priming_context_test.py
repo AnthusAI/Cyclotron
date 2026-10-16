@@ -5,6 +5,8 @@ from .embedded_cyclotron import Cyclotron
 from .embedded_cyclotron_test import DEFINITION,Model,item
 from .models import Item,LabeledItem
 from .flywheel_test import agent
+from .cyclotron_status import load_schema
+from .cyclotron_status_test import validate
 
 
 def seed():return {'relevant':[LabeledItem(Item('synthetic-prime',{'text':'Synthetic reviewed reference'}),'include','trusted',{'human_feedback':'Synthetic explicit reason'})]}
@@ -19,6 +21,8 @@ def test_priming_context_is_persisted_training_only_and_used_before_first_decisi
     model=Inspect();c=Cyclotron.open(tmp_path/'engine',DEFINITION,model,agent([]),priming_examples=seed())
     try:
         assert c.status().alignment.labels==0
+        assert c.status().primed_examples==1 and c.status().to_json()['cyclotron']['primedExamples']==1
+        validate(c.status().to_json(),load_schema())
         train,dev,protected=c._partitions('relevant')
         assert train[0].context['human_feedback']=='Synthetic explicit reason'
         assert dev==protected==()

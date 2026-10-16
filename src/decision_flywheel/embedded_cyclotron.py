@@ -1128,8 +1128,9 @@ class Cyclotron:
                 raise ValueError("name the classifier; this cyclotron has several (overview() shows them all)")
             classifier = next(iter(self.specs))
         spec = self.specs[classifier]
-        return status_from_flywheel(self.wheels[classifier], cyclotron_id=self.definition.id,
-                                    positive_label=spec.positive_label, review_rate=self._review_rate_status())
+        status = status_from_flywheel(self.wheels[classifier], cyclotron_id=self.definition.id,
+                                      positive_label=spec.positive_label, review_rate=self._review_rate_status())
+        return replace(status, primed_examples=len(self.priming_examples.get(classifier, ())))
 
     def subscribe(self, after: int = 0, limit: int = 100) -> dict[str, Any]:
         """Committed cyclotron events after a cursor, oldest first.
