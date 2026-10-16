@@ -118,7 +118,7 @@ def test_stale_bindings_prediction_pins_and_changed_retry_payload_never_write_fe
             c = client['threat-intelligence']
             decision = await c.command('threat-intelligence','decide',{'item':ITEM,'bindingRevision':'binding-1'})
             for change in ({'bindingRevision':'old-binding'}, {'predictionFingerprint':'old-prediction'},
-                           {'predictionVersion':999}, {'explanation':'  '}, {'reviewer':'spoofed-editor'}):
+                           {'predictionVersion':999}, {'explanation':[]}, {'reviewer':'spoofed-editor'}):
                 with pytest.raises(PublicationError):
                     await c.command('threat-intelligence','review',review_payload(decision, **change))
             assert lab.engine.labels() == []
@@ -243,4 +243,54 @@ def test_remote_uncertain_outcomes_remain_reconciliation_errors_without_automati
             with pytest.raises(PublicationError,match='reconciliation') as error:
                 await HTTPPublicationClient(http).command('threat-intelligence','steer',{})
             assert error.value.code=='reconciliation_required' and len(calls)==1
+    run(scenario())
+
+
+@pytest.mark.parametrize('mode', ['embedded','remote'])
+@pytest.mark.parametrize('explanation', ['omitted',None,'','  ','  Human reason  ','  First line\nSecond line  '])
+def test_optional_review_explanation_uses_existing_native_normalization_and_survives_reopen(tmp_path, mode, explanation):
+    async def scenario():
+        directory=tmp_path/'engine';model=OfflineModel()
+        async with clients(directory,mode,model) as (client,lab):
+            c=client['threat-intelligence']
+            decision=await c.command('threat-intelligence','decide',{'item':ITEM,'bindingRevision':'binding-1'})
+            payload=review_payload(decision)
+            if explanation=='omitted':payload.pop('explanation')
+            else:payload['explanation']=explanation
+            saved=await c.command('threat-intelligence','review',payload)
+            expected=(explanation.strip() or None) if isinstance(explanation,str) and explanation!='omitted' else None
+            assert saved['review']['label']=='reject'
+            assert saved['review']['explanation']==expected
+            assert await c.command('threat-intelligence','review',payload)==saved
+            if expected is None:
+                for absent in (None,'','  '):
+                    assert await c.command('threat-intelligence','review',{**payload,'explanation':absent})==saved
+            assert len(lab.engine.labels())==1
+        async with clients(directory,mode,model) as (client,lab):
+            c=client['threat-intelligence']
+            assert await c.command('threat-intelligence','review',payload)==saved
+            history=await c.command('threat-intelligence','history',{})
+            assert history['history'][0]['reviews']['intel']['explanation']==expected
+            assert len(lab.engine.labels())==1 and model.calls==1
+            with pytest.raises(PublicationError):
+                await c.command('threat-intelligence','review',{**payload,'explanation':'Changed human reason'})
+            assert len(lab.engine.labels())==1
+    run(scenario())
+
+
+@pytest.mark.parametrize('mode', ['embedded','remote'])
+def test_optional_explanation_still_requires_configured_label_and_bounded_text(tmp_path, mode):
+    async def scenario():
+        async with clients(tmp_path/'engine',mode,OfflineModel()) as (client,lab):
+            c=client['threat-intelligence']
+            decision=await c.command('threat-intelligence','decide',{'item':ITEM,'bindingRevision':'binding-1'})
+            for value in (False,0,[],{},'x'*4001):
+                with pytest.raises(PublicationError):
+                    await c.command('threat-intelligence','review',review_payload(decision,explanation=value))
+            for value in (None,'','  ','unknown'):
+                with pytest.raises(PublicationError):
+                    await c.command('threat-intelligence','review',review_payload(decision,label=value,explanation=''))
+            payload=review_payload(decision,explanation='');payload.pop('label')
+            with pytest.raises(PublicationError):await c.command('threat-intelligence','review',payload)
+            assert lab.engine.labels()==[]
     run(scenario())

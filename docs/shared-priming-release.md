@@ -26,7 +26,11 @@ old native priming/engine files are never overlaid. Our three publication module
 five tests, execution harness and deployment-contract documentation come from
 0123708 (unchanged publication implementation from9911). The shared PrimingPanel,
 client, LabelingReview and ReviewControl also exactly match0123708. Optional
-priming explanations remain separate from required operational-review explanations.
+priming and operational-review explanations are optional; their input purposes
+remain separate. A later narrow publication-adapter correction accepts omitted,
+null and blank operational explanations while retaining required configured labels
+and the native SDK's existing whitespace normalization. No SDK mode or replay
+normalization changes are included.
 
 The storage owner confirmed additive dev extra includes priming, and web includes
 its priming self-extra for the advertised file/XLSX APIs. Accounts and
@@ -79,3 +83,9 @@ wheel build succeeds and contains publication/priming/S3 modules and0.20.1 metad
 The36-file UI pack contains all concrete exports and exact reviewed UI sources.
 Pack SHA256:46228c0dfbc6ac52b882fe3136d5c90c03e456d5df92bb8792fd7dcfe97d5193.
 These focused checks do not claim the entire historical suite or hosted activation.
+
+Optional operational explanation correction:55 focused publication tests and97
+cross-owner publication/Papyrus checks pass (overlapping sets). Both embedded and
+HTTP reviews accept omitted/null/empty/whitespace explanations, preserve native
+normalization on reopen/retry, reject non-text/oversize values and missing or
+unconfigured labels. Native engine, replay, guard and binding policies are unchanged.

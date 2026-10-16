@@ -165,13 +165,17 @@ class PublicationLab:
                 expected = {'bindingRevision','decisionId','classifier','predictionVersion','predictionFingerprint',
                             'requestId','label','explanation','reasonCode'}
                 if self.records is not None:expected.add('contextId')
-                if set(payload) != expected:
+                if set(payload)-{'explanation'} != expected-{'explanation'}:
                     raise PublicationError('explicit review fields required; actor is host supplied', 400)
                 cid = payload['classifier']
                 if cid not in binding.outputs:
                     raise PublicationError('classifier is outside publication binding', 403)
-                for key in ('decisionId','requestId','label','explanation'):
+                for key in ('decisionId','requestId','label'):
                     text(payload[key], key)
+                explanation=payload.get('explanation')
+                if explanation is None:explanation=''
+                if not isinstance(explanation,str) or len(explanation)>4000:
+                    raise PublicationError('explanation must be bounded text when provided',400)
                 context=None
                 def preflight():
                     nonlocal context
@@ -188,7 +192,7 @@ class PublicationLab:
                             raise PublicationError('superseded source is read-only; revision-specific review is unavailable')
                 # Request IDs cannot collide across publication/actor scopes.
                 identity=hashlib.sha256(json.dumps([self.account_id,publication,actor.actor_id,payload['requestId'],*([payload['contextId']] if self.records is not None else [])],separators=(',',':')).encode()).hexdigest()
-                kwargs={'classifier':cid,'explanation':payload['explanation'],'reason_code':payload['reasonCode'],
+                kwargs={'classifier':cid,'explanation':explanation,'reason_code':payload['reasonCode'],
                         'reviewer':actor.actor_id,'review_id':'publication-'+identity}
                 if execution_guard is None:preflight()
                 else:kwargs['execution_guard']=lambda:guarded(preflight)

@@ -809,7 +809,8 @@
     {
       "path": "src/decision_flywheel/publication_lab.py",
       "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
-      "sha256": "2d7e89a7d34efcb2b9854fc569fd5138b435bb8a1130ceebf9af80fd45f4c632"
+      "sha256": "230ae337cd9e508bfda64b73873a7a6fc05618cdb029a35163ee78961c1c8a6c",
+      "note": "Deliberate later parent-authorized optional operational explanation adapter/tests/docs correction; labels required and native SDK normalization unchanged."
     },
     {
       "path": "src/decision_flywheel/publication_records.py",
@@ -824,7 +825,8 @@
     {
       "path": "src/decision_flywheel/publication_lab_test.py",
       "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
-      "sha256": "86e0d704505ec05776d124ef457ae333d5ebe01bdd783f30dd12d57b1215a7be"
+      "sha256": "83bdba62500e0984cd36a13ed420cdfdfb47926405ee576887ca6760f2399e19",
+      "note": "Deliberate later parent-authorized optional operational explanation adapter/tests/docs correction; labels required and native SDK normalization unchanged."
     },
     {
       "path": "src/decision_flywheel/publication_records_test.py",
@@ -854,7 +856,8 @@
     {
       "path": "docs/publication-deployment-contract.md",
       "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
-      "sha256": "43659aa92daf95ed8af25633baf93be6a97063d6a56d2bc73345fb4028ae15a0"
+      "sha256": "0a4c4ee5a048caf5ca53472bd4426e5df226a3b987e54142506ff977434eda7c",
+      "note": "Deliberate later parent-authorized optional operational explanation adapter/tests/docs correction; labels required and native SDK normalization unchanged."
     },
     {
       "path": "trace-ui/src/components/priming-panel.tsx",
@@ -926,6 +929,7 @@
     "wheel": "decision_flywheel-0.20.1-py3-none-any.whl; local no-isolation build passed",
     "pack_sha256": "46228c0dfbc6ac52b882fe3136d5c90c03e456d5df92bb8792fd7dcfe97d5193",
     "pack_integrity": "sha512-j4ETUvEbEZckFW4IznqA3/9F9IwVBp/SDwAKmadDYlQigS5lgU7esNVngLe+GOxgorZpq3CFwmDDNw7VcM10GA==",
-    "network": "offline fake source/provider/ASGI; no live cloud/provider calls"
+    "network": "offline fake source/provider/ASGI; no live cloud/provider calls",
+    "operational_explanation": "55 publication tests and97 cross-owner publication/Papyrus checks PASS (overlapping); omitted/null/empty/whitespace/spaced/multiline plus type/label/bounds/reopen/retry; native SDK normalization unchanged."
   }
 }

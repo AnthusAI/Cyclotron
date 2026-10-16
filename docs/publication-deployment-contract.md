@@ -43,12 +43,18 @@ Operations:
   by the existing multi-output engine; returned predictions and routing are
   projected to the publication's bound outputs. Predictions are never labels.
 - `review`: `{bindingRevision, decisionId, classifier, predictionVersion,
-  predictionFingerprint, requestId, label, explanation, reasonCode}`. A label and
-  nonblank explanation are explicit human input. The server derives reviewer
+  predictionFingerprint, requestId, label, explanation?, reasonCode}`. An explicit
+  configured label is required; the human explanation is optional. The server
+  derives reviewer
   identity from the verified actor, checks the displayed prediction pin and
   binding, and namespaces request identities by account/publication/actor. It
-  delegates idempotency/corrections/learning to the SDK. Changing the contents of
-  a retried request conflicts rather than overwrites an acknowledgement.
+  normalizes an omitted/null explanation to an empty string before dispatch and
+  rejects supplied non-text or explanations over 4000 characters. Supplied strings
+  pass unchanged to the native SDK, whose existing normalization trims outer
+  whitespace and stores absent/blank explanations as `None`. No rationale is invented.
+  It delegates idempotency/corrections/learning to the SDK. A changed normalized
+  review conflicts rather than overwrites an acknowledgement. Omitted, null, and
+  blank explanations remain equivalent under the existing native normalization.
 - `status`: `{}`. Per-output `cyclotron-status/v1` snapshots, unchanged for shared
   monitoring components. Snapshot metadata includes only bound output questions,
   class labels and positive label configuration.
@@ -92,7 +98,7 @@ full cloud conversion and production authorization integration remain dependenci
 
 `publication_lab_test.py` executes deterministic offline `classify_many` models
 through the real SDK and both direct and in-process HTTP/ASGI adapters. It covers
-independent common-item outputs; explicit label/reason/explanation; cross-account
+independent common-item outputs; explicit labels with optional explanations; cross-account
 and cross-publication denial; cached decisions and idempotent reviews after owner
 restart; changed retry conflicts; stale binding/prediction pin denial; lost
 transport acknowledgement without automatic retry; corrections and scoped event
