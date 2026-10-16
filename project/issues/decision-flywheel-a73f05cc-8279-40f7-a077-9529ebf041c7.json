@@ -3,16 +3,32 @@
   "title": "Embeddable cyclotron: Papyrus integration",
   "description": "Make a cyclotron easy to embed in an application, using Papyrus (the automated newsroom CMS) as the first integration and the public example. Papyrus decides whether a pending Reference candidate is relevant to the publication (classifier 'relevant', labels include/exclude); editors review with thumbs up or down, a reason code and an explanation. Design: project/wiki/papyrus-integration.md. The Papyrus-side epic lives in AnthusAI/Papyrus (project/wiki/cyclotron-integration.md on branch docs/cyclotron-integration). Order of the child tasks: status shape, then SDK, portable store, review-rate program, review control, status widget, package release, recording export, docs. Done when Papyrus decides and reviews through the SDK, shows the review control and status strip from the package, and one recorded Papyrus fixture exists.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "640c679e-5146-4fbb-894c-a2f865d0eabf",
+      "author": "home",
+      "text": "2026-10-16 reconciliation: Integration remains unfinished. Required modes are a central remote lab with multiple publication classifier outputs and embedded deployment-local storage, sharing monitoring, steering and labeling UI. Anthus shared publications and DataParade embedded are examples. URL-only priming must reuse Papyrus/Biblicus research-paper and web curation, with optional explanations and CSV/JSON/JSONL/spreadsheet/template paths. Adaptercdc70ff, Biblicus1b170876/verification79861bb and Papyrus draft PR213/a7c4d1d are source/prototype evidence, not a production release. Dependencies: Papyrus PPY-58f107, PPY-7a0ac8; Prospectus central account/permission service. Hosted auth/storage and reviewed Cyclotron release/pins remain gates.",
+      "created_at": "2026-10-16T20:46:43.316159Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "unfinished-work-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
   "created_at": "2026-10-09T14:50:43.755286Z",
-  "updated_at": "2026-10-09T14:50:43.755336Z",
+  "updated_at": "2026-10-16T20:46:43.316177Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

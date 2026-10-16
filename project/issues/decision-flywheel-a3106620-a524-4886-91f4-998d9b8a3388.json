@@ -1,0 +1,47 @@
+{
+  "id": "decision-flywheel-a3106620-a524-4886-91f4-998d9b8a3388",
+  "title": "Share lab monitoring steering and labeling across remote and embedded modes",
+  "description": "As a publication operator, I want the same UI for either supported deployment mode.\n\nFeature: Share lab monitoring steering and labeling across remote and embedded modes\n  Scenario: Observable acceptance\n    Given a central lab with multiple publication outputs or an embedded deployment-local engine\n    When I monitor, steer and label an authorized publication\n    Then the same shared controls operate on the selected authorized output and never mix another publication’s state\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "064354da-fb77-4488-b644-73be525c2a49",
+      "author": "home",
+      "text": "2026-10-16 reconciliation: Status describes remaining acceptance, not implementation authorization.",
+      "created_at": "2026-10-16T20:46:52.976029Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "unfinished-work-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
+  "created_at": "2026-10-16T20:46:43.334148Z",
+  "updated_at": "2026-10-16T20:46:52.976050Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "unfinished-work-reconciliation",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
