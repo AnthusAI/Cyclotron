@@ -167,3 +167,41 @@ All AWS sign-in, provisioning and configuration work uses CLI/API only. Product
 browser verification at lab remains permitted. The former browser SSO handoff
 must not be resumed. Existing CLI SSO is renewed; no browser console action is
 needed for the current deployment.
+
+## Central fix deployed and actual Google onboarding verified
+
+Parent confirmed Prospectus main3c90214afd312ed7dd9ef5912fedfe8eb7913da5,
+Amplify job11 BUILD/DEPLOY/VERIFY succeeded, with live integer expiry/300-second
+TTL checked by the sole central writer. One bounded public HTTP probe now passes
+signed-out denial and actual login initiation: dedicated client/callback,
+code+PKCE S256, nonce/state and browser-binding cookie. Proof values are never
+printed. No provider calls.
+
+Actual in-app browser Continue with Google completed the Google redirect using
+its existing authenticated session and rendered signed-in account onboarding.
+Exactly one create request each produced the synthetic accounts
+`Cyclotron verification 2026-10-16 Alpha` and
+`Cyclotron verification 2026-10-16 Beta`; both opened their empty account-scoped
+workspace with owner/Can edit workspace. No fabricated identity, human labels,
+provider call or retry of an uncertain account create was used. These are retained
+verification records, not fabricated customer accounts. UI error log was empty.
+
+A signed-in unowned synthetic-tenant GET was attempted in a separate product
+browser tab, but navigation returned net::ERR_BLOCKED_BY_CLIENT. This is not
+accepted as API denial proof. Live viewer/revocation/queued-execution denial
+remain separate from existing synthetic regression evidence; no permissions
+were expanded to produce such fixtures.
+
+Beta-to-Alpha switching completed in the actual browser: both named accounts
+remain in the shared selector and Alpha's owner workspace is selected. During
+the request the previous private workspace unmounted and controls disabled.
+Signed-in screenshot: `deployment/cloud-google-account-proof.jpg`. Only empty
+workspace navigation was displayed; no human labels were submitted.
+
+Sign-out completed and removed selector/private workspace. A full page reload
+still rendered only Welcome/Continue with Google. Final screenshot:
+`deployment/cloud-logout-proof.jpg`. This completes the first live Google ->
+central account create/select -> account-scoped workspace -> switch -> logout
+slice. HTTP unauthenticated GraphQL/events denial also passed. Live viewer,
+revocation and queued-worker human authorization remain unproven; existing
+synthetic specs cover those boundaries, and paid commands remain disabled.

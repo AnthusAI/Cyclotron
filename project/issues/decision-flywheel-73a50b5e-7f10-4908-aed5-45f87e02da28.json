@@ -125,10 +125,24 @@
       "text": "Cloud checkpoint 2026-10-16: unreserved runtime UPDATE_COMPLETE; quota unchanged10; BFF/worker no reservations, SQS max2/API throttles retained, paid commands disabled. Amplify lab domain AVAILABLE, public and backend signed-out HTTP proof PASS (session200/no-store; GraphQL/events401). Login503 traced to central fractional challenge expiry; owner fix330713f pending sole-writer CI rollout. Strict validation retained; live Google/account proof pending rollout and normal Mac unlock. No provider calls or new grants.",
       "created_at": "2026-10-16T07:09:45.003600Z",
       "comment_type": "default"
+    },
+    {
+      "id": "7ac43409-1b7f-4177-96c5-4088b7a7d751",
+      "author": "home",
+      "text": "PR9 main3c90214/Amplify11 deployed; strict public login probe now PASS. Actual Google browser redirect using existing real session -> central account onboarding -> exactly one Alpha and one Beta synthetic verification-account create -> both owner workspaces -> Beta-to-Alpha switch PASS. No retries/fabricated identity/human labels/provider calls. Screenshot deployment/cloud-google-account-proof.jpg. Signed-in unowned-tenant direct browser navigation blocked by client, so not claimed as API denial. Logout verification in progress; worker paid commands remain disabled.",
+      "created_at": "2026-10-16T07:41:43.755527Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "15019c90-0080-4213-9303-d7cc71b237f6",
+      "author": "home",
+      "text": "Live first slice completed: actual Google login, Alpha/Beta central verification account create/select, owner workspaces, Beta-to-Alpha switch, sign-out and reload remaining signed-out all PASS. Public HTTP signed-out GraphQL/events401 and strict login initiation PASS. Evidence docs/console-cloud-activation.md plus cloud-google-account-proof.jpg/cloud-logout-proof.jpg. No human labels/model calls. Live viewer/revocation/queued-worker human authorization remain unproven; paid commands disabled. No AWS browser operations.",
+      "created_at": "2026-10-16T07:42:18.703958Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T07:09:45.003646Z",
+  "updated_at": "2026-10-16T07:42:18.703999Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
