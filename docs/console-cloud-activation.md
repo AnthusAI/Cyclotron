@@ -159,3 +159,11 @@ loaded the actual public lab and displayed “Welcome to Cyclotron” / “Conti
 with Google”, replacing the earlier proxy-error screen. Screenshot:
 `deployment/cloud-signed-out-proof.jpg`. Native Chrome/credential handoff may
 still need unlock; do not treat the lock as blocking all browser observation.
+
+## Standing AWS operation boundary
+
+Ryan's standing instruction: never operate the AWS console from any browser.
+All AWS sign-in, provisioning and configuration work uses CLI/API only. Product
+browser verification at lab remains permitted. The former browser SSO handoff
+must not be resumed. Existing CLI SSO is renewed; no browser console action is
+needed for the current deployment.
