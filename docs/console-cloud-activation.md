@@ -120,3 +120,42 @@ in the opened AWS sign-in tab. No password was read or requested in chat. Revise
 packaged-unreserved template is ready with the same verified artifact pointer;
 create/review/execute of a NEW changeset awaits completed SSO, not quota approval.
 The older prepared reserved-concurrency changeset must never be executed.
+
+## Unreserved runtime deployed — 2026-10-16
+
+After Ryan renewed Endymion SSO, the new change set
+`approved-runtime-unreserved-20261016` was reviewed and executed. Stack
+`cyclotron-console` is UPDATE_COMPLETE. The old reserved-concurrency change set
+was not executed. Applied account concurrency remains10/unreserved10; both
+functions have no reserved concurrency. SQS batch1/max2 and HTTP stage5rps/burst10
+remain, with paid commands disabled.
+
+BFF and worker use the approved separate Lambda-only runtime roles. Backend
+origin is https://o01d28uizl.execute-api.us-east-1.amazonaws.com. The deployed
+artifact CodeSha256 matches `hbG+3kw6+bHRz2b2XvedIXh4DldDnlKvM8A7ASnNbP4=`.
+Amplify app d2lya5yok0779c now proxies auth/API/GraphQL/run requests to that
+backend. Its lab domain association is AVAILABLE and verified; the public
+signed-out session returns200/no-store, and GraphQL plus tenant event requests
+return401. `scripts/verify_runtime_http.py --signed-out-only` passes against
+https://lab.cyclotron.anth.us with zero provider calls.
+
+Login initiation currently returns503. Matching central API metrics show a2xx
+response; the central owner confirmed a composition bug passing fractional Unix
+seconds into challenge expiry, violating the integer timestamp contract. Their
+fix330713f135b6fefa061e5118e42776a2c1967f79 floors issuedAt only and retains
+fractional cryptographic freshness checks. Its actual-factory/native-file
+regression and27 identity checks/typecheck pass. The sole central deployment
+owner is rolling it through normal CI. Python validation remains strict; no IAM
+expansion or central source edits occurred here.
+
+Human Google sign-in, account creation/switching and queued human authorization
+are not yet proven live. Browser inventory also reports the Mac locked; normal
+manual unlock is required before browser verification. No password, token,
+nonce or cookie was printed. Existing local synthetic proofs remain separate
+from this partial cloud checkpoint.
+
+The in-app browser remains usable despite the native Mac lock. It independently
+loaded the actual public lab and displayed “Welcome to Cyclotron” / “Continue
+with Google”, replacing the earlier proxy-error screen. Screenshot:
+`deployment/cloud-signed-out-proof.jpg`. Native Chrome/credential handoff may
+still need unlock; do not treat the lock as blocking all browser observation.

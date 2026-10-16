@@ -118,10 +118,17 @@
         "model": "gpt-6.1-sol",
         "name": "cyclotron-console"
       }
+    },
+    {
+      "id": "979c990d-e54f-49a8-8e16-2bd501e83899",
+      "author": "home",
+      "text": "Cloud checkpoint 2026-10-16: unreserved runtime UPDATE_COMPLETE; quota unchanged10; BFF/worker no reservations, SQS max2/API throttles retained, paid commands disabled. Amplify lab domain AVAILABLE, public and backend signed-out HTTP proof PASS (session200/no-store; GraphQL/events401). Login503 traced to central fractional challenge expiry; owner fix330713f pending sole-writer CI rollout. Strict validation retained; live Google/account proof pending rollout and normal Mac unlock. No provider calls or new grants.",
+      "created_at": "2026-10-16T07:09:45.003600Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T06:32:36.076979Z",
+  "updated_at": "2026-10-16T07:09:45.003646Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
