@@ -100,10 +100,25 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "7bccc52d-6170-47c0-b234-cd67a958fd32",
+      "author": "home",
+      "text": "Parent final policy: operational publication review explanations optional, configuredlabelrequired, retainnativeSDKtrim/None normalization; no preservationmode/replayexpansion. Diskholdlifted15GiB. REDspecs reproduced8failures then narrow adapter corrected; localsharedreleasecdc70ffca76f4621cd58c8abfdb05c5920734acd.55publication and97crossownerchecks PASS(overlap),14new direct/HTTP optional/null/empty/whitespace/spaced/multiline/type/bound/label/reopen/retry scenarios. Adapterpatch /tmp/cyclotron-operational-explanation-cdc70ff/adapter.patch; ownersnotified; manifest/docsupdated. No engine/UIpack/server/userreview/publicpush changes. Consumer8930restartautomaticreviewDENIED activeuserpreview; ownerpreservesexistingreviewandseeksparentrestartapproval, no workaround.",
+      "created_at": "2026-10-16T16:36:21.385269Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "CuratedExamplePriming",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-14T11:54:33.949970Z",
-  "updated_at": "2026-10-15T21:52:15.902550Z",
+  "updated_at": "2026-10-16T16:36:21.385307Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
