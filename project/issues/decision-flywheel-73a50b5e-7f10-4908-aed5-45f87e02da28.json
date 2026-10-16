@@ -146,10 +146,17 @@
       "text": "Current iPad loading defect confirmed by3 actual28s BFF timeouts plus22-27s calls. Lab mitigation deployed8e9b3a5/8c76fd9: parallel fresh list/read/write; one verified select response, no duplicate GET;20s browser abort/state-only retry; no window-focus loading, throttled visibility return only. Current measured warm reload8.535s and switch8.921s200 versus14.915/15.261s first mitigation.94 backend/11UI checks/build pass. Central owner owns storage-helper batching performance fix (15 native calls per identity). Unwanted email-named account traced read-only, no deletes or email inference. No labels/model calls/new grants/AWS browser.",
       "created_at": "2026-10-16T11:32:59.548834Z",
       "comment_type": "default"
+    },
+    {
+      "id": "ceca140c-6ff2-44fa-a4df-40c6a8e8058c",
+      "author": "home",
+      "text": "Final lab mitigation checkpoint246338f deployed, BFF Active/Successful +Amplify5 SUCCEED. Native menu opens/closes without loading; warm reload8535ms, switch8921ms200; logout7148ms then signed-out session116ms.94 backend/11UI specs/build pass; final anonymous GraphQL/events denial PASS. Cold browser14635ms remains; phase trace session220/JWT100/parallel central listing8326ms, so central storage PR10 CI/deploy still required. Evidence deployment/account-latency-evidence.json and cloud-account-latency-fix.jpg. No physical iPad claim, account deletion, label/model calls, grants or AWS browser.",
+      "created_at": "2026-10-16T11:38:16.996055Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T11:32:59.549339Z",
+  "updated_at": "2026-10-16T11:38:16.996094Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

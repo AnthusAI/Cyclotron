@@ -1,0 +1,73 @@
+{
+  "date": "2026-10-16",
+  "before": {
+    "bffTimeoutsObserved": 3,
+    "lambdaTimeoutMs": 28000,
+    "otherBffDurationsMs": [
+      21986.45,
+      23554.47,
+      27147.59,
+      27371.18
+    ]
+  },
+  "afterFirstMitigation": {
+    "listingMs": 14915,
+    "switchMs": 15261,
+    "status": 200
+  },
+  "afterRedundantCallRemoval": {
+    "warmSelectedReloadMs": 8535,
+    "warmSwitchMs": 8921,
+    "status": 200,
+    "duplicateSessionGetAfterSwitch": false
+  },
+  "finalColdTrace": {
+    "browserMs": 14635,
+    "lambdaMs": 13514.95,
+    "sessionReadMs": 220,
+    "tokenVerifyMs": 100,
+    "parallelCentralCallsMs": {
+      "listing": 8326,
+      "authorizeReadOrWrite": [
+        6888,
+        6997
+      ]
+    },
+    "status": 200,
+    "unattributedColdOverhead": true
+  },
+  "menuBrowserProof": {
+    "openAndClosePreservedWorkspace": true,
+    "loadingNotTriggered": true,
+    "physicalIpadVerified": false
+  },
+  "checks": {
+    "backendPassed": 94,
+    "uiPassed": 11,
+    "typescriptBuildPassed": true
+  },
+  "deployment": {
+    "bffSource": "246338f",
+    "bffArtifactSha256": "846e110e240290c1a3a624584c69b3c025aa8e79c304d73d92f71547a519244e",
+    "amplifyJob": "5",
+    "status": "SUCCEED",
+    "workerChanged": false,
+    "permissionsChanged": false
+  },
+  "centralFix": {
+    "pullRequest": "https://github.com/AnthusAI/Prospectus/pull/10",
+    "state": "CI pending at checkpoint"
+  },
+  "data": {
+    "accountsDeleted": 0,
+    "labelsSubmitted": 0,
+    "providerCalls": 0,
+    "identityLinkingPerformed": false
+  },
+  "signOut": {
+    "status": 200,
+    "durationMs": 7148,
+    "signedOutSessionMs": 116,
+    "workspaceUnmounted": true
+  }
+}

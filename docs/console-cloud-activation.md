@@ -284,3 +284,26 @@ bundle build; normal central PR/CI/deployment remains theirs. No receipt/family
 or authorization fence is relaxed here. The unwanted account's exact canonical
 creator/retained version/associations are under their read-only review; no
 account or identity has been removed by the console owner.
+
+Final lab checkpoint246338f is deployed: BFF artifact
+846e110e240290c1a3a624584c69b3c025aa8e79c304d73d92f71547a519244e,
+UPDATE_COMPLETE/Active/Successful, Amplify job5 SUCCEED. Actual native menu open
+and Escape-close left Beta's workspace mounted, without Loading or a new account
+request log. Final cold trace: browser14635ms, Lambda13514.95ms; session-read220ms,
+JWT100ms; parallel central list8326ms and authorizations6888/6997ms. The remaining
+roughly4.9s cold overhead is not attributed by these phase logs; do not claim it
+is KMS, JWKS, network or framework work without further measurement. Warm
+reload8535ms and switch8921ms remain the current measured performance.
+
+Machine-readable evidence: deployment/account-latency-evidence.json; current
+browser screenshot: deployment/cloud-account-latency-fix.jpg. Physical iPad/Safari
+is not verified. Central PR10 is open with CI in progress at this checkpoint;
+central helper-read batching remains needed for materially faster account and
+workspace operations. No further broad testing or permission changes is needed
+to wait for that normal rollout. The console owner generated no extra accounts,
+labels, model calls, identity links or deletions during this incident.
+
+Final sign-out passed in 7148ms; subsequent signed-out session read returned200
+in116ms and the browser showed only Welcome/Continue with Google. Anonymous
+public HTTP security checks pass again after the final rollout. The test browser
+is signed out to avoid ongoing background workspace reads while PR10 is pending.
