@@ -96,3 +96,27 @@ Processed template independently checked: exact separate roles, reserved caps
 BFF5/worker2, real client parameter and no live/provider environment toggle.
 Do not execute while the quota1001 request remains unapproved. The prior automatic
 approval rejection remains in force; no retry or cap-dropping workaround occurred.
+
+## User correction: remove unrequested function reservations
+
+Ryan explicitly rejected reserved concurrency: “Why are you configuring reserved
+concurrency?? I never wanted that!” The parent authorized removal and continued
+deployment at the unchanged account quota. This supersedes the earlier quota
+pause; no quota increase will be requested. The two ReservedConcurrentExecutions
+properties have been removed from renderer/template; exact template comparison
+verifies no other change. SQS MaximumConcurrency2, batch1, existing API throttles,
+scoped roles and disabled paid commands remain. cfn-lint passes.
+
+The last verified applied account limit was10/unreserved10. Fresh read-only
+reconfirmation failed because Endymion SSO expired. There was no observed
+PutFunctionConcurrency error: the earlier block was inferred from the documented
+100-unreserved rule before creating functions. The actual observed AWS quota
+request error was IllegalArgumentException: “You must provide a quota value
+greater than the default quota value of 1000.0”. This distinction corrects any
+implication that function reservation creation had been attempted and failed.
+
+Existing Endymion CLI login renewal has started and reached Ryan's password step
+in the opened AWS sign-in tab. No password was read or requested in chat. Revised
+packaged-unreserved template is ready with the same verified artifact pointer;
+create/review/execute of a NEW changeset awaits completed SSO, not quota approval.
+The older prepared reserved-concurrency changeset must never be executed.

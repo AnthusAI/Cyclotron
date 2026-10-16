@@ -305,7 +305,6 @@
         },
         "MemorySize": 1024,
         "Timeout": 28,
-        "ReservedConcurrentExecutions": 5,
         "Environment": {
           "Variables": {
             "CYCLOTRON_ISSUER": {
@@ -532,7 +531,6 @@
         },
         "MemorySize": 1024,
         "Timeout": 180,
-        "ReservedConcurrentExecutions": 2,
         "Environment": {
           "Variables": {
             "CYCLOTRON_ISSUER": {

@@ -58,7 +58,7 @@ def template():
         properties={'FunctionName':'cyclotron-console-'+suffix,'Runtime':'python3.13','Architectures':['x86_64'],
             'Handler':'decision_flywheel.cloud_entry.'+('bff_handler' if component=='Bff' else 'worker_handler'),
             'CodeUri':'./console-backend.zip','Role':attr(component+'Role'),'MemorySize':1024,
-            'Timeout':28 if component=='Bff' else 180,'ReservedConcurrentExecutions':5 if component=='Bff' else 2,
+            'Timeout':28 if component=='Bff' else 180,
             'Environment':{'Variables':environment},'Tags':{'Product':'cyclotron','FederationReview':ref('FederationReviewId'),'ExecutionPairReview':ref('ExecutionPairReviewId')}}
         if component=='Bff':
             properties['Events']={name:{'Type':'HttpApi','Properties':{'ApiId':ref('ConsoleApi'),'Path':path,'Method':'ANY','PayloadFormatVersion':'2.0'}} for name,path in [('Root','/'),('Proxy','/{proxy+}')]}
