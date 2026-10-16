@@ -581,3 +581,20 @@ test('a failed initial workspace read shows an error rather than claiming empty 
   expect(screen.queryByText('A history you can inspect')).toBeNull()
   expect(screen.queryByText('Loading workspace…')).toBeNull()
 })
+
+
+test('returning to empty optimization history records the section for reload and back navigation',async()=>{
+  vi.mocked(graphql).mockImplementation(async query=>query.includes('capabilities')
+    ?{runs:[],capabilities:{liveEnabled:false,itemCount:0}}
+    :{cyclotronDefinitions:[],classifiers:[],itemLists:[]})
+  render(<WebApp embedded/> )
+  await screen.findByText('A history you can inspect')
+  fireEvent.click(screen.getByRole('button',{name:'Cyclotrons'}))
+  await waitFor(()=>expect(window.location.hash).toContain('section=cyclotrons'))
+  fireEvent.click(screen.getByRole('button',{name:'Optimizations'}))
+  await screen.findByText('A history you can inspect')
+  await waitFor(()=>expect(window.location.hash).toContain('section=optimizations'))
+  window.history.replaceState(null,'','#run=&view=timeline&section=cyclotrons')
+  fireEvent(window,new PopStateEvent('popstate'))
+  expect(await screen.findByRole('heading',{name:'Cyclotrons'})).toBeVisible()
+})

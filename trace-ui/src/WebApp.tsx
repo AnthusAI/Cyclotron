@@ -114,7 +114,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
     if(timelineClassifier&&!invalidTimelineClassifier)route.set('classifier',timelineClassifier)
     else route.delete('classifier')
     const hash=`#${route}`
-    if((selected||section!=='optimizations')&&window.location.hash!==hash){
+    if((selected||section!=='optimizations'||window.location.hash)&&window.location.hash!==hash){
       if(firstRoute.current||invalidTimelineClassifier)window.history.replaceState(null,'',hash)
       else window.history.pushState(null,'',hash)
     }
