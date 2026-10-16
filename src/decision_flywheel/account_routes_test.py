@@ -340,3 +340,42 @@ def test_http_event_page_outage_returns_no_private_events_and_enforces_response_
         gateway.accounts.authorize=outage
         result=client.get(url,params={'account':account_id})
         assert result.status_code==503 and 'events' not in result.json()
+
+
+def test_selected_session_lists_and_checks_both_permissions_concurrently(hosted):
+    from threading import Barrier
+    client, gateway, state, account_id = hosted
+    with client:
+        sign_in(client, state)
+        session = client.get('/api/session').json()
+        headers = {'Origin': str(client.base_url).rstrip('/'), 'X-CSRF-Token': session['csrfToken'], 'Idempotency-Key': str(uuid4())}
+        assert client.post('/api/accounts', json={'name': 'Parallel account'}, headers=headers).status_code == 201
+        barrier = Barrier(3, timeout=2)
+        listing, authorize = gateway.accounts.accounts, gateway.accounts.authorize
+        def list_together(token):
+            barrier.wait()
+            return listing(token)
+        def authorize_together(*args):
+            barrier.wait()
+            return authorize(*args)
+        gateway.accounts.accounts = list_together
+        gateway.accounts.authorize = authorize_together
+        result = client.get('/api/session')
+        assert result.status_code == 200
+        assert result.json()['selectedAccountId'] == account_id
+        assert result.json()['canWrite'] is True
+
+
+def test_select_returns_fresh_session_state_without_requiring_another_listing_request(hosted):
+    client, _, state, account_id = hosted
+    with client:
+        sign_in(client, state)
+        session = client.get('/api/session').json()
+        headers = {'Origin': str(client.base_url).rstrip('/'), 'X-CSRF-Token': session['csrfToken'], 'Idempotency-Key': str(uuid4())}
+        assert client.post('/api/accounts', json={'name': 'Selected account'}, headers=headers).status_code == 201
+        result = client.post('/api/accounts/select', json={'accountId': account_id}, headers=headers)
+        assert result.status_code == 200
+        assert result.json()['authenticated'] is True
+        assert result.json()['selectedAccountId'] == account_id
+        assert result.json()['canWrite'] is True
+        assert result.json()['accounts'][0]['id'] == account_id

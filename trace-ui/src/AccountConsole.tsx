@@ -15,39 +15,53 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
   const [switching,setSwitching]=useState(false)
   const [creationKey,setCreationKey]=useState(()=>crypto.randomUUID())
   const generation=useRef(0),active=useRef(true)
+  const refreshPending=useRef<Promise<void>|null>(null),busyRef=useRef(false)
   const expired=useCallback(()=>{
     generation.current++
     setSession({authenticated:false,loginUrl:'/auth/login'})
     window.history.replaceState(null,'',window.location.pathname+window.location.search)
   },[])
-  const refresh=useCallback(async()=>{
+  const refresh=useCallback(()=>{
+    if(refreshPending.current)return refreshPending.current
     const current=++generation.current
+    const pending=(async()=>{
     try{
       const state=await client.session()
       if(active.current&&current===generation.current){setSession(state);setError('')}
     }catch(cause){
       if(active.current&&current===generation.current){setSession(null);setError(cause instanceof Error?cause.message:'Account service unavailable. Try again.')}
     }
+    })()
+    refreshPending.current=pending
+    void pending.finally(()=>{if(refreshPending.current===pending)refreshPending.current=null})
+    return pending
   },[client])
   useEffect(()=>{
     let cancelled=false
     active.current=true
     void Promise.resolve().then(()=>{if(!cancelled)void refresh()})
-    const focus=()=>{void refresh()}
+    const focus=()=>{if(!busyRef.current)void refresh()}
     window.addEventListener('focus',focus)
     return ()=>{cancelled=true;active.current=false;window.removeEventListener('focus',focus)}
   },[refresh])
 
-  const change=async(action:()=>Promise<void>)=>{
+  const change=async(action:()=>Promise<ConsoleSession|void>,clearOnFailure=false)=>{
+    if(busyRef.current)return
+    busyRef.current=true
     setBusy(true);setSwitching(true);setError('');generation.current++
     try{
-      await action()
+      const result=await action()
       window.history.replaceState(null,'',window.location.pathname+window.location.search)
-      await refresh()
+      if(result&&'authenticated' in result){setSession(result);setError('')}
+      else{
+        if(refreshPending.current)await refreshPending.current
+        await refresh()
+      }
     }catch(cause){
       if(cause instanceof SignInExpired)setSession({authenticated:false,loginUrl:'/auth/login'})
+      else if(clearOnFailure)setSession(null)
       setError(cause instanceof Error?cause.message:'The account request failed. Try again.')
-    }finally{setBusy(false);setSwitching(false)}
+    }finally{busyRef.current=false;setBusy(false);setSwitching(false)}
   }
   const selected=session?.authenticated?session.accounts.find(account=>account.id===session.selectedAccountId):undefined
   const workspace=!!selected&&!switching
@@ -64,8 +78,8 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
     <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
       <CyclotronBrand/>
       {session?.authenticated?<div className="flex flex-wrap items-center gap-3">
-        {session.accounts.length?<AccountSwitcher accounts={session.accounts} selectedAccountId={session.selectedAccountId} disabled={busy} onSelect={id=>{void change(()=>client.select(id,session.csrfToken))}}/>:null}
-        <Button variant="outline" disabled={busy} onClick={()=>{void change(async()=>{await client.logout(session.csrfToken);generation.current++;setSession({authenticated:false,loginUrl:'/auth/login'})})}}>Sign out</Button>
+        {session.accounts.length?<AccountSwitcher accounts={session.accounts} selectedAccountId={session.selectedAccountId} disabled={busy} onSelect={id=>{void change(()=>client.select(id,session.csrfToken),true)}}/>:null}
+        <Button variant="outline" disabled={busy} onClick={()=>{void change(async()=>{await client.logout(session.csrfToken);generation.current++;setSession({authenticated:false,loginUrl:'/auth/login'})},true)}}>Sign out</Button>
       </div>:null}
     </header>
     {error?<div role="alert" className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">{error}</div>:null}

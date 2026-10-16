@@ -24,6 +24,7 @@ def runtime():
 
 
 def bff_handler(event,context):
+    from .prospectus_accounts import account_request_id
     global _cached_adapter
     if _cached_adapter is None:
         from mangum import Mangum
@@ -32,7 +33,11 @@ def bff_handler(event,context):
     try:loop=asyncio.get_event_loop()
     except RuntimeError:loop=None
     if loop is None or loop.is_closed():asyncio.set_event_loop(asyncio.new_event_loop())
-    return _cached_adapter(event,context)
+    correlation = account_request_id.set(getattr(context, 'aws_request_id', None))
+    try:
+        return _cached_adapter(event,context)
+    finally:
+        account_request_id.reset(correlation)
 
 
 def worker_handler(event,context):

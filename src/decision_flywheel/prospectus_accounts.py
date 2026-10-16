@@ -4,10 +4,15 @@ The host must verify its session access JWT before passing it here. Prospectus
 independently verifies that JWT and the SigV4 runtime identity on every call.
 """
 from dataclasses import dataclass, field, replace
+from contextvars import ContextVar
 import json
 import re
+import time
 from urllib.parse import quote, urlsplit
 from uuid import UUID
+
+
+account_request_id = ContextVar('account_request_id', default=None)
 
 
 class AccountAccessDenied(Exception):
@@ -52,6 +57,8 @@ class SigV4Transport:
                 or resolution and not valid_token(identity_token)
                 or not resolution and identity_token is not None):
             raise AccountAccessDenied('verified session required')
+        started = time.monotonic()
+        status = 'unavailable'
         try:
             credentials = self.session.get_credentials().get_frozen_credentials()
             if not credentials.token:
@@ -69,6 +76,7 @@ class SigV4Transport:
             prepared = request.prepare()
             response = self.client.request(method, prepared.url, content=prepared.body,
                 headers=dict(prepared.headers), follow_redirects=False, timeout=10)
+            status = response.status_code
             if response.status_code in (401, 403, 409):
                 raise AccountAccessDenied('account access refused')
             if response.status_code not in (200, 201):
@@ -81,6 +89,13 @@ class SigV4Transport:
             raise
         except Exception:
             raise ProspectusUnavailable('account service unavailable') from None
+        finally:
+            # Fixed route labels and timings only: never log actor/account IDs,
+            # proof headers, OAuth values, response bodies or exception strings.
+            route = '/v1/accounts/{account}/authorize' if path.startswith('/v1/accounts/') else path
+            print(json.dumps({'event': 'prospectus_call', 'requestId': account_request_id.get(),
+                'method': method, 'route': route, 'status': status,
+                'durationMs': round((time.monotonic() - started) * 1000)}))
 
 
 class AccountsClient:

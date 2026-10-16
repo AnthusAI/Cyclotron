@@ -77,3 +77,39 @@ test('signing out unmounts account data without storing bearer tokens in the bro
   expect(await screen.findByRole('link',{name:'Continue with Google'})).toBeVisible()
   expect(screen.queryByText('Existing console workspace')).toBeNull()
 })
+
+test('repeated window focus coalesces an in-flight account request',async()=>{
+  let complete!:(state:AuthenticatedConsoleSession)=>void
+  const client=clientFor()
+  vi.mocked(client.session).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve}))
+  render(<AccountConsole client={client}/> )
+  await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(1))
+  fireEvent.focus(window)
+  fireEvent.focus(window)
+  expect(client.session).toHaveBeenCalledTimes(1)
+  complete(signedIn)
+  expect(await screen.findByRole('heading',{name:'Choose an account'})).toBeVisible()
+})
+
+test('account switching consumes the verified response without a duplicate session request',async()=>{
+  const client=clientFor()
+  vi.mocked(client.select).mockResolvedValue({...signedIn,selectedAccountId:'alpha',canWrite:true})
+  render(<AccountConsole client={client}/> )
+  await screen.findByRole('heading',{name:'Choose an account'})
+  fireEvent.change(screen.getByRole('combobox',{name:'Account'}),{target:{value:'alpha'}})
+  expect(await screen.findByText('Existing console workspace')).toBeVisible()
+  expect(client.session).toHaveBeenCalledTimes(1)
+})
+
+test('an uncertain switch hides the old workspace and retries state without repeating the mutation',async()=>{
+  const client=clientFor({...signedIn,selectedAccountId:'alpha',canWrite:true})
+  vi.mocked(client.select).mockRejectedValue(new Error('Account service took too long. Try again.'))
+  render(<AccountConsole client={client}/> )
+  await screen.findByText('Existing console workspace')
+  fireEvent.change(screen.getByRole('combobox',{name:'Account'}),{target:{value:'beta'}})
+  expect(await screen.findByRole('alert')).toHaveTextContent('took too long')
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'Try again'}))
+  expect(await screen.findByText('Existing console workspace')).toBeVisible()
+  expect(client.select).toHaveBeenCalledTimes(1)
+})

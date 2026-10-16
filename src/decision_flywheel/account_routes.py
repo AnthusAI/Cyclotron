@@ -1,6 +1,7 @@
 """Same-origin OAuth and accounts BFF for the existing Python console."""
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 import hmac
 import json
 from urllib.parse import urlencode
@@ -93,23 +94,33 @@ class HostedAccounts:
             await asyncio.to_thread(self.sessions.save, session)
         return cleaned
 
-    async def _state(self, session):
-        accounts = await self._listing(session)
-        can_write = False
-        if session.account_id:
+    async def _state(self, session, *, require_selected=False):
+        async def permission(operation):
             try:
                 await asyncio.to_thread(self.accounts.authorize, session.access_token,
-                    session.account_id, session.person_id, 'console:read')
+                    session.account_id, session.person_id, operation)
+                return True
             except AccountAccessDenied:
+                return False
+
+        # These are independent authority reads, not a cached authorization lease.
+        # Await all three before returning any account state. Actual workspace
+        # operations still reauthorize at their execution boundary.
+        if session.account_id and session.person_id:
+            accounts, can_read, can_write = await asyncio.gather(
+                self._listing(session), permission('console:read'), permission('console:write'))
+        else:
+            accounts = await self._listing(session)
+            can_read, can_write = (await asyncio.gather(
+                permission('console:read'), permission('console:write'))
+                if session.account_id else (False, False))
+        if session.account_id and not can_read:
+            if require_selected:
+                raise AccountAccessDenied('account access refused')
+            else:
                 session.account_id = None
                 await asyncio.to_thread(self.sessions.save, session)
-            if session.account_id:
-                try:
-                    await asyncio.to_thread(self.accounts.authorize, session.access_token,
-                        session.account_id, session.person_id, 'console:write')
-                    can_write = True
-                except AccountAccessDenied:
-                    pass
+            can_write = False
         return {'authenticated': True, 'csrfToken': session.csrf_token, 'personId': session.person_id,
             'accounts': accounts, 'selectedAccountId': session.account_id, 'canWrite': can_write}
 
@@ -229,12 +240,13 @@ class HostedAccounts:
                 account_id = body['accountId']
             except (ValueError, KeyError, TypeError):
                 raise HTTPException(400, 'account identifier required') from None
-            await self._listing(session)
-            await asyncio.to_thread(self.accounts.authorize, session.access_token,
-                account_id, session.person_id, 'console:read')
-            session.account_id = account_id
+            if not session.person_id:
+                await self._listing(session)
+            selected = replace(session, account_id=account_id)
+            result = await self._state(selected, require_selected=True)
+            session.account_id = selected.account_id
             await asyncio.to_thread(self.sessions.save, session)
-            return {'selectedAccountId': account_id}
+            return result
 
         @app.post('/api/accounts')
         async def create(request: Request):

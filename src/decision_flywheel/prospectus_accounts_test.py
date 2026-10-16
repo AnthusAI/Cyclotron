@@ -195,3 +195,22 @@ def test_hosted_mode_cannot_mix_shared_token_lan_or_global_worker_authority(tmp_
     for options in ({'token': 'shared'}, {'allow_unauthenticated_lan': True}, {'service': object()}):
         with pytest.raises(ValueError, match='hosted account access cannot use'):
             create_app(WebStore(tmp_path / 'unused.sqlite'), account_access=object(), **options)
+
+
+def test_transport_timings_correlate_fixed_routes_without_logging_any_proof_or_account(capsys):
+    import json
+    from .prospectus_accounts import account_request_id
+    session = SimpleNamespace(get_credentials=lambda: Credentials('synthetic', 'private-secret', 'private-runtime-token'))
+    transport = SigV4Transport('https://accounts.example.test/api', 'us-east-1', session=session,
+        client=httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={'private': 'response-body'}))))
+    correlation = account_request_id.set('synthetic-request')
+    try:
+        transport('POST', '/v1/accounts/private-account/authorize', 'private-human-token', {'operation': 'console:read'})
+    finally:
+        account_request_id.reset(correlation)
+    output = capsys.readouterr().out
+    entry = json.loads(output)
+    assert entry['requestId'] == 'synthetic-request'
+    assert entry['route'] == '/v1/accounts/{account}/authorize'
+    assert entry['status'] == 200 and entry['durationMs'] >= 0
+    assert all(value not in output for value in ('private-secret', 'private-runtime-token', 'private-human-token', 'private-account', 'response-body'))

@@ -205,3 +205,38 @@ central account create/select -> account-scoped workspace -> switch -> logout
 slice. HTTP unauthenticated GraphQL/events denial also passed. Live viewer,
 revocation and queued-worker human authorization remain unproven; existing
 synthetic specs cover those boundaries, and paid commands remain disabled.
+
+## Current account loading regression — 2026-10-16
+
+Ryan reported an iPad account-switch freeze and long loading followed by failure.
+Earlier morning success does not establish the current state. Recent deployed
+BFF reports confirm three28-second Lambda timeouts and successful calls around
+22–27seconds. Session loading serialized central me/list/read-authorize/write-
+authorize. Switching then triggered another full session request; repeated window
+focus could start overlapping refreshes. No user data was changed by diagnosis.
+
+The lab fix concurrently awaits independent listing/read/write authority reads,
+keeps fresh me and actual execution authorization, and returns verified full
+session state from selection to avoid the duplicate GET. Selection is persisted
+only after authority checks; denied/outage paths remain closed. UI requests now
+abort after20seconds, coalesce in-flight focus refreshes and suppress focus during
+mutations. An uncertain switch clears the workspace and offers state-only retry,
+not automatic mutation replay; create retains its idempotency key. Browser and
+BFF emit only fixed paths/status/duration, with BFF Lambda correlation ID—no
+actor/account IDs, cookies, proofs, bodies or exception text.
+
+Validation:72 backend specs,9 UI checks and TypeScript/production builds pass.
+Regression barriers prove concurrent authority reads; tests cover no duplicate
+GET, focus coalescing, bounded stalled request, uncertain-switch retry, route
+redaction and existing CSRF/viewer/foreign-account boundaries. No network or
+credentials in specs. Artifact SHA256
+575199f9e0c6cd95a75c97d23037a6c0342130ac530b908f8caa467299f82e21.
+Prepared change set account-latency-fix-20261016 changes BFF Code only in the
+source template; worker remains on its previous artifact. CloudFormation also
+reports ConsoleApi Body modification, but processed old/new API bodies compare
+exactly equal. No IAM/storage/queue/quota replacement or permission change.
+
+The unwanted “Ryan at Capacity” entry is being traced by the central owner using
+exact identity/account provenance and associations. Lab code does not generate
+that name. No deletion, email-based linking or identity inference is authorized
+by these diagnostics; recovery/approval checks remain with the parent.
