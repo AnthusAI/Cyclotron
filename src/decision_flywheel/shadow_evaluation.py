@@ -61,26 +61,17 @@ class ShadowCycle:
 class ShadowEvaluator:
     def __init__(self, wheel):
         self.wheel, self.config = wheel, wheel.idea_screening
-        self.ledger = HypothesisLedger(wheel.db)
-        wheel.db.executescript("""
-            CREATE TABLE IF NOT EXISTS shadow_set (idea_id TEXT PRIMARY KEY, control TEXT NOT NULL,
-                joined_seq INTEGER NOT NULL, status TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS shadow_scored (idea_id TEXT, item_id TEXT, seq INTEGER,
-                PRIMARY KEY (idea_id, item_id));
-            CREATE TABLE IF NOT EXISTS shadow_looks (idea_id TEXT, incumbent_id TEXT, look INTEGER, shared INTEGER,
-                gained INTEGER, lost INTEGER, p_value REAL, cleared INTEGER, seq INTEGER,
-                PRIMARY KEY (idea_id, incumbent_id, look));
-            CREATE TABLE IF NOT EXISTS shadow_incumbents (incumbent_id TEXT PRIMARY KEY, rubric TEXT, first_seq INTEGER);
-        """)
+        self.ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
+        self.storage = wheel.shadow_storage
+        self.storage.ensure()
 
     # -- small state -----------------------------------------------------------------------------------------
     def _state(self, key, default=None):
-        row = self.wheel.db.execute("SELECT value FROM runtime_state WHERE key=?", (key,)).fetchone()
-        return json.loads(row[0]) if row else default
+        value = self.wheel.runtime_storage.state(key)
+        return json.loads(value) if value is not None else default
 
     def _set_state(self, key, value):
-        with self.wheel.db:
-            self.wheel.db.execute("INSERT OR REPLACE INTO runtime_state VALUES (?, ?)", (key, _json(value)))
+        self.wheel.runtime_storage.put_state(key, _json(value))
 
     def seq(self):
         return self._state("shadow_seq", 0)
@@ -92,19 +83,17 @@ class ShadowEvaluator:
         return value
 
     def calls(self):
-        return self.wheel.db.execute("SELECT count(*) FROM shadow_scored").fetchone()[0]
+        return self.storage.calls()
 
     def active(self):
-        return [{"idea_id": i, "control": c, "joined_seq": j} for i, c, j in self.wheel.db.execute(
-            "SELECT idea_id,control,joined_seq FROM shadow_set WHERE status='active' ORDER BY joined_seq,idea_id")]
+        return [{"idea_id": i, "control": c, "joined_seq": j} for i, c, j in self.storage.active()]
 
     def _ideas(self):
         from .control_scheduler import ControlScheduler
         return {idea["id"]: idea for idea in ControlScheduler(self.wheel).ideas()}
 
     def _set_status(self, idea_id, status):
-        with self.wheel.db:
-            self.wheel.db.execute("UPDATE shadow_set SET status=? WHERE idea_id=?", (status, idea_id))
+        self.storage.set_status(idea_id,status)
 
     def _changes_incumbent(self, idea, training):
         """The configuration this idea would run (incumbent plus its one change), or None if it changes nothing."""
@@ -122,7 +111,7 @@ class ShadowEvaluator:
         free = self.config.shadow_ideas - len(self.active())
         if free <= 0:
             return []
-        known = {i for (i,) in self.wheel.db.execute("SELECT idea_id FROM shadow_set")}
+        known = self.storage.known()
         waiting = sorted((i for i in self._ideas().values() if i["control"] in SHADOW_CONTROLS and i["id"] not in known),
                          key=lambda i: (-i.get("created_seq", -1), i["id"]))
         joined = []
@@ -132,8 +121,7 @@ class ShadowEvaluator:
             if self._changes_incumbent(idea, training) is None:
                 continue
             seq = max(self.seq(), idea.get("created_seq", 0))
-            with self.wheel.db:
-                self.wheel.db.execute("INSERT INTO shadow_set VALUES (?,?,?,'active')", (idea["id"], idea["control"], seq))
+            self.storage.join(idea["id"],idea["control"],seq)
             self.wheel._emit({"kind": "shadow-idea-added", "idea_id": idea["id"], "control": idea["control"],
                               "joined_seq": seq, "proposal": idea["proposal"]})
             joined.append(idea["id"])
@@ -187,9 +175,7 @@ class ShadowEvaluator:
             if config is None:
                 self._evict(member["idea_id"], "the idea no longer changes the incumbent or cannot be applied", {})
                 continue
-            with self.wheel.db:
-                self.wheel.db.execute("INSERT OR IGNORE INTO shadow_scored VALUES (?,?,?)",
-                                      (member["idea_id"], item.id, seq))
+            self.storage.scored(member["idea_id"],item.id,seq)
             try:
                 batch = await self.wheel._answers(config, item, training, now)
             except RequestBudgetExhausted:
@@ -217,9 +203,7 @@ class ShadowEvaluator:
         """The label is now known: store per-(idea, story) correctness, the incumbent's included."""
         if cycle is None:
             return
-        with self.wheel.db:
-            self.wheel.db.execute("INSERT OR IGNORE INTO shadow_incumbents VALUES (?,?,?)",
-                                  (cycle.incumbent_id, self.wheel.active.config.rubric[:200], cycle.seq))
+        self.storage.incumbent(cycle.incumbent_id,self.wheel.active.config.rubric[:200],cycle.seq)
         for idea_id, choice, confidence in cycle.scored:
             self.ledger.record_evaluations(idea_id, [{"item_id": cycle.item_id, "correct": choice == label,
                 "label": label, "choice": choice, "confidence": confidence}], SHADOW)
@@ -229,8 +213,7 @@ class ShadowEvaluator:
 
     # -- looks, eviction, promotion --------------------------------------------------------------------------
     def _looks_taken(self, idea_id, incumbent):
-        return self.wheel.db.execute("SELECT count(*) FROM shadow_looks WHERE idea_id=? AND incumbent_id=?",
-                                     (idea_id, incumbent)).fetchone()[0]
+        return self.storage.looks_taken(idea_id,incumbent)
 
     def _advanced_already(self, idea_id, incumbent):
         return any(v["verdict"] == "advanced" and v["evidence"].get("incumbent") == incumbent
@@ -259,9 +242,7 @@ class ShadowEvaluator:
             if taken < config.shadow_looks and n >= (taken + 1) * config.shadow_min_items:
                 ok = clears_look(gained, lost, config.alpha, config.shadow_looks, config.shadow_ideas)
                 taken += 1
-                with self.wheel.db:
-                    self.wheel.db.execute("INSERT INTO shadow_looks VALUES (?,?,?,?,?,?,?,?,?)",
-                        (idea_id, inc, taken, n, gained, lost, pair["p_value"], int(ok), seq))
+                self.storage.look((idea_id,inc,taken,n,gained,lost,pair["p_value"],int(ok),seq))
                 self.wheel._emit({"kind": "shadow-look", "idea_id": idea_id, "look": taken, "cleared": ok,
                                   "threshold": look_threshold(config.alpha, config.shadow_looks, config.shadow_ideas), **stats})
                 if ok:
@@ -328,8 +309,8 @@ class ShadowEvaluator:
         """Each idea's forward record and the forward stories every scored voter got wrong. Everything here
         is a story that already arrived and had its label revealed; a story awaiting its label is never in it."""
         inc = incumbent_id(self.wheel)
-        old = {i for (i,) in self.wheel.db.execute("SELECT incumbent_id FROM shadow_incumbents")}
-        status = dict(self.wheel.db.execute("SELECT idea_id,status FROM shadow_set"))
+        old = self.storage.incumbent_ids()
+        status = self.storage.statuses()
         rows = self.ledger.summary_for_optimizer(limit=CAPS["ledger_ideas"], incumbent_id=inc,
                                                  max_item_ids=CAPS["item_ids_per_idea"], context_version=SHADOW,
                                                  skip_ids=old)
@@ -344,7 +325,7 @@ async def shadow_stage(wheel, proposals, training, development, lineage=None):
     evidence already collected. Nothing is scored on the development partition."""
     from .control_scheduler import ControlScheduler
     control = "rubric"
-    cycle = wheel.db.execute("SELECT count(*) FROM optimization_stages").fetchone()[0]
+    cycle = wheel.learning_storage.count('rubric')
     ControlScheduler(wheel).admit_proposals(control, proposals, training, cycle, lineage)
     shadow = ShadowEvaluator(wheel)
     shadow.fill_slots(training)

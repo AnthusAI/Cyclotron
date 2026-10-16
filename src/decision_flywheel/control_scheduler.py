@@ -16,10 +16,9 @@ CONTROLS = ("rubric", "example_ids", "tasks")
 class ControlScheduler:
     def __init__(self, wheel):
         self.wheel = wheel
-        wheel.db.executescript("""
-            CREATE TABLE IF NOT EXISTS control_ideas (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS control_cycles (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT);
-        """)
+        self.storage = wheel.control_storage
+        self.storage.ensure()
+        wheel.learning_storage.ensure('controls')
         # Older bundled proposals remain ideas. Their old aggregate outcome is
         # not falsely presented as a test of any individual control.
         if not self.ideas():
@@ -34,7 +33,7 @@ class ControlScheduler:
                                "rationale": old["rationale"], "attempts": [], "last_cycle": 0,
                                "created_cycle": 0, "source": "historical bundled hypothesis",
                                "bundled_attempts": old["attempts"]})
-        self.features = FeatureBank(wheel.db)
+        self.features = FeatureBank(storage=wheel.feature_storage)
         # Import old grouped questions without mislabeling the group's score as
         # an individual feature test. Old records remain available for audit.
         for idea in self.ideas():
@@ -65,11 +64,10 @@ class ControlScheduler:
         return {"tasks": [*tasks, question]}
 
     def ideas(self):
-        return tuple(json.loads(row[0]) for row in self.wheel.db.execute("SELECT payload FROM control_ideas ORDER BY id"))
+        return tuple(json.loads(payload) for payload in self.storage.payloads())
 
     def save(self, idea):
-        with self.wheel.db:
-            self.wheel.db.execute("INSERT OR REPLACE INTO control_ideas VALUES (?,?)", (idea["id"], _json(idea)))
+        self.storage.save(idea['id'],_json(idea))
 
     def admit_proposals(self, control, proposals, training, cycle, lineage=None):
         """Save each distinct, changing proposal as a control idea and announce it. ``lineage`` (optional, aligned
@@ -110,7 +108,7 @@ class ControlScheduler:
         """Idea-screening round for one control: several proposals, one screen, one confirmation, then a
         fitted trial for the best cleared finalist (promotion stays the cycle's single best-eligible step)."""
         wheel, config = self.wheel, self.wheel.idea_screening
-        ledger = HypothesisLedger(wheel.db)
+        ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
         own = [idea for idea in self.ideas() if idea["control"] == control]
         salt = f"{wheel.initial.task.fingerprint}:idea-screening"
         reserve_ids = {r.item.id for r in development if reserve_member(salt, r.item.id, config.reserve_fraction)}
@@ -211,7 +209,7 @@ class ControlScheduler:
                     "scheduler_version": "individual-features-v1", "max_feature_trials": max_feature_trials,
                     **({"idea_screening": wheel.idea_screening.as_json()} if screening else {})}
         key = _hash(evidence)
-        saved = wheel.db.execute("SELECT status,payload FROM control_cycles WHERE id=?", (key,)).fetchone()
+        saved = wheel.learning_storage.artifact('controls',key)
         if saved and saved[0] == "complete":
             return json.loads(saved[1])
         if saved and not retry_interrupted:
@@ -235,13 +233,11 @@ class ControlScheduler:
         completed = set(progress.get("completed_controls", []))
         discovered = set(progress.get("discovered_controls", []))
         def checkpoint():
-            with wheel.db:
-                wheel.db.execute("INSERT OR REPLACE INTO control_cycles VALUES (?, 'pending', ?)",
-                    (key, _json({"baseline_version": baseline, "trials": results,
-                                  "completed_controls": sorted(completed), "discovered_controls": sorted(discovered),
-                                  "evaluation_time": evaluation_time.isoformat()})))
+            wheel.learning_storage.begin('controls',key,_json({"baseline_version":baseline,"trials":results,
+                "completed_controls":sorted(completed),"discovered_controls":sorted(discovered),
+                "evaluation_time":evaluation_time.isoformat()}))
         checkpoint()
-        cycle = wheel.db.execute("SELECT count(*) FROM control_cycles").fetchone()[0]
+        cycle = wheel.learning_storage.count('controls')
         winners = {}
         try:
             for control in CONTROLS:
@@ -356,7 +352,7 @@ class ControlScheduler:
                 wheel.promote_trial(best["trial_fingerprint"], training, development)
                 if best["trial_fingerprint"] in winners:
                     idea_id, stats = winners[best["trial_fingerprint"]]
-                    HypothesisLedger(wheel.db).record_verdict(idea_id, "promoted",
+                    HypothesisLedger(storage=wheel.hypothesis_storage).record_verdict(idea_id, "promoted",
                         f"cleared the reserve gate and improved the fitted development trial; fixed {stats['gained']} "
                         f"and broke {stats['lost']} reserve items (Holm-adjusted p={stats['p_adjusted']:.3f})", stats)
             shadow_promoted = None
@@ -369,8 +365,7 @@ class ControlScheduler:
                       "reason": ("best isolated candidate improved" if best else
                                  "an idea cleared forward shadow evaluation" if shadow_promoted else
                                  "no isolated candidate qualified")}
-            with wheel.db:
-                wheel.db.execute("UPDATE control_cycles SET status='complete',payload=? WHERE id=?", (_json(result), key))
+            wheel.learning_storage.complete('controls',key,_json(result))
             wheel._emit({"kind": "control-cycle-completed", **result})
             return result
         except Exception as error:

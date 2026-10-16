@@ -65,18 +65,17 @@ def recorded_predictions(wheel, ids):
     human-feedback event (so never a prediction made with the label known)."""
     ids = set(ids)
     first_feedback = {}
-    for event_id, item in wheel.db.execute(
-            "SELECT id, json_extract(payload,'$.feedback.item_id') FROM runtime_events "
-            "WHERE json_extract(payload,'$.kind')='human-feedback' ORDER BY id"):
-        first_feedback.setdefault(item, event_id)
+    for event in wheel.runtime_storage.events_of(('human-feedback',)):
+        feedback=event.get('feedback')
+        item=feedback.get('item_id') if isinstance(feedback,dict) else None
+        first_feedback.setdefault(item,event['event_id'])
     out = {}
-    for event_id, item, label, probabilities, version in wheel.db.execute(
-            "SELECT id, json_extract(payload,'$.target_id'), json_extract(payload,'$.decision_model_label'), "
-            "json_extract(payload,'$.decision_model_probabilities'), json_extract(payload,'$.version') "
-            "FROM runtime_events WHERE json_extract(payload,'$.kind')='prediction' ORDER BY id"):
-        if item in ids and label is not None and event_id < first_feedback.get(item, float("inf")):
-            out[item] = {"label": label, "version": version,
-                         "probabilities": json.loads(probabilities) if isinstance(probabilities, str) else probabilities}
+    for event in wheel.runtime_storage.events_of(('prediction',)):
+        event_id,item=event['event_id'],event.get('target_id')
+        label,probabilities,version=(event.get('decision_model_label'),event.get('decision_model_probabilities'),event.get('version'))
+        if item in ids and label is not None and event_id < first_feedback.get(item,float('inf')):
+            out[item]={'label':label,'version':version,
+                      'probabilities':json.loads(probabilities) if isinstance(probabilities,str) else probabilities}
     return out
 
 
@@ -593,9 +592,9 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
         return None
     now = now or datetime.now(timezone.utc)
     task = wheel.initial.task
-    wheel.db.execute("CREATE TABLE IF NOT EXISTS optimization_stages (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
-    round_number = wheel.db.execute("SELECT count(*) FROM optimization_stages").fetchone()[0]
-    ledger = HypothesisLedger(wheel.db)
+    wheel.learning_storage.ensure('rubric')
+    round_number = wheel.learning_storage.count('rubric')
+    ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
     asker, meter = Asker(wheel, development, protected), JevMeter(wheel, config.max_jev_calls, training, development)
     revealed = [r for r in (*training, *development) if r.item.id not in {i.id for i in protected}]
     predictions = recorded_predictions(wheel, {r.item.id for r in revealed})

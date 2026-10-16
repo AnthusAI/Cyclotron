@@ -19,10 +19,9 @@ def provisional_primary_allowance(policy, allowance):
 
 
 def _example_experiments(wheel, training, development):
-    if not wheel.db.execute("SELECT name FROM sqlite_master WHERE name='example_measurements'").fetchone():return []
     current_train=wheel._evidence(training);current_dev=wheel._evidence(development)
     reports=[]
-    for payload, in wheel.db.execute("SELECT payload FROM example_measurements WHERE status='complete' ORDER BY rowid DESC"):
+    for _,payload in wheel.learning_storage.completed('examples'):
         report=json.loads(payload)
         if report.get('answer_dependencies') is None or not wheel.answer_dependencies_current(report['answer_dependencies']):continue
         if any(current_train.get(k)!=v for k,v in report.get('training_evidence',{}).items()) or any(current_dev.get(k)!=v for k,v in report.get('development_evidence',{}).items()):continue
@@ -108,7 +107,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         key_data["idea_screening"] = wheel.idea_screening.as_json()
     if stage=='examples':key_data['max_example_trials']=max_example_trials
     key = _hash(key_data)
-    wheel.db.execute("CREATE TABLE IF NOT EXISTS optimization_stages (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
+    wheel.learning_storage.ensure('rubric')
     key, saved = wheel.cached_artifact('optimization_stages', 'id', key)
     if saved and saved[0] == "complete":
         result = json.loads(saved[1])
@@ -123,7 +122,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     proposal = json.loads(saved[1]).get("proposal") if saved and saved[1] else None
     pending_key=None
     if proposal is None and not saved:
-        for old_key,payload in wheel.db.execute("SELECT id,payload FROM optimization_stages WHERE status='complete' ORDER BY rowid DESC"):
+        for old_key,payload in wheel.learning_storage.completed('rubric'):
             previous=json.loads(payload)
             evidence=previous.get('proposal_training_evidence',{})
             if (previous.get('stage')==stage and previous.get('pending_evaluation') and
@@ -134,9 +133,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                              'proposal':proposal,'reason':'reevaluate retained proposal with current development coverage'})
                 break
     control = controls[stage]
-    with wheel.db:
-        wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'pending', ?)",
-                         (key, _json({"proposal": proposal})))
+    wheel.learning_storage.begin('rubric',key,_json({'proposal':proposal}))
     wheel._emit({"kind": "optimization-stage-started", "stage": stage, "context_version": wheel.active.config.fingerprint})
     # Shadow mode never selects on the development partition (it judges ideas on forward stories), so it needs only an
     # incumbent rubric to compare against, provisional or not. Stage 2 dev_screen selects on development, so it keeps
@@ -164,23 +161,21 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
             diagnosis = await run_diagnosis(wheel, training, development, protected)
         screen_proposals, screen_lineage = await ask_round(
             wheel, lambda extra: stage_briefing(wheel, stage, training, development, protected, extra=extra),
-            optimizer_context(wheel, HypothesisLedger(wheel.db), own, hidden), "rubric", own, training, development,
+            optimizer_context(wheel, HypothesisLedger(storage=wheel.hypothesis_storage), own, hidden), "rubric", own, training, development,
             protected, diagnosis)
         # Every proposal can be gated out (novelty); the stage then keeps the incumbent and shadows what it has.
         proposal = screen_proposals[0] if screen_proposals else {
             "rationale": "no proposal passed the operator gates", "rubric": wheel.active.config.rubric}
-        with wheel.db:
-            wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?",
-                             (_json({"proposal": proposal, "screen_proposals": screen_proposals,
-                                     **({"screen_lineage": screen_lineage} if screen_lineage else {})}), key))
+        wheel.learning_storage.update_payload('rubric',key,
+            _json({'proposal':proposal,'screen_proposals':screen_proposals,
+                   **({'screen_lineage':screen_lineage} if screen_lineage else {})}))
     elif proposal is None:
         briefing = stage_briefing(wheel, stage, training, development, protected)
         recorded = next((event for event in reversed(wheel.history(1000))
                          if event["kind"] == "optimizer-response" and
                          event.get("briefing_fingerprint") == briefing.fingerprint), None) if retry_interrupted else None
         proposal = json.loads(recorded["content"]) if recorded else await ask_optimizer(wheel.optimizer, 'propose', briefing)
-        with wheel.db:
-            wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?", (_json({"proposal": proposal}), key))
+        wheel.learning_storage.update_payload('rubric',key,_json({'proposal':proposal}))
         if recorded:
             wheel._emit({"kind": "optimizer-response-reused", "briefing_fingerprint": briefing.fingerprint,
                          "reason": "explicit recovery; no additional optimizer request"})
@@ -207,8 +202,7 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
                 'answer_dependencies':wheel.collected_answer_dependencies(),
                 'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
-        with wheel.db:
-            wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?",(_json(result),key))
+        wheel.learning_storage.complete('rubric',key,_json(result))
         wheel._emit({'kind':'optimization-stage-completed',**result})
         return result
     config=wheel.active.config.apply(proposal, training)
@@ -219,12 +213,10 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
                 'answer_dependencies':wheel.collected_answer_dependencies(),
                 'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
-        with wheel.db:
-            wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?",(_json(result),key))
+        wheel.learning_storage.complete('rubric',key,_json(result))
         wheel._emit({'kind':'optimization-stage-completed',**result})
         return result
-    with wheel.db:
-        wheel.db.execute("UPDATE optimization_stages SET payload=? WHERE id=?", (_json({"proposal": proposal}), key))
+    wheel.learning_storage.update_payload('rubric',key,_json({'proposal':proposal}))
     if stage == "questions" and control == "tasks":
         result = await measure_questions(wheel, training, proposal["tasks"],
             protected=tuple(row.item for row in development)+tuple(protected), propensities=propensities,
@@ -332,18 +324,13 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
               'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
               'basis_context_version':key_data['context'], 'proposal_training_evidence':key_data['training'],
               "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"]}
-    with wheel.db:
-        if pending_key and not result.get('pending_evaluation') and result.get('reason')!='round failed':
-            old=json.loads(wheel.db.execute('SELECT payload FROM optimization_stages WHERE id=?',(pending_key,)).fetchone()[0])
-            old['pending_evaluation']=False
-            wheel.db.execute('UPDATE optimization_stages SET payload=? WHERE id=?',(_json(old),pending_key))
-        wheel.db.execute("UPDATE optimization_stages SET status='complete',payload=? WHERE id=?", (_json(result), key))
-        if result.get('activated') or result.get("promoted") or result.get("classifier_training", {}).get("promoted"):
-            # Restart after this stage's own promotion must not rediscover the
-            # same feedback merely because this stage changed the active context.
-            alias, _ = wheel.cached_artifact('optimization_stages', 'id',
-                _hash({**key_data, "context": wheel.active.config.fingerprint}))
-            wheel.db.execute("INSERT OR REPLACE INTO optimization_stages VALUES (?, 'complete', ?)",
-                (alias, _json(result)))
+    aliases=()
+    if result.get('activated') or result.get('promoted') or result.get('classifier_training',{}).get('promoted'):
+        # Preserve restart alias identity under the post-promotion context.
+        alias,_=wheel.cached_artifact('optimization_stages','id',
+            _hash({**key_data,'context':wheel.active.config.fingerprint}))
+        aliases=(alias,)
+    clear_pending=pending_key if pending_key and not result.get('pending_evaluation') and result.get('reason')!='round failed' else None
+    wheel.learning_storage.complete('rubric',key,_json(result),aliases=aliases,clear_pending_key=clear_pending)
     wheel._emit({"kind": "optimization-stage-completed", **result})
     return result

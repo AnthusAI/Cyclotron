@@ -331,7 +331,7 @@ async def screen_round(wheel, control, candidates, pool_ideas, training, develop
     ``pool_ideas`` are all of the control's ideas (carried positives are re-confirmed from them).
     ``proposal_of(idea)`` is the full proposal an idea applies. Returns a plain dict for events and results.
     """
-    ledger = HypothesisLedger(wheel.db)
+    ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
     protected_ids = {item.id for item in protected}
     if any(row.item.id in protected_ids for row in development):
         raise ValueError("development and protected records must be disjoint")
@@ -429,8 +429,8 @@ async def screening_stage(wheel, proposals, training, development, *, protected,
     cleared finalist through the usual fitted-trial path (improve with promotion)."""
     from .control_scheduler import ControlScheduler
     control, config = "rubric", wheel.idea_screening
-    scheduler, ledger = ControlScheduler(wheel), HypothesisLedger(wheel.db)
-    cycle = wheel.db.execute("SELECT count(*) FROM optimization_stages").fetchone()[0]
+    scheduler, ledger = ControlScheduler(wheel), HypothesisLedger(storage=wheel.hypothesis_storage)
+    cycle = wheel.learning_storage.count('rubric')
     scheduler.admit_proposals(control, proposals, training, cycle)
     ideas = [i for i in scheduler.ideas() if i["control"] == control]
 
