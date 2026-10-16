@@ -21,7 +21,83 @@
     "status": 200,
     "duplicateSessionGetAfterSwitch": false
   },
-  "finalColdTrace": {
+  "menuBrowserProof": {
+    "openAndClosePreservedWorkspace": true,
+    "loadingNotTriggered": true,
+    "physicalIpadVerified": false
+  },
+  "checks": {
+    "backendPassed": 94,
+    "uiPassed": 11,
+    "typescriptBuildPassed": true,
+    "backendAfterContextDedupPassed": 131,
+    "uiFocusedIncludingWorkspaceDiagnosticsPassed": 23
+  },
+  "deployment": {
+    "bffSource": "246338f",
+    "bffArtifactSha256": "846e110e240290c1a3a624584c69b3c025aa8e79c304d73d92f71547a519244e",
+    "amplifyJob": "5",
+    "status": "SUCCEED",
+    "workerChanged": false,
+    "permissionsChanged": false,
+    "latestBffSource": "d59eb5c3cc3ec4d55ae1c4972b060cd1ebc28e7d",
+    "latestBffArtifactSha256": "cebd0f12742cd0d2c81bd76ea3581305a39d9241db5220038602c50649442090",
+    "latestAmplifyJob": "6",
+    "frontendSource": "d083add"
+  },
+  "centralFix": {
+    "pullRequest": "https://github.com/AnthusAI/Prospectus/pull/10",
+    "merge": "b000adf",
+    "amplifyJob": "12",
+    "state": "deployed; parent and owner verified bundle"
+  },
+  "data": {
+    "accountsDeleted": 0,
+    "labelsSubmitted": 0,
+    "providerCalls": 0,
+    "identityLinkingPerformed": false
+  },
+  "postCentralFix": {
+    "initialAuthenticatedListingMs": 7134,
+    "initialSelectMs": 8011,
+    "warmSelectedReloadSamplesMs": [
+      7089,
+      7304
+    ],
+    "workspaceReadBeforeContextDedupMs": [
+      20692,
+      20636
+    ],
+    "coldSignedOutFirstRequestMs": 5924,
+    "postContextDedup": {
+      "coldSelectedReloadMs": 13894,
+      "coldLambdaReportMs": 12581.13,
+      "reportedInitMs": 396.78,
+      "warmSelectedReloadMs": 7059,
+      "workspaceReadSamplesMs": [
+        16587,
+        16253,
+        16279
+      ],
+      "status": 200,
+      "graphqlSuccessful": true,
+      "finalSwitchMs": 7825,
+      "finalSignOut": {
+        "status": 200,
+        "durationMs": 6329,
+        "signedOutSessionMs": 104,
+        "workspaceUnmounted": true
+      },
+      "menuOpenCloseTriggeredAccountRequest": false,
+      "screenshot": "deployment/cloud-account-post-pr10.jpg"
+    },
+    "physicalIpadVerified": false,
+    "newAccountsCreated": 0,
+    "labelsSubmitted": 0,
+    "providerCalls": 0,
+    "deletedAccounts": 0
+  },
+  "preCentralFixColdTrace": {
     "browserMs": 14635,
     "lambdaMs": 13514.95,
     "sessionReadMs": 220,
@@ -36,35 +112,7 @@
     "status": 200,
     "unattributedColdOverhead": true
   },
-  "menuBrowserProof": {
-    "openAndClosePreservedWorkspace": true,
-    "loadingNotTriggered": true,
-    "physicalIpadVerified": false
-  },
-  "checks": {
-    "backendPassed": 94,
-    "uiPassed": 11,
-    "typescriptBuildPassed": true
-  },
-  "deployment": {
-    "bffSource": "246338f",
-    "bffArtifactSha256": "846e110e240290c1a3a624584c69b3c025aa8e79c304d73d92f71547a519244e",
-    "amplifyJob": "5",
-    "status": "SUCCEED",
-    "workerChanged": false,
-    "permissionsChanged": false
-  },
-  "centralFix": {
-    "pullRequest": "https://github.com/AnthusAI/Prospectus/pull/10",
-    "state": "CI pending at checkpoint"
-  },
-  "data": {
-    "accountsDeleted": 0,
-    "labelsSubmitted": 0,
-    "providerCalls": 0,
-    "identityLinkingPerformed": false
-  },
-  "signOut": {
+  "preCentralFixSignOut": {
     "status": 200,
     "durationMs": 7148,
     "signedOutSessionMs": 116,

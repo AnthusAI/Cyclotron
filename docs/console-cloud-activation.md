@@ -307,3 +307,60 @@ Final sign-out passed in 7148ms; subsequent signed-out session read returned200
 in116ms and the browser showed only Welcome/Continue with Google. Anonymous
 public HTTP security checks pass again after the final rollout. The test browser
 is signed out to avoid ongoing background workspace reads while PR10 is pending.
+
+## Post-central-PR10 verification and HTTP context duplication
+
+Parent confirmed central PR10 merge b000adf / Amplify main job12 SUCCEED and live
+bundle identity. Actual existing-account Google login still succeeds. First
+post-fix account listing measured 7134ms (central listing 6890ms), selection
+8011ms; selected reloads 7089/7304ms. These are successful responses but remain
+slow. Signed-out first/cold load was 5924ms; no forced cold restart or concurrency
+change was used for measurement. Existing accounts only; no new enrollment
+identity fabrication, accounts, labels, provider calls or account deletions.
+
+To verify actual workspace completion, source d083add adds fixed-endpoint,
+HTTP status/success/duration-only browser diagnostics. It never logs queries,
+variables, account IDs, response data or private errors. 23 focused UI checks
+and production build pass; existing Amplify job6 SUCCEED. Measured real GraphQL
+reads succeeded without GraphQL errors in 20692/20636ms, proving the empty screen
+was backed by a completed read but exposing substantial residual delay.
+
+The BFF made three identity lookups per workspace request: HTTP middleware,
+GraphQL context and actual execution. The identity owner reviewed a narrow
+context-only optimization: a per-app private object sentinel marks request.state
+only after this request passes middleware same-origin/authentication. HTTP
+context checks sentinel identity and still checks origin; absent/wrong sentinel
+falls back to full authentication, and WebSocket always authenticates. This
+marker grants no workspace/account/operation access and is not a cross-request
+positive cache. Full on_execute identity/account authorization and stream guards
+remain unchanged, as do initial401/503/cross-origin403 outcomes.
+
+Source d59eb5c passes 131 backend/API checks, including separate requests,
+forged header, absent/invalid sentinel, WebSocket, revocation/outage/membership
+change between preflight and execution before any store access. Normal BFF-only
+change set http-context-preflight-20261016 was reviewed; worker/resources/IAM
+are unchanged and processed API bodies compare equal. Artifact SHA256:
+cebd0f12742cd0d2c81bd76ea3581305a39d9241db5220038602c50649442090.
+Actual post-deployment timings follow separately; do not infer them from tests.
+
+BFF-only context-preflight deployment is UPDATE_COMPLETE / Active / Successful;
+code hash matches the reviewed artifact. Actual first selected reload after this
+rollout: browser13894ms, Lambda12581.13ms with Init396.78ms. Warm selected reload:
+7059ms. Actual workspace reads succeeded (HTTP200, no GraphQL errors) in16587ms
+and16253ms versus20692/20636ms before the duplicate context removal. Sanitized
+trace confirms two fresh me lookups plus account authorization per execution,
+not a cached grant. Central read latency is still several seconds; the measured
+flows now complete, but this is not a low-latency or physical-iPad proof.
+
+Final existing Alpha-to-Beta switch completed in 7825ms; the Beta workspace read
+completed in 16279ms (HTTP 200, GraphQL successful). Opening and closing the native
+account menu preserved the workspace and generated no new account request.
+Screenshot: ![Verified Beta workspace](../deployment/cloud-account-post-pr10.jpg).
+Final browser logout completed in 6329ms, followed by signed-out session 104ms;
+the private workspace disappeared and the Google welcome page returned.
+
+Measured reload/switch failures are resolved in these runs and Ryan can retry
+the deployed lab. Remaining latency is material: warm accounts 7–8s, workspace
+about 16s, first selected reload 14s. Physical iPad behavior remains unverified.
+No new accounts, account deletions, labels or provider calls were performed;
+paid commands remain disabled. Existing fresh execution authorization is retained.

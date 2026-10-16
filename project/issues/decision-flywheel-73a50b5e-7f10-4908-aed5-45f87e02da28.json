@@ -153,10 +153,17 @@
       "text": "Final lab mitigation checkpoint246338f deployed, BFF Active/Successful +Amplify5 SUCCEED. Native menu opens/closes without loading; warm reload8535ms, switch8921ms200; logout7148ms then signed-out session116ms.94 backend/11UI specs/build pass; final anonymous GraphQL/events denial PASS. Cold browser14635ms remains; phase trace session220/JWT100/parallel central listing8326ms, so central storage PR10 CI/deploy still required. Evidence deployment/account-latency-evidence.json and cloud-account-latency-fix.jpg. No physical iPad claim, account deletion, label/model calls, grants or AWS browser.",
       "created_at": "2026-10-16T11:38:16.996055Z",
       "comment_type": "default"
+    },
+    {
+      "id": "f4631d57-8c19-403c-9ad0-6e3f7ce20add",
+      "author": "home",
+      "text": "2026-10-16 post-PR10 live verification: central b000adf/job12 plus BFF d59eb5c and UI job6. Normal BFF-only SAM deployment UPDATE_COMPLETE; live code hash matches artifact. 131 backend/API and 23 focused UI checks pass. Real existing-account reload warm7059ms/cold13894ms, switch7825ms; actual successful GraphQL workspace reads16587/16253/16279ms versus20692/20636ms before removing only duplicate HTTP context authentication. Private per-request sentinel retains same-origin and full fresh on_execute/stream/worker guards. Menu open/close triggered no account reload. Logout6329ms then signed-out session104ms; anonymous GraphQL/events denied. Ryan can retry; residual accounts7-8s/workspace16s remains material and physical iPad unverified. No new accounts/deletions/labels/providers/paid activation. Evidence deployment/account-latency-evidence.json and cloud-account-post-pr10.jpg; docs/console-cloud-activation.md.",
+      "created_at": "2026-10-16T12:24:40.925330Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T11:38:16.996094Z",
+  "updated_at": "2026-10-16T12:24:40.925429Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
