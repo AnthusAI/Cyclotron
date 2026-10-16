@@ -1,8 +1,8 @@
 import {afterEach,expect,test,vi} from 'vitest'
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import {AccountConsole} from './AccountConsole'
-import type {ConsoleAccountsClient,AuthenticatedConsoleSession,AccountSummary} from './consoleSession'
+import {SignInExpired,type ConsoleAccountsClient,type AuthenticatedConsoleSession,type AccountSummary} from './consoleSession'
 
 vi.mock('./WebApp',()=>({WebApp:()=> <div>Existing console workspace</div>}))
 afterEach(()=>{cleanup();window.history.replaceState(null,'','/');vi.restoreAllMocks()})
@@ -41,20 +41,79 @@ test('selecting a central account mounts the existing workspace and switching cl
   expect(window.location.hash).toBe('')
 })
 
-test('a failed create preserves its idempotency key for the same user retry',async()=>{
-  const client=clientFor({...signedIn,personId:null,accounts:[]})
-  vi.mocked(client.create).mockRejectedValueOnce(new Error('Service unavailable'))
+test('the first selection offers tappable accounts without account creation',async()=>{
+  const client=clientFor()
   render(<AccountConsole client={client}/> )
-  fireEvent.change(await screen.findByRole('textbox',{name:'Account name'}),{target:{value:'New team'}})
-  fireEvent.click(screen.getByRole('button',{name:'Create account'}))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Service unavailable')
-  fireEvent.click(screen.getByRole('button',{name:'Create account'}))
-  await waitFor(()=>expect(client.create).toHaveBeenCalledTimes(2))
-  const calls=vi.mocked(client.create).mock.calls
-  expect(calls[0]).toEqual(calls[1])
-  expect(calls[0][0]).toBe('New team')
-  expect(calls[0][1]).toMatch(/^[0-9a-f-]{36}$/)
-  expect(calls[0][2]).toBe('csrf')
+  expect(await screen.findByRole('button',{name:'Open Alpha team workspace (owner)'})).toBeVisible()
+  expect(screen.getByRole('button',{name:'Open Beta team workspace (viewer)'})).toBeVisible()
+  expect(screen.queryByRole('textbox',{name:'Account name'})).toBeNull()
+  expect(screen.queryByText(/Create.*account/i)).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'Open Alpha team workspace (owner)'}))
+  expect(await screen.findByText('Existing console workspace')).toBeVisible()
+  expect(screen.queryByText(/Create.*account/i)).toBeNull()
+  expect(client.create).not.toHaveBeenCalled()
+})
+
+test('no accounts shows an honest empty state without onboarding or workspace',async()=>{
+  const client=clientFor({...signedIn,personId:null,accounts:[]})
+  render(<AccountConsole client={client}/> )
+  expect(await screen.findByRole('heading',{name:'No accounts available'})).toBeVisible()
+  expect(screen.getByText('No accounts are available for this sign-in. Contact your account administrator if you expected access.')).toBeVisible()
+  expect(screen.queryByRole('combobox')).toBeNull()
+  expect(screen.queryByRole('textbox')).toBeNull()
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+  expect(client.create).not.toHaveBeenCalled()
+})
+
+test('a tap immediately shows workspace loading and repeated taps cannot repeat selection',async()=>{
+  let complete!:(state:AuthenticatedConsoleSession)=>void
+  const client=clientFor()
+  vi.mocked(client.select).mockImplementation(()=>new Promise(resolve=>{complete=resolve}))
+  render(<AccountConsole client={client}/> )
+  const choice=await screen.findByRole('button',{name:'Open Alpha team workspace (owner)'})
+  fireEvent.click(choice)
+  fireEvent.click(choice)
+  fireEvent.change(screen.getByRole('combobox',{name:'Account'}),{target:{value:'beta'}})
+  window.history.replaceState(null,'','#run=old-private-run')
+  fireEvent(window,new PopStateEvent('popstate'))
+  expect(screen.getByRole('status')).toHaveTextContent('Loading Alpha team workspace…')
+  expect(screen.queryByRole('heading',{name:'Choose an account'})).toBeNull()
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+  expect(screen.queryByText(/Create.*account/i)).toBeNull()
+  expect(screen.getByRole('combobox',{name:'Account'})).toBeDisabled()
+  expect(client.select).toHaveBeenCalledTimes(1)
+  complete({...signedIn,selectedAccountId:'alpha',canWrite:true})
+  expect(await screen.findByText('Existing console workspace')).toBeVisible()
+  expect(window.location.hash).toBe('')
+})
+
+test('switching hides old private workspace before awaiting fresh authorization',async()=>{
+  let complete!:(state:AuthenticatedConsoleSession)=>void
+  const client=clientFor({...signedIn,selectedAccountId:'alpha',canWrite:true})
+  vi.mocked(client.select).mockImplementation(()=>new Promise(resolve=>{complete=resolve}))
+  render(<AccountConsole client={client}/> )
+  await screen.findByText('Existing console workspace')
+  fireEvent.change(screen.getByRole('combobox',{name:'Account'}),{target:{value:'beta'}})
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+  expect(screen.getByRole('status')).toHaveTextContent('Loading Beta team workspace…')
+  complete({...signedIn,selectedAccountId:'beta',canWrite:false})
+  expect(await screen.findByText(/Read-only account/)).toBeVisible()
+  expect(screen.queryByText(/Create.*account/i)).toBeNull()
+})
+
+test('reload awaits fresh session verification before mounting a selected workspace',async()=>{
+  let complete!:(state:AuthenticatedConsoleSession)=>void
+  const client=clientFor()
+  vi.mocked(client.session).mockImplementation(()=>new Promise(resolve=>{complete=resolve}))
+  const view=render(<AccountConsole client={client}/> )
+  await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(1))
+  expect(screen.getByRole('status')).toHaveTextContent('Loading your accounts')
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+  view.unmount()
+  render(<AccountConsole client={client}/> )
+  await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(2))
+  complete({...signedIn,selectedAccountId:'beta',canWrite:false})
+  expect(await screen.findByText(/Read-only account/)).toBeVisible()
 })
 
 test('a central failure hides the workspace and offers a retry',async()=>{
@@ -137,4 +196,45 @@ test('native menu window focus never starts account loading but returning from b
   expect(client.session).toHaveBeenCalledTimes(1)
   fireEvent(document,new Event('visibilitychange'))
   await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(2))
+})
+
+
+test('a denied first selection stays outside all workspaces and retries verified state',async()=>{
+  const client=clientFor()
+  vi.mocked(client.select).mockRejectedValue(new Error('Account access denied'))
+  render(<AccountConsole client={client}/> )
+  fireEvent.click(await screen.findByRole('button',{name:'Open Alpha team workspace (owner)'}))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Account access denied')
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'Try again'}))
+  expect(await screen.findByRole('heading',{name:'Choose an account'})).toBeVisible()
+  expect(client.select).toHaveBeenCalledTimes(1)
+})
+
+test('expired authorization during selection returns to Google sign-in without workspace data',async()=>{
+  const client=clientFor({...signedIn,selectedAccountId:'alpha',canWrite:true})
+  vi.mocked(client.select).mockRejectedValue(new SignInExpired('Sign-in expired. Sign in again.'))
+  render(<AccountConsole client={client}/> )
+  await screen.findByText('Existing console workspace')
+  fireEvent.change(screen.getByRole('combobox',{name:'Account'}),{target:{value:'beta'}})
+  expect(await screen.findByRole('link',{name:'Continue with Google'})).toBeVisible()
+  expect(screen.queryByText('Existing console workspace')).toBeNull()
+})
+
+test('an older background session result cannot replace a newly authorized selection',async()=>{
+  let complete!:(state:AuthenticatedConsoleSession)=>void
+  const now=Date.now(),client=clientFor()
+  render(<AccountConsole client={client}/> )
+  await screen.findByRole('heading',{name:'Choose an account'})
+  vi.mocked(client.session).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve}))
+  vi.spyOn(Date,'now').mockReturnValue(now+60000)
+  vi.spyOn(document,'visibilityState','get').mockReturnValue('visible')
+  fireEvent(document,new Event('visibilitychange'))
+  await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(2))
+  vi.mocked(client.select).mockResolvedValue({...signedIn,selectedAccountId:'beta',canWrite:false})
+  fireEvent.click(screen.getByRole('button',{name:'Open Beta team workspace (viewer)'}))
+  expect(await screen.findByText(/Read-only account/)).toBeVisible()
+  await act(async()=>complete({...signedIn,selectedAccountId:'alpha',canWrite:true}))
+  expect(screen.queryByText('Can edit workspace')).toBeNull()
+  expect(screen.getByRole('combobox',{name:'Account'})).toHaveValue('beta')
 })

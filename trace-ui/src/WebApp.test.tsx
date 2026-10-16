@@ -561,3 +561,23 @@ test('the activity drawer can isolate optimizer exchanges from later decision tr
   expect(screen.getByText('Explain knowledge-base feedback')).toBeVisible()
   expect(screen.getByText('Keep knowledge-base articles')).toBeVisible()
 })
+
+
+test('an embedded workspace shows loading until its first verified run read finishes',async()=>{
+  let complete!:(value:unknown)=>void
+  vi.mocked(graphql).mockImplementation(()=>new Promise(resolve=>{complete=resolve}))
+  render(<WebApp embedded/> )
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…')
+  expect(screen.queryByText('A history you can inspect')).toBeNull()
+  await act(async()=>complete({runs:[],capabilities:{liveEnabled:false,itemCount:0}}))
+  expect(await screen.findByText('A history you can inspect')).toBeVisible()
+  expect(screen.queryByText('Loading workspace…')).toBeNull()
+})
+
+test('a failed initial workspace read shows an error rather than claiming empty history',async()=>{
+  vi.mocked(graphql).mockRejectedValue(new Error('Workspace access unavailable'))
+  render(<WebApp embedded/> )
+  expect(await screen.findByRole('alert')).toHaveTextContent('Workspace access unavailable')
+  expect(screen.queryByText('A history you can inspect')).toBeNull()
+  expect(screen.queryByText('Loading workspace…')).toBeNull()
+})

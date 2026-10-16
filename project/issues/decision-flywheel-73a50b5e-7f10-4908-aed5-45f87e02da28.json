@@ -160,10 +160,17 @@
       "text": "2026-10-16 post-PR10 live verification: central b000adf/job12 plus BFF d59eb5c and UI job6. Normal BFF-only SAM deployment UPDATE_COMPLETE; live code hash matches artifact. 131 backend/API and 23 focused UI checks pass. Real existing-account reload warm7059ms/cold13894ms, switch7825ms; actual successful GraphQL workspace reads16587/16253/16279ms versus20692/20636ms before removing only duplicate HTTP context authentication. Private per-request sentinel retains same-origin and full fresh on_execute/stream/worker guards. Menu open/close triggered no account reload. Logout6329ms then signed-out session104ms; anonymous GraphQL/events denied. Ryan can retry; residual accounts7-8s/workspace16s remains material and physical iPad unverified. No new accounts/deletions/labels/providers/paid activation. Evidence deployment/account-latency-evidence.json and cloud-account-post-pr10.jpg; docs/console-cloud-activation.md.",
       "created_at": "2026-10-16T12:24:40.925330Z",
       "comment_type": "default"
+    },
+    {
+      "id": "7a28e923-e868-4dc6-87c7-45ae2f0e94b8",
+      "author": "home",
+      "text": "Ryan UI correction in progress: remove all account creation controls from main Lab; show tappable first-selection account list and honest no-accounts empty state; immediate named workspace loading, retaining header selector for later switches. Tests cover repeated taps, pending navigation, failure/retry, reload, expired authorization and older background results. Existing BFF/central fresh authorization unchanged. 61 focused UI checks pass; typecheck/build and live responsive verification pending. Local run-study skill does not apply; Right Now generation disabled in project config. Parent coordinates central PR11 performance rollout separately; no account mutations/new permissions.",
+      "created_at": "2026-10-16T13:01:50.680217Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T12:24:40.925429Z",
+  "updated_at": "2026-10-16T13:01:50.681303Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

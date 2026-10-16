@@ -64,7 +64,7 @@ h1,h2,h3,h4,h5,h6,[data-slot="card-title"],.font-heading {font-family:'Blinker',
 .app-shell[data-embedded] {height:100%;padding:0}
 .account-console {padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
 .account-console .prospectus-account-switcher {display:flex;align-items:center;gap:8px;min-width:0;font-size:12px}
-.account-console .prospectus-account-switcher select {max-width:min(280px,55vw);min-width:0;border-radius:var(--radius);background:var(--input);padding:4px 8px;color:var(--foreground);font:inherit}
+.account-console .prospectus-account-switcher select {min-height:44px;max-width:min(280px,55vw);min-width:0;border-radius:var(--radius);background:var(--input);padding:4px 8px;color:var(--foreground);font:inherit}
 .account-console .prospectus-account-switcher select:focus-visible {outline:2px solid var(--ring);outline-offset:2px}
 .app-shell > header {flex-shrink:0}
 .app-header {--app-header-height:3rem;position:relative;z-index:50}
