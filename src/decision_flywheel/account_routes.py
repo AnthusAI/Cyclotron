@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 import hmac
 import json
+import math
 from urllib.parse import urlencode
 
 from fastapi import HTTPException, Request, Query
@@ -13,6 +14,10 @@ import httpx
 from .account_sessions import CognitoTokenVerifier, OAuthSessions, SessionRejected
 from .prospectus_accounts import (AccountAccessDenied, AccountWorkspaceAccess,
     ProspectusUnavailable, VerifiedAccountSession)
+
+
+class AccountIdentityChanged(AccountAccessDenied):
+    """Fresh account listing no longer proves the original enrolled person."""
 
 
 class HostedAccounts:
@@ -27,7 +32,7 @@ class HostedAccounts:
         self.owns_token_client = token_client is None
         self.access = AccountWorkspaceAccess(accounts, self.resolve_session, workspace_for_account)
 
-    async def _session(self, connection):
+    async def _session(self, connection, *, verify_person=True):
         identifier = connection.cookies.get(self.config.cookie_name)
         session = await asyncio.to_thread(self.sessions.get, identifier)
         if not session:
@@ -37,6 +42,12 @@ class HostedAccounts:
             if claims['sub'] != session.subject:
                 raise SessionRejected('session identity changed')
             if self.google_identity:
+                auth_time, lineage = claims.get('auth_time'), claims.get('origin_jti')
+                if (type(auth_time) not in (int, float) or not math.isfinite(auth_time)
+                        or auth_time > self.sessions.clock() + 30
+                        or not isinstance(lineage, str) or not 0 < len(lineage) <= 256 or not lineage.isascii()):
+                    raise SessionRejected('session binding is invalid')
+            if self.google_identity and verify_person:
                 person = await asyncio.to_thread(self.google_identity.me, session.access_token)
                 if not person or person['id'] != session.person_id:
                     raise SessionRejected('session identity enrollment changed')
@@ -52,14 +63,14 @@ class HostedAccounts:
             return None
         return VerifiedAccountSession(session.access_token, session.person_id, account_id, session_ref=session.session_ref)
 
-    async def _require(self, request):
-        session = await self._session(request)
+    async def _require(self, request, *, verify_person=True):
+        session = await self._session(request, verify_person=verify_person)
         if not session:
             raise HTTPException(401, 'sign-in required')
         return session
 
-    async def _csrf(self, request):
-        session = await self._require(request)
+    async def _csrf(self, request, *, verify_person=True):
+        session = await self._require(request, verify_person=verify_person)
         csrf = request.headers.get('x-csrf-token', '')
         if request.headers.get('origin') != self.config.public_origin or not csrf.isascii() or not hmac.compare_digest(csrf, session.csrf_token):
             raise HTTPException(403, 'request origin or session check failed')
@@ -87,7 +98,7 @@ class HostedAccounts:
         if person is None and cleaned:
             raise ProspectusUnavailable('invalid account identity response')
         if self.google_identity and (person is None or person['id'] != session.person_id):
-            raise AccountAccessDenied('account identity service is not aligned')
+            raise AccountIdentityChanged('account identity service is not aligned')
         person_id = person['id'] if person else None
         if session.person_id != person_id:
             session.person_id = person_id
@@ -206,10 +217,16 @@ class HostedAccounts:
 
         @app.get('/api/session')
         async def state(request: Request):
-            session = await self._session(request)
+            session = await self._session(request, verify_person=False)
             if not session:
                 return {'authenticated': False, 'loginUrl': '/auth/login'}
-            return await self._state(session)
+            try:
+                # Central listing itself verifies the current enrolled session
+                # family and person. Never accept null/mismatch or a cached grant.
+                return await self._state(session)
+            except AccountIdentityChanged:
+                await asyncio.to_thread(self.sessions.revoke, request.cookies.get(self.config.cookie_name))
+                return {'authenticated': False, 'loginUrl': '/auth/login'}
 
         @app.get('/api/runs/{run_id}/events')
         async def event_page(request: Request, run_id: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)):
@@ -234,7 +251,7 @@ class HostedAccounts:
 
         @app.post('/api/accounts/select')
         async def select(request: Request):
-            session = await self._csrf(request)
+            session = await self._csrf(request, verify_person=False)
             try:
                 body = await request.json()
                 account_id = body['accountId']
@@ -243,7 +260,11 @@ class HostedAccounts:
             if not session.person_id:
                 await self._listing(session)
             selected = replace(session, account_id=account_id)
-            result = await self._state(selected, require_selected=True)
+            try:
+                result = await self._state(selected, require_selected=True)
+            except AccountIdentityChanged:
+                await asyncio.to_thread(self.sessions.revoke, request.cookies.get(self.config.cookie_name))
+                raise SessionRejected('session identity enrollment changed') from None
             session.account_id = selected.account_id
             await asyncio.to_thread(self.sessions.save, session)
             return result

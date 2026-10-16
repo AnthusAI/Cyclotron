@@ -113,3 +113,12 @@ test('an uncertain switch hides the old workspace and retries state without repe
   expect(await screen.findByText('Existing console workspace')).toBeVisible()
   expect(client.select).toHaveBeenCalledTimes(1)
 })
+
+test('opening a native account menu does not refresh a recently loaded session',async()=>{
+  const client=clientFor()
+  render(<AccountConsole client={client}/> )
+  await screen.findByRole('heading',{name:'Choose an account'})
+  fireEvent.focus(window)
+  fireEvent.focus(window)
+  expect(client.session).toHaveBeenCalledTimes(1)
+})

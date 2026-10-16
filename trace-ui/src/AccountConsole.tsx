@@ -16,6 +16,7 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
   const [creationKey,setCreationKey]=useState(()=>crypto.randomUUID())
   const generation=useRef(0),active=useRef(true)
   const refreshPending=useRef<Promise<void>|null>(null),busyRef=useRef(false)
+  const lastRefreshAt=useRef(0)
   const expired=useCallback(()=>{
     generation.current++
     setSession({authenticated:false,loginUrl:'/auth/login'})
@@ -23,6 +24,7 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
   },[])
   const refresh=useCallback(()=>{
     if(refreshPending.current)return refreshPending.current
+    lastRefreshAt.current=Date.now()
     const current=++generation.current
     const pending=(async()=>{
     try{
@@ -40,7 +42,9 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
     let cancelled=false
     active.current=true
     void Promise.resolve().then(()=>{if(!cancelled)void refresh()})
-    const focus=()=>{if(!busyRef.current)void refresh()}
+    // Native account menus can emit focus repeatedly on touch browsers. A
+    // recently refreshed display needs no extra read; operations still authorize.
+    const focus=()=>{if(!busyRef.current&&Date.now()-lastRefreshAt.current>=30000)void refresh()}
     window.addEventListener('focus',focus)
     return ()=>{cancelled=true;active.current=false;window.removeEventListener('focus',focus)}
   },[refresh])

@@ -27,7 +27,7 @@ async function request<T>(path:string,options:RequestInit={}):Promise<T>{
     throw error
   }finally{
     clearTimeout(timeout)
-    console.debug('cyclotron-account-request',{path,status,durationMs:Math.round(performance.now()-started)})
+    console.debug('cyclotron-account-request '+JSON.stringify({path,status,durationMs:Math.round(performance.now()-started)}))
   }
 }
 const post=<T=void>(path:string,csrf:string,body:Record<string,unknown>={},headers:Record<string,string>={})=>request<T>(path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,...headers},body:JSON.stringify(body)})

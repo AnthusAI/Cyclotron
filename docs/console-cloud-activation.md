@@ -240,3 +240,26 @@ The unwanted “Ryan at Capacity” entry is being traced by the central owner u
 exact identity/account provenance and associations. Lab code does not generate
 that name. No deletion, email-based linking or identity inference is authorized
 by these diagnostics; recovery/approval checks remain with the parent.
+
+First mitigation deployed: BFF UPDATE_COMPLETE/Active/Successful; Amplify job2
+and final UI job4 SUCCEED. Existing account listing returned200 in14915ms and
+selection200 in15261ms end-to-end, with no duplicate GET after selection. These
+are measured partial improvement, not acceptable low latency. Central timings
+showed me6570ms plus list8231ms. Workspace execution still invokes fresh guards;
+those fences were not removed to hide the storage latency. The central owner
+identified15 native helper invocations per identity lookup, each reinitializing
+S3/bucket checks, and owns bounded immutable-read batching in its own branch.
+
+The identity owner separately confirmed from source plus four actual RSA/native
+checks that fresh central list/authorize already enforce the committed enrolled
+session family, auth_time, issuer/client/policy/principal and original Person.
+Therefore the next narrow lab optimization skips the redundant me ONLY for
+GET/api/session and POST/account-select: local signed JWT/sub/session/CSRF checks
+remain; finite nonfuture auth_time and nonempty bounded ASCII origin_jti are
+validated locally. Every success awaits a fresh listing whose nonnull person ID
+matches the encrypted original session, plus exact selected-account authorization.
+Null/mismatch revokes the local session; outage is never a positive fallback.
+Worker/workspace me and execution guards remain unchanged. New regressions cover
+null/mismatched Person, unknown/new-family representation, outage, malformed
+binding/future time, revoked selection and no mutation replay. No positive cache
+or email-based identity inference is introduced.
