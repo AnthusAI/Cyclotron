@@ -139,10 +139,17 @@
       "text": "Live first slice completed: actual Google login, Alpha/Beta central verification account create/select, owner workspaces, Beta-to-Alpha switch, sign-out and reload remaining signed-out all PASS. Public HTTP signed-out GraphQL/events401 and strict login initiation PASS. Evidence docs/console-cloud-activation.md plus cloud-google-account-proof.jpg/cloud-logout-proof.jpg. No human labels/model calls. Live viewer/revocation/queued-worker human authorization remain unproven; paid commands disabled. No AWS browser operations.",
       "created_at": "2026-10-16T07:42:18.703958Z",
       "comment_type": "default"
+    },
+    {
+      "id": "5e46d4e7-6dab-4744-930c-87ab6cc63525",
+      "author": "home",
+      "text": "Current iPad loading defect confirmed by3 actual28s BFF timeouts plus22-27s calls. Lab mitigation deployed8e9b3a5/8c76fd9: parallel fresh list/read/write; one verified select response, no duplicate GET;20s browser abort/state-only retry; no window-focus loading, throttled visibility return only. Current measured warm reload8.535s and switch8.921s200 versus14.915/15.261s first mitigation.94 backend/11UI checks/build pass. Central owner owns storage-helper batching performance fix (15 native calls per identity). Unwanted email-named account traced read-only, no deletes or email inference. No labels/model calls/new grants/AWS browser.",
+      "created_at": "2026-10-16T11:32:59.548834Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T07:42:18.703999Z",
+  "updated_at": "2026-10-16T11:32:59.549339Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

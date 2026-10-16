@@ -441,3 +441,20 @@ def test_select_revokes_changed_person_before_persisting_any_requested_account(h
         assert response.status_code == 401
         assert gateway.sessions.get(cookie) is None
         assert not any(call[0] == 'POST' and call[1] == '/v1/accounts' for call in state['calls'])
+
+
+def test_account_phase_timings_never_include_session_proofs(hosted, capsys):
+    import json
+    client, gateway, state, _ = hosted
+    with client:
+        sign_in(client, state)
+        cookie = client.cookies.get(gateway.config.cookie_name)
+        token = gateway.sessions.get(cookie).access_token
+        capsys.readouterr()
+        response = client.get('/api/session')
+        assert response.status_code == 200
+        output = capsys.readouterr().out
+        entries = [json.loads(line) for line in output.splitlines()]
+        phases = {entry['phase'] for entry in entries if entry.get('event') == 'console_phase'}
+        assert {'session_read', 'token_verify'} <= phases
+        assert cookie not in output and token not in output and response.json()['csrfToken'] not in output

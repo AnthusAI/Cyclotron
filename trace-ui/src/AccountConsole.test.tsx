@@ -78,14 +78,17 @@ test('signing out unmounts account data without storing bearer tokens in the bro
   expect(screen.queryByText('Existing console workspace')).toBeNull()
 })
 
-test('repeated window focus coalesces an in-flight account request',async()=>{
+test('repeated background-return events coalesce an in-flight account request',async()=>{
+  const now=Date.now()
   let complete!:(state:AuthenticatedConsoleSession)=>void
   const client=clientFor()
   vi.mocked(client.session).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve}))
   render(<AccountConsole client={client}/> )
   await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(1))
-  fireEvent.focus(window)
-  fireEvent.focus(window)
+  vi.spyOn(Date,'now').mockReturnValue(now+60000)
+  vi.spyOn(document,'visibilityState','get').mockReturnValue('visible')
+  fireEvent(document,new Event('visibilitychange'))
+  fireEvent(document,new Event('visibilitychange'))
   expect(client.session).toHaveBeenCalledTimes(1)
   complete(signedIn)
   expect(await screen.findByRole('heading',{name:'Choose an account'})).toBeVisible()
@@ -121,4 +124,17 @@ test('opening a native account menu does not refresh a recently loaded session',
   fireEvent.focus(window)
   fireEvent.focus(window)
   expect(client.session).toHaveBeenCalledTimes(1)
+})
+
+test('native menu window focus never starts account loading but returning from background does',async()=>{
+  const client=clientFor()
+  const now=Date.now()
+  render(<AccountConsole client={client}/> )
+  await screen.findByRole('heading',{name:'Choose an account'})
+  vi.spyOn(Date,'now').mockReturnValue(now+60000)
+  vi.spyOn(document,'visibilityState','get').mockReturnValue('visible')
+  fireEvent.focus(window)
+  expect(client.session).toHaveBeenCalledTimes(1)
+  fireEvent(document,new Event('visibilitychange'))
+  await waitFor(()=>expect(client.session).toHaveBeenCalledTimes(2))
 })

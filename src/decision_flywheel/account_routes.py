@@ -5,6 +5,7 @@ from dataclasses import replace
 import hmac
 import json
 import math
+import time
 from urllib.parse import urlencode
 
 from fastapi import HTTPException, Request, Query
@@ -13,7 +14,7 @@ import httpx
 
 from .account_sessions import CognitoTokenVerifier, OAuthSessions, SessionRejected
 from .prospectus_accounts import (AccountAccessDenied, AccountWorkspaceAccess,
-    ProspectusUnavailable, VerifiedAccountSession)
+    ProspectusUnavailable, VerifiedAccountSession, account_request_id)
 
 
 class AccountIdentityChanged(AccountAccessDenied):
@@ -32,13 +33,21 @@ class HostedAccounts:
         self.owns_token_client = token_client is None
         self.access = AccountWorkspaceAccess(accounts, self.resolve_session, workspace_for_account)
 
+    async def _timed(self, phase, operation, *args):
+        started = time.monotonic()
+        try:
+            return await asyncio.to_thread(operation, *args)
+        finally:
+            print(json.dumps({'event': 'console_phase', 'requestId': account_request_id.get(),
+                'phase': phase, 'durationMs': round((time.monotonic() - started) * 1000)}))
+
     async def _session(self, connection, *, verify_person=True):
         identifier = connection.cookies.get(self.config.cookie_name)
-        session = await asyncio.to_thread(self.sessions.get, identifier)
+        session = await self._timed('session_read', self.sessions.get, identifier)
         if not session:
             return None
         try:
-            claims = await asyncio.to_thread(self.verifier.access, session.access_token)
+            claims = await self._timed('token_verify', self.verifier.access, session.access_token)
             if claims['sub'] != session.subject:
                 raise SessionRejected('session identity changed')
             if self.google_identity:
@@ -266,7 +275,7 @@ class HostedAccounts:
                 await asyncio.to_thread(self.sessions.revoke, request.cookies.get(self.config.cookie_name))
                 raise SessionRejected('session identity enrollment changed') from None
             session.account_id = selected.account_id
-            await asyncio.to_thread(self.sessions.save, session)
+            await self._timed('session_write', self.sessions.save, session)
             return result
 
         @app.post('/api/accounts')

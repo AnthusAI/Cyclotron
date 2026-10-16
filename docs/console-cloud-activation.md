@@ -263,3 +263,24 @@ Worker/workspace me and execution guards remain unchanged. New regressions cover
 null/mismatched Person, unknown/new-family representation, outage, malformed
 binding/future time, revoked selection and no mutation replay. No positive cache
 or email-based identity inference is introduced.
+
+The redundant-call optimization deployed successfully as BFF-only change set
+account-authority-once-20261016 (artifact6b60bee8a244a6a6f60a72b90a5eabac873cd54b05a69daeefbb448359076376).
+Warm selected-account reload now measures8535ms; Alpha-to-Beta selection8921ms,
+both200, versus14915/15261ms after the first mitigation. Current cold reload was
+15058ms, with Lambda14005ms versus central max8504ms. Additional redacted local
+session-read/token-verify/session-write phase timing is being deployed to isolate
+that gap.94 backend tests include proof-redaction coverage.
+
+The touch-menu fix now removes window-focus loading entirely: only a throttled
+return from a background document can refresh account display. A regression
+proves native window focus even after60seconds cannot start loading, while a
+visibility return can.11 UI checks and production build pass. This is a tested
+browser-event fix, not a claim of physical iPad/Safari verification.
+
+Central owner independently tested its storage-helper batching fix with138
+identity/durability/delegation/RSA checks plus75 application checks and production
+bundle build; normal central PR/CI/deployment remains theirs. No receipt/family
+or authorization fence is relaxed here. The unwanted account's exact canonical
+creator/retained version/associations are under their read-only review; no
+account or identity has been removed by the console owner.

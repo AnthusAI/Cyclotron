@@ -42,11 +42,11 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
     let cancelled=false
     active.current=true
     void Promise.resolve().then(()=>{if(!cancelled)void refresh()})
-    // Native account menus can emit focus repeatedly on touch browsers. A
-    // recently refreshed display needs no extra read; operations still authorize.
-    const focus=()=>{if(!busyRef.current&&Date.now()-lastRefreshAt.current>=30000)void refresh()}
-    window.addEventListener('focus',focus)
-    return ()=>{cancelled=true;active.current=false;window.removeEventListener('focus',focus)}
+    // Native menus can emit window focus on touch browsers. Refresh only when
+    // returning from a background tab; operations still authorize independently.
+    const visible=()=>{if(document.visibilityState==='visible'&&!busyRef.current&&Date.now()-lastRefreshAt.current>=30000)void refresh()}
+    document.addEventListener('visibilitychange',visible)
+    return ()=>{cancelled=true;active.current=false;document.removeEventListener('visibilitychange',visible)}
   },[refresh])
 
   const change=async(action:()=>Promise<ConsoleSession|void>,clearOnFailure=false)=>{
