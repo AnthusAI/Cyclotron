@@ -167,10 +167,17 @@
       "text": "Ryan UI correction in progress: remove all account creation controls from main Lab; show tappable first-selection account list and honest no-accounts empty state; immediate named workspace loading, retaining header selector for later switches. Tests cover repeated taps, pending navigation, failure/retry, reload, expired authorization and older background results. Existing BFF/central fresh authorization unchanged. 61 focused UI checks pass; typecheck/build and live responsive verification pending. Local run-study skill does not apply; Right Now generation disabled in project config. Parent coordinates central PR11 performance rollout separately; no account mutations/new permissions.",
       "created_at": "2026-10-16T13:01:50.680217Z",
       "comment_type": "default"
+    },
+    {
+      "id": "aa8fab9e-ae15-44ea-a480-9797a084ef9b",
+      "author": "home",
+      "text": "Completed Ryan account-selection UI correction. Source e1812e2 (functional6933b2a), existing Amplify production job9 SUCCEED; actual live JS fc58c1e3fac17c67/CSS f0de56e4b8946f9b verified. Removed ALL account creation controls from Lab. First-login no-selection state has tappable account list; no-accounts state gives clear administrator guidance without onboarding. Selection immediately hides old workspace and shows named loading; initial workspace read also shows loading. Header switching retained.62 focused UI tests + TypeScript/production builds pass: failures/retry, repeated taps, reload/navigation, expiry and stale background results. Fixed observed empty-history route persistence and scoped hosted320px overflow. Actual Google/list/select/switch/reload/navigation/logout checked at desktop1280 and mobile390/320; final320 document width320, rows >=62.6px and inside viewport. Physical iPad not agent-verified. After central owner verified PR11 Lambda13:05:29Z, listing1758/1886ms, selected reload1973/1990ms, select2358/2646ms, successful workspace3773-4430ms vs prior21s. Final logout1584ms and welcome visible; browser viewport reset. Fresh BFF/execution authorization unchanged; no central edits, account creation/deletion, labels/providers/new permissions/AWS-console browser. Exact hashes/screenshots/timings: deployment/account-selection-evidence.json and docs/console-cloud-activation.md. User can retry live lab.",
+      "created_at": "2026-10-16T13:12:55.130955Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-14T20:57:51.094917Z",
-  "updated_at": "2026-10-16T13:01:50.681303Z",
+  "updated_at": "2026-10-16T13:12:55.131035Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

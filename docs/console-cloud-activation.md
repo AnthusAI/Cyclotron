@@ -364,3 +364,57 @@ the deployed lab. Remaining latency is material: warm accounts 7–8s, workspace
 about 16s, first selected reload 14s. Physical iPad behavior remains unverified.
 No new accounts, account deletions, labels or provider calls were performed;
 paid commands remain disabled. Existing fresh execution authorization is retained.
+
+
+## Account selection UI correction — final frontend job 9
+
+Ryan requested an account picker instead of account creation in Lab. Source
+7616284 removes both account-creation forms and presents full-width account
+buttons when no account is selected. No accounts produces a plain access empty
+state with administrator guidance; it invents no onboarding path. The existing
+shared header selector remains for subsequent switching.
+
+A selection immediately unmounts the previous workspace and displays named
+workspace loading. Repeated taps are suppressed synchronously. Only the fresh
+BFF selection/session response mounts an account-keyed workspace. Failure hides
+private data and offers a fresh state read rather than replaying the mutation;
+expired sign-in returns to Google. Older background responses and unmounted
+selection completions cannot replace a newer selection. Initial workspace data
+reads show loading instead of premature empty history. Existing BFF, central,
+execution and stream authorization are unchanged; no permissions were added.
+
+Live navigation exposed an existing empty-history route bug; 6933b2a records the
+optimization section even with no run so reload/back preserve navigation.
+Live 320px checking also found the inherited 360px body minimum; e1812e2 removes
+that minimum only for the hosted Lab. Standalone viewer sizing is retained.
+
+62 focused UI checks pass across account shell, workspace, session client and
+transport. They cover empty accounts, list selection, loading, repeated taps,
+pending navigation, failed selection/retry, expiry, reload and older background
+results. TypeScript and both production builds pass. React best-practices review
+retained request deduplication, account-keyed mounts, semantic buttons/statuses,
+keyboard focus and no new dependency. Local run-study skill is unrelated; Kanbus
+Right Now generation is disabled in project configuration.
+
+Existing Amplify production job 9 SUCCEED. Live JavaScript hash begins
+fc58c1e3fac17c67; CSS begins f0de56e4b8946f9b. Actual Google sign-in, desktop and
+phone selection, header switching, loading, selected reload, mobile navigation
+and logout were exercised with existing accounts. Live widths 1280/390/320 were
+checked; final 320px document width is 320 and every account row is within the
+viewport (minimum row height 62.6px). Viewport override reset afterwards.
+No physical iPad was available for this agent's verification.
+
+Central owner independently verified PR11 Lambda bundle at 13:05:29 UTC and
+backend stack completion at 13:06:00 UTC. Prior live list/select were 8.6/9–9.7s
+and workspace reads 21s. After that verified update, actual selected reloads
+1973/1990ms, fresh-login listings 1758/1886ms, selections 2358/2646ms, workspace
+reads 3773–4430ms, all HTTP200 / GraphQL successful. These are warm observed
+samples, not a cold-start or physical-device guarantee. Central work remained
+with its owner. No account creation/deletion, membership/entitlement edits,
+labels, provider calls, new permissions or AWS-console browser use occurred.
+
+Exact measurements, hashes and scope: deployment/account-selection-evidence.json.
+
+![Live desktop account picker](../deployment/cloud-account-list-desktop.jpg)
+![Live phone account picker](../deployment/cloud-account-list-mobile.jpg)
+![Immediate workspace loading](../deployment/cloud-account-loading-desktop.jpg)

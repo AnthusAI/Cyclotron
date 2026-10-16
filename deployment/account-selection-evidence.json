@@ -1,0 +1,109 @@
+{
+  "date": "2026-10-16",
+  "origin": "https://lab.cyclotron.anth.us/",
+  "source": "e1812e2ab3af8913f5d18c86a4811120713add12",
+  "functionalSource": "6933b2ae96823ef36be3a8597b7b6fd65646f276",
+  "amplify": {
+    "appId": "d2lya5yok0779c",
+    "branch": "production",
+    "jobId": "9",
+    "status": "SUCCEED"
+  },
+  "assets": {
+    "web.js": "fc58c1e3fac17c6729e6e47e5d6906f8b0e3781d8012d871dda9af623dd5c447",
+    "web.css": "f0de56e4b8946f9b30c0aa2ada6f8381641f5a8800b4f08c9fe999abe79262d3"
+  },
+  "behavior": {
+    "creationControlsRemoved": true,
+    "initialTappableList": true,
+    "immediateNamedLoading": true,
+    "initialWorkspaceDataLoading": true,
+    "headerSwitchingRetained": true,
+    "reloadAndNavigationVerified": true,
+    "noAccountsEmptyState": "synthetic test only; no live account/grant changes",
+    "failedSelectionAndRepeatedTaps": "synthetic tests; no live fault injection"
+  },
+  "checks": {
+    "focusedUiPassed": 62,
+    "typescriptAndProductionBuildPassed": true,
+    "responsiveWidths": [
+      1280,
+      390,
+      320
+    ],
+    "horizontalOverflowAtFinal320": false,
+    "minimumAccountRowHeightAt320": 62.5625,
+    "physicalIpadVerified": false,
+    "anonymousWorkspaceDenied": true
+  },
+  "central": {
+    "ownerVerifiedPr": "https://github.com/AnthusAI/Prospectus/pull/11",
+    "merge": "94f6d4ad57904797fe6beb7a3d4bad0a6a537684",
+    "lambdaUpdatedAt": "2026-10-16T13:05:29Z",
+    "backendStackCompleteAt": "2026-10-16T13:06:00Z",
+    "bundleVerifiedByOwner": true,
+    "changesPerformedByThisWork": false
+  },
+  "beforeCentralPr11": {
+    "listingMs": 8596,
+    "selectMs": [
+      9653,
+      9051
+    ],
+    "workspaceMs": [
+      21231,
+      20963
+    ]
+  },
+  "afterVerifiedCentralPr11": {
+    "selectedReloadMs": [
+      1973,
+      1990
+    ],
+    "newLoginListingMs": [
+      1758,
+      1886
+    ],
+    "selectMs": [
+      2358,
+      2646
+    ],
+    "workspaceMs": [
+      3773,
+      3916,
+      4430,
+      4050,
+      4126,
+      4206
+    ],
+    "status": 200,
+    "graphqlSuccessful": true,
+    "coldStartNotForcedOrMeasured": true
+  },
+  "scope": {
+    "backendChanged": false,
+    "freshAuthorizationChanged": false,
+    "permissionsChanged": false,
+    "accountsCreated": 0,
+    "accountsDeleted": 0,
+    "membershipOrEntitlementChanges": 0,
+    "labelsSubmitted": 0,
+    "providerCalls": 0,
+    "awsConsoleBrowserUsed": false,
+    "viewportOverrideReset": true
+  },
+  "screenshots": [
+    "cloud-account-list-desktop.jpg",
+    "cloud-account-list-mobile.jpg",
+    "cloud-account-list-320.jpg",
+    "cloud-account-loading-desktop.jpg",
+    "cloud-account-loading-mobile.jpg",
+    "cloud-account-workspace-mobile.jpg"
+  ],
+  "finalLogout": {
+    "durationMs": 1584,
+    "status": 200,
+    "workspaceUnmounted": true,
+    "welcomeVisible": true
+  }
+}
