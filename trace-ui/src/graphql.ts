@@ -9,11 +9,21 @@ export function workspaceUrl(path:string,accountId?:string){
 }
 
 export async function graphql<T>(query:string,variables:Record<string,unknown>={},accountId?:string):Promise<T>{
+  const started=performance.now()
+  let status:number|'unavailable'='unavailable',successful=false
+  try{
   const response=await fetch(workspaceUrl('/graphql',accountId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,variables})})
+  status=response.status
   if(response.status===401)throw new WorkspaceAuthenticationRequired('Authentication required')
   const body=await response.json()
   if(!response.ok||body.errors)throw new Error(body.errors?.[0]?.message||'The API request failed')
+  successful=true
   return body.data as T
+  }finally{
+    // Fixed endpoint and timing only; never emit query, variables, account IDs,
+    // response content or private error messages to browser diagnostics.
+    console.debug('cyclotron-workspace-request '+JSON.stringify({path:'/graphql',status,successful,durationMs:Math.round(performance.now()-started)}))
+  }
 }
 
 export function subscribeEvents(runId:string,after:number,onEvent:(event:TraceEvent)=>void,onStatus:(status:string)=>void,accountId?:string){

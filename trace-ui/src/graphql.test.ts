@@ -20,7 +20,7 @@ class FakeSocket{
 }
 const envelope=(sequence:number)=>({id:'events',type:'next',payload:{data:{runEvents:{sequence,sourceId:`event-${sequence}`,payload:{kind:'optimizer-response'}}}}})
 beforeEach(()=>{vi.useFakeTimers();FakeSocket.instances=[];vi.stubGlobal('WebSocket',FakeSocket)})
-afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals()})
+afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();vi.restoreAllMocks()})
 
 test('reconnecting resumes after the last delivered event and discards duplicates without model commands',()=>{
   const deliver=vi.fn(),status=vi.fn()
@@ -97,4 +97,19 @@ test('a connection without an acknowledgement times out and cleanup cancels both
   expect(FakeSocket.instances).toHaveLength(2)
   stop();vi.advanceTimersByTime(20000)
   expect(FakeSocket.instances).toHaveLength(2)
+})
+
+test.each([false,true])('workspace timings with failure=%s never log query variables or response content',async failed=>{
+  const {graphql}=await import('./graphql')
+  const log=vi.spyOn(console,'debug').mockImplementation(()=>{})
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(failed?{errors:[{message:'private-error-content'}]}:{data:{value:'private-response-content'}}),{status:200})))
+  const result=graphql('query PrivateQuery{privateField}',{value:'private-variable-content'},'private-account-id')
+  if(failed)await expect(result).rejects.toThrow('private-error-content')
+  else expect(await result).toEqual({value:'private-response-content'})
+  const output=String(log.mock.calls[0]?.[0])
+  const entry=JSON.parse(output.replace('cyclotron-workspace-request ',''))
+  expect(entry).toMatchObject({path:'/graphql',status:200,successful:!failed})
+  expect(entry.durationMs).toBeGreaterThanOrEqual(0)
+  for(const value of ['PrivateQuery','privateField','private-variable-content','private-response-content','private-error-content','private-account-id'])expect(output).not.toContain(value)
+  log.mockRestore()
 })
