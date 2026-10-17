@@ -55,6 +55,7 @@ from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedb
 from .models import DecisionTask, Item
 from .review_program import REASONS, ProgramState, ReviewProgram
 from .optimizer_agent import OptimizationSuperseded
+from .run_usage import _usage as _usage_counts, stored_usage_by_window
 from .shared_decisions import SharedDecisions
 from .review_rate_controller import ReviewRateController
 from .sibling_check import install_sibling_checks
@@ -67,11 +68,6 @@ ExecutionGuard = Callable[[], None | Awaitable[None]]
 _NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
-
-
-def _usage_counts(usage) -> tuple[int, int, int]:
-    from .run_usage import _usage
-    return _usage(usage)
 
 
 def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, list[dict]]:
@@ -559,70 +555,7 @@ class Cyclotron:
         request made while reviewing or learning counts toward the decision it
         served. The shape matches ``run_usage.usage_by_window``.
         """
-        from .run_usage import _block, _empty
-        if type(window) is not int or window < 1:
-            raise ValueError("window must be a positive integer")
-        if set(prices) != {"decision_model", "optimizer"}:
-            raise ValueError("prices must give decision_model and optimizer list prices")
-        position = {decision_id: index for index, (decision_id,) in
-                    enumerate(self.root_storage.decision_ids())}
-        times = [json.loads(payload)["createdAt"] for (payload,) in self.root_storage.decision_payloads()]
-        windows: dict[int, dict] = {}
-        total = {"decision_model": _empty(), "optimizer": _empty()}
-        for decision_id, model, prompt, cached, output in self.root_storage.usage_counts():
-            index = position.get(decision_id)
-            targets = [total[model]]
-            if index is not None:
-                targets.append(windows.setdefault(index // window, {"decision_model": _empty(), "optimizer": _empty()})[model])
-            for counts in targets:
-                counts["requests"] += 1
-                counts["input_tokens"] += prompt
-                counts["cached_input_tokens"] += cached
-                counts["output_tokens"] += output
-        blocks = []
-        for index in range((len(times) + window - 1) // window):
-            first, last = index * window, min(len(times), (index + 1) * window) - 1
-            models = windows.get(index, {"decision_model": _empty(), "optimizer": _empty()})
-            blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
-                           **_block(models, prices, times[first], times[last])})
-        return {"window_size": window, "windows": blocks,
-                "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices),
-                "outputs": self._usage_by_output(prices)}
-
-    def _usage_by_output(self, prices: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
-        """An estimated split of the total by output; the outputs sum to the total.
-
-        Optimizer calls are measured per output (each output's learning makes
-        its own calls). A shared decision-model request is split by each
-        output's share of the request bytes; a request recorded before shares
-        were kept is split evenly.
-        """
-        from .run_usage import _block, _empty
-        ids = list(self.specs)
-        per = {cid: {"decision_model": _empty(), "optimizer": _empty()} for cid in ids}
-        shares: dict[int, dict[str, float]] = {}
-        for usage_id, classifier, share in self.root_storage.usage_shares():
-            shares.setdefault(usage_id, {})[classifier] = share
-        for usage_id, model, prompt, cached, output, source in self.root_storage.usage_by_output():
-            if model == "optimizer":
-                owner = (source or "").rsplit(":", 1)[0]
-                split = {owner: 1.0} if owner in per else {cid: 1 / len(ids) for cid in ids}
-            else:
-                split = {cid: share for cid, share in shares.get(usage_id, {}).items() if cid in per}
-                if not split:
-                    split = {cid: 1 / len(ids) for cid in ids}
-                scale = sum(split.values())
-                split = {cid: share / scale for cid, share in split.items()}
-            for cid, share in split.items():
-                counts = per[cid][model]
-                counts["requests"] += share
-                counts["input_tokens"] += prompt * share
-                counts["cached_input_tokens"] += cached * share
-                counts["output_tokens"] += output * share
-        return {"estimate": ("Decision-model usage is split by each output's share of the shared request bytes "
-                             "(evenly for requests recorded before shares were kept); optimizer usage is measured "
-                             "per output. Outputs sum to the total."),
-                "by_output": {cid: _block(per[cid], prices) for cid in ids}}
+        return stored_usage_by_window(self.root_storage, list(self.specs), prices, window=window)
 
     def decision_log(self) -> list[dict[str, Any]]:
         """Every decision in the order it was made, with its item values, state and active reviews (for recordings)."""
