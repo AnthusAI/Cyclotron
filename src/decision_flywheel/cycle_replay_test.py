@@ -1,7 +1,6 @@
 import asyncio
 import json
 import pytest
-
 from .cycle_replay import run_cycle_replay
 from .replay import plan_replay
 from .replay_test import rows
@@ -104,6 +103,48 @@ def test_replay_can_resume_a_completed_prefix_without_repaying_predictions(tmp_p
     assert sum(event['kind']=='features-requested' for event in wheel.history(10000))==len(ordered)
     assert sum(event['kind']=='cycle-completed' for event in wheel.history(10000))==len(ordered)
     wheel.close()
+
+
+@pytest.mark.parametrize('how_the_cycle_stops',['a step raises after the vote is recorded','the process dies after the vote is recorded'])
+def test_resuming_an_interrupted_cycle_completes_it_without_recording_its_feedback_twice(tmp_path,monkeypatch,how_the_cycle_stops):
+    ordered=rows()
+    plan=plan_replay(TASK,ordered,seed='interrupted-resume',batch_size=100)
+    replay_options=dict(optimize_every=100,retrain_every=100,stages=('rubric',),rubric_changes_every=None)
+    def open_wheel(path):
+        return DecisionFlywheel(path,ClassifierConfig(TASK),FakeModel(),OptimizerAgent(lambda _:OptimizerReply('{}','fake')),max_requests=2000)
+    uninterrupted=open_wheel(tmp_path/'uninterrupted.sqlite')
+    asyncio.run(run_cycle_replay(uninterrupted,plan,**replay_options))
+    expected_events=uninterrupted.history(100000)
+    uninterrupted.close()
+    interrupted_path=tmp_path/'interrupted.sqlite'
+    wheel=open_wheel(interrupted_path)
+    original_context_setter=wheel.set_optimizer_context
+    calls=[]
+    def die_during_the_third_cycle(value):
+        calls.append(value)
+        if len(calls)==3:
+            raise RuntimeError('synthetic interruption')
+        return original_context_setter(value)
+    wheel.set_optimizer_context=die_during_the_third_cycle
+    if how_the_cycle_stops.startswith('the process dies'):
+        original_emit=wheel._emit
+        wheel._emit=lambda event:{} if event.get('kind')=='cycle-failed' else original_emit(event)
+    with pytest.raises(RuntimeError,match='synthetic interruption'):
+        asyncio.run(run_cycle_replay(wheel,plan,**replay_options))
+    wheel.close()
+    resumed=open_wheel(interrupted_path)
+    report=asyncio.run(run_cycle_replay(resumed,plan,resume=True,**replay_options))
+    events=resumed.history(100000)
+    resumed.close()
+    assert report['resumed_from_cycles']==2
+    def kinds_in_order(history,kind,field):
+        return [event[field] for event in history if event['kind']==kind]
+    recorded_item_ids=[event['feedback']['item_id'] for event in events if event['kind']=='human-feedback']
+    assert recorded_item_ids==[event['feedback']['item_id'] for event in expected_events if event['kind']=='human-feedback']
+    assert len(recorded_item_ids)==len(set(recorded_item_ids))
+    assert kinds_in_order(events,'cycle-started','cycle_number')==list(range(1,len(ordered)+1))
+    assert kinds_in_order(events,'cycle-completed','cycle_number')==list(range(1,len(ordered)+1))
+    assert len(kinds_in_order(events,'prediction','target_id'))==len(kinds_in_order(expected_events,'prediction','target_id'))
 
 
 def test_revealed_feedback_trigger_uses_exact_counts_with_partial_feedback(tmp_path):
