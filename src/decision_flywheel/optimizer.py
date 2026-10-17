@@ -1,24 +1,23 @@
 """Development-only, resumable search over explicit context-policy trials."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import unicodedata
-from collections.abc import MutableMapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 from .budget import ContextBudget, build_context_plan
 from .context import ContextPolicy, PolicyMetadata
 from .events import EventSink, FlywheelEvent
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
 
-
 Objective = Literal["accuracy", "macro-f1", "brier"]
 MissingProbabilityPolicy = Literal["accuracy", "incomplete"]
 TrialStatus = Literal["completed", "incomplete", "not-run"]
-FailureReason = Literal["context-infeasible", "model-failure", "call-budget-exhausted",
-                        "missing-probabilities"]
+FailureReason = Literal["context-infeasible", "model-failure", "call-budget-exhausted", "missing-probabilities"]
 _CALL_ACCOUNTING_KEY = "model_calls_attempted"
 
 
@@ -156,16 +155,25 @@ async def search_context_policies(
     """
     if missing_probabilities not in {"accuracy", "incomplete"}:
         raise ValueError("missing_probabilities must be 'accuracy' or 'incomplete'")
-    _validate_search_inputs(task, candidates, development, trials, max_model_calls,
-                            objective, protected_ids, protected_text_hashes)
+    _validate_search_inputs(
+        task, candidates, development, trials, max_model_calls, objective, protected_ids, protected_text_hashes
+    )
     resolved_label_order = _resolve_presentation_label_order(task, presentation_label_order)
     resolved_model_fingerprint = _resolve_model_fingerprint(model, model_fingerprint)
     candidate_pool_fingerprint = _split_fingerprint(task, candidates)
     development_split_fingerprint = _split_fingerprint(task, development)
     search_fingerprint = _search_fingerprint(
-        task.fingerprint, candidate_pool_fingerprint, development_split_fingerprint,
-        resolved_model_fingerprint, trials, objective, max_model_calls, display_order,
-        order_seed, resolved_label_order, missing_probabilities,
+        task.fingerprint,
+        candidate_pool_fingerprint,
+        development_split_fingerprint,
+        resolved_model_fingerprint,
+        trials,
+        objective,
+        max_model_calls,
+        display_order,
+        order_seed,
+        resolved_label_order,
+        missing_probabilities,
     )
     prior_attempted = _read_call_accounting(call_accounting, search_fingerprint)
     if prior_attempted > max_model_calls:
@@ -183,8 +191,13 @@ async def search_context_policies(
         for development_item in development:
             try:
                 plan = build_context_plan(
-                    task, development_item.item, candidates, spec.policy,
-                    budget=spec.context_budget, display_order=display_order, order_seed=order_seed,
+                    task,
+                    development_item.item,
+                    candidates,
+                    spec.policy,
+                    budget=spec.context_budget,
+                    display_order=display_order,
+                    order_seed=order_seed,
                     presentation_label_order=resolved_label_order,
                 )
             except ValueError:
@@ -204,8 +217,7 @@ async def search_context_policies(
                     _emit(event_sink, "decision-reused", spec.trial_name, key, attempted, succeeded)
                     continue
                 if probabilities is not None or missing_probabilities == "accuracy":
-                    decisions.append(DecisionHistory(development_item.item.id, key, prediction, True,
-                                                     probabilities))
+                    decisions.append(DecisionHistory(development_item.item.id, key, prediction, True, probabilities))
                     _emit(event_sink, "decision-reused", spec.trial_name, key, attempted, succeeded)
                     continue
             if prior_attempted + attempted >= max_model_calls:
@@ -246,37 +258,45 @@ async def search_context_policies(
             store[key] = {"label": prediction, "probabilities": probabilities}
             decisions.append(DecisionHistory(development_item.item.id, key, prediction, False, probabilities))
 
-        trial_objective = ("accuracy" if objective == "brier" and any(
-            row.probabilities is None for row in decisions) else objective)
+        trial_objective = (
+            "accuracy" if objective == "brier" and any(row.probabilities is None for row in decisions) else objective
+        )
         score = _score(task, development, decisions, trial_objective) if complete else None
-        results.append(TrialResult(
-            trial_name=spec.trial_name,
-            policy_metadata=spec.policy.metadata,
-            policy_fingerprint=spec.policy.fingerprint,
-            per_label=spec.per_label,
-            budget=spec.context_budget,
-            display_order=display_order,
-            order_seed=order_seed,
-            presentation_label_order=resolved_label_order,
-            status="completed" if complete else "incomplete",
-            objective=score,
-            decisions=tuple(decisions),
-            failure_count=failures,
-            failure_reasons=tuple(reasons),
-        ))
-        _emit(event_sink, "trial-completed" if complete else "trial-incomplete", spec.trial_name,
-              None, attempted, succeeded)
+        results.append(
+            TrialResult(
+                trial_name=spec.trial_name,
+                policy_metadata=spec.policy.metadata,
+                policy_fingerprint=spec.policy.fingerprint,
+                per_label=spec.per_label,
+                budget=spec.context_budget,
+                display_order=display_order,
+                order_seed=order_seed,
+                presentation_label_order=resolved_label_order,
+                status="completed" if complete else "incomplete",
+                objective=score,
+                decisions=tuple(decisions),
+                failure_count=failures,
+                failure_reasons=tuple(reasons),
+            )
+        )
+        _emit(event_sink, "trial-completed" if complete else "trial-incomplete", spec.trial_name, None, attempted, succeeded)
 
-    fallback_trials = tuple(trial.trial_name for trial in results if any(
-        row.probabilities is None for row in trial.decisions)) if objective == "brier" and missing_probabilities == "accuracy" else ()
+    fallback_trials = (
+        tuple(trial.trial_name for trial in results if any(row.probabilities is None for row in trial.decisions))
+        if objective == "brier" and missing_probabilities == "accuracy"
+        else ()
+    )
     effective_objective = "accuracy" if fallback_trials else objective
     if fallback_trials:
-        results = [replace(trial, objective=_score(task, development, trial.decisions, "accuracy"))
-                   if trial.status == "completed" else trial for trial in results]
+        results = [
+            replace(trial, objective=_score(task, development, trial.decisions, "accuracy"))
+            if trial.status == "completed"
+            else trial
+            for trial in results
+        ]
     completed = [trial for trial in results if trial.status == "completed"]
     sign = -1 if effective_objective == "brier" else 1
-    provisional_best = (max(completed, key=lambda trial: (sign * trial.objective, trial.trial_name))
-                        if completed else None)
+    provisional_best = max(completed, key=lambda trial: (sign * trial.objective, trial.trial_name)) if completed else None
     winner = provisional_best if len(completed) == len(results) else None
     result_type = ObjectiveFallbackResult if fallback_trials else OptimizationResult
     result = result_type(
@@ -294,15 +314,24 @@ async def search_context_policies(
         provisional_best=provisional_best,
         winner=winner,
         checkpoint_entries=len(store),
-        **({"requested_objective": objective, "fallback_reason": "missing-probabilities",
-            "fallback_trials": fallback_trials} if fallback_trials else {}),
+        **(
+            {"requested_objective": objective, "fallback_reason": "missing-probabilities", "fallback_trials": fallback_trials}
+            if fallback_trials
+            else {}
+        ),
     )
     _emit(event_sink, "round-completed", None, None, attempted, succeeded)
     return result
 
 
-def _emit(sink: EventSink | None, event_type: str, trial_name: str | None,
-          request_fingerprint: str | None, attempted: int, succeeded: int) -> None:
+def _emit(
+    sink: EventSink | None,
+    event_type: str,
+    trial_name: str | None,
+    request_fingerprint: str | None,
+    attempted: int,
+    succeeded: int,
+) -> None:
     if sink is not None:
         sink(FlywheelEvent(event_type, trial_name, request_fingerprint, attempted, succeeded))
 
@@ -328,9 +357,7 @@ def _validate_search_inputs(
         raise ValueError("trial names must be unique")
     protected_id_set = set(protected_ids)
     protected_hash_set = set(protected_text_hashes)
-    candidate_ids, candidate_texts = _validate_labeled_split(
-        task, candidates, "candidates", protected_id_set, protected_hash_set
-    )
+    candidate_ids, candidate_texts = _validate_labeled_split(task, candidates, "candidates", protected_id_set, protected_hash_set)
     development_ids, development_texts = _validate_labeled_split(
         task, development, "development", protected_id_set, protected_hash_set
     )
@@ -415,9 +442,7 @@ def _checkpoint_entry(task: DecisionTask, value: object) -> tuple[str, dict[str,
 def _split_fingerprint(task: DecisionTask, rows: Sequence[LabeledItem]) -> str:
     """Hash an order-independent split manifest without retaining source text."""
     manifest = sorted(
-        (row.item.id, task.validate_label(row.label), _text_hash(task, row.item),
-         _context_hash(row.context))
-        for row in rows
+        (row.item.id, task.validate_label(row.label), _text_hash(task, row.item), _context_hash(row.context)) for row in rows
     )
     return _fingerprint(manifest)
 
@@ -455,20 +480,25 @@ def _search_fingerprint(
         }
         for trial in trials
     ]
-    return _fingerprint({
-        "candidate_pool_fingerprint": candidate_pool_fingerprint,
-        "declared_trials": declared_trials,
-        "development_split_fingerprint": development_split_fingerprint,
-        "display_order": display_order,
-        "max_model_calls": max_model_calls,
-        "model_fingerprint": model_fingerprint,
-        "objective": objective,
-        "order_seed": order_seed,
-        "presentation_label_order": presentation_label_order,
-        "task_fingerprint": task_fingerprint,
-        **({"missing_probabilities": missing_probabilities}
-           if objective == "brier" and missing_probabilities != "incomplete" else {}),
-    })
+    return _fingerprint(
+        {
+            "candidate_pool_fingerprint": candidate_pool_fingerprint,
+            "declared_trials": declared_trials,
+            "development_split_fingerprint": development_split_fingerprint,
+            "display_order": display_order,
+            "max_model_calls": max_model_calls,
+            "model_fingerprint": model_fingerprint,
+            "objective": objective,
+            "order_seed": order_seed,
+            "presentation_label_order": presentation_label_order,
+            "task_fingerprint": task_fingerprint,
+            **(
+                {"missing_probabilities": missing_probabilities}
+                if objective == "brier" and missing_probabilities != "incomplete"
+                else {}
+            ),
+        }
+    )
 
 
 def _fingerprint(value: object) -> str:
@@ -476,8 +506,7 @@ def _fingerprint(value: object) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _read_call_accounting(accounting: MutableMapping[str, int | str] | None,
-                          search_fingerprint: str) -> int:
+def _read_call_accounting(accounting: MutableMapping[str, int | str] | None, search_fingerprint: str) -> int:
     if accounting is None:
         return 0
     if not accounting:
@@ -496,15 +525,15 @@ def _read_call_accounting(accounting: MutableMapping[str, int | str] | None,
     return value
 
 
-def _write_call_accounting(accounting: MutableMapping[str, int | str] | None, attempted: int,
-                           search_fingerprint: str) -> None:
+def _write_call_accounting(accounting: MutableMapping[str, int | str] | None, attempted: int, search_fingerprint: str) -> None:
     if accounting is not None:
         accounting[_CALL_ACCOUNTING_KEY] = attempted
         accounting["search_fingerprint"] = search_fingerprint
 
 
-def _score(task: DecisionTask, development: Sequence[LabeledItem], decisions: Sequence[DecisionHistory],
-           objective: Objective) -> float:
+def _score(
+    task: DecisionTask, development: Sequence[LabeledItem], decisions: Sequence[DecisionHistory], objective: Objective
+) -> float:
     predictions = {decision.target_id: decision.prediction for decision in decisions}
     if set(predictions) != {row.item.id for row in development}:
         raise ValueError("only complete development trials may be scored")
@@ -524,8 +553,7 @@ def _score(task: DecisionTask, development: Sequence[LabeledItem], decisions: Se
     return sum(f1s) / len(f1s)
 
 
-def _resolve_presentation_label_order(task: DecisionTask,
-                                      label_order: Sequence[str] | None) -> tuple[str, ...]:
+def _resolve_presentation_label_order(task: DecisionTask, label_order: Sequence[str] | None) -> tuple[str, ...]:
     """Mirror the explicit request-order contract of the budget planner."""
     if label_order is None:
         return tuple(sorted(task.labels))
@@ -537,15 +565,27 @@ def _resolve_presentation_label_order(task: DecisionTask,
     return resolved
 
 
-def _not_run_result(spec: TrialSpec, display_order: str, order_seed: int,
-                    presentation_label_order: tuple[str, ...]) -> TrialResult:
-    return TrialResult(spec.trial_name, spec.policy.metadata, spec.policy.fingerprint,
-                       spec.per_label, spec.context_budget, display_order, order_seed,
-                       presentation_label_order, "not-run", None, (), 0, ())
+def _not_run_result(
+    spec: TrialSpec, display_order: str, order_seed: int, presentation_label_order: tuple[str, ...]
+) -> TrialResult:
+    return TrialResult(
+        spec.trial_name,
+        spec.policy.metadata,
+        spec.policy.fingerprint,
+        spec.per_label,
+        spec.context_budget,
+        display_order,
+        order_seed,
+        presentation_label_order,
+        "not-run",
+        None,
+        (),
+        0,
+        (),
+    )
 
 
-def brier_score(task: DecisionTask, actual: Mapping[str, str],
-                distributions: Mapping[str, Mapping[str, float] | None]) -> float:
+def brier_score(task: DecisionTask, actual: Mapping[str, str], distributions: Mapping[str, Mapping[str, float] | None]) -> float:
     """Mean over items of the label-averaged squared error of a distribution.
 
     For two labels this equals the binary Brier score of either label.
@@ -555,6 +595,7 @@ def brier_score(task: DecisionTask, actual: Mapping[str, str],
         distribution = distributions.get(item_id)
         if distribution is None:
             raise ValueError("the Brier objective needs a probability distribution for every item")
-        total += sum((float(distribution[name]) - (1.0 if name == label else 0.0)) ** 2
-                     for name in task.labels) / len(task.labels)
+        total += sum((float(distribution[name]) - (1.0 if name == label else 0.0)) ** 2 for name in task.labels) / len(
+            task.labels
+        )
     return total / len(actual)

@@ -24,14 +24,20 @@ web:
 web-live:
 	$(PYTHON) -m decision_flywheel.web_server serve --database "$(WEB_DATABASE)" --articles "$(REVIEWER_BATCH)" --port "$(WEB_PORT)" --allow-live
 
-.PHONY: test demo review review-local review-arxiv run-flywheel review-live install-tools release
+.PHONY: test test-all demo review review-local review-arxiv run-flywheel review-live install-tools release
 
 test:
+	$(PYTHON) -m pytest -q -m "not slow"
+
+test-all:
 	$(PYTHON) -m pytest -q
 
-.PHONY: check
-check:
-	$(PYTHON) -m pytest -q
+.PHONY: check lint
+lint:
+	$(PYTHON) -m ruff check .
+	$(PYTHON) -m ruff format --check .
+
+check: lint test-all
 	cd trace-ui && npm ci && npm test && npm run build
 	git diff --exit-code -- src/decision_flywheel/vendor/trace-ui
 

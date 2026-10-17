@@ -3,47 +3,71 @@ from types import SimpleNamespace
 
 import pytest
 
-from .jev import JevAdapter, JevConfiguration
 from ..models import DecisionTask, Item, LabeledItem
-
+from .jev import JevAdapter, JevConfiguration
 
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only the target.")
 TARGET = Item("target", {"text": "target text"})
 CONTEXT = [LabeledItem(Item("demo", {"text": "demo text"}), "yes")]
 
 
-@pytest.mark.parametrize('proposal', [
-    {'rubric':'Revised human criteria'},
-    {'example_ids':[]},
-    {'tasks':[{'name':'practical','instructions':'Revised wording?', 'labels':['present','absent']}]},
-    {'tasks':[{'name':'practical','instructions':'Practical?', 'labels':['yes','no']},
-              {'name':'recent','instructions':'Recent?', 'labels':['yes','no']}]},
-    {'tasks':[]},
-    {'dynamic_elements':[]},
-])
+@pytest.mark.parametrize(
+    "proposal",
+    [
+        {"rubric": "Revised human criteria"},
+        {"example_ids": []},
+        {"tasks": [{"name": "practical", "instructions": "Revised wording?", "labels": ["present", "absent"]}]},
+        {
+            "tasks": [
+                {"name": "practical", "instructions": "Practical?", "labels": ["yes", "no"]},
+                {"name": "recent", "instructions": "Recent?", "labels": ["yes", "no"]},
+            ]
+        },
+        {"tasks": []},
+        {"dynamic_elements": []},
+    ],
+)
 def test_independent_config_edits_change_the_exact_jev_request_and_keep_the_parent(proposal):
     from datetime import datetime, timezone
+
     from ..classifier_config import ClassifierConfig
+
     class Client:
         def system_one(self, *, state, questions):
             self.state, self.questions = state, questions
-            return SimpleNamespace(answers={key:{'choice':next(iter(question['criteria'])),
-                'probabilities':{label:1/len(question['criteria']) for label in question['criteria']}}
-                for key, question in questions.items()}, model='fake', usage={})
-    parent = ClassifierConfig(TASK, rubric='Original', example_ids=('demo',),
-        tasks=(DecisionTask('practical', ('yes','no'), 'Practical?'),), dynamic_elements=('current_datetime',))
+            return SimpleNamespace(
+                answers={
+                    key: {
+                        "choice": next(iter(question["criteria"])),
+                        "probabilities": {label: 1 / len(question["criteria"]) for label in question["criteria"]},
+                    }
+                    for key, question in questions.items()
+                },
+                model="fake",
+                usage={},
+            )
+
+    parent = ClassifierConfig(
+        TASK,
+        rubric="Original",
+        example_ids=("demo",),
+        tasks=(DecisionTask("practical", ("yes", "no"), "Practical?"),),
+        dynamic_elements=("current_datetime",),
+    )
     before = parent.briefing_state()
-    child = parent.apply({'rationale':'Feedback-supported isolated edit', **proposal}, CONTEXT)
+    child = parent.apply({"rationale": "Feedback-supported isolated edit", **proposal}, CONTEXT)
     client = Client()
-    now = datetime(2026,10,7,tzinfo=timezone.utc)
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     result = asyncio.run(JevAdapter(client).classify(child, TARGET, CONTEXT, now=now))
     expected = child.request(TARGET, CONTEXT, now=now)
-    assert client.state == {k: v for k, v in expected['state'].items() if k != 'rubric'}
-    assert set(result.answers) == set(expected['questions'])
-    for name, question in expected['questions'].items():
-        assert list(client.questions[name]['criteria']) == question['options']
-        assert client.questions[name]['instructions'] == question['instructions'].replace(" Use state.rubric as the human's decision criteria.", "")
-    for key in ('rubric','example_ids','tasks','dynamic_elements'):
+    assert client.state == {k: v for k, v in expected["state"].items() if k != "rubric"}
+    assert set(result.answers) == set(expected["questions"])
+    for name, question in expected["questions"].items():
+        assert list(client.questions[name]["criteria"]) == question["options"]
+        assert client.questions[name]["instructions"] == question["instructions"].replace(
+            " Use state.rubric as the human's decision criteria.", ""
+        )
+    for key in ("rubric", "example_ids", "tasks", "dynamic_elements"):
         if key not in proposal:
             assert child.briefing_state()[key] == before[key]
     assert child.parent_fingerprint == parent.fingerprint
@@ -63,16 +87,26 @@ def test_jev_cache_identity_separates_custom_servers_without_disclosing_endpoint
 
 def test_a_complete_classifier_request_asks_all_feature_questions_in_one_jev_call():
     from ..classifier_config import ClassifierConfig
+
     class Client:
         calls = 0
+
         def system_one(self, *, state, questions):
             self.calls += 1
             self.state, self.questions = state, questions
-            return SimpleNamespace(answers={key: {"choice": "yes", "probabilities": {"yes": .8, "no": .2}}
-                                            for key in questions}, model="fake", usage={"input_tokens": 42})
+            return SimpleNamespace(
+                answers={key: {"choice": "yes", "probabilities": {"yes": 0.8, "no": 0.2}} for key in questions},
+                model="fake",
+                usage={"input_tokens": 42},
+            )
+
     client = Client()
-    config = ClassifierConfig(TASK, rubric="Practical work", example_ids=("demo",),
-                              tasks=(DecisionTask("practical", ("yes", "no"), "Is this practical?"),))
+    config = ClassifierConfig(
+        TASK,
+        rubric="Practical work",
+        example_ids=("demo",),
+        tasks=(DecisionTask("practical", ("yes", "no"), "Is this practical?"),),
+    )
     batch = asyncio.run(JevAdapter(client).classify(config, TARGET, CONTEXT))
     assert client.calls == 1
     assert "rubric" not in client.state
@@ -81,26 +115,32 @@ def test_a_complete_classifier_request_asks_all_feature_questions_in_one_jev_cal
     assert set(client.questions) == {"decision", "practical"}
     assert client.questions["practical"]["criteria"] == {"yes": None, "no": None}
     assert "options" not in client.questions["practical"]
-    assert batch.answers["decision"].probabilities == {"yes": .8, "no": .2}
+    assert batch.answers["decision"].probabilities == {"yes": 0.8, "no": 0.2}
     assert batch.usage == {"input_tokens": 42}
     assert all(answer.usage is None for answer in batch.answers.values())
 
 
 def test_inspection_records_the_exact_provider_bound_state_questions_and_answers():
     from ..classifier_config import ClassifierConfig
+
     events = []
+
     class Client:
         def system_one(self, *, state, questions):
             self.state, self.questions = state, questions
-            return SimpleNamespace(answers={"decision": {"choice": "yes", "probabilities": {"yes": .7, "no": .3}}},
-                                   model="fake", usage={"input_tokens": 4})
+            return SimpleNamespace(
+                answers={"decision": {"choice": "yes", "probabilities": {"yes": 0.7, "no": 0.3}}},
+                model="fake",
+                usage={"input_tokens": 4},
+            )
+
     client = Client()
     asyncio.run(JevAdapter(client).classify(ClassifierConfig(TASK), TARGET, [], event_sink=events.append))
     assert events[0]["kind"] == "decision-request"
     assert events[0]["state"] == client.state
     assert events[0]["questions"] == client.questions
     assert events[1]["kind"] == "decision-response"
-    assert events[1]["answers"]["decision"]["probabilities"]["yes"] == .7
+    assert events[1]["answers"]["decision"]["probabilities"]["yes"] == 0.7
 
 
 class FakeJevClient:
@@ -109,7 +149,8 @@ class FakeJevClient:
         self.state, self.questions, self.kwargs = state, questions, kwargs
         return SimpleNamespace(
             answers={"topic": {"choice": "YES!", "confidence": 0.31, "probabilities": {"yes": 0.8, "no": 0.2}}},
-            model="jev-2026-09-30", usage={"input_tokens": 12, "output_tokens": 3},
+            model="jev-2026-09-30",
+            usage={"input_tokens": 12, "output_tokens": 3},
         )
 
 
@@ -125,7 +166,9 @@ def test_a_jev_adapter_changes_only_examples_between_zero_and_few_shot_requests(
     assert zero_state["labeled_examples"] == []
     assert client.state["labeled_examples"] == [{"text": "demo text", "label": "yes"}]
     assert zero_questions == client.questions
-    assert client.questions == {"topic": {"type": "choice", "instructions": "Classify only the target.", "criteria": {"yes": None, "no": None}}}
+    assert client.questions == {
+        "topic": {"type": "choice", "instructions": "Classify only the target.", "criteria": {"yes": None, "no": None}}
+    }
 
 
 def test_a_jev_adapter_keeps_provider_probabilities_and_numeric_usage_without_article_text():
@@ -161,22 +204,20 @@ def test_a_jev_adapter_rejects_bad_context_before_calling_the_client():
 
 def test_a_jev_adapter_sends_generic_demo_context_only_with_labeled_examples():
     client = FakeJevClient()
-    contextual = [LabeledItem(Item("demo", {"text": "demo text"}), "yes",
-                               context={"human_feedback": "This is useful."})]
+    contextual = [LabeledItem(Item("demo", {"text": "demo text"}), "yes", context={"human_feedback": "This is useful."})]
 
     asyncio.run(JevAdapter(client).decide(TASK, TARGET, contextual))
 
-    assert client.state["labeled_examples"] == [
-        {"text": "demo text", "label": "yes", "human_feedback": "This is useful."}
-    ]
+    assert client.state["labeled_examples"] == [{"text": "demo text", "label": "yes", "human_feedback": "This is useful."}]
     assert client.state["target"] == {"text": "target text"}
 
 
 class _Capture:
     def system_one(self, *, state, questions):
         self.state, self.questions = state, questions
-        return SimpleNamespace(answers={key: {"choice": next(iter(q["criteria"]))} for key, q in questions.items()},
-                               model="fake", usage={})
+        return SimpleNamespace(
+            answers={key: {"choice": next(iter(q["criteria"]))} for key, q in questions.items()}, model="fake", usage={}
+        )
 
 
 def _classify(config, rubric_label=None):
@@ -188,23 +229,26 @@ def _classify(config, rubric_label=None):
 
 def test_rubric_goes_in_the_first_labels_criterion_and_not_in_state():
     from ..classifier_config import ClassifierConfig
-    client = _classify(ClassifierConfig(TASK, rubric="Be practical",
-                                        tasks=(DecisionTask("el", ("a", "b"), "Element?"),)))
+
+    client = _classify(ClassifierConfig(TASK, rubric="Be practical", tasks=(DecisionTask("el", ("a", "b"), "Element?"),)))
     assert "rubric" not in client.state
     assert client.questions["decision"]["criteria"] == {"yes": "Be practical", "no": None}
     assert client.questions["decision"]["instructions"].endswith(
-        " Classify only state.target; state.examples are labeled demonstrations.")
+        " Classify only state.target; state.examples are labeled demonstrations."
+    )
     assert "state.rubric" not in client.questions["decision"]["instructions"]
     assert client.questions["el"]["criteria"] == {"a": None, "b": None}
 
 
 def test_empty_rubric_sends_all_none_criteria():
     from ..classifier_config import ClassifierConfig
+
     assert _classify(ClassifierConfig(TASK)).questions["decision"]["criteria"] == {"yes": None, "no": None}
 
 
 def test_rubric_label_override_and_validation():
     from ..classifier_config import ClassifierConfig
+
     config = ClassifierConfig(TASK, rubric="Be practical")
     assert _classify(config, "no").questions["decision"]["criteria"] == {"yes": None, "no": "Be practical"}
     with pytest.raises(ValueError):
@@ -216,11 +260,11 @@ def test_rubric_label_override_and_validation():
 
 def test_classify_many_puts_each_rubric_in_its_own_question_and_other_adapters_keep_state_rubric():
     from ..classifier_config import ClassifierConfig
+
     a = ClassifierConfig(TASK, rubric="Rubric A")
     b = ClassifierConfig(DecisionTask("b", ("include", "exclude"), "B?"), rubric="Rubric B")
     client = _Capture()
-    asyncio.run(JevAdapter(client, configuration=JevConfiguration()).classify_many(
-        {"a": a, "b": b}, TARGET, {"a": [], "b": []}))
+    asyncio.run(JevAdapter(client, configuration=JevConfiguration()).classify_many({"a": a, "b": b}, TARGET, {"a": [], "b": []}))
     assert all("rubric" not in v for v in client.state["classifiers"].values())
     crit = [q["criteria"] for q in client.questions.values()]
     assert crit == [{"yes": "Rubric A", "no": None}, {"include": "Rubric B", "exclude": None}]

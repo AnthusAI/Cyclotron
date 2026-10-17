@@ -23,19 +23,20 @@ committed to this public repository; the manifest is.
 Without ``--confirm-live`` the script plans and prints its worst-case cost and
 makes no request. ``OPENAI_API_KEY`` comes from the environment.
 """
+
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from datetime import UTC
 import hashlib
 import json
 import os
-from pathlib import Path
 import random
 import re
 import urllib.error
 import urllib.request
+from collections import Counter, defaultdict
+from datetime import UTC
+from pathlib import Path
 
 MODEL = "gpt-4.1-mini-2025-04-14"
 DATASET = "malteos/wikinews"
@@ -46,8 +47,11 @@ BASE_CORPUS = "uplifting-editorial-wikinews-400-semantic-v2"
 BASE_SELECTION_SEED = "uplifting-editorial-semantic-v2"
 EXTENSION_SEED = "uplifting-editorial-semantic-v2-extension-1"
 BASE_HIGH_RELEVANCE_SHARE = 210 / 400
-PRICE = {"input_usd_per_mtok": 0.40, "output_usd_per_mtok": 1.60,
-         "source": "OpenAI published API price for gpt-4.1-mini (the base corpus manifest used the same rates)"}
+PRICE = {
+    "input_usd_per_mtok": 0.40,
+    "output_usd_per_mtok": 1.60,
+    "source": "OpenAI published API price for gpt-4.1-mini (the base corpus manifest used the same rates)",
+}
 MAX_INPUT_TOKENS = 4000
 MAX_OUTPUT_TOKENS = 1000
 
@@ -73,15 +77,33 @@ SCHEMA = {
             "label": {"type": "string", "enum": ["publish", "reject"]},
             "rationale": {"type": "string", "minLength": 8, "maxLength": 300},
             "evidence_span": {"type": "string", "minLength": 3, "maxLength": 300},
-            "factor": {"type": "string", "enum": ["benefit", "achievement", "understanding", "rights_access", "conservation_welfare",
-                                                  "constructive_response", "insufficient_evidence", "harm_dominant", "routine_or_hype"]},
+            "factor": {
+                "type": "string",
+                "enum": [
+                    "benefit",
+                    "achievement",
+                    "understanding",
+                    "rights_access",
+                    "conservation_welfare",
+                    "constructive_response",
+                    "insufficient_evidence",
+                    "harm_dominant",
+                    "routine_or_hype",
+                ],
+            },
         },
         "required": ["label", "rationale", "evidence_span", "factor"],
     },
 }
 
-POSITIVE = re.compile(r"\b(rescue[ds]?|saved|protect(?:s|ed|ion)?|conservation|endangered|habitat|renewable|clean energy|restor(?:e|ed|ation)|discover(?:s|ed|y)|research(?:ers)? (?:find|develop)|scientists? (?:find|develop)|breakthrough|successful(?:ly)?|cure[ds]?|treatment|aid|relief|donat(?:e|ed|ion)|volunteer|community|opens?|access|legaliz(?:e|ed|ation)|rights|equality|inclusive|disabilit|women|education|scholarship|reunite[ds]?|return(?:s|ed) to|reintroduc(?:e|ed|tion)|agreement|peace|ceasefire)\b", re.I)
-HARM = re.compile(r"\b(killed|dies?|dead|attack|war|shoot(?:ing)?|crash|earthquake|flood|arrest(?:ed)?|indict(?:ed)?|sentenced|outbreak|covid|disaster|explosion)\b", re.I)
+POSITIVE = re.compile(
+    r"\b(rescue[ds]?|saved|protect(?:s|ed|ion)?|conservation|endangered|habitat|renewable|clean energy|restor(?:e|ed|ation)|discover(?:s|ed|y)|research(?:ers)? (?:find|develop)|scientists? (?:find|develop)|breakthrough|successful(?:ly)?|cure[ds]?|treatment|aid|relief|donat(?:e|ed|ion)|volunteer|community|opens?|access|legaliz(?:e|ed|ation)|rights|equality|inclusive|disabilit|women|education|scholarship|reunite[ds]?|return(?:s|ed) to|reintroduc(?:e|ed|tion)|agreement|peace|ceasefire)\b",
+    re.I,
+)
+HARM = re.compile(
+    r"\b(killed|dies?|dead|attack|war|shoot(?:ing)?|crash|earthquake|flood|arrest(?:ed)?|indict(?:ed)?|sentenced|outbreak|covid|disaster|explosion)\b",
+    re.I,
+)
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -145,7 +167,7 @@ def curation_order(rows, count: int, seed: str) -> list[dict]:
     for row in unique:
         buckets[topic(row.get("categories"))].append(row)
     ranked = sorted(unique, key=lambda r: (relevance(r), r["title"]), reverse=True)
-    selected = [r for r in ranked if relevance(r) >= 2][:round(count * BASE_HIGH_RELEVANCE_SHARE)]
+    selected = [r for r in ranked if relevance(r) >= 2][: round(count * BASE_HIGH_RELEVANCE_SHARE)]
     used = {identifier(r) for r in selected}
     for values in buckets.values():
         rng.shuffle(values)
@@ -175,20 +197,31 @@ def verified_span(result: dict, excerpt: str) -> bool:
 
     def normalized(value: str) -> str:
         return re.sub(r"\s+", " ", value.replace("“", '"').replace("”", '"').replace("’", "'")).strip()
+
     return normalized(result["evidence_span"]) in normalized(excerpt)
 
 
 def record(row: dict, result: dict, sequence: int, excerpt: str) -> dict:
     return {
-        "id": identifier(row), "sequence": sequence,
+        "id": identifier(row),
+        "sequence": sequence,
         "occurred_at": row["article_timestamp"].astimezone(UTC).isoformat().replace("+00:00", "Z"),
-        "title": row["title"], "text": excerpt, "categories": row.get("categories") or [],
-        "source_url": row["url"].replace("http://", "https://"), "wikinews_page_id": row["wiki_page_id"],
-        "wikinews_revision_id": row["wiki_revision_id"], "source_file": row["source_file"],
-        "license": LICENSE, "license_url": LICENSE_URL, "label_type": "simulated_semantic_editorial",
-        "simulated_label": result["label"], "simulated_rationale": result["rationale"],
-        "evidence_span": result["evidence_span"], "decision_factor": result["factor"],
-        "evidence_span_verified": True, "curation_relevance_score": relevance(row),
+        "title": row["title"],
+        "text": excerpt,
+        "categories": row.get("categories") or [],
+        "source_url": row["url"].replace("http://", "https://"),
+        "wikinews_page_id": row["wiki_page_id"],
+        "wikinews_revision_id": row["wiki_revision_id"],
+        "source_file": row["source_file"],
+        "license": LICENSE,
+        "license_url": LICENSE_URL,
+        "label_type": "simulated_semantic_editorial",
+        "simulated_label": result["label"],
+        "simulated_rationale": result["rationale"],
+        "evidence_span": result["evidence_span"],
+        "decision_factor": result["factor"],
+        "evidence_span_verified": True,
+        "curation_relevance_score": relevance(row),
         "provenance": {"dataset": DATASET, "revision": REVISION, "selection_seed": EXTENSION_SEED, "model": MODEL},
     }
 
@@ -202,14 +235,21 @@ def extended_bytes(base: bytes, records) -> bytes:
 
 def request_label(api_key: str, title: str, excerpt: str) -> tuple[dict, dict]:
     payload = {
-        "model": MODEL, "temperature": 0, "max_tokens": MAX_OUTPUT_TOKENS,
+        "model": MODEL,
+        "temperature": 0,
+        "max_tokens": MAX_OUTPUT_TOKENS,
         "response_format": {"type": "json_schema", "json_schema": SCHEMA},
-        "messages": [{"role": "system", "content": RUBRIC},
-                     {"role": "user", "content": f"TITLE: {title}\n\nARTICLE EXCERPT:\n{excerpt}"}],
+        "messages": [
+            {"role": "system", "content": RUBRIC},
+            {"role": "user", "content": f"TITLE: {title}\n\nARTICLE EXCERPT:\n{excerpt}"},
+        ],
     }
-    request = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=json.dumps(payload).encode(),
-                                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                                     method="POST")
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
     with urllib.request.urlopen(request, timeout=90) as response:
         body = json.loads(response.read())
     return json.loads(body["choices"][0]["message"]["content"]), body.get("usage", {})
@@ -217,6 +257,7 @@ def request_label(api_key: str, title: str, excerpt: str) -> tuple[dict, dict]:
 
 def load_pool(source_dir: Path, years) -> tuple[list[dict], list[dict]]:
     import pyarrow.parquet as pq
+
     rows, files = [], []
     for year in years:
         path = source_dir / f"en-{year}.parquet"
@@ -254,9 +295,20 @@ def main(argv=None) -> int:
     order = curation_order(pool, needed, EXTENSION_SEED)
     rate = (MAX_INPUT_TOKENS * PRICE["input_usd_per_mtok"] + MAX_OUTPUT_TOKENS * PRICE["output_usd_per_mtok"]) / 1e6
     reserved = args.max_live_calls * rate
-    print(json.dumps({"preflight": "ok", "base_items": len(base_rows), "needed": needed, "pool": len(pool),
-                      "reserve_candidates": len(order) - needed, "max_live_calls": args.max_live_calls,
-                      "worst_case_usd": round(reserved, 4), "budget_usd": args.budget_usd}))
+    print(
+        json.dumps(
+            {
+                "preflight": "ok",
+                "base_items": len(base_rows),
+                "needed": needed,
+                "pool": len(pool),
+                "reserve_candidates": len(order) - needed,
+                "max_live_calls": args.max_live_calls,
+                "worst_case_usd": round(reserved, 4),
+                "budget_usd": args.budget_usd,
+            }
+        )
+    )
     if reserved > args.budget_usd:
         raise SystemExit("worst-case reservation exceeds the budget")
     if not args.confirm_live:
@@ -292,10 +344,20 @@ def main(argv=None) -> int:
                     entry = {"id": key, "result": result, "usage": usage}
                 except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as exc:
                     entry = {"id": key, "error": type(exc).__name__}
-                ledger.write(json.dumps({"id": key, "call": calls, "usage": entry.get("usage"),
-                                         "status": "error" if "error" in entry else "complete"}) + "\n")
+                ledger.write(
+                    json.dumps(
+                        {
+                            "id": key,
+                            "call": calls,
+                            "usage": entry.get("usage"),
+                            "status": "error" if "error" in entry else "complete",
+                        }
+                    )
+                    + "\n"
+                )
                 cache_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                ledger.flush(); cache_file.flush()
+                ledger.flush()
+                cache_file.flush()
                 cache[key] = entry
             if "error" in entry:
                 set_aside.append({"id": key, "reason": f"call failed ({entry['error']}); not retried"})
@@ -319,7 +381,9 @@ def main(argv=None) -> int:
     for entry in cache.values():
         for field in ("prompt_tokens", "completion_tokens"):
             usage[field] += int((entry.get("usage") or {}).get(field, 0))
-    cost = (usage["prompt_tokens"] * PRICE["input_usd_per_mtok"] + usage["completion_tokens"] * PRICE["output_usd_per_mtok"]) / 1e6
+    cost = (
+        usage["prompt_tokens"] * PRICE["input_usd_per_mtok"] + usage["completion_tokens"] * PRICE["output_usd_per_mtok"]
+    ) / 1e6
     all_rows = base_rows + accepted
     manifest = {
         "schema_version": 4,
@@ -329,20 +393,28 @@ def main(argv=None) -> int:
         "actual_count": len(all_rows),
         "sha256": sha256_bytes(data),
         "item_set_sha256": sha256_bytes(data),
-        "first_400": {"corpus": BASE_CORPUS, "sha256": args.base_sha256, "byte_identical_prefix": True,
-                      "lines": len(base_rows)},
+        "first_400": {"corpus": BASE_CORPUS, "sha256": args.base_sha256, "byte_identical_prefix": True, "lines": len(base_rows)},
         "label_disclosure": "simulated_semantic_editorial_labels",
-        "dataset": DATASET, "dataset_revision": REVISION, "license": LICENSE, "license_url": LICENSE_URL,
+        "dataset": DATASET,
+        "dataset_revision": REVISION,
+        "license": LICENSE,
+        "license_url": LICENSE_URL,
         "source_files": source_files,
         "extension": {
-            "items": len(accepted), "selection_seed": EXTENSION_SEED,
+            "items": len(accepted),
+            "selection_seed": EXTENSION_SEED,
             "curation_rule": "base rule generalised: the top round(count x 210/400) items with relevance >= 2, then a topical round-robin over a seeded shuffle, then a seeded shuffle of the selection; bootstrap and base items excluded",
             "years": list(years),
             "label_procedure": "one request per item, temperature 0, strict JSON schema, no retry; an item with a failed call, an incoherent factor, or a non-literal evidence quote is set aside for the next candidate in the frozen order",
-            "model": MODEL, "label_prompt": RUBRIC, "label_prompt_sha256": sha256_bytes(RUBRIC.encode()),
+            "model": MODEL,
+            "label_prompt": RUBRIC,
+            "label_prompt_sha256": sha256_bytes(RUBRIC.encode()),
             "label_schema": SCHEMA,
-            "set_aside": set_aside, "live_calls": calls,
-            "usage": dict(usage), "cost_usd": round(cost, 6), "price_basis": PRICE,
+            "set_aside": set_aside,
+            "live_calls": calls,
+            "usage": dict(usage),
+            "cost_usd": round(cost, 6),
+            "price_basis": PRICE,
             "offline_review": "none; the base corpus's offline span review and 20-item spot check covered the first 400 only",
             "label_counts": dict(Counter(r["simulated_label"] for r in accepted)),
             "topic_counts": dict(Counter(topic(r["categories"]) for r in accepted)),
@@ -351,8 +423,18 @@ def main(argv=None) -> int:
         "label_counts": dict(Counter(r["simulated_label"] for r in all_rows)),
     }
     (args.out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
-    print(json.dumps({"items": len(all_rows), "sha256": manifest["sha256"], "labels": manifest["label_counts"],
-                      "set_aside": len(set_aside), "live_calls": calls, "cost_usd": round(cost, 4)}))
+    print(
+        json.dumps(
+            {
+                "items": len(all_rows),
+                "sha256": manifest["sha256"],
+                "labels": manifest["label_counts"],
+                "set_aside": len(set_aside),
+                "live_calls": calls,
+                "cost_usd": round(cost, 4),
+            }
+        )
+    )
     return 0
 
 

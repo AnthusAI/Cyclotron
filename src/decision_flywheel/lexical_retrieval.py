@@ -7,14 +7,15 @@ with its own versioned configuration, used through ``PerLabelRetrieval``.
 Everything is pure Python and built over the labeled pool only (document
 frequencies, average lengths), so it needs no downloads and no dependencies.
 """
+
 from __future__ import annotations
 
 import math
 import re
 import unicodedata
 from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Mapping, Sequence
 
 from .context import _text
 from .models import DecisionTask, Item, LabeledItem
@@ -28,7 +29,8 @@ LEXICAL_RETRIEVER_VERSION = "2"
 # It also keeps contrast and intensity words (but, very, too, only, more, most).
 # Never edit this list in place: add "en-v2" instead.
 STOPWORDS = {
-    "en-v1": frozenset("""
+    "en-v1": frozenset(
+        """
         a about above after am an and any are as at be because been before being below
         between both by can could did do does doing during each for from had has have
         having he her here hers herself him himself his how i if in into is it its itself
@@ -36,7 +38,8 @@ STOPWORDS = {
         that the their theirs them themselves then there these they this those through to
         until was we were what when where which while who whom why will with would you
         your yours yourself yourselves s ll re ve d m
-    """.split()),
+    """.split()
+    ),
     "none": frozenset(),
 }
 
@@ -81,9 +84,13 @@ class LexicalRetriever:
 
     @property
     def configuration(self) -> Mapping[str, object]:
-        config: dict[str, object] = {"kind": "lexical", "version": LEXICAL_RETRIEVER_VERSION,
-                                     "stopwords": self.stopwords, "tokenizer": self.tokenizer,
-                                     "weighting": self.weighting}
+        config: dict[str, object] = {
+            "kind": "lexical",
+            "version": LEXICAL_RETRIEVER_VERSION,
+            "stopwords": self.stopwords,
+            "tokenizer": self.tokenizer,
+            "weighting": self.weighting,
+        }
         if self.weighting == "bm25":  # k1 and b only matter, and only fingerprint, for BM25
             config.update(k1=float(self.k1), b=float(self.b))
         return config
@@ -96,7 +103,7 @@ class LexicalRetriever:
         stop = STOPWORDS[self.stopwords]
         return [token for token in TOKENIZERS[self.tokenizer](text) if token not in stop]
 
-    def index(self, task: DecisionTask, pool: Sequence[LabeledItem]) -> "LexicalIndex":
+    def index(self, task: DecisionTask, pool: Sequence[LabeledItem]) -> LexicalIndex:
         return LexicalIndex(self, task, validated_pool(task, pool))
 
 
@@ -168,5 +175,6 @@ class LexicalIndex:
 
     def top_per_label(self, target, label, k, exclude_ids):
         totals = self.scores(target)
-        return rank({item_id: totals.get(item_id, 0.0) for item_id in self.ids_by_label.get(label, ())
-                     if item_id not in exclude_ids}, k)
+        return rank(
+            {item_id: totals.get(item_id, 0.0) for item_id in self.ids_by_label.get(label, ()) if item_id not in exclude_ids}, k
+        )

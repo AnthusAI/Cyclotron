@@ -8,20 +8,20 @@ parameters beside the local JSONL. The rows endpoint is not revision-pinned;
 the recorded Hub revision is observational provenance, not a replay guarantee.
 The saved batch is the immutable local source. It does not redistribute papers.
 """
+
 from __future__ import annotations
 
 import argparse
-from datetime import date
-import json
 import hashlib
-from pathlib import Path
+import json
 import random
 import time
+from datetime import date
+from pathlib import Path
 from typing import Any
 
 import requests
 from huggingface_hub import HfApi
-
 
 DATASET = "librarian-bots/arxiv-metadata-snapshot"
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
@@ -32,8 +32,11 @@ def _rows(offset: int) -> list[dict[str, Any]]:
     last_error: requests.RequestException | None = None
     for attempt in range(3):
         try:
-            response = requests.get(ROWS_URL, params={"dataset": DATASET, "config": "default", "split": "train",
-                                                       "offset": offset, "length": 100}, timeout=60)
+            response = requests.get(
+                ROWS_URL,
+                params={"dataset": DATASET, "config": "default", "split": "train", "offset": offset, "length": 100},
+                timeout=60,
+            )
             response.raise_for_status()
             payload = response.json()
             rows = payload.get("rows", [])
@@ -43,7 +46,7 @@ def _rows(offset: int) -> list[dict[str, Any]]:
         except requests.RequestException as error:
             last_error = error
             if attempt < 2:
-                time.sleep(.5 * (attempt + 1))
+                time.sleep(0.5 * (attempt + 1))
     raise RuntimeError("the Hub dataset-server was unavailable after three bounded attempts") from last_error
 
 
@@ -55,9 +58,20 @@ def _created(row: dict[str, Any]) -> str | None:
     if not isinstance(value, str) or len(value) < 12:
         return None
     # RFC 2822 dates end with a four-digit year; this avoids a date-parser dependency.
-    year = value[-12:-8]
-    months = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
-              "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
+    months = {
+        "Jan": "01",
+        "Feb": "02",
+        "Mar": "03",
+        "Apr": "04",
+        "May": "05",
+        "Jun": "06",
+        "Jul": "07",
+        "Aug": "08",
+        "Sep": "09",
+        "Oct": "10",
+        "Nov": "11",
+        "Dec": "12",
+    }
     parts = value.replace(",", "").split()
     if len(parts) < 4 or parts[2] not in months or not parts[1].isdigit() or not parts[3].isdigit():
         return None
@@ -69,16 +83,24 @@ def _article(row: dict[str, Any], earliest: str) -> dict[str, Any] | None:
         row.get(name) for name in ("id", "title", "abstract", "categories", "authors", "journal-ref")
     )
     submitted = _created(row)
-    if (not all(isinstance(value, str) and value.strip() for value in (identifier, title, abstract, categories))
-            or submitted is None or submitted < earliest):
+    if (
+        not all(isinstance(value, str) and value.strip() for value in (identifier, title, abstract, categories))
+        or submitted is None
+        or submitted < earliest
+    ):
         return None
     cs_categories = [value for value in categories.split() if value.startswith("cs.")]
     if not cs_categories:
         return None
-    return {"id": f"arxiv:{identifier}", "title": " ".join(title.split()),
-            "abstract": " ".join(abstract.split()), "submitted_at": submitted, "categories": cs_categories,
-            "authors": " ".join(authors.split()) if isinstance(authors, str) and authors.strip() else "Not provided",
-            "journal_ref": " ".join(journal_ref.split()) if isinstance(journal_ref, str) and journal_ref.strip() else None}
+    return {
+        "id": f"arxiv:{identifier}",
+        "title": " ".join(title.split()),
+        "abstract": " ".join(abstract.split()),
+        "submitted_at": submitted,
+        "categories": cs_categories,
+        "authors": " ".join(authors.split()) if isinstance(authors, str) and authors.strip() else "Not provided",
+        "journal_ref": " ".join(journal_ref.split()) if isinstance(journal_ref, str) and journal_ref.strip() else None,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -94,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--limit and --max-chunks must be positive")
     if args.output.exists() and not args.refresh:
         from decision_flywheel.reviewer import load_articles_jsonl
+
         count = len(load_articles_jsonl(args.output))
         print(f"Reusing {count} saved article records; no dataset request or overwrite.")
         return 0
@@ -102,8 +125,14 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         parser.error("--from-date must be an ISO date")
     info = HfApi().dataset_info(DATASET)
-    split = next((part for part in (info.card_data.get("dataset_info", {}).get("splits", []) if info.card_data else [])
-                  if part.get("name") == "train"), None)
+    split = next(
+        (
+            part
+            for part in (info.card_data.get("dataset_info", {}).get("splits", []) if info.card_data else [])
+            if part.get("name") == "train"
+        ),
+        None,
+    )
     if not split or not isinstance(split.get("num_examples"), int):
         raise RuntimeError("the Hub dataset card did not provide the train split size")
     total = split["num_examples"]
@@ -125,16 +154,32 @@ def main(argv: list[str] | None = None) -> int:
     if len(selected) < args.limit:
         raise RuntimeError(f"only found {len(selected)} eligible records within {args.max_chunks} bounded chunks")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
-                                    for row in list(sorted(selected.values(), key=lambda row: row["id"]))[:args.limit]),
-                           encoding="utf-8")
-    manifest = {"dataset": DATASET, "observed_hub_revision": info.sha, "revision_pinned": False,
-                "batch_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
-                "split": "train", "source": "Hub dataset-server rows API",
-                "selection": {"limit": args.limit, "from_date": args.from_date, "seed": args.seed,
-                              "chunk_length": 100, "offsets": offsets}, "output": args.output.name}
+    args.output.write_text(
+        "".join(
+            json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+            for row in list(sorted(selected.values(), key=lambda row: row["id"]))[: args.limit]
+        ),
+        encoding="utf-8",
+    )
+    manifest = {
+        "dataset": DATASET,
+        "observed_hub_revision": info.sha,
+        "revision_pinned": False,
+        "batch_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
+        "split": "train",
+        "source": "Hub dataset-server rows API",
+        "selection": {
+            "limit": args.limit,
+            "from_date": args.from_date,
+            "seed": args.seed,
+            "chunk_length": 100,
+            "offsets": offsets,
+        },
+        "output": args.output.name,
+    }
     args.output.with_suffix(args.output.suffix + ".manifest.json").write_text(
-        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
     print(f"Wrote {args.limit} article records and a pinned source manifest to {args.output}")
     return 0
 

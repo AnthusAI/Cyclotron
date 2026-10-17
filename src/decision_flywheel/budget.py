@@ -4,18 +4,19 @@ Selection decides *which* demonstrations belong in a request.  This module
 decides whether that request fits, and how the already-selected examples are
 shown.  Its token figures are deterministic estimates, never provider usage.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import random
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from .context import ContextPolicy, PolicyMetadata, validate_selected_context
 from .models import DecisionTask, Item, LabeledItem
-
 
 _WORDS = re.compile(r"\S+")
 _DISPLAY_ORDERS = frozenset({"canonical", "interleaved", "reversed", "shuffled"})
@@ -26,8 +27,7 @@ class TokenCounter(Protocol):
 
     identity: str
 
-    def count(self, serialized_request: str) -> int:
-        ...
+    def count(self, serialized_request: str) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -110,14 +110,26 @@ def build_context_plan(
     _validate_order(display_order, order_seed)
     resolved_label_order = _resolve_presentation_label_order(task, presentation_label_order)
     resolved_budget = budget or ContextBudget()
-    selected = () if resolved_budget.per_label == 0 else validate_selected_context(
-        task, target, candidates,
-        policy.select(task, target, candidates, per_label=resolved_budget.per_label),
-        per_label=resolved_budget.per_label,
+    selected = (
+        ()
+        if resolved_budget.per_label == 0
+        else validate_selected_context(
+            task,
+            target,
+            candidates,
+            policy.select(task, target, candidates, per_label=resolved_budget.per_label),
+            per_label=resolved_budget.per_label,
+        )
     )
     return _plan_from_selected(
-        task, target, selected, policy, budget=resolved_budget, display_order=display_order,
-        order_seed=order_seed, presentation_label_order=resolved_label_order,
+        task,
+        target,
+        selected,
+        policy,
+        budget=resolved_budget,
+        display_order=display_order,
+        order_seed=order_seed,
+        presentation_label_order=resolved_label_order,
         token_counter=token_counter,
     )
 
@@ -146,9 +158,16 @@ def build_context_ladder(
     resolved_label_order = _resolve_presentation_label_order(task, presentation_label_order)
     base_budget = budget or ContextBudget()
     maximum = max(counts)
-    selected = () if maximum == 0 else validate_selected_context(
-        task, target, candidates, policy.select(task, target, candidates, per_label=maximum),
-        per_label=maximum,
+    selected = (
+        ()
+        if maximum == 0
+        else validate_selected_context(
+            task,
+            target,
+            candidates,
+            policy.select(task, target, candidates, per_label=maximum),
+            per_label=maximum,
+        )
     )
     by_label = {label: tuple(item for item in selected if item.label == label) for label in task.labels}
     for label, examples in by_label.items():
@@ -158,12 +177,19 @@ def build_context_ladder(
     plans = []
     for count in counts:
         frozen_selection = tuple(item for label in task.labels for item in by_label[label][:count])
-        plans.append(_plan_from_selected(
-            task, target, frozen_selection, policy,
-            budget=replace(base_budget, per_label=count), display_order=display_order,
-            order_seed=order_seed, presentation_label_order=resolved_label_order,
-            token_counter=token_counter,
-        ))
+        plans.append(
+            _plan_from_selected(
+                task,
+                target,
+                frozen_selection,
+                policy,
+                budget=replace(base_budget, per_label=count),
+                display_order=display_order,
+                order_seed=order_seed,
+                presentation_label_order=resolved_label_order,
+                token_counter=token_counter,
+            )
+        )
     return tuple(plans)
 
 
@@ -208,8 +234,7 @@ def _plan_from_selected(
     )
 
 
-def _serialize_request(task: DecisionTask, target: Item,
-                       examples: Sequence[LabeledItem]) -> str:
+def _serialize_request(task: DecisionTask, target: Item, examples: Sequence[LabeledItem]) -> str:
     """Serialize the actual System One wire shape for deterministic estimates.
 
     Mapping fields are inserted in a fixed order.  ``criteria`` intentionally
@@ -219,8 +244,7 @@ def _serialize_request(task: DecisionTask, target: Item,
     task.validate_target(target)
     state = {
         "labeled_examples": [
-            {"text": _text(example.item, task), "label": task.validate_label(example.label),
-             **dict(example.context)}
+            {"text": _text(example.item, task), "label": task.validate_label(example.label), **dict(example.context)}
             for example in examples
         ],
         "target": {"text": _text(target, task)},
@@ -230,37 +254,38 @@ def _serialize_request(task: DecisionTask, target: Item,
         "instructions": task.instructions,
         "criteria": {label: None for label in task.labels},
     }
-    return json.dumps({"state": state, "questions": {task.name: question}}, ensure_ascii=False,
-                      separators=(",", ":"))
+    return json.dumps({"state": state, "questions": {task.name: question}}, ensure_ascii=False, separators=(",", ":"))
 
 
-def _present(selected: Sequence[LabeledItem], order: str, seed: int,
-             label_order: Sequence[str]) -> tuple[LabeledItem, ...]:
+def _present(selected: Sequence[LabeledItem], order: str, seed: int, label_order: Sequence[str]) -> tuple[LabeledItem, ...]:
     # "Canonical" means lexical label order by default, deliberately independent
     # of task choice-option order.  ``presentation_label_order`` lets callers
     # preserve an explicit historical display convention instead.
-    groups = {label: sorted((item for item in selected if item.label == label), key=lambda item: item.item.id)
-              for label in label_order}
+    groups = {
+        label: sorted((item for item in selected if item.label == label), key=lambda item: item.item.id) for label in label_order
+    }
     canonical = [item for label in label_order for item in groups[label]]
     if order == "canonical":
         return tuple(canonical)
     if order == "reversed":
         return tuple(reversed(canonical))
     if order == "interleaved":
-        return tuple(item for index in range(max((len(group) for group in groups.values()), default=0))
-                     for label in label_order for item in groups[label][index:index + 1])
+        return tuple(
+            item
+            for index in range(max((len(group) for group in groups.values()), default=0))
+            for label in label_order
+            for item in groups[label][index : index + 1]
+        )
     shuffled = list(canonical)
     random.Random(seed).shuffle(shuffled)
     return tuple(shuffled)
 
 
 def _check_limits(accounting: TokenAccounting, budget: ContextBudget) -> None:
-    for name, limit in (("max_tokens", budget.max_tokens),
-                        ("provider_token_limit", budget.provider_token_limit)):
+    for name, limit in (("max_tokens", budget.max_tokens), ("provider_token_limit", budget.provider_token_limit)):
         if limit is not None and accounting.estimated_request_tokens > limit:
             raise BudgetExceededError(
-                f"{name}={limit} is infeasible: "
-                f"estimated_request_tokens={accounting.estimated_request_tokens}"
+                f"{name}={limit} is infeasible: estimated_request_tokens={accounting.estimated_request_tokens}"
             )
 
 
@@ -277,8 +302,7 @@ def _validate_order(display_order: str, order_seed: int) -> None:
     _non_negative_int("order_seed", order_seed)
 
 
-def _resolve_presentation_label_order(task: DecisionTask,
-                                      presentation_label_order: Sequence[str] | None) -> tuple[str, ...]:
+def _resolve_presentation_label_order(task: DecisionTask, presentation_label_order: Sequence[str] | None) -> tuple[str, ...]:
     """Use lexical labels by default, or an explicit task-label permutation."""
     if presentation_label_order is None:
         return tuple(sorted(task.labels))

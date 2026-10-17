@@ -1,7 +1,9 @@
 """Persistent measurements, distinct from the decision to deploy a classifier."""
+
 import hashlib
 import json
 import math
+
 from .models import PROBABILITY_SUM_TOLERANCE
 
 
@@ -20,25 +22,36 @@ def probability_diagnostics(classes, options, rows):
         if label not in groups:
             raise ValueError("diagnostic label is not declared")
         if probabilities is not None:
-            if set(probabilities) != set(options) or any(
-                isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1
-                for v in probabilities.values()) or not math.isclose(sum(probabilities.values()), 1., rel_tol=0.,
-                                                                    abs_tol=PROBABILITY_SUM_TOLERANCE):
+            if (
+                set(probabilities) != set(options)
+                or any(
+                    isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1
+                    for v in probabilities.values()
+                )
+                or not math.isclose(sum(probabilities.values()), 1.0, rel_tol=0.0, abs_tol=PROBABILITY_SUM_TOLERANCE)
+            ):
                 raise ValueError("diagnostics require a complete valid probability distribution")
         groups[label].append(probabilities)
     report = {}
     for label, values in groups.items():
         answered = [v for v in values if v is not None]
-        report[label] = {"count": len(values), "answered": len(answered), "missing": len(values)-len(answered),
-                         "mean_probabilities": {option: sum(v[option] for v in answered)/len(answered)
-                                                if answered else None for option in options}}
+        report[label] = {
+            "count": len(values),
+            "answered": len(answered),
+            "missing": len(values) - len(answered),
+            "mean_probabilities": {
+                option: sum(v[option] for v in answered) / len(answered) if answered else None for option in options
+            },
+        }
     return {"scope": "training only; descriptive, not generalization evidence", "by_class": report}
 
 
 class FeatureBank:
     def __init__(self, db=None, *, storage=None):
         from .learning_storage import SQLiteFeatureStorage
-        if storage is None and db is None: raise ValueError('feature storage required')
+
+        if storage is None and db is None:
+            raise ValueError("feature storage required")
         self.storage = storage if storage is not None else SQLiteFeatureStorage(db)
         self.storage.ensure()
 
@@ -47,6 +60,7 @@ class FeatureBank:
             raise ValueError("feature definition must contain name, instructions and labels")
         # Validation uses the same type as actual decision-model requests.
         from .models import DecisionTask
+
         task = DecisionTask(question["name"], question["labels"], question["instructions"])
         if task.name == "decision":
             raise ValueError("supporting feature name cannot be decision")
@@ -59,12 +73,22 @@ class FeatureBank:
                 self._save(existing)
             return key
         parents = [entry["id"] for entry in self.entries() if entry["question"]["name"] == task.name]
-        self._save({"id": key, "question": question, "concept": task.name, "rationale": rationale,
-                    "parent_ids": parents, "discovery_evidence": [evidence], "attempts": [], "state": "proposed"})
+        self._save(
+            {
+                "id": key,
+                "question": question,
+                "concept": task.name,
+                "rationale": rationale,
+                "parent_ids": parents,
+                "discovery_evidence": [evidence],
+                "attempts": [],
+                "state": "proposed",
+            }
+        )
         return key
 
     def _save(self, entry):
-        self.storage.save(entry['id'],_json(entry))
+        self.storage.save(entry["id"], _json(entry))
 
     def entries(self, *, active_tasks=()):
         deployed = {question_id(question) for question in active_tasks}

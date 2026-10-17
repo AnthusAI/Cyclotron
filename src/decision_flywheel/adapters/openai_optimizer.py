@@ -1,4 +1,5 @@
 """Explicit opt-in OpenAI transport for the otherwise provider-neutral optimizer."""
+
 from __future__ import annotations
 
 from ..optimizer_agent import OptimizerReply
@@ -20,11 +21,13 @@ class OpenAIOptimizer:
     def from_environment(cls, *, model: str, max_calls: int = 10, asynchronous: bool = False):
         from dotenv import load_dotenv
         from openai import OpenAI
+
         load_dotenv(override=False)
         # No SDK retry can silently consume another paid attempt.
         async_client = None
         if asynchronous:
             from openai import AsyncOpenAI
+
             async_client = AsyncOpenAI(max_retries=0, timeout=60)
         return cls(OpenAI(max_retries=0, timeout=60), model=model, max_calls=max_calls, async_client=async_client)
 
@@ -36,14 +39,16 @@ class OpenAIOptimizer:
     def __call__(self, messages):
         self._reserve()
         response = self.client.chat.completions.create(
-            model=self.model, messages=messages, response_format={"type": "json_object"}, store=False)
+            model=self.model, messages=messages, response_format={"type": "json_object"}, store=False
+        )
         return self._reply(response)
 
     async def _acomplete(self, messages):
         """The same request through the async client; one ceiling covers both forms."""
         self._reserve()
         response = await self.async_client.chat.completions.create(
-            model=self.model, messages=messages, response_format={"type": "json_object"}, store=False)
+            model=self.model, messages=messages, response_format={"type": "json_object"}, store=False
+        )
         return self._reply(response)
 
     @staticmethod

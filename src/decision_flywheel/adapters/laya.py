@@ -1,11 +1,13 @@
 """Optional local adapter for Convai Innovations' open-weight ``convaiinnovations/laya`` decision model."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
@@ -22,13 +24,11 @@ class LayaConfiguration:
 
 class LayaAdapter:
     """Wrap a Laya-compatible local model exposing synchronous ``system_one``."""
-    name = "laya"
-    capabilities = ModelCapabilities(
-        supports_labeled_context=True, supports_probability_distributions=True
-    )
 
-    def __init__(self, model: Any, *, configuration: LayaConfiguration = LayaConfiguration(),
-                 model_name: str | None = None):
+    name = "laya"
+    capabilities = ModelCapabilities(supports_labeled_context=True, supports_probability_distributions=True)
+
+    def __init__(self, model: Any, *, configuration: LayaConfiguration = LayaConfiguration(), model_name: str | None = None):
         self.model, self.configuration = model, configuration
         self.model_name = model_name or configuration.model_identity
 
@@ -42,69 +42,126 @@ class LayaAdapter:
             import laya
         except ImportError as error:  # pragma: no cover - optional dependency
             raise ImportError("Install decision-flywheel[laya] to load the upstream Laya model.") from error
-        return cls(laya.load(configuration.model_id, revision=configuration.revision), configuration=configuration,
-                   model_name=f"{configuration.model_identity}:sdk-{getattr(laya, '__version__', 'unknown')}")
+        return cls(
+            laya.load(configuration.model_id, revision=configuration.revision),
+            configuration=configuration,
+            model_name=f"{configuration.model_identity}:sdk-{getattr(laya, '__version__', 'unknown')}",
+        )
 
-    async def decide(self, task: DecisionTask, target: Item,
-                     context: Sequence[LabeledItem]) -> DecisionResult:
+    async def decide(self, task: DecisionTask, target: Item, context: Sequence[LabeledItem]) -> DecisionResult:
         task.validate_target(target)
         for example in context:
             task.validate_target(example.item)
             task.validate_label(example.label)
         text = target.values[task.input_field]
-        state = text if not context else {
-            "target": {"text": text}, "labeled_examples": [
-                {"text": e.item.values[task.input_field], "label": e.label, **dict(e.context)} for e in context]}
-        question = {"type": "choice", "instructions": task.instructions,
-                    "criteria": {label: label for label in task.labels}}
+        state = (
+            text
+            if not context
+            else {
+                "target": {"text": text},
+                "labeled_examples": [
+                    {"text": e.item.values[task.input_field], "label": e.label, **dict(e.context)} for e in context
+                ],
+            }
+        )
+        question = {"type": "choice", "instructions": task.instructions, "criteria": {label: label for label in task.labels}}
         started = time.perf_counter()
         response = await self._response(state, {task.name: question})
-        answers = response.get("answers", response); answer = answers[task.name]
-        label = answer.get("choice", answer.get("value")); task.validate_label(label)
-        result = DecisionResult(label, answer.get("probabilities"), self.model_name,
-                                response.get("usage"), response.get("latency_ms", round((time.perf_counter()-started)*1000, 2)),
-                                answer.get("confidence"))
+        answers = response.get("answers", response)
+        answer = answers[task.name]
+        label = answer.get("choice", answer.get("value"))
+        task.validate_label(label)
+        result = DecisionResult(
+            label,
+            answer.get("probabilities"),
+            self.model_name,
+            response.get("usage"),
+            response.get("latency_ms", round((time.perf_counter() - started) * 1000, 2)),
+            answer.get("confidence"),
+        )
         return task.validate_result(result)
 
     async def classify(self, config, target, training, *, now=None, event_sink=None):
         from ..classifier_config import ClassifiedAnswers
-        result = await self.classify_many({"classifier": config}, target, {"classifier": training},
-                                          now=now, event_sink=event_sink)
+
+        result = await self.classify_many(
+            {"classifier": config}, target, {"classifier": training}, now=now, event_sink=event_sink
+        )
         return ClassifiedAnswers(result.answers["classifier"], result.model, result.usage, result.latency_ms)
 
-    async def classify_many(self, configurations, target, training, *, now=None,
-                            event_sink=None, max_request_bytes=32000, share_supporting_questions=False):
+    async def classify_many(
+        self,
+        configurations,
+        target,
+        training,
+        *,
+        now=None,
+        event_sink=None,
+        max_request_bytes=32000,
+        share_supporting_questions=False,
+    ):
         """Transport scoped context, without promising in-context effectiveness."""
-        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
-        request, identities = batch_request(configurations, target, training, now=now,
-                                             max_request_bytes=max_request_bytes, share_questions=share_supporting_questions)
-        questions = {key: {"type": value["type"], "instructions": value["instructions"],
-                           "criteria": {label: None for label in value["options"]}}
-                     for key, value in request["questions"].items()}
+        from ..batched_classification import BatchedAnswers, answer_groups, batch_request, question_bindings
+
+        request, identities = batch_request(
+            configurations,
+            target,
+            training,
+            now=now,
+            max_request_bytes=max_request_bytes,
+            share_questions=share_supporting_questions,
+        )
+        questions = {
+            key: {
+                "type": value["type"],
+                "instructions": value["instructions"],
+                "criteria": {label: None for label in value["options"]},
+            }
+            for key, value in request["questions"].items()
+        }
         bindings = question_bindings(configurations, request, identities)
         observe = event_sink or (lambda _: None)
-        observe({"kind": "decision-request", "target_id": target.id, "model": self.model_identity,
-                 "state": request["state"], "questions": questions, "question_bindings": bindings})
+        observe(
+            {
+                "kind": "decision-request",
+                "target_id": target.id,
+                "model": self.model_identity,
+                "state": request["state"],
+                "questions": questions,
+                "question_bindings": bindings,
+            }
+        )
         started = time.perf_counter()
+
         def record_response(payload):
-            observe({"kind": "decision-response", "target_id": target.id,
-                     "model": payload.get("model", self.model_name), "answers": payload.get("answers"),
-                     "usage": payload.get("usage"), "question_bindings": bindings})
+            observe(
+                {
+                    "kind": "decision-response",
+                    "target_id": target.id,
+                    "model": payload.get("model", self.model_name),
+                    "answers": payload.get("answers"),
+                    "usage": payload.get("usage"),
+                    "question_bindings": bindings,
+                }
+            )
+
         response = await self._response(request["state"], questions, on_response=record_response)
         answers = response.get("answers")
         if not isinstance(answers, dict):
             raise ValueError("Laya response is missing answers")
         model = response.get("model", self.model_name)
         usage = response.get("usage")
+
         def answer_for(key, task):
             answer = answers.get(key)
             if not isinstance(answer, dict) or not isinstance(answer.get("choice"), str):
                 raise ValueError(f"Laya response is missing choice for {key!r}")
-            return task.validate_result(DecisionResult(
-                answer["choice"], answer.get("probabilities"), model=model,
-                confidence=answer.get("confidence")))
+            return task.validate_result(
+                DecisionResult(answer["choice"], answer.get("probabilities"), model=model, confidence=answer.get("confidence"))
+            )
+
         groups = answer_groups(configurations, request, identities, answer_for)
-        return BatchedAnswers(groups, model, usage, round((time.perf_counter()-started)*1000, 2))
+        return BatchedAnswers(groups, model, usage, round((time.perf_counter() - started) * 1000, 2))
 
     async def _response(self, state, questions, *, on_response=None):
         self._guard_against_source_truncation(state, questions)

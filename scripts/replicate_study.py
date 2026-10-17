@@ -7,11 +7,11 @@ across replicates, and reads each finished replicate read-only.  It never reads
 .env files, never prints environment values and inherits the caller's
 environment unchanged.  Tests inject a fake study script with --study-script.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import random
 import shlex
 import sqlite3
@@ -66,11 +66,11 @@ def build_command(study, base_args, out, seed):
 
 # ---------------------------------------------------------------- reading runs
 
+
 def find_mode_dir(rep_dir, mode=None):
     if mode:
         return rep_dir / mode
-    found = sorted(p for p in rep_dir.iterdir() if p.is_dir() and (p / "results.json").exists()) \
-        if rep_dir.is_dir() else []
+    found = sorted(p for p in rep_dir.iterdir() if p.is_dir() and (p / "results.json").exists()) if rep_dir.is_dir() else []
     if found:
         return found[0]
     candidates = sorted(p for p in rep_dir.iterdir() if p.is_dir()) if rep_dir.is_dir() else []
@@ -99,14 +99,14 @@ def read_events(db):
 
 def window_accuracies(correct, size):
     n = (len(correct) // size) * size
-    return [100.0 * sum(correct[i:i + size]) / size for i in range(0, n, size)]
+    return [100.0 * sum(correct[i : i + size]) / size for i in range(0, n, size)]
 
 
 def majority_share(labels, size):
     n = (len(labels) // size) * size
     out = []
     for i in range(0, n, size):
-        chunk = labels[i:i + size]
+        chunk = labels[i : i + size]
         out.append(100.0 * max(chunk.count(x) for x in set(chunk)) / size)
     return out
 
@@ -185,8 +185,7 @@ def summarise_replicate(rep_dir, window, mode=None, corpus=None):
     except (OSError, json.JSONDecodeError):
         expected = None
     if expected is not None and len(cycles) < expected:
-        return {"status": "incomplete", "reason": f"{len(cycles)} of {expected} cycles",
-                "cycles": len(cycles), "ledger": ledger}
+        return {"status": "incomplete", "reason": f"{len(cycles)} of {expected} cycles", "cycles": len(cycles), "ledger": ledger}
     if ledger is None:
         return {"status": "incomplete", "reason": "no global_budget_ledger.json", "cycles": len(cycles)}
     cycles = sorted(cycles, key=lambda c: c["cycle_number"])
@@ -196,8 +195,7 @@ def summarise_replicate(rep_dir, window, mode=None, corpus=None):
         labels_note = f"corpus reference labels ({source})"
     else:
         human = [c["human_label"] for c in cycles]
-        labels_note = ("recorded" if all(h is not None for h in human)
-                       else "recorded (reviewed stories only)")
+        labels_note = "recorded" if all(h is not None for h in human) else "recorded (reviewed stories only)"
     truth = {c["cycle_number"]: h for c, h in zip(cycles, human)}
     cyclotron = window_accuracies([c["predicted_label"] == h for c, h in zip(cycles, human)], window)
     events = read_events(mode_dir / "runtime.sqlite3")
@@ -205,13 +203,18 @@ def summarise_replicate(rep_dir, window, mode=None, corpus=None):
     for e in events:
         if e.get("kind") == "prediction":
             predictions[e["cycle_number"]] = e
-    decision = [predictions[c["cycle_number"]]["decision_model_label"] == h
-                if c["cycle_number"] in predictions else False for c, h in zip(cycles, human)]
+    decision = [
+        predictions[c["cycle_number"]]["decision_model_label"] == h if c["cycle_number"] in predictions else False
+        for c, h in zip(cycles, human)
+    ]
     activations = activation_cycles(events)
     head = [bool(p.get("fitted_head")) for p in predictions.values()]
     post = mean(cyclotron[1:])
     return {
-        "status": "complete", "labels": labels_note, "cycles": len(cycles), "windows": len(cyclotron),
+        "status": "complete",
+        "labels": labels_note,
+        "cycles": len(cycles),
+        "windows": len(cyclotron),
         "cyclotron_by_window": cyclotron,
         "decision_model_by_window": window_accuracies(decision, window),
         "majority_baseline_by_window": majority_share(human, window),
@@ -230,6 +233,7 @@ def summarise_replicate(rep_dir, window, mode=None, corpus=None):
 
 # -------------------------------------------------------------------- aggregate
 
+
 def bootstrap_median_interval(values, seed="replicates-bootstrap", resamples=2000, level=0.90):
     if not values:
         return None
@@ -243,18 +247,27 @@ def spread(values):
     values = [v for v in values if v is not None]
     if not values:
         return None
-    return {"n": len(values), "median": statistics.median(values), "min": min(values),
-            "max": max(values), "bootstrap_90_median": bootstrap_median_interval(values)}
+    return {
+        "n": len(values),
+        "median": statistics.median(values),
+        "min": min(values),
+        "max": max(values),
+        "bootstrap_90_median": bootstrap_median_interval(values),
+    }
 
 
 def aggregate(replicates, margin=5.0):
     done = [r for r in replicates.values() if r.get("status") == "complete"]
     finals = [r["final_window_accuracy"] for r in done]
     posts = [r["post_warmup_accuracy"] for r in done if r["post_warmup_accuracy"] is not None]
-    beats = [r["final_window_accuracy"] >= r["majority_baseline_by_window"][-1] + margin
-             for r in done if r["majority_baseline_by_window"]]
+    beats = [
+        r["final_window_accuracy"] >= r["majority_baseline_by_window"][-1] + margin
+        for r in done
+        if r["majority_baseline_by_window"]
+    ]
     return {
-        "complete": len(done), "total": len(replicates),
+        "complete": len(done),
+        "total": len(replicates),
         "incomplete": sorted(k for k, r in replicates.items() if r.get("status") != "complete"),
         "final_window_accuracy": spread(finals),
         "post_warmup_accuracy": spread(posts),
@@ -273,47 +286,60 @@ def _f(v, digits=1):
 def render_markdown(summary):
     reps = summary["replicates"]
     agg = summary["aggregate"]
-    lines = [f"# Replicate summary", "",
-             f"Window size {summary['window_size']}; {agg['complete']} of {agg['total']} replicates complete.", ""]
+    lines = [
+        "# Replicate summary",
+        "",
+        f"Window size {summary['window_size']}; {agg['complete']} of {agg['total']} replicates complete.",
+        "",
+    ]
     notes = sorted({r["labels"] for r in reps.values() if r.get("labels")})
     if notes:
         lines += [f"Labels: {'; '.join(notes)}.", ""]
-    lines += ["| replicate | status | seed | cycles | cyclotron by window | decision model by window | "
-              "majority by window | first activation | activations | head share | Jev requests | "
-              "optimizer requests | post-warm-up | final | AULC |",
-              "|" + "---|" * 15]
+    lines += [
+        "| replicate | status | seed | cycles | cyclotron by window | decision model by window | "
+        "majority by window | first activation | activations | head share | Jev requests | "
+        "optimizer requests | post-warm-up | final | AULC |",
+        "|" + "---|" * 15,
+    ]
     for name, r in reps.items():
         if r["status"] != "complete":
             lines.append(f"| {name} | {r['status']}: {r.get('reason', '')} | {r.get('seed', '')} |" + " |" * 12)
             continue
         by = lambda k: " / ".join(_f(x) for x in r[k])
-        lines.append(f"| {name} | complete | {r.get('seed', '')} | {r['cycles']} | {by('cyclotron_by_window')} | "
-                     f"{by('decision_model_by_window')} | {by('majority_baseline_by_window')} | "
-                     f"{r['first_activation_cycle'] if r['first_activation_cycle'] is not None else '-'} | "
-                     f"{r['rubric_activations']} | {_f(100 * r['fitted_head_share'])}% | {r['decision_requests']} | "
-                     f"{r['optimizer_requests']} | {_f(r['post_warmup_accuracy'])} | "
-                     f"{_f(r['final_window_accuracy'])} | {_f(r['learning_curve_area'])} |")
+        lines.append(
+            f"| {name} | complete | {r.get('seed', '')} | {r['cycles']} | {by('cyclotron_by_window')} | "
+            f"{by('decision_model_by_window')} | {by('majority_baseline_by_window')} | "
+            f"{r['first_activation_cycle'] if r['first_activation_cycle'] is not None else '-'} | "
+            f"{r['rubric_activations']} | {_f(100 * r['fitted_head_share'])}% | {r['decision_requests']} | "
+            f"{r['optimizer_requests']} | {_f(r['post_warmup_accuracy'])} | "
+            f"{_f(r['final_window_accuracy'])} | {_f(r['learning_curve_area'])} |"
+        )
     lines += ["", "| metric | n | median | min | max | bootstrap 90% interval of median |", "|---|---|---|---|---|---|"]
-    for key, label in (("final_window_accuracy", "final-window accuracy"),
-                       ("post_warmup_accuracy", "post-warm-up accuracy")):
+    for key, label in (("final_window_accuracy", "final-window accuracy"), ("post_warmup_accuracy", "post-warm-up accuracy")):
         s = agg[key]
         if s:
             iv = s["bootstrap_90_median"]
-            lines.append(f"| {label} | {s['n']} | {_f(s['median'])} | {_f(s['min'])} | {_f(s['max'])} | "
-                         f"{_f(iv[0])} to {_f(iv[1])} |")
+            lines.append(
+                f"| {label} | {s['n']} | {_f(s['median'])} | {_f(s['min'])} | {_f(s['max'])} | {_f(iv[0])} to {_f(iv[1])} |"
+            )
         else:
             lines.append(f"| {label} | 0 | - | - | - | - |")
     rel = agg["reliability"]
     share = rel["share_final_beats_baseline_by_5"]
-    lines += ["", f"Reliability: {_f(None if share is None else 100 * share, 0)}% of complete replicates have "
-              f"final-window accuracy at least {rel['margin_points']:.0f} points above the majority-class baseline; "
-              f"minimum post-warm-up accuracy {_f(rel['min_post_warmup_accuracy'])}.", ""]
+    lines += [
+        "",
+        f"Reliability: {_f(None if share is None else 100 * share, 0)}% of complete replicates have "
+        f"final-window accuracy at least {rel['margin_points']:.0f} points above the majority-class baseline; "
+        f"minimum post-warm-up accuracy {_f(rel['min_post_warmup_accuracy'])}.",
+        "",
+    ]
     if summary.get("launch_notes"):
         lines += ["Launch notes:", *[f"- {n}" for n in summary["launch_notes"]], ""]
     return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------- running
+
 
 class Guard:
     """Global cap check. Finished replicates count at their ledger's consumed calls;
@@ -336,8 +362,12 @@ class Guard:
 
 def run_all(args, base_args, seeds, out_dir):
     study = Path(args.study_script)
-    guard = Guard(args.max_total_decision_calls, args.max_total_optimizer_calls,
-                  per_run_cap(base_args, "--max-decision-calls"), per_run_cap(base_args, "--max-optimizer-calls"))
+    guard = Guard(
+        args.max_total_decision_calls,
+        args.max_total_optimizer_calls,
+        per_run_cap(base_args, "--max-decision-calls"),
+        per_run_cap(base_args, "--max-optimizer-calls"),
+    )
     names = [f"rep-{n}" for n in range(1, len(seeds) + 1)]
     queue = list(zip(names, seeds))
     finished_ledgers, running, exits, notes = [], {}, {}, []
@@ -346,8 +376,7 @@ def run_all(args, base_args, seeds, out_dir):
     # skipped and counted from their ledgers; partial ones are reported, never relaunched.
     existing = [(n, sd) for n, sd in queue if (out_dir / n).exists()]
     if existing and not args.resume:
-        raise SystemExit("replicate output already exists (" + ", ".join(n for n, _ in existing)
-                         + "); pass --resume to reuse it")
+        raise SystemExit("replicate output already exists (" + ", ".join(n for n, _ in existing) + "); pass --resume to reuse it")
     for name, seed in existing:
         queue.remove((name, seed))
         s = summarise_replicate(out_dir / name, args.window_size, args.mode, corpus_arg(base_args))
@@ -389,8 +418,7 @@ def main(argv=None):
     p.add_argument("--study-script", type=Path, default=DEFAULT_STUDY)
     p.add_argument("--replicates", type=int, default=3)
     p.add_argument("--seeds", help="comma-separated seeds used verbatim (sets the replicate count)")
-    p.add_argument("--base-seed", default=DEFAULT_BASE_SEED,
-                   help="default seeds are <base-seed>:rep-N")
+    p.add_argument("--base-seed", default=DEFAULT_BASE_SEED, help="default seeds are <base-seed>:rep-N")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--parallel", type=int, default=2)
     p.add_argument("--max-total-optimizer-calls", type=int)
@@ -425,8 +453,13 @@ def main(argv=None):
         else:
             s = summarise_replicate(args.out_dir / name, args.window_size, args.mode, corpus_arg(base_args))
         replicates[name] = {"seed": seed, "exit": exits.get(name), **s}
-    summary = {"window_size": args.window_size, "seeds": seeds, "launch_notes": notes,
-               "replicates": replicates, "aggregate": aggregate(replicates)}
+    summary = {
+        "window_size": args.window_size,
+        "seeds": seeds,
+        "launch_notes": notes,
+        "replicates": replicates,
+        "aggregate": aggregate(replicates),
+    }
     (args.out_dir / "replicates-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     (args.out_dir / "replicates-summary.md").write_text(render_markdown(summary))
     print(render_markdown(summary))

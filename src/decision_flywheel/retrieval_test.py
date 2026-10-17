@@ -7,8 +7,7 @@ from .context import input_hash
 from .embedding_retrieval import EmbeddingRetriever, HashingEmbedder, InMemoryVectorStore
 from .lexical_retrieval import LexicalRetriever
 from .models import DecisionTask, Item, LabeledItem
-from .retrieval import (PerLabelRetrieval, RetrievalIndex, Retriever, VectorStore, neighbour_label_purity,
-                        pool_fingerprint)
+from .retrieval import PerLabelRetrieval, RetrievalIndex, Retriever, VectorStore, neighbour_label_purity, pool_fingerprint
 
 TASK = DecisionTask("topic", ("a", "b"), "Classify the target.")
 POOL = [
@@ -69,12 +68,15 @@ def test_protected_ids_and_text_hashes_are_never_selected():
         policy.select(TASK, Item("t", {"text": "apple"}), POOL, per_label=3)
 
 
-@pytest.mark.parametrize("answer, message", [
-    ([("t", 1.0), ("a-1", 0.5)], "target or a protected"),
-    ([("b-1", 1.0), ("a-1", 0.5)], "not a trusted 'a' candidate"),
-    ([("a-1", 1.0)], "expected 2 distinct"),
-    ([("a-1", 1.0), ("a-1", 1.0)], "expected 2 distinct"),
-])
+@pytest.mark.parametrize(
+    "answer, message",
+    [
+        ([("t", 1.0), ("a-1", 0.5)], "target or a protected"),
+        ([("b-1", 1.0), ("a-1", 0.5)], "not a trusted 'a' candidate"),
+        ([("a-1", 1.0)], "expected 2 distinct"),
+        ([("a-1", 1.0), ("a-1", 1.0)], "expected 2 distinct"),
+    ],
+)
 def test_retrieval_refuses_an_index_that_breaks_the_contract(answer, message):
     retriever = ScriptedRetriever({"a": answer, "b": [("b-1", 1.0), ("b-2", 0.5)]})
     pool = POOL + [LabeledItem(Item("t", {"text": "the target itself"}), "a")]
@@ -97,8 +99,7 @@ def test_the_index_is_built_once_per_candidate_pool_and_reused_across_targets():
 def test_a_retrieval_policy_plugs_into_build_context_plan_and_records_its_fingerprint():
     policy = PerLabelRetrieval(LexicalRetriever(weighting="bm25"), per_label=1)
 
-    plan = build_context_plan(TASK, Item("t", {"text": "motor car"}), POOL, policy,
-                              budget=ContextBudget(per_label=1))
+    plan = build_context_plan(TASK, Item("t", {"text": "motor car"}), POOL, policy, budget=ContextBudget(per_label=1))
 
     assert sorted(plan.example_ids) == ["a-1", "b-1"]  # nothing in "a" matches, so ascending ID decides
     assert plan.selection_policy == "per-label-retrieval"
@@ -153,8 +154,9 @@ def test_built_in_retrievers_indexes_and_stores_satisfy_the_interface():
 
 
 def test_neighbour_purity_is_one_for_separated_labels_and_lower_when_labels_mix():
-    clean = [LabeledItem(Item(f"a-{n}", {"text": f"apple fruit {n}"}), "a") for n in range(3)] + \
-            [LabeledItem(Item(f"b-{n}", {"text": f"motor engine {n}"}), "b") for n in range(3)]
+    clean = [LabeledItem(Item(f"a-{n}", {"text": f"apple fruit {n}"}), "a") for n in range(3)] + [
+        LabeledItem(Item(f"b-{n}", {"text": f"motor engine {n}"}), "b") for n in range(3)
+    ]
 
     assert neighbour_label_purity(TASK, clean, LexicalRetriever(), k=2).mean == 1.0
     report = neighbour_label_purity(TASK, POOL, LexicalRetriever(), k=1)
