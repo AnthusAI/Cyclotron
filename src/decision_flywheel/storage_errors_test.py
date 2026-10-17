@@ -60,7 +60,15 @@ ADAPTERS=[embedded_adapter,runtime_adapter,review_adapter,console_adapter]
 
 
 @pytest.mark.parametrize('adapter',ADAPTERS)
-def test_an_uncertain_write_raises_the_shared_type_and_refuses_the_handle_afterwards(adapter):
+def test_an_uncertain_write_raises_the_shared_type(adapter):
+    from .storage_errors import StorageUncertain
+    client=ConditionalS3();storage,write=adapter(client)
+    client.lose=lambda key:key==storage.journal.head_key
+    with pytest.raises(StorageUncertain):write(1)
+
+
+@pytest.mark.parametrize('adapter',[embedded_adapter,runtime_adapter])
+def test_a_handle_that_caches_owned_state_refuses_further_use_after_an_uncertain_write(adapter):
     from .storage_errors import StorageUncertain
     client=ConditionalS3();storage,write=adapter(client)
     head=storage.journal.head_key

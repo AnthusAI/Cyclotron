@@ -5,7 +5,7 @@ from copy import deepcopy
 import json
 import math
 from .s3_journal import S3Journal,commit_with_contract,encode
-from .storage_errors import StorageUncertain,StorageLimit
+from .storage_errors import StorageLimit
 
 COLUMNS={
  'study_metadata':('key','value'),
@@ -23,7 +23,7 @@ def append(value,table,row):
 class S3ReviewStorage:
     def __init__(self,journal,*,max_records):
         if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1:raise ValueError('canonical S3 journal and reviewer record budget required')
-        self.journal=journal;self.max_records=max_records;self.poisoned=False;self._tx=ContextVar('s3_review_transaction',default=None)
+        self.journal=journal;self.max_records=max_records;self._tx=ContextVar('s3_review_transaction',default=None)
     def _validate(self,value,*,max_records=None,max_bytes=None):
         if not isinstance(value,dict) or set(value)!=set(empty()) or value['schema']!='cyclotron-review-source/v1' or value['metadata']!={'sequences':{}} or not isinstance(value['tables'],dict) or set(value['tables'])!=set(COLUMNS):raise ValueError('invalid complete reviewer snapshot')
         tables=value['tables']
@@ -59,20 +59,18 @@ class S3ReviewStorage:
                 if shown is None or shown['article_id']!=row['article_id']:raise ValueError('invalid displayed-prediction reference')
             previous[row['id']]=row
     def initialize(self):self._validate(self.journal.initialize(empty()).value)
-    def _poison(self):self.poisoned=True
     def _record(self):
         record=self.journal.read();self._validate(record.value);return record
     def _value(self):return self._tx.get() if self._tx.get() is not None else self._record().value
     @contextmanager
     def transaction(self):
         if self._tx.get() is not None:raise ValueError('nested reviewer transaction')
-        if self.poisoned:raise StorageUncertain('uncertain review write; reopen/reconcile before continuing')
         record=self._record();value=deepcopy(record.value);token=self._tx.set(value)
         try:
             yield self
             self._validate(value)
             if value!=record.value:
-                commit_with_contract(self.journal,record,value,invalidate=self._poison)
+                commit_with_contract(self.journal,record,value)
         finally:self._tx.reset(token)
     def _write(self,fn):
         if self._tx.get() is not None:return fn(self._tx.get())
