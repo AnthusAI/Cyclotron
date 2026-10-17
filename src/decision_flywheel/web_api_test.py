@@ -237,14 +237,14 @@ def test_cross_origin_requests_and_unauthenticated_remote_access_cannot_mutate(t
 
 
 def test_subscription_replays_committed_events_after_a_cursor(tmp_path):
-    from .web_api import schema
+    from .web_api import schema, EventSubscriberLimit
     store = WebStore(tmp_path / 'web.sqlite')
     run = store.create_run('A','recorded',{})
     first = store.append_event(run['id'],'one',{'kind':'prediction'})
     second = store.append_event(run['id'],'two',{'kind':'human-feedback'})
     async def read():
         stream = await schema.subscribe('subscription($id:ID!,$after:Int!){runEvents(runId:$id,after:$after){sequence payload}}',
-            variable_values={'id':run['id'],'after':first['sequence']},context_value={'store':store})
+            variable_values={'id':run['id'],'after':first['sequence']},context_value={'store':store,'event_subscribers':EventSubscriberLimit(1)})
         result = await anext(stream)
         await stream.aclose()
         return result
@@ -314,3 +314,70 @@ def test_promoting_a_supporting_question_needs_confirmation_and_live_authority(t
     events=[e['payload'] for e in store.all_events(run['id'])]
     assert events[-1]['promoted_supporting_question']=={'source_classifier_id':'relevant','question':'names_vendor',
                                                         'classifier_id':'vendor'}
+
+
+def graphql(client, query, **variables):
+    return client.post('/graphql', json={'query': query, 'variables': variables}).json()
+
+
+def test_an_unknown_priming_payload_key_is_refused_without_leaking_a_python_signature(tmp_path):
+    with TestClient(create_app(WebStore(tmp_path / 'web.sqlite'))) as client:
+        result = graphql(client, 'mutation($payload:JSON!){primingCommand(action:"poll",payload:$payload)}',
+                         payload={'identifier': 'draft', 'surprise': 1})
+        message = result['errors'][0]['message']
+        assert 'unknown field' in message
+        assert 'TypeError' not in message and 'argument' not in message and 'poll(' not in message
+
+
+def test_unexpected_server_exceptions_are_masked_while_deliberate_value_errors_are_shown(tmp_path):
+    store = WebStore(tmp_path / 'web.sqlite')
+    def explode(*args, **kwargs):
+        raise OSError('/secret/path/to/database.sqlite refused by db.internal.example')
+    store.runs = explode
+    with TestClient(create_app(store)) as client:
+        masked = graphql(client, '{runs{id}}')['errors'][0]['message']
+        assert 'secret' not in masked and 'internal' not in masked
+        shown = graphql(client, '{run(runId:"missing"){id}}')['errors'][0]['message']
+        assert shown
+
+
+def test_a_credential_in_a_native_submit_command_is_refused_before_the_worker_runs(tmp_path):
+    from types import SimpleNamespace
+    store = WebStore(tmp_path / 'web.sqlite')
+    run = store.create_run('A', 'recorded', {})
+    with TestClient(create_app(store, service=SimpleNamespace(allow_live=False, start=lambda: None, close=lambda: None),
+                               redact=('sk-live-secret',))) as client:
+        refused = graphql(client, 'mutation($run:ID!,$payload:JSON){submitCommand(runId:$run,requestId:"r",kind:"label",payload:$payload){id}}',
+                          run=run['id'], payload={'comment': 'token sk-live-secret'})
+        assert 'credential' in refused['errors'][0]['message']
+        assert store.jobs(run['id']) == []
+
+
+def test_loopback_trust_comes_from_injected_hosts_not_a_hard_coded_test_name(tmp_path):
+    with TestClient(create_app(WebStore(tmp_path / 'web.sqlite'), trusted_loopback_hosts=())) as client:
+        assert client.post('/graphql', json={'query': '{runs{id}}'}).status_code == 401
+    with TestClient(create_app(WebStore(tmp_path / 'web.sqlite'), trusted_loopback_hosts=('testclient',))) as client:
+        assert client.post('/graphql', json={'query': '{runs{id}}'}).status_code == 200
+
+
+def test_live_event_subscribers_are_capped_and_released_when_they_leave(tmp_path):
+    from .web_api import schema, EventSubscriberLimit
+    store = WebStore(tmp_path / 'web.sqlite')
+    run = store.create_run('A', 'recorded', {})
+    limit = EventSubscriberLimit(1)
+    query = 'subscription($id:ID!){runEvents(runId:$id){sequence}}'
+    async def attempt():
+        first = await schema.subscribe(query, variable_values={'id': run['id']},
+                                       context_value={'store': store, 'event_subscribers': limit})
+        pending = asyncio.ensure_future(anext(first))
+        await asyncio.sleep(.5)
+        second = await schema.subscribe(query, variable_values={'id': run['id']},
+                                        context_value={'store': store, 'event_subscribers': limit})
+        refused = await anext(second)
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await first.aclose()
+        return refused
+    refused = asyncio.run(attempt())
+    assert 'too many live event subscribers' in refused.errors[0].message
+    assert limit.active == 0

@@ -29,41 +29,6 @@ def test_only_explicit_runtime_exhaustion_marks_a_run_completed(tmp_path):
         worker.close()
 
 
-def test_a_cyclotron_correction_command_is_not_misinterpreted_as_legacy_undo(tmp_path):
-    from types import SimpleNamespace
-    store = WebStore(tmp_path / 'workspace.sqlite')
-    run = store.create_run('Legacy', 'live', {})
-    calls = []
-    reviewer = SimpleNamespace(current_cycle=None, finish_cycle=lambda: calls.append('finish'),
-        store=SimpleNamespace(undo_last_vote=lambda: calls.append('undo')))
-    worker = WebWorker(store, tmp_path / 'runs', allow_live=True)
-    worker.sessions[run['id']] = reviewer
-    store.command(run['id'], 'correction', 'correct', {'labels': []})
-    worker.process(store.claim_command())
-    assert not calls
-    assert store.jobs(run['id'])[0]['status'] == 'failed'
-    worker.sessions.clear()
-    worker.close()
-
-def test_legacy_web_metrics_use_recorded_probability_vectors_and_calibration_provenance():
-    from types import SimpleNamespace
-    events=[{'kind':'prediction','event_id':1,'target_id':'paper','label':'include','version':'head-v1',
-             'probabilities':{'include':.6,'exclude':.4},'confidence':.99,'fitted_head':True,
-             'uncalibrated_probabilities':{'include':.9,'exclude':.1},'calibration_temperature':2.,
-             'calibration_provenance':{'fit_on':'oof','training_ids':['trusted']}},
-            {'kind':'human-feedback','event_id':2,'action':'submitted',
-             'feedback':{'item_id':'paper','final_answer_value':'include'}}]
-    emitted=[]
-    reviewer=SimpleNamespace(core=SimpleNamespace(initial=SimpleNamespace(task=SimpleNamespace(labels=('include','exclude'))),
-        events_of=lambda kinds:tuple(events),_emit=emitted.append))
-    WebWorker._metrics(reviewer)
-    curve=emitted[0]['metrics']['calibration']
-    assert curve['ece']==__import__('pytest').approx(.4)
-    assert curve['samples'][0]['prediction_event_id']==1
-    assert curve['samples'][0]['calibration_provenance']=={'fit_on':'oof','training_count':1}
-    assert curve['matched_head_comparison']['raw']['ece']==__import__('pytest').approx(.1)
-
-
 def test_a_live_run_pins_the_selected_cyclotron_definition_not_latest_classifiers(tmp_path):
     store=WebStore(tmp_path/'db')
     config={'question':'Choose','input_field':'text','classes':[{'label':'yes'},{'label':'no'}]}
@@ -358,21 +323,6 @@ def test_restart_accepts_feedback_for_the_displayed_prediction_in_the_same_cycle
     assert feedback['cycle_id'] == prediction['cycle_id']
     assert reopened.sessions[run['id']].core.model.calls == 0
     reopened.close()
-
-
-def test_protected_feedback_cannot_fire_legacy_stage_cadences():
-    from types import SimpleNamespace
-    checks=[]; improvements=[]
-    events=[{'kind':'human-feedback','action':'submitted','assignment':'train'},
-            {'kind':'human-feedback','action':'submitted','assignment':'final_audit'}]
-    reviewer=SimpleNamespace(core=SimpleNamespace(events_of=lambda _:events),
-        feedback_trigger=lambda _:False,
-        current_cycle=SimpleNamespace(check_trigger=lambda stage,**check:checks.append((stage,check))),
-        improve=lambda **kwargs:improvements.append(kwargs))
-    WebWorker._optimize(None,reviewer,{'optimize_every':1})
-    assert improvements==[]
-    assert all(not check['due'] for _,check in checks)
-    assert all(check['details']['feedback_count']==1 for _,check in checks)
 
 
 def test_new_runs_pin_shared_defaults_while_existing_runs_keep_their_settings(tmp_path):

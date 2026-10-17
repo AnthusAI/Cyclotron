@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "decision-flywheel"
-version = "0.6.0"
+version = "0.22.0"
 description = "Model-neutral decision context optimization"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,7 +46,6 @@ upload_to_pypi = false
 upload_to_vcs_release = true
 allow_zero_version = true
 major_on_zero = false
-changelog_file = "CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

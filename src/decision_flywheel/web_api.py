@@ -6,7 +6,7 @@ import hmac
 from ipaddress import ip_address
 import json
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Mapping
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -14,11 +14,62 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import strawberry
-from strawberry.extensions import SchemaExtension
+from strawberry.extensions import MaskErrors, SchemaExtension
 from strawberry.fastapi import GraphQLRouter
 from strawberry.scalars import JSON
 
 from .trace_artifact import render_trace
+
+
+LOOPBACK_HOSTS = ('127.0.0.1', '::1')
+DEFAULT_MAXIMUM_EVENT_SUBSCRIBERS = 64
+PRIMING_PAYLOAD_KEYS = {
+    'file': {'identifier', 'list_id', 'refs', 'kind', 'content'},
+    'transform': {'identifier', 'list_id', 'refs', 'transformer_id', 'inputs'},
+    'poll': {'identifier'},
+    'feedback': {'identifier', 'version', 'request_id', 'reason', 'inputs'},
+    'cancel': {'identifier'},
+    'accept': {'identifier', 'version', 'labels'},
+}
+
+
+def refuse_credentials(info, subject, *values):
+    """Refuse caller input that contains any configured secret before it is persisted."""
+    encoded = json.dumps(values, default=str)
+    if any(secret and secret in encoded for secret in info.context.get('redact', ())):
+        raise ValueError(f'{subject} contains a credential')
+
+
+def require_known_payload_keys(payload, allowed_keys, subject):
+    if not isinstance(payload, Mapping):
+        raise ValueError(f'{subject} payload must be an object')
+    if set(payload) - set(allowed_keys):
+        raise ValueError(f'{subject} payload has an unknown field')
+
+
+def error_message_is_safe_to_expose(error) -> bool:
+    """Only deliberate ValueError and account-denial messages reach clients; everything else is masked."""
+    original = getattr(error, 'original_error', None)
+    if isinstance(original, ValueError):
+        return True
+    try:
+        from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
+    except ImportError:
+        return False
+    return isinstance(original, (AccountAccessDenied, ProspectusUnavailable))
+
+
+class EventSubscriberLimit:
+    def __init__(self, maximum):
+        self.maximum, self.active = maximum, 0
+
+    def acquire(self):
+        if self.active >= self.maximum:
+            raise ValueError('too many live event subscribers; try again later')
+        self.active += 1
+
+    def release(self):
+        self.active -= 1
 
 
 @strawberry.type
@@ -205,6 +256,7 @@ class Mutation:
                    'poll': priming.poll, 'feedback': priming.feedback, 'cancel': priming.cancel, 'accept': priming.accept}
         if action not in actions or not isinstance(payload, dict):
             raise ValueError('unknown priming command')
+        require_known_payload_keys(payload, PRIMING_PAYLOAD_KEYS[action], 'priming command')
         return await asyncio.to_thread(actions[action], **payload)
 
     @strawberry.mutation
@@ -217,6 +269,7 @@ class Mutation:
         service=info.context.get('service')
         if not confirmed or service is None or not service.allow_live:
             raise ValueError('cyclotron replay requires explicit live authority')
+        refuse_credentials(info,'cyclotron',name)
         run=await call(info,'extend_cyclotron',str(parent_run_id),classifier_ids,name=name)
         await call(info,'append_event',run['id'],'cyclotron-created',{'kind':'cyclotron-version-created','cyclotron_id':run['config']['cyclotron_id'],'revision':run['config']['cyclotron_revision'],'parent_run_id':str(parent_run_id),'learning_policy':'fresh-replay','backfill_count':run['config']['backfill_count']})
         return Run(**run)
@@ -228,6 +281,7 @@ class Mutation:
         service=info.context.get('service')
         if not confirmed or service is None or not service.allow_live:
             raise ValueError('cyclotron replay requires explicit live authority')
+        refuse_credentials(info,'supporting question',name,question,classifier_name)
         run=await call(info,'promote_supporting_question',str(parent_run_id),source_classifier_id,question,
                        classifier_id=classifier_id,classifier_name=classifier_name,name=name,positive_label=positive_label)
         await call(info,'append_event',run['id'],'cyclotron-created',{'kind':'cyclotron-version-created','cyclotron_id':run['config']['cyclotron_id'],'revision':run['config']['cyclotron_revision'],'parent_run_id':str(parent_run_id),'learning_policy':'fresh-replay','backfill_count':run['config']['backfill_count'],
@@ -243,20 +297,17 @@ class Mutation:
     @strawberry.mutation
     async def label_item(self, info: strawberry.Info, classifier_id: strawberry.ID, classifier_revision: int,
                          list_id: strawberry.ID, item_id: str, item_revision: int, label: str, comment: str, request_id: str) -> JSON:
-        if any(secret and secret in comment for secret in info.context.get('redact', ())):
-            raise ValueError('feedback contains a credential')
+        refuse_credentials(info, 'feedback', comment)
         return await call(info,'label_item',str(classifier_id),classifier_revision,str(list_id),item_id,item_revision,label,comment,request_id)
 
     @strawberry.mutation
     async def save_classifier(self, info: strawberry.Info, identifier: str, name: str, config: JSON) -> JSON:
-        if any(secret and secret in json.dumps(config) for secret in info.context.get('redact', ())):
-            raise ValueError('configuration contains a credential')
+        refuse_credentials(info, 'configuration', name, config)
         return await call(info, 'save_classifier', identifier, name, config)
 
     @strawberry.mutation
     async def save_cyclotron_definition(self,info:strawberry.Info,identifier:str,name:str,classifiers:JSON,settings:JSON)->JSON:
-        if any(secret and secret in json.dumps([name,classifiers,settings]) for secret in info.context.get('redact',())):
-            raise ValueError('configuration contains a credential')
+        refuse_credentials(info,'configuration',name,classifiers,settings)
         return await call(info,'save_cyclotron_definition',identifier,name,classifiers,settings)
 
     @strawberry.mutation
@@ -265,26 +316,24 @@ class Mutation:
 
     @strawberry.mutation
     async def save_item_list(self, info: strawberry.Info, identifier: str, name: str) -> JSON:
+        refuse_credentials(info, 'item list', name)
         return await call(info, 'save_item_list', identifier, name)
 
     @strawberry.mutation
     async def upsert_list_items(self, info: strawberry.Info, list_id: strawberry.ID, items: JSON) -> JSON:
-        if any(secret and secret in json.dumps(items) for secret in info.context.get('redact', ())):
-            raise ValueError('items contain a credential')
+        refuse_credentials(info, 'items', items)
         return await call(info, 'upsert_list_items', str(list_id), items)
 
     @strawberry.mutation
     async def complete_run(self, info: strawberry.Info, run_id: strawberry.ID, summary: JSON) -> Run:
-        if any(secret and secret in json.dumps(summary) for secret in info.context.get('redact', ())):
-            raise ValueError('summary contains a credential')
+        refuse_credentials(info, 'summary', summary)
         return Run(**await call(info,'complete_run',str(run_id),summary))
 
     @strawberry.mutation
     async def create_run(self, info: strawberry.Info, name: str, mode: str = 'recorded', config: JSON | None = None,
                          confirmed: bool = False) -> Run:
         service = info.context.get('service')
-        if any(secret and secret in json.dumps(config or {}) for secret in info.context.get('redact', ())):
-            raise ValueError('run configuration contains a credential')
+        refuse_credentials(info, 'run configuration', name, config or {})
         if mode == 'live':
             if not confirmed or service is None or not service.allow_live:
                 raise ValueError('live run requires server authority and explicit confirmation')
@@ -319,16 +368,13 @@ class Mutation:
         service=info.context.get('service')
         if not confirmed or service is None or not service.allow_live:
             raise ValueError('replay execution requires explicit live-call authority')
-        if any(secret and secret in json.dumps(config) for secret in info.context.get('redact',())):
-            raise ValueError('configuration contains a credential')
+        refuse_credentials(info,'configuration',name,config)
         return Run(**await asyncio.to_thread(service.create_replay,name,str(source_run_id),config))
 
     @strawberry.mutation
     async def ingest_events(self, info: strawberry.Info, run_id: strawberry.ID, events: list[TraceInput]) -> list[TraceEvent]:
         data = [(e.source_id,e.payload) for e in events]
-        encoded = json.dumps(data)
-        if any(secret and secret in encoded for secret in info.context.get('redact', ())):
-            raise ValueError('trace contains a credential; ingestion refused')
+        refuse_credentials(info, 'trace', data)
         return [event_type(r) for r in await call(info,'append_batch',str(run_id),data)]
 
     @strawberry.mutation
@@ -356,6 +402,7 @@ class Mutation:
                              kind: str, payload: JSON | None = None) -> Job:
         if not info.context.get('service'):
             raise ValueError('labeling worker is not available')
+        refuse_credentials(info, 'command', request_id, kind, payload)
         if info.context.get('account_access'):
             service=info.context['service']
             if not hasattr(service,'submit_command'):raise ValueError('hosted command composition unavailable')
@@ -370,12 +417,17 @@ class Subscription:
     @strawberry.subscription
     async def run_events(self, info: strawberry.Info, run_id: strawberry.ID, after: int = 0) -> AsyncGenerator[TraceEvent, None]:
         cursor = after
-        while True:
-            rows = await call(info, 'events', str(run_id), after=cursor)
-            for row in rows:
-                cursor = row['sequence']
-                yield event_type(row)
-            await asyncio.sleep(.2)
+        subscribers = info.context['event_subscribers']
+        subscribers.acquire()
+        try:
+            while True:
+                rows = await call(info, 'events', str(run_id), after=cursor)
+                for row in rows:
+                    cursor = row['sequence']
+                    yield event_type(row)
+                await asyncio.sleep(.2)
+        finally:
+            subscribers.release()
 
 
 def agreed_live_authority(*services):
@@ -413,16 +465,19 @@ class AccountAuthorization(SchemaExtension):
 
 
 schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription,
-    extensions=[AccountAuthorization])
+    extensions=[AccountAuthorization, lambda: MaskErrors(should_mask_error=lambda error: not error_message_is_safe_to_expose(error))])
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, held_out=None, public_origin=None, event_transport="websocket"):
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, held_out=None, public_origin=None, event_transport="websocket",
+               trusted_loopback_hosts=None, maximum_event_subscribers=DEFAULT_MAXIMUM_EVENT_SUBSCRIBERS):
     if event_transport not in ("websocket","poll"):raise ValueError("explicit supported event transport required")
     if account_access and priming is not None:
         raise ValueError('hosted account access cannot use a global priming service')
     if account_access and held_out is not None:
         raise ValueError('hosted account access cannot use a global held-out service')
     shared_live_authority = agreed_live_authority(service, held_out, priming)
+    loopback_hosts = tuple(LOOPBACK_HOSTS if trusted_loopback_hosts is None else trusted_loopback_hosts)
+    event_subscribers = EventSubscriberLimit(maximum_event_subscribers)
     def held_out_service():
         if held_out is None:
             raise ValueError('held-out reports are not configured for this workspace')
@@ -452,7 +507,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
             except ValueError:
                 pass
         if not token:
-            return connection.client is not None and connection.client.host in ('127.0.0.1','::1','testclient')
+            return connection.client is not None and connection.client.host in loopback_hosts
         supplied = connection.headers.get('authorization', '').removeprefix('Bearer ') or connection.cookies.get('flywheel-session','')
         return hmac.compare_digest(supplied, token)
 
@@ -500,7 +555,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
             raise HTTPException(403, 'access refused')
         return {'store':None if account_access else store,'service':service,'redact':redact,
             'account_access':account_access,'connection':connection,'priming_service':priming_service,
-            'held_out_service':held_out_service,'allow_live':shared_live_authority}
+            'held_out_service':held_out_service,'allow_live':shared_live_authority,
+            'event_subscribers':event_subscribers}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')
