@@ -3,7 +3,7 @@
   "title": "Ship a review control widget contract with thumbs mode, reason codes and a submit event",
   "description": "Generalize trace-ui/src/components/labeling-review.tsx into an embeddable review control (export path cyclotron/components/review-control). Props: itemId, decision {decisionId, label, confidence, classes, version}, reviewReason?, mode 'thumbs'|'labels', positiveLabel, reasons? [{code, label, labelEffect 'exclude'|'none'}], value?, disabled, compact. Events: onReview({itemId, decisionId, label, reasonCode, explanation}), onUndo({itemId, decisionId}). It never calls a server. Ordering: after the status shape (shares types).\n\nAcceptance criteria:\n- Thumbs up maps to positiveLabel; thumbs down requires a reason when reasons are given; a reason with labelEffect 'none' submits no label.\n- The decision and confidence are visible before the reviewer chooses, and the control says it was shown before the review.\n- Keyboard and screen-reader use pass the existing Vitest accessibility checks; UI strings use review, label, explanation, decision, confidence.\n- The console's MultiLabelCard uses the new control, so there is one implementation.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -29,11 +29,18 @@
       "text": "Ryan, 2026-10-09: thumbs stay configurable; per-class buttons are the general case. Applications choose the mode per cyclotron (Papyrus: thumbs for include/exclude relevance, per-class otherwise). Reason presets are not generalized: the control must work with no reasons at all; applications pass only their own existing codes.",
       "created_at": "2026-10-09T16:40:53.158189Z",
       "comment_type": "default"
+    },
+    {
+      "id": "c91fdf55-5bd8-42f8-8411-a0891b5c83e8",
+      "author": "claude",
+      "text": "Shipped: landed on develop by merge commit 3716aa5 (feat/review-control; no pull request was opened) and released in web package ui-v0.2.0, with the field-id fix in 0.2.1. Closing.",
+      "created_at": "2026-10-17T16:55:57.784686Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:51:17.394843Z",
-  "updated_at": "2026-10-09T16:40:53.158223Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:55:57.784686Z",
+  "closed_at": "2026-10-17T16:55:57.784686Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

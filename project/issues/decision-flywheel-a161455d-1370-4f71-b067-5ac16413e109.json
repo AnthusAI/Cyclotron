@@ -3,7 +3,7 @@
   "title": "Ship a status widget that renders cyclotron-status/v1 as a strip or a card",
   "description": "An embeddable view of what the cyclotron is doing now (export path cyclotron/components/cyclotron-status). Props: status (cyclotron-status/v1), variant 'strip'|'card', onOverride?. Strip example: Version 13 · agrees 86% · says 84% sure, right 86% · reviewing 1 in 4: audit accuracy met target. Card adds precision, recall, the calibration curve, the last change, and the override control. No backend client; ClassifierMetrics keeps working for the console. Ordering: after the status shape and the review-rate program.\n\nAcceptance criteria:\n- Renders from a fixture snapshot with no network; empty and onboarding states read sensibly.\n- Shows the review rate, its reason, and any override with its expiry.\n- Calibration is shown as says-sure versus is-right with the gap in points; Brier and ECE do not appear.\n- Vitest covers strip, card, empty and override states.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -33,11 +33,18 @@
       "text": "Ryan's copy notes landed on feat/widget-copy: the strip reads 'Tapering · 25% reviewed' (the full sentence stays in the card and the strip's tooltip); the card title takes a classifierName prop and falls back to the classifier id.",
       "created_at": "2026-10-09T16:41:42.819037Z",
       "comment_type": "default"
+    },
+    {
+      "id": "dc2d9130-5901-432d-b958-621390fd6de6",
+      "author": "claude",
+      "text": "Shipped: landed on develop by merge commit be7a0a6 (feat/status-widget; no pull request was opened) and released in web package ui-v0.2.0, with the copy changes in 0.2.1. Closing.",
+      "created_at": "2026-10-17T16:55:57.784686Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:51:17.441293Z",
-  "updated_at": "2026-10-09T16:41:42.819066Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:55:57.784686Z",
+  "closed_at": "2026-10-17T16:55:57.784686Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

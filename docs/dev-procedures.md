@@ -9,7 +9,7 @@ Work on a branch off `origin/develop`; merge to `develop` when green; promote
 `develop` to `main` with `scripts/dev/release_to_main.sh` (add `--dry-run` to
 test without pushing). It builds a throwaway worktree, fast-forwards to
 `origin/main`, merges `origin/develop`, runs the full suite and pushes without
-force. It never touches your checkout.
+force, waits for the release commit semantic-release adds to `main`, then merges `main` back into `develop` so `develop` reports the released version. It never touches your checkout.
 
 ## 2. Temporary worktrees
 

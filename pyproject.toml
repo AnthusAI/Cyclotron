@@ -46,7 +46,6 @@ upload_to_pypi = false
 upload_to_vcs_release = true
 allow_zero_version = true
 major_on_zero = false
-changelog_file = "CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
