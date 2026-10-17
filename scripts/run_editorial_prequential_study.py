@@ -100,7 +100,7 @@ def proposal_mix_type(text):
     try:
         return parse_proposal_mix(text)
     except ValueError as error:
-        raise argparse.ArgumentTypeError(str(error))
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
 def diagnosis_options(args):

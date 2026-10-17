@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from contextvars import ContextVar
+from types import MappingProxyType
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -20,7 +21,7 @@ from typing import Protocol
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .classification_metrics import classification_metrics
 from .context import _normalized_text
-from .feedback import Feature, FeedbackItem, LABEL_SOURCE_VETTED
+from .feedback import FeedbackItem
 from .head import Calibration, HeadProvenance, LearnedHead, OutOfFoldPredictions
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent
@@ -191,11 +192,11 @@ class DecisionFlywheel:
             optimizer = DisabledOptimizer()
         self.initial, self.model, self.optimizer = initial, model, optimizer
         self.version_baseline = initial
-        self._step_context = ContextVar("flywheel_step", default={})
+        self._step_context = ContextVar("flywheel_step", default=MappingProxyType({}))
         self._answer_scopes = ContextVar('answer_dependencies', default=())
         # A multi-output cyclotron installs a sibling check; one output has none.
         self.sibling_check = None
-        self._cycle_context = ContextVar("flywheel_cycle", default={})
+        self._cycle_context = ContextVar("flywheel_cycle", default=MappingProxyType({}))
         self._cycle_running = False
         self._step_running = False
         self.observer = observer or (lambda event: None)

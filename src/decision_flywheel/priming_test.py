@@ -42,7 +42,7 @@ def test_async_clarification_revision_and_exact_representation_before_human_acce
     draft=s.poll('draft')
     assert draft['status']=='preview' and draft['rows'][0]['model_representation']['editor']==ITEM['values']
     responses.append({'job_id':'job','status':'running'})
-    revised=s.feedback('draft',draft['version'],'revise-1','Abstract is missing details',{})
+    s.feedback('draft',draft['version'],'revise-1','Abstract is missing details',{})
     with pytest.raises(ValueError):s.accept('draft',draft['version'],[LABELS])
     responses.append({'job_id':'job','status':'complete','candidate':{**ITEM,'values':{**ITEM['values'],'text':'Revised synthetic abstract'}}})
     draft=s.poll('draft');result=s.accept('draft',draft['version'],[LABELS])

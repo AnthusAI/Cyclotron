@@ -1,6 +1,4 @@
 """Native versioned definitions retain transaction composition and API shape."""
-import pytest
-from .definition_storage import DefinitionStorage, SQLiteDefinitionStorage
 from .web_store import WebStore
 
 

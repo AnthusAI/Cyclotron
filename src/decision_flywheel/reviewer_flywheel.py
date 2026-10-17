@@ -53,7 +53,6 @@ class ReviewerFlywheel:
 
     def feedback_trigger(self, every):
         if self.stage == 'rubric' and self.rubric_trigger:
-            import json
             events = self.core.runtime_storage.events_of(('human-feedback','trigger-evaluated'))
             check = self.rubric_trigger.check(events)
             if self.current_cycle:

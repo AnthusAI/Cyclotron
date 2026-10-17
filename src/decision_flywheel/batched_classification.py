@@ -125,7 +125,7 @@ def output_shares(request, identities):
     for cid in classifiers:
         weights[cid] += size(request['state']['target']) / len(classifiers)
     owners = request.get('owners', {})
-    for key, (identifier, local_name, _) in identities.items():
+    for key, (identifier, _, _) in identities.items():
         holders = [owner for owner, _ in owners[key]] if key in owners else [identifier]
         for owner in holders:
             weights[owner] += size(request['questions'][key]) / len(holders)

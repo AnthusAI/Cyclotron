@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 import httpx
 import pytest
 
-from .account_sessions_test import identity, ISSUER, CLIENT
-from .account_sessions import OAuthConfig, OAuthSessions
+from .account_sessions_test import ISSUER, CLIENT
+from .account_sessions import OAuthConfig
 from .account_routes import HostedAccounts
 from .prospectus_accounts import AccountAccessDenied, AccountsClient, AccountWorkspace, ProspectusUnavailable
 from .web_api import create_app

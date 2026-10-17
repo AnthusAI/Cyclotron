@@ -1,6 +1,5 @@
 """Active labels come from a materialized view, never from a window of recent events."""
 import json
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest

@@ -12,7 +12,6 @@ One optimizer call per round carries every operator's block and the reply labels
 A bold proposal rejected by the novelty gate may be re-requested (``novelty_retries`` extra calls, default 1, only
 when something was rejected). Everything shown to the optimizer is capped (see ``OPERATOR_CAPS``).
 """
-import json
 import re
 
 from .flywheel import _json
@@ -103,7 +102,7 @@ def combine_block(wheel, ledger, ideas, count):
         return None, None, pair["skipped"]
     cap = OPERATOR_CAPS["parent_item_ids"]
     parents = []
-    for name, other, mine in ((pair["a"], pair["b"], pair["fixes_a_not_b"]), (pair["b"], pair["a"], pair["fixes_b_not_a"])):
+    for name, _, mine in ((pair["a"], pair["b"], pair["fixes_a_not_b"]), (pair["b"], pair["a"], pair["fixes_b_not_a"])):
         rubric = wheel.active.config.rubric if name == inc else _rubric_of(by_id[name])
         entry = {"id": name, "is_incumbent": name == inc, "rubric": _clip(rubric, OPERATOR_CAPS["parent_rubric_chars"]),
                  "fixes_that_the_other_misses": len(mine), "story_ids_fixed_only_by_this": mine[:cap]}

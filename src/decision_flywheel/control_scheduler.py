@@ -6,7 +6,7 @@ from .flywheel import _hash, _json
 from .optimizer_agent import FeedbackBriefing
 from .feature_bank import FeatureBank
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import (SCREENED_CONTROLS, ask_proposals, candidate_set, optimizer_context, reserve_member,
+from .idea_screening import (SCREENED_CONTROLS, candidate_set, optimizer_context, reserve_member,
                              screen_round)
 
 

@@ -2,7 +2,6 @@
 import asyncio
 import hashlib
 import random
-import sqlite3
 
 import pytest
 
@@ -258,7 +257,7 @@ def test_after_a_promotion_old_evidence_versus_the_old_incumbent_is_never_reused
     assert old_ids
     ledger = HypothesisLedger(wheel.db)
     for member in ev.active():
-        pair = ledger.paired_comparison(member["idea_id"], new_inc, context_version="shadow")
+        ledger.paired_comparison(member["idea_id"], new_inc, context_version="shadow")
         # shared stories were all scored while the new incumbent was active
         first = wheel.db.execute("SELECT first_seq FROM shadow_incumbents WHERE incumbent_id=?", (new_inc,)).fetchone()
         if first:

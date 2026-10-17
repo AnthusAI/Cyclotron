@@ -8,14 +8,11 @@ the confirmation, and its evidence accumulates across rounds. Promotion still go
 fitted-trial path, so the selection policy stays the final gate.
 """
 import hashlib
-import json
-import random
 from dataclasses import dataclass
 
-from .flywheel import _hash, _json
+from .flywheel import _json
 from .hypothesis_ledger import HypothesisLedger, sign_test
 from .idea_screen import holm, screen
-from .optimizer_agent import parse_proposals
 
 SCREENED_CONTROLS = ("rubric", "example_ids")
 MODES = ("shadow", "dev_screen")

@@ -203,7 +203,7 @@ def test_several_classifiers_share_one_request_and_are_reviewed_separately(tmp_p
         assert set(decision.results) == {"relevant", "timely"}
         assert model.calls == 1
         with pytest.raises(ValueError, match="several"):
-            decision.label
+            _ = decision.label
         run(cyclotron.review(decision.decision_id, "include", classifier="relevant"))
         assert cyclotron.status("relevant").alignment.labels == 1
         assert cyclotron.status("timely").pending.decisions_awaiting_review == 1

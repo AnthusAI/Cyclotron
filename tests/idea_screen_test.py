@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import random
 import sqlite3
 from types import SimpleNamespace
 

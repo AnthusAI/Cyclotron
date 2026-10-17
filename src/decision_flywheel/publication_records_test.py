@@ -2,7 +2,7 @@
 import pytest
 from .models import Item
 from .publication_lab import PublicationBinding
-from .publication_records import PublicationRecords, RevisionRef
+from .publication_records import PublicationRecords
 from .web_store import WebStore
 
 

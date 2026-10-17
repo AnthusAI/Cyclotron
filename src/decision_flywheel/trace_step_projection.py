@@ -56,7 +56,7 @@ def step_projection(events, history, items):
     records.sort(key=lambda record: datetime.fromisoformat(record[0].replace('Z', '+00:00')))
     steps, positions, order = [], {}, []
     previous = None
-    for date, key, identity, title, target, cycle in records:
+    for _, key, identity, title, target, cycle in records:
         if (cycle, identity) != previous:
             steps.append({'number': len(steps)+1, 'title': title, 'item_id': target, 'keys': [], 'cycle_key': cycle})
         steps[-1]['keys'].append(key)
@@ -65,7 +65,7 @@ def step_projection(events, history, items):
     for index, step in enumerate(steps):
         for offset, key in enumerate(step['keys']):
             positions[key] = index * 1000 + 1000 * (offset+1) / (len(step['keys'])+1)
-    cycles, numbers = [], {}
+    cycles = []
     for index, step in enumerate(steps):
         key = step['cycle_key']
         if not cycles or cycles[-1]['key'] != key:
@@ -90,6 +90,6 @@ def step_projection(events, history, items):
             cycle.update(start=index*1000,end=(index+1)*1000)
             for offset,step in enumerate(inside):
                 step.update(start=cycle['start'],end=cycle['end'],cycle_step=offset+1)
-                for marker,key in enumerate(step['keys']):
+                for key in step['keys']:
                     positions[key]=cycle['start']+500
     return {'steps': steps, 'positions': positions, 'order': order, 'cycles': cycles,'axis':axis}

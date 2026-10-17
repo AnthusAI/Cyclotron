@@ -1,5 +1,4 @@
 """The cyclotron decides how many items people review, and says why."""
-import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 

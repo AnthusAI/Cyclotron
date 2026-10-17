@@ -11,7 +11,7 @@ import json
 from urllib.parse import quote, urlsplit
 import httpx
 from .priming_files import checked_schema, read_rows, template, validate_rows, MAX_BYTES
-from .workspace_catalog import encoded
+from .catalog_storage import encoded
 
 
 def fingerprint(value):return hashlib.sha256(encoded(value).encode()).hexdigest()

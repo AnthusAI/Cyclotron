@@ -6,9 +6,8 @@ import json
 import math
 from dataclasses import dataclass
 from numbers import Real
-from typing import Sequence
 
-from .models import DecisionTask, Item, normalize_label
+from .models import DecisionTask, normalize_label
 
 
 # Primus-compatible provenance names.  Only explicit reviewed sources may teach

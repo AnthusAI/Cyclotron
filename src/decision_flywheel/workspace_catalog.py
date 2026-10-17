@@ -1,5 +1,5 @@
 """Existing catalog API, delegating persistence to a domain storage contract."""
-from .catalog_storage import SQLiteCatalogStorage, encoded, timestamp
+from .catalog_storage import SQLiteCatalogStorage
 
 
 class WorkspaceCatalog:

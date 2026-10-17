@@ -238,7 +238,7 @@ class OptimizerAgent:
         if inspect.iscoroutinefunction(acomplete):
             return acomplete
         if inspect.iscoroutinefunction(self.complete) or inspect.iscoroutinefunction(
-                getattr(self.complete, "__call__", None)):
+                type(self.complete).__call__):
             return self.complete
         return None
 
@@ -354,7 +354,7 @@ class OptimizationSuperseded(BaseException):
 
 def _has_sync_call(transport) -> bool:
     """A transport with ``acomplete`` may still be callable synchronously (the OpenAI and LiteLLM adapters are)."""
-    call = getattr(transport, "__call__", None)
+    call = type(transport).__call__
     return callable(transport) and not inspect.iscoroutinefunction(transport) and not inspect.iscoroutinefunction(call)
 
 

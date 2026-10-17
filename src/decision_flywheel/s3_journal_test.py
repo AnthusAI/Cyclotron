@@ -89,7 +89,7 @@ def test_missing_or_changed_immutable_record_is_not_recovered_from_index_or_prio
 
 
 def test_scope_and_explicit_limits_fail_before_any_canonical_mutation():
-    from .s3_journal import JournalLimit
+    from .journal import JournalLimit
     j=journal();head=j.initialize({'x':1})
     with pytest.raises(JournalLimit):j.commit(head,{'x':'a'*1000001})
     foreign=journal(j.payloads.client,StorageScope('foreign','workspace-a'))
@@ -98,7 +98,7 @@ def test_scope_and_explicit_limits_fail_before_any_canonical_mutation():
 
 
 def test_commit_limit_and_unknown_sdk_retry_configuration_fail_before_head_mutation():
-    from .s3_journal import S3Journal,JournalLimit
+    from .journal import JournalLimit
     from types import SimpleNamespace
     j=journal();head=j.initialize({'x':1});j.max_commits=1
     with pytest.raises(JournalLimit):j.commit(head,{'x':2})
@@ -145,13 +145,13 @@ def test_explicit_create_only_initialization_needs_no_list_permission_and_never_
         def get_object(self,**request):
             try:return super().get_object(**request)
             except S3Error as error:
-                if error.response['Error']['Code']=='NoSuchKey':raise S3Error('AccessDenied')
+                if error.response['Error']['Code']=='NoSuchKey':raise S3Error('AccessDenied') from error
                 raise
     client=NoListing()
     def open():
         base=journal(client)
         return S3Journal(base.payloads,'shared-batches','run-a',max_bytes=1000000,max_commits=100,create_only_initialization=True)
-    j=open();first=j.initialize({'charged':1})
+    j=open();j.initialize({'charged':1})
     assert open().read().value=={'charged':1}
     assert open().initialize({'charged':0}).value=={'charged':1}
     del client.objects[j.head_key]

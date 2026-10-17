@@ -5,7 +5,7 @@ import json
 import math
 
 from .classification_metrics import classification_metrics
-from .feature_bank import FeatureBank, probability_diagnostics, question_id
+from .feature_bank import FeatureBank, probability_diagnostics
 from .flywheel import _hash, _json, track_answer_dependencies
 
 

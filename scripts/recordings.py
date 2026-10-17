@@ -430,7 +430,7 @@ def cmd_add(a):
     try:
         protocol = json.loads((run_dir / "protocol.json").read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"cannot read {run_dir / 'protocol.json'}: {exc}")
+        raise SystemExit(f"cannot read {run_dir / 'protocol.json'}: {exc}") from exc
     mode_dir = replicates.find_mode_dir(run_dir)
     if not (mode_dir / "results.json").is_file():
         raise SystemExit(f"no results.json under {run_dir}")
@@ -684,7 +684,7 @@ def cmd_compare(a):
     summary = [("overall", *a.ids)]
     for label, key in (("final accuracy", "final_accuracy"), ("raw accuracy", "raw_accuracy")):
         summary.append((label, *(pct(accuracy(d, key.replace("accuracy", "label"))) for d in data)))
-    for label, key in (("final publish recall", "final_publish"), ("final publish precision", "final_publish"),
+    for label, _ in (("final publish recall", "final_publish"), ("final publish precision", "final_publish"),
                        ("raw publish recall", "raw_publish"), ("raw publish precision", "raw_publish")):
         metric = "recall" if "recall" in label else "precision"
         which = "final_label" if label.startswith("final") else "raw_label"

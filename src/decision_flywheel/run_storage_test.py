@@ -2,9 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
-import pytest
 
-from .run_storage import RunStorage, SQLiteRunStorage
 from .web_store import WebStore
 
 

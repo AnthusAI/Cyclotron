@@ -1,6 +1,5 @@
 """Canonical S3 evaluation clock/trace and explicit whole-plan ownership."""
 from copy import deepcopy
-import json
 from .journal import Journal,commit_with_contract,uuid,encode,decode
 from .storage_errors import StorageConflict
 from .s3_runtime_storage import RuntimeOwnershipError

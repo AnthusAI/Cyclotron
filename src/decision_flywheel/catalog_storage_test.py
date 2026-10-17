@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from .catalog_storage import CatalogConflict, SQLiteCatalogStorage
+from .catalog_storage import CatalogConflict
 from .web_store import WebStore
 from .workspace_catalog_test import configuration
 

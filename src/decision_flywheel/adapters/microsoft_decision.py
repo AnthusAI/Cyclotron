@@ -1,7 +1,7 @@
 """Microsoft-Decision-1 on Microsoft Foundry, through the System One wire shape Jev and Kev share."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from hashlib import sha256
 import json
 import os
@@ -37,7 +37,7 @@ class MicrosoftDecisionConfiguration:
                 raise ValueError(f"{name} must be a non-empty string")
         if isinstance(self.timeout_seconds, bool) or self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        self.origin  # validates the endpoint
+        _ = self.origin  # validates the endpoint
         if self.rubric_placement not in _PLACEMENTS:
             raise ValueError("rubric_placement must be 'criteria' or 'state'")
         if self.rubric_label is not None and (not isinstance(self.rubric_label, str) or not self.rubric_label):

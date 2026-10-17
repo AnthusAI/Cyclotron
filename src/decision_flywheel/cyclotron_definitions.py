@@ -1,5 +1,5 @@
 """Definition API shared by local, remote and embedded consumers."""
-from .definition_storage import SQLiteDefinitionStorage, encode
+from .definition_storage import SQLiteDefinitionStorage
 
 
 class CyclotronDefinitions:

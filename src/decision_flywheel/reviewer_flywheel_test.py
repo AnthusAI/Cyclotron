@@ -1,5 +1,4 @@
 """The article demo delegates to the reusable core rather than implementing a loop."""
-import asyncio
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel, development_assignment

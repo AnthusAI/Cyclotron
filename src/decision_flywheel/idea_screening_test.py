@@ -9,10 +9,10 @@ import pytest
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .flywheel import DecisionFlywheel
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import (CAPS, DevelopmentScorer, IdeaScreeningConfig, confirm, parse_proposals,
+from .idea_screening import (CAPS, DevelopmentScorer, IdeaScreeningConfig, confirm,
                              reserve_member, validate_proposals)
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
-from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
+from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply, parse_proposals
 from .selection_policy import SelectionPolicy
 
 TASK = DecisionTask("inclusion", ("include", "exclude"), "Should this item be included?")

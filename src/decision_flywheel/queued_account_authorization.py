@@ -11,7 +11,7 @@ import hashlib
 import hmac
 import re
 from .prospectus_accounts import AccountAccessDenied
-from .s3_journal import encode, uuid
+from .journal import encode, uuid
 
 
 @dataclass(frozen=True)

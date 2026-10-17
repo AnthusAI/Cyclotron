@@ -91,7 +91,7 @@ def test_a_conflicting_transaction_raises_the_shared_type(adapter):
 
 
 def test_the_journal_outcomes_are_members_of_the_shared_family():
-    from .s3_journal import JournalConflict,JournalUncertain,JournalLimit
+    from .journal import JournalConflict,JournalUncertain,JournalLimit
     from .storage_errors import StorageConflict,StorageUncertain,StorageLimit
     assert issubclass(JournalConflict,StorageConflict)
     assert issubclass(JournalUncertain,StorageUncertain)

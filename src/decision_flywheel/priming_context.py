@@ -2,7 +2,7 @@
 from dataclasses import asdict
 import json
 from .models import Item,LabeledItem
-from .workspace_catalog import encoded
+from .catalog_storage import encoded
 
 
 def encode_priming(examples,tasks,*,redact=()):

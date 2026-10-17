@@ -16,7 +16,7 @@ from .models import DecisionResult, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply, parse_operator_proposals
 from .proposal_operators import ask_round, nearest_novelty, target_stories, text_novelty
 from .replay import plan_replay
-from .shadow_evaluation_test import TASK, TRAIN, make, replay_rows, run, truth
+from .shadow_evaluation_test import TASK, TRAIN, make, replay_rows, run
 
 BASE = ("Include an item when it reports a completed outcome that readers can verify in the text. "
         "Exclude previews and opinion pieces.")
@@ -155,7 +155,7 @@ def test_the_novelty_gate_rejects_near_duplicates_retries_once_and_accepts_diffe
         [{"operator": "bold", "rationale": "reword", "rubric": BASE.replace("verify", "check")},
          {"operator": "bold", "rationale": "new", "rubric": OTHER}],
         [{"operator": "bold", "rationale": "again", "rubric": BASE + " Also exclude previews."}]))
-    wheel.active.config.rubric  # incumbent is "base"; use BASE as the incumbent text via a prior idea
+    _ = wheel.active.config.rubric  # incumbent is "base"; use BASE as the incumbent text via a prior idea
     ControlScheduler(wheel).admit_proposals("rubric", [{"rationale": "p", "rubric": BASE}], TRAIN, 0)
     ideas = [i for i in ControlScheduler(wheel).ideas()]
     proposals, lineage = asyncio.run(ask_round(wheel, builder(wheel), {}, "rubric", ideas, TRAIN, (), ()))

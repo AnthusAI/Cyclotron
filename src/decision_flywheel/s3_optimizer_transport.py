@@ -26,10 +26,10 @@ class S3OptimizerTransport:
         self.transport=transport;self.storage=storage;self.identity=decode(encode(identity));self.max_calls=max_calls
         self.model=identity['model'];self.max_request_bytes=max_request_bytes;self.max_reply_bytes=max_reply_bytes;self.redact=tuple(redact)
         candidate=getattr(transport,'acomplete',None)
-        if not inspect.iscoroutinefunction(candidate):candidate=transport if inspect.iscoroutinefunction(transport) or inspect.iscoroutinefunction(getattr(transport,'__call__',None)) else None
+        if not inspect.iscoroutinefunction(candidate):candidate=transport if inspect.iscoroutinefunction(transport) or inspect.iscoroutinefunction(type(transport).__call__) else None
         self._async=candidate
         if candidate is not None:self.acomplete=self._acomplete
-        self._sync=transport if callable(transport) and not inspect.iscoroutinefunction(transport) and not inspect.iscoroutinefunction(getattr(transport,'__call__',None)) else None
+        self._sync=transport if callable(transport) and not inspect.iscoroutinefunction(transport) and not inspect.iscoroutinefunction(type(transport).__call__) else None
     def with_execution_guard(self,guard):
         return S3OptimizerTransport(self.transport,self.storage,identity=self.identity,max_calls=self.max_calls,
             max_request_bytes=self.max_request_bytes,max_reply_bytes=self.max_reply_bytes,redact=self.redact,execution_guard=guard)

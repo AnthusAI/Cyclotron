@@ -493,7 +493,6 @@ def test_optimizer_traces_belong_only_to_the_classifier_that_requested_them(tmp_
 @pytest.mark.parametrize('failure',[StepFailed,RuntimeError])
 def test_failed_learning_does_not_lose_votes_or_block_the_remaining_classifier_labels(tmp_path,failure):
     from .workspace_session import freeze_configuration
-    from .observability import StepFailed
     store=WebStore(tmp_path/'web.sqlite')
     for key in ('a','b'):store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('list','List');store.upsert_list_items('list',[{'id':'one','occurred_at':'2026-01-01','values':{'text':'Text'}}])

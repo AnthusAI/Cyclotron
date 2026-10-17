@@ -1,6 +1,4 @@
 """A cyclotron store moves between workers, has one writer, and survives a crash between its two stores."""
-import asyncio
-import json
 import os
 from pathlib import Path
 import subprocess

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import random
 import shlex
 import sqlite3
@@ -273,7 +272,7 @@ def _f(v, digits=1):
 def render_markdown(summary):
     reps = summary["replicates"]
     agg = summary["aggregate"]
-    lines = [f"# Replicate summary", "",
+    lines = ["# Replicate summary", "",
              f"Window size {summary['window_size']}; {agg['complete']} of {agg['total']} replicates complete.", ""]
     notes = sorted({r["labels"] for r in reps.values() if r.get("labels")})
     if notes:

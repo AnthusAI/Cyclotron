@@ -55,7 +55,6 @@ def _created(row: dict[str, Any]) -> str | None:
     if not isinstance(value, str) or len(value) < 12:
         return None
     # RFC 2822 dates end with a four-digit year; this avoids a date-parser dependency.
-    year = value[-12:-8]
     months = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
               "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
     parts = value.replace(",", "").split()

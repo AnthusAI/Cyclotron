@@ -47,7 +47,7 @@ from .flywheel import DecisionFlywheel
 from .held_out_evaluation import HeldOutEvaluation
 from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions, labeled_partitions,
                             learn_from_review, record_cycle_metrics, review_role)
-from .models import DecisionTask, Item
+from .models import DecisionTask, Item, LabeledItem
 from .review_program import REASONS, ProgramState, ReviewProgram
 from .run_usage import _usage as _usage_counts, stored_usage_by_window
 from .shared_decisions import SharedDecisions

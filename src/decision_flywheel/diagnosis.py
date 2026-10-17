@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from .classification_metrics import classification_metrics
 from .context import _normalized_text
 from .element_stats import auc, cv_gain, pearson
-from .flywheel import _hash, _json
+from .flywheel import _hash
 from .hypothesis_ledger import HypothesisLedger
 from .models import DecisionTask
 from .optimizer_agent import FeedbackBriefing
@@ -166,7 +166,6 @@ def draw_samples(task, rows, predictions, cells, *, ways, size, contrast, seed):
         pool = sorted((m for m in mine if (m["true"], m["answered"]) == (cell["true"], cell["answered"])),
                       key=lambda m: (-m["confidence"], m["id"]))
         errors[cell["key"]] = deal(pool, ways, size, f"{seed}:{cell['key']}")
-    kept = [[] for _ in range(ways)]
     contrasts = [{label: [] for label in task.labels} for _ in range(ways)]
     for label in task.labels:
         pool = sorted((m for m in mine if m["true"] == label and m["answered"] == label),

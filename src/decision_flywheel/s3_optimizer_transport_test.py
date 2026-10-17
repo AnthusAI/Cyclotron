@@ -82,7 +82,6 @@ def test_cloud_sdk_rejects_unmetered_optimizer_before_creating_a_namespace(monke
 
 
 def test_per_invocation_guard_denial_precedes_reservation_and_is_rechecked_before_dispatch():
-    from .s3_optimizer_transport import S3OptimizerTransport
     calls=[];checks=[]
     base=wrapped(lambda messages:calls.append(messages))
     def denied():raise PermissionError('revoked')

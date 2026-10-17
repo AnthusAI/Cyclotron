@@ -8,7 +8,7 @@ import json
 import zipfile
 from jsonschema import Draft202012Validator
 from .models import DecisionTask, Item
-from .workspace_catalog import encoded, timestamp
+from .catalog_storage import encoded, timestamp
 
 MAX_BYTES = 4_000_000
 MAX_ROWS = 200

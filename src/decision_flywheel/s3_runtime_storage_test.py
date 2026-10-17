@@ -58,7 +58,7 @@ def test_cache_refresh_learning_aliases_and_pending_cleanup_preserve_domain_sema
 def test_real_core_predict_restart_and_improve_use_only_injected_s3_repositories(monkeypatch):
     from .flywheel import DecisionFlywheel
     from .classifier_config import ClassifierConfig
-    from .flywheel_test import TASK,TRAIN,DEV,FakeModel,agent
+    from .flywheel_test import TASK,TRAIN,DEV,FakeModel
     def forbidden(*args,**kwargs):raise AssertionError('cloud core opened SQLite')
     monkeypatch.setattr('sqlite3.connect',forbidden)
     s=stores();j=s.journal;model=FakeModel()
