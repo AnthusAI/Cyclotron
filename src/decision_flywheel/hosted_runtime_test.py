@@ -15,7 +15,7 @@ def test_cloud_app_is_logged_out_by_default_and_never_opens_sqlite_or_a_local_st
     config=HostedConfig(issuer=ISSUER,client_id=CLIENT,authorization_origin='https://synthetic.auth.example.invalid',
         public_origin='https://console.example.test',account='111111111111',region='us-east-1',
         books_bucket='synthetic-books',auth_bucket='synthetic-auth',session_key_arn='arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111',
-        queue_url='https://sqs.us-east-1.amazonaws.com/111111111111/synthetic')
+        queue_url='https://sqs.us-east-1.amazonaws.com/111111111111/synthetic',central_endpoint='https://central.example.test/api')
     runtime=HostedRuntime(config,s3=ConditionalS3(),cipher=Cipher(),central=central,verifier=verifier,send=lambda message:None)
     with TestClient(runtime.app(),base_url=config.public_origin) as client:
         assert client.get('/api/session').json()['authenticated'] is False
@@ -27,6 +27,34 @@ def test_cloud_config_rejects_incomplete_scopes_credentials_and_unreviewed_live_
     from .hosted_runtime import HostedConfig
     with pytest.raises((TypeError,ValueError)):HostedConfig()
     with pytest.raises(ValueError):HostedConfig.from_environment({})
+
+
+def complete_environment():
+    return {'CYCLOTRON_ISSUER':ISSUER,'CYCLOTRON_CLIENT_ID':CLIENT,'CYCLOTRON_AUTHORIZATION_ORIGIN':'https://synthetic.auth.example.invalid',
+        'CYCLOTRON_PUBLIC_ORIGIN':'https://console.example.test','CYCLOTRON_ACCOUNT':'111111111111','CYCLOTRON_REGION':'eu-west-2',
+        'CYCLOTRON_BOOKS_BUCKET':'synthetic-books','CYCLOTRON_AUTH_BUCKET':'synthetic-auth',
+        'CYCLOTRON_SESSION_KEY_ARN':'arn:aws:kms:eu-west-2:111111111111:key/11111111-1111-4111-8111-111111111111',
+        'CYCLOTRON_QUEUE_URL':'https://sqs.eu-west-2.amazonaws.com/111111111111/synthetic','CYCLOTRON_CENTRAL_ENDPOINT':'https://central.example.test/api'}
+
+
+def test_cloud_config_fails_closed_without_region_or_central_endpoint():
+    from .hosted_runtime import HostedConfig
+    assert HostedConfig.from_environment(complete_environment()).central_endpoint=='https://central.example.test/api'
+    for missing in ('CYCLOTRON_REGION','CYCLOTRON_CENTRAL_ENDPOINT'):
+        environment=complete_environment();del environment[missing]
+        with pytest.raises(ValueError):HostedConfig.from_environment(environment)
+    insecure=complete_environment();insecure['CYCLOTRON_CENTRAL_ENDPOINT']='http://central.example.test/api'
+    with pytest.raises(ValueError):HostedConfig.from_environment(insecure)
+
+
+def test_central_transport_is_signed_for_the_configured_region(identity,monkeypatch):
+    from .hosted_runtime import HostedConfig,HostedRuntime
+    verifier,token=identity
+    signed_for=[]
+    monkeypatch.setattr('decision_flywheel.hosted_runtime.SigV4Transport',lambda endpoint,region:signed_for.append((endpoint,region)))
+    config=HostedConfig.from_environment(complete_environment())
+    HostedRuntime(config,s3=ConditionalS3(),cipher=Cipher(),verifier=verifier,send=lambda message:None)
+    assert signed_for==[('https://central.example.test/api','eu-west-2')]
 
 
 def test_actual_hosted_graphql_queue_worker_and_event_page_keep_original_tenant_and_rationale(identity,monkeypatch):
@@ -50,7 +78,7 @@ def test_actual_hosted_graphql_queue_worker_and_event_page_keep_original_tenant_
         return call
     config=HostedConfig(issuer=ISSUER,client_id=CLIENT,authorization_origin='https://synthetic.auth.example.invalid',
         public_origin='https://console.example.test',account='111111111111',region='us-east-1',books_bucket='synthetic-books',auth_bucket='synthetic-auth',
-        session_key_arn='arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111',queue_url='https://sqs.us-east-1.amazonaws.com/111111111111/synthetic',allow_live=True)
+        session_key_arn='arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111',queue_url='https://sqs.us-east-1.amazonaws.com/111111111111/synthetic',central_endpoint='https://central.example.test/api',allow_live=True)
     factory=lambda config:(model,DisabledOptimizer())
     bff=HostedRuntime(config,s3=s3,cipher=cipher,central=central('bff'),verifier=verifier,send=sent.append,model_factory=factory)
     worker=HostedRuntime(config,s3=s3,cipher=cipher,central=central('worker'),verifier=verifier,send=sent.append,model_factory=factory)

@@ -38,7 +38,8 @@ def hosted_runtime(allow_live, open_cyclotron):
     config = HostedConfig(issuer=ISSUER, client_id=CLIENT, authorization_origin="https://synthetic.auth.example.invalid",
         public_origin="https://console.example.test", account="111111111111", region="us-east-1",
         books_bucket="synthetic-books", auth_bucket="synthetic-auth", session_key_arn=SESSION_KEY_ARN,
-        queue_url="https://sqs.us-east-1.amazonaws.com/111111111111/synthetic", allow_live=allow_live)
+        queue_url="https://sqs.us-east-1.amazonaws.com/111111111111/synthetic",
+        central_endpoint="https://central.example.test/api", allow_live=allow_live)
     return HostedRuntime(config, s3=ConditionalS3(), cipher=Cipher(), central=lambda *args, **kwargs: None,
         verifier=SimpleNamespace(), send=lambda message: None,
         model_factory=(lambda model_config: None) if allow_live else None, open_cyclotron=open_cyclotron)
