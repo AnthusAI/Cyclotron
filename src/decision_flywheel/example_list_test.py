@@ -7,8 +7,11 @@ from .example_list import example_list_from_policy, improve_example_list, plan_e
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
 TASK = DecisionTask("tone", ("pos", "neg"), "Choose the tone.")
-LABELED = [LabeledItem(Item(f"{label}-{n:02d}", {"text": f"{label} sample {n} with words"}), label)
-           for label in TASK.labels for n in range(14)]
+LABELED = [
+    LabeledItem(Item(f"{label}-{n:02d}", {"text": f"{label} sample {n} with words"}), label)
+    for label in TASK.labels
+    for n in range(14)
+]
 BY_ID = {row.item.id: row for row in LABELED}
 HELPFUL = {"pos-11", "pos-12", "neg-11", "neg-12"}
 
@@ -50,14 +53,14 @@ def test_a_round_declares_at_most_three_trials_and_scores_only_items_outside_eve
 
 def test_the_hard_swap_replaces_the_most_recently_added_half_of_each_label_with_hard_demos():
     incumbent = FixedExampleList.from_items(
-        TASK, [BY_ID[i] for i in ("pos-00", "pos-01", "pos-02", "pos-03", "neg-00", "neg-01", "neg-02", "neg-03")],
-        [BY_ID["pos-13"], BY_ID["neg-13"]])
-    plan = plan_example_list_round(TASK, LABELED, incumbent=incumbent,
-                                   hard_demo_ids=["neg-12", "pos-11", "neg-11", "pos-12"])
+        TASK,
+        [BY_ID[i] for i in ("pos-00", "pos-01", "pos-02", "pos-03", "neg-00", "neg-01", "neg-02", "neg-03")],
+        [BY_ID["pos-13"], BY_ID["neg-13"]],
+    )
+    plan = plan_example_list_round(TASK, LABELED, incumbent=incumbent, hard_demo_ids=["neg-12", "pos-11", "neg-11", "pos-12"])
     trials = dict(plan.trials)
     assert trials["incumbent"] == incumbent and plan.incumbent_source == "given"
-    assert trials["hard-swap"].example_ids == ("pos-00", "pos-01", "pos-11", "pos-12",
-                                               "neg-00", "neg-01", "neg-12", "neg-11")
+    assert trials["hard-swap"].example_ids == ("pos-00", "pos-01", "pos-11", "pos-12", "neg-00", "neg-01", "neg-12", "neg-11")
     assert trials["hard-swap"].reserve_ids == ("pos-13", "neg-13")
 
 
@@ -78,11 +81,14 @@ def test_brier_example_promotion_remains_strict_when_a_probability_provider_retu
     class LabelOnlyModel(FakeModel):
         async def decide(self, task, target, context):
             return DecisionResult(target.id.split("-")[0])
+
     result = _run(LabelOnlyModel(), hard_demo_ids=sorted(HELPFUL), seed=1)
     assert not result.promoted and result.winner_trial == "incumbent"
     assert result.optimization.objective == "brier"
-    assert all(trial.status == "incomplete" and trial.failure_reasons == ("missing-probabilities",)
-               for trial in result.optimization.trials)
+    assert all(
+        trial.status == "incomplete" and trial.failure_reasons == ("missing-probabilities",)
+        for trial in result.optimization.trials
+    )
 
 
 def test_swapping_in_hard_demos_wins_when_they_help():
@@ -123,8 +129,9 @@ def test_accuracy_is_the_fallback_objective_for_a_model_without_probabilities():
 
 
 def test_an_exhausted_budget_keeps_the_incumbent():
-    result = asyncio.run(improve_example_list(TASK, LABELED, FakeModel(HELPFUL), max_model_calls=5,
-                                              hard_demo_ids=sorted(HELPFUL)))
+    result = asyncio.run(
+        improve_example_list(TASK, LABELED, FakeModel(HELPFUL), max_model_calls=5, hard_demo_ids=sorted(HELPFUL))
+    )
     assert result.winner_trial == "incumbent" and result.promoted is False
     assert "incomplete" in result.reason
 

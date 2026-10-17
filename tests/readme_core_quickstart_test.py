@@ -1,4 +1,5 @@
 """The documented headless-core quickstart stays runnable without the web app."""
+
 from pathlib import Path
 
 

@@ -63,8 +63,9 @@ class HostedConfig:
 
 
 class HostedRuntime:
-    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None):
+    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None):
         self.config,self.s3=config,s3
+        self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
         self.central=central or SigV4Transport(config.central_endpoint,'us-east-1')
@@ -100,7 +101,13 @@ class HostedRuntime:
         # Pure file priming is supported. No transformer/provider is inferred.
         priming=PrimingService(store,storage=store,client=_NoTransformerClient())
         service=HostedConsoleService(account_id,store,self.authorization,self.send,allow_live=self.config.allow_live)
-        return AccountWorkspace(store,service,account_id,priming=priming)
+        held_out=None
+        if self.open_cyclotron is not None:
+            from .held_out_service import HeldOutService
+            def open_account_cyclotron(cyclotron_id,max_requests=None):
+                return self.open_cyclotron(account_id,cyclotron_id,max_requests)
+            held_out=HeldOutService(open_account_cyclotron,allow_live=self.config.allow_live)
+        return AccountWorkspace(store,service,account_id,priming=priming,held_out=held_out)
     def app(self):
         oauth=OAuthConfig(self.config.issuer,self.config.client_id,self.config.authorization_origin,self.config.public_origin,allow_insecure_loopback=self.config.allow_insecure_loopback)
         self.gateway=HostedAccounts(oauth,self.accounts,self.workspace,verifier=self.verifier,sessions=self.sessions,google_identity=self.identities)

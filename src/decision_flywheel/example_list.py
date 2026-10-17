@@ -18,6 +18,7 @@ A challenger replaces the incumbent only if it improves Brier by at least ``min_
 without lowering accuracy (under the accuracy fallback: only if it raises accuracy). Ties,
 small gains and incomplete searches all keep the incumbent.
 """
+
 from __future__ import annotations
 
 import math
@@ -64,29 +65,36 @@ def _ranked(policy, task: DecisionTask, pool: Sequence[LabeledItem]) -> dict[str
 
 
 def _list_from_ranking(task: DecisionTask, ranking: dict[str, list[LabeledItem]], k: int) -> FixedExampleList:
-    return FixedExampleList.from_items(task, [row for label in task.labels for row in ranking[label][:k]],
-                                       [ranking[label][k] for label in task.labels])
+    return FixedExampleList.from_items(
+        task, [row for label in task.labels for row in ranking[label][:k]], [ranking[label][k] for label in task.labels]
+    )
 
 
-def example_list_from_policy(policy, task: DecisionTask, labeled: Sequence[LabeledItem], *,
-                             per_label: int = 4) -> FixedExampleList:
+def example_list_from_policy(
+    policy, task: DecisionTask, labeled: Sequence[LabeledItem], *, per_label: int = 4
+) -> FixedExampleList:
     """Freeze a fixed-global policy's pick (e.g. ``RandomBalanced``) as a list: its first
     ``per_label`` items per label, and the next one per label as the reserve."""
     return _list_from_ranking(task, _ranked(policy, task, labeled), per_label)
 
 
-def _hard_swap(task: DecisionTask, incumbent: FixedExampleList, by_id: dict[str, LabeledItem],
-               hard_demo_ids: Sequence[str], prototype: dict[str, list[LabeledItem]]) -> FixedExampleList:
+def _hard_swap(
+    task: DecisionTask,
+    incumbent: FixedExampleList,
+    by_id: dict[str, LabeledItem],
+    hard_demo_ids: Sequence[str],
+    prototype: dict[str, list[LabeledItem]],
+) -> FixedExampleList:
     k = incumbent.per_label
     drop = math.ceil(k / 2)
     examples, reserves = [], []
     for label in task.labels:
         current = [by_id[ref.id] for ref in incumbent.examples if ref.label == label]
-        kept = current[:k - drop]                  # the most recently added are at the end
+        kept = current[: k - drop]  # the most recently added are at the end
         used = {row.item.id for row in kept}
         fresh = [by_id[i] for i in hard_demo_ids if by_id[i].label == label and i not in used][:drop]
         used |= {row.item.id for row in fresh}
-        fresh += [row for row in prototype[label] if row.item.id not in used][:drop - len(fresh)]
+        fresh += [row for row in prototype[label] if row.item.id not in used][: drop - len(fresh)]
         used |= {row.item.id for row in fresh}
         examples += kept + fresh
         reserve = by_id[next(ref.id for ref in incumbent.reserves if ref.label == label)]
@@ -139,7 +147,8 @@ def plan_example_list_round(
         dev_ids = dev_ids[:dev_max]
     chosen = set(dev_ids)
     return ExampleListRound(
-        trials=trials, incumbent_source=source,
+        trials=trials,
+        incumbent_source=source,
         development=tuple(by_id[i] for i in dev_ids),
         candidates=tuple(row for row in sorted(labeled, key=lambda r: r.item.id) if row.item.id not in chosen),
     )
@@ -180,26 +189,44 @@ async def improve_example_list(
         objective = "brier" if model.capabilities.supports_probability_distributions else "accuracy"
     if objective not in ("brier", "accuracy"):
         raise ValueError("improve_example_list scores by 'brier' or 'accuracy'")
-    plan = plan_example_list_round(task, labeled, incumbent=incumbent, hard_demo_ids=hard_demo_ids,
-                                   per_label=per_label, seed=seed, development_ids=development_ids,
-                                   dev_max=dev_max)
+    plan = plan_example_list_round(
+        task,
+        labeled,
+        incumbent=incumbent,
+        hard_demo_ids=hard_demo_ids,
+        per_label=per_label,
+        seed=seed,
+        development_ids=development_ids,
+        dev_max=dev_max,
+    )
     optimization = await search_context_policies(
-        task, plan.candidates, plan.development, model,
+        task,
+        plan.candidates,
+        plan.development,
+        model,
         [TrialSpec(fixed, per_label, name=name) for name, fixed in plan.trials],
-        max_model_calls=max_model_calls, objective=objective, checkpoint=checkpoint,
+        max_model_calls=max_model_calls,
+        objective=objective,
+        checkpoint=checkpoint,
         missing_probabilities="incomplete",
-        model_fingerprint=model_fingerprint, protected_ids=protected_ids,
-        protected_text_hashes=protected_text_hashes, display_order=display_order,
+        model_fingerprint=model_fingerprint,
+        protected_ids=protected_ids,
+        protected_text_hashes=protected_text_hashes,
+        display_order=display_order,
         presentation_label_order=presentation_label_order,
         event_sink=event_sink,
     )
     lists = dict(plan.trials)
     results = {trial.trial_name: trial for trial in optimization.trials}
-    scores = {name: {"accuracy": _accuracy(trial, plan.development), objective: trial.objective}
-              for name, trial in results.items() if trial.status == "completed"}
+    scores = {
+        name: {"accuracy": _accuracy(trial, plan.development), objective: trial.objective}
+        for name, trial in results.items()
+        if trial.status == "completed"
+    }
     if "incumbent" not in scores:
-        return ExampleListImprovement(lists["incumbent"], "incumbent", False,
-                                      "kept the incumbent: its trial was incomplete", scores, plan, optimization)
+        return ExampleListImprovement(
+            lists["incumbent"], "incumbent", False, "kept the incumbent: its trial was incomplete", scores, plan, optimization
+        )
     base = scores["incumbent"]
     best, best_gain = "incumbent", 0.0
     for name in TRIAL_NAMES[1:]:

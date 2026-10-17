@@ -4,7 +4,11 @@ from .context import PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
 from .models import DecisionTask, Item, LabeledItem
 
 TASK = DecisionTask("topic", ("a", "b"), "Classify the target.")
-CANDIDATES = [LabeledItem(Item(f"{label}-{number}", {"text": f"{label} shared token {number}"}), label) for label in TASK.labels for number in range(4)]
+CANDIDATES = [
+    LabeledItem(Item(f"{label}-{number}", {"text": f"{label} shared token {number}"}), label)
+    for label in TASK.labels
+    for number in range(4)
+]
 
 
 def test_a_random_context_is_balanced_and_repeatable():
@@ -72,9 +76,7 @@ def test_lexical_retrieval_ranks_stronger_overlap_first_per_label():
         LabeledItem(Item("b-strong", {"text": "alpha beta unique"}), "b"),
     ]
 
-    context = PerLabelLexicalRetrieval().select(
-        TASK, Item("target", {"text": "alpha beta gamma"}), candidates, per_label=1
-    )
+    context = PerLabelLexicalRetrieval().select(TASK, Item("target", {"text": "alpha beta gamma"}), candidates, per_label=1)
 
     assert [item.item.id for item in context] == ["a-strong", "b-strong"]
 
@@ -87,9 +89,7 @@ def test_lexical_retrieval_breaks_equal_scores_by_stable_candidate_id():
         LabeledItem(Item("b-a", {"text": "beta banana"}), "b"),
     ]
 
-    context = PerLabelLexicalRetrieval().select(
-        TASK, Item("target", {"text": "alpha beta"}), candidates, per_label=2
-    )
+    context = PerLabelLexicalRetrieval().select(TASK, Item("target", {"text": "alpha beta"}), candidates, per_label=2)
 
     assert [item.item.id for item in context] == ["a-a", "a-z", "b-a", "b-z"]
 
@@ -208,8 +208,11 @@ def test_an_insufficient_label_pool_is_rejected_after_target_exclusion(policy):
 
 from .context import ExampleRef, FixedExampleList  # noqa: E402
 
-LIST_POOL = [LabeledItem(Item(f"{label}-{number}", {"text": f"{label} example number {number}"}), label)
-             for label in TASK.labels for number in range(6)]
+LIST_POOL = [
+    LabeledItem(Item(f"{label}-{number}", {"text": f"{label} example number {number}"}), label)
+    for label in TASK.labels
+    for number in range(6)
+]
 BY_ID = {row.item.id: row for row in LIST_POOL}
 
 
@@ -257,13 +260,16 @@ def test_a_fixed_list_refuses_a_budget_that_differs_from_its_size_per_label():
         _fixed().select(TASK, Item("t", {"text": "t"}), LIST_POOL, per_label=1)
 
 
-@pytest.mark.parametrize("primary,reserves", [
-    (("a-0", "a-1", "b-0"), ("a-5", "b-5")),          # unbalanced
-    (("a-0", "a-1", "b-0", "b-1"), ("a-5",)),         # a label without a reserve
-    (("a-0", "a-1", "b-0", "b-1"), ("a-5", "a-4")),   # two reserves for one label
-    (("a-0", "a-0", "b-0", "b-1"), ("a-5", "b-5")),   # duplicate example
-    (("a-0", "a-1", "b-0", "b-1"), ("a-1", "b-5")),   # reserve is also an example
-])
+@pytest.mark.parametrize(
+    "primary,reserves",
+    [
+        (("a-0", "a-1", "b-0"), ("a-5", "b-5")),  # unbalanced
+        (("a-0", "a-1", "b-0", "b-1"), ("a-5",)),  # a label without a reserve
+        (("a-0", "a-1", "b-0", "b-1"), ("a-5", "a-4")),  # two reserves for one label
+        (("a-0", "a-0", "b-0", "b-1"), ("a-5", "b-5")),  # duplicate example
+        (("a-0", "a-1", "b-0", "b-1"), ("a-1", "b-5")),  # reserve is also an example
+    ],
+)
 def test_a_fixed_list_must_be_balanced_with_one_distinct_reserve_per_label(primary, reserves):
     with pytest.raises(ValueError):
         _fixed(primary, reserves)
@@ -274,11 +280,10 @@ def test_a_fixed_list_fingerprint_is_deterministic_text_free_and_content_bound()
     assert first.fingerprint == second.fingerprint
     assert first.metadata.name == "fixed-example-list" and first.metadata.selection_mode == "fixed-global"
     assert "example number" not in str(first.metadata.configuration)
-    assert _fixed(("a-1", "a-0", "b-0", "b-1")).fingerprint != first.fingerprint   # order matters
+    assert _fixed(("a-1", "a-0", "b-0", "b-1")).fingerprint != first.fingerprint  # order matters
     assert _fixed(reserves=("a-4", "b-5")).fingerprint != first.fingerprint
     edited = LabeledItem(Item("a-0", {"text": "a different text"}), "a")
-    other = FixedExampleList.from_items(TASK, [edited, BY_ID["a-1"], BY_ID["b-0"], BY_ID["b-1"]],
-                                        [BY_ID["a-5"], BY_ID["b-5"]])
+    other = FixedExampleList.from_items(TASK, [edited, BY_ID["a-1"], BY_ID["b-0"], BY_ID["b-1"]], [BY_ID["a-5"], BY_ID["b-5"]])
     assert other.fingerprint != first.fingerprint
     assert FixedExampleList.from_configuration(first.metadata.configuration) == first
     assert first.example_ids == ("a-0", "a-1", "b-0", "b-1") and first.reserve_ids == ("a-5", "b-5")

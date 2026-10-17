@@ -55,7 +55,7 @@ def test_legacy_web_metrics_use_recorded_probability_vectors_and_calibration_pro
              'feedback':{'item_id':'paper','final_answer_value':'include'}}]
     emitted=[]
     reviewer=SimpleNamespace(core=SimpleNamespace(initial=SimpleNamespace(task=SimpleNamespace(labels=('include','exclude'))),
-        history=lambda limit:tuple(events),_emit=emitted.append))
+        events_of=lambda kinds:tuple(events),_emit=emitted.append))
     WebWorker._metrics(reviewer)
     curve=emitted[0]['metrics']['calibration']
     assert curve['ece']==__import__('pytest').approx(.4)
@@ -365,7 +365,7 @@ def test_protected_feedback_cannot_fire_legacy_stage_cadences():
     checks=[]; improvements=[]
     events=[{'kind':'human-feedback','action':'submitted','assignment':'train'},
             {'kind':'human-feedback','action':'submitted','assignment':'final_audit'}]
-    reviewer=SimpleNamespace(core=SimpleNamespace(history=lambda _:events),
+    reviewer=SimpleNamespace(core=SimpleNamespace(events_of=lambda _:events),
         feedback_trigger=lambda _:False,
         current_cycle=SimpleNamespace(check_trigger=lambda stage,**check:checks.append((stage,check))),
         improve=lambda **kwargs:improvements.append(kwargs))

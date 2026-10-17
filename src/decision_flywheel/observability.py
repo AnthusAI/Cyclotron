@@ -1,4 +1,5 @@
 """A single-writer step driver and replayable trace for application frontends."""
+
 from uuid import uuid4
 
 from .classifier_snapshot import compact_snapshot
@@ -17,11 +18,11 @@ class StepFailed(RuntimeError):
 def _stopped(error) -> str:
     """The terminal status of a step or round that a superseded or cancelled pass stopped."""
     from .optimizer_agent import OptimizationSuperseded
+
     return "superseded" if isinstance(error, OptimizationSuperseded) else "cancelled"
 
 
-async def step(wheel, stage, training, development, *, trigger="manual", request_budget=None,
-               parent_step_id=None, **kwargs):
+async def step(wheel, stage, training, development, *, trigger="manual", request_budget=None, parent_step_id=None, **kwargs):
     if stage not in {"rubric", "examples", "questions", "classifier"}:
         raise ValueError("unknown step stage")
     if not isinstance(trigger, str) or not trigger.strip():
@@ -39,14 +40,23 @@ async def step(wheel, stage, training, development, *, trigger="manual", request
     if request_budget is not None:
         wheel.max_requests = min(ceiling, wheel.requests + request_budget)
     try:
-        wheel._emit({"kind": "step-started", "trigger": trigger,
-            "context": wheel.optimizer_context, "configuration": wheel.active.config.briefing_state(),
-            "classifier_version": wheel.active.fingerprint,
-            "classifier_snapshot": compact_snapshot(wheel.active),
-            "training_count": len(training), "development_count": len(development),
-            "request_budget": request_budget, "session_request_ceiling": ceiling})
-        result = await wheel.optimize_stage(stage, training, development, **kwargs,
-            **({"train_after_questions": False} if stage == "questions" else {}))
+        wheel._emit(
+            {
+                "kind": "step-started",
+                "trigger": trigger,
+                "context": wheel.optimizer_context,
+                "configuration": wheel.active.config.briefing_state(),
+                "classifier_version": wheel.active.fingerprint,
+                "classifier_snapshot": compact_snapshot(wheel.active),
+                "training_count": len(training),
+                "development_count": len(development),
+                "request_budget": request_budget,
+                "session_request_ceiling": ceiling,
+            }
+        )
+        result = await wheel.optimize_stage(
+            stage, training, development, **kwargs, **({"train_after_questions": False} if stage == "questions" else {})
+        )
         reason = result.get("reason", "")
         status = "waiting" if "interrupted" in reason or "waiting" in reason else "completed"
         trials = result.get("trials", [])
@@ -54,23 +64,40 @@ async def step(wheel, stage, training, development, *, trigger="manual", request
             status = "failed"
         elif any(t.get("error_type") for t in trials):
             status = "partial"
-        wheel._emit({"kind": "step-completed", "status": status, "result": result,
-                     "classifier_snapshot": compact_snapshot(wheel.active),
-                     "classifier_version": wheel.active.fingerprint})
+        wheel._emit(
+            {
+                "kind": "step-completed",
+                "status": status,
+                "result": result,
+                "classifier_snapshot": compact_snapshot(wheel.active),
+                "classifier_version": wheel.active.fingerprint,
+            }
+        )
         return {"step_id": step_id, "status": status, "result": result}
     except Exception as error:
         if isinstance(error, RequestBudgetExhausted):
-            wheel._emit({"kind": "step-paused", "reason": "request budget exhausted",
-                         "classifier_snapshot": compact_snapshot(wheel.active),
-                         "resume_requires_explicit_retry": True})
+            wheel._emit(
+                {
+                    "kind": "step-paused",
+                    "reason": "request budget exhausted",
+                    "classifier_snapshot": compact_snapshot(wheel.active),
+                    "resume_requires_explicit_retry": True,
+                }
+            )
             return {"step_id": step_id, "status": "paused", "reason": "request budget exhausted"}
         wheel._emit({"kind": "step-failed", "error_type": type(error).__name__})
         raise StepFailed(type(error).__name__) from None
     except BaseException as error:
         # A superseded or cancelled pass still closes the step it started in the trace.
-        wheel._emit({"kind": "step-completed", "status": _stopped(error), "result": None,
-                     "classifier_snapshot": compact_snapshot(wheel.active),
-                     "classifier_version": wheel.active.fingerprint})
+        wheel._emit(
+            {
+                "kind": "step-completed",
+                "status": _stopped(error),
+                "result": None,
+                "classifier_snapshot": compact_snapshot(wheel.active),
+                "classifier_version": wheel.active.fingerprint,
+            }
+        )
         raise
     finally:
         wheel.max_requests = ceiling

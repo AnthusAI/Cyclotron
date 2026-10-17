@@ -1,5 +1,6 @@
 """Existing catalog API, delegating persistence to a domain storage contract."""
-from .catalog_storage import SQLiteCatalogStorage, encoded, timestamp
+
+from .catalog_storage import SQLiteCatalogStorage
 
 
 class WorkspaceCatalog:
@@ -7,7 +8,8 @@ class WorkspaceCatalog:
         if self.catalog_storage is None:
             self.catalog_storage = SQLiteCatalogStorage(
                 lambda: self.connect(),
-                lambda db, identifier, revision: self.advance_classifier_definitions(db, identifier, revision))
+                lambda db, identifier, revision: self.advance_classifier_definitions(db, identifier, revision),
+            )
 
     def save_classifier(self, identifier, name, config):
         return self.catalog_storage.save_classifier(identifier, name, config)
@@ -40,7 +42,9 @@ class WorkspaceCatalog:
         return self.catalog_storage.snapshot_items(list_id)
 
     def label_item(self, classifier_id, classifier_revision, list_id, item_id, item_revision, label, comment, request_id):
-        return self.catalog_storage.label_item(classifier_id, classifier_revision, list_id, item_id, item_revision, label, comment, request_id)
+        return self.catalog_storage.label_item(
+            classifier_id, classifier_revision, list_id, item_id, item_revision, label, comment, request_id
+        )
 
     def item_labels(self, list_id, item_id, item_revision):
         return self.catalog_storage.item_labels(list_id, item_id, item_revision)

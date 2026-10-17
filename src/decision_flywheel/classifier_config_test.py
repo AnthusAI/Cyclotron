@@ -1,13 +1,15 @@
 """Specs for the three independently adjustable decision request parts."""
+
 import pytest
 
 from .classifier_config import ClassifierConfig
 from .models import DecisionTask, Item, LabeledItem
 
-
 TASK = DecisionTask("inclusion", ("include", "exclude"), "Should this item be included?")
-POOL = (LabeledItem(Item("yes", {"text": "Practical paper"}), "include"),
-        LabeledItem(Item("no", {"text": "Other paper"}), "exclude"))
+POOL = (
+    LabeledItem(Item("yes", {"text": "Practical paper"}), "include"),
+    LabeledItem(Item("no", {"text": "Other paper"}), "exclude"),
+)
 
 
 def test_the_initial_classifier_has_no_invented_rubric_or_examples():
@@ -19,11 +21,13 @@ def test_the_initial_classifier_has_no_invented_rubric_or_examples():
 
 def test_a_papers_knowledge_base_subject_is_a_valid_feature_separate_from_its_inclusion_decision():
     parent = ClassifierConfig(TASK)
-    proposal = {"rationale": "The human accepted papers about knowledge bases.",
-                "rubric": "Prefer research about knowledge bases.",
-                "tasks": [{"name": "about_knowledge_bases",
-                           "instructions": "Is this paper about knowledge bases?",
-                           "labels": ["yes", "no"]}]}
+    proposal = {
+        "rationale": "The human accepted papers about knowledge bases.",
+        "rubric": "Prefer research about knowledge bases.",
+        "tasks": [
+            {"name": "about_knowledge_bases", "instructions": "Is this paper about knowledge bases?", "labels": ["yes", "no"]}
+        ],
+    }
     child = parent.apply(proposal, POOL)
     request = child.request(Item("new", {"text": "A paper about knowledge bases"}), POOL)
     assert request["questions"]["decision"]["options"] == ["include", "exclude"]
@@ -35,10 +39,15 @@ def test_a_papers_knowledge_base_subject_is_a_valid_feature_separate_from_its_in
 
 def test_a_proposal_changes_all_three_parts_and_preserves_the_parent_version():
     parent = ClassifierConfig(TASK)
-    child = parent.apply({"rationale": "Practical recent work", "rubric": "Practical work",
-                          "example_ids": ["yes", "no"], "tasks": [
-                              {"name": "practical", "instructions": "Is there an implementation?",
-                               "labels": ["yes", "no"]}]}, POOL)
+    child = parent.apply(
+        {
+            "rationale": "Practical recent work",
+            "rubric": "Practical work",
+            "example_ids": ["yes", "no"],
+            "tasks": [{"name": "practical", "instructions": "Is there an implementation?", "labels": ["yes", "no"]}],
+        },
+        POOL,
+    )
     request = child.request(Item("new", {"text": "New paper"}), POOL)
     assert request["state"]["rubric"] == "Practical work"
     assert [row["label"] for row in request["state"]["examples"]] == ["include", "exclude"]
@@ -48,11 +57,19 @@ def test_a_proposal_changes_all_three_parts_and_preserves_the_parent_version():
     assert parent.rubric == ""
 
 
-@pytest.mark.parametrize("proposal", [{"weights": [1]}, {"example_ids": ["unknown"]},
-                                     {"provenance": {}}, {"calibration": {"temperature": 1}},
-                                     {"example_ids": ["yes", "yes"]}, {"rubric": 123},
-                                     {"dynamic_elements": ["execute_python"]},
-                                     {"tasks": [{"name": "decision", "instructions": "x", "labels": ["y", "n"]}]}])
+@pytest.mark.parametrize(
+    "proposal",
+    [
+        {"weights": [1]},
+        {"example_ids": ["unknown"]},
+        {"provenance": {}},
+        {"calibration": {"temperature": 1}},
+        {"example_ids": ["yes", "yes"]},
+        {"rubric": 123},
+        {"dynamic_elements": ["execute_python"]},
+        {"tasks": [{"name": "decision", "instructions": "x", "labels": ["y", "n"]}]},
+    ],
+)
 def test_invalid_proposals_cannot_modify_the_active_classifier(proposal):
     parent = ClassifierConfig(TASK)
     with pytest.raises(ValueError):
@@ -68,9 +85,9 @@ def test_examples_matching_the_target_by_id_or_normalized_text_are_never_sent():
 
 def test_dynamic_time_requires_an_explicit_aware_request_instant():
     from datetime import datetime, timezone
+
     config = ClassifierConfig(TASK).apply({"dynamic_elements": ["current_datetime"]}, POOL)
     with pytest.raises(ValueError, match="aware"):
         config.request(Item("new", {"text": "New"}), POOL)
-    request = config.request(Item("new", {"text": "New"}), POOL,
-                             now=datetime(2026, 10, 5, tzinfo=timezone.utc))
+    request = config.request(Item("new", {"text": "New"}), POOL, now=datetime(2026, 10, 5, tzinfo=timezone.utc))
     assert request["state"]["current_datetime"] == "2026-10-05T00:00:00Z"

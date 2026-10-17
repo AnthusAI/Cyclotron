@@ -1,5 +1,4 @@
 """The article demo delegates to the reusable core rather than implementing a loop."""
-import asyncio
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel, development_assignment
@@ -11,36 +10,42 @@ from .reviewer_store import Article, ReviewStore
 
 def test_protected_vote_does_not_advance_non_rubric_review_cadence():
     from types import SimpleNamespace
-    checks=[]
-    events=[{'kind':'human-feedback','action':'submitted','assignment':'train','cycle_id':'one'},
-            {'kind':'human-feedback','action':'submitted','assignment':'rolling_audit','cycle_id':'two'}]
-    reviewer=SimpleNamespace(stage='examples',core=SimpleNamespace(history=lambda _:events),
-        current_cycle=SimpleNamespace(check_trigger=lambda stage,**check:checks.append(check)))
-    assert not ReviewerFlywheel.feedback_trigger(reviewer,1)
-    assert checks[0]['details']['feedback_count']==1
+
+    checks = []
+    events = [
+        {"kind": "human-feedback", "action": "submitted", "assignment": "train", "cycle_id": "one"},
+        {"kind": "human-feedback", "action": "submitted", "assignment": "rolling_audit", "cycle_id": "two"},
+    ]
+    reviewer = SimpleNamespace(
+        stage="examples",
+        core=SimpleNamespace(events_of=lambda _: events),
+        current_cycle=SimpleNamespace(check_trigger=lambda stage, **check: checks.append(check)),
+    )
+    assert not ReviewerFlywheel.feedback_trigger(reviewer, 1)
+    assert checks[0]["details"]["feedback_count"] == 1
 
 
 def test_reviewer_transition_trigger_survives_restart_and_records_its_cause(tmp_path):
-    path=tmp_path/'runtime.sqlite'
-    with ReviewStore(tmp_path/'reviews.sqlite',study_seed='transitions') as store:
-        articles=tuple(Article(str(i),'Paper',f'Text {i}','2026-10-06',('cs.AI',)) for i in range(3))
+    path = tmp_path / "runtime.sqlite"
+    with ReviewStore(tmp_path / "reviews.sqlite", study_seed="transitions") as store:
+        articles = tuple(Article(str(i), "Paper", f"Text {i}", "2026-10-06", ("cs.AI",)) for i in range(3))
         store.import_articles(articles)
-        core=DecisionFlywheel(path,ClassifierConfig(reviewer_task()),FakeModel(),agent([]))
-        reviewer=ReviewerFlywheel(store,core)
-        for article,label in zip(articles[:2],('exclude','include')):
+        core = DecisionFlywheel(path, ClassifierConfig(reviewer_task()), FakeModel(), agent([]))
+        reviewer = ReviewerFlywheel(store, core)
+        for article, label in zip(articles[:2], ("exclude", "include")):
             reviewer.predict(article)
-            reviewer.record_review_event(store.record_vote(article.id,label))
+            reviewer.record_review_event(store.record_vote(article.id, label))
             assert not reviewer.feedback_trigger(10)
             reviewer.finish_cycle()
         core.close()
-        core=DecisionFlywheel(path,ClassifierConfig(reviewer_task()),FakeModel(),agent([]))
-        reviewer=ReviewerFlywheel(store,core)
+        core = DecisionFlywheel(path, ClassifierConfig(reviewer_task()), FakeModel(), agent([]))
+        reviewer = ReviewerFlywheel(store, core)
         reviewer.predict(articles[2])
-        reviewer.record_review_event(store.record_vote(articles[2].id,'exclude'))
+        reviewer.record_review_event(store.record_vote(articles[2].id, "exclude"))
         assert reviewer.feedback_trigger(10)
-        check=core.history()[-1]
-        assert check['kind']=='trigger-evaluated' and check['stage']=='rubric'
-        assert check['details']['transition_count']==2
+        check = core.history()[-1]
+        assert check["kind"] == "trigger-evaluated" and check["stage"] == "rubric"
+        assert check["details"]["transition_count"] == 2
         assert not reviewer.feedback_trigger(10)
         reviewer.finish_cycle()
         core.close()
@@ -66,80 +71,105 @@ def test_reviewer_feedback_is_partitioned_without_exposing_audit_votes(tmp_path)
 
 
 def test_default_reviewer_guidance_excludes_protected_comments_as_well_as_protected_labels(tmp_path):
-    store = ReviewStore(tmp_path / 'reviews.sqlite',study_seed='fixture')
-    articles = tuple(Article(str(i),'Paper',f'Text {i}','2026-10-06',('cs.AI',)) for i in range(40))
+    store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
+    articles = tuple(Article(str(i), "Paper", f"Text {i}", "2026-10-06", ("cs.AI",)) for i in range(40))
     store.import_articles(articles)
     for article in articles:
-        store.record_vote(article.id,'include',comment=f'Explanation {article.id}')
-    core = DecisionFlywheel(tmp_path / 'core.sqlite',ClassifierConfig(reviewer_task()),FakeModel(),agent([]))
-    reviewer = ReviewerFlywheel(store,core)
+        store.record_vote(article.id, "include", comment=f"Explanation {article.id}")
+    core = DecisionFlywheel(tmp_path / "core.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), agent([]))
+    reviewer = ReviewerFlywheel(store, core)
     training, development, protected = reviewer.partitions()
     context = reviewer.sync_optimizer_context()
-    assert set(context['human_explanations']) == {f'Explanation {row.item.id}' for row in training}
-    assert not context['evaluation_context_exposed']
+    assert set(context["human_explanations"]) == {f"Explanation {row.item.id}" for row in training}
+    assert not context["evaluation_context_exposed"]
     core.close()
     store.close()
 
 
 def test_default_live_reviewer_prompt_contains_training_metadata_errors_and_explanations_only(tmp_path):
     import json
-    from .optimizer_agent import OptimizerAgent,OptimizerReply
-    store=ReviewStore(tmp_path/'reviews.sqlite',study_seed='fixture')
-    articles=tuple(Article(str(i),f'Paper {i}',f'Unique abstract {i}','2026-10-06',('cs.AI',),
-        authors=f'Author {i}',journal_ref=f'Journal {i}') for i in range(40))
+
+    from .optimizer_agent import OptimizerAgent, OptimizerReply
+
+    store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
+    articles = tuple(
+        Article(
+            str(i),
+            f"Paper {i}",
+            f"Unique abstract {i}",
+            "2026-10-06",
+            ("cs.AI",),
+            authors=f"Author {i}",
+            journal_ref=f"Journal {i}",
+        )
+        for i in range(40)
+    )
     store.import_articles(articles)
     for article in articles:
-        shown=store.record_prediction(article.id,'exclude',.8,'fake','a'*64,0)
-        store.record_vote(article.id,'include' if int(article.id)%2 else 'exclude',
-            comment=f'Explanation {article.id}',presentation_id=shown.id)
-    sent=[]
+        shown = store.record_prediction(article.id, "exclude", 0.8, "fake", "a" * 64, 0)
+        store.record_vote(
+            article.id,
+            "include" if int(article.id) % 2 else "exclude",
+            comment=f"Explanation {article.id}",
+            presentation_id=shown.id,
+        )
+    sent = []
+
     def complete(messages):
         sent.append(messages)
-        return OptimizerReply('{"rationale":"Use trusted feedback","rubric":"Prefer useful research"}','fake')
-    core=DecisionFlywheel(tmp_path/'core.sqlite',ClassifierConfig(reviewer_task()),FakeModel(),OptimizerAgent(complete))
+        return OptimizerReply('{"rationale":"Use trusted feedback","rubric":"Prefer useful research"}', "fake")
+
+    core = DecisionFlywheel(tmp_path / "core.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), OptimizerAgent(complete))
     try:
-        reviewer=ReviewerFlywheel(store,core)
-        training,development,protected=reviewer.partitions()
-        result=reviewer.improve()
-        assert len(sent)==1
-        prompt=json.loads(sent[0][-1]['content'])
-        assert {row['id'] for row in prompt['feedback']}=={row.item.id for row in training}
-        assert set(prompt['human_explanations'])=={f'Explanation {row.item.id}' for row in training}
-        for row in prompt['feedback']:
-            assert row['initial_answer_value']=='exclude'
-            assert row['prediction_matches_label']==(row['label']=='exclude')
-            assert row['comment']==f"Explanation {row['id']}"
-            assert f"Authors: Author {row['id']}" in row['values']['text']
-            assert f"Published as: Journal {row['id']}" in row['values']['text']
-        assert not {row.item.id for row in development}.intersection(row['id'] for row in prompt['feedback'])
-        assert not {item.id for item in protected}.intersection(row['id'] for row in prompt['feedback'])
-        assert result['evaluation_independent_of_optimizer_context']
+        reviewer = ReviewerFlywheel(store, core)
+        training, development, protected = reviewer.partitions()
+        result = reviewer.improve()
+        assert len(sent) == 1
+        prompt = json.loads(sent[0][-1]["content"])
+        assert {row["id"] for row in prompt["feedback"]} == {row.item.id for row in training}
+        assert set(prompt["human_explanations"]) == {f"Explanation {row.item.id}" for row in training}
+        for row in prompt["feedback"]:
+            assert row["initial_answer_value"] == "exclude"
+            assert row["prediction_matches_label"] == (row["label"] == "exclude")
+            assert row["comment"] == f"Explanation {row['id']}"
+            assert f"Authors: Author {row['id']}" in row["values"]["text"]
+            assert f"Published as: Journal {row['id']}" in row["values"]["text"]
+        assert not {row.item.id for row in development}.intersection(row["id"] for row in prompt["feedback"])
+        assert not {item.id for item in protected}.intersection(row["id"] for row in prompt["feedback"])
+        assert result["evaluation_independent_of_optimizer_context"]
     finally:
-        core.close();store.close()
+        core.close()
+        store.close()
 
 
 def test_explicit_protected_guidance_is_visible_and_invalidates_independent_evaluation(tmp_path):
     import json
+
     from .optimizer_agent import OptimizerAgent, OptimizerReply
+
     store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
     articles = tuple(Article(str(i), f"Paper {i}", f"Unique text {i}", "2026-10-05", ("cs.AI",)) for i in range(40))
     store.import_articles(articles)
     for article in articles:
         store.record_vote(article.id, "include" if int(article.id) % 2 else "exclude", comment=f"Preference {article.id}")
     prompts = []
+
     def complete(messages):
         prompts.append(json.loads(messages[-1]["content"]))
         return OptimizerReply('{"rationale":"Use explanations","rubric":"Updated preferences"}', "fake")
+
     core = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), OptimizerAgent(complete))
-    reviewer = ReviewerFlywheel(store, core,include_protected_guidance=True)
+    reviewer = ReviewerFlywheel(store, core, include_protected_guidance=True)
     result = reviewer.improve()
     assert len(prompts[0]["human_explanations"]) == 40
     _, development, protected = reviewer.partitions()
     excluded_ids = {r.item.id for r in development} | {i.id for i in protected}
     assert not excluded_ids & {r["id"] for r in prompts[0]["feedback"]}
-    assert all(not any(row["values"]["text"].endswith("Abstract: " + article.abstract)
-                       for row in prompts[0]["feedback"])
-               for article in articles if article.id in excluded_ids)
+    assert all(
+        not any(row["values"]["text"].endswith("Abstract: " + article.abstract) for row in prompts[0]["feedback"])
+        for article in articles
+        if article.id in excluded_ids
+    )
     assert not result["evaluation_independent_of_optimizer_context"]
     store.undo_last_vote()
     reviewer.sync_optimizer_context()
@@ -167,8 +197,10 @@ def test_reviewer_predictions_identify_the_core_version_without_a_local_replacem
 
 def test_active_configuration_inspection_shows_the_exact_question_not_just_its_name(tmp_path):
     from .models import DecisionTask
-    config = ClassifierConfig(reviewer_task(), tasks=(DecisionTask(
-        "about_knowledge_bases", ("yes", "no"), "Is this paper about knowledge bases?"),))
+
+    config = ClassifierConfig(
+        reviewer_task(), tasks=(DecisionTask("about_knowledge_bases", ("yes", "no"), "Is this paper about knowledge bases?"),)
+    )
     with ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture") as store:
         core = DecisionFlywheel(tmp_path / "wheel.sqlite", config, FakeModel(), agent([]))
         status = ReviewerFlywheel(store, core).status()
@@ -182,15 +214,17 @@ def test_active_configuration_inspection_shows_the_exact_question_not_just_its_n
 def test_a_stage_failure_is_visible_without_crashing_the_reviewer_or_echoing_exception_secrets(tmp_path):
     with ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture") as store:
         core = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(reviewer_task()), FakeModel(), agent([]))
+
         async def fail(*args, **kwargs):
             raise ValueError("private-provider-secret")
+
         core.optimize_stage = fail
         result = ReviewerFlywheel(store, core).improve(stage="questions")
         events = core.history(10000)
-        assert events[0]['kind'] == 'cycle-started'
-        assert events[-1]['kind'] == 'cycle-completed'
-        assert events[0]['cycle_item_id'] is None
-        assert all(e.get('cycle_id') == events[0]['cycle_id'] for e in events)
+        assert events[0]["kind"] == "cycle-started"
+        assert events[-1]["kind"] == "cycle-completed"
+        assert events[0]["cycle_item_id"] is None
+        assert all(e.get("cycle_id") == events[0]["cycle_id"] for e in events)
         assert result["stage"] == "questions"
         assert result["error_type"] == "ValueError"
         assert "private-provider-secret" not in str(core.history())

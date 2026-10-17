@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
 """Freeze historical votes read-only; preflight or run an explicitly bounded replay."""
+
 import argparse
 import asyncio
 import json
 import os
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.adapters.openai_decision import OpenAIDecisionAdapter, OpenAIDecisionConfiguration
 from decision_flywheel.adapters.optimizer_transport import optimizer_transport
-from decision_flywheel.credential_redaction import credential_values
+from decision_flywheel.api_event_sink import GraphQLTraceSink
 from decision_flywheel.classifier_config import ClassifierConfig
+from decision_flywheel.credential_redaction import credential_values
+from decision_flywheel.cycle_replay import run_cycle_replay
 from decision_flywheel.flywheel import DecisionFlywheel
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.replay import plan_replay, run_replay
-from decision_flywheel.cycle_replay import run_cycle_replay
-from decision_flywheel.trace_artifact import read_trace, render_trace
+from decision_flywheel.replay_feedback_policy import ReplayFeedbackPolicy
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.selection_policy import add_selection_arguments, selection_from_arguments
-from decision_flywheel.api_event_sink import GraphQLTraceSink
-from decision_flywheel.replay_feedback_policy import ReplayFeedbackPolicy
+from decision_flywheel.trace_artifact import read_trace, render_trace
 
 
 def main(argv=None):
@@ -35,34 +36,44 @@ def main(argv=None):
     parser.add_argument("--max-optimizer-calls", type=int, default=5)
     parser.add_argument("--optimizer-model", default="gpt-6-luna")
     parser.add_argument("--optimizer-transport", choices=("openai", "litellm"), default="openai")
-    parser.add_argument('--context-validation-floor',type=int,default=20)
-    parser.add_argument('--evaluation-samples',type=int,default=200)
-    parser.add_argument('--rubric-recency-allowance',type=float,default=2.)
-    parser.add_argument('--rubric-recency-decay-per-class',type=int,default=20)
-    parser.add_argument('--rubric-changes-every',type=int,default=2)
+    parser.add_argument("--context-validation-floor", type=int, default=20)
+    parser.add_argument("--evaluation-samples", type=int, default=200)
+    parser.add_argument("--rubric-recency-allowance", type=float, default=2.0)
+    parser.add_argument("--rubric-recency-decay-per-class", type=int, default=20)
+    parser.add_argument("--rubric-changes-every", type=int, default=2)
     parser.add_argument("--decisions-provider", choices=("jev", "openai"), default="jev")
     parser.add_argument("--decisions-model", default="jev-1.13.0")
-    parser.add_argument('--feedback-policy',choices=('all','reject_half','casual_ten_percent'),default='all')
-    parser.add_argument('--negative-label')
-    parser.add_argument('--calibration-method',choices=('auto','temperature','isotonic'),default='auto')
+    parser.add_argument("--feedback-policy", choices=("all", "reject_half", "casual_ten_percent"), default="all")
+    parser.add_argument("--negative-label")
+    parser.add_argument("--calibration-method", choices=("auto", "temperature", "isotonic"), default="auto")
     parser.add_argument("--confirm-live", action="store_true")
-    parser.add_argument('--operational',action='store_true',help='predict before each vote, trace item cycles and separate triggered stages')
-    parser.add_argument('--trace-api-url',help='GraphQL endpoint for acknowledged trace logging')
-    parser.add_argument('--trace-api-run-id',help='existing web workspace run ID')
+    parser.add_argument(
+        "--operational", action="store_true", help="predict before each vote, trace item cycles and separate triggered stages"
+    )
+    parser.add_argument("--trace-api-url", help="GraphQL endpoint for acknowledged trace logging")
+    parser.add_argument("--trace-api-run-id", help="existing web workspace run ID")
     args = parser.parse_args(argv)
     if bool(args.trace_api_url) != bool(args.trace_api_run_id):
-        parser.error('trace API URL and run ID must be specified together')
-    if args.operational and args.feedback_policy != 'all' and not args.negative_label:
-        parser.error('--negative-label is required for a selective feedback policy')
+        parser.error("trace API URL and run ID must be specified together")
+    if args.operational and args.feedback_policy != "all" and not args.negative_label:
+        parser.error("--negative-label is required for a selective feedback policy")
     from dataclasses import asdict
+
     from decision_flywheel import EvaluationPolicy
+
     try:
-        selection_policy=selection_from_arguments(args)
-        evaluation_policy=EvaluationPolicy(args.evaluation_samples,args.rubric_recency_allowance,
-                                           args.rubric_recency_decay_per_class)
+        selection_policy = selection_from_arguments(args)
+        evaluation_policy = EvaluationPolicy(
+            args.evaluation_samples, args.rubric_recency_allowance, args.rubric_recency_decay_per_class
+        )
     except ValueError as error:
         parser.error(str(error))
-    if min(args.batch_size, args.max_requests, args.max_optimizer_calls,args.context_validation_floor,args.rubric_changes_every) < 1:
+    if (
+        min(
+            args.batch_size, args.max_requests, args.max_optimizer_calls, args.context_validation_floor, args.rubric_changes_every
+        )
+        < 1
+    ):
         parser.error("batch size and request ceilings must be positive")
     if not args.database.is_file():
         parser.error("existing rated database required")
@@ -70,14 +81,17 @@ def main(argv=None):
     snapshot = args.output / "reviews.sqlite3"
     if not snapshot.exists():
         # Backup a read-only connection: the live review database is never opened for writes.
-        with sqlite3.connect(args.database.resolve().as_uri()+"?mode=ro", uri=True) as source:
+        with sqlite3.connect(args.database.resolve().as_uri() + "?mode=ro", uri=True) as source:
             with sqlite3.connect(snapshot) as destination:
                 source.backup(destination)
     with sqlite3.connect(snapshot) as connection:
         metadata = dict(connection.execute("SELECT key,value FROM study_metadata"))
-    with ReviewStore(snapshot, study_seed=metadata["study_seed"],
-                     rolling_audit_rate=float(metadata["rolling_audit_rate"]),
-                     final_audit_rate=float(metadata["final_audit_rate"])) as store:
+    with ReviewStore(
+        snapshot,
+        study_seed=metadata["study_seed"],
+        rolling_audit_rate=float(metadata["rolling_audit_rate"]),
+        final_audit_rate=float(metadata["final_audit_rate"]),
+    ) as store:
         feedback = store.learning_feedback()
         items = {row.item.id: row for row in reviewer_labeled_items(feedback, store.article)}
         # Current non-undone votes and comments, preserving historical arrival order.
@@ -90,44 +104,62 @@ def main(argv=None):
         except ValueError as error:
             parser.error(str(error))
     manifest = plan.manifest(reviewer_task())
-    manifest['execution'] = {
-        'mode': 'operational' if args.operational else 'batch',
-        'optimize_every': args.batch_size, 'retrain_every': args.batch_size,
-        'stages': ['rubric', 'questions', 'examples'],
-        'decisions_model': args.decisions_model, 'optimizer_model': args.optimizer_model,
-        'decisions_provider': args.decisions_provider, 'feedback_policy': args.feedback_policy,
-        'negative_label': args.negative_label, 'calibration_method': args.calibration_method,
-        'optimizer_transport': args.optimizer_transport,
-        'max_requests': args.max_requests, 'max_optimizer_calls': args.max_optimizer_calls,
-        'context_validation_floor':args.context_validation_floor,'cold_start_policy':'provisional-working-rubric',
-        'evaluation_policy':asdict(evaluation_policy),
-        'selection_policy':asdict(selection_policy) if selection_policy else None,
-        'rubric_trigger':{'policy':'label-transitions','every':args.rubric_changes_every},
+    manifest["execution"] = {
+        "mode": "operational" if args.operational else "batch",
+        "optimize_every": args.batch_size,
+        "retrain_every": args.batch_size,
+        "stages": ["rubric", "questions", "examples"],
+        "decisions_model": args.decisions_model,
+        "optimizer_model": args.optimizer_model,
+        "decisions_provider": args.decisions_provider,
+        "feedback_policy": args.feedback_policy,
+        "negative_label": args.negative_label,
+        "calibration_method": args.calibration_method,
+        "optimizer_transport": args.optimizer_transport,
+        "max_requests": args.max_requests,
+        "max_optimizer_calls": args.max_optimizer_calls,
+        "context_validation_floor": args.context_validation_floor,
+        "cold_start_policy": "provisional-working-rubric",
+        "evaluation_policy": asdict(evaluation_policy),
+        "selection_policy": asdict(selection_policy) if selection_policy else None,
+        "rubric_trigger": {"policy": "label-transitions", "every": args.rubric_changes_every},
     }
     path = args.output / "manifest.json"
     encoded = json.dumps(manifest, indent=2)
     if path.exists():
-        saved=json.loads(path.read_text())
+        saved = json.loads(path.read_text())
         # Before transport selection existed, this application used OpenAI.
         # Compare that effective default without rewriting the frozen artifact.
-        execution={**saved.get('execution',{})}
-        execution.setdefault('optimizer_transport','openai')
-        if {**saved,'execution':execution} != json.loads(encoded):
+        execution = {**saved.get("execution", {})}
+        execution.setdefault("optimizer_transport", "openai")
+        if {**saved, "execution": execution} != json.loads(encoded):
             parser.error("frozen replay plan differs; choose a new output directory")
     else:
-        path.write_text(encoded+"\n")
+        path.write_text(encoded + "\n")
     counts = lambda rows: {label: sum(row.label == label for row in rows) for label in reviewer_task().labels}
-    transition_count=sum(left.label != right.label for left,right in zip(plan.ordered,plan.ordered[1:]))
-    rubric_rounds=transition_count//args.rubric_changes_every
-    cadence_rounds=len(plan.ordered)//args.batch_size
+    transition_count = sum(left.label != right.label for left, right in zip(plan.ordered, plan.ordered[1:]))
+    rubric_rounds = transition_count // args.rubric_changes_every
+    cadence_rounds = len(plan.ordered) // args.batch_size
     # Rubric transitions and the other context stages are independently scheduled.
-    optimizer_bound = rubric_rounds+cadence_rounds if args.operational else len(plan.checkpoints)
-    requests_bound = len(plan.ordered) * (1+6*optimizer_bound) if args.operational else plan.request_upper_bound
-    print(json.dumps({"operational_cycles":args.operational,"eligible_labels": len(plan.ordered), "training": counts(plan.training),
-                      "development": counts(plan.development), "protected_audit_pool": counts(plan.scoreboard),
-                      "final_full_audit_evaluation": counts(plan.evaluation(len(plan.ordered), reviewer_task().labels)),
-                      "checkpoints": plan.checkpoints, "jev_uncached_upper_bound": requests_bound,
-                      "optimizer_upper_bound": optimizer_bound, "output": str(args.output)}), flush=True)
+    optimizer_bound = rubric_rounds + cadence_rounds if args.operational else len(plan.checkpoints)
+    requests_bound = len(plan.ordered) * (1 + 6 * optimizer_bound) if args.operational else plan.request_upper_bound
+    print(
+        json.dumps(
+            {
+                "operational_cycles": args.operational,
+                "eligible_labels": len(plan.ordered),
+                "training": counts(plan.training),
+                "development": counts(plan.development),
+                "protected_audit_pool": counts(plan.scoreboard),
+                "final_full_audit_evaluation": counts(plan.evaluation(len(plan.ordered), reviewer_task().labels)),
+                "checkpoints": plan.checkpoints,
+                "jev_uncached_upper_bound": requests_bound,
+                "optimizer_upper_bound": optimizer_bound,
+                "output": str(args.output),
+            }
+        ),
+        flush=True,
+    )
     if not args.confirm_live:
         print("Preflight only: no model clients constructed or called.")
         return 0
@@ -136,12 +168,17 @@ def main(argv=None):
     runtime = args.output / "runtime.sqlite3"
     if runtime.exists():
         parser.error("a live replay already exists; use a new output directory rather than silently restart it")
-    if args.decisions_provider == 'jev':
+    if args.decisions_provider == "jev":
         adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decisions_model))
     else:
         adapter = OpenAIDecisionAdapter.from_environment(configuration=OpenAIDecisionConfiguration(model=args.decisions_model))
     transport = optimizer_transport(vars(args))
-    sink = GraphQLTraceSink(args.trace_api_url,args.trace_api_run_id,token=os.environ.get('FLYWHEEL_WEB_TOKEN')) if args.trace_api_url else None
+    sink = (
+        GraphQLTraceSink(args.trace_api_url, args.trace_api_run_id, token=os.environ.get("FLYWHEEL_WEB_TOKEN"))
+        if args.trace_api_url
+        else None
+    )
+
     def observe(event):
         if sink:
             sink(event)
@@ -149,49 +186,124 @@ def main(argv=None):
         if kind == "optimizer-response":
             proposal = json.loads(event["content"])
             print(json.dumps({"event": kind, "model": event["model"], "proposal": proposal}), flush=True)
-        elif kind in {"optimizer-request", "optimizer-failed", "proposal-validated", "fit-started", "fit-completed",
-                      "candidate-evaluated", "candidate-rejected", "promoted", "waiting-for-labels", "round-failed", "features-failed"}:
-            summary_fields = {'kind', 'event_id', 'cycle_number', 'step_stage', 'requested_model',
-                              'reason', 'status', 'promoted', 'training_count', 'error_type'}
+        elif kind in {
+            "optimizer-request",
+            "optimizer-failed",
+            "proposal-validated",
+            "fit-started",
+            "fit-completed",
+            "candidate-evaluated",
+            "candidate-rejected",
+            "promoted",
+            "waiting-for-labels",
+            "round-failed",
+            "features-failed",
+        }:
+            summary_fields = {
+                "kind",
+                "event_id",
+                "cycle_number",
+                "step_stage",
+                "requested_model",
+                "reason",
+                "status",
+                "promoted",
+                "training_count",
+                "error_type",
+            }
             print(json.dumps({k: v for k, v in event.items() if k in summary_fields}), flush=True)
-    wheel = DecisionFlywheel(runtime, ClassifierConfig(reviewer_task()), adapter, OptimizerAgent(transport),
-                             max_requests=args.max_requests, evaluation_weighting="equal_class",
-                             min_evaluation_per_class=2, observer=observe,
-                             context_validation_floor=args.context_validation_floor,
-                             evaluation_policy=evaluation_policy,
-                             selection_policy=selection_policy,
-                             redact=credential_values(os.environ), calibration_method=args.calibration_method)
+
+    wheel = DecisionFlywheel(
+        runtime,
+        ClassifierConfig(reviewer_task()),
+        adapter,
+        OptimizerAgent(transport),
+        max_requests=args.max_requests,
+        evaluation_weighting="equal_class",
+        min_evaluation_per_class=2,
+        observer=observe,
+        context_validation_floor=args.context_validation_floor,
+        evaluation_policy=evaluation_policy,
+        selection_policy=selection_policy,
+        redact=credential_values(os.environ),
+        calibration_method=args.calibration_method,
+    )
+
     def checkpoint(report):
-        (args.output / "results.json").write_text(json.dumps(report, indent=2)+"\n")
+        (args.output / "results.json").write_text(json.dumps(report, indent=2) + "\n")
         if args.operational:
-            point=report['cycles'][-1]
-            print(json.dumps({'cycle':point['cycle_number'],'agreement':point['metrics']['accuracy'],
-                             'requests':wheel.requests,'optimizer_calls':transport.calls}),flush=True)
+            point = report["cycles"][-1]
+            print(
+                json.dumps(
+                    {
+                        "cycle": point["cycle_number"],
+                        "agreement": point["metrics"]["accuracy"],
+                        "requests": wheel.requests,
+                        "optimizer_calls": transport.calls,
+                    }
+                ),
+                flush=True,
+            )
             return
         point = report["checkpoints"][-1]
-        print(json.dumps({"checkpoint": point["revealed_labels"], "training_labels": point["training_labels"],
-                          "fitted_head": point["fitted_head"], "scoreboard": point["scoreboard"],
-                          "recent_balanced_scoreboard": point["recent_balanced_scoreboard"],
-                          "requests": wheel.requests}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "checkpoint": point["revealed_labels"],
+                    "training_labels": point["training_labels"],
+                    "fitted_head": point["fitted_head"],
+                    "scoreboard": point["scoreboard"],
+                    "recent_balanced_scoreboard": point["recent_balanced_scoreboard"],
+                    "requests": wheel.requests,
+                }
+            ),
+            flush=True,
+        )
+
     try:
         if args.operational:
-            report=asyncio.run(run_cycle_replay(wheel,plan,optimize_every=args.batch_size,
-                retrain_every=args.batch_size,on_cycle=checkpoint,rubric_changes_every=args.rubric_changes_every,
-                feedback_policy=ReplayFeedbackPolicy(args.feedback_policy,args.seed),negative_label=args.negative_label))
-            print(json.dumps({'complete':'stopped_reason' not in report,'cycles':len(report['cycles']),
-                              'jev_attempts':wheel.requests,'optimizer_attempts':transport.calls}),flush=True)
-            return int('stopped_reason' in report)
+            report = asyncio.run(
+                run_cycle_replay(
+                    wheel,
+                    plan,
+                    optimize_every=args.batch_size,
+                    retrain_every=args.batch_size,
+                    on_cycle=checkpoint,
+                    rubric_changes_every=args.rubric_changes_every,
+                    feedback_policy=ReplayFeedbackPolicy(args.feedback_policy, args.seed),
+                    negative_label=args.negative_label,
+                )
+            )
+            print(
+                json.dumps(
+                    {
+                        "complete": "stopped_reason" not in report,
+                        "cycles": len(report["cycles"]),
+                        "jev_attempts": wheel.requests,
+                        "optimizer_attempts": transport.calls,
+                    }
+                ),
+                flush=True,
+            )
+            return int("stopped_reason" in report)
         report = asyncio.run(run_replay(wheel, plan, on_checkpoint=checkpoint))
-        failed = any(point.get("round", {}).get("reason") == "round failed"
-                     for point in report["checkpoints"] if point.get("round"))
-        print(json.dumps({"complete": not failed, "jev_attempts": wheel.requests,
-                          "optimizer_attempts": transport.calls}), flush=True)
+        failed = any(
+            point.get("round", {}).get("reason") == "round failed" for point in report["checkpoints"] if point.get("round")
+        )
+        print(
+            json.dumps({"complete": not failed, "jev_attempts": wheel.requests, "optimizer_attempts": transport.calls}),
+            flush=True,
+        )
         return int(failed)
     finally:
         if args.operational and not sink:
             events = read_trace(runtime)
-            (args.output/'trace.json').write_text(json.dumps(events, indent=2)+'\n')
-            (args.output/'playback.html').write_text(render_trace(events,class_config=[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]))
+            (args.output / "trace.json").write_text(json.dumps(events, indent=2) + "\n")
+            (args.output / "playback.html").write_text(
+                render_trace(
+                    events, class_config=[{"label": "include", "role": "positive"}, {"label": "exclude", "role": "negative"}]
+                )
+            )
         wheel.close()
 
 

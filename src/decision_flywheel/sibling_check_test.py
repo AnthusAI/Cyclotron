@@ -1,7 +1,7 @@
 import asyncio
-from dataclasses import asdict
 import hashlib
 import json
+from dataclasses import asdict
 
 import pytest
 
@@ -11,22 +11,28 @@ from .sibling_check import SiblingCheck, SiblingPolicy, install_sibling_checks, 
 
 
 def test_the_default_policy_refuses_any_sibling_regression():
-    assert SiblingPolicy() == SiblingPolicy("refuse", 0.)
+    assert SiblingPolicy() == SiblingPolicy("refuse", 0.0)
 
 
-@pytest.mark.parametrize("options", [{"action": "warn"}, {"max_regression": -.1}, {"max_regression": float("nan")},
-                                     {"max_regression": True}])
+@pytest.mark.parametrize(
+    "options", [{"action": "warn"}, {"max_regression": -0.1}, {"max_regression": float("nan")}, {"max_regression": True}]
+)
 def test_an_undeclared_action_or_an_invalid_tolerance_is_refused(options):
     with pytest.raises(ValueError):
         SiblingPolicy(**options)
 
 
 def test_a_drop_beyond_the_tolerance_is_a_regression_and_a_smaller_one_is_not():
-    policy = SiblingPolicy(max_regression=.05)
-    assert sibling_effect(policy, "f1", .8, .7)["status"] == "regressed"
-    assert sibling_effect(policy, "f1", .8, .76)["status"] == "no-regression"
-    assert sibling_effect(policy, "f1", .8, .9) == {"status": "no-regression", "metric": "f1", "incumbent_score": .8,
-                                                    "candidate_score": .9, "change": pytest.approx(.1)}
+    policy = SiblingPolicy(max_regression=0.05)
+    assert sibling_effect(policy, "f1", 0.8, 0.7)["status"] == "regressed"
+    assert sibling_effect(policy, "f1", 0.8, 0.76)["status"] == "no-regression"
+    assert sibling_effect(policy, "f1", 0.8, 0.9) == {
+        "status": "no-regression",
+        "metric": "f1",
+        "incumbent_score": 0.8,
+        "candidate_score": 0.9,
+        "change": pytest.approx(0.1),
+    }
 
 
 class Wheel:
@@ -58,6 +64,7 @@ def test_a_candidate_that_leaves_the_shared_request_unchanged_costs_no_sibling_e
 
 def test_the_sibling_policy_does_not_change_an_existing_store_identity():
     from .embedded_cyclotron import ClassifierSpec, CyclotronDefinition
+
     spec = ClassifierSpec("relevant", ("include", "exclude"), "Relevant?")
     definition = CyclotronDefinition("newsroom", (spec,))
     legacy = {key: value for key, value in asdict(definition).items() if key != "sibling_policy"}

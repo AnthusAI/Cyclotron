@@ -1,4 +1,5 @@
 """Execute viewer controls against a stub DOM, without browser or network access."""
+
 import json
 import re
 import shutil
@@ -10,11 +11,11 @@ from .trace_artifact import render_trace
 
 
 def test_fit_all_restores_the_entire_recorded_range_after_deep_zoom():
-    if not shutil.which('node'):
-        pytest.skip('Node is needed for viewer interaction spec')
-    code=re.findall(r'<script>(.*?)</script>',render_trace([]),re.S)[-1]
-    controls=code[code.index('function setView('):code.index('// Capture before vis-timeline:')]
-    harness="""
+    if not shutil.which("node"):
+        pytest.skip("Node is needed for viewer interaction spec")
+    code = re.findall(r"<script>(.*?)</script>", render_trace([]), re.S)[-1]
+    controls = code[code.index("function setView(") : code.index("// Capture before vis-timeline:")]
+    harness = """
 const assert=require('node:assert/strict');
 const maximum=12000,minimumWindow=4;
 const elements={};const el=id=>elements[id]??(elements[id]={});
@@ -23,17 +24,17 @@ CONTROLS
 el('fit-all').onclick();assert.deepEqual(timeline.window,[0,12000]);
 el('zoom-in').onclick();assert.deepEqual(timeline.window,[3000,9000]);
 el('fit-all').onclick();assert.deepEqual(timeline.window,[0,12000]);
-""".replace('CONTROLS',controls)
-    result=subprocess.run(['node','-e',harness],capture_output=True,text=True)
-    assert result.returncode==0,result.stderr
+""".replace("CONTROLS", controls)
+    result = subprocess.run(["node", "-e", harness], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_playback_dispatches_only_recorded_model_comparisons_at_or_before_the_cursor():
-    if not shutil.which('node'):
-        pytest.skip('Node is needed for viewer interaction spec')
-    code=re.findall(r'<script>(.*?)</script>',render_trace([]),re.S)[-1]
-    dispatch=code[code.index(' const calibrationSnapshots={};'):code.index(" el('status').textContent=")]
-    harness="""
+    if not shutil.which("node"):
+        pytest.skip("Node is needed for viewer interaction spec")
+    code = re.findall(r"<script>(.*?)</script>", render_trace([]), re.S)[-1]
+    dispatch = code[code.index(" const calibrationSnapshots={};") : code.index(" el('status').textContent=")]
+    harness = """
 const assert=require('node:assert/strict');
 const classConfig=[{label:'include',role:'positive'}];
 const events=[{kind:'prediction'},
@@ -48,60 +49,78 @@ assert.equal(delivered['flywheel-model-comparison-position'].Topic.comparison.co
 assert.deepEqual(delivered['flywheel-model-comparison-position'].Topic.classes,[{label:'yes',role:'positive'}]);
 position=2;dispatch();assert.equal(delivered['flywheel-model-comparison-position'].Topic.comparison.count,2);
 position=0;dispatch();assert.deepEqual(delivered['flywheel-model-comparison-position'],{});
-""".replace('DISPATCH',dispatch)
-    result=subprocess.run(['node','-e',harness],capture_output=True,text=True)
-    assert result.returncode==0,result.stderr
+""".replace("DISPATCH", dispatch)
+    result = subprocess.run(["node", "-e", harness], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_selection_details_expose_priorities_and_raw_selection_is_not_called_a_head_activation():
     html = render_trace([])
     assert "field('Candidate objective scores'" in html
     assert "field('Incumbent objective scores'" in html
-    if not shutil.which('node'):
-        pytest.skip('Node is needed for viewer interaction spec')
-    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
-    helpers = code[code.index('function optimizationActivity('):code.index('function cycleCells(')]
-    result = subprocess.run(['node', '-e', helpers + """
+    if not shutil.which("node"):
+        pytest.skip("Node is needed for viewer interaction spec")
+    code = re.findall(r"<script>(.*?)</script>", html, re.S)[-1]
+    helpers = code[code.index("function optimizationActivity(") : code.index("function cycleCells(")]
+    result = subprocess.run(
+        [
+            "node",
+            "-e",
+            helpers
+            + """
 const assert=require('node:assert/strict');
 const rows=[{cycle_id:'c',stage:'classifier',kind:'classifier-training-completed',promoted:true,selected:{feature_set:'raw_decision'}}];
 assert.equal(mlActivity('c','classifier-attempts',rows).label,'Raw decision model selected; no learned head');
-"""], capture_output=True, text=True)
+""",
+        ],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0, result.stderr
 
 
 def test_a_long_run_opens_with_every_cycle_visible():
-    if not shutil.which('node'):
-        pytest.skip('Node is needed for viewer interaction spec')
+    if not shutil.which("node"):
+        pytest.skip("Node is needed for viewer interaction spec")
     html = render_trace([])
-    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
-    callback = re.search(r'onInitialDrawComplete:(.*?),height:', code).group(1)
-    result = subprocess.run(['node', '-e',
-        "const assert=require('node:assert/strict');let initialWindowSet=false;"
-        "const maximum=87000,projection={axis:'cycle'};"
-        "const timeline={setWindow:(start,end)=>assert.deepEqual([start,end],[0,maximum])};"
-        f"({callback})();"], capture_output=True, text=True)
+    code = re.findall(r"<script>(.*?)</script>", html, re.S)[-1]
+    callback = re.search(r"onInitialDrawComplete:(.*?),height:", code).group(1)
+    result = subprocess.run(
+        [
+            "node",
+            "-e",
+            "const assert=require('node:assert/strict');let initialWindowSet=false;"
+            "const maximum=87000,projection={axis:'cycle'};"
+            "const timeline={setWindow:(start,end)=>assert.deepEqual([start,end],[0,maximum])};"
+            f"({callback})();",
+        ],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0, result.stderr
 
 
 def test_operational_prediction_details_link_the_actual_request_and_disagreement_filters_keep_both_labels():
-    if not shutil.which('node'):
-        pytest.skip('Node is needed for viewer interaction spec')
+    if not shutil.which("node"):
+        pytest.skip("Node is needed for viewer interaction spec")
     events = [
-        {'kind': 'cycle-started', 'item': {'id': 'paper', 'values': {'text': 'Title: Paper'}}},
-        {'kind': 'decision-request', 'target_id': 'paper', 'state': {'examples': []}, 'questions': {}},
-        {'kind': 'decision-response', 'target_id': 'paper', 'answers': {'decision': {'choice': 'reject'}}},
-        {'kind': 'prediction', 'target_id': 'paper', 'label': 'reject', 'probabilities': {'reject': .8, 'accept': .2}},
-        {'kind': 'human-feedback', 'feedback': {'item_id': 'paper', 'final_answer_value': 'accept'}},
-        {'kind': 'cycle-completed'},
+        {"kind": "cycle-started", "item": {"id": "paper", "values": {"text": "Title: Paper"}}},
+        {"kind": "decision-request", "target_id": "paper", "state": {"examples": []}, "questions": {}},
+        {"kind": "decision-response", "target_id": "paper", "answers": {"decision": {"choice": "reject"}}},
+        {"kind": "prediction", "target_id": "paper", "label": "reject", "probabilities": {"reject": 0.8, "accept": 0.2}},
+        {"kind": "human-feedback", "feedback": {"item_id": "paper", "final_answer_value": "accept"}},
+        {"kind": "cycle-completed"},
     ]
-    events = [{**e, 'event_id': i+1, 'cycle_id': 'one', 'cycle_number': 1,
-               'created_at': f'2026-10-06T12:00:0{i}Z'} for i, e in enumerate(events)]
-    events[0]['classifier_snapshot'] = {'config': {'rubric': 'before rubric'}, 'head': None}
-    events[-1]['classifier_snapshot'] = {'config': {'rubric': 'after rubric'}, 'head': {'weights': [1]}}
-    html = render_trace(events, class_config=[{'label':'accept','role':'positive'},{'label':'reject','role':'negative'}])
+    events = [
+        {**e, "event_id": i + 1, "cycle_id": "one", "cycle_number": 1, "created_at": f"2026-10-06T12:00:0{i}Z"}
+        for i, e in enumerate(events)
+    ]
+    events[0]["classifier_snapshot"] = {"config": {"rubric": "before rubric"}, "head": None}
+    events[-1]["classifier_snapshot"] = {"config": {"rubric": "after rubric"}, "head": {"weights": [1]}}
+    html = render_trace(events, class_config=[{"label": "accept", "role": "positive"}, {"label": "reject", "role": "negative"}])
     data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
-    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
-    harness = r'''
+    code = re.findall(r"<script>(.*?)</script>", html, re.S)[-1]
+    harness = r"""
 const assert=require('node:assert/strict'),elements={},handlers={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
 global.document={getElementById:id=>elements[id]||(elements[id]={textContent:'',value:'',append(){},replaceChildren(){},addEventListener(n,f){this[n]=f;},getBoundingClientRect(){return {left:0,width:1000};}}),createElement:()=>({textContent:'',style:{},cloneNode(){return {...this};},append(...children){this.textContent+=children.map(child=>child.textContent||'').join('');},setAttribute(){}})};
@@ -270,40 +289,85 @@ timeline.setWindow(0,4);elements['fit-all'].onclick();assert.deepEqual(timeline.
 elements['disagreement-filter'].checked=true;applyFilters();
 assert.ok(timeline.items.some(i=>i.className.startsWith('marker-prediction')));
 assert.ok(timeline.items.some(i=>i.className.startsWith('marker-human')));
-'''.replace('DATA', json.dumps(data)).replace('CODE', code)
-    result = subprocess.run(['node'], input=harness, capture_output=True, text=True)
+""".replace("DATA", json.dumps(data)).replace("CODE", code)
+    result = subprocess.run(["node"], input=harness, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
 
 def test_clicking_event_shows_only_that_event_and_filters_do_not_change_recorded_history():
-    if not shutil.which('node'):
-        pytest.skip('Node is needed for viewer interaction spec')
+    if not shutil.which("node"):
+        pytest.skip("Node is needed for viewer interaction spec")
     events = []
-    for name in ('a', 'b'):
-        for kind, extra in [('step-started', {'step_stage': 'rubric'}),
-                            ('optimizer-request', {'messages': [{'content': 'prompt-'+name}]}),
-                            ('optimizer-response', {'content': 'reply-'+name, 'tool_calls': [{'name': 'tool-'+name}]}),
-                            ('step-completed', {'result': {'reason': 'outcome-'+name}})]:
-            events.append({'event_id': len(events)+1, 'kind': kind, 'step_id': name,
-                           'created_at': '2026-10-06T12:00:00Z', **extra})
-    for label in ('accept', 'reject'):
-        events.append({'event_id': len(events)+1, 'kind': 'human-feedback',
-            'created_at': '2026-10-06T12:01:00Z', 'assignment': 'development',
-            'feedback': {'final_answer_value': label, 'edit_comment_value': 'reason' if label=='accept' else ''}})
-    events.append({'event_id':11,'kind':'internal-cache-check','created_at':'2026-10-06T12:01:10Z'})
-    events.append({'event_id':12,'kind':'proposal-validated','step_id':'a','step_stage':'rubric','created_at':'2026-10-06T12:01:11Z',
-                   'previous':{'rubric':''},'candidate':{'rubric':'prefer curated knowledge'}})
-    events.extend([{'event_id':13+i,'kind':'trigger-evaluated','stage':'rubric','due':due,'created_at':f'2026-10-06T12:01:{12+i}Z'} for i,due in enumerate((False,True))])
-    events.append({'event_id':15,'kind':'cycle-metrics','created_at':'2026-10-06T12:01:14Z','metrics':{'accuracy':.5,'count':2}})
-    events.append({'event_id':16,'kind':'cycle-metrics','created_at':'2026-10-06T12:01:15Z','metrics':{'accuracy':.75,'count':4}})
-    history=[{'source_table':'review_events','record':{'label':'accept','action':'vote','comment':'why','created_at':'2026-10-06T12:02:00Z'},
-              'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'},'presentation':{'predicted_label':'reject','confidence':.9}}]
-    history.append({'source_table':'presentations','record':{'predicted_label':'reject','confidence':.9,'shown_at':'2026-10-06T12:01:30Z'},
-                    'article':{'title':'Source title','abstract':'Source abstract','assignment':'train'}})
+    for name in ("a", "b"):
+        for kind, extra in [
+            ("step-started", {"step_stage": "rubric"}),
+            ("optimizer-request", {"messages": [{"content": "prompt-" + name}]}),
+            ("optimizer-response", {"content": "reply-" + name, "tool_calls": [{"name": "tool-" + name}]}),
+            ("step-completed", {"result": {"reason": "outcome-" + name}}),
+        ]:
+            events.append(
+                {"event_id": len(events) + 1, "kind": kind, "step_id": name, "created_at": "2026-10-06T12:00:00Z", **extra}
+            )
+    for label in ("accept", "reject"):
+        events.append(
+            {
+                "event_id": len(events) + 1,
+                "kind": "human-feedback",
+                "created_at": "2026-10-06T12:01:00Z",
+                "assignment": "development",
+                "feedback": {"final_answer_value": label, "edit_comment_value": "reason" if label == "accept" else ""},
+            }
+        )
+    events.append({"event_id": 11, "kind": "internal-cache-check", "created_at": "2026-10-06T12:01:10Z"})
+    events.append(
+        {
+            "event_id": 12,
+            "kind": "proposal-validated",
+            "step_id": "a",
+            "step_stage": "rubric",
+            "created_at": "2026-10-06T12:01:11Z",
+            "previous": {"rubric": ""},
+            "candidate": {"rubric": "prefer curated knowledge"},
+        }
+    )
+    events.extend(
+        [
+            {
+                "event_id": 13 + i,
+                "kind": "trigger-evaluated",
+                "stage": "rubric",
+                "due": due,
+                "created_at": f"2026-10-06T12:01:{12 + i}Z",
+            }
+            for i, due in enumerate((False, True))
+        ]
+    )
+    events.append(
+        {"event_id": 15, "kind": "cycle-metrics", "created_at": "2026-10-06T12:01:14Z", "metrics": {"accuracy": 0.5, "count": 2}}
+    )
+    events.append(
+        {"event_id": 16, "kind": "cycle-metrics", "created_at": "2026-10-06T12:01:15Z", "metrics": {"accuracy": 0.75, "count": 4}}
+    )
+    history = [
+        {
+            "source_table": "review_events",
+            "record": {"label": "accept", "action": "vote", "comment": "why", "created_at": "2026-10-06T12:02:00Z"},
+            "article": {"title": "Source title", "abstract": "Source abstract", "assignment": "train"},
+            "presentation": {"predicted_label": "reject", "confidence": 0.9},
+        }
+    ]
+    history.append(
+        {
+            "source_table": "presentations",
+            "record": {"predicted_label": "reject", "confidence": 0.9, "shown_at": "2026-10-06T12:01:30Z"},
+            "article": {"title": "Source title", "abstract": "Source abstract", "assignment": "train"},
+        }
+    )
     html = render_trace(events, history)
     data = dict(re.findall(r'<script id="([^"]+)" type="application/json">(.*?)</script>', html, re.S))
-    code = re.findall(r'<script>(.*?)</script>', html, re.S)[-1]
-    harness = r'''
+    code = re.findall(r"<script>(.*?)</script>", html, re.S)[-1]
+    harness = (
+        r"""
 const assert=require('node:assert/strict');
 const elements={};
 for(const [id,text] of Object.entries(DATA))elements[id]={textContent:text};
@@ -424,6 +488,9 @@ assert.equal(new Set(timelineItems.map(i=>+i.start)).size,timelineItems.length);
 assert.equal(readable({messages:[{role:'user',content:JSON.stringify({human_explanations:['knowledge bases'],feedback:[{text:'Title\\nAbstract'}]})}]}).includes('Title\\n'),true);
 assert.ok(!readable({content:'line one\\nline two'}).includes('\\\\n'));
 assert.ok(readable({content:'<script>untrusted</script>'}).includes('<script>untrusted</script>'));
-'''.replace('DATA', json.dumps(data)).replace('HTML', json.dumps(html)).replace('CODE', code)
-    completed = subprocess.run(['node'], input=harness, capture_output=True, text=True)
+""".replace("DATA", json.dumps(data))
+        .replace("HTML", json.dumps(html))
+        .replace("CODE", code)
+    )
+    completed = subprocess.run(["node"], input=harness, capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr

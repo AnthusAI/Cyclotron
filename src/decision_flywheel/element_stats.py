@@ -8,11 +8,12 @@
 Everything is deterministic given the seed. These are screening statistics on a few hundred stories, not tests;
 forward shadow evaluation stays the arbiter.
 """
+
 import math
 import random
 
-CLIP = 1e-3          # main probabilities are clipped to [CLIP, 1 - CLIP] before the logit
-L2 = 1e-2            # ridge on the slopes (not the intercept), so a perfect separator still has a finite fit
+CLIP = 1e-3  # main probabilities are clipped to [CLIP, 1 - CLIP] before the logit
+L2 = 1e-2  # ridge on the slopes (not the intercept), so a perfect separator still has a finite fit
 
 
 def auc(scores, positives):
@@ -158,7 +159,7 @@ def cv_gain(main, element, y, *, k=5, repeats=5, seed=0, bootstrap=500, level=0.
                 pb, pa = predict(wb, base_x[i]), predict(wa, aug_x[i])
                 lb = -math.log(max(1e-12, pb if y[i] else 1 - pb))
                 la = -math.log(max(1e-12, pa if y[i] else 1 - pa))
-                hb, ha = float((pb >= .5) == bool(y[i])), float((pa >= .5) == bool(y[i]))
+                hb, ha = float((pb >= 0.5) == bool(y[i])), float((pa >= 0.5) == bool(y[i]))
                 gain_ll[i] += (lb - la) / repeats
                 gain_acc[i] += (ha - hb) / repeats
                 base_ll += lb / repeats / n
@@ -173,9 +174,19 @@ def cv_gain(main, element, y, *, k=5, repeats=5, seed=0, bootstrap=500, level=0.
         for _ in range(bootstrap):
             means.append(sum(values[boot.randrange(n)] for _ in range(n)) / n)
         return percentile(means, tail)
-    return {"n": n, "repeats": repeats, "folds": k,
-            "base_log_loss": base_ll, "augmented_log_loss": aug_ll, "base_accuracy": base_hit,
-            "augmented_accuracy": aug_hit,
-            "mean_log_loss_gain": sum(gain_ll) / n, "lower_log_loss_gain": lower(gain_ll),
-            "mean_accuracy_gain": sum(gain_acc) / n, "lower_accuracy_gain": lower(gain_acc),
-            "bootstrap": bootstrap, "level": level}
+
+    return {
+        "n": n,
+        "repeats": repeats,
+        "folds": k,
+        "base_log_loss": base_ll,
+        "augmented_log_loss": aug_ll,
+        "base_accuracy": base_hit,
+        "augmented_accuracy": aug_hit,
+        "mean_log_loss_gain": sum(gain_ll) / n,
+        "lower_log_loss_gain": lower(gain_ll),
+        "mean_accuracy_gain": sum(gain_acc) / n,
+        "lower_accuracy_gain": lower(gain_acc),
+        "bootstrap": bootstrap,
+        "level": level,
+    }

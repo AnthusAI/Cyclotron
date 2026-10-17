@@ -3,7 +3,7 @@
   "title": "Hosted held-out: declare held_out on AccountWorkspace and derive one allow_live flag",
   "description": "Problem: the held-out before-and-after report (merged in PR #29) has no path to the hosted workspace. AccountWorkspace (src/decision_flywheel/prospectus_accounts.py:137) has no held_out field while web_api.py:391 probes getattr(workspace, 'held_out', None), so hosted held-out is silently absent rather than declared. Separately, three independent flags say whether paid calls are allowed: WebWorker.allow_live (web_worker.py:35), HeldOutService.allow_live (held_out_service.py:26) and HostedConfig.allow_live (hosted_runtime.py:42); capabilities.live_enabled (web_api.py:172) reads only the first, so an app with a live HeldOutService and no workspace service can run paid evaluations while the console says live is off.\nDo: (1) add held_out: object = None to AccountWorkspace and wire HeldOutService(open_cyclotron, allow_live) in hosted_runtime where the priming service is wired; (2) make create_app derive one allow_live and inject it into the priming and held-out services (or assert the flags agree at construction); (3) have HeldOutService size the request budget from held_out_request_bound before opening the cyclotron, so an editor never sees 'reopen with a larger max_requests' (embedded_cyclotron.py:1378); (4) add held_out_service_test.py covering evaluate with live disabled through GraphQL and the capabilities flag agreeing with the service.\nDone when: a hosted workspace can expose heldOutOverview and heldOutCommand, live_enabled matches what the mutations allow, specs pass. Releasing the UI tag that carries the held-out card needs Ryan's go-ahead and is not part of this issue. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -12,11 +12,14 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-10-17T16:37:20.156174Z",
-  "updated_at": "2026-10-17T16:37:20.156303Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:43:14.671778Z",
+  "closed_at": "2026-10-17T16:43:14.671628Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

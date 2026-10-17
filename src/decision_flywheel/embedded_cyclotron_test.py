@@ -1,4 +1,5 @@
 """An application decides and reviews its own items without managing learning data."""
+
 import asyncio
 
 import pytest
@@ -9,13 +10,13 @@ from .flywheel_test import agent
 from .learning_loop import review_role
 from .models import DecisionResult, Item
 
-RELEVANT = ClassifierSpec("relevant", ("include", "exclude"), "Is this relevant to the publication?",
-                          positive_label="include")
+RELEVANT = ClassifierSpec("relevant", ("include", "exclude"), "Is this relevant to the publication?", positive_label="include")
 DEFINITION = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed")
 
 
 class Model:
     """A scripted batched decision model: 'yes' items look relevant."""
+
     model_identity = "scripted-batch"
 
     def __init__(self):
@@ -23,10 +24,16 @@ class Model:
 
     async def classify_many(self, configs, target, training, **kwargs):
         self.calls += 1
-        p = .8 if "yes" in target.values["text"] else .3
-        return BatchedAnswers({cid: {"decision": DecisionResult("include" if p > .5 else "exclude",
-                                                                {"include": p, "exclude": 1 - p})}
-                               for cid in configs}, "scripted", {}, 1)
+        p = 0.8 if "yes" in target.values["text"] else 0.3
+        return BatchedAnswers(
+            {
+                cid: {"decision": DecisionResult("include" if p > 0.5 else "exclude", {"include": p, "exclude": 1 - p})}
+                for cid in configs
+            },
+            "scripted",
+            {},
+            1,
+        )
 
 
 def run(coroutine):
@@ -52,10 +59,13 @@ def test_an_application_decides_and_reviews_by_its_own_ids(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, model) as cyclotron:
         decision = run(cyclotron.decide(item("ref-1")))
         assert decision.item_id == "ref-1" and decision.label == "include"
-        assert decision.confidence == pytest.approx(.8) and decision.version == 1
+        assert decision.confidence == pytest.approx(0.8) and decision.version == 1
         assert decision.review.selected and decision.review.propensity == 1.0
-        review = run(cyclotron.review(decision.decision_id, "exclude", explanation="Vendor marketing.",
-                                      reason_code="out_of_scope", reviewer="editor-1"))
+        review = run(
+            cyclotron.review(
+                decision.decision_id, "exclude", explanation="Vendor marketing.", reason_code="out_of_scope", reviewer="editor-1"
+            )
+        )
         assert review.kind == "label" and review.label == "exclude"
         snapshot = cyclotron.status().to_json()
     assert snapshot["cyclotron"]["id"] == "papyrus-relevance"
@@ -203,7 +213,7 @@ def test_several_classifiers_share_one_request_and_are_reviewed_separately(tmp_p
         assert set(decision.results) == {"relevant", "timely"}
         assert model.calls == 1
         with pytest.raises(ValueError, match="several"):
-            decision.label
+            _ = decision.label
         run(cyclotron.review(decision.decision_id, "include", classifier="relevant"))
         assert cyclotron.status("relevant").alignment.labels == 1
         assert cyclotron.status("timely").pending.decisions_awaiting_review == 1
@@ -221,13 +231,12 @@ def test_the_request_ceiling_applies_to_each_open(tmp_path):
 
 
 def test_reviews_drive_the_existing_learning_loop_when_an_optimizer_is_supplied(tmp_path):
-    definition = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=2,
-                                     rubric_changes_every=1)
+    definition = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=2, rubric_changes_every=1)
     events = []
-    with Cyclotron.open(tmp_path / "c", definition, Model(), agent([]), max_requests=50,
-                        observer=events.append) as cyclotron:
-        for index, (text, label) in enumerate([("yes a", "include"), ("no b", "exclude"),
-                                               ("yes c", "exclude"), ("no d", "include")]):
+    with Cyclotron.open(tmp_path / "c", definition, Model(), agent([]), max_requests=50, observer=events.append) as cyclotron:
+        for index, (text, label) in enumerate(
+            [("yes a", "include"), ("no b", "exclude"), ("yes c", "exclude"), ("no d", "include")]
+        ):
             decision = run(cyclotron.decide(item(f"learn-{index}", text)))
             run(cyclotron.review(decision.decision_id, label, explanation=f"reason {index}"))
         history = cyclotron.wheels["relevant"].history(100000)
@@ -236,12 +245,18 @@ def test_reviews_drive_the_existing_learning_loop_when_an_optimizer_is_supplied(
     assert [e["kind"] for e in events if e["kind"] in ("decision", "review")][:2] == ["decision", "review"]
 
 
+@pytest.mark.slow
 def test_a_promoted_version_reaches_subscribers_and_the_status(tmp_path):
     from .optimizer_agent import OptimizerAgent, OptimizerReply
-    optimizer = OptimizerAgent(lambda _: OptimizerReply(
-        '{"rationale":"Editors include items that say yes","rubric":"Include items that say yes."}', "fake-optimizer"))
-    definition = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=1000,
-                                     rubric_changes_every=1)
+
+    optimizer = OptimizerAgent(
+        lambda _: OptimizerReply(
+            '{"rationale":"Editors include items that say yes","rubric":"Include items that say yes."}', "fake-optimizer"
+        )
+    )
+    definition = CyclotronDefinition(
+        "papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=1000, rubric_changes_every=1
+    )
     with Cyclotron.open(tmp_path / "c", definition, Model(), optimizer, max_requests=500) as cyclotron:
         for index in range(16):
             decision = run(cyclotron.decide(item(f"learn-{index}", ("yes " if index % 2 else "no ") + str(index))))
@@ -268,3 +283,29 @@ def test_a_seed_rubric_starts_the_classifier_and_is_fixed_when_the_store_is_crea
         assert cyclotron.status().version == 1
     with pytest.raises(ValueError, match="seed_rubrics"):
         Cyclotron.open(tmp_path / "d", DEFINITION, Model(), seed_rubrics={"other": "x"})
+
+
+def test_deciding_reads_only_the_labeled_items_never_the_whole_item_store(tmp_path):
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model()) as cyclotron:
+        labeled = []
+        for index in range(3):
+            decision = run(cyclotron.decide(item(f"labeled-{index}")))
+            run(cyclotron.review(decision.decision_id, "include", explanation="note"))
+            labeled.append(f"labeled-{index}")
+        for index in range(5):
+            run(cyclotron.decide(item(f"unlabeled-{index}")))
+        looked_up = []
+        storage = cyclotron.root_storage
+        original_lookup = storage.item_values
+
+        def forbidden_items():
+            raise AssertionError("deciding read every item")
+
+        def recording_lookup(identifier):
+            looked_up.append(identifier)
+            return original_lookup(identifier)
+
+        storage.items = forbidden_items
+        storage.item_values = recording_lookup
+        run(cyclotron.decide(item("new-item")))
+    assert set(looked_up) == set(labeled)

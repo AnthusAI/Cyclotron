@@ -69,6 +69,7 @@
 .cyclotron-held-out-headline-name { font-weight:600; }
 .cyclotron-held-out-headline-value { font-size:1.6em; font-variant-numeric:tabular-nums; }
 .cyclotron-held-out-points { font-size:.6em; color:var(--muted-foreground,#5d5361); }
+.cyclotron-held-out-interval { font-variant-numeric:tabular-nums; color:var(--muted-foreground,#5d5361); }
 .cyclotron-held-out-verdict { font-weight:600; }
 .cyclotron-held-out-table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
 .cyclotron-held-out-table th, .cyclotron-held-out-table td { padding:4px 8px; text-align:left; border-bottom:1px solid var(--border,#d9d3dc); }

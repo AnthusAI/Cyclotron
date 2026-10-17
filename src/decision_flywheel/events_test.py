@@ -1,4 +1,5 @@
 """Specs for the reusable text-free live optimizer event stream."""
+
 from __future__ import annotations
 
 from .events import FlywheelEvent, JsonlEventStream

@@ -1,6 +1,7 @@
 """Executable Gherkin contract for the headless public library."""
-import asyncio
+
 import ast
+import asyncio
 from pathlib import Path
 
 from pytest_bdd import given, scenarios, then, when
@@ -8,7 +9,6 @@ from pytest_bdd import given, scenarios, then, when
 from decision_flywheel import ClassifierConfig, DecisionFlywheel
 from decision_flywheel.classifier_config import ClassifiedAnswers
 from decision_flywheel.models import DecisionResult, DecisionTask, Item
-
 
 scenarios("features/headless_core.feature")
 
@@ -51,9 +51,9 @@ def prediction_has_event(wheel):
 def reusable_core_modules():
     root = Path(__file__).parents[1] / "src" / "decision_flywheel"
     excluded_prefixes = ("application_runtime", "web_", "trace_", "reviewer")
-    return tuple(path for path in root.glob("*.py")
-                 if not path.name.endswith("_test.py")
-                 and not path.stem.startswith(excluded_prefixes))
+    return tuple(
+        path for path in root.glob("*.py") if not path.name.endswith("_test.py") and not path.stem.startswith(excluded_prefixes)
+    )
 
 
 @when("its imports are inspected", target_fixture="core_imports")
