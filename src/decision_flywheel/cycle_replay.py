@@ -1,7 +1,8 @@
 """Sequential operational replay: predict first, reveal one historical vote, then act."""
 from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
 from .calibration_history import reviewed_calibration_metrics
-from .replay_feedback_policy import ReplayFeedbackPolicy
+from .models import DecisionResult
+from .replay_feedback_policy import FeedbackSelection, ReplayFeedbackPolicy
 from .output_comparison import compare_outputs
 
 TRIGGER_KINDS=('human-feedback','trigger-evaluated')
@@ -72,27 +73,30 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
     revealed_propensities={row.item.id:1. for row in revealed_rows}
     all_item_evaluation=[]
     completed_ids=set()
+    feedback_recorded_by_interrupted_cycle={}
     if resume:
         started={event.get('cycle_id'):event for event in prior_events if event.get('kind')=='cycle-started'}
-        closed={event.get('cycle_id') for event in prior_events if event.get('kind') in {'cycle-completed','cycle-failed'}}
-        unfinished=set(started)-closed
-        if unfinished:
-            raise ValueError('operational replay has an unfinished cycle; inspect or explicitly resume that cycle first')
-        completed_ids={event.get('cycle_item_id') for cycle_id,event in started.items()
-                       if cycle_id in closed and any(value.get('kind')=='cycle-completed' and value.get('cycle_id')==cycle_id for value in prior_events)}
+        completed_cycle_ids={event.get('cycle_id') for event in prior_events if event.get('kind')=='cycle-completed'}
+        completed_ids={event.get('cycle_item_id') for cycle_id,event in started.items() if cycle_id in completed_cycle_ids}
         expected=[row.item.id for row in plan.ordered[:len(completed_ids)]]
         if set(expected)!=completed_ids:
             raise ValueError('completed replay cycles are not a contiguous prefix of the frozen plan')
+        interrupted_item_id=plan.ordered[len(completed_ids)].item.id if len(completed_ids)<len(plan.ordered) else None
         for event in prior_events:
             if event.get('kind')!='human-feedback':
                 continue
             payload=event.get('feedback',{})
             identifier=payload.get('item_id')
-            if identifier not in rows_by_id or identifier in revealed_propensities:
+            if identifier not in rows_by_id or identifier in revealed_propensities or identifier in feedback_recorded_by_interrupted_cycle:
                 raise ValueError('replay feedback does not match the frozen plan')
             row=rows_by_id[identifier]
             if payload.get('final_answer_value')!=row.label:
                 raise ValueError('replay feedback label does not match the frozen reference')
+            if identifier not in completed_ids:
+                if identifier!=interrupted_item_id:
+                    raise ValueError('replay feedback belongs to a cycle that is neither completed nor the next one in the frozen plan')
+                feedback_recorded_by_interrupted_cycle[identifier]=payload.get('selection_propensity')
+                continue
             revealed_rows.append(row)
             revealed_propensities[identifier]=payload.get('selection_propensity')
         eligible_count=len(revealed_rows)-len(initial_training)-len(initial_development)
@@ -111,19 +115,31 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
             continue
         train=tuple(value for value in revealed_rows if roles[value.item.id]=='training')
         dev=tuple(value for value in revealed_rows if roles[value.item.id]=='development')
-        with wheel.cycle(row.item,reason='historical-feedback-replay') as cycle:
-            if retry_failed_requests:
-                from .decision_cache import CacheOptions
-                result=await wheel.predict(row.item,train,cache_options=CacheOptions(retry_failed=True))
+        interrupted_cycle=(wheel.resume_cycle(row.item,include_failed=True)
+                           if resume and row.item.id==interrupted_item_id else None)
+        with (interrupted_cycle or wheel.cycle(row.item,reason='historical-feedback-replay')) as cycle:
+            prediction_before_interruption=(next((event for event in reversed(_events_of(wheel,('prediction',)))
+                if event.get('cycle_id')==cycle.context['cycle_id'] and event['target_id']==row.item.id),None)
+                if interrupted_cycle else None)
+            if prediction_before_interruption:
+                prediction=prediction_before_interruption
+                result=DecisionResult(prediction['label'],prediction['probabilities'],prediction['model'],
+                                      prediction['usage'],prediction['latency_ms'],prediction['confidence'])
             else:
-                result=await wheel.predict(row.item,train)
+                if retry_failed_requests:
+                    from .decision_cache import CacheOptions
+                    result=await wheel.predict(row.item,train,cache_options=CacheOptions(retry_failed=True))
+                else:
+                    result=await wheel.predict(row.item,train)
+                # This is an evaluator-only record.  It is deliberately not emitted
+                # into wheel history, optimizer context, or a feedback event.
+                prediction=next(event for event in reversed(wheel.history(20))
+                                if event['kind']=='prediction' and event['target_id']==row.item.id)
             selection=policy.select(item_id=row.item.id,predicted_label=result.label,negative_label=negative_label,
                                     cycle_number=index+1,confidence=result.probabilities[result.label])
+            if row.item.id in feedback_recorded_by_interrupted_cycle:
+                selection=FeedbackSelection(True,feedback_recorded_by_interrupted_cycle[row.item.id],selection.inclusion_propensity)
             selected=selection.selected
-            # This is an evaluator-only record.  It is deliberately not emitted
-            # into wheel history, optimizer context, or a feedback event.
-            prediction=next(event for event in reversed(wheel.history(20))
-                            if event['kind']=='prediction' and event['target_id']==row.item.id)
             all_item_evaluation.append({'item_id':row.item.id, 'actual_label':row.label,
                 'decision_model_label':prediction['decision_model_label'], 'decision_model_probabilities':prediction['decision_model_probabilities'],
                 'label':result.label, 'probabilities':result.probabilities})
@@ -146,7 +162,8 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
                     initial_answer_value=result.label,final_answer_value=row.label,
                     edit_comment_value=row.context.get('human_feedback'),label_source=LABEL_SOURCE_VETTED,
                         selection_propensity=selection.propensity,review_provenance='historical-human-vote-replayed-after-prediction')
-                    wheel.record_feedback_event(feedback,assignment=roles[row.item.id])
+                    if row.item.id not in feedback_recorded_by_interrupted_cycle:
+                        wheel.record_feedback_event(feedback,assignment=roles[row.item.id])
                     revealed_rows.append(row)
                     revealed_propensities[row.item.id]=selection.propensity
                     if hasattr(policy,'observe_review'):

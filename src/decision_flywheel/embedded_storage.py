@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 from typing import Protocol
-from .storage_errors import StorageConflict,StorageUncertain,StorageLimit,StorageMissing
+from .storage_errors import StorageConflict,StorageUncertain,StorageLimit,StorageMissing,refusing_duplicate_identity
 
 SCHEMA_SQL = '\n            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, item_values TEXT NOT NULL, fingerprint TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, item_fingerprint TEXT NOT NULL,\n                state TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE INDEX IF NOT EXISTS decisions_by_item ON decisions(item_id);\n            CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,\n                classifier TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,\n                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL, superseded INTEGER NOT NULL DEFAULT 0);\n            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,\n                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,\n                source TEXT);\n            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,\n                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));\n        '
 
@@ -52,11 +52,25 @@ class EmbeddedStorage(Protocol):
     def review_count(self,classifier: str) -> int: ...
     def delete_learning(self,seq: int) -> None: ...
     def close(self) -> None: ...
-    def export_storage(self,*,max_records=10000,max_bytes=64000000) -> dict: ...
-    def restore_storage(self,snapshot: dict,*,max_records=10000,max_bytes=64000000) -> None: ...
 
 
-class SQLiteEmbeddedStorage:
+class SQLiteEmbeddedSnapshots:
+    """Native snapshot migration needs SQLite tables, so it is not part of the cross-backend protocol."""
+    def export_storage(self,*,max_records=10000,max_bytes=64000000):
+        from .domain_snapshots import embedded_codec
+        return embedded_codec().export(self.db,max_records=max_records,max_bytes=max_bytes)
+
+    def restore_storage(self,snapshot,*,max_records=10000,max_bytes=64000000):
+        from .domain_snapshots import embedded_codec
+        if snapshot.get('schema')=='cyclotron-embedded-root/v1':
+            from copy import deepcopy
+            snapshot=deepcopy(embedded_codec(1).validate(snapshot,max_records=max_records,max_bytes=max_bytes))
+            snapshot['schema']='cyclotron-embedded-root/v2'
+            for row in snapshot['tables']['learning_queue']: row['superseded']=0
+        return embedded_codec().restore(self.db,snapshot,max_records=max_records,max_bytes=max_bytes)
+
+
+class SQLiteEmbeddedStorage(SQLiteEmbeddedSnapshots):
     def __init__(self,path):
         Path(path).parent.mkdir(parents=True,exist_ok=True)
         self.db=sqlite3.connect(path,timeout=30)
@@ -75,14 +89,16 @@ class SQLiteEmbeddedStorage:
     def meta(self,key): return self.db.execute('SELECT value FROM meta WHERE key=?',(key,)).fetchone()
     def insert_meta(self,key,payload,*,ignore=False):
         sql='INSERT OR IGNORE' if ignore else 'INSERT'
-        self.db.execute(sql+' INTO meta VALUES (?,?)',(key,payload))
+        with refusing_duplicate_identity('duplicate root metadata'): self.db.execute(sql+' INTO meta VALUES (?,?)',(key,payload))
     def put_meta(self,key,payload): self.db.execute('INSERT OR REPLACE INTO meta VALUES (?,?)',(key,payload))
-    def put_item(self,identifier,payload,fingerprint): self.db.execute('INSERT OR REPLACE INTO items VALUES (?,?,?)',(identifier,payload,fingerprint))
+    def put_item(self,identifier,payload,fingerprint):
+        self.db.execute('INSERT INTO items VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET item_values=excluded.item_values,fingerprint=excluded.fingerprint',(identifier,payload,fingerprint))
     def items(self): return self.db.execute('SELECT id,item_values FROM items ORDER BY rowid').fetchall()
     def item_values(self,identifier):
         row=self.db.execute('SELECT item_values FROM items WHERE id=?',(identifier,)).fetchone()
         return row[0] if row else None
-    def insert_decision(self,row): self.db.execute('INSERT INTO decisions VALUES (?,?,?,?,?)',row)
+    def insert_decision(self,row):
+        with refusing_duplicate_identity('duplicate decision identity'): self.db.execute('INSERT INTO decisions VALUES (?,?,?,?,?)',row)
     def set_decision_state(self,identifier,state,*,unless_superseded=False):
         self.db.execute("UPDATE decisions SET state=? WHERE id=?"+(" AND state!='superseded'" if unless_superseded else ''),(state,identifier))
     def decision_count(self): return self.db.execute('SELECT COUNT(*) FROM decisions').fetchone()[0]
@@ -100,7 +116,8 @@ class SQLiteEmbeddedStorage:
     def latest_id(self,item_id=None):
         if item_id is not None: return self.db.execute('SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1',(item_id,)).fetchone()
         return self.db.execute('SELECT id FROM decisions ORDER BY rowid DESC LIMIT 1').fetchone()
-    def insert_review(self,identifier,decision_id,classifier,payload): self.db.execute('INSERT INTO reviews(id,decision_id,classifier,payload) VALUES (?,?,?,?)',(identifier,decision_id,classifier,payload))
+    def insert_review(self,identifier,decision_id,classifier,payload):
+        with refusing_duplicate_identity('duplicate review identity'): self.db.execute('INSERT INTO reviews(id,decision_id,classifier,payload) VALUES (?,?,?,?)',(identifier,decision_id,classifier,payload))
     def review(self,identifier): return self.db.execute('SELECT payload FROM reviews WHERE id=?',(identifier,)).fetchone()
     def reviews(self,decision_id,classifier): return self.db.execute('SELECT payload FROM reviews WHERE decision_id=? AND classifier=? ORDER BY seq',(decision_id,classifier)).fetchall()
     def last_review(self,decision_id,classifier): return self.db.execute('SELECT payload FROM reviews WHERE decision_id=? AND classifier=? ORDER BY seq DESC LIMIT 1',(decision_id,classifier)).fetchone()
@@ -108,7 +125,8 @@ class SQLiteEmbeddedStorage:
     def events(self,after,limit): return self.db.execute('SELECT id,payload FROM events WHERE id>? ORDER BY id LIMIT ?',(after,limit)).fetchall()
     def insert_usage(self,decision_id,model,prompt,cached,output,source):
         return self.db.execute('INSERT INTO usage(decision_id,model,input_tokens,cached_input_tokens,output_tokens,source) VALUES (?,?,?,?,?,?)',(decision_id,model,prompt,cached,output,source)).lastrowid
-    def insert_usage_share(self,usage_id,classifier,share): self.db.execute('INSERT INTO usage_shares VALUES (?,?,?)',(usage_id,classifier,share))
+    def insert_usage_share(self,usage_id,classifier,share):
+        with refusing_duplicate_identity('duplicate usage share'): self.db.execute('INSERT INTO usage_shares VALUES (?,?,?)',(usage_id,classifier,share))
     def usage_counts(self): return self.db.execute('SELECT decision_id,model,input_tokens,cached_input_tokens,output_tokens FROM usage ORDER BY id').fetchall()
     def usage_shares(self): return self.db.execute('SELECT usage_id,classifier,share FROM usage_shares').fetchall()
     def usage_by_output(self): return self.db.execute('SELECT id,model,input_tokens,cached_input_tokens,output_tokens,source FROM usage ORDER BY id').fetchall()
@@ -120,16 +138,3 @@ class SQLiteEmbeddedStorage:
     def requeue_learning(self,seq,covered): self.db.execute('UPDATE learning_queue SET since_count=?,superseded=0 WHERE seq=?',(covered,seq))
     def review_count(self,classifier): return self.db.execute('SELECT COUNT(*) FROM reviews WHERE classifier=?',(classifier,)).fetchone()[0]
     def delete_learning(self,seq): self.db.execute('DELETE FROM learning_queue WHERE seq=?',(seq,))
-
-    def export_storage(self,*,max_records=10000,max_bytes=64000000):
-        from .domain_snapshots import embedded_codec
-        return embedded_codec().export(self.db,max_records=max_records,max_bytes=max_bytes)
-
-    def restore_storage(self,snapshot,*,max_records=10000,max_bytes=64000000):
-        from .domain_snapshots import embedded_codec
-        if snapshot.get('schema')=='cyclotron-embedded-root/v1':
-            from copy import deepcopy
-            snapshot=deepcopy(embedded_codec(1).validate(snapshot,max_records=max_records,max_bytes=max_bytes))
-            snapshot['schema']='cyclotron-embedded-root/v2'
-            for row in snapshot['tables']['learning_queue']: row['superseded']=0
-        return embedded_codec().restore(self.db,snapshot,max_records=max_records,max_bytes=max_bytes)

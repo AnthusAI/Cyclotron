@@ -328,10 +328,10 @@ class DecisionFlywheel:
         from .cycles import Cycle
         return Cycle(self, item, reason=reason)
 
-    def resume_cycle(self, item):
+    def resume_cycle(self, item, *, include_failed=False):
         """Resume an unfinished operational cycle without rerunning paid work."""
         from .cycles import Cycle
-        return Cycle.resume(self,item)
+        return Cycle.resume(self,item,include_failed=include_failed)
 
     def preview_optimizer_request(self, stage, training, development, *, protected):
         """Preview the exact next-stage messages without collecting or emitting."""
