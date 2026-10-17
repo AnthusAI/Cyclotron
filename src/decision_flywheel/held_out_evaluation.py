@@ -48,9 +48,23 @@ class HeldOutEvaluation:
             latest_by_item[item_id] = (review, engine.decision(decision_id).review.for_output(classifier))
         return latest_by_item
 
-    def stored_sets(self, classifier: str) -> list[dict[str, Any]]:
+    def legacy_sets(self, classifier: str) -> list[dict[str, Any]]:
+        """Sets saved before each set had its own record: one list per classifier, oldest first."""
         row = self.engine.root_storage.meta(f"held_out_sets:{classifier}")
         return json.loads(row[0]) if row else []
+
+    def set_ids(self, classifier: str) -> list[str]:
+        """Every frozen set's identity, oldest first: legacy sets, then the sets indexed one record each."""
+        row = self.engine.root_storage.meta(f"held_out_set_ids:{classifier}")
+        indexed = json.loads(row[0]) if row else []
+        legacy = [stored["id"] for stored in self.legacy_sets(classifier)]
+        return [*legacy, *(set_id for set_id in indexed if set_id not in legacy)]
+
+    def stored_set(self, classifier: str, set_id: str) -> dict[str, Any] | None:
+        row = self.engine.root_storage.meta(f"held_out_set:{classifier}:{set_id}")
+        if row is not None:
+            return json.loads(row[0])
+        return next((stored for stored in self.legacy_sets(classifier) if stored["id"] == set_id), None)
 
     def freeze(self, classifier: str | None = None) -> dict[str, Any]:
         """Freeze the labeled audit items so far into a held-out set that never changes. No model call.
@@ -66,19 +80,22 @@ class HeldOutEvaluation:
                       for item_id, (review, selection) in self.active_audit_reviews(classifier).items()]
         held_out_set = HeldOutSet.freeze(engine.definition.id, classifier, candidates)
         labels = engine.specs[classifier].task.labels
-        stored = self.stored_sets(classifier)
-        existing = next((row for row in stored if row["id"] == held_out_set.set_id), None)
+        existing = self.stored_set(classifier, held_out_set.set_id)
         if existing is not None:
             return HeldOutSet.from_json(existing).summary_json(labels)
+        set_ids = self.set_ids(classifier)
         with engine.root_storage.transaction():
-            engine.root_storage.put_meta(f"held_out_sets:{classifier}", _json([*stored, held_out_set.to_json()]))
+            engine.root_storage.put_meta(f"held_out_set:{classifier}:{held_out_set.set_id}",
+                                         _json(held_out_set.to_json()))
+            engine.root_storage.put_meta(f"held_out_set_ids:{classifier}", _json([*set_ids, held_out_set.set_id]))
         return held_out_set.summary_json(labels)
 
     def sets(self, classifier: str | None = None) -> list[dict[str, Any]]:
         """Summaries of the frozen held-out sets, oldest first. No model call."""
         classifier = self.only_or_named_classifier(classifier)
         labels = self.engine.specs[classifier].task.labels
-        return [HeldOutSet.from_json(row).summary_json(labels) for row in self.stored_sets(classifier)]
+        return [HeldOutSet.from_json(self.stored_set(classifier, set_id)).summary_json(labels)
+                for set_id in self.set_ids(classifier)]
 
     def reports(self, classifier: str | None = None) -> list[dict[str, Any]]:
         """The latest cyclotron-held-out-report/v1 documents, oldest first. No model call."""
@@ -92,15 +109,12 @@ class HeldOutEvaluation:
         return 2 * len(self.held_out_set(classifier, set_id).items)
 
     def held_out_set(self, classifier: str, set_id: str | None):
-        stored = self.stored_sets(classifier)
-        if not stored:
+        set_ids = self.set_ids(classifier)
+        if not set_ids:
             raise ValueError("freeze a held-out set first")
-        if set_id is None:
-            return HeldOutSet.from_json(stored[-1])
-        found = next((row for row in stored if row["id"] == set_id), None)
-        if found is None:
+        if set_id is not None and set_id not in set_ids:
             raise ValueError(f"unknown held-out set {set_id}")
-        return HeldOutSet.from_json(found)
+        return HeldOutSet.from_json(self.stored_set(classifier, set_id or set_ids[-1]))
 
     async def evaluate(self, classifier: str | None = None, *, set_id: str | None = None,
                        minimum_per_label: int | None = None) -> dict[str, Any]:
