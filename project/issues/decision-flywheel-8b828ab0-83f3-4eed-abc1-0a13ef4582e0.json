@@ -30,10 +30,25 @@
       "text": "Landed on feat/embedding-docs (stacked on feat/package-release): docs/embedding.md walks an application through define, open, decide, review (label, correction, no label, undo, selected_by, review ids), status, subscribe, the review program and override, the lease, snapshot, restore and replay, the two widgets, and the operational notes. tests/embedding_docs_test.py runs all 13 Python samples in order offline and checks the quoted TSX equals trace-ui/src/examples/embedding.tsx and the pinned tarball matches package.json; trace-ui/src/examples/embedding.test.tsx renders that example. The json and next.config snippets are configuration, checked only for the pin.",
       "created_at": "2026-10-09T16:11:07.820480Z",
       "comment_type": "default"
+    },
+    {
+      "id": "be214ed5-3d97-4128-a85f-5dce417b8470",
+      "author": "home",
+      "text": "2026-10-16 reconciliation: Extend existing embedding documentation to the central multi-publication and embedded deployment-local modes above. Preserve the four SDK calls and portable store contract; source demos are not hosted production acceptance.",
+      "created_at": "2026-10-16T20:46:53.246345Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "unfinished-work-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-09T14:51:30.386515Z",
-  "updated_at": "2026-10-09T16:11:07.820500Z",
+  "updated_at": "2026-10-16T20:46:53.246379Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

@@ -175,9 +175,10 @@ async def learn_from_review(wheels, shared, identifier, cycle, partitions: Calla
         if due:
             stages.append(stage)
     stages = list(dict.fromkeys([*stages, *resume_stages]))
+    # Every stage binds the same label pools the steps use, even if labels arrive mid-pass.
+    pools = {cid: (training if cid == identifier else partitions(cid)[0]) for cid in wheels}
     for stage in stages:
-        shared.bind_context({cid: w.active.config for cid, w in wheels.items()},
-                            {cid: partitions(cid)[0] for cid in wheels})
+        shared.bind_context({cid: w.active.config for cid, w in wheels.items()}, pools)
         transport = getattr(wheel.optimizer, 'complete', None)
         if stage != 'classifier' and hasattr(transport, 'max_calls') and transport.calls >= transport.max_calls:
             wheel._emit({'kind': 'optimization-paused', 'stage': stage, 'reason': 'optimizer call limit reached',

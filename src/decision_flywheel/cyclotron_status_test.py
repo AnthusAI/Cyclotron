@@ -91,7 +91,7 @@ def test_an_empty_cyclotron_reports_no_alignment_yet_and_full_review(tmp_path):
     snapshot = status.to_json()
     validate(snapshot, load_schema())
     assert snapshot["cyclotron"] == {"id": "papyrus-relevance", "classifier": "inclusion", "version": 1,
-                                     "refits": 0, "fingerprint": status.fingerprint}
+                                     "refits": 0, "fingerprint": status.fingerprint, "primedExamples": 0}
     assert snapshot["alignment"]["labels"] == 0 and snapshot["alignment"]["accuracy"] is None
     assert snapshot["alignment"]["positiveLabel"] == "include"
     assert snapshot["calibration"] == {"saysSure": None, "isRight": None, "gapPoints": None, "curve": []}

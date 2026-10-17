@@ -1,0 +1,935 @@
+{
+  "status": "LOCAL review candidate; no remote branch/PR/tag/publication",
+  "public_integration_base": "c09f70b33b2b96a4e4cc2acca360af47d26620a8",
+  "source_fork": "e14323cdc9c894a2b6a9fce7f8e63e89fb5a49ca",
+  "storage_core_source": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+  "publication_ui_source": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+  "python_version": "0.20.1 preserved from public main; no PyPI publication",
+  "ui_version": "0.2.1 existing private manifest for Git-SHA review; proposed ui-v0.2.2 requires reviewed package0.2.2 bump plus authorization/review",
+  "package_private": true,
+  "files": [
+    {
+      "path": "src/decision_flywheel/__init__.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "61882604c7a95843aade4d9bc76f3bf081032da17f8eb1c829d8c640f0514efb",
+      "note": "preserve public version"
+    },
+    {
+      "path": "src/decision_flywheel/account_routes.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "0c1c3ea591e5688786fd68bf1c519c490706f36fe8ef5dee0816ed8f8ca44fff",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/account_routes_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f864a4529f2c5296529e5ea01be0c1dfe661e806165a56e3bd723063e0097173",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/account_sessions.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "02b51bbe292710affb72406cb3b802f6f761dde49edeaf93cbe4460d89097b72",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/account_sessions_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "50e0e1b7d974eba0fc42c6b8b13ca57e9a9c05e5468dbc9f148a3b0caea8bd29",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/adapters/litellm_optimizer.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "70c9e2898f97a205cc5b9edccfd9251b8b5e40f31d42143aa3152ca07f4788cf",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/adapters/litellm_optimizer_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "1f77ce181f5eaa648da9c87e94c30560fc8b094f86cc78265f34cb1cda027db2",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/adapters/microsoft_decision.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "1849bdbd612dec088e10fe48f76fa675bea776cf0cd24bee8462acd40c236a80",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/adapters/microsoft_decision_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f872662354ccae558f20b1360c6252ee531b8d39b10b77b156e128b3e742e62d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/adapters/openai_optimizer.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "678a6f856221713f09deebfea6f609301518572c0e6d7c4a9fc4279b453f3532",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/adapters/openai_optimizer_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "acb085af94e99f4f18d19ebe31d7caa8eccceed1dd5d2fda21694b91ab95b2ce",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/batch_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "386fc0d35998a3dd94ef5dcc37dc4959928a52cf5d1ec350e17a976d9538b2d1",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/batch_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "2667a5d881e5ba71bfc42451d2b21fafdf16b256bacfc653763a3c29e8cf2184",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/catalog_archive.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "1b31f38b3fad70a0c801ba84099602477ac3eb4be695863a2f7a2572e48db391",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/catalog_archive_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "110d7809f71dc975c9ef0090d919b342245cfb226658ec9f5ae57322fbe16203",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/catalog_snapshot.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "36b8eaa5ef4997172e86c307754808cdcf5e4b5718ce43a8ba593a84090965d1",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/catalog_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "035d85787f4cc19f1377306aa155a8b3a3bc41b709425074df08370eb97881ed",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/catalog_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "df08b82ba9f25dd2f6d7c89f87902d9d454e4571fc124e4300c02f29db9b1295",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/classifier_training.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "8930337d3e85b22996cf37007067dc11aefe0d26cf42e8577dd04bc964649076",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/cloud_entry.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "91b1b43d42f2c835d8a28a892ef3875020e258b03b0e6ea738241f14d020c56b",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/cloud_entry_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "978b054db8919b9db78447ab16cd40115ab8d17fa226319daf4aebc30d43b22d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/console_snapshot.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "fad4dee7aa45fb929ef870be0dcf54c1081768ae563e0fdfa4c1c2591e91d88d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/console_snapshot_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "8587a65b454f894b81e66e6572239933412cd9cb311ed9337e9109e2ce0eb8ac",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/control_scheduler.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "2521c163bf07eb9b71b810ceb0ca866687d85330a4d615854faebcf281388a15",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/cycle_replay.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "7bf159cc814c89ea5fb299a8d2731744100f8eddf866272f5873cbe1c33a18a1",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/cycles.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "d6ec3c7f05b2be7691f3f3d8dd4999c592fc5ee171e4d83ce6775d01b9548b46",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/cyclotron_definitions.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "bc98425bc96a84572e4f98f7f3e30967b8908115decf1f2c2f1bacea7bfad8cf",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/cyclotron_runtime.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "ce116503b106dcafca6574c3507541bfe14847b952761713d4b0ff763e5534ab",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/definition_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "b3ea26fcc81d9cb68ab4e825853d9d8579a32d6620b6c1ea6281c9d5d74e59ed",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/definition_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f5662ba8e6627b5b0d21598b5977bd2cdedb7ebbd77295ef116790de1d3741da",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/diagnosis.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "8f1fd992db873618b880f817029bb6836f145da7713a8bf814dbf500a7ac41f1",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/diagnosis_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "7588a8b0535a49c32493ed628b49a30f26a6374f0470811a569349d4f92f388a",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/domain_snapshots.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "19b785632c6fa02e5e9efe3db7b922729685199b62d6e4c09b396ff606e2cfd9",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/embedded_cyclotron.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "3ecd1ed7c0d7c7355bcc0f20cff0a791baa5d4371395d8111b04d6e561e3837d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/embedded_execution_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "30c018ddfee6cbaf6da4a08e41bdb975a943fa2f02a7a72fe67cc3da3e14840f",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/embedded_learning_window_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "de01587fcd2889e59faba4cf158be69765cbce41740750aaf2f033f4cfc96920",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/embedded_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "1bc0b8edf96346bfed6581a586f4091aa22e99c50077c450aad301a696d81e67",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/embedded_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "27f5841f5d64a2525b0ea39ab67ffc09548ab3a5f8b6d9d8dd550bc5dd242e8d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/evaluation_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "65215a921073257066572f143147283ff7359ba1eff83da714fac8bff0525110",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/evaluation_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "62d482e5382de940e819f9f6f21f9cd91a3fb2f12d31d261f00c025aa02a3ab4",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/example_attribution.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f135706cee59b3f478eb302845b19e59d9bb61e0dbea57f4faa2847b662b7225",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/feature_bank.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "3d0885cdcedbc4838de8196d88477491b643d0022badb36e0fe2b35dc53132fa",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/flywheel.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "5ec663f546ce75d3e982fe06264601db3bc8a9bbf80b525db3407bb8d9f722ee",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/google_identity.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "573b3b0b73e2f810ef43cb7adccdc0ae67e14b8de5582edb13dcb3fd3d47b763",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/google_identity_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "d8bcddc2344a638fa5e44dfaa1a52f367b924b4d68dc366a158821d526000821",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hosted_command_worker.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "3648bc5b145425a42ff4311e1219157a2d7d249be3c9d80077441c92330a9e97",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hosted_command_worker_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "8612e0db1ff489c829eb5a176ac618d77031a26821256e4ff2921bf362b5c586",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hosted_console_service.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "efd2e5858154f6674860c7e2647a103ac839fb47299578afebf746b8734d4043",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hosted_console_service_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "5fb6ba02c560ea5da9c9c109707f8f33aab831c085635a8c6df8181f9a604698",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hosted_runtime.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "0dddf9bc500d3f1bad4f018d78dae28b1a19f027ee804ee3f52333ab65f76c0e",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hosted_runtime_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "576c0516bd001012ce0f5ddac18857b87971536ba96165c66a6fddb35305e33b",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hypothesis_ledger.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "6e4435d48e079702003309c678528017988c781947d4c12bb1340dbfc11c5e7e",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hypothesis_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "43f86438efe82914cb9f515118a2f24ff7bd6b6c2b5668eda6368b4a86477c06",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/hypothesis_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "b4d0856e8fbcbc0e1444633c359267a53b25f8b218fb473323f526dd122f4e6b",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/idea_screening.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "16d4db02eb03b45c54ec1c65cedb62d0237fecb92bfa37580a9c25a419076718",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/learning_loop.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "5d8dc32f4a6cbe9a5c5c0467ff8495b0b91411aaf47df825b0147af182d6ef3b",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/learning_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "eb0787b5542f741f0d39127a79a4c417cc94271df179dedc8df4c1c4b1810be4",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/learning_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "fb302199ebb0eeb757807e5ab7afb9604c571385e63555d4ab00afc5f014b501",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/matched_run_evaluation.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "9153de85bb725906b8ff65418a933d4cf35594d86da8a78b18d4e467e0cc3a0d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/native_domain_snapshot.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "615aa2cccf33a32bd5947f3c94051d16726d6865a5f2f42d6d3374e97a276930",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/native_domain_snapshot_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "3cf3bce26c5156de4f6d31c348c9639e5daee39b7caf7b5703ff066e991b1ac9",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/observability.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "28ff8948ba18b9a3c9d4859a1e172ed36d3eaefe32c96e269e76ff856147e213",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/optimizer_agent.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "92a193f0805dafc493d2ca3bf3c081aed25ebeba8429b76285f8f11c24240874",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/optimizer_agent_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "173512220bd9fbc50ae9052b228ad545060b596455d0943bf50e9f69a4cae5ca",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/payload_index.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "7b796fd141a276a30f41946df8e1a0e8d3be93b195607aa55e5b7f4ba64b9753",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/payload_index_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "099dbfbb1d5b330b3ec3abf74ca76b2c3e17dcbcc7a43be82d80a5ef957825ef",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/pending_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "6292b8f3a4c7b1b5bbbc00477b78ed97e7ee0984da148fad639a68a6a226189a",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "afacd9fafcc5b8b2f89d5f7fa26d610b37b0cf263b6eaf118d7188f15b086617",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_api_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "42bac84d8bd8bbf02658baa4103fb2d8cfdfd38dc865c8ebd2098eb908b8b9d3",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_config.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "1549f176a6ed2eec30eb75c6abe8708f359fb3fb46aa8404395d38d4aca080c0",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_config_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "fe6fbc379441716bd45e46f4438dfc88f767330b671ce6bb8d80a27860f1c817",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_context.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "d3e3f9352b47e888bafefdea8f8755f23924ad3407f44b532b31b1199b272ebe",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_context_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "c3583da5b852ac41750dcc5089508638d35ed0c13e82e478395b6ebbf6157354",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_files.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "bb6bc5cef17d8d1325e3b89481dcf70e1d2cbcbcb61e992580c2ff354dd129cc",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_files_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "e3500c0582fd91e48601525b05be2390d2c3a50863c54ae6d0b31fa65beb9583",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f49d7132caab2aa8dcd93ed8568381dafa531ef890e2f063b0fc5e62529633e5",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "a10bf0333f3c163385f2bf0d021b8648ddc4b7708e18d3eebd6b45d0c1f6f269",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/priming_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "eefe57c497a6dba82e396f2e3520ace8554584755ec7ee46726960512f459cf9",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/proposal_operators.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "11bf29475d180be8104fa13de0ab9d54078f3f61869976ddc207825ef88e09f4",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/proposal_operators_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "12f5b273c5280980358141177c7a00d6291095cf984f468953705ff36bea60eb",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/prospectus_accounts.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "11fa0af3eb463126b93de287a1f791b12b23cfed8cd130beeaf7b7e79d063b4e",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/prospectus_accounts_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "429acfc9adbb94ba91610f4536174d62429150181886f2b70c3caa75af3f2c85",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/question_measurement.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "7f0719fe63d568b85b78ce8454e83a853c5ef648e48b0c899046557ef0f6eaed",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/queued_account_authorization.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "3e47508cad0fa35533eb780a00703b8c1d0eff3a1b2a0880aea8c4f8458bc171",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/queued_account_authorization_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "bf9619137b7bbc056e675b96a9c5966747ccbb19d57859d8cdd9e55c40fdab88",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/review_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "928072fda8c539c42646e62d0cf15559201ce6ed37aa88d1da2b723d9d518edf",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/review_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "9fb42465bca55ba9184268dc445818ae9ebd9ffd3eed653b5057a29b492978a1",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/reviewer_flywheel.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "906b868f3e1c4bb772ae6506c47ab9a07bb383b2bffa96dfb545ca9434051eda",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/reviewer_store.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "9a7b35c89894f00c979b483b3d504265582f4adde23ee1270416c13b3b6a0c3c",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/run_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "5b2f91a9a68a644647c617286912923cd51b5428075b035c78fd7efd266f3deb",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/run_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "a935a0fda17e0c01cf7395a9b09de74d276043ffca17dce4c9c826f59a29a08b",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/runtime_cache_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "e91cb46aa140990c3c5f4d04e7fadda7656e76ff126ccf532dd4b2b851128fd8",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/runtime_cache_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "152ac27938dcf9a3fa78899d3d8a6a28f6460de3a62d8f634b1233daaa04aa11",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/runtime_snapshot.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f1130365761b48e6d6f79ade7eff6acff518fc7e40adddfabf9ac3890130c6e3",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/runtime_snapshot_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "a0b188d5eeb668945e6b8c5448b7a77d996b6427c6ee1b61ffaac5efe157b762",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/runtime_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "78de6c030ffd137c4f523761faaf18828977a2049aaa67aff8cc1c3b98bda631",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/runtime_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "4c65b6bda07447af1df0a0edd6dfd90b4a4e135dba093ab9e0d4927185db2401",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_batch_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "83603147e3f0918703b908404fa3b17c5807004bce5af9d1a18c029fa171f78d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_batch_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "94acb371fccfa4dd35ceccf9a552e072f9ad73c95c7e135cf02bfd1047c8316d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_console_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "2dba05c1137be7596b818768c164773c29bfa96f8b3c00c431a19cb1914de01f",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_console_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "49102e7f12ac27501c4f497292df91f97369d226d7a17e159027b82e12efb738",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_embedded_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "a6582f524de92ed361f6efad20f10c7c7d49b0c6b921f75e29d67a21dc5346bd",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_embedded_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "10e787074ca21e6de4eb80b4c79e684749ef835dd0a17cf3ae074467c6d10686",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_evaluation_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "5d8ec0a0b4c66d7e4ec4d075a0f25e9c6c331739f4c761f0b7c7cd96a21c1c1d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_evaluation_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "973d18dd1d24bd981da57c5e2ff92daf3774132324c726aacdfcdd4d299a8140",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_journal.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "9afe81558cbf57a59abbb3edff3c8b36a5dade6a6cc53e75c29b065ac44fb76d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_journal_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "7ecabc0c2db54568473af5325c9cf4a16924039b1cf5792cc067746a30c6dd55",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_optimizer_transport.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "36c56232138b7ce98538d13098ea7c56fb7377e85f9ed9fb410294fd4cb25088",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_optimizer_transport_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "b1e77b81d54d4b902d7dfdd984614390d9487296b857f8df4e2e0d78efa5c11b",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_review_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "4d00bae6fa788b8d9516c2a32c27f87a0b271780bbb23274d198f4ea8b967ca1",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_review_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f0be230116ea0eed0c2f18078be3c8f0824ef9a687cacdf465dbf6c9982a5f1f",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_runtime_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "09e8521e5811705a10f7649e1f233563b9f6f9527d790e230b8816df18636e9d",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_runtime_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "3277ab061fcf375836c5fe94b08fa7583352bcb50520c8dd69b0483ba561a732",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_sessions.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "4151d5a47dc419803f784810b27edd3c116ad4cfb42c18a63c2944f9ad8135e0",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_sessions_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "ca87aabafbe813e4110462f90165331178c92aebb910291c79ac33711df58256",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_workspace_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "58e1051f7e5ac44a9645f1e2cb0bf9ba2990bde95c3f4ca1d33bb04d778ab50e",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/s3_workspace_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "e8847c7cd26c1341fd5a36d26efa3f16255ef2d6e261a28cdc95bf1c2d0a1778",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/shadow_evaluation.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "6c33687a6bed6f11cf6a2884b4027f952379eb3dc43e8f1da1e644c649b521df",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/shadow_storage.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "86f245468052dda79928646ecfdc25af9f4c3d2648532ca74d6e23d43b88ee94",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/shadow_storage_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "11668a1d90f74456f836f3344db35f3b24cb65ccd777fcb75f639bc452790bfd",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/shared_decisions.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "65e0110d4d3d033c72c564e24f9340988c774cb67165a20ba11f405e52550079",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/shared_decisions_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "a08897b66b6b3d3e630254ffa7e0d96eb8a8f3481b2c96073392cf30e8496d52",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/staged_optimization.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "8c826d337da0a0b69cbda674f0b7befbc91468efd365c33723105ac3c49232a3",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/storage_payloads.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "c8ce48f5da842056bbd4be9cf1a41f89522a1b47bd320b6a1576a89a75485e2c",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/storage_payloads_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "cb2d259527a71c6efca47251f83d07996d32b2aa7451ba7c0b92f3e2b384f1cc",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/web_api.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "2935538a71fe0f8940abb237a03fb2b732a2665ce6ecd62174e147d92dc98d9a",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/web_store.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "eb218c8d1e7f85f3028f8889ba272735cf1162ce99ff9adfc9a0e468dc012d71",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/workspace_catalog.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "29adfe8fc728402a4bc370848b81abd941d3b541b74bd8b0fa83220a0f2cbad4",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/workspace_session.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "26eadb9ce6dbd81ae7f5151898992bd5a30c8c86e375306885d5c2320ff9558d",
+      "note": ""
+    },
+    {
+      "path": "tests/editorial_study_preflight_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "9bc8bcccea1369675a8af725d194818563765b21620d75ebb838f4b18f02e1d0",
+      "note": ""
+    },
+    {
+      "path": "tests/learning_repository_boundary_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "b79bb16c0938b0c4462938f979cbc305da9c6f0175bbc8e71a99bf60c035ccbf",
+      "note": ""
+    },
+    {
+      "path": "tests/recordings_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "9cfb31100bd4310ef6451daf5ef4cb6e9dc2c8236a7b4ea4a4c2437fb8cd0ee1",
+      "note": ""
+    },
+    {
+      "path": "tests/source_store_boundary_test.py",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "4649178808d96d9aaecb5c2da821c7a499554210b5f886d01c845ec2e1b808c7",
+      "note": ""
+    },
+    {
+      "path": "src/decision_flywheel/publication_lab.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "230ae337cd9e508bfda64b73873a7a6fc05618cdb029a35163ee78961c1c8a6c",
+      "note": "Deliberate later parent-authorized optional operational explanation adapter/tests/docs correction; labels required and native SDK normalization unchanged."
+    },
+    {
+      "path": "src/decision_flywheel/publication_records.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "e74e3e46855a44257f6e30d553f9cb03e9526672c1f27571724410f7225671d7"
+    },
+    {
+      "path": "src/decision_flywheel/publication_steering.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "24e14af166fb7439c2eae7feda7a443f061412af00fa189ee65aad1b43228aa9"
+    },
+    {
+      "path": "src/decision_flywheel/publication_lab_test.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "83bdba62500e0984cd36a13ed420cdfdfb47926405ee576887ca6760f2399e19",
+      "note": "Deliberate later parent-authorized optional operational explanation adapter/tests/docs correction; labels required and native SDK normalization unchanged."
+    },
+    {
+      "path": "src/decision_flywheel/publication_records_test.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "fc5bf940ce4385f27486de86fa6c6b71a6db693b63eddb5b019c6a68dff62b53"
+    },
+    {
+      "path": "src/decision_flywheel/publication_steering_test.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "94c017023b736ee487e922872395c5cf81e60f56a647095bdc383ba3f58df09e"
+    },
+    {
+      "path": "src/decision_flywheel/publication_composition_test.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "5b69a3f64b622334fecdfe5fc340cab7d822b2ab9fa0e5a9556513183ed521a1"
+    },
+    {
+      "path": "src/decision_flywheel/publication_host_test.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "b6e4d16afbfb2fd429eeb3a28a9a7a8f3caf1bd96e1cded9fcc52a708f5c134e"
+    },
+    {
+      "path": "scripts/verify_publication_execution_contract.py",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "b1854b6b89dc7810e2ab5d1e26807e5ef6cdae5726a1cfc2f1d54a702b572cf2"
+    },
+    {
+      "path": "docs/publication-deployment-contract.md",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "0a4c4ee5a048caf5ca53472bd4426e5df226a3b987e54142506ff977434eda7c",
+      "note": "Deliberate later parent-authorized optional operational explanation adapter/tests/docs correction; labels required and native SDK normalization unchanged."
+    },
+    {
+      "path": "trace-ui/src/components/priming-panel.tsx",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "77250d26426d77815857f8ed71a96d01ca6aabc4e923b4c93bcdbe93a6d849ad"
+    },
+    {
+      "path": "trace-ui/src/components/priming-panel.test.tsx",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "ef6bccb5c8275defd2aa7be26fc326ff862400e6b4bbecab343269659510b7b7"
+    },
+    {
+      "path": "trace-ui/src/primingClient.ts",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "f859bf2917b2da71bcad6183e698b78a60a42df38c303af8cf2775b64e83654f"
+    },
+    {
+      "path": "trace-ui/src/components/labeling-review.tsx",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "c4a02c4395f1998c55636cb4ec7718cb6afe5227b873de25e2361dd29b4c5926"
+    },
+    {
+      "path": "trace-ui/src/components/labeling-review.test.tsx",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "d8103dcfe5976c435143ff4fd00a61e6978c9e9a271c7bb3559963ab7ce2aa7b"
+    },
+    {
+      "path": "trace-ui/src/components/review-control.tsx",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "694acc7ccc11fb57467dcb753096fe7803e7f280f8c16365a3a4ac88a68ca041"
+    },
+    {
+      "path": "trace-ui/src/components/review-control.test.tsx",
+      "source_commit": "0123708a3ccb52e89bac5821a383b2643e530dcb",
+      "sha256": "d5826a061a686724cf7e2f1c1a806a73d0230c4101c0133ecadb28b394f1b2c1"
+    },
+    {
+      "path": "docs/embedded-execution-authorization.md",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "5d90847ed784eaf09f80731432adfcc2b7337b979563875a130e2a23b2a8ef98"
+    },
+    {
+      "path": "docs/s3-cloud-storage.md",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "f901d24e1da4a4a856e86f98ef83e1065d812b70e6e25861276a0e6675a0f65a",
+      "note": "Deliberate public documentation adaptation: replace links to excluded activation/deployment docs with included execution/storage protocol boundaries; deployment approval remains host-owned."
+    },
+    {
+      "path": "docs/source-store-handoff.md",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "746ad1dbdfa0c9540c415261d544103778ed9ea7a5a1d270da5f2c21bf5e6128"
+    },
+    {
+      "path": "docs/learning-storage-handoff.md",
+      "source_commit": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
+      "sha256": "716443ad2f71301d78cf24286ab7ea8c9fd6ee92798d43c4ed83965aa3c54f87"
+    }
+  ],
+  "manifest_edits": {
+    "pyproject.toml": "preserve public version; core extras; additive dev priming and web self-extra priming",
+    "package.json": "only priming panel/client files and exports"
+  },
+  "excluded": "deployment/**, activation docs/scripts/screenshots, project/**, credentials, generated vendor UI and console frontend. No source-branch ancestry merged.",
+  "proof": {
+    "python_focused": 208,
+    "papyrus_publication_harness": 83,
+    "ui_tests": 21,
+    "typescript": "tsc -b passed",
+    "wheel": "decision_flywheel-0.20.1-py3-none-any.whl; local no-isolation build passed",
+    "pack_sha256": "46228c0dfbc6ac52b882fe3136d5c90c03e456d5df92bb8792fd7dcfe97d5193",
+    "pack_integrity": "sha512-j4ETUvEbEZckFW4IznqA3/9F9IwVBp/SDwAKmadDYlQigS5lgU7esNVngLe+GOxgorZpq3CFwmDDNw7VcM10GA==",
+    "network": "offline fake source/provider/ASGI; no live cloud/provider calls",
+    "operational_explanation": "55 publication tests and97 cross-owner publication/Papyrus checks PASS (overlapping); omitted/null/empty/whitespace/spaced/multiline plus type/label/bounds/reopen/retry; native SDK normalization unchanged."
+  }
+}

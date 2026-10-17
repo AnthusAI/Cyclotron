@@ -1,0 +1,71 @@
+{
+  "id": "decision-flywheel-705e4a9e-3895-4f20-957f-6da4afb5c5b3",
+  "title": "Prime examples from a URL or structured import",
+  "description": "As a curator, I want existing Papyrus/Biblicus curation reused without requiring an explanation.\n\nFeature: Prime examples from a URL or structured import\n  Scenario: Observable acceptance\n    Given a permitted research-paper or web URL, or a CSV JSON JSONL spreadsheet or template input\n    When I curate the source and save a required human label with an optional explanation\n    Then the accepted source and label persist through the shared adapter and invalid imports fail explicitly\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.\n\n## Current next-step plan — 2026-10-17\n\nPriority 1: complete the hosted Cyclotron priming workflow inside Papyrus. Reuse existing Biblicus/Papyrus paper and web curation rather than introducing a second ingestion path. A user pastes a permitted URL, reviews the extracted material, chooses publish or reject, optionally explains the choice, saves, reloads, and can prove that the selected classifier consumes the accepted example. A visible saved card alone is not classifier-consumption evidence.\n\nFeature: Hosted reference priming\n  Scenario: Save a published example and consume it after reload\n    Given an authorized publication and a supported paper or web URL\n    When the editor curates it, chooses publish, optionally explains, saves and reloads\n    Then canonical source content and the human label remain in the selected account/publication\n    And the next classifier decision exposes the accepted example ID and priming count/context provenance\n  Scenario: Reject or retry without creating a false positive\n    Given a candidate and an optional blank explanation\n    When the editor rejects it or a save fails and is explicitly retried\n    Then the recorded choice survives reload without duplicate examples\n    And rejected or uncommitted candidates do not silently become positive accepted examples\n  Scenario: Deny cross-scope and revoked access\n    Given a missing/revoked grant or an account/publication change during a request\n    When a save or classifier operation is attempted\n    Then authorization is rechecked and stale/cross-scope data is not read or written\n\nRun equivalent observable scenarios in embedded deployment-local and remote central multi-publication modes using the same shared UI. Cloud content is canonical text/files in S3; DynamoDB is a rebuildable scoped catalog. Local SQLite remains supported; no always-on SQLite cloud service. Preserve existing canonical IDs, revision/conflict and replay semantics. Dependency order: shared release/tag and consumer lock/pins; Papyrus PR213 required checks/review; real account/publication BFF and approved storage/runtime scope; then hosted save/reload/classifier evidence. No paid calls during documentation; any later live-model acceptance uses its separately approved budget.\n\nSource evidence: PR25 merged323d0b5 includes PrimingPanel/createPrimingClient, optional explanations and priming_examples on Cyclotron.open. Do not duplicate source work; verify published package then application-hosted route/persistence/consumption. Structured CSV/JSON/JSONL/spreadsheet/template imports remain the same shared path. Acceptance must expose which accepted example IDs were included in the first decision context and status priming count.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-1019e003-22bc-4a90-bffe-4bba8fbdc250",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-b5f1a414-eaba-4362-b1e0-d9a0da0e94ca",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "b4f3173f-80bf-4ebe-a2dd-73dc2ca5730a",
+      "author": "home",
+      "text": "2026-10-16 reconciliation: Status describes remaining acceptance, not implementation authorization.",
+      "created_at": "2026-10-16T20:46:53.040240Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "unfinished-work-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "8d5155c6-e76d-47f0-9b51-285933aa04d7",
+      "author": "home",
+      "text": "2026-10-17 next-step plan recorded in the description. Priority 1: complete the hosted Cyclotron priming workflow inside Papyrus. Reuse existing Biblicus/Papyrus paper and web curation rather than introducing a second ingestion path. A user pastes a permitted URL, reviews the extracted material, chooses publish or reject, optionally explains the choice, saves, reloads, and can prove that the selected classifier consumes the accepted example. A visible saved card alone is not classifier-consumption evidence.\n\nFeature: Hosted reference priming\n  Scenario: Save a published example and consume it after reload\n    Given an authorized publication and a supported paper or web URL\n    When the editor curates it, chooses publish, optionally explains, saves and reloads\n    Then canonical source content and the human label remain in the selected account/publication\n    And the next classifier decision exposes the accepted example ID and priming count/context provenance\n  Scenario: Reject or retry without creating a false positive\n    Given a candidate and an optional blank explanation\n    When the editor rejects it or a save fails and is explicitly retried\n    Then the recorded choice survives reload without duplicate examples\n    And rejected or uncommitted candidates do not silently become positive accepted examples\n  Scenario: Deny cross-scope and revoked access\n    Given a missing/revoked grant or an account/publication change during a request\n    When a save or classifier operation is attempted\n    Then authorization is rechecked and stale/cross-scope data is not read or written\n\nRun equivalent observable scenarios in embedded deployment-local and remote central multi-publication modes using the same shared UI. Cloud content is canonical text/files in S3; DynamoDB is a rebuildable scoped catalog. Local SQLite remains supported; no always-on SQLite cloud service. Preserve existing canonical IDs, revision/conflict and replay semantics. Dependency order: shared release/tag and consumer lock/pins; Papyrus PR213 required checks/review; real account/publication BFF and approved storage/runtime scope; then hosted save/reload/classifier evidence. No paid calls during documentation; any later live-model acceptance uses its separately approved budget.\n\nSource evidence: PR25 merged323d0b5 includes PrimingPanel/createPrimingClient, optional explanations and priming_examples on Cyclotron.open. Do not duplicate source work; verify published package then application-hosted route/persistence/consumption. Structured CSV/JSON/JSONL/spreadsheet/template imports remain the same shared path. Acceptance must expose which accepted example IDs were included in the first decision context and status priming count.",
+      "created_at": "2026-10-17T06:22:39.971558Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "next-step-plan-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
+    }
+  ],
+  "created_at": "2026-10-16T20:46:53.012198Z",
+  "updated_at": "2026-10-17T06:24:14.189608Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6.1-sol",
+    "name": "unfinished-work-reconciliation",
+    "settings": {
+      "reasoning_effort": "medium"
+    }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

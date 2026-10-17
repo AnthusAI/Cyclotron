@@ -56,3 +56,11 @@ test('unrecorded example text and partial snapshot fields are not guessed',()=>{
   expect(screen.getByText('ML model not recorded')).toBeVisible()
   expect(screen.queryByText('Raw decision-model output')).toBeNull()
 })
+
+test.each([['superseded','Superseded'],['cancelled','Cancelled']])('a %s learning step says so instead of an unrecorded outcome',(status,shown)=>{
+  const start=event(1,{...scope,kind:'step-started',classifier_snapshot:before})
+  const end=event(2,{...scope,kind:'step-completed',status,result:null,classifier_snapshot:before})
+  render(<OptimizationChange event={end} events={[start,end]}/>)
+  expect(screen.getByText(shown)).toBeVisible()
+  expect(screen.queryByText('Outcome not recorded')).toBeNull()
+})

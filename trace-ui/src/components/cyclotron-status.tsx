@@ -32,6 +32,11 @@ function versionText(status:CyclotronStatus){
   return `Version ${version}${refits?` (${refits} refit${refits===1?'':'s'})`:''}`
 }
 
+function primedText(status:CyclotronStatus){
+  const primed=status.cyclotron.primedExamples
+  return primed?`Primed with ${primed} example${primed===1?'':'s'}`:null
+}
+
 function calibrationText(status:CyclotronStatus){
   const says=percent(status.calibration.saysSure),right=percent(status.calibration.isRight)
   return says&&right?`Says ${says}, right ${right}`:'Calibration not measured yet'
@@ -72,8 +77,10 @@ export function CyclotronStatusView({status,variant='strip',onOverride,classifie
   const state=STATES[rate.state]
   const agrees=percent(status.alignment.accuracy)
   const override=rate.override
+  const primed=primedText(status)
   if(variant==='strip')return <section className="cyclotron-status" data-variant="strip" aria-label={`${status.cyclotron.id} status`}>
     <span>{versionText(status)}</span>
+    {primed?<span data-testid="cyclotron-status-primed">{primed}</span>:null}
     <span>{agrees?`Agrees ${agrees}`:'Agreement not measured yet'}</span>
     <span>{calibrationText(status)}</span>
     <span data-review-state={rate.state} title={rateText(status)}><span aria-hidden="true">{state.mark} </span>{state.word} · {percent(rate.rate)} reviewed</span>
@@ -98,6 +105,7 @@ export function CyclotronStatusView({status,variant='strip',onOverride,classifie
         definition="Of all items, how many it got right." />
     </dl>
     <p className="cyclotron-status-note">{status.alignment.labels} reviews in the last {status.alignment.window}, {status.alignment.measuredOn}.</p>
+    {primed?<p className="cyclotron-status-note" data-testid="cyclotron-status-primed">{primed} before its first decision. They train it but never count in these measurements.</p>:null}
     <section className="cyclotron-status-section" aria-label="Calibration">
       <h4>Confidence</h4>
       <p>{calibrationText(status)}{status.calibration.gapPoints!=null?` · off by ${status.calibration.gapPoints} point${status.calibration.gapPoints===1?'':'s'}`:''}</p>

@@ -1,4 +1,4 @@
-"""Local GraphQL workspace; SQLite is authoritative for API trace history."""
+"""Existing workspace API with explicit native or account-scoped storage."""
 import asyncio
 from contextlib import asynccontextmanager
 from hashlib import sha256
@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import strawberry
+from strawberry.extensions import SchemaExtension
 from strawberry.fastapi import GraphQLRouter
 from strawberry.scalars import JSON
 
@@ -88,6 +89,19 @@ async def call(info, method, *args, **kwargs):
 
 @strawberry.type
 class Query:
+    @strawberry.field
+    async def priming_contract(self, info: strawberry.Info, list_id: strawberry.ID, classifiers: JSON) -> JSON:
+        return await asyncio.to_thread(info.context['priming_service']().contract, str(list_id), classifiers)
+
+    @strawberry.field
+    async def priming_template(self, info: strawberry.Info, list_id: strawberry.ID, classifiers: JSON, format: str) -> JSON:
+        return await asyncio.to_thread(info.context['priming_service']().template, str(list_id), classifiers, format)
+
+    @strawberry.field
+    async def priming_draft(self, info: strawberry.Info, identifier: str) -> JSON:
+        return await asyncio.to_thread(info.context['priming_service']().get, identifier)
+
+
     @strawberry.field
     async def cyclotrons(self,info:strawberry.Info)->JSON:
         return await call(info,'cyclotrons')
@@ -177,6 +191,17 @@ class Query:
 
 @strawberry.type
 class Mutation:
+    @strawberry.mutation
+    async def priming_command(self, info: strawberry.Info, action: str, payload: JSON) -> JSON:
+        priming = info.context['priming_service']()
+        payload = priming.safe(payload)
+        actions = {'file': priming.start_file, 'transform': priming.start_transform,
+                   'poll': priming.poll, 'feedback': priming.feedback, 'cancel': priming.cancel, 'accept': priming.accept}
+        if action not in actions or not isinstance(payload, dict):
+            raise ValueError('unknown priming command')
+        return await asyncio.to_thread(actions[action], **payload)
+
+
     @strawberry.mutation
     async def extend_cyclotron(self,info:strawberry.Info,parent_run_id:strawberry.ID,classifier_ids:list[str],name:str,confirmed:bool=False)->Run:
         service=info.context.get('service')
@@ -321,7 +346,12 @@ class Mutation:
                              kind: str, payload: JSON | None = None) -> Job:
         if not info.context.get('service'):
             raise ValueError('labeling worker is not available')
-        row = await call(info,'command',str(run_id),request_id,kind,payload or {})
+        if info.context.get('account_access'):
+            service=info.context['service']
+            if not hasattr(service,'submit_command'):raise ValueError('hosted command composition unavailable')
+            row=await service.submit_command(info.context.get('verified_session'),str(run_id),request_id,kind,payload or {})
+        else:
+            row = await call(info,'command',str(run_id),request_id,kind,payload or {})
         return Job(id=row['id'],kind=row['kind'],status=row['status'],result=row['result'])
 
 
@@ -338,10 +368,53 @@ class Subscription:
             await asyncio.sleep(.2)
 
 
-schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription)
+class AccountAuthorization(SchemaExtension):
+    async def on_execute(self):
+        context = self.execution_context.context
+        access = context.get('account_access')
+        if access:
+            operation = 'console:write' if self.execution_context.operation_type.value == 'mutation' else 'console:read'
+            workspace = await access(context['connection'], operation)
+            context.update(store=workspace.store, service=workspace.service, account_id=workspace.account_id,
+                           verified_session=getattr(workspace,"request_session",None))
+            if getattr(workspace,"priming",None) is not None:
+                context['priming_service']=lambda:workspace.priming
+        yield
+
+    async def on_stream_result(self, result):
+        context = self.execution_context.context
+        if context.get('account_access') and self.execution_context.operation_type.value == 'subscription':
+            from .prospectus_accounts import AccountAccessDenied
+            workspace = await context['account_access'](context['connection'], 'console:read')
+            if workspace.account_id != context['account_id']:
+                raise AccountAccessDenied('account selection changed; reconnect required')
+        yield
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False):
+schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription,
+    extensions=[AccountAuthorization])
+
+
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, public_origin=None, event_transport="websocket"):
+    if event_transport not in ("websocket","poll"):raise ValueError("explicit supported event transport required")
+    if account_access and priming is not None:
+        raise ValueError('hosted account access cannot use a global priming service')
+    configured_priming=priming
+    def priming_service():
+        nonlocal configured_priming
+        # A local default is lazy so unrelated console routes do not require
+        # optional priming dependencies. Hosted composition stays fail-closed:
+        # a global service cannot select another account's catalog or transformer.
+        if account_access:
+            raise ValueError('hosted priming requires an account-scoped service composition')
+        if configured_priming is None:
+            from .priming import PrimingService
+            configured_priming=PrimingService(store,redact=redact)
+        return configured_priming
+    if account_access and (token or allow_unauthenticated_lan or service):
+        raise ValueError('hosted account access cannot use shared-token/LAN authority or a global worker')
+    if account_access and not hasattr(SchemaExtension, 'on_stream_result'):
+        raise ValueError('hosted accounts require streaming authorization support; install the accounts extra')
     def authorized(connection):
         if allow_unauthenticated_lan and connection.client:
             try:
@@ -357,7 +430,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     def same_origin(connection):
         origin = connection.headers.get('origin')
-        return not origin or urlsplit(origin).netloc == connection.headers.get('host')
+        return not origin or (origin == public_origin if public_origin is not None else urlsplit(origin).netloc == connection.headers.get('host'))
 
     @asynccontextmanager
     async def lifespan(app):
@@ -366,6 +439,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         yield
         if service:
             await asyncio.to_thread(service.close)
+        if priming is None and configured_priming is not None:
+            configured_priming.close()
 
     app = FastAPI(lifespan=lifespan)
 
@@ -374,18 +449,29 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         if request.url.path.startswith(('/graphql','/runs/')):
             if not same_origin(request):
                 return JSONResponse({'error':'cross-origin access refused'}, status_code=403)
-            if not authorized(request):
+            from .prospectus_accounts import ProspectusUnavailable
+            try:
+                authenticated = await account_access.authenticated(request) if account_access else authorized(request)
+            except ProspectusUnavailable:
+                return JSONResponse({'error':'account service unavailable; try again'}, status_code=503,
+                    headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Vary':'Cookie'})
+            if not authenticated:
                 return JSONResponse({'error':'authentication required'}, status_code=401)
         response = await next_handler(request)
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
+        if account_access:
+            response.headers['Referrer-Policy'] = 'no-referrer'
+            response.headers['Vary'] = 'Cookie'
         return response
 
     async def context(request: Request = None, websocket: WebSocket = None):
         connection = request or websocket
-        if not authorized(connection) or not same_origin(connection):
+        authenticated = await account_access.authenticated(connection) if account_access else authorized(connection)
+        if not authenticated or not same_origin(connection):
             raise HTTPException(403, 'access refused')
-        return {'store':store,'service':service,'redact':redact}
+        return {'store':None if account_access else store,'service':service,'redact':redact,
+            'account_access':account_access,'connection':connection,'priming_service':priming_service}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')
@@ -400,6 +486,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.post('/session')
     async def session(request: Request):
+        if account_access:
+            raise HTTPException(403,'shared token login is unavailable')
         if not same_origin(request):
             raise HTTPException(403,'access refused')
         body = await request.json()
@@ -411,13 +499,25 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.get('/',response_class=HTMLResponse)
     async def index():
-        return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"></div><script src="{asset_url("web.js")}"></script></body></html>'
+        account_mode = (' data-account-mode="hosted" data-event-transport="'+event_transport+'"') if account_access else ''
+        return f'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Decision Flywheel</title><link rel="stylesheet" href="{asset_url("web.css")}"></head><body><div id="root"{account_mode}></div><script src="{asset_url("web.js")}"></script></body></html>'
 
     @app.get('/runs/{run_id}/timeline',response_class=HTMLResponse)
-    async def timeline(run_id: str, classifier_id: str | None = None):
-        run = await asyncio.to_thread(store.run,run_id)
-        rows = await asyncio.to_thread(store.all_events,run_id)
-        summary = await asyncio.to_thread(store.summary,run_id)
+    async def timeline(run_id: str, request: Request, classifier_id: str | None = None):
+        timeline_store = store
+        if account_access:
+            from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
+            try:
+                workspace = await account_access(request, 'console:read')
+                timeline_store = workspace.store
+            except (AccountAccessDenied, ProspectusUnavailable):
+                raise HTTPException(403,'account access refused') from None
+        try:
+            run = await asyncio.to_thread(timeline_store.run,run_id)
+        except ValueError:
+            raise HTTPException(404,'unknown run') from None
+        rows = await asyncio.to_thread(timeline_store.all_events,run_id)
+        summary = await asyncio.to_thread(timeline_store.summary,run_id)
         classes=run['config'].get('class_config')
         if run['config'].get('classifiers'):
             classifiers=run['config']['classifiers']

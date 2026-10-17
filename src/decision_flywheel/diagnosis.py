@@ -65,18 +65,17 @@ def recorded_predictions(wheel, ids):
     human-feedback event (so never a prediction made with the label known)."""
     ids = set(ids)
     first_feedback = {}
-    for event_id, item in wheel.db.execute(
-            "SELECT id, json_extract(payload,'$.feedback.item_id') FROM runtime_events "
-            "WHERE json_extract(payload,'$.kind')='human-feedback' ORDER BY id"):
-        first_feedback.setdefault(item, event_id)
+    for event in wheel.runtime_storage.events_of(('human-feedback',)):
+        feedback=event.get('feedback')
+        item=feedback.get('item_id') if isinstance(feedback,dict) else None
+        first_feedback.setdefault(item,event['event_id'])
     out = {}
-    for event_id, item, label, probabilities, version in wheel.db.execute(
-            "SELECT id, json_extract(payload,'$.target_id'), json_extract(payload,'$.decision_model_label'), "
-            "json_extract(payload,'$.decision_model_probabilities'), json_extract(payload,'$.version') "
-            "FROM runtime_events WHERE json_extract(payload,'$.kind')='prediction' ORDER BY id"):
-        if item in ids and label is not None and event_id < first_feedback.get(item, float("inf")):
-            out[item] = {"label": label, "version": version,
-                         "probabilities": json.loads(probabilities) if isinstance(probabilities, str) else probabilities}
+    for event in wheel.runtime_storage.events_of(('prediction',)):
+        event_id,item=event['event_id'],event.get('target_id')
+        label,probabilities,version=(event.get('decision_model_label'),event.get('decision_model_probabilities'),event.get('version'))
+        if item in ids and label is not None and event_id < first_feedback.get(item,float('inf')):
+            out[item]={'label':label,'version':version,
+                      'probabilities':json.loads(probabilities) if isinstance(probabilities,str) else probabilities}
     return out
 
 
@@ -322,7 +321,7 @@ class Asker:
         return FeedbackBriefing.build(self.wheel.initial.task, (), current=current,
                                       protected=tuple(r.item for r in self.development) + tuple(self.protected))
 
-    def ask(self, current, validate):
+    async def ask(self, current, validate):
         """-> the validated reply, or None after a corrective retry also failed. Raises _Stop on a ceiling or a failed call."""
         error = None
         for attempt in range(1 + RETRIES):
@@ -332,7 +331,8 @@ class Asker:
             self.calls += 1
             body = current if error is None else {**current, "previous_reply_error": str(error)}
             try:
-                return validate(self.wheel.optimizer.diagnose(self.briefing(body)))
+                from .optimizer_agent import ask_optimizer
+                return validate(await ask_optimizer(self.wheel.optimizer, 'diagnose', self.briefing(body)))
             except ValueError as problem:
                 error = problem
                 self.wheel._emit({"kind": "diagnosis-reply-rejected", "phase": current["diagnosis_phase"],
@@ -592,9 +592,9 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
         return None
     now = now or datetime.now(timezone.utc)
     task = wheel.initial.task
-    wheel.db.execute("CREATE TABLE IF NOT EXISTS optimization_stages (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
-    round_number = wheel.db.execute("SELECT count(*) FROM optimization_stages").fetchone()[0]
-    ledger = HypothesisLedger(wheel.db)
+    wheel.learning_storage.ensure('rubric')
+    round_number = wheel.learning_storage.count('rubric')
+    ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
     asker, meter = Asker(wheel, development, protected), JevMeter(wheel, config.max_jev_calls, training, development)
     revealed = [r for r in (*training, *development) if r.item.id not in {i.id for i in protected}]
     predictions = recorded_predictions(wheel, {r.item.id for r in revealed})
@@ -636,7 +636,7 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
                            "errors": [show(wheel, r) for r in errors],
                            "contrast": [show(wheel, r) for label in task.labels for r in samples["contrast"][index][label]],
                            "max_hypotheses": MAX_HYPOTHESES}
-                diagnoses[cell["key"]].append(asker.ask(current, lambda reply, s=shown: validate_diagnosis(reply, s)))
+                diagnoses[cell["key"]].append(await asker.ask(current, lambda reply, s=shown: validate_diagnosis(reply, s)))
         usable = [c for c in cells if any(d for d in diagnoses[c["key"]])]
         if not usable:
             _skip(wheel, result, "no independent diagnosis passed validation")
@@ -655,7 +655,7 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
                                               for r in samples["errors"][c["key"]][i]]} for c in usable],
                    "contrast_seen": [show(wheel, r) for i in range(config.independent) for label in task.labels
                                      for r in samples["contrast"][i][label]]}
-        reconciled = asker.ask(current, lambda reply: validate_reconcile(
+        reconciled = await asker.ask(current, lambda reply: validate_reconcile(
             reply, errors_by_cell=errors_by_cell, contrast_ids=contrast_ids, max_causes=config.max_causes,
             max_elements=config.element_candidates, taken_elements=taken))
     except _Stop as stop:
