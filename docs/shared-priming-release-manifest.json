@@ -1,5 +1,16 @@
 {
-  "status": "LOCAL review candidate; no remote branch/PR/tag/publication",
+  "status": "Published 2026-10-17 as v0.21.0 and ui-v0.2.2 on a565daf; fields below published_pin record the pre-release review candidate",
+  "published_pin": {
+    "commit": "a565dafb1f6953e1eb4d2efb1069396303afe0c6",
+    "python_release": "v0.21.0",
+    "python_pin": "decision-flywheel[web,priming] @ git+https://github.com/AnthusAI/Cyclotron.git@a565dafb1f6953e1eb4d2efb1069396303afe0c6",
+    "ui_release": "ui-v0.2.2",
+    "ui_asset": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.2/cyclotron-0.2.2.tgz",
+    "ui_asset_sha256": "fa96b15afb0c3c89a9cc89dcb40b5f327360f0fb703710a44188ed080b00636f",
+    "ui_asset_integrity": "sha512-Ot4SdcoBRveNugFh3fhggp/JlK02JKPrfnFIIgkojVy08whfQ5TQ1XQ04Tx6V/IIaW13xHk0l248zFPM99tvVQ==",
+    "release_run": "https://github.com/AnthusAI/Cyclotron/actions/runs/39011967316",
+    "verified": "2026-10-17"
+  },
   "public_integration_base": "c09f70b33b2b96a4e4cc2acca360af47d26620a8",
   "source_fork": "e14323cdc9c894a2b6a9fce7f8e63e89fb5a49ca",
   "storage_core_source": "37fe4f9dab562f2e606d72c94a2a0a82d00400cd",
@@ -931,5 +942,6 @@
     "pack_integrity": "sha512-j4ETUvEbEZckFW4IznqA3/9F9IwVBp/SDwAKmadDYlQigS5lgU7esNVngLe+GOxgorZpq3CFwmDDNw7VcM10GA==",
     "network": "offline fake source/provider/ASGI; no live cloud/provider calls",
     "operational_explanation": "55 publication tests and97 cross-owner publication/Papyrus checks PASS (overlapping); omitted/null/empty/whitespace/spaced/multiline plus type/label/bounds/reopen/retry; native SDK normalization unchanged."
-  }
+  },
+  "candidate_status": "LOCAL review candidate; no remote branch/PR/tag/publication"
 }
