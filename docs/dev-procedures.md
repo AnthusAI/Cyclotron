@@ -7,9 +7,17 @@ knowledge does not live in one person's head.
 
 Work on a branch off `origin/develop`; merge to `develop` when green; promote
 `develop` to `main` with `scripts/dev/release_to_main.sh` (add `--dry-run` to
-test without pushing). It builds a throwaway worktree, fast-forwards to
-`origin/main`, merges `origin/develop`, runs the full suite and pushes without
+check without pushing). It builds a throwaway worktree, fast-forwards to
+`origin/main`, merges `origin/develop`, runs `make check` and pushes without
 force. It never touches your checkout.
+
+`make check` is the gate, because CI for this private repository runs locally
+and `.github/workflows/release.yml` is kept only for the semantic-release job.
+It runs, in order: `python -m pytest -q`; `npm ci`, `npm test` and
+`npm run build` in `trace-ui`; then `git diff --exit-code` on
+`src/decision_flywheel/vendor/trace-ui`, which fails when the committed bundle
+differs from a fresh build. If it fails on the bundle, commit the rebuilt files.
+Ruff joins the front of the sequence once the lint setup lands.
 
 ## 2. Temporary worktrees
 

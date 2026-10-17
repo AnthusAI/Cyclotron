@@ -29,6 +29,12 @@ web-live:
 test:
 	$(PYTHON) -m pytest -q
 
+.PHONY: check
+check:
+	$(PYTHON) -m pytest -q
+	cd trace-ui && npm ci && npm test && npm run build
+	git diff --exit-code -- src/decision_flywheel/vendor/trace-ui
+
 .PHONY: build-trace-ui test-trace-ui
 build-trace-ui:
 	cd trace-ui && npm run build

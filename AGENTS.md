@@ -25,4 +25,5 @@ and keep provider-specific behavior inside adapters.
 
 ```bash
 make test
+make check   # the merge gate: pytest, trace-ui tests and build, bundle drift
 ```
