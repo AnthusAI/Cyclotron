@@ -28,16 +28,11 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import inspect
 from dataclasses import asdict, replace
-import io
-import os
-import tarfile
-import tempfile
 import time
 from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-import sqlite3
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 from uuid import uuid4
 
@@ -59,6 +54,7 @@ from .run_usage import _usage as _usage_counts, stored_usage_by_window
 from .shared_decisions import SharedDecisions
 from .review_rate_controller import ReviewRateController
 from .sibling_check import install_sibling_checks
+from .store_snapshot import classifier_store_name, restore_store_snapshot, store_paths, write_store_snapshot
 
 __all__ = ["ClassifierDecision", "ClassifierSpec", "Cyclotron", "CyclotronDefinition", "Decision", "ExecutionGuard",
            "FileLease", "Review", "ReviewSelection", "StoreLocked"]
@@ -66,8 +62,6 @@ SELECTED_BY = REASONS
 LEARNING_MODES = ("inline", "deferred")
 ExecutionGuard = Callable[[], None | Awaitable[None]]
 _NO_LABEL = object()  # review() was called without a single label
-STORE_SCHEMA = "cyclotron-store/v1"
-STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
 
 
 def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, list[dict]]:
@@ -100,14 +94,6 @@ def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, l
 def _priming_includes(saved_priming: Mapping[str, Any], requested_priming: Mapping[str, Any]) -> bool:
     """A reopen may pass the examples a store was created with after more were added."""
     return all(row in saved_priming.get(cid, ()) for cid, rows in requested_priming.items() for row in rows)
-
-
-def _store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, Path]:
-    paths = {name: directory / name for name in STORE_FILES}
-    for spec in definition.classifiers:
-        name = "classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"
-        paths[name] = directory / name
-    return paths
 
 
 class Cyclotron:
@@ -217,10 +203,10 @@ class Cyclotron:
         self.versions: dict[str, VersionTracker] = {}
         self._seen: dict[str, int] = {}
         if self.directory is not None:(self.directory / "classifiers").mkdir(exist_ok=True)
-        paths = _store_paths(self.directory, definition) if self.directory is not None else {}
+        paths = store_paths(self.directory, definition) if self.directory is not None else {}
         additions = self._priming_additions()
         for spec in definition.classifiers:
-            path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"] if self.directory is not None else None
+            path = paths[classifier_store_name(spec.id)] if self.directory is not None else None
             primed_example_ids = tuple(row.item.id for row in self.priming_examples.get(spec.id, ()))
             added_example_ids = {key for addition in additions for key in addition['examples'].get(spec.id, ())}
             # The store's creation configuration stays version 1; later additions apply as new versions.
@@ -887,33 +873,11 @@ class Cyclotron:
         archive holds item values, decisions, reviews, transcripts and caches,
         never provider keys; values passed as ``redact`` are already redacted.
         """
-        path = Path(path)
-        manifest = {"schema": STORE_SCHEMA, "cyclotron": self.definition.id,
-                    "definition_fingerprint": self.definition.fingerprint, "created_at": _now(), "files": []}
         if self.storage is not None:raise ValueError('cloud records require canonical S3 export, not a SQLite binary snapshot')
         connections = {"cyclotron.sqlite3": self.db, "shared.sqlite3": self.shared.db}
         for spec in self.definition.classifiers:
-            name = "classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"
-            connections[name] = self.wheels[spec.id].db
-        with tempfile.TemporaryDirectory() as scratch:
-            with tarfile.open(Path(scratch) / "store.tar.gz", "w:gz") as archive:
-                for name, connection in connections.items():
-                    copy = Path(scratch) / hashlib.sha256(name.encode()).hexdigest()
-                    target = sqlite3.connect(copy)
-                    with target:
-                        connection.backup(target)
-                    target.close()
-                    archive.add(copy, arcname=name)
-                    manifest["files"].append({"name": name, "sha256": hashlib.sha256(copy.read_bytes()).hexdigest()})
-                data = json.dumps(manifest, indent=2).encode()
-                info = tarfile.TarInfo("manifest.json")
-                info.size = len(data)
-                archive.addfile(info, io.BytesIO(data))
-            path.parent.mkdir(parents=True, exist_ok=True)
-            partial = path.with_name(path.name + ".partial")
-            os.replace(Path(scratch) / "store.tar.gz", partial)
-            os.replace(partial, path)
-        return manifest
+            connections[classifier_store_name(spec.id)] = self.wheels[spec.id].db
+        return write_store_snapshot(path, self.definition, connections)
 
     @staticmethod
     def restore(archive_path, directory, *, lease=None) -> dict[str, Any]:
@@ -921,30 +885,7 @@ class Cyclotron:
 
         Open the restored store with ``Cyclotron.open`` and the same definition.
         """
-        directory = Path(directory)
-        if any((directory / name).exists() for name in STORE_FILES) or (directory / "classifiers").exists():
-            raise ValueError("restore needs a directory without a cyclotron store")
-        lease = lease if lease is not None else FileLease(directory)
-        lease.acquire()
-        try:
-            with tarfile.open(archive_path, "r:gz") as archive:
-                manifest = json.loads(archive.extractfile("manifest.json").read())
-                if manifest.get("schema") != STORE_SCHEMA:
-                    raise ValueError("not a cyclotron store snapshot")
-                allowed = {entry["name"]: entry["sha256"] for entry in manifest["files"]}
-                for name, digest in allowed.items():
-                    if name not in STORE_FILES and not (name.startswith("classifiers/") and name.count("/") == 1
-                                                        and name.endswith(".sqlite3") and ".." not in name):
-                        raise ValueError(f"unexpected file in snapshot: {name}")
-                    data = archive.extractfile(name).read()
-                    if hashlib.sha256(data).hexdigest() != digest:
-                        raise ValueError(f"snapshot file is damaged: {name}")
-                    target = directory / name
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(data)
-            return manifest
-        finally:
-            lease.release()
+        return restore_store_snapshot(archive_path, directory, lease=lease)
 
     # Derived records ------------------------------------------------------
 
