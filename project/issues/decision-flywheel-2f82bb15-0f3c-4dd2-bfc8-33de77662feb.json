@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-2f82bb15-0f3c-4dd2-bfc8-33de77662feb",
+  "title": "UI package release procedure, changelog and the two styling tiers",
+  "description": "The trace-ui components ship as a GitHub tarball (make pack-ui, Makefile pack-ui target) attached by hand to a ui-v* release; no workflow or script builds, hashes or attaches it, so a UI release cannot be reproduced from the repository. Standing rule: CI for private repos runs locally (no GitHub Actions minutes). Run the full gate locally before merging. so the fix is a script, not an Actions job. Also: review-control, cyclotron-status and held-out-report use plain CSS classes from styles/components.css, while priming-panel.tsx uses Tailwind utilities and the radix ui/* components, so a host must adopt tailwind-preset.ts for one export only. Small defects: held-out-report.tsx:66 doc string reads 'cyclotron-cyclotron-held-out-report/v1'; download() in priming-panel builds a Blob with no MIME type; crypto.randomUUID() fails on plain-http LAN hosts; review-control.tsx:70 throws after hooks for thumbs mode with more than two classes.\nDo: a scripts/dev/release_ui.sh that runs the trace-ui tests and build, packs the tarball, computes sha256 and sha512, creates the ui-v<version> tag and release with the tarball attached (gh release create), and prints the pin block for docs/shared-priming-release.md; add the 0.2.2 entry to CHANGELOG.md; either port priming-panel to the plain-CSS convention or document the two tiers in the README section on the web components; fix the four small defects.\nDone when: a UI release can be produced from the script alone from Ryan's Mac, the changelog lists 0.2.2, the README says which exports need Tailwind. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:37:27.176627Z",
+  "updated_at": "2026-10-17T16:37:27.176739Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

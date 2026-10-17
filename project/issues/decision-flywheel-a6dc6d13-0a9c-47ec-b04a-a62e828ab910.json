@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-a6dc6d13-0a9c-47ec-b04a-a62e828ab910",
+  "title": "Add ruff and a formatter; fix the undefined name and mutable ContextVar defaults",
+  "description": "No linter, formatter or type checker runs anywhere. ruff with defaults plus B and UP reports 999 findings, among them real defects: LabeledItem is undefined in two annotations in src/decision_flywheel/embedded_cyclotron.py (:348 and :578; it survives only because of postponed annotations); ContextVar defaults are mutable (flywheel.py:194 and :198); 52 unused imports; a try/except/pass in priming.py:231; unused locals in diagnosis.py:169 and trace_step_projection.py:68. Formatting also diverges: the storage and S3 modules use self.storage=storage, if x:do() on one line and no spaces around operators, against the rest of the package.\nDo: add [tool.ruff] to pyproject.toml with a small rule set (F, B, UP, I) and a line length matching the code (the package has 1,926 lines over 120 characters, so pick 130 or exclude E501), fix every F and B finding by hand (do not auto-fix blindly in a 53k-line package; review each), run ruff format once in its own commit so blame stays readable, and add ruff check and ruff format --check to make check. Keep the user's preference: long descriptive names, no explanatory comments.\nDone when: ruff check and ruff format --check pass on develop, the undefined name is imported, make test passes. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:37:22.285011Z",
+  "updated_at": "2026-10-17T16:37:22.285134Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

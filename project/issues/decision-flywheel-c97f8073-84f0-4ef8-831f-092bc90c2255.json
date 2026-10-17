@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-c97f8073-84f0-4ef8-831f-092bc90c2255",
+  "title": "A Journal protocol so the S3 document adapters accept any compare-and-swap journal",
+  "description": "Eight isinstance checks across the S3 adapters require the concrete S3Journal (S3EmbeddedStorage, S3RuntimeStores, S3ReviewStorage, S3EvaluationStorage, S3BatchStorage, S3ConsoleStorage, S3OptimizerTransport), and S3Journal requires S3Payloads (src/decision_flywheel/s3_journal.py:40). The document adapters are store-agnostic dict logic over a journal with initialize, read and commit, so a file, GCS or Azure journal would reuse every adapter unchanged, and specs could run without the fake S3 client. A FilePayloads already exists (storage_payloads.py:60) with no file journal to use it.\nDo: define a Journal Protocol (initialize, read, commit, the exception types) in a journal module, check adapters against it, add a LocalFileJournal over FilePayloads for tests and single-machine use, and cache the immutable anchor per handle so read() is not three GETs and commit() does not re-read it (s3_journal.py:127, :151); expose a public exists() so s3_sessions.py:103 stops reaching into journal._get.\nDone when: no adapter imports S3Journal for a type check, the adapter specs run against both the S3 fake and the file journal, GET count per read drops to two or fewer. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:37:26.759555Z",
+  "updated_at": "2026-10-17T16:37:26.759705Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}
