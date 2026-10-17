@@ -68,3 +68,7 @@ Then in the site repo run `npm run recordings:sync`, `npm test`, and look at
 the pages (`scripts/dev/page-shots.mjs`). Publish only runs that explain
 something; read `docs/recordings.md`. Keep the raw run folders: they are the
 evidence behind the recording.
+
+## Kanbus in cloud sessions
+
+`.claude/settings.json` runs `scripts/dev/ensure_kanbus.sh` at session start. It installs the `kanbus` version pinned in the `tools` extra of `pyproject.toml` when `kbs` is missing, and links the `kbs` name to the `kanbus` executable. Use `kbs` commands for the board; never edit `project/issues` or `project/events` by hand.
