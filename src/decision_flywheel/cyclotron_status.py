@@ -227,7 +227,7 @@ class VersionTracker:
             changed = [name for key, name in STRUCTURE if before.get(key) != after.get(key)]
             if changed:
                 self.last_change = LastChange("promoted", self.version, self.version + 1, event.get("created_at"),
-                                              "Changed the " + ", ".join(changed) + ".")
+                                              event.get("change_summary") or "Changed the " + ", ".join(changed) + ".")
                 self.version, self.refits = self.version + 1, 0
             else:
                 head = current.get("head") or {}
@@ -320,10 +320,10 @@ def status_from_flywheel(wheel, *, cyclotron_id: str, positive_label: str | None
 
 
 def initial_snapshot(wheel) -> dict:
-    """The classifier snapshot before any activation: its initial configuration."""
+    """The classifier snapshot before any activation: the configuration it was created with."""
     from dataclasses import asdict
     from .flywheel import FittedClassifier
-    return asdict(FittedClassifier(wheel.initial))
+    return asdict(FittedClassifier(getattr(wheel, "version_baseline", wheel.initial)))
 
 
 def _alignment(metrics, window, positive_label) -> Alignment:

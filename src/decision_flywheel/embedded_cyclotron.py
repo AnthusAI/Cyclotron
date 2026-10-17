@@ -324,6 +324,11 @@ def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, l
     return normalized
 
 
+def _priming_includes(saved_priming: Mapping[str, Any], requested_priming: Mapping[str, Any]) -> bool:
+    """A reopen may pass the examples a store was created with after more were added."""
+    return all(row in saved_priming.get(cid, ()) for cid, rows in requested_priming.items() for row in rows)
+
+
 def _store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, Path]:
     paths = {name: directory / name for name in STORE_FILES}
     for spec in definition.classifiers:
@@ -356,6 +361,7 @@ class Cyclotron:
             raise ValueError("seed_rubrics maps classifier ids to rubric text")
         self.seed_rubrics = seed_rubrics
         from .priming_context import encode_priming
+        self.priming_redaction = tuple(redact)
         self.requested_priming = None if priming_examples is None else encode_priming(
             dict(priming_examples), {spec.id:spec.task for spec in definition.classifiers}, redact=redact)
         self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
@@ -416,11 +422,11 @@ class Cyclotron:
         from .priming_context import decode_priming
         stored_priming = self.root_storage.meta('priming_examples')
         saved_priming = json.loads(stored_priming[0]) if stored_priming else {}
-        if stored_priming and self.requested_priming is not None and self.requested_priming != saved_priming:
-            raise ValueError("this store has different accepted priming; create a new store")
+        if stored_priming and self.requested_priming is not None and not _priming_includes(saved_priming, self.requested_priming):
+            raise ValueError("this store has different accepted priming; add new examples with add_priming_examples")
         if not stored_priming and self.requested_priming:
             if saved:
-                raise ValueError("priming must be supplied when the store is first created")
+                raise ValueError("this store already exists; add priming examples with add_priming_examples")
             saved_priming = self.requested_priming
         with self.root_storage.transaction():
             self.root_storage.insert_meta('priming_examples',_json(saved_priming),ignore=True)
@@ -439,10 +445,14 @@ class Cyclotron:
         self._seen: dict[str, int] = {}
         if self.directory is not None:(self.directory / "classifiers").mkdir(exist_ok=True)
         paths = _store_paths(self.directory, definition) if self.directory is not None else {}
+        additions = self._priming_additions()
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"] if self.directory is not None else None
+            primed_example_ids = tuple(row.item.id for row in self.priming_examples.get(spec.id, ()))
+            added_example_ids = {key for addition in additions for key in addition['examples'].get(spec.id, ())}
+            # The store's creation configuration stays version 1; later additions apply as new versions.
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task, example_ids=tuple(row.item.id for row in self.priming_examples.get(spec.id,())), rubric=self._seed(spec.id),
+                path, ClassifierConfig(spec.task, example_ids=tuple(key for key in primed_example_ids if key not in added_example_ids), rubric=self._seed(spec.id),
                                        tasks=self._seed_questions(spec, created=saved is None)),
                 # Each output gets its own copy so its optimizer events reach only its own
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
@@ -450,10 +460,12 @@ class Cyclotron:
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2,
                 storage=self.storage.runtime_for_classifier(spec.id) if self.storage is not None else None)
+            wheel.initial = replace(wheel.initial, example_ids=primed_example_ids)
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
         install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
+        self._apply_priming_additions()
         self._sync()
 
     def _seed(self, classifier: str) -> str:
@@ -560,6 +572,84 @@ class Cyclotron:
                 result = await result
             if result is not None:
                 raise TypeError('execution_guard must return None or raise to deny')
+
+    # Priming --------------------------------------------------------------
+
+    async def add_priming_examples(self, examples: Mapping[str, Sequence[LabeledItem]], *, added_by: str,
+                                   execution_guard: ExecutionGuard | None = None) -> dict[str, Any]:
+        """Add accepted, human-labeled examples to an existing store. No model call.
+
+        Each output that gains examples appends them to its fixed example list
+        as a new version, so its next decision sees them. Reviewed decisions
+        keep their labels; an unreviewed decision is decided again by the new
+        version. Adding the same examples again changes nothing. A known
+        identity with different content, or an item already decided, is refused.
+        """
+        if not isinstance(added_by, str) or not added_by.strip():
+            raise ValueError("added_by names who accepted the examples")
+        from .priming_context import decode_priming, encode_priming
+        tasks = {cid: spec.task for cid, spec in self.specs.items()}
+        requested = encode_priming(dict(examples), tasks, redact=self.priming_redaction)
+        async with self._learn_lock, self.execution(execution_guard=execution_guard):
+            stored = self.root_storage.meta('priming_examples')
+            saved = json.loads(stored[0]) if stored else {}
+            operational_item_ids = set(self._item_values())
+            merged = {cid: list(rows) for cid, rows in saved.items()}
+            added_example_ids: dict[str, list[str]] = {}
+            for cid, rows in requested.items():
+                known = {row['item']['id']: row for row in merged.get(cid, ())}
+                for row in rows:
+                    identity = row['item']['id']
+                    if identity in known:
+                        if known[identity] != row:
+                            raise ValueError(f"primed example {identity!r} already exists with different content")
+                        continue
+                    if identity in operational_item_ids:
+                        raise ValueError("priming and operational items must be disjoint")
+                    merged.setdefault(cid, []).append(row)
+                    added_example_ids.setdefault(cid, []).append(identity)
+            if added_example_ids:
+                merged = encode_priming(decode_priming(merged), tasks, redact=self.priming_redaction)
+                additions = self._priming_additions()
+                additions.append({'added_by': added_by.strip(), 'at': _now(), 'examples': added_example_ids, 'applied': {}})
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta('priming_examples', _json(merged))
+                    self.root_storage.put_meta('priming_additions', _json(additions))
+                self.priming_examples = decode_priming(merged)
+                self._apply_priming_additions()
+                self._sync()
+            return {'added': added_example_ids,
+                    'primed_examples': {cid: len(self.priming_examples.get(cid, ())) for cid in self.specs},
+                    'versions': {cid: self.versions[cid].version for cid in self.specs}}
+
+    def priming_additions(self) -> list[dict[str, Any]]:
+        """Who added primed examples to this store after it was created, and when."""
+        return [{key: value for key, value in addition.items() if key != 'applied'} for addition in self._priming_additions()]
+
+    def _priming_additions(self) -> list[dict[str, Any]]:
+        stored = self.root_storage.meta('priming_additions')
+        return json.loads(stored[0]) if stored else []
+
+    def _apply_priming_additions(self) -> None:
+        """Bring each output's example list up to its recorded additions, once each.
+
+        An addition is marked applied per output, so an example the optimizer
+        later swaps out of the list is not put back on reopen.
+        """
+        additions = self._priming_additions()
+        for addition in additions:
+            for cid, example_ids in addition['examples'].items():
+                if cid in addition['applied']:
+                    continue
+                wheel = self.wheels[cid]
+                missing_example_ids = [key for key in example_ids if key not in wheel.active.config.example_ids]
+                if missing_example_ids:
+                    count = len(missing_example_ids)
+                    wheel.extend_example_list(missing_example_ids, change_summary=(
+                        f"Added {count} primed example{'' if count == 1 else 's'} to the example list."))
+                addition['applied'][cid] = wheel.active.fingerprint
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta('priming_additions', _json(additions))
 
     # Decide ---------------------------------------------------------------
 
@@ -1177,6 +1267,167 @@ class Cyclotron:
                               review_id=record.get("review_id"), _replay=True, execution_guard=execution_guard)
             count += 1
         return count
+
+    # Held-out measurement --------------------------------------------------
+
+    def _only_or_named_classifier(self, classifier: str | None) -> str:
+        if classifier is None:
+            if len(self.specs) != 1:
+                raise ValueError("name the classifier; this cyclotron has several")
+            return next(iter(self.specs))
+        if classifier not in self.specs:
+            raise ValueError("classifier not in this cyclotron")
+        return classifier
+
+    def _active_audit_reviews(self, classifier: str) -> dict[str, tuple[Review, ReviewSelection]]:
+        """The latest active review of each audit-share item, with how its decision was sent to review."""
+        audit_item_ids = {item.id for item in self._partitions(classifier)[2]}
+        latest_by_item: dict[str, tuple[Review, ReviewSelection]] = {}
+        for decision_id, item_id in self.root_storage.decision_items():
+            if item_id not in audit_item_ids:
+                continue
+            review = self._active_review(decision_id, classifier)
+            if review is None or review.selected_by == "reviewer":
+                continue
+            latest_by_item[item_id] = (review, self.decision(decision_id).review.for_output(classifier))
+        return latest_by_item
+
+    def _stored_held_out_sets(self, classifier: str) -> list[dict[str, Any]]:
+        row = self.root_storage.meta(f"held_out_sets:{classifier}")
+        return json.loads(row[0]) if row else []
+
+    def freeze_held_out_set(self, classifier: str | None = None) -> dict[str, Any]:
+        """Freeze the labeled audit items so far into a held-out set that never changes. No model call.
+
+        Returns the set's summary. Freezing again with no new audit labels
+        returns the same set; with new labels, it adds a newer set.
+        """
+        from .held_out import HeldOutItem, HeldOutSet
+        classifier = self._only_or_named_classifier(classifier)
+        self._sync()
+        values = self._item_values()
+        candidates = [HeldOutItem(item_id, values[item_id], review.label, selection.propensity, selection.reason)
+                      for item_id, (review, selection) in self._active_audit_reviews(classifier).items()]
+        held_out_set = HeldOutSet.freeze(self.definition.id, classifier, candidates)
+        labels = self.specs[classifier].task.labels
+        stored = self._stored_held_out_sets(classifier)
+        existing = next((row for row in stored if row["id"] == held_out_set.set_id), None)
+        if existing is not None:
+            return HeldOutSet.from_json(existing).summary_json(labels)
+        with self.root_storage.transaction():
+            self.root_storage.put_meta(f"held_out_sets:{classifier}", _json([*stored, held_out_set.to_json()]))
+        return held_out_set.summary_json(labels)
+
+    def held_out_sets(self, classifier: str | None = None) -> list[dict[str, Any]]:
+        """Summaries of the frozen held-out sets, oldest first. No model call."""
+        from .held_out import HeldOutSet
+        classifier = self._only_or_named_classifier(classifier)
+        labels = self.specs[classifier].task.labels
+        return [HeldOutSet.from_json(row).summary_json(labels) for row in self._stored_held_out_sets(classifier)]
+
+    def held_out_reports(self, classifier: str | None = None) -> list[dict[str, Any]]:
+        """The latest cyclotron-held-out-report/v1 documents, oldest first. No model call."""
+        classifier = self._only_or_named_classifier(classifier)
+        row = self.root_storage.meta(f"held_out_reports:{classifier}")
+        return json.loads(row[0]) if row else []
+
+    def held_out_request_bound(self, classifier: str | None = None, *, set_id: str | None = None) -> int:
+        """The most new decision-model requests ``evaluate_held_out`` can make: two per held-out item."""
+        classifier = self._only_or_named_classifier(classifier)
+        return 2 * len(self._held_out_set(classifier, set_id).items)
+
+    def _held_out_set(self, classifier: str, set_id: str | None):
+        from .held_out import HeldOutSet
+        stored = self._stored_held_out_sets(classifier)
+        if not stored:
+            raise ValueError("freeze a held-out set first")
+        if set_id is None:
+            return HeldOutSet.from_json(stored[-1])
+        found = next((row for row in stored if row["id"] == set_id), None)
+        if found is None:
+            raise ValueError(f"unknown held-out set {set_id}")
+        return HeldOutSet.from_json(found)
+
+    async def evaluate_held_out(self, classifier: str | None = None, *, set_id: str | None = None,
+                                minimum_per_label: int | None = None,
+                                execution_guard: ExecutionGuard | None = None) -> dict[str, Any]:
+        """Score the store's first classifier and its active one on a frozen held-out set.
+
+        Makes at most ``held_out_request_bound()`` decision-model requests;
+        repeating an evaluation answers the unchanged endpoint from the request
+        cache. Nothing is learned, fitted or promoted. Returns the report and
+        keeps it for ``held_out_reports``.
+        """
+        from .classifier_config import ClassifiedAnswers
+        from .held_out import (DEFAULT_MINIMUM_PER_LABEL, REPORTS_KEPT_PER_CLASSIFIER, AFTER_DESCRIPTION,
+                               BEFORE_DESCRIPTION, Endpoint, build_report)
+        from .models import DecisionResult
+        async with self.execution(execution_guard=execution_guard):
+            classifier = self._only_or_named_classifier(classifier)
+            self._sync()
+            held_out_set = self._held_out_set(classifier, set_id)
+            audit_item_ids = {item.id for item in self._partitions(classifier)[2]}
+            excluded_item_ids = [row.item_id for row in held_out_set.items if row.item_id not in audit_item_ids]
+            scored_items = [row for row in held_out_set.items if row.item_id not in excluded_item_ids]
+            current_reviews = self._active_audit_reviews(classifier)
+            labels_changed_since_frozen = sum(
+                1 for row in held_out_set.items
+                if row.item_id in current_reviews and current_reviews[row.item_id][0].label != row.label)
+            request_bound = 2 * len(scored_items)
+            remaining_requests = self.shared.max_requests - self.shared.requests
+            if request_bound > remaining_requests:
+                raise ValueError(f"this evaluation may need {request_bound} decision-model requests and "
+                                 f"{remaining_requests} remain in this open; reopen with a larger max_requests")
+            before_configs = {cid: wheel.initial for cid, wheel in self.wheels.items()}
+            before_training = {cid: tuple(self.priming_examples.get(cid, ())) for cid in self.wheels}
+            after_configs = {cid: wheel.active.config for cid, wheel in self.wheels.items()}
+            after_training = {cid: self._partitions(cid)[0] for cid in self.wheels}
+            self.shared.bind_context(after_configs, after_training)
+            active = self.wheels[classifier].active
+            if active.head and active.head.provenance.source_model_provenance != self.wheels[classifier].model_context(
+                    active.config, after_training[classifier]):
+                raise ValueError("the ML model was fit on an older shared context; decide an item to refit it first")
+            clock = datetime.fromisoformat(held_out_set.frozen_at)
+            self._batches = []
+            prepared_requests = 0
+            predictions = {}
+            try:
+                for endpoint_name, configs, training, head in (
+                        ("before", before_configs, before_training, None),
+                        ("after", after_configs, after_training, active.head)):
+                    predictions[endpoint_name] = {}
+                    for row in scored_items:
+                        payload, _ = await self.shared.prepare(configs, Item(row.item_id, row.values), training,
+                                                               now=clock)
+                        prepared_requests += 1
+                        raw = payload["result"]
+                        answers = ClassifiedAnswers({name: DecisionResult(**answer) for name, answer in
+                                                     raw["answers"][classifier].items()}, raw["model"], None,
+                                                    raw["latency_ms"])
+                        predictions[endpoint_name][row.item_id] = (
+                            head.predict(DecisionFlywheel._features(configs[classifier], answers)) if head
+                            else answers.answers["decision"].label)
+            finally:
+                paid_batches, self._batches = self._batches, []
+                self.shared.bind_context(after_configs, after_training)
+            from .flywheel import FittedClassifier
+            spec = self.specs[classifier]
+            versions = self.versions[classifier]
+            report = build_report(
+                held_out_set, labels=spec.task.labels, positive_label=spec.positive_label,
+                before=Endpoint(1, 0, FittedClassifier(self.wheels[classifier].initial).fingerprint,
+                                BEFORE_DESCRIPTION, predictions["before"]),
+                after=Endpoint(versions.version, versions.refits, active.fingerprint, AFTER_DESCRIPTION,
+                               predictions["after"]),
+                excluded_item_ids=excluded_item_ids, labels_changed_since_frozen=labels_changed_since_frozen,
+                cost={"newRequests": len(paid_batches), "cachedRequests": prepared_requests - len(paid_batches),
+                      "promptTokens": sum(batch[0] for batch in paid_batches),
+                      "outputTokens": sum(batch[2] for batch in paid_batches)},
+                minimum_per_label=DEFAULT_MINIMUM_PER_LABEL if minimum_per_label is None else minimum_per_label)
+            kept_reports = [*self.held_out_reports(classifier), report][-REPORTS_KEPT_PER_CLASSIFIER:]
+            with self.root_storage.transaction():
+                self.root_storage.put_meta(f"held_out_reports:{classifier}", _json(kept_reports))
+            return report
 
     # Snapshot and restore -------------------------------------------------
 

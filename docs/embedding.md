@@ -96,10 +96,30 @@ primed.close()
 
 The first decision request already carries them as training context. They
 are never decisions, reviews or measured alignment, and an item used to prime
-cannot also be decided. Priming is fixed when the store is created: reopening
-with different examples fails, so a new set of examples means a new store.
-`status().to_json()["cyclotron"]["primedExamples"]` says how many there are,
-and the status widget shows "Primed with N examples".
+cannot also be decided. `status().to_json()["cyclotron"]["primedExamples"]`
+says how many there are, and the status widget shows "Primed with N examples".
+
+A running store takes more examples with `add_priming_examples`. Each output
+that gains examples appends them to its fixed example list as a new version,
+so its next decision request carries them; an unreviewed decision is decided
+again by that version. The ML model was fitted to the old context, so the new
+version starts without it and the next learning pass refits it. Adding the
+same examples again changes nothing; an identity that was already decided, or
+that was primed with different content, is refused. `priming_additions()`
+records who added which examples and when.
+
+```python
+primed = Cyclotron.open("var/cyclotrons/primed-relevance", definition, ScriptedModel(), optimizer=None)
+pasted = {"relevant": [LabeledItem(Item("pasted-url-1", {"text": "A vendor's product announcement."}),
+                                   "exclude", "trusted", {"human_feedback": "Marketing, not research."})]}
+added = asyncio.run(primed.add_priming_examples(pasted, added_by="editor-1"))
+assert added["added"] == {"relevant": ["pasted-url-1"]} and added["versions"] == {"relevant": 2}
+assert primed.status().to_json()["lastChange"]["summary"] == "Added 1 primed example to the example list."
+primed.close()
+```
+
+Reopening with the examples the store was created with still works after
+additions. Reopening with examples the store never accepted fails.
 
 To collect examples in the application, render `PrimingPanel` from
 `cyclotron/components/priming-panel` with `createPrimingClient` from
@@ -108,7 +128,8 @@ server side is `decision_flywheel.priming.PrimingService`: people paste a URL
 or upload CSV, JSON, JSONL or a spreadsheet, check what was extracted, choose
 a label for each output with an optional explanation, and accept.
 `PrimingService.examples(list_id, classifiers)` then returns the accepted
-examples for `priming_examples`. Fetching and extracting a URL is the
+examples, for `priming_examples` on a new store or `add_priming_examples` on a
+running one. Fetching and extracting a URL is the
 application's transformer, not Cyclotron's.
 
 ## Decide
@@ -288,6 +309,23 @@ question it shares. Split request and token counts can be fractional.
 `usage["outputs"]["estimate"]` says how the split is made. Requests recorded
 by older stores have no shares and are split evenly. A deferred learning pass
 counts toward the latest decision.
+
+## Before and after on a held-out set
+
+The status card reports agreement on recent reviews. The headline evidence
+that a cyclotron learned is a separate measurement: the classifier as the
+store was created versus the classifier active now, on a frozen set of audit
+reviews neither has trained on.
+
+```python
+cyclotron.freeze_held_out_set()
+report = asyncio.run(cyclotron.evaluate_held_out())
+print(report["headline"]["before"], report["headline"]["after"], report["change"]["verdict"])
+```
+
+[held-out-measurement.md](held-out-measurement.md) defines the metric, the
+held-out set, the report format and the shared GraphQL operations behind the
+`HeldOutPanel` card.
 
 ## The review program and its override
 
