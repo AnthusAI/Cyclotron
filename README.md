@@ -4,6 +4,14 @@
 model such as Jev with the parts that turn human feedback into an auditable,
 improvable classifier.
 
+Jev, Kev and Laya are third-party decision models, not people or placeholders:
+Jev is TypeSafe AI's hosted System One model (reached through `typesafe-sdk`),
+Kev is a decision model you run as a local server that speaks the same System One
+API, and Laya is Convai Innovations' open-weight
+[`convaiinnovations/laya`](https://huggingface.co/convaiinnovations/laya) model,
+loaded in-process. Cyclotron ships an optional adapter for each; any model that
+fits the adapter contract works the same way.
+
 A decision model can give a fast structured answer. It does not know a team's
 private definition of a good item. Cyclotron starts with a simple decision, then
 uses human labels and explanations to make three controlled changes around the

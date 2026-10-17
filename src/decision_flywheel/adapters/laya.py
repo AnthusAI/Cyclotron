@@ -1,4 +1,4 @@
-"""Optional local Laya adapter."""
+"""Optional local adapter for Convai Innovations' open-weight ``convaiinnovations/laya`` decision model."""
 from __future__ import annotations
 
 import asyncio
