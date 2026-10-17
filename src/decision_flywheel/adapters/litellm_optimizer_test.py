@@ -1,4 +1,5 @@
 """Provider-neutral optimizer transport specs never contact a provider."""
+
 from types import SimpleNamespace
 
 import pytest
@@ -8,16 +9,36 @@ from .litellm_optimizer import LiteLLMOptimizer
 
 def test_a_completion_preserves_messages_usage_and_tool_calls_without_hidden_retries():
     calls = []
+
     def complete(**kwargs):
         calls.append(kwargs)
-        return SimpleNamespace(model="returned-model", usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 17}),
-            choices=[SimpleNamespace(message=SimpleNamespace(content='{"rubric":"Relevant"}',
-                tool_calls=[SimpleNamespace(model_dump=lambda: {"id": "call-1", "function": {"name": "propose"}})]))])
+        return SimpleNamespace(
+            model="returned-model",
+            usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 17}),
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='{"rubric":"Relevant"}',
+                        tool_calls=[SimpleNamespace(model_dump=lambda: {"id": "call-1", "function": {"name": "propose"}})],
+                    )
+                )
+            ],
+        )
+
     transport = LiteLLMOptimizer(complete, model="anthropic/fake", max_calls=1)
     messages = [{"role": "user", "content": "The full feedback context"}]
     reply = transport(messages)
-    assert calls == [{"model": "anthropic/fake", "messages": messages, "response_format": {"type": "json_object"},
-                      "num_retries": 0, "max_retries": 0, "timeout": 60, "drop_params": False}]
+    assert calls == [
+        {
+            "model": "anthropic/fake",
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+            "num_retries": 0,
+            "max_retries": 0,
+            "timeout": 60,
+            "drop_params": False,
+        }
+    ]
     assert reply.model == "returned-model"
     assert reply.usage == {"total_tokens": 17}
     assert reply.tool_calls[0]["function"]["name"] == "propose"
@@ -28,9 +49,11 @@ def test_a_completion_preserves_messages_usage_and_tool_calls_without_hidden_ret
 
 def test_a_failed_provider_attempt_consumes_the_ceiling_instead_of_retrying_silently():
     calls = []
+
     def fail(**kwargs):
         calls.append(kwargs)
         raise RuntimeError("fake failure")
+
     transport = LiteLLMOptimizer(fail, model="ollama/fake", max_calls=1)
     with pytest.raises(RuntimeError, match="fake failure"):
         transport([])
@@ -50,17 +73,23 @@ def test_acompletion_is_awaited_under_the_same_ceiling_and_arguments():
     from types import SimpleNamespace
 
     from .litellm_optimizer import LiteLLMOptimizer
+
     seen = []
 
     def response():
-        return SimpleNamespace(model="m", usage=SimpleNamespace(model_dump=lambda: {}),
-                               choices=[SimpleNamespace(message=SimpleNamespace(content="{}", tool_calls=None))])
+        return SimpleNamespace(
+            model="m",
+            usage=SimpleNamespace(model_dump=lambda: {}),
+            choices=[SimpleNamespace(message=SimpleNamespace(content="{}", tool_calls=None))],
+        )
 
     async def acompletion(**kwargs):
         seen.append(("async", kwargs))
         return response()
-    transport = LiteLLMOptimizer(lambda **kwargs: seen.append(("sync", kwargs)) or response(), model="m", max_calls=2,
-                                 acompletion=acompletion)
+
+    transport = LiteLLMOptimizer(
+        lambda **kwargs: seen.append(("sync", kwargs)) or response(), model="m", max_calls=2, acompletion=acompletion
+    )
     asyncio.run(transport.acomplete([{"role": "user", "content": "x"}]))
     transport([{"role": "user", "content": "x"}])
     with pytest.raises(RuntimeError, match="ceiling"):

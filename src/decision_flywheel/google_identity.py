@@ -1,4 +1,5 @@
 """Optional central Google enrollment client, separate from membership storage."""
+
 import re
 import time
 from dataclasses import dataclass, field
@@ -34,30 +35,39 @@ class GoogleIdentityClient:
         self.clock = clock
 
     def challenge(self):
-        result = self.transport('POST', '/v1/identities/google/challenge', None, {})
-        nonce, expiry = result.get('nonce'), result.get('expiresAt')
-        if (not uuid4_string(result.get('challengeId')) or not isinstance(nonce, str)
-                or not re.fullmatch(r'[A-Za-z0-9_-]{32,256}', nonce)
-                or type(expiry) is not int or not self.clock() < expiry <= self.clock() + 300):
-            raise ProspectusUnavailable('invalid identity challenge')
-        return GoogleChallenge(result['challengeId'], nonce, expiry)
+        result = self.transport("POST", "/v1/identities/google/challenge", None, {})
+        nonce, expiry = result.get("nonce"), result.get("expiresAt")
+        if (
+            not uuid4_string(result.get("challengeId"))
+            or not isinstance(nonce, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", nonce)
+            or type(expiry) is not int
+            or not self.clock() < expiry <= self.clock() + 300
+        ):
+            raise ProspectusUnavailable("invalid identity challenge")
+        return GoogleChallenge(result["challengeId"], nonce, expiry)
 
     @staticmethod
     def _person(result, *, optional=False):
-        person = result.get('person')
-        if optional and 'person' in result and person is None:
+        person = result.get("person")
+        if optional and "person" in result and person is None:
             return None
-        if (not isinstance(person, dict) or not uuid4_string(person.get('id'))
-                or not isinstance(person.get('createdAt'), str) or not person['createdAt']):
-            raise ProspectusUnavailable('invalid identity service response')
-        return {'id': person['id'], 'createdAt': person['createdAt']}
+        if (
+            not isinstance(person, dict)
+            or not uuid4_string(person.get("id"))
+            or not isinstance(person.get("createdAt"), str)
+            or not person["createdAt"]
+        ):
+            raise ProspectusUnavailable("invalid identity service response")
+        return {"id": person["id"], "createdAt": person["createdAt"]}
 
     def resolve(self, access_token, id_token, challenge_id):
         if not uuid4_string(challenge_id):
-            raise ValueError('identity resolution requires a challenge UUIDv4')
-        result = self.transport('POST', '/v1/identities/google/resolve', access_token,
-            {'challengeId': challenge_id}, identity_token=id_token)
+            raise ValueError("identity resolution requires a challenge UUIDv4")
+        result = self.transport(
+            "POST", "/v1/identities/google/resolve", access_token, {"challengeId": challenge_id}, identity_token=id_token
+        )
         return self._person(result)
 
     def me(self, access_token):
-        return self._person(self.transport('GET', '/v1/identities/me', access_token), optional=True)
+        return self._person(self.transport("GET", "/v1/identities/me", access_token), optional=True)

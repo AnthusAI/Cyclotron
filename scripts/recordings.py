@@ -7,6 +7,7 @@ title, summary, what to notice, setup, results, cost) and ``fixture.json`` (the 
 ``export-published`` writes only published recordings, without the local-only ``source`` block, for the site.
 No model calls are made and no environment values are read.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -40,7 +41,7 @@ REVIEW_SUMMARIES = {
     "first_50_all_then_half": "Every story for the first 50 stories, then half of the stories.",
     "first_100_all_then_half": "Every story for the first 100 stories, then half of the stories.",
     "publish_priority_taper": "For the first 50 stories, every story the model calls publish and half of those it calls "
-                              "reject; after that, half of the publishes and a quarter of the rejects.",
+    "reject; after that, half of the publishes and a quarter of the rejects.",
 }
 
 
@@ -67,6 +68,7 @@ def study_baseline_rubric():
     global study_constants
     if study_constants is None:
         import ast
+
         tree = ast.parse((SCRIPTS / "run_editorial_prequential_study.py").read_text())
         for node in tree.body:
             if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "BASELINE_RUBRIC" for t in node.targets):
@@ -78,6 +80,7 @@ def study_baseline_rubric():
 
 
 # ------------------------------------------------------------------ file helpers
+
 
 def dumps(value):
     return json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
@@ -110,6 +113,7 @@ def all_recordings(catalog):
 
 
 # ------------------------------------------------------------------ validation
+
 
 def _num(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -174,7 +178,9 @@ def validate_recording(rec, *, for_publish=False, directory=None):
         problems.append("results.windows is required")
     else:
         for window in results["windows"]:
-            if not all(_num(window.get(k)) for k in ("first_cycle", "last_cycle", "cyclotron_accuracy", "decision_model_accuracy")):
+            if not all(
+                _num(window.get(k)) for k in ("first_cycle", "last_cycle", "cyclotron_accuracy", "decision_model_accuracy")
+            ):
                 problems.append("every window needs cycles and both accuracies")
                 break
         for key in ("final_window_accuracy",):
@@ -231,11 +237,18 @@ def canonical_sha(value):
 def fingerprint_inputs(setup, cycles):
     """Exactly what makes two runs the same benchmark. The decision model and its revision are deliberately absent."""
     params = setup.get("parameters") or {}
-    return {"corpus_sha256": (setup.get("corpus") or {}).get("sha256"), "window_size": setup.get("window_size"),
-            "review_policy": (setup.get("review") or {}).get("policy", "all"),
-            "rubric_trigger": {k: params.get(k) for k in ("rubric_changes_every", "rubric_trigger_basis", "max_rubric_optimizations")},
-            "optimizer_model": setup.get("optimizer_model"), "selection_policy_primary": setup.get("objective"),
-            "starting_rubric": setup.get("starting_rubric"), "cycles": cycles}
+    return {
+        "corpus_sha256": (setup.get("corpus") or {}).get("sha256"),
+        "window_size": setup.get("window_size"),
+        "review_policy": (setup.get("review") or {}).get("policy", "all"),
+        "rubric_trigger": {
+            k: params.get(k) for k in ("rubric_changes_every", "rubric_trigger_basis", "max_rubric_optimizations")
+        },
+        "optimizer_model": setup.get("optimizer_model"),
+        "selection_policy_primary": setup.get("objective"),
+        "starting_rubric": setup.get("starting_rubric"),
+        "cycles": cycles,
+    }
 
 
 def compute_benchmark(setup, cycles, ids_known=True):
@@ -248,8 +261,12 @@ def compute_benchmark(setup, cycles, ids_known=True):
     if not inputs["corpus_sha256"]:
         return {"id": None, "fingerprint": None, "inputs": inputs, "comparable": False, "reason": reason}
     fingerprint = canonical_sha(inputs)
-    out = {"id": f"{setup['corpus']['id']}-{fingerprint[:8]}", "fingerprint": fingerprint, "inputs": inputs,
-           "comparable": reason is None}
+    out = {
+        "id": f"{setup['corpus']['id']}-{fingerprint[:8]}",
+        "fingerprint": fingerprint,
+        "inputs": inputs,
+        "comparable": reason is None,
+    }
     if reason:
         out["reason"] = reason
     return out
@@ -272,8 +289,12 @@ def decision_model_detail(setup_or_protocol, card_path):
     except (OSError, ValueError, AttributeError):
         pass
     provider = setup_or_protocol.get("decision_provider")
-    return {"name": public_decision_model(setup_or_protocol), "revision": revision, "provider": provider,
-            "hosting": "local" if provider == "kev" else "hosted"}
+    return {
+        "name": public_decision_model(setup_or_protocol),
+        "revision": revision,
+        "provider": provider,
+        "hosting": "local" if provider == "kev" else "hosted",
+    }
 
 
 def card_for(run_dir):
@@ -287,10 +308,18 @@ def prediction_rows(fixture, ids=None):
     for c in fixture["scenarios"][SCENARIO]["cycles"]:
         raw = c.get("decision_model_probabilities")
         story = (c.get("article") or {}).get("id") or (ids or {}).get(c["n"])
-        rows.append({"n": c["n"], "id": story, "gold": c.get("actual"),
-                     "raw_label": exporter.decision_model_choice(raw, LABELS) if raw else None, "raw_probs": raw,
-                     "final_label": c.get("predicted"), "final_probs": c.get("probabilities"),
-                     "reviewed": bool(c.get("feedback_revealed"))})
+        rows.append(
+            {
+                "n": c["n"],
+                "id": story,
+                "gold": c.get("actual"),
+                "raw_label": exporter.decision_model_choice(raw, LABELS) if raw else None,
+                "raw_probs": raw,
+                "final_label": c.get("predicted"),
+                "final_probs": c.get("probabilities"),
+                "reviewed": bool(c.get("feedback_revealed")),
+            }
+        )
     return rows
 
 
@@ -309,7 +338,11 @@ def publish_metrics(rows, key):
     fn = sum(r["gold"] == "publish" and r[key] != "publish" for r in rows)
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None
-    f1 = 2 * precision * recall / (precision + recall) if precision is not None and recall is not None and precision + recall else None
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision is not None and recall is not None and precision + recall
+        else None
+    )
     rnd = lambda v: None if v is None else round(v, 3)
     return {"precision": rnd(precision), "recall": rnd(recall), "f1": rnd(f1)}
 
@@ -336,11 +369,12 @@ def mcnemar_exact(only_a, only_b):
     n = only_a + only_b
     if n == 0:
         return 1.0
-    tail = sum(math.comb(n, k) for k in range(min(only_a, only_b) + 1)) / 2 ** n
+    tail = sum(math.comb(n, k) for k in range(min(only_a, only_b) + 1)) / 2**n
     return min(1.0, 2 * tail)
 
 
 # ------------------------------------------------------------------ add
+
 
 def starting_rubric(protocol):
     text = protocol.get("baseline_rubric") or ""
@@ -351,8 +385,11 @@ def starting_rubric(protocol):
 
 def setup_parameters(protocol):
     trigger = protocol.get("rubric_trigger") or {}
-    params = {"rubric_changes_every": trigger.get("every"), "rubric_trigger_basis": trigger.get("basis"),
-              "max_rubric_optimizations": trigger.get("max_attempts")}
+    params = {
+        "rubric_changes_every": trigger.get("every"),
+        "rubric_trigger_basis": trigger.get("basis"),
+        "max_rubric_optimizations": trigger.get("max_attempts"),
+    }
     for key in ("optimize_every", "retrain_every"):
         if key in protocol:
             params[key] = protocol[key]
@@ -364,10 +401,24 @@ def setup_parameters(protocol):
 
 
 def build_fixture(run_dir, mode_dir, manifest_path, corpus_path, out, *, cycles, window, decision_price, optimizer_price):
-    args = ["--output", str(out), "--corpus-manifest", str(manifest_path), "--corpus", str(corpus_path),
-            "--scenario", f"{SCENARIO}={mode_dir}", "--window-size", str(window),
-            "--decision-model-price", decision_price, "--optimizer-price", optimizer_price,
-            "--title", "Recorded run"]
+    args = [
+        "--output",
+        str(out),
+        "--corpus-manifest",
+        str(manifest_path),
+        "--corpus",
+        str(corpus_path),
+        "--scenario",
+        f"{SCENARIO}={mode_dir}",
+        "--window-size",
+        str(window),
+        "--decision-model-price",
+        decision_price,
+        "--optimizer-price",
+        optimizer_price,
+        "--title",
+        "Recorded run",
+    ]
     if cycles is not None:
         args += ["--cycles", str(cycles)]
     with contextlib.redirect_stdout(io.StringIO()):
@@ -384,27 +435,42 @@ def compute_results(fixture, mode_dir, window):
         actual = [v.get("actual") for v in (w["cyclotron"].get("per_class") or {}).values()]
         total = w["cyclotron"].get("count") or 0
         baseline = max(actual) / total if total and actual and all(isinstance(x, int) for x in actual) else None
-        windows.append({"first_cycle": w["first_cycle"], "last_cycle": w["last_cycle"],
-                        "cyclotron_accuracy": round(w["cyclotron"]["accuracy"], 3),
-                        "decision_model_accuracy": round(w["decision_model"]["accuracy"], 3),
-                        "majority_baseline": None if baseline is None else round(baseline, 3)})
+        windows.append(
+            {
+                "first_cycle": w["first_cycle"],
+                "last_cycle": w["last_cycle"],
+                "cyclotron_accuracy": round(w["cyclotron"]["accuracy"], 3),
+                "decision_model_accuracy": round(w["decision_model"]["accuracy"], 3),
+                "majority_baseline": None if baseline is None else round(baseline, 3),
+            }
+        )
     events = replicates.read_events(mode_dir / "runtime.sqlite3")
     activations = [c for c in replicates.activation_cycles(events) if c <= len(cycles)]
     later = [w["cyclotron_accuracy"] for w in windows[1:]]
-    return {"windows": windows, "first_rubric_cycle": activations[0] if activations else None,
-            "final_window_accuracy": windows[-1]["cyclotron_accuracy"],
-            "post_warm_up_accuracy": round(replicates.mean(later), 3) if later else None}
+    return {
+        "windows": windows,
+        "first_rubric_cycle": activations[0] if activations else None,
+        "final_window_accuracy": windows[-1]["cyclotron_accuracy"],
+        "post_warm_up_accuracy": round(replicates.mean(later), 3) if later else None,
+    }
 
 
 def compute_cost(fixture):
     scenario = fixture["scenarios"][SCENARIO]
     total = scenario["usage_total"]
     basis = fixture["attribution"]["price_basis"]
-    line = (f"{basis['basis']}; decision model {basis['decision_model']['model']} ({basis['decision_model']['source']}); "
-            f"optimizer {basis['optimizer']['model']} ({basis['optimizer']['source']})")
-    return {"usd_total": total["usd"], "decision_model_usd": total["decision_model"]["usd"],
-            "optimizer_usd": total["optimizer"]["usd"], "decision_requests": total["decision_model"]["requests"],
-            "optimizer_requests": total["optimizer"]["requests"], "price_basis": line}
+    line = (
+        f"{basis['basis']}; decision model {basis['decision_model']['model']} ({basis['decision_model']['source']}); "
+        f"optimizer {basis['optimizer']['model']} ({basis['optimizer']['source']})"
+    )
+    return {
+        "usd_total": total["usd"],
+        "decision_model_usd": total["decision_model"]["usd"],
+        "optimizer_usd": total["optimizer"]["usd"],
+        "decision_requests": total["decision_model"]["requests"],
+        "optimizer_requests": total["optimizer"]["requests"],
+        "price_basis": line,
+    }
 
 
 def compute_review(fixture, protocol, mode_dir):
@@ -416,8 +482,12 @@ def compute_review(fixture, protocol, mode_dir):
     summary = policy.get("summary") if isinstance(policy.get("summary"), str) and policy["summary"].strip() else None
     summary = summary or review_summary(name) or f"Stories are reviewed under the {policy.get('display_name') or name} policy."
     cycles = scenario["cycles"]
-    return {"policy": name, "summary": summary,
-            "stories_reviewed": sum(bool(c.get("feedback_revealed")) for c in cycles), "stories_total": len(cycles)}
+    return {
+        "policy": name,
+        "summary": summary,
+        "stories_reviewed": sum(bool(c.get("feedback_revealed")) for c in cycles),
+        "stories_total": len(cycles),
+    }
 
 
 def cmd_add(a):
@@ -435,42 +505,78 @@ def cmd_add(a):
     if not (mode_dir / "results.json").is_file():
         raise SystemExit(f"no results.json under {run_dir}")
     window = a.window_size or DEFAULT_WINDOW
-    decision_price = a.decision_model_price or ({"foundry": "microsoft-decision-1"}.get(protocol.get("decision_provider"), protocol.get("decision_provider"))
-                                                 if protocol.get("decision_provider") in ("jev", "kev", "foundry") else None) \
+    decision_price = (
+        a.decision_model_price
+        or (
+            {"foundry": "microsoft-decision-1"}.get(protocol.get("decision_provider"), protocol.get("decision_provider"))
+            if protocol.get("decision_provider") in ("jev", "kev", "foundry")
+            else None
+        )
         or "gpt-4.1-mini"
-    optimizer_price = a.optimizer_price or (protocol.get("optimizer_model") if protocol.get("optimizer_model") in exporter.PRICES
-                                            else "gpt-4.1-mini")
+    )
+    optimizer_price = a.optimizer_price or (
+        protocol.get("optimizer_model") if protocol.get("optimizer_model") in exporter.PRICES else "gpt-4.1-mini"
+    )
     manifest = json.loads(Path(a.corpus_manifest).read_text())
     with tempfile.TemporaryDirectory() as tmp:
         built = Path(tmp) / "fixture.json"
-        build_fixture(run_dir, mode_dir, a.corpus_manifest, a.corpus, built, cycles=a.cycles, window=window,
-                      decision_price=decision_price, optimizer_price=optimizer_price)
+        build_fixture(
+            run_dir,
+            mode_dir,
+            a.corpus_manifest,
+            a.corpus,
+            built,
+            cycles=a.cycles,
+            window=window,
+            decision_price=decision_price,
+            optimizer_price=optimizer_price,
+        )
         fixture = json.loads(built.read_text())
         rubric_kind, rubric_text = starting_rubric(protocol)
         commit = a.engine_commit or protocol.get("engine_commit")
         if not commit:
             print("warning: no engine commit recorded; pass --engine-commit to set it", file=sys.stderr)
         provenance = manifest.get("label_provenance") or fixture["disclosure"]
-        corpus = {"id": manifest.get("corpus") or manifest.get("dataset"), "stories": manifest.get("actual_count"),
-                  "label_provenance": provenance}
+        corpus = {
+            "id": manifest.get("corpus") or manifest.get("dataset"),
+            "stories": manifest.get("actual_count"),
+            "label_provenance": provenance,
+        }
         sha = manifest.get("operational_sha256") or manifest.get("sha256")
         if sha:
             corpus["sha256"] = sha
-        setup = {"decision_model": public_decision_model(protocol), "decision_provider": protocol.get("decision_provider"),
-                 "optimizer_model": protocol.get("optimizer_model"),
-                 "objective": (protocol.get("selection_policy") or {}).get("primary"),
-                 "starting_rubric": rubric_kind, "parameters": setup_parameters(protocol), "corpus": corpus,
-                 "window_size": window}
+        setup = {
+            "decision_model": public_decision_model(protocol),
+            "decision_provider": protocol.get("decision_provider"),
+            "optimizer_model": protocol.get("optimizer_model"),
+            "objective": (protocol.get("selection_policy") or {}).get("primary"),
+            "starting_rubric": rubric_kind,
+            "parameters": setup_parameters(protocol),
+            "corpus": corpus,
+            "window_size": window,
+        }
         setup["review"] = compute_review(fixture, protocol, mode_dir)
         setup["decision_model_detail"] = decision_model_detail(protocol, card_for(run_dir))
         if rubric_text:
             setup["starting_rubric_text"] = rubric_text
-        rec = {"schema": SCHEMA, "id": a.id, "title": a.title, "summary": a.summary, "notice": list(a.notice or []),
-               "tags": list(a.tag or []), "status": "draft", "featured": False, "created": date.today().isoformat(),
-               "engine": {"commit": commit or None}, "setup": setup,
-               "results": compute_results(fixture, mode_dir, window), "cost": compute_cost(fixture),
-               "fixture": "fixture.json", "fixture_sha256": sha256_file(built),
-               "source": {"run_dir": str(run_dir.resolve()), "replicate_of": a.replicate_of}}
+        rec = {
+            "schema": SCHEMA,
+            "id": a.id,
+            "title": a.title,
+            "summary": a.summary,
+            "notice": list(a.notice or []),
+            "tags": list(a.tag or []),
+            "status": "draft",
+            "featured": False,
+            "created": date.today().isoformat(),
+            "engine": {"commit": commit or None},
+            "setup": setup,
+            "results": compute_results(fixture, mode_dir, window),
+            "cost": compute_cost(fixture),
+            "fixture": "fixture.json",
+            "fixture_sha256": sha256_file(built),
+            "source": {"run_dir": str(run_dir.resolve()), "replicate_of": a.replicate_of},
+        }
         rows = prediction_rows(fixture)
         add_classification_results(rec["results"], rows)
         rec["benchmark"] = compute_benchmark(setup, len(rows), ids_known=all(r["id"] for r in rows))
@@ -486,6 +592,7 @@ def cmd_add(a):
 
 
 # ------------------------------------------------------------------ list / show / status
+
 
 def pct(value):
     return "-" if value is None else f"{100 * value:.1f}%"
@@ -520,9 +627,18 @@ def cmd_list(a):
         if a.tag and a.tag not in rec["tags"]:
             continue
         first = rec["results"].get("first_rubric_cycle")
-        rows.append((rec["id"], rec["status"], "yes" if rec["featured"] else "-", rec["title"],
-                     pct(rec["results"].get("final_window_accuracy")), "-" if first is None else f"cycle {first}", review_cell(rec),
-                     f"${rec['cost']['usd_total']:.3f}"))
+        rows.append(
+            (
+                rec["id"],
+                rec["status"],
+                "yes" if rec["featured"] else "-",
+                rec["title"],
+                pct(rec["results"].get("final_window_accuracy")),
+                "-" if first is None else f"cycle {first}",
+                review_cell(rec),
+                f"${rec['cost']['usd_total']:.3f}",
+            )
+        )
     print(table(rows))
 
 
@@ -560,6 +676,7 @@ def _set(a, status=None, featured=None):
 
 # ------------------------------------------------------------------ export
 
+
 def cmd_export(a):
     published = [r for r in all_recordings(a.catalog) if r["status"] == "published"]
     for rec in published:
@@ -588,12 +705,17 @@ def cmd_export(a):
         shutil.copyfile(recording_dir(a.catalog, rec["id"]) / rec["fixture"], out / rec["fixture"])
         if rec.get("predictions_sha256"):
             shutil.copyfile(recording_dir(a.catalog, rec["id"]) / PREDICTIONS, out / PREDICTIONS)
-    index = {"schema": INDEX_SCHEMA, "recordings": [
-        {k: r[k] for k in ("id", "title", "summary", "tags", "featured")} for r in published]}
+    index = {
+        "schema": INDEX_SCHEMA,
+        "recordings": [{k: r[k] for k in ("id", "title", "summary", "tags", "featured")} for r in published],
+    }
     (dest / "index.json").write_text(dumps(index))
     (dest / MARKER).write_text("Managed by scripts/recordings.py export-published; stale recordings here may be removed.\n")
-    note = "" if marked or not any(p.is_dir() for p in dest.iterdir() if p.name not in keep) else \
-        " (no marker file existed, so nothing was removed)"
+    note = (
+        ""
+        if marked or not any(p.is_dir() for p in dest.iterdir() if p.name not in keep)
+        else " (no marker file existed, so nothing was removed)"
+    )
     print(f"exported {len(published)} recording(s) to {dest}; removed {len(removed)} stale" + note)
 
 
@@ -614,8 +736,10 @@ def flatten(value, prefix=""):
 def setup_diff(recs, ids):
     setups = []
     for rec in recs:
-        flat = flatten({k: v for k, v in rec["setup"].items() if k not in ("corpus", "review")}
-                       | {"corpus": rec["setup"]["corpus"].get("id")})
+        flat = flatten(
+            {k: v for k, v in rec["setup"].items() if k not in ("corpus", "review")}
+            | {"corpus": rec["setup"]["corpus"].get("id")}
+        )
         flat["review.policy"] = review_of(rec)["policy"]
         flat.pop("corpus.label_provenance", None)
         setups.append(flat)
@@ -640,7 +764,9 @@ def benchmark_problem(recs, ids):
     if len({m["id"] for m in marks}) > 1:
         a, b = marks[0].get("inputs") or {}, marks[1].get("inputs") or {}
         diffs = [f"  {k}: {a.get(k)!r} vs {b.get(k)!r}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)]
-        return (f"different benchmarks ({marks[0]['id']} vs {marks[1]['id']}); fields that differ:\n" + "\n".join(diffs or ["  (inputs not recorded)"]))
+        return f"different benchmarks ({marks[0]['id']} vs {marks[1]['id']}); fields that differ:\n" + "\n".join(
+            diffs or ["  (inputs not recorded)"]
+        )
     return None
 
 
@@ -660,7 +786,9 @@ def cmd_compare(a):
     if problem and not a.force:
         raise SystemExit(f"cannot compare: {problem}\n(use --force to compare anyway)")
     if problem:
-        print(f"WARNING: THESE RECORDINGS ARE NOT THE SAME BENCHMARK; differences below may not be due to the model.\n{problem}\n")
+        print(
+            f"WARNING: THESE RECORDINGS ARE NOT THE SAME BENCHMARK; differences below may not be due to the model.\n{problem}\n"
+        )
     diff_text, fmt = setup_diff(recs, a.ids)
     print("Setup differences")
     print(diff_text)
@@ -673,7 +801,9 @@ def cmd_compare(a):
             if i < len(ws):
                 w = ws[i]
                 span = span or f"{w['first_cycle']}-{w['last_cycle']}"
-                cells.append(f"{pct(w['cyclotron_accuracy'])} / {pct(w['decision_model_accuracy'])} / {pct(w.get('majority_baseline'))}")
+                cells.append(
+                    f"{pct(w['cyclotron_accuracy'])} / {pct(w['decision_model_accuracy'])} / {pct(w.get('majority_baseline'))}"
+                )
             else:
                 cells.append("-")
         rows.append((span, *cells))
@@ -684,8 +814,12 @@ def cmd_compare(a):
     summary = [("overall", *a.ids)]
     for label, key in (("final accuracy", "final_accuracy"), ("raw accuracy", "raw_accuracy")):
         summary.append((label, *(pct(accuracy(d, key.replace("accuracy", "label"))) for d in data)))
-    for label, _ in (("final publish recall", "final_publish"), ("final publish precision", "final_publish"),
-                       ("raw publish recall", "raw_publish"), ("raw publish precision", "raw_publish")):
+    for label, _ in (
+        ("final publish recall", "final_publish"),
+        ("final publish precision", "final_publish"),
+        ("raw publish recall", "raw_publish"),
+        ("raw publish precision", "raw_publish"),
+    ):
         metric = "recall" if "recall" in label else "precision"
         which = "final_label" if label.startswith("final") else "raw_label"
         summary.append((label, *(pct(publish_metrics(d, which)[metric]) for d in data)))
@@ -702,21 +836,28 @@ def cmd_compare(a):
     disagreements = []
     print(f"\nPaired comparison over {len(shared)} stories (exact McNemar, two-sided)")
     for label, key in (("final decisions", "final_label"), ("raw decision-model answers", "raw_label")):
-        pairs = [(keyed[0][k], keyed[1][k]) for k in shared if keyed[0][k]["gold"] is not None and keyed[0][k][key] and keyed[1][k][key]]
+        pairs = [
+            (keyed[0][k], keyed[1][k])
+            for k in shared
+            if keyed[0][k]["gold"] is not None and keyed[0][k][key] and keyed[1][k][key]
+        ]
         only_a = sum(x[key] == x["gold"] and y[key] != y["gold"] for x, y in pairs)
         only_b = sum(x[key] != x["gold"] and y[key] == y["gold"] for x, y in pairs)
         differ = sum(x[key] != y[key] for x, y in pairs)
-        print(f"  {label}: {len(pairs)} scored; only {a.ids[0]} right {only_a}, only {a.ids[1]} right {only_b}; "
-              f"p = {mcnemar_exact(only_a, only_b):.4f}; stories where the two answers differ: {differ}")
+        print(
+            f"  {label}: {len(pairs)} scored; only {a.ids[0]} right {only_a}, only {a.ids[1]} right {only_b}; "
+            f"p = {mcnemar_exact(only_a, only_b):.4f}; stories where the two answers differ: {differ}"
+        )
         if key == "final_label":
             disagreements = [(x, y) for x, y in pairs if x[key] != y[key]]
     if a.disagreements:
         print(f"\nFirst {a.disagreements} disagreements on final decisions: story, gold, {a.ids[0]}, {a.ids[1]}")
-        for x, y in disagreements[:a.disagreements]:
+        for x, y in disagreements[: a.disagreements]:
             print(f"  {x.get('id') or x['n']}  gold={x['gold']}  {x['final_label']}  {y['final_label']}")
 
 
 # ------------------------------------------------------------------ upgrade
+
 
 def cmd_upgrade(a):
     rec = load_recording(a.catalog, a.id)
@@ -758,11 +899,16 @@ def cmd_upgrade(a):
 
 # ------------------------------------------------------------------ cli
 
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--catalog", type=Path, default=os.environ.get("CYCLOTRON_RECORDINGS_CATALOG"),
-                        help="catalog directory (default: $CYCLOTRON_RECORDINGS_CATALOG)")
+    common.add_argument(
+        "--catalog",
+        type=Path,
+        default=os.environ.get("CYCLOTRON_RECORDINGS_CATALOG"),
+        help="catalog directory (default: $CYCLOTRON_RECORDINGS_CATALOG)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     add = sub.add_parser("add", parents=[common], help="record a run as a draft")
     add.add_argument("run_dir", type=Path)
@@ -785,8 +931,12 @@ def build_parser():
     lst.add_argument("--status", choices=STATUSES)
     lst.add_argument("--tag")
     lst.set_defaults(func=cmd_list)
-    for name, func in (("show", cmd_show), ("unpublish", lambda a: _set(a, "draft")), ("retire", lambda a: _set(a, "retired")),
-                       ("unfeature", lambda a: _set(a, featured=False))):
+    for name, func in (
+        ("show", cmd_show),
+        ("unpublish", lambda a: _set(a, "draft")),
+        ("retire", lambda a: _set(a, "retired")),
+        ("unfeature", lambda a: _set(a, featured=False)),
+    ):
         p = sub.add_parser(name, parents=[common])
         p.add_argument("id")
         p.set_defaults(func=func)
@@ -799,10 +949,14 @@ def build_parser():
     exp.set_defaults(func=cmd_export)
     cmp_ = sub.add_parser("compare", parents=[common])
     cmp_.add_argument("ids", nargs="+")
-    cmp_.add_argument("--disagreements", type=int, default=0, metavar="N", help="list the first N stories where the final decisions differ")
+    cmp_.add_argument(
+        "--disagreements", type=int, default=0, metavar="N", help="list the first N stories where the final decisions differ"
+    )
     cmp_.add_argument("--force", action="store_true", help="compare recordings of different benchmarks, with a warning")
     cmp_.set_defaults(func=cmd_compare)
-    upg = sub.add_parser("upgrade", parents=[common], help="backfill benchmark, identity and per-story fields on an existing recording")
+    upg = sub.add_parser(
+        "upgrade", parents=[common], help="backfill benchmark, identity and per-story fields on an existing recording"
+    )
     upg.add_argument("id")
     upg.add_argument("--run-dir", type=Path, help="the run directory (default: the recording's source.run_dir)")
     upg.set_defaults(func=cmd_upgrade)

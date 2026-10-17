@@ -1,4 +1,5 @@
 """Specs for the reusable, restart-safe flywheel run ledger."""
+
 from __future__ import annotations
 
 import pytest
@@ -23,7 +24,7 @@ def _round(*, input_fingerprint: str = "a" * 64, policy_fingerprint: str = "b" *
         outcome="incumbent-retained",
         calls_attempted=8,
         calls_succeeded=8,
-        trials=(TrialActivity("incumbent", "completed", 4, 0, .2),),
+        trials=(TrialActivity("incumbent", "completed", 4, 0, 0.2),),
     )
 
 
@@ -61,11 +62,20 @@ def test_a_run_ledger_rejects_malformed_or_text_bearing_records(tmp_path):
 
     with pytest.raises(ValueError, match="outcome"):
         FlywheelRound(
-            task_fingerprint="c" * 64, input_fingerprint="a" * 64,
-            active_policy_fingerprint="b" * 64, model_fingerprint="jev:example",
-            feedback_count=1, candidate_count=1, development_count=0, objective_name="brier",
-            winner="incumbent", promoted=False, outcome="the user wrote this explanation",
-            calls_attempted=0, calls_succeeded=0, trials=(),
+            task_fingerprint="c" * 64,
+            input_fingerprint="a" * 64,
+            active_policy_fingerprint="b" * 64,
+            model_fingerprint="jev:example",
+            feedback_count=1,
+            candidate_count=1,
+            development_count=0,
+            objective_name="brier",
+            winner="incumbent",
+            promoted=False,
+            outcome="the user wrote this explanation",
+            calls_attempted=0,
+            calls_succeeded=0,
+            trials=(),
         )
 
 
@@ -79,14 +89,24 @@ def test_feedback_fingerprint_changes_for_a_new_label_without_retaining_its_text
 
 def test_a_round_exposes_active_features_and_their_auditable_optimizer_lifecycle(tmp_path):
     feature = FeatureDefinition("recency", "programmatic_datetime", ("recency",), "e" * 64)
-    activity = FeatureActivity("f" * 64, "recency", "evaluated", "improved-development", .04)
+    activity = FeatureActivity("f" * 64, "recency", "evaluated", "improved-development", 0.04)
     round_ = FlywheelRound(
-        task_fingerprint="c" * 64, input_fingerprint="a" * 64,
-        active_policy_fingerprint="b" * 64, model_fingerprint="jev:example",
-        feedback_count=12, candidate_count=8, development_count=4, objective_name="brier",
-        winner="incumbent", promoted=False, outcome="incumbent-retained",
-        calls_attempted=8, calls_succeeded=8, trials=(),
-        active_features=(feature,), feature_activity=(activity,),
+        task_fingerprint="c" * 64,
+        input_fingerprint="a" * 64,
+        active_policy_fingerprint="b" * 64,
+        model_fingerprint="jev:example",
+        feedback_count=12,
+        candidate_count=8,
+        development_count=4,
+        objective_name="brier",
+        winner="incumbent",
+        promoted=False,
+        outcome="incumbent-retained",
+        calls_attempted=8,
+        calls_succeeded=8,
+        trials=(),
+        active_features=(feature,),
+        feature_activity=(activity,),
     )
     ledger = JsonlRunLedger(tmp_path / "runs.jsonl")
 
@@ -108,6 +128,7 @@ def test_a_new_ledger_reader_can_resume_a_pre_feature_lifecycle_round(tmp_path):
     legacy.pop("active_features")
     legacy.pop("feature_activity")
     import json
+
     path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
 
     restored = JsonlRunLedger(path).history()[0]

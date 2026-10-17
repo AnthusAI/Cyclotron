@@ -1,4 +1,5 @@
 """Text-free events emitted while a reusable flywheel is measuring a round."""
+
 from __future__ import annotations
 
 import json
@@ -7,11 +8,19 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-_EVENT_TYPES = frozenset({
-    "round-started", "trial-started", "decision-reused", "decision-requested",
-    "decision-completed", "decision-failed", "trial-completed", "trial-incomplete",
-    "round-completed",
-})
+_EVENT_TYPES = frozenset(
+    {
+        "round-started",
+        "trial-started",
+        "decision-reused",
+        "decision-requested",
+        "decision-completed",
+        "decision-failed",
+        "trial-completed",
+        "trial-incomplete",
+        "round-completed",
+    }
+)
 
 
 def _fingerprint(value: object) -> str:

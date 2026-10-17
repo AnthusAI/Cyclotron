@@ -6,6 +6,7 @@ outside the learner.  It never writes a label, item ID, text, or per-item score
 into the artifact, so the result is safe for the marketing workspace but cannot
 be used as feedback by a live run.
 """
+
 import argparse
 import hashlib
 import json
@@ -41,10 +42,16 @@ def predictions(database, labels):
         identifier = event["target_id"]
         if identifier not in labels:
             raise ValueError("prediction does not map to the frozen reference")
-        found.append({"cycle_number": event["cycle_number"], "actual": labels[identifier],
-                      "final_label": event["label"], "final_probabilities": event["probabilities"],
-                      "raw_label": event["decision_model_label"],
-                      "raw_probabilities": event["decision_model_probabilities"]})
+        found.append(
+            {
+                "cycle_number": event["cycle_number"],
+                "actual": labels[identifier],
+                "final_label": event["label"],
+                "final_probabilities": event["probabilities"],
+                "raw_label": event["decision_model_label"],
+                "raw_probabilities": event["decision_model_probabilities"],
+            }
+        )
     found.sort(key=lambda row: row["cycle_number"])
     if len({row["cycle_number"] for row in found}) != len(found):
         raise ValueError("more than one immutable prediction was recorded for a completed cycle")
@@ -68,22 +75,40 @@ def summary(rows, *, label_key, probability_key):
         brier += sum((probabilities[label] - float(label == row["actual"])) ** 2 for label in LABELS)
         confidence = probabilities[row[label_key]]
         bins[min(9, int(confidence * 10))].append(float(row[label_key] == row["actual"]))
-    ece = sum((len(values) / len(rows)) * abs(sum(values) / len(values) - (index + .5) / 10)
-              for index, values in enumerate(bins) if values)
-    return {"count": len(rows), "accuracy": correct / len(rows), "brier": brier / len(rows), "ece": ece,
-            "actual_label_counts": dict(sorted(actual_counts.items())),
-            "predicted_label_counts": dict(sorted(predicted_counts.items()))}
+    ece = sum(
+        (len(values) / len(rows)) * abs(sum(values) / len(values) - (index + 0.5) / 10)
+        for index, values in enumerate(bins)
+        if values
+    )
+    return {
+        "count": len(rows),
+        "accuracy": correct / len(rows),
+        "brier": brier / len(rows),
+        "ece": ece,
+        "actual_label_counts": dict(sorted(actual_counts.items())),
+        "predicted_label_counts": dict(sorted(predicted_counts.items())),
+    }
 
 
 def temporal(rows):
     result = {"completed_predictions": len(rows)}
     for window in WINDOWS:
-        result[f"first_{window}"] = (None if len(rows) < window else {
-            "raw_decision": summary(rows[:window], label_key="raw_label", probability_key="raw_probabilities"),
-            "final_output": summary(rows[:window], label_key="final_label", probability_key="final_probabilities")})
-        result[f"last_{window}"] = (None if len(rows) < window else {
-            "raw_decision": summary(rows[-window:], label_key="raw_label", probability_key="raw_probabilities"),
-            "final_output": summary(rows[-window:], label_key="final_label", probability_key="final_probabilities")})
+        result[f"first_{window}"] = (
+            None
+            if len(rows) < window
+            else {
+                "raw_decision": summary(rows[:window], label_key="raw_label", probability_key="raw_probabilities"),
+                "final_output": summary(rows[:window], label_key="final_label", probability_key="final_probabilities"),
+            }
+        )
+        result[f"last_{window}"] = (
+            None
+            if len(rows) < window
+            else {
+                "raw_decision": summary(rows[-window:], label_key="raw_label", probability_key="raw_probabilities"),
+                "final_output": summary(rows[-window:], label_key="final_label", probability_key="final_probabilities"),
+            }
+        )
     return result
 
 
@@ -97,11 +122,11 @@ def main(argv=None):
     if sha256(args.operational_corpus) != args.operational_sha256:
         raise ValueError("operational corpus hash mismatch")
     labels = frozen_labels(args.operational_corpus)
-    protocol_path=args.study_output / "protocol.json"
+    protocol_path = args.study_output / "protocol.json"
     if protocol_path.exists():
-        modes_to_export=tuple(json.loads(protocol_path.read_text()).get("modes", ()))
+        modes_to_export = tuple(json.loads(protocol_path.read_text()).get("modes", ()))
     else:
-        modes_to_export=tuple(path.name for path in args.study_output.iterdir() if path.is_dir())
+        modes_to_export = tuple(path.name for path in args.study_output.iterdir() if path.is_dir())
     if not modes_to_export:
         raise ValueError("study output has no declared scenario modes")
     modes = {}
@@ -110,20 +135,30 @@ def main(argv=None):
         if database.exists():
             modes[mode] = temporal(predictions(database, labels))
         else:
-            modes[mode] = {"completed_predictions": 0, "first_100": None, "last_100": None,
-                           "first_200": None, "last_200": None}
+            modes[mode] = {"completed_predictions": 0, "first_100": None, "last_100": None, "first_200": None, "last_200": None}
     artifact = {
         "artifact_type": "editorial-prequential-evaluator-only-aggregate",
         "version": 1,
-        "sanitization": {"contains_item_ids": False, "contains_item_text": False,
-                           "contains_individual_labels": False, "contains_individual_probabilities": False},
+        "sanitization": {
+            "contains_item_ids": False,
+            "contains_item_text": False,
+            "contains_individual_labels": False,
+            "contains_individual_probabilities": False,
+        },
         "evaluator_firewall": "The frozen reference labels are joined only by this offline exporter; no label is emitted to the learner or included in this aggregate.",
-        "source_mapping": {"reference": {"sha256": args.operational_sha256, "join_key": "reference.id = prediction.target_id"},
-                           "prediction": {"database": "<study-output>/<mode>/runtime.sqlite3",
-                                          "event_kind": "prediction", "order": "cycle_number", "fields": {
-                                              "raw_decision": ["decision_model_label", "decision_model_probabilities"],
-                                              "final_output": ["label", "probabilities"]}},
-                           "eligibility": "only predictions in cycles with a durable cycle-completed event"},
+        "source_mapping": {
+            "reference": {"sha256": args.operational_sha256, "join_key": "reference.id = prediction.target_id"},
+            "prediction": {
+                "database": "<study-output>/<mode>/runtime.sqlite3",
+                "event_kind": "prediction",
+                "order": "cycle_number",
+                "fields": {
+                    "raw_decision": ["decision_model_label", "decision_model_probabilities"],
+                    "final_output": ["label", "probabilities"],
+                },
+            },
+            "eligibility": "only predictions in cycles with a durable cycle-completed event",
+        },
         "modes": modes,
     }
     output = args.output or args.study_output / "evaluator_temporal_aggregates.json"

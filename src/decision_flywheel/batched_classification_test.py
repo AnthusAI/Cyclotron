@@ -1,4 +1,5 @@
 """Independent classifiers share transport but not rubric or feature identities."""
+
 import asyncio
 from types import SimpleNamespace
 
@@ -10,80 +11,155 @@ from .models import DecisionTask, Item, LabeledItem
 
 
 def test_two_classifiers_and_their_features_use_one_request_with_scoped_context():
-    yes = DecisionTask('library',('include','exclude'),'Include it?')
-    topic = DecisionTask('topic',('science','sport','business'),'Choose its topic')
-    configurations = {'library':ClassifierConfig(yes,rubric='Memory systems',example_ids=('example',),
-        tasks=(DecisionTask('memory',('yes','no'),'About memory?'),)), 'topic':ClassifierConfig(topic,rubric='Choose the primary topic')}
-    training = {'library':[LabeledItem(Item('example',{'text':'Memory paper'}),'include')], 'topic':[]}
+    yes = DecisionTask("library", ("include", "exclude"), "Include it?")
+    topic = DecisionTask("topic", ("science", "sport", "business"), "Choose its topic")
+    configurations = {
+        "library": ClassifierConfig(
+            yes,
+            rubric="Memory systems",
+            example_ids=("example",),
+            tasks=(DecisionTask("memory", ("yes", "no"), "About memory?"),),
+        ),
+        "topic": ClassifierConfig(topic, rubric="Choose the primary topic"),
+    }
+    training = {"library": [LabeledItem(Item("example", {"text": "Memory paper"}), "include")], "topic": []}
+
     class Client:
         calls = 0
+
         def system_one(self, *, state, questions):
-            self.calls+=1;self.state=state;self.questions=questions
-            return SimpleNamespace(answers={key:{'choice':next(iter(q['criteria'])), 'probabilities':{label:1/len(q['criteria']) for label in q['criteria']}} for key,q in questions.items()},model='fake',usage={'input_tokens':10})
-    client=Client(); events=[]
-    result=asyncio.run(JevAdapter(client).classify_many(configurations,Item('target',{'text':'Target paper'}),training,event_sink=events.append))
-    assert client.calls == 1 and len(client.questions)==3
-    assert 'rubric' not in client.state['classifiers']['library']
-    crit=[q['criteria'] for q in client.questions.values()]
-    assert {'include':'Memory systems','exclude':None} in crit and {'science':'Choose the primary topic','sport':None,'business':None} in crit
-    assert client.state['classifiers']['topic']['examples']==[]
-    assert set(result.answers)=={'library','topic'}
-    assert set(result.answers['library'])=={'decision','memory'}
-    assert result.usage=={'input_tokens':10}
+            self.calls += 1
+            self.state = state
+            self.questions = questions
+            return SimpleNamespace(
+                answers={
+                    key: {
+                        "choice": next(iter(q["criteria"])),
+                        "probabilities": {label: 1 / len(q["criteria"]) for label in q["criteria"]},
+                    }
+                    for key, q in questions.items()
+                },
+                model="fake",
+                usage={"input_tokens": 10},
+            )
+
+    client = Client()
+    events = []
+    result = asyncio.run(
+        JevAdapter(client).classify_many(
+            configurations, Item("target", {"text": "Target paper"}), training, event_sink=events.append
+        )
+    )
+    assert client.calls == 1 and len(client.questions) == 3
+    assert "rubric" not in client.state["classifiers"]["library"]
+    crit = [q["criteria"] for q in client.questions.values()]
+    assert {"include": "Memory systems", "exclude": None} in crit and {
+        "science": "Choose the primary topic",
+        "sport": None,
+        "business": None,
+    } in crit
+    assert client.state["classifiers"]["topic"]["examples"] == []
+    assert set(result.answers) == {"library", "topic"}
+    assert set(result.answers["library"]) == {"decision", "memory"}
+    assert result.usage == {"input_tokens": 10}
     assert all(answer.usage is None for group in result.answers.values() for answer in group.values())
-    assert events[0]['state']==client.state and events[0]['questions']==client.questions
-    assert '.rubric' not in next(iter(client.questions.values()))['instructions']
+    assert events[0]["state"] == client.state and events[0]["questions"] == client.questions
+    assert ".rubric" not in next(iter(client.questions.values()))["instructions"]
 
 
 def test_oversized_batches_and_target_leakage_fail_before_a_model_call():
     class Client:
-        def system_one(self,**kwargs): raise AssertionError('invalid batch must never call a model')
-    task=DecisionTask('main',('yes','no'),'Choose')
-    config=ClassifierConfig(task,rubric='x'*100)
-    with pytest.raises(ValueError,match='budget'):
-        asyncio.run(JevAdapter(Client()).classify_many({'a':config},Item('target',{'text':'Target'}),{'a':[]},max_request_bytes=10))
+        def system_one(self, **kwargs):
+            raise AssertionError("invalid batch must never call a model")
+
+    task = DecisionTask("main", ("yes", "no"), "Choose")
+    config = ClassifierConfig(task, rubric="x" * 100)
+    with pytest.raises(ValueError, match="budget"):
+        asyncio.run(
+            JevAdapter(Client()).classify_many({"a": config}, Item("target", {"text": "Target"}), {"a": []}, max_request_bytes=10)
+        )
     from .batched_classification import batch_request
-    request,_=batch_request({'a':ClassifierConfig(task,example_ids=('target',))},Item('target',{'text':'Target'}),
-                           {'a':[LabeledItem(Item('target',{'text':'Target'}),'yes')]})
-    assert request['state']['classifiers']['a']['examples']==[]
+
+    request, _ = batch_request(
+        {"a": ClassifierConfig(task, example_ids=("target",))},
+        Item("target", {"text": "Target"}),
+        {"a": [LabeledItem(Item("target", {"text": "Target"}), "yes")]},
+    )
+    assert request["state"]["classifiers"]["a"]["examples"] == []
 
 
 def test_a_supporting_question_two_classifiers_ask_is_asked_once_and_answers_both():
-    shared = DecisionTask('memory',('yes','no'),'About memory?')
-    configurations = {'library':ClassifierConfig(DecisionTask('library',('include','exclude'),'Include it?'),tasks=(shared,)),
-                      'archive':ClassifierConfig(DecisionTask('archive',('keep','drop'),'Keep it?'),tasks=(shared,))}
+    shared = DecisionTask("memory", ("yes", "no"), "About memory?")
+    configurations = {
+        "library": ClassifierConfig(DecisionTask("library", ("include", "exclude"), "Include it?"), tasks=(shared,)),
+        "archive": ClassifierConfig(DecisionTask("archive", ("keep", "drop"), "Keep it?"), tasks=(shared,)),
+    }
+
     class Client:
         def system_one(self, *, state, questions):
-            self.questions=questions
-            return SimpleNamespace(answers={key:{'choice':next(iter(q['criteria'])),'probabilities':{label:1/len(q['criteria']) for label in q['criteria']}} for key,q in questions.items()},model='fake',usage={'input_tokens':10})
-    client=Client(); events=[]
-    result=asyncio.run(JevAdapter(client).classify_many(configurations,Item('target',{'text':'Target'}),{'library':[],'archive':[]},event_sink=events.append,share_supporting_questions=True))
-    assert len(client.questions)==3
-    memory=[key for key,q in client.questions.items() if q['instructions'].startswith('About memory?')]
-    assert len(memory)==1 and 'shared by classifiers ["library", "archive"]' in client.questions[memory[0]]['instructions']
-    assert result.answers['library']['memory'] == result.answers['archive']['memory']
-    assert events[0]['question_bindings'][memory[0]]['owners']==[{'classifier_id':'library','question':'memory'},
-                                                                {'classifier_id':'archive','question':'memory'}]
+            self.questions = questions
+            return SimpleNamespace(
+                answers={
+                    key: {
+                        "choice": next(iter(q["criteria"])),
+                        "probabilities": {label: 1 / len(q["criteria"]) for label in q["criteria"]},
+                    }
+                    for key, q in questions.items()
+                },
+                model="fake",
+                usage={"input_tokens": 10},
+            )
+
+    client = Client()
+    events = []
+    result = asyncio.run(
+        JevAdapter(client).classify_many(
+            configurations,
+            Item("target", {"text": "Target"}),
+            {"library": [], "archive": []},
+            event_sink=events.append,
+            share_supporting_questions=True,
+        )
+    )
+    assert len(client.questions) == 3
+    memory = [key for key, q in client.questions.items() if q["instructions"].startswith("About memory?")]
+    assert len(memory) == 1 and 'shared by classifiers ["library", "archive"]' in client.questions[memory[0]]["instructions"]
+    assert result.answers["library"]["memory"] == result.answers["archive"]["memory"]
+    assert events[0]["question_bindings"][memory[0]]["owners"] == [
+        {"classifier_id": "library", "question": "memory"},
+        {"classifier_id": "archive", "question": "memory"},
+    ]
 
 
 def test_questions_that_differ_in_name_instructions_or_labels_are_not_shared_and_keep_their_scope():
     from .batched_classification import batch_request
-    main = DecisionTask('main',('yes','no'),'Choose')
-    variants = [DecisionTask('memory',('yes','no'),'About memory?'), DecisionTask('memory2',('yes','no'),'About memory?'),
-                DecisionTask('memory',('yes','no'),'Mentions memory?'), DecisionTask('memory',('yes','no','unsure'),'About memory?')]
+
+    main = DecisionTask("main", ("yes", "no"), "Choose")
+    variants = [
+        DecisionTask("memory", ("yes", "no"), "About memory?"),
+        DecisionTask("memory2", ("yes", "no"), "About memory?"),
+        DecisionTask("memory", ("yes", "no"), "Mentions memory?"),
+        DecisionTask("memory", ("yes", "no", "unsure"), "About memory?"),
+    ]
     for other in variants[1:]:
-        request,identities=batch_request({'a':ClassifierConfig(main,tasks=(variants[0],)),'b':ClassifierConfig(main,tasks=(other,))},
-                                         Item('target',{'text':'Target'}),{'a':[],'b':[]})
-        assert 'owners' not in request and len(request['questions'])==4
-        assert all('state.classifiers[' in q['instructions'] for q in request['questions'].values())
+        request, identities = batch_request(
+            {"a": ClassifierConfig(main, tasks=(variants[0],)), "b": ClassifierConfig(main, tasks=(other,))},
+            Item("target", {"text": "Target"}),
+            {"a": [], "b": []},
+        )
+        assert "owners" not in request and len(request["questions"]) == 4
+        assert all("state.classifiers[" in q["instructions"] for q in request["questions"].values())
 
 
 def test_identical_questions_are_asked_separately_unless_sharing_is_requested():
     from .batched_classification import batch_request
-    shared = DecisionTask('memory',('yes','no'),'About memory?')
-    configs = {'a':ClassifierConfig(DecisionTask('a',('yes','no'),'A?'),tasks=(shared,)),
-               'b':ClassifierConfig(DecisionTask('b',('yes','no'),'B?'),tasks=(shared,))}
-    legacy,_ = batch_request(configs,Item('target',{'text':'Target'}),{'a':[],'b':[]})
-    assert 'owners' not in legacy and len(legacy['questions'])==4
-    sharing,_ = batch_request(configs,Item('target',{'text':'Target'}),{'a':[],'b':[]},share_questions=True)
-    assert len(sharing['questions'])==3
+
+    shared = DecisionTask("memory", ("yes", "no"), "About memory?")
+    configs = {
+        "a": ClassifierConfig(DecisionTask("a", ("yes", "no"), "A?"), tasks=(shared,)),
+        "b": ClassifierConfig(DecisionTask("b", ("yes", "no"), "B?"), tasks=(shared,)),
+    }
+    legacy, _ = batch_request(configs, Item("target", {"text": "Target"}), {"a": [], "b": []})
+    assert "owners" not in legacy and len(legacy["questions"]) == 4
+    sharing, _ = batch_request(configs, Item("target", {"text": "Target"}), {"a": [], "b": []}, share_questions=True)
+    assert len(sharing["questions"]) == 3

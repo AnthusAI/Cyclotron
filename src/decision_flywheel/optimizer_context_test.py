@@ -1,4 +1,5 @@
 """Human explanation context is persistent and cannot masquerade as clean evaluation."""
+
 import asyncio
 import json
 
@@ -10,12 +11,14 @@ from .optimizer_agent import OptimizerAgent, OptimizerReply
 
 def test_explanations_reach_the_next_stage_and_survive_restarts(tmp_path):
     prompts = []
+
     def complete(messages):
         prompts.append(json.loads(messages[-1]["content"]))
         return OptimizerReply('{"rationale":"Use explanations","rubric":"Knowledge management"}', "fake")
+
     path = tmp_path / "runtime.sqlite"
     wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), OptimizerAgent(complete))
-    kwargs = dict(protected=(), propensities={r.item.id: 1. for r in TRAIN})
+    kwargs = dict(protected=(), propensities={r.item.id: 1.0 for r in TRAIN})
     asyncio.run(wheel.optimize_stage("rubric", TRAIN, DEV, **kwargs))
     wheel.set_optimizer_context(("knowledge base management",), evaluation_context_exposed=True)
     result = asyncio.run(wheel.optimize_stage("rubric", TRAIN, DEV, **kwargs))

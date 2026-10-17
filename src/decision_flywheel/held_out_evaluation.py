@@ -6,6 +6,7 @@
 stores and wheels and keeps its sets and reports in the root store. The caller
 owns execution: ``evaluate`` runs inside the engine's execution scope.
 """
+
 from __future__ import annotations
 
 import json
@@ -84,8 +85,10 @@ class HeldOutEvaluation:
         classifier = self.only_or_named_classifier(classifier)
         engine._sync()
         values = engine._item_values()
-        candidates = [HeldOutItem(item_id, values[item_id], review.label, selection.propensity, selection.reason)
-                      for item_id, (review, selection) in self.active_audit_reviews(classifier).items()]
+        candidates = [
+            HeldOutItem(item_id, values[item_id], review.label, selection.propensity, selection.reason)
+            for item_id, (review, selection) in self.active_audit_reviews(classifier).items()
+        ]
         held_out_set = HeldOutSet.freeze(engine.definition.id, classifier, candidates)
         labels = engine.specs[classifier].task.labels
         existing = self.stored_set(classifier, held_out_set.set_id)
@@ -93,8 +96,7 @@ class HeldOutEvaluation:
             return HeldOutSet.from_json(existing).summary_json(labels)
         set_ids = self.set_ids(classifier)
         with engine.root_storage.transaction():
-            engine.root_storage.put_meta(f"held_out_set:{classifier}:{held_out_set.set_id}",
-                                         _json(held_out_set.to_json()))
+            engine.root_storage.put_meta(f"held_out_set:{classifier}:{held_out_set.set_id}", _json(held_out_set.to_json()))
             engine.root_storage.put_meta(f"held_out_set_ids:{classifier}", _json([*set_ids, held_out_set.set_id]))
         return held_out_set.summary_json(labels)
 
@@ -102,8 +104,9 @@ class HeldOutEvaluation:
         """Summaries of the frozen held-out sets, oldest first. No model call."""
         classifier = self.only_or_named_classifier(classifier)
         labels = self.engine.specs[classifier].task.labels
-        return [HeldOutSet.from_json(self.stored_set(classifier, set_id)).summary_json(labels)
-                for set_id in self.set_ids(classifier)]
+        return [
+            HeldOutSet.from_json(self.stored_set(classifier, set_id)).summary_json(labels) for set_id in self.set_ids(classifier)
+        ]
 
     def reports(self, classifier: str | None = None) -> list[dict[str, Any]]:
         """The latest cyclotron-held-out-report/v1 documents, oldest first. No model call."""
@@ -124,8 +127,9 @@ class HeldOutEvaluation:
             raise ValueError(f"unknown held-out set {set_id}")
         return HeldOutSet.from_json(self.stored_set(classifier, set_id or set_ids[-1]))
 
-    async def evaluate(self, classifier: str | None = None, *, set_id: str | None = None,
-                       minimum_per_label: int | None = None) -> dict[str, Any]:
+    async def evaluate(
+        self, classifier: str | None = None, *, set_id: str | None = None, minimum_per_label: int | None = None
+    ) -> dict[str, Any]:
         """Score the store's first classifier and its active one on a frozen held-out set.
 
         Makes at most ``request_bound()`` decision-model requests; repeating an
@@ -143,13 +147,17 @@ class HeldOutEvaluation:
         scored_items = [row for row in held_out_set.items if row.item_id not in excluded_item_ids]
         current_reviews = self.active_audit_reviews(classifier)
         labels_changed_since_frozen = sum(
-            1 for row in held_out_set.items
-            if row.item_id in current_reviews and current_reviews[row.item_id][0].label != row.label)
+            1
+            for row in held_out_set.items
+            if row.item_id in current_reviews and current_reviews[row.item_id][0].label != row.label
+        )
         request_bound = 2 * len(scored_items)
         remaining_requests = shared.max_requests - shared.requests
         if request_bound > remaining_requests:
-            raise ValueError(f"this evaluation may need {request_bound} decision-model requests and "
-                             f"{remaining_requests} remain in this open; reopen with a larger max_requests")
+            raise ValueError(
+                f"this evaluation may need {request_bound} decision-model requests and "
+                f"{remaining_requests} remain in this open; reopen with a larger max_requests"
+            )
         before_configs = {cid: wheel.initial for cid, wheel in wheels.items()}
         before_training = {cid: tuple(engine.priming_examples.get(cid, ())) for cid in wheels}
         after_configs = {cid: wheel.active.config for cid, wheel in wheels.items()}
@@ -157,7 +165,8 @@ class HeldOutEvaluation:
         shared.bind_context(after_configs, after_training)
         active = wheels[classifier].active
         if active.head and active.head.provenance.source_model_provenance != wheels[classifier].model_context(
-                active.config, after_training[classifier]):
+            active.config, after_training[classifier]
+        ):
             raise ValueError("the ML model was fit on an older shared context; decide an item to refit it first")
         clock = datetime.fromisoformat(held_out_set.frozen_at)
         engine._batches = []
@@ -165,35 +174,48 @@ class HeldOutEvaluation:
         predictions = {}
         try:
             for endpoint_name, configs, training, head in (
-                    ("before", before_configs, before_training, None),
-                    ("after", after_configs, after_training, active.head)):
+                ("before", before_configs, before_training, None),
+                ("after", after_configs, after_training, active.head),
+            ):
                 predictions[endpoint_name] = {}
                 for row in scored_items:
                     payload, _ = await shared.prepare(configs, Item(row.item_id, row.values), training, now=clock)
                     prepared_requests += 1
                     raw = payload["result"]
-                    answers = ClassifiedAnswers({name: DecisionResult(**answer) for name, answer in
-                                                 raw["answers"][classifier].items()}, raw["model"], None,
-                                                raw["latency_ms"])
+                    answers = ClassifiedAnswers(
+                        {name: DecisionResult(**answer) for name, answer in raw["answers"][classifier].items()},
+                        raw["model"],
+                        None,
+                        raw["latency_ms"],
+                    )
                     predictions[endpoint_name][row.item_id] = (
-                        head.predict(DecisionFlywheel._features(configs[classifier], answers)) if head
-                        else answers.answers["decision"].label)
+                        head.predict(DecisionFlywheel._features(configs[classifier], answers))
+                        if head
+                        else answers.answers["decision"].label
+                    )
         finally:
             paid_batches, engine._batches = engine._batches, []
             shared.bind_context(after_configs, after_training)
         spec = engine.specs[classifier]
         versions = engine.versions[classifier]
         report = build_report(
-            held_out_set, labels=spec.task.labels, positive_label=spec.positive_label,
-            before=Endpoint(1, 0, FittedClassifier(wheels[classifier].initial).fingerprint,
-                            BEFORE_DESCRIPTION, predictions["before"]),
-            after=Endpoint(versions.version, versions.refits, active.fingerprint, AFTER_DESCRIPTION,
-                           predictions["after"]),
-            excluded_item_ids=excluded_item_ids, labels_changed_since_frozen=labels_changed_since_frozen,
-            cost={"newRequests": len(paid_batches), "cachedRequests": prepared_requests - len(paid_batches),
-                  "promptTokens": sum(batch[0] for batch in paid_batches),
-                  "outputTokens": sum(batch[2] for batch in paid_batches)},
-            minimum_per_label=DEFAULT_MINIMUM_PER_LABEL if minimum_per_label is None else minimum_per_label)
+            held_out_set,
+            labels=spec.task.labels,
+            positive_label=spec.positive_label,
+            before=Endpoint(
+                1, 0, FittedClassifier(wheels[classifier].initial).fingerprint, BEFORE_DESCRIPTION, predictions["before"]
+            ),
+            after=Endpoint(versions.version, versions.refits, active.fingerprint, AFTER_DESCRIPTION, predictions["after"]),
+            excluded_item_ids=excluded_item_ids,
+            labels_changed_since_frozen=labels_changed_since_frozen,
+            cost={
+                "newRequests": len(paid_batches),
+                "cachedRequests": prepared_requests - len(paid_batches),
+                "promptTokens": sum(batch[0] for batch in paid_batches),
+                "outputTokens": sum(batch[2] for batch in paid_batches),
+            },
+            minimum_per_label=DEFAULT_MINIMUM_PER_LABEL if minimum_per_label is None else minimum_per_label,
+        )
         kept_reports = [*self.reports(classifier), report][-REPORTS_KEPT_PER_CLASSIFIER:]
         with engine.root_storage.transaction():
             engine.root_storage.put_meta(f"held_out_reports:{classifier}", _json(kept_reports))

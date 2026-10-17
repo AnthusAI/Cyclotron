@@ -1,4 +1,5 @@
 """A held-out set is kept as its own record in the root store, in either storage adapter."""
+
 import json
 
 from .embedded_cyclotron import Cyclotron
@@ -21,9 +22,13 @@ def test_each_frozen_set_is_stored_as_its_own_record_with_an_index_in_the_local_
 def test_each_frozen_set_is_stored_as_its_own_record_with_an_index_in_the_cloud_store():
     from .s3_embedded_storage import S3CyclotronStores
     from .s3_journal_test import ConditionalS3, journal
+
     client = ConditionalS3()
-    stores = S3CyclotronStores(journal(client, name="held-out-root"), max_records=10000,
-                               journal_for=lambda domain, name: journal(client, name=domain + "-" + name))
+    stores = S3CyclotronStores(
+        journal(client, name="held-out-root"),
+        max_records=10000,
+        journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
+    )
     with Cyclotron.open(None, learning_definition(), RubricReadingModel(), storage=stores, max_requests=500) as cyclotron:
         decide_and_review(cyclotron, 3, audit_only=True)
         frozen = cyclotron.freeze_held_out_set()

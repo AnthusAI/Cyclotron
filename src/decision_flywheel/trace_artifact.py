@@ -1,4 +1,5 @@
 """Offline, self-contained playback of private recorded flywheel events."""
+
 import argparse
 import json
 import sqlite3
@@ -11,117 +12,147 @@ from .trace_timeline import timeline_data
 
 
 def read_trace(database):
-    uri = Path(database).resolve().as_uri() + '?mode=ro'
+    uri = Path(database).resolve().as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
-        return [{**json.loads(payload), 'event_id': number}
-                for number, payload in db.execute('SELECT id,payload FROM runtime_events ORDER BY id')]
+        return [
+            {**json.loads(payload), "event_id": number}
+            for number, payload in db.execute("SELECT id,payload FROM runtime_events ORDER BY id")
+        ]
 
 
 def render_trace(events, reviewer_history=(), *, class_config=None, run_comparison=None, embedded=False):
     if class_config is None and run_comparison is not None:
-        class_config = run_comparison.get('class_config')
+        class_config = run_comparison.get("class_config")
+
     def encode(value):
         data = json.dumps(value, ensure_ascii=True, allow_nan=False)
-        return data.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
-    vendor = Path(__file__).parent / 'vendor' / 'vis-timeline'
-    viewer = Path(__file__).parent / 'vendor' / 'trace-ui'
-    javascript = (vendor / 'standalone/umd/vis-timeline-graph2d.min.js').read_text()
-    css = (vendor / 'styles/vis-timeline-graph2d.min.css').read_text()
-    projected = step_projection(events, reviewer_history,
-                                [item for item in timeline_data(events)['items'] if item['group']!='configuration-count'])
+        return data.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+    vendor = Path(__file__).parent / "vendor" / "vis-timeline"
+    viewer = Path(__file__).parent / "vendor" / "trace-ui"
+    javascript = (vendor / "standalone/umd/vis-timeline-graph2d.min.js").read_text()
+    css = (vendor / "styles/vis-timeline-graph2d.min.css").read_text()
+    projected = step_projection(
+        events, reviewer_history, [item for item in timeline_data(events)["items"] if item["group"] != "configuration-count"]
+    )
     labels = []
     for event in events:
-        labels.extend(event.get('classifier_snapshot',{}).get('config',{}).get('task',{}).get('labels',[]))
-        if event.get('kind')=='prediction': labels.append(event['label'])
-        if event.get('kind')=='human-feedback' and event.get('feedback',{}).get('final_answer_value') is not None:
-            labels.append(event['feedback']['final_answer_value'])
+        labels.extend(event.get("classifier_snapshot", {}).get("config", {}).get("task", {}).get("labels", []))
+        if event.get("kind") == "prediction":
+            labels.append(event["label"])
+        if event.get("kind") == "human-feedback" and event.get("feedback", {}).get("final_answer_value") is not None:
+            labels.append(event["feedback"]["final_answer_value"])
     for source in reviewer_history:
-        label=source['record'].get('label') or source['record'].get('predicted_label')
-        if label is not None: labels.append(label)
-    classes=class_configuration(labels,class_config)
-    metric_view={}
-    for index,event in enumerate(events):
-        result=event.get('result') or event
-        if isinstance(result,dict) and ('incumbent' in result or 'candidate' in result):
-            metric_view[str(index)]={key:positive_metrics(result.get(key) or {},classes) for key in ('incumbent','candidate')}
-    return TEMPLATE.replace('__WORKSPACE_OPTIONS__',encode({'embedded':embedded})).replace('__RECORDING__', encode(events)).replace(
-        '__CLASS_CONFIG__',encode(classes)).replace('__RUN_COMPARISON__',encode(run_comparison)).replace('__METRIC_VIEW__',encode(metric_view)).replace('__METRIC_SERIES__',encode(running_metric_series(events,classes))).replace(
-        '__PRESENTATION__', encode(recover_configurations(events))).replace(
-        '__REVIEW_HISTORY__', encode(reviewer_history)).replace('__EXCHANGES__', encode(exchange_indices(events))).replace('__ROUNDS__', encode(round_details(events))).replace(
-        '__TIMELINE_DATA__', encode(timeline_data(events))).replace('__STEP_PROJECTION__', encode(projected)).replace(
-        '__TIMELINE_JS__', javascript.replace('</script', '<\\/script')).replace('__TIMELINE_CSS__', css).replace(
-        '__VENDOR_LICENSE__', encode((vendor / 'LICENSE.MIT.txt').read_text() + '\n\n' +
-        (viewer / 'THIRD_PARTY_NOTICES.txt').read_text())).replace(
-        '__VIEWER_CSS__', (viewer / 'viewer.css').read_text()).replace(
-        '__VIEWER_JS__', (viewer / 'viewer.js').read_text().replace('</script', '<\\/script'))
+        label = source["record"].get("label") or source["record"].get("predicted_label")
+        if label is not None:
+            labels.append(label)
+    classes = class_configuration(labels, class_config)
+    metric_view = {}
+    for index, event in enumerate(events):
+        result = event.get("result") or event
+        if isinstance(result, dict) and ("incumbent" in result or "candidate" in result):
+            metric_view[str(index)] = {
+                key: positive_metrics(result.get(key) or {}, classes) for key in ("incumbent", "candidate")
+            }
+    return (
+        TEMPLATE.replace("__WORKSPACE_OPTIONS__", encode({"embedded": embedded}))
+        .replace("__RECORDING__", encode(events))
+        .replace("__CLASS_CONFIG__", encode(classes))
+        .replace("__RUN_COMPARISON__", encode(run_comparison))
+        .replace("__METRIC_VIEW__", encode(metric_view))
+        .replace("__METRIC_SERIES__", encode(running_metric_series(events, classes)))
+        .replace("__PRESENTATION__", encode(recover_configurations(events)))
+        .replace("__REVIEW_HISTORY__", encode(reviewer_history))
+        .replace("__EXCHANGES__", encode(exchange_indices(events)))
+        .replace("__ROUNDS__", encode(round_details(events)))
+        .replace("__TIMELINE_DATA__", encode(timeline_data(events)))
+        .replace("__STEP_PROJECTION__", encode(projected))
+        .replace("__TIMELINE_JS__", javascript.replace("</script", "<\\/script"))
+        .replace("__TIMELINE_CSS__", css)
+        .replace(
+            "__VENDOR_LICENSE__",
+            encode((vendor / "LICENSE.MIT.txt").read_text() + "\n\n" + (viewer / "THIRD_PARTY_NOTICES.txt").read_text()),
+        )
+        .replace("__VIEWER_CSS__", (viewer / "viewer.css").read_text())
+        .replace("__VIEWER_JS__", (viewer / "viewer.js").read_text().replace("</script", "<\\/script"))
+    )
 
 
 def exchange_indices(events):
-    latest = dict.fromkeys(('optimizer_request', 'optimizer_response', 'decision_request', 'decision_response'))
+    latest = dict.fromkeys(("optimizer_request", "optimizer_response", "decision_request", "decision_response"))
     positions = []
     for index, event in enumerate(events):
-        name = event.get('kind', '').replace('-', '_')
+        name = event.get("kind", "").replace("-", "_")
         if name in latest:
             latest[name] = index
-            if name.endswith('_request'):
-                latest[name.replace('_request', '_response')] = None
+            if name.endswith("_request"):
+                latest[name.replace("_request", "_response")] = None
         positions.append(dict(latest))
     return positions
 
 
 def exchanges_at(events, position):
-    return {name: events[index] if index is not None else None
-            for name, index in exchange_indices(events)[position].items()}
+    return {name: events[index] if index is not None else None for name, index in exchange_indices(events)[position].items()}
 
 
 def recover_configurations(events):
     """Recover decision context only from the same round's recorded request."""
     result = {}
-    boundaries = {'step-started', 'round-started', 'optimization-stage-started'}
+    boundaries = {"step-started", "round-started", "optimization-stage-started"}
     for index, event in enumerate(events):
-        if event.get('classifier_snapshot') or event.get('kind') not in boundaries:
+        if event.get("classifier_snapshot") or event.get("kind") not in boundaries:
             continue
-        for candidate in events[index+1:]:
-            if candidate.get('kind') in {'step-started', 'round-started'}:
+        for candidate in events[index + 1 :]:
+            if candidate.get("kind") in {"step-started", "round-started"}:
                 break
-            if candidate.get('kind') != 'optimizer-request':
+            if candidate.get("kind") != "optimizer-request":
                 continue
             try:
-                briefing = json.loads(candidate['messages'][-1]['content'])
-                current = briefing['current']
+                briefing = json.loads(candidate["messages"][-1]["content"])
+                current = briefing["current"]
             except (KeyError, IndexError, TypeError, ValueError):
                 break
             result[index] = {
-                'configuration': current, 'main_task': briefing.get('task'),
-                'source_event_id': candidate.get('event_id'),
-                'provenance': 'Decision context recovered from this round’s actual optimizer request',
-                'learned_head': 'Not present in this request; not reconstructed'}
+                "configuration": current,
+                "main_task": briefing.get("task"),
+                "source_event_id": candidate.get("event_id"),
+                "provenance": "Decision context recovered from this round’s actual optimizer request",
+                "learned_head": "Not present in this request; not reconstructed",
+            }
             break
     return result
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--database', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--reviews', type=Path, help='optional original reviewer source history, read-only')
-    parser.add_argument('--class-config', type=Path, help='JSON ordered class labels and positive/negative/neutral roles')
-    parser.add_argument('--run-comparison', type=Path, help='JSON matched endpoint evaluation; never inferred from running scores')
+    parser.add_argument("--database", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reviews", type=Path, help="optional original reviewer source history, read-only")
+    parser.add_argument("--class-config", type=Path, help="JSON ordered class labels and positive/negative/neutral roles")
+    parser.add_argument(
+        "--run-comparison", type=Path, help="JSON matched endpoint evaluation; never inferred from running scores"
+    )
     args = parser.parse_args(argv)
     if args.output.exists():
-        parser.error('choose a new output path; recorded artifacts are not overwritten')
-    if args.output.suffix != '.html':
-        parser.error('output must be an HTML file')
+        parser.error("choose a new output path; recorded artifacts are not overwritten")
+    if args.output.suffix != ".html":
+        parser.error("output must be an HTML file")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open('x') as stream:
+    with args.output.open("x") as stream:
         from .trace_review_history import read_review_history
-        stream.write(render_trace(read_trace(args.database), read_review_history(args.reviews) if args.reviews else (),
-            class_config=json.loads(args.class_config.read_text()) if args.class_config else None,
-            run_comparison=json.loads(args.run_comparison.read_text()) if args.run_comparison else None))
-    print(f'Private offline trace: {args.output.resolve()}')
+
+        stream.write(
+            render_trace(
+                read_trace(args.database),
+                read_review_history(args.reviews) if args.reviews else (),
+                class_config=json.loads(args.class_config.read_text()) if args.class_config else None,
+                run_comparison=json.loads(args.run_comparison.read_text()) if args.run_comparison else None,
+            )
+        )
+    print(f"Private offline trace: {args.output.resolve()}")
 
 
-TEMPLATE = r'''<!doctype html>
+TEMPLATE = r"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; connect-src 'none'">
 <title>Decision Flywheel — run explorer</title>
@@ -840,8 +871,8 @@ timeline.on('click',properties=>{
  goStep(preceding);
  timeline.setCustomTime(point,'playback');
 });
-</script></html>'''
+</script></html>"""
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

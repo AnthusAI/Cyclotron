@@ -29,20 +29,36 @@ class ScriptedModel:
 
 
 def _frozen_result():
-    return asyncio.run(search_context_policies(
-        TASK, POOL, DEVELOPMENT, ScriptedModel(), (TrialSpec(RandomBalanced(seed=5), 1),),
-        max_model_calls=2, model_fingerprint="fake-model-v1",
-    ))
+    return asyncio.run(
+        search_context_policies(
+            TASK,
+            POOL,
+            DEVELOPMENT,
+            ScriptedModel(),
+            (TrialSpec(RandomBalanced(seed=5), 1),),
+            max_model_calls=2,
+            model_fingerprint="fake-model-v1",
+        )
+    )
 
 
 def test_a_fallback_artifact_names_accuracy_instead_of_mislabeling_it_as_brier():
-    result = asyncio.run(search_context_policies(
-        TASK, POOL, DEVELOPMENT, ScriptedModel(), (TrialSpec(RandomBalanced(seed=5), 1),),
-        max_model_calls=2, objective="brier", model_fingerprint="fake-model-v1"))
+    result = asyncio.run(
+        search_context_policies(
+            TASK,
+            POOL,
+            DEVELOPMENT,
+            ScriptedModel(),
+            (TrialSpec(RandomBalanced(seed=5), 1),),
+            max_model_calls=2,
+            objective="brier",
+            model_fingerprint="fake-model-v1",
+        )
+    )
     document = json.loads(create_artifact(TASK, POOL, "revision", result))
     assert document["development"]["objective_name"] == "accuracy"
-    assert document["development"]["objective"] == 1.
-    assert load_artifact(json.dumps(document), TASK, POOL, "revision").development_objective == 1.
+    assert document["development"]["objective"] == 1.0
+    assert load_artifact(json.dumps(document), TASK, POOL, "revision").development_objective == 1.0
 
 
 def test_a_frozen_winner_round_trips_without_text_and_reproduces_context_ids_for_a_new_target():
@@ -54,10 +70,18 @@ def test_a_frozen_winner_round_trips_without_text_and_reproduces_context_ids_for
 
     assert plan.example_ids == ("no-1", "yes-1")
     assert document["pool"]["items"] == [
-        {"id": "no-1", "input_hash": document["pool"]["items"][0]["input_hash"],
-         "context_hash": document["pool"]["items"][0]["context_hash"], "label": "no"},
-        {"id": "yes-1", "input_hash": document["pool"]["items"][1]["input_hash"],
-         "context_hash": document["pool"]["items"][1]["context_hash"], "label": "yes"},
+        {
+            "id": "no-1",
+            "input_hash": document["pool"]["items"][0]["input_hash"],
+            "context_hash": document["pool"]["items"][0]["context_hash"],
+            "label": "no",
+        },
+        {
+            "id": "yes-1",
+            "input_hash": document["pool"]["items"][1]["input_hash"],
+            "context_hash": document["pool"]["items"][1]["context_hash"],
+            "label": "yes",
+        },
     ]
     assert "demonstration" not in serialized
     assert "never-persist" not in serialized
@@ -67,8 +91,7 @@ def test_an_artifact_apply_uses_only_the_injected_model_and_reproduced_context()
     artifact = load_artifact(create_artifact(TASK, POOL, "r1", _frozen_result()), TASK, POOL, "r1")
     model = ScriptedModel()
 
-    result = asyncio.run(artifact.apply(TASK, Item("new-yes", {"text": "new target"}), model,
-                                        model_fingerprint="fake-model-v1"))
+    result = asyncio.run(artifact.apply(TASK, Item("new-yes", {"text": "new target"}), model, model_fingerprint="fake-model-v1"))
 
     assert result.label == "yes"
     assert model.calls == [("new-yes", ("no-1", "yes-1"))]
@@ -82,14 +105,15 @@ def test_artifact_apply_validates_a_generic_model_result_against_the_artifact_ta
     artifact = load_artifact(create_artifact(TASK, POOL, "r1", _frozen_result()), TASK, POOL, "r1")
 
     with pytest.raises(ValueError, match="not one of"):
-        asyncio.run(artifact.apply(TASK, Item("new", {"text": "new"}), InvalidModel(),
-                                   model_fingerprint="fake-model-v1"))
+        asyncio.run(artifact.apply(TASK, Item("new", {"text": "new"}), InvalidModel(), model_fingerprint="fake-model-v1"))
 
 
 def test_an_artifact_rejects_tampering_unknown_fields_and_incompatible_task_pool_or_revision():
     serialized = create_artifact(TASK, POOL, "r1", _frozen_result())
-    changed = json.loads(serialized); changed["model_fingerprint"] = "attacker"
-    extra = json.loads(serialized); extra["credential"] = "no"
+    changed = json.loads(serialized)
+    changed["model_fingerprint"] = "attacker"
+    extra = json.loads(serialized)
+    extra["credential"] = "no"
 
     for value in (json.dumps(changed), json.dumps(extra)):
         with pytest.raises(ArtifactValidationError):
@@ -104,11 +128,17 @@ def test_an_artifact_rejects_tampering_unknown_fields_and_incompatible_task_pool
 
 
 def test_only_a_fully_frozen_winner_can_be_persisted_not_a_provisional_best():
-    result = asyncio.run(search_context_policies(
-        TASK, POOL, DEVELOPMENT, ScriptedModel(),
-        (TrialSpec(RandomBalanced(seed=1), 1), TrialSpec(RandomBalanced(seed=2), 0)),
-        max_model_calls=2, model_fingerprint="fake-model-v1",
-    ))
+    result = asyncio.run(
+        search_context_policies(
+            TASK,
+            POOL,
+            DEVELOPMENT,
+            ScriptedModel(),
+            (TrialSpec(RandomBalanced(seed=1), 1), TrialSpec(RandomBalanced(seed=2), 0)),
+            max_model_calls=2,
+            model_fingerprint="fake-model-v1",
+        )
+    )
 
     assert result.provisional_best is not None and result.winner is None
     with pytest.raises(ArtifactValidationError, match="frozen winner"):
@@ -128,12 +158,15 @@ def test_artifact_identity_is_pool_order_invariant_but_rejects_policy_version_ch
         load_artifact(json.dumps(changed), TASK, POOL, "r1")
 
 
-@pytest.mark.parametrize("mutate", [
-    lambda document: document.update(artifact_version=True),
-    lambda document: document.update(artifact_hash="g" * 64),
-    lambda document: document.update(task_fingerprint=""),
-    lambda document: document["development"].update(objective=1.1),
-])
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda document: document.update(artifact_version=True),
+        lambda document: document.update(artifact_hash="g" * 64),
+        lambda document: document.update(task_fingerprint=""),
+        lambda document: document["development"].update(objective=1.1),
+    ],
+)
 def test_strict_artifacts_reject_malformed_versions_hashes_fingerprints_and_scores(mutate):
     document = json.loads(create_artifact(TASK, POOL, "r1", _frozen_result()))
     mutate(document)
@@ -169,10 +202,17 @@ def test_artifact_refuses_an_optimizer_winner_from_a_different_task_or_candidate
 
 @pytest.mark.parametrize("policy", [RandomBalanced(seed=5), PrototypeBalanced(), PerLabelLexicalRetrieval()])
 def test_every_supported_builtin_policy_round_trips_from_frozen_optimizer_provenance(policy):
-    result = asyncio.run(search_context_policies(
-        TASK, POOL, DEVELOPMENT, ScriptedModel(), (TrialSpec(policy, 1),),
-        max_model_calls=2, model_fingerprint="fake-model-v1",
-    ))
+    result = asyncio.run(
+        search_context_policies(
+            TASK,
+            POOL,
+            DEVELOPMENT,
+            ScriptedModel(),
+            (TrialSpec(policy, 1),),
+            max_model_calls=2,
+            model_fingerprint="fake-model-v1",
+        )
+    )
 
     artifact = load_artifact(create_artifact(TASK, POOL, "r1", result), TASK, POOL, "r1")
 
@@ -182,29 +222,69 @@ def test_every_supported_builtin_policy_round_trips_from_frozen_optimizer_proven
 def test_artifact_checksum_identity_changes_with_budget_seed_order_model_and_task():
     base = _frozen_result()
     variants = [
-        asyncio.run(search_context_policies(TASK, POOL, DEVELOPMENT, ScriptedModel(),
-                                            (TrialSpec(RandomBalanced(seed=5), 1,
-                                                       budget=ContextBudget(per_label=1, max_tokens=100)),),
-                                            max_model_calls=2, model_fingerprint="fake-model-v1")),
-        asyncio.run(search_context_policies(TASK, POOL, DEVELOPMENT, ScriptedModel(),
-                                            (TrialSpec(RandomBalanced(seed=8), 1),), max_model_calls=2,
-                                            model_fingerprint="fake-model-v1")),
-        asyncio.run(search_context_policies(TASK, POOL, DEVELOPMENT, ScriptedModel(),
-                                            (TrialSpec(RandomBalanced(seed=5), 1),), max_model_calls=2,
-                                            model_fingerprint="fake-model-v1", display_order="reversed", order_seed=9)),
-        asyncio.run(search_context_policies(TASK, POOL, DEVELOPMENT, ScriptedModel(),
-                                            (TrialSpec(RandomBalanced(seed=5), 1),),
-                                            max_model_calls=2, model_fingerprint="other-model")),
+        asyncio.run(
+            search_context_policies(
+                TASK,
+                POOL,
+                DEVELOPMENT,
+                ScriptedModel(),
+                (TrialSpec(RandomBalanced(seed=5), 1, budget=ContextBudget(per_label=1, max_tokens=100)),),
+                max_model_calls=2,
+                model_fingerprint="fake-model-v1",
+            )
+        ),
+        asyncio.run(
+            search_context_policies(
+                TASK,
+                POOL,
+                DEVELOPMENT,
+                ScriptedModel(),
+                (TrialSpec(RandomBalanced(seed=8), 1),),
+                max_model_calls=2,
+                model_fingerprint="fake-model-v1",
+            )
+        ),
+        asyncio.run(
+            search_context_policies(
+                TASK,
+                POOL,
+                DEVELOPMENT,
+                ScriptedModel(),
+                (TrialSpec(RandomBalanced(seed=5), 1),),
+                max_model_calls=2,
+                model_fingerprint="fake-model-v1",
+                display_order="reversed",
+                order_seed=9,
+            )
+        ),
+        asyncio.run(
+            search_context_policies(
+                TASK,
+                POOL,
+                DEVELOPMENT,
+                ScriptedModel(),
+                (TrialSpec(RandomBalanced(seed=5), 1),),
+                max_model_calls=2,
+                model_fingerprint="other-model",
+            )
+        ),
     ]
 
     fingerprints = {json.loads(create_artifact(TASK, POOL, "r1", base))["artifact_hash"]}
     fingerprints.update(json.loads(create_artifact(TASK, POOL, "r1", result))["artifact_hash"] for result in variants)
 
     other_task = DecisionTask("other", ("yes", "no"), "Classify only target.")
-    other_result = asyncio.run(search_context_policies(
-        other_task, POOL, DEVELOPMENT, ScriptedModel(), (TrialSpec(RandomBalanced(seed=5), 1),),
-        max_model_calls=2, model_fingerprint="fake-model-v1",
-    ))
+    other_result = asyncio.run(
+        search_context_policies(
+            other_task,
+            POOL,
+            DEVELOPMENT,
+            ScriptedModel(),
+            (TrialSpec(RandomBalanced(seed=5), 1),),
+            max_model_calls=2,
+            model_fingerprint="fake-model-v1",
+        )
+    )
     fingerprints.add(json.loads(create_artifact(other_task, POOL, "r1", other_result))["artifact_hash"])
 
     assert len(fingerprints) == 6
@@ -226,9 +306,18 @@ def test_a_fixed_example_list_winner_scored_by_brier_round_trips_and_keeps_its_r
             label = "yes" if target.id.endswith("yes") else "no"
             return DecisionResult(label, probabilities={label: 0.8, ("no" if label == "yes" else "yes"): 0.2})
 
-    result = asyncio.run(search_context_policies(
-        TASK, pool, DEVELOPMENT, ProbabilityModel(), (TrialSpec(fixed, 1),),
-        max_model_calls=2, model_fingerprint="fake-model-v1", objective="brier"))
+    result = asyncio.run(
+        search_context_policies(
+            TASK,
+            pool,
+            DEVELOPMENT,
+            ProbabilityModel(),
+            (TrialSpec(fixed, 1),),
+            max_model_calls=2,
+            model_fingerprint="fake-model-v1",
+            objective="brier",
+        )
+    )
     serialized = create_artifact(TASK, pool, "r1", result)
     artifact = load_artifact(serialized, TASK, pool, "r1")
 
@@ -247,9 +336,11 @@ def test_a_frozen_fixed_list_can_be_reused_as_the_next_round_incumbent_when_new_
         LabeledItem(Item("no-2", {"text": "no reserve demonstration"}), "no"),
     ]
     fixed = FixedExampleList.from_items(TASK, pool[:2], pool[2:])
-    result = asyncio.run(search_context_policies(
-        TASK, pool, DEVELOPMENT, ScriptedModel(), (TrialSpec(fixed, 1),),
-        max_model_calls=2, model_fingerprint="fake-model-v1"))
+    result = asyncio.run(
+        search_context_policies(
+            TASK, pool, DEVELOPMENT, ScriptedModel(), (TrialSpec(fixed, 1),), max_model_calls=2, model_fingerprint="fake-model-v1"
+        )
+    )
     serialized = create_artifact(TASK, pool, "r1", result)
     expanded = pool + [
         LabeledItem(Item("yes-3", {"text": "a later yes label"}), "yes"),
@@ -269,9 +360,11 @@ def test_a_reused_incumbent_refuses_when_a_prior_demonstration_was_undone_or_cha
         LabeledItem(Item("no-2", {"text": "no reserve demonstration"}), "no"),
     ]
     fixed = FixedExampleList.from_items(TASK, pool[:2], pool[2:])
-    result = asyncio.run(search_context_policies(
-        TASK, pool, DEVELOPMENT, ScriptedModel(), (TrialSpec(fixed, 1),),
-        max_model_calls=2, model_fingerprint="fake-model-v1"))
+    result = asyncio.run(
+        search_context_policies(
+            TASK, pool, DEVELOPMENT, ScriptedModel(), (TrialSpec(fixed, 1),), max_model_calls=2, model_fingerprint="fake-model-v1"
+        )
+    )
     serialized = create_artifact(TASK, pool, "r1", result)
 
     with pytest.raises(ArtifactValidationError, match="no longer matches"):

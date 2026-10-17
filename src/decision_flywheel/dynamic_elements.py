@@ -4,6 +4,7 @@ Dynamic context is intentionally explicit and narrow.  It is never sampled
 from a host clock during fitting or replay: callers provide one timezone-aware
 instant for the request, and the resulting state can be recorded with it.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping

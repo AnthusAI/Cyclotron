@@ -1,4 +1,5 @@
 """Trusted human-feedback and cyclotron-lineage contracts, independent of a model."""
+
 from __future__ import annotations
 
 import hashlib
@@ -58,14 +59,18 @@ class FeedbackItem:
         _non_empty("item_id", self.item_id)
         _non_empty("score_name", self.score_name)
         if self.label_source not in {
-            LABEL_SOURCE_VETTED, LABEL_SOURCE_FINAL,
-            LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED, LABEL_SOURCE_UNRESOLVED,
+            LABEL_SOURCE_VETTED,
+            LABEL_SOURCE_FINAL,
+            LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED,
+            LABEL_SOURCE_UNRESOLVED,
         }:
             raise ValueError("label_source is not recognized")
-        for name, value in (("initial_answer_value", self.initial_answer_value),
-                            ("final_answer_value", self.final_answer_value),
-                            ("edit_comment_value", self.edit_comment_value),
-                            ("review_provenance", self.review_provenance)):
+        for name, value in (
+            ("initial_answer_value", self.initial_answer_value),
+            ("final_answer_value", self.final_answer_value),
+            ("edit_comment_value", self.edit_comment_value),
+            ("review_provenance", self.review_provenance),
+        ):
             if value is not None and not isinstance(value, str):
                 raise ValueError(f"{name} must be a string or None")
         if self.selection_propensity is not None:
@@ -217,14 +222,20 @@ class Cyclotron:
 
     @property
     def fingerprint(self) -> str:
-        return _fingerprint({
-            "elements": [
-                {"definition_fingerprint": element.definition_fingerprint, "feature_names": element.feature_names,
-                 "key": element.key, "question_type": element.question_type}
-                for element in self.elements
-            ],
-            "name": self.name,
-            "parent_fingerprint": self.parent_fingerprint,
-            "policy_fingerprint": self.policy_fingerprint,
-            "version": self.version,
-        })
+        return _fingerprint(
+            {
+                "elements": [
+                    {
+                        "definition_fingerprint": element.definition_fingerprint,
+                        "feature_names": element.feature_names,
+                        "key": element.key,
+                        "question_type": element.question_type,
+                    }
+                    for element in self.elements
+                ],
+                "name": self.name,
+                "parent_fingerprint": self.parent_fingerprint,
+                "policy_fingerprint": self.policy_fingerprint,
+                "version": self.version,
+            }
+        )

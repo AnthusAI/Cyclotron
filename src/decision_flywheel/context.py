@@ -1,4 +1,5 @@
 """Deterministic context policies that never inspect a target label."""
+
 from __future__ import annotations
 
 import hashlib
@@ -74,10 +75,7 @@ def _validated_candidate_pools(
 
     for label, pool in pools.items():
         if len(pool) < per_label:
-            raise ValueError(
-                f"insufficient trusted candidates for label {label!r}: "
-                f"requested {per_label}, found {len(pool)}"
-            )
+            raise ValueError(f"insufficient trusted candidates for label {label!r}: requested {per_label}, found {len(pool)}")
         pool.sort(key=lambda candidate: candidate.item.id)
     return pools
 
@@ -99,7 +97,8 @@ def validate_selected_context(
     pools = _validated_candidate_pools(task, target, candidates, per_label=per_label)
     allowed = {
         (candidate.item.id, _normalized_text(candidate.item, task), candidate.label)
-        for pool in pools.values() for candidate in pool
+        for pool in pools.values()
+        for candidate in pool
     }
     frozen = tuple(selected)
     seen_ids: set[str] = set()
@@ -119,10 +118,7 @@ def validate_selected_context(
         counts[example.label] += 1
     for label, count in counts.items():
         if count != per_label:
-            raise ValueError(
-                f"selection policy must return exactly {per_label} examples per label; "
-                f"{label!r} had {count}"
-            )
+            raise ValueError(f"selection policy must return exactly {per_label} examples per label; {label!r} had {count}")
     return frozen
 
 
@@ -131,9 +127,9 @@ class ContextPolicy(Protocol):
     metadata: PolicyMetadata
     fingerprint: str
 
-    def select(self, task: DecisionTask, target: Item,
-               candidates: Sequence[LabeledItem], *, per_label: int) -> list[LabeledItem]:
-        ...
+    def select(
+        self, task: DecisionTask, target: Item, candidates: Sequence[LabeledItem], *, per_label: int
+    ) -> list[LabeledItem]: ...
 
 
 @dataclass(frozen=True)
@@ -195,11 +191,7 @@ class RandomBalanced:
 
     def select(self, task, target, candidates, *, per_label):
         pools = _validated_candidate_pools(task, target, candidates, per_label=per_label)
-        return [
-            item
-            for label in task.labels
-            for item in _shuffled_rank(pools[label], seed=self.seed, label=label)[:per_label]
-        ]
+        return [item for label in task.labels for item in _shuffled_rank(pools[label], seed=self.seed, label=label)[:per_label]]
 
 
 @dataclass(frozen=True)
@@ -242,6 +234,7 @@ class PrototypeBalanced:
 @dataclass(frozen=True)
 class PerLabelLexicalRetrieval:
     """Target-conditioned cosine-normalized lexical overlap, balanced by label."""
+
     name: str = "per-label-lexical-retrieval"
 
     @property
@@ -257,6 +250,7 @@ class PerLabelLexicalRetrieval:
         target_tokens = _tokens(_text(target, task))
         selected = []
         for label in task.labels:
+
             def score(item: LabeledItem) -> float:
                 value = _tokens(_text(item.item, task))
                 return len(target_tokens & value) / math.sqrt(max(1, len(target_tokens)) * max(1, len(value)))
@@ -307,7 +301,8 @@ class FixedExampleList:
         object.__setattr__(self, "reserves", reserves)
         for ref in examples + reserves:
             if not isinstance(ref, ExampleRef) or not all(
-                    isinstance(value, str) and value for value in (ref.id, ref.label, ref.input_hash)):
+                isinstance(value, str) and value for value in (ref.id, ref.label, ref.input_hash)
+            ):
                 raise ValueError("fixed list entries must be ExampleRef values with non-empty fields")
         ids = [ref.id for ref in examples + reserves]
         hashes = [ref.input_hash for ref in examples + reserves]
@@ -321,8 +316,7 @@ class FixedExampleList:
             raise ValueError("a fixed list needs exactly one reserve for each of its labels")
 
     @classmethod
-    def from_items(cls, task: DecisionTask, examples: Sequence[LabeledItem],
-                   reserves: Sequence[LabeledItem]) -> FixedExampleList:
+    def from_items(cls, task: DecisionTask, examples: Sequence[LabeledItem], reserves: Sequence[LabeledItem]) -> FixedExampleList:
         def ref(row: LabeledItem) -> ExampleRef:
             if row.source != "trusted":
                 raise ValueError("fixed list examples must have trusted label sources")
@@ -364,10 +358,15 @@ class FixedExampleList:
 
     @property
     def metadata(self) -> PolicyMetadata:
-        return PolicyMetadata(self.name, POLICY_VERSION, "fixed-global", {
-            "examples": [ref.as_dict() for ref in self.examples],
-            "reserves": [ref.as_dict() for ref in self.reserves],
-        })
+        return PolicyMetadata(
+            self.name,
+            POLICY_VERSION,
+            "fixed-global",
+            {
+                "examples": [ref.as_dict() for ref in self.examples],
+                "reserves": [ref.as_dict() for ref in self.reserves],
+            },
+        )
 
     @property
     def fingerprint(self) -> str:

@@ -1,4 +1,5 @@
 """Separately scheduled controls with persistent discovery and measurement."""
+
 import json
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -12,25 +13,34 @@ from .question_measurement import measure_questions
 
 def provisional_primary_allowance(policy, allowance):
     """Primary-metric allowance for provisional acceptance; rate objectives may be capped by the policy."""
-    if policy.primary in ('brier', 'balanced_brier'):
+    if policy.primary in ("brier", "balanced_brier"):
         return allowance
     cap = policy.provisional_rate_allowance
     return allowance / 2 if cap is None else min(allowance / 2, cap)
 
 
 def _example_experiments(wheel, training, development):
-    current_train=wheel._evidence(training);current_dev=wheel._evidence(development)
-    reports=[]
-    for _,payload in wheel.learning_storage.completed('examples'):
-        report=json.loads(payload)
-        if report.get('answer_dependencies') is None or not wheel.answer_dependencies_current(report['answer_dependencies']):continue
-        if any(current_train.get(k)!=v for k,v in report.get('training_evidence',{}).items()) or any(current_dev.get(k)!=v for k,v in report.get('development_evidence',{}).items()):continue
-        if not report.get('development_evidence'):continue
-        summary={key:report[key] for key in ('baseline_fingerprint','scope','effect_scope','by_class')}
-        summary['rankings']=[{key:row[key] for key in ('examples','brier_gain','accuracy_change','question_effects')}
-                            for row in report['rankings'][:4]]
+    current_train = wheel._evidence(training)
+    current_dev = wheel._evidence(development)
+    reports = []
+    for _, payload in wheel.learning_storage.completed("examples"):
+        report = json.loads(payload)
+        if report.get("answer_dependencies") is None or not wheel.answer_dependencies_current(report["answer_dependencies"]):
+            continue
+        if any(current_train.get(k) != v for k, v in report.get("training_evidence", {}).items()) or any(
+            current_dev.get(k) != v for k, v in report.get("development_evidence", {}).items()
+        ):
+            continue
+        if not report.get("development_evidence"):
+            continue
+        summary = {key: report[key] for key in ("baseline_fingerprint", "scope", "effect_scope", "by_class")}
+        summary["rankings"] = [
+            {key: row[key] for key in ("examples", "brier_gain", "accuracy_change", "question_effects")}
+            for row in report["rankings"][:4]
+        ]
         reports.append(summary)
-        if len(reports)==3:break
+        if len(reports) == 3:
+            break
     return reports
 
 
@@ -38,39 +48,71 @@ def stage_briefing(wheel, stage, training, development, protected, extra=None):
     control = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}.get(stage)
     if control is None:
         raise ValueError("this stage has no optimizer request")
-    measurements=_example_experiments(wheel,training,development) if stage=='examples' else []
-    return FeedbackBriefing.build(wheel.initial.task, training,
-        current={**wheel.active.config.briefing_state(), "control_under_test": control,
-                 "allowed_proposal_controls": [control, "dynamic_elements"] if stage == "questions" else [control],
-                 "selection_policy":asdict(wheel.selection_policy) if wheel.selection_policy else None,
-                 "stage": stage, "request_budget_bytes": wheel.max_request_bytes,
-                 **({'example_experiments':measurements} if stage=='examples' else {}),
-                 **(wheel.sibling_briefing() if stage=='questions' else {}), **(extra or {})},
-        protected=tuple(row.item for row in development)+tuple(protected),
-        human_explanations=wheel.optimizer_context["human_explanations"])
+    measurements = _example_experiments(wheel, training, development) if stage == "examples" else []
+    return FeedbackBriefing.build(
+        wheel.initial.task,
+        training,
+        current={
+            **wheel.active.config.briefing_state(),
+            "control_under_test": control,
+            "allowed_proposal_controls": [control, "dynamic_elements"] if stage == "questions" else [control],
+            "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
+            "stage": stage,
+            "request_budget_bytes": wheel.max_request_bytes,
+            **({"example_experiments": measurements} if stage == "examples" else {}),
+            **(wheel.sibling_briefing() if stage == "questions" else {}),
+            **(extra or {}),
+        },
+        protected=tuple(row.item for row in development) + tuple(protected),
+        human_explanations=wheel.optimizer_context["human_explanations"],
+    )
 
 
 @track_answer_dependencies
-async def optimize_stage(wheel, stage, training, development, *, protected, propensities,
-                         limit=200, retry_interrupted=False, min_development_per_class=20,
-                         train_after_questions=True, max_example_trials=8,
-                         feature_groups=(), max_group_configurations=8):
+async def optimize_stage(
+    wheel,
+    stage,
+    training,
+    development,
+    *,
+    protected,
+    propensities,
+    limit=200,
+    retry_interrupted=False,
+    min_development_per_class=20,
+    train_after_questions=True,
+    max_example_trials=8,
+    feature_groups=(),
+    max_group_configurations=8,
+):
     if feature_groups and stage != "classifier":
         raise ValueError("feature groups are supported only by the classifier stage")
     if stage == "classifier":
         from .classifier_training import train_classifier
-        return await train_classifier(wheel, training, development, protected=protected,
-            propensities=propensities, min_development_per_class=min_development_per_class,
-            retry_interrupted=retry_interrupted, feature_groups=feature_groups,
-            max_group_configurations=max_group_configurations)
+
+        return await train_classifier(
+            wheel,
+            training,
+            development,
+            protected=protected,
+            propensities=propensities,
+            min_development_per_class=min_development_per_class,
+            retry_interrupted=retry_interrupted,
+            feature_groups=feature_groups,
+            max_group_configurations=max_group_configurations,
+        )
     controls = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}
     if stage not in controls:
         raise ValueError("stage must be rubric, examples or questions")
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("retrospective limit must be a positive integer")
-    if type(max_example_trials) is not int or max_example_trials<1:
-        raise ValueError('example trial ceiling must be positive')
-    if isinstance(min_development_per_class, bool) or not isinstance(min_development_per_class, int) or min_development_per_class < 1:
+    if type(max_example_trials) is not int or max_example_trials < 1:
+        raise ValueError("example trial ceiling must be positive")
+    if (
+        isinstance(min_development_per_class, bool)
+        or not isinstance(min_development_per_class, int)
+        or min_development_per_class < 1
+    ):
         raise ValueError("stage evaluation floor must be a positive integer")
     wheel._validate_partitions(training, development, protected, propensities)
     if not training:
@@ -79,78 +121,116 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         return result
     wheel.reconcile_feedback(training, development=development)
     wheel.reconcile_model_context(training)
-    screening = stage == 'rubric' and wheel.screening_enabled()
+    screening = stage == "rubric" and wheel.screening_enabled()
     if screening:
         # The optimizer is shown development item ids (what each idea fixed or broke): record the exposure.
-        wheel.set_optimizer_context(wheel.optimizer_context['human_explanations'], evaluation_context_exposed=True)
-    if stage=='examples' and _example_experiments(wheel,training,development):
-        wheel.set_optimizer_context(wheel.optimizer_context['human_explanations'],evaluation_context_exposed=True)
-    key_data = {"stage": stage, "context": wheel.active.config.fingerprint,
-                 "model_context": wheel.model_context(wheel.active.config, training),
-                 "training": wheel._evidence(training), "development": wheel._evidence(development),
-                 "protected": sorted(item.id for item in protected), "propensities": propensities,
-                 "limit": limit, "evaluation_floor": min_development_per_class,
-                 "evaluation_weighting": wheel.evaluation_weighting, "training_class_weighting": wheel.training_class_weighting}
-    key_data['context_validation_floor']=wheel.context_validation_floor
-    key_data['proposal_protocol']='independent-dynamic-inputs-v1'
-    key_data['head_fitting']={'refit_on_context_activation':True,'minimum_training_per_class':3}
+        wheel.set_optimizer_context(wheel.optimizer_context["human_explanations"], evaluation_context_exposed=True)
+    if stage == "examples" and _example_experiments(wheel, training, development):
+        wheel.set_optimizer_context(wheel.optimizer_context["human_explanations"], evaluation_context_exposed=True)
+    key_data = {
+        "stage": stage,
+        "context": wheel.active.config.fingerprint,
+        "model_context": wheel.model_context(wheel.active.config, training),
+        "training": wheel._evidence(training),
+        "development": wheel._evidence(development),
+        "protected": sorted(item.id for item in protected),
+        "propensities": propensities,
+        "limit": limit,
+        "evaluation_floor": min_development_per_class,
+        "evaluation_weighting": wheel.evaluation_weighting,
+        "training_class_weighting": wheel.training_class_weighting,
+    }
+    key_data["context_validation_floor"] = wheel.context_validation_floor
+    key_data["proposal_protocol"] = "independent-dynamic-inputs-v1"
+    key_data["head_fitting"] = {"refit_on_context_activation": True, "minimum_training_per_class": 3}
     from dataclasses import asdict
-    key_data['selection_policy']=asdict(wheel.selection_policy) if wheel.selection_policy else None
-    key_data['evaluation_policy']=asdict(wheel.evaluation_policy)
+
+    key_data["selection_policy"] = asdict(wheel.selection_policy) if wheel.selection_policy else None
+    key_data["evaluation_policy"] = asdict(wheel.evaluation_policy)
     key_data["optimizer_context"] = wheel.optimizer_context
-    predictions = {row.item.id: row.initial_answer_value for row in training
-                   if row.initial_answer_value is not None}
+    predictions = {row.item.id: row.initial_answer_value for row in training if row.initial_answer_value is not None}
     if predictions:
         key_data["initial_answers"] = predictions
     key_data["train_after_questions"] = train_after_questions
     if screening:
         key_data["idea_screening"] = wheel.idea_screening.as_json()
-    if stage=='examples':key_data['max_example_trials']=max_example_trials
+    if stage == "examples":
+        key_data["max_example_trials"] = max_example_trials
     key = _hash(key_data)
-    wheel.learning_storage.ensure('rubric')
-    key, saved = wheel.cached_artifact('optimization_stages', 'id', key)
+    wheel.learning_storage.ensure("rubric")
+    key, saved = wheel.cached_artifact("optimization_stages", "id", key)
     if saved and saved[0] == "complete":
         result = json.loads(saved[1])
         if stage == "questions" and train_after_questions:
             from .classifier_training import train_classifier
-            result["classifier_training"] = await train_classifier(wheel, training, development,
-                protected=protected, propensities=propensities,
-                min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
+
+            result["classifier_training"] = await train_classifier(
+                wheel,
+                training,
+                development,
+                protected=protected,
+                propensities=propensities,
+                min_development_per_class=min_development_per_class,
+                retry_interrupted=retry_interrupted,
+            )
         return result
     if saved and not retry_interrupted:
         return {"stage": stage, "promoted": False, "reason": "interrupted stage requires explicit retry"}
     proposal = json.loads(saved[1]).get("proposal") if saved and saved[1] else None
-    pending_key=None
+    pending_key = None
     if proposal is None and not saved:
-        for old_key,payload in wheel.learning_storage.completed('rubric'):
-            previous=json.loads(payload)
-            evidence=previous.get('proposal_training_evidence',{})
-            if (previous.get('stage')==stage and previous.get('pending_evaluation') and
-                previous.get('basis_context_version')==wheel.active.config.fingerprint and
-                evidence and all(wheel._evidence(training).get(k)==v for k,v in evidence.items())):
-                proposal=previous['proposal'];pending_key=old_key
-                wheel._emit({'kind':'pending-proposal-reused','stage':stage,'source_stage_key':old_key,
-                             'proposal':proposal,'reason':'reevaluate retained proposal with current development coverage'})
+        for old_key, payload in wheel.learning_storage.completed("rubric"):
+            previous = json.loads(payload)
+            evidence = previous.get("proposal_training_evidence", {})
+            if (
+                previous.get("stage") == stage
+                and previous.get("pending_evaluation")
+                and previous.get("basis_context_version") == wheel.active.config.fingerprint
+                and evidence
+                and all(wheel._evidence(training).get(k) == v for k, v in evidence.items())
+            ):
+                proposal = previous["proposal"]
+                pending_key = old_key
+                wheel._emit(
+                    {
+                        "kind": "pending-proposal-reused",
+                        "stage": stage,
+                        "source_stage_key": old_key,
+                        "proposal": proposal,
+                        "reason": "reevaluate retained proposal with current development coverage",
+                    }
+                )
                 break
     control = controls[stage]
-    wheel.learning_storage.begin('rubric',key,_json({'proposal':proposal}))
+    wheel.learning_storage.begin("rubric", key, _json({"proposal": proposal}))
     wheel._emit({"kind": "optimization-stage-started", "stage": stage, "context_version": wheel.active.config.fingerprint})
     # Shadow mode never selects on the development partition (it judges ideas on forward stories), so it needs only an
     # incumbent rubric to compare against, provisional or not. Stage 2 dev_screen selects on development, so it keeps
     # the non-provisional and per-class coverage requirements.
-    use_screening = bool(screening and wheel.active.config.rubric.strip() and (
-        wheel.idea_screening.mode == 'shadow' or (
-            wheel.active.validation_status != 'provisional' and bool(development)
-            and min(sum(row.label == label for row in development) for label in wheel.initial.task.labels)
-            >= min_development_per_class)))
-    screen_proposals = (json.loads(saved[1]).get("screen_proposals") if saved and saved[1] and proposal is not None
-                        and use_screening else None)
-    screen_lineage = (json.loads(saved[1]).get("screen_lineage") if saved and saved[1] and proposal is not None
-                      and use_screening else None)
+    use_screening = bool(
+        screening
+        and wheel.active.config.rubric.strip()
+        and (
+            wheel.idea_screening.mode == "shadow"
+            or (
+                wheel.active.validation_status != "provisional"
+                and bool(development)
+                and min(sum(row.label == label for row in development) for label in wheel.initial.task.labels)
+                >= min_development_per_class
+            )
+        )
+    )
+    screen_proposals = (
+        json.loads(saved[1]).get("screen_proposals") if saved and saved[1] and proposal is not None and use_screening else None
+    )
+    screen_lineage = (
+        json.loads(saved[1]).get("screen_lineage") if saved and saved[1] and proposal is not None and use_screening else None
+    )
     if proposal is None and use_screening:
         from .hypothesis_ledger import HypothesisLedger
         from .idea_screening import optimizer_context, reserve_member
         from .proposal_operators import ask_round
+
         config = wheel.idea_screening
         own = [idea for idea in ControlScheduler(wheel).ideas() if idea["control"] == "rubric"]
         salt = f"{wheel.initial.task.fingerprint}:idea-screening"
@@ -158,27 +238,60 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
         diagnosis = None
         if config.diagnosis.enabled:
             from .diagnosis import run_diagnosis
+
             diagnosis = await run_diagnosis(wheel, training, development, protected)
         screen_proposals, screen_lineage = await ask_round(
-            wheel, lambda extra: stage_briefing(wheel, stage, training, development, protected, extra=extra),
-            optimizer_context(wheel, HypothesisLedger(storage=wheel.hypothesis_storage), own, hidden), "rubric", own, training, development,
-            protected, diagnosis)
+            wheel,
+            lambda extra: stage_briefing(wheel, stage, training, development, protected, extra=extra),
+            optimizer_context(wheel, HypothesisLedger(storage=wheel.hypothesis_storage), own, hidden),
+            "rubric",
+            own,
+            training,
+            development,
+            protected,
+            diagnosis,
+        )
         # Every proposal can be gated out (novelty); the stage then keeps the incumbent and shadows what it has.
-        proposal = screen_proposals[0] if screen_proposals else {
-            "rationale": "no proposal passed the operator gates", "rubric": wheel.active.config.rubric}
-        wheel.learning_storage.update_payload('rubric',key,
-            _json({'proposal':proposal,'screen_proposals':screen_proposals,
-                   **({'screen_lineage':screen_lineage} if screen_lineage else {})}))
+        proposal = (
+            screen_proposals[0]
+            if screen_proposals
+            else {"rationale": "no proposal passed the operator gates", "rubric": wheel.active.config.rubric}
+        )
+        wheel.learning_storage.update_payload(
+            "rubric",
+            key,
+            _json(
+                {
+                    "proposal": proposal,
+                    "screen_proposals": screen_proposals,
+                    **({"screen_lineage": screen_lineage} if screen_lineage else {}),
+                }
+            ),
+        )
     elif proposal is None:
         briefing = stage_briefing(wheel, stage, training, development, protected)
-        recorded = next((event for event in reversed(wheel.history(1000))
-                         if event["kind"] == "optimizer-response" and
-                         event.get("briefing_fingerprint") == briefing.fingerprint), None) if retry_interrupted else None
-        proposal = json.loads(recorded["content"]) if recorded else await ask_optimizer(wheel.optimizer, 'propose', briefing)
-        wheel.learning_storage.update_payload('rubric',key,_json({'proposal':proposal}))
+        recorded = (
+            next(
+                (
+                    event
+                    for event in reversed(wheel.history(1000))
+                    if event["kind"] == "optimizer-response" and event.get("briefing_fingerprint") == briefing.fingerprint
+                ),
+                None,
+            )
+            if retry_interrupted
+            else None
+        )
+        proposal = json.loads(recorded["content"]) if recorded else await ask_optimizer(wheel.optimizer, "propose", briefing)
+        wheel.learning_storage.update_payload("rubric", key, _json({"proposal": proposal}))
         if recorded:
-            wheel._emit({"kind": "optimizer-response-reused", "briefing_fingerprint": briefing.fingerprint,
-                         "reason": "explicit recovery; no additional optimizer request"})
+            wheel._emit(
+                {
+                    "kind": "optimizer-response-reused",
+                    "briefing_fingerprint": briefing.fingerprint,
+                    "reason": "explicit recovery; no additional optimizer request",
+                }
+            )
     if stage == "questions" and isinstance(proposal.get("tasks"), list):
         tasks = []
         for task in proposal["tasks"]:
@@ -188,149 +301,288 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
                 task = {k: v for k, v in task.items() if k != "input_field"}
             tasks.append(task)
         proposal = {**proposal, "tasks": tasks}
-    if stage == 'questions' and 'dynamic_elements' in proposal:
-        control = 'dynamic_elements'
-    outside = sorted(set(proposal)-{"rationale", control})
+    if stage == "questions" and "dynamic_elements" in proposal:
+        control = "dynamic_elements"
+    outside = sorted(set(proposal) - {"rationale", control})
     if outside or control not in proposal:
         # A proposal that reaches outside its stage is dropped and recorded, like an
         # unusable rubric: the active configuration stays and later feedback may
         # trigger another attempt. Raising here ended long replays on one bad reply.
-        result={'stage':stage,'proposal':proposal,'activated':False,'promoted':False,
-                'validation_status':'invalid-proposal',
-                'reason':(f"proposal changed {', '.join(outside)} outside its {control} stage" if outside
-                          else f'proposal did not set {control}')+'; active configuration retained',
-                'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
-                'answer_dependencies':wheel.collected_answer_dependencies(),
-                'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
-        wheel.learning_storage.complete('rubric',key,_json(result))
-        wheel._emit({'kind':'optimization-stage-completed',**result})
+        result = {
+            "stage": stage,
+            "proposal": proposal,
+            "activated": False,
+            "promoted": False,
+            "validation_status": "invalid-proposal",
+            "reason": (
+                f"proposal changed {', '.join(outside)} outside its {control} stage"
+                if outside
+                else f"proposal did not set {control}"
+            )
+            + "; active configuration retained",
+            "basis_context_version": key_data["context"],
+            "proposal_training_evidence": key_data["training"],
+            "answer_dependencies": wheel.collected_answer_dependencies(),
+            "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
+        }
+        wheel.learning_storage.complete("rubric", key, _json(result))
+        wheel._emit({"kind": "optimization-stage-completed", **result})
         return result
-    config=wheel.active.config.apply(proposal, training)
-    if stage=='rubric' and not config.rubric.strip():
-        result={'stage':stage,'proposal':proposal,'activated':False,'promoted':False,
-                'validation_status':'insufficient-evidence' if not wheel.active.config.rubric.strip() else 'invalid-proposal',
-                'reason':'no usable rubric proposed; active configuration retained and future feedback may trigger another attempt',
-                'basis_context_version':key_data['context'],'proposal_training_evidence':key_data['training'],
-                'answer_dependencies':wheel.collected_answer_dependencies(),
-                'evaluation_independent_of_optimizer_context':not wheel.optimizer_context['evaluation_context_exposed']}
-        wheel.learning_storage.complete('rubric',key,_json(result))
-        wheel._emit({'kind':'optimization-stage-completed',**result})
+    config = wheel.active.config.apply(proposal, training)
+    if stage == "rubric" and not config.rubric.strip():
+        result = {
+            "stage": stage,
+            "proposal": proposal,
+            "activated": False,
+            "promoted": False,
+            "validation_status": "insufficient-evidence" if not wheel.active.config.rubric.strip() else "invalid-proposal",
+            "reason": "no usable rubric proposed; active configuration retained and future feedback may trigger another attempt",
+            "basis_context_version": key_data["context"],
+            "proposal_training_evidence": key_data["training"],
+            "answer_dependencies": wheel.collected_answer_dependencies(),
+            "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
+        }
+        wheel.learning_storage.complete("rubric", key, _json(result))
+        wheel._emit({"kind": "optimization-stage-completed", **result})
         return result
-    wheel.learning_storage.update_payload('rubric',key,_json({'proposal':proposal}))
+    wheel.learning_storage.update_payload("rubric", key, _json({"proposal": proposal}))
     if stage == "questions" and control == "tasks":
-        result = await measure_questions(wheel, training, proposal["tasks"],
-            protected=tuple(row.item for row in development)+tuple(protected), propensities=propensities,
-            limit=limit, retry_interrupted=retry_interrupted)
+        result = await measure_questions(
+            wheel,
+            training,
+            proposal["tasks"],
+            protected=tuple(row.item for row in development) + tuple(protected),
+            propensities=propensities,
+            limit=limit,
+            retry_interrupted=retry_interrupted,
+        )
         if train_after_questions:
             from .classifier_training import train_classifier
-            result["classifier_training"] = await train_classifier(wheel, training, development,
-                protected=protected, propensities=propensities,
-                min_development_per_class=min_development_per_class, retry_interrupted=retry_interrupted)
+
+            result["classifier_training"] = await train_classifier(
+                wheel,
+                training,
+                development,
+                protected=protected,
+                propensities=propensities,
+                min_development_per_class=min_development_per_class,
+                retry_interrupted=retry_interrupted,
+            )
     elif screen_proposals is not None and wheel.idea_screening.mode == "shadow":
         from .shadow_evaluation import shadow_stage
+
         result = await shadow_stage(wheel, screen_proposals, training, development, screen_lineage)
     elif screen_proposals is not None:
         from .idea_screening import screening_stage
-        result = await screening_stage(wheel, screen_proposals, training, development, protected=protected,
-                                       propensities=propensities, evaluation_time=datetime.now(timezone.utc),
-                                       retry_interrupted=retry_interrupted)
-    elif stage=='examples' and wheel.active.config.example_ids:
+
+        result = await screening_stage(
+            wheel,
+            screen_proposals,
+            training,
+            development,
+            protected=protected,
+            propensities=propensities,
+            evaluation_time=datetime.now(timezone.utc),
+            retry_interrupted=retry_interrupted,
+        )
+    elif stage == "examples" and wheel.active.config.example_ids:
         from .example_attribution import measure_example_swaps
-        by_id={row.item.id:row for row in training}
-        hard={}
+
+        by_id = {row.item.id: row for row in training}
+        hard = {}
         for event in wheel.history(10000):
-            if event.get('kind')=='prediction' and event.get('target_id') in by_id:
-                row=by_id[event['target_id']]
-                if event.get('label')!=row.label:
-                    hard[row.item.id]=event.get('confidence') or 0.
-        preferred=tuple(dict.fromkeys((*sorted(hard,key=lambda key:(-hard[key],key)),*proposal['example_ids'])))
-        measured=await measure_example_swaps(wheel,training,development,protected=protected,
-            propensities=propensities,preferred_ids=preferred,max_trials=max_example_trials,limit=min(limit,200))
-        best=measured['recommended_proposal']
-        counts=measured.get('by_class',{label:0 for label in wheel.initial.task.labels})
-        if best and min(counts.values())>=min_development_per_class:
-            result=await wheel.improve(training,development,protected=protected,propensities=propensities,
-                candidate_proposal=best,retry_interrupted=retry_interrupted,require_recall_safeguards=True)
+            if event.get("kind") == "prediction" and event.get("target_id") in by_id:
+                row = by_id[event["target_id"]]
+                if event.get("label") != row.label:
+                    hard[row.item.id] = event.get("confidence") or 0.0
+        preferred = tuple(dict.fromkeys((*sorted(hard, key=lambda key: (-hard[key], key)), *proposal["example_ids"])))
+        measured = await measure_example_swaps(
+            wheel,
+            training,
+            development,
+            protected=protected,
+            propensities=propensities,
+            preferred_ids=preferred,
+            max_trials=max_example_trials,
+            limit=min(limit, 200),
+        )
+        best = measured["recommended_proposal"]
+        counts = measured.get("by_class", {label: 0 for label in wheel.initial.task.labels})
+        if best and min(counts.values()) >= min_development_per_class:
+            result = await wheel.improve(
+                training,
+                development,
+                protected=protected,
+                propensities=propensities,
+                candidate_proposal=best,
+                retry_interrupted=retry_interrupted,
+                require_recall_safeguards=True,
+            )
         else:
-            result={'promoted':False,'pending_evaluation':True,
-                'reason':'swap evidence retained for later labels; no measured winner with adequate class coverage',
-                'development_counts':counts,'minimum_development_per_class':min_development_per_class}
-        result['example_measurement']=measured
+            result = {
+                "promoted": False,
+                "pending_evaluation": True,
+                "reason": "swap evidence retained for later labels; no measured winner with adequate class coverage",
+                "development_counts": counts,
+                "minimum_development_per_class": min_development_per_class,
+            }
+        result["example_measurement"] = measured
     else:
         counts = {label: sum(row.label == label for row in development) for label in wheel.initial.task.labels}
-        if stage=='rubric' and not wheel.active.config.rubric.strip() and wheel.active.head is None:
-            previous=wheel.active.config.briefing_state()
-            wheel._emit({'kind':'proposal-validated','proposal':proposal,'previous':previous,'candidate':config.briefing_state()})
-            candidate,_=await fit_candidate(wheel,config,training,development,protected=protected,
-                propensities=propensities,validation_status='provisional')
-            siblings=await wheel.sibling_effects(candidate.config,datetime.now(timezone.utc))
-            accepted=not (siblings and siblings['refused'])
+        if stage == "rubric" and not wheel.active.config.rubric.strip() and wheel.active.head is None:
+            previous = wheel.active.config.briefing_state()
+            wheel._emit(
+                {"kind": "proposal-validated", "proposal": proposal, "previous": previous, "candidate": config.briefing_state()}
+            )
+            candidate, _ = await fit_candidate(
+                wheel,
+                config,
+                training,
+                development,
+                protected=protected,
+                propensities=propensities,
+                validation_status="provisional",
+            )
+            siblings = await wheel.sibling_effects(candidate.config, datetime.now(timezone.utc))
+            accepted = not (siblings and siblings["refused"])
             if accepted:
                 wheel._activate(candidate)
-            result={'promoted':False,'activated':accepted,'validation_status':'provisional','proposal':proposal,
-                    'pending_evaluation':not accepted,
-                    'reason':('first nonempty rubric initialized provisionally; improvement has not been established'
-                              if accepted else siblings['reason']),
-                    'development_counts':counts,'minimum_development_per_class':min_development_per_class,
-                    **({'sibling_effects':siblings} if siblings is not None else {})}
-            wheel._emit({'kind':'context-initialized' if accepted else 'candidate-rejected',**result,
-                         'configuration':wheel.active.config.briefing_state() if not accepted else config.briefing_state(),
-                         'previous':previous})
-        elif stage=='rubric' and wheel.active.validation_status=='provisional' and wheel.evaluation_policy.recency_allowance(counts)>0:
-            candidate,_=await fit_candidate(wheel,config,training,development,protected=protected,
-                propensities=propensities,validation_status='provisional')
-            measurements={}
-            if min(counts.values())>0:
-                now=datetime.now(timezone.utc)
+            result = {
+                "promoted": False,
+                "activated": accepted,
+                "validation_status": "provisional",
+                "proposal": proposal,
+                "pending_evaluation": not accepted,
+                "reason": (
+                    "first nonempty rubric initialized provisionally; improvement has not been established"
+                    if accepted
+                    else siblings["reason"]
+                ),
+                "development_counts": counts,
+                "minimum_development_per_class": min_development_per_class,
+                **({"sibling_effects": siblings} if siblings is not None else {}),
+            }
+            wheel._emit(
+                {
+                    "kind": "context-initialized" if accepted else "candidate-rejected",
+                    **result,
+                    "configuration": wheel.active.config.briefing_state() if not accepted else config.briefing_state(),
+                    "previous": previous,
+                }
+            )
+        elif (
+            stage == "rubric"
+            and wheel.active.validation_status == "provisional"
+            and wheel.evaluation_policy.recency_allowance(counts) > 0
+        ):
+            candidate, _ = await fit_candidate(
+                wheel,
+                config,
+                training,
+                development,
+                protected=protected,
+                propensities=propensities,
+                validation_status="provisional",
+            )
+            measurements = {}
+            if min(counts.values()) > 0:
+                now = datetime.now(timezone.utc)
                 wheel.reconcile_model_context(training)
-                measurements={'incumbent':await wheel._score(wheel.active,development,training,now),
-                              'candidate':await wheel._score(candidate,development,training,now)}
-            previous=wheel.active.config.briefing_state()
-            wheel._emit({'kind':'proposal-validated','proposal':proposal,'previous':previous,'candidate':config.briefing_state()})
-            allowance=wheel.evaluation_policy.recency_allowance(counts)
-            accepted=(not measurements or measurements['candidate']['balanced_brier'] <=
-                      measurements['incumbent']['balanced_brier'] + allowance)
+                measurements = {
+                    "incumbent": await wheel._score(wheel.active, development, training, now),
+                    "candidate": await wheel._score(candidate, development, training, now),
+                }
+            previous = wheel.active.config.briefing_state()
+            wheel._emit(
+                {"kind": "proposal-validated", "proposal": proposal, "previous": previous, "candidate": config.briefing_state()}
+            )
+            allowance = wheel.evaluation_policy.recency_allowance(counts)
+            accepted = (
+                not measurements
+                or measurements["candidate"]["balanced_brier"] <= measurements["incumbent"]["balanced_brier"] + allowance
+            )
             selection = None
             if measurements and wheel.selection_policy:
-                selection = wheel.selection_policy.compare(measurements['incumbent'], measurements['candidate'],
-                    primary_allowance=provisional_primary_allowance(wheel.selection_policy, allowance))
-                accepted = selection['provisional_eligible']
-            siblings=await wheel.sibling_effects(candidate.config,datetime.now(timezone.utc)) if accepted else None
-            sibling_refused=bool(siblings and siblings['refused'])
-            accepted=accepted and not sibling_refused
+                selection = wheel.selection_policy.compare(
+                    measurements["incumbent"],
+                    measurements["candidate"],
+                    primary_allowance=provisional_primary_allowance(wheel.selection_policy, allowance),
+                )
+                accepted = selection["provisional_eligible"]
+            siblings = await wheel.sibling_effects(candidate.config, datetime.now(timezone.utc)) if accepted else None
+            sibling_refused = bool(siblings and siblings["refused"])
+            accepted = accepted and not sibling_refused
             if accepted:
                 wheel._activate(candidate)
-            result={'promoted':False,'activated':accepted,'validation_status':'provisional','proposal':proposal,
-                    'pending_evaluation':not accepted, 'recency_allowance':allowance, 'selection':selection,
-                    'reason':('working rubric refined with a decaying recency preference; evaluation remains exploratory'
-                              if accepted else siblings['reason'] if sibling_refused
-                              else 'proposal retained; measured regression exceeds current recency allowance'),
-                    'development_counts':counts,'context_validation_floor':wheel.context_validation_floor,**measurements,
-                    **({'sibling_effects':siblings} if siblings is not None else {})}
-            wheel._emit({'kind':'context-refined' if accepted else 'candidate-rejected',**result,
-                         'configuration':wheel.active.config.briefing_state(),'previous':previous})
+            result = {
+                "promoted": False,
+                "activated": accepted,
+                "validation_status": "provisional",
+                "proposal": proposal,
+                "pending_evaluation": not accepted,
+                "recency_allowance": allowance,
+                "selection": selection,
+                "reason": (
+                    "working rubric refined with a decaying recency preference; evaluation remains exploratory"
+                    if accepted
+                    else siblings["reason"]
+                    if sibling_refused
+                    else "proposal retained; measured regression exceeds current recency allowance"
+                ),
+                "development_counts": counts,
+                "context_validation_floor": wheel.context_validation_floor,
+                **measurements,
+                **({"sibling_effects": siblings} if siblings is not None else {}),
+            }
+            wheel._emit(
+                {
+                    "kind": "context-refined" if accepted else "candidate-rejected",
+                    **result,
+                    "configuration": wheel.active.config.briefing_state(),
+                    "previous": previous,
+                }
+            )
         elif min(counts.values()) < min_development_per_class:
-            result = {"promoted": False, "proposal": proposal,
-                      'validation_status':'insufficient-evidence',
-                      'pending_evaluation':True,
-                      "reason": "proposal retained; waiting for adequate development class coverage",
-                      "development_counts": counts, "minimum_development_per_class": min_development_per_class}
+            result = {
+                "promoted": False,
+                "proposal": proposal,
+                "validation_status": "insufficient-evidence",
+                "pending_evaluation": True,
+                "reason": "proposal retained; waiting for adequate development class coverage",
+                "development_counts": counts,
+                "minimum_development_per_class": min_development_per_class,
+            }
         else:
-            result = await wheel.improve(training, development, protected=protected, propensities=propensities,
-                candidate_proposal=proposal, retry_interrupted=retry_interrupted, require_recall_safeguards=True)
-    result = {**result, "stage": stage, 'proposal':proposal,
-              'control_under_test':control,
-              'answer_dependencies':wheel.collected_answer_dependencies(),
-              'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
-              'basis_context_version':key_data['context'], 'proposal_training_evidence':key_data['training'],
-              "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"]}
-    aliases=()
-    if result.get('activated') or result.get('promoted') or result.get('classifier_training',{}).get('promoted'):
+            result = await wheel.improve(
+                training,
+                development,
+                protected=protected,
+                propensities=propensities,
+                candidate_proposal=proposal,
+                retry_interrupted=retry_interrupted,
+                require_recall_safeguards=True,
+            )
+    result = {
+        **result,
+        "stage": stage,
+        "proposal": proposal,
+        "control_under_test": control,
+        "answer_dependencies": wheel.collected_answer_dependencies(),
+        "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
+        "basis_context_version": key_data["context"],
+        "proposal_training_evidence": key_data["training"],
+        "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
+    }
+    aliases = ()
+    if result.get("activated") or result.get("promoted") or result.get("classifier_training", {}).get("promoted"):
         # Preserve restart alias identity under the post-promotion context.
-        alias,_=wheel.cached_artifact('optimization_stages','id',
-            _hash({**key_data,'context':wheel.active.config.fingerprint}))
-        aliases=(alias,)
-    clear_pending=pending_key if pending_key and not result.get('pending_evaluation') and result.get('reason')!='round failed' else None
-    wheel.learning_storage.complete('rubric',key,_json(result),aliases=aliases,clear_pending_key=clear_pending)
+        alias, _ = wheel.cached_artifact(
+            "optimization_stages", "id", _hash({**key_data, "context": wheel.active.config.fingerprint})
+        )
+        aliases = (alias,)
+    clear_pending = (
+        pending_key if pending_key and not result.get("pending_evaluation") and result.get("reason") != "round failed" else None
+    )
+    wheel.learning_storage.complete("rubric", key, _json(result), aliases=aliases, clear_pending_key=clear_pending)
     wheel._emit({"kind": "optimization-stage-completed", **result})
     return result

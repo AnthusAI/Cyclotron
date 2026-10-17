@@ -1,4 +1,5 @@
 """Human-reviewed steering: analysts propose structure; code owns every number."""
+
 from __future__ import annotations
 
 import json
@@ -127,8 +128,9 @@ def run_steering_round(
     if type(accepted) is not bool:
         raise ValueError("human review must return an exact boolean")
     if not accepted:
-        return _outcome(cyclotron, policy, cyclotron.fingerprint, False, False, None, proposal, proposal_fingerprint,
-                        "rejected", None, None)
+        return _outcome(
+            cyclotron, policy, cyclotron.fingerprint, False, False, None, proposal, proposal_fingerprint, "rejected", None, None
+        )
 
     candidate_policy = allowed_policies.get(proposal.context_policy_name, policy)
     candidate = _apply(cyclotron, proposal, candidate_policy)
@@ -139,40 +141,96 @@ def run_steering_round(
     except Exception as error:
         # Do not serialize exception text: a failed dependency must not leak its
         # inputs into the steering audit trail.
-        return _outcome(cyclotron, policy, cyclotron.fingerprint, True, False, None, proposal, proposal_fingerprint,
-                        "fit-failed", candidate.fingerprint, type(error).__name__)
+        return _outcome(
+            cyclotron,
+            policy,
+            cyclotron.fingerprint,
+            True,
+            False,
+            None,
+            proposal,
+            proposal_fingerprint,
+            "fit-failed",
+            candidate.fingerprint,
+            type(error).__name__,
+        )
 
-    objective = _finite_objective(
-        "candidate development objective", development_objective(candidate, candidate_policy, refit)
-    )
+    objective = _finite_objective("candidate development objective", development_objective(candidate, candidate_policy, refit))
     if objective <= incumbent:
-        return _outcome(cyclotron, policy, cyclotron.fingerprint, True, False, None, proposal, proposal_fingerprint,
-                        "not-better-on-development", candidate.fingerprint, None)
-    return _outcome(candidate, candidate_policy, cyclotron.fingerprint, True, True, refit, proposal, proposal_fingerprint,
-                    "promoted", candidate.fingerprint, None)
+        return _outcome(
+            cyclotron,
+            policy,
+            cyclotron.fingerprint,
+            True,
+            False,
+            None,
+            proposal,
+            proposal_fingerprint,
+            "not-better-on-development",
+            candidate.fingerprint,
+            None,
+        )
+    return _outcome(
+        candidate,
+        candidate_policy,
+        cyclotron.fingerprint,
+        True,
+        True,
+        refit,
+        proposal,
+        proposal_fingerprint,
+        "promoted",
+        candidate.fingerprint,
+        None,
+    )
 
 
-def _outcome(cyclotron: Cyclotron, policy: ContextPolicy, parent_cyclotron_fingerprint: str, accepted: bool, promoted: bool,
-             refit: LearnedHead | None, proposal: SteeringProposal, proposal_fingerprint: str, decision: str,
-             candidate_fingerprint: str | None, reason: str | None) -> SteeringOutcome:
-    return SteeringOutcome(cyclotron, policy, accepted, promoted, refit, proposal,
-                           (SteeringHistory(proposal_fingerprint, decision, parent_cyclotron_fingerprint,
-                                            candidate_fingerprint, reason),))
+def _outcome(
+    cyclotron: Cyclotron,
+    policy: ContextPolicy,
+    parent_cyclotron_fingerprint: str,
+    accepted: bool,
+    promoted: bool,
+    refit: LearnedHead | None,
+    proposal: SteeringProposal,
+    proposal_fingerprint: str,
+    decision: str,
+    candidate_fingerprint: str | None,
+    reason: str | None,
+) -> SteeringOutcome:
+    return SteeringOutcome(
+        cyclotron,
+        policy,
+        accepted,
+        promoted,
+        refit,
+        proposal,
+        (SteeringHistory(proposal_fingerprint, decision, parent_cyclotron_fingerprint, candidate_fingerprint, reason),),
+    )
 
 
 def steering_observations(outcome: SteeringOutcome) -> tuple[tuple[FeatureDefinition, ...], tuple[FeatureActivity, ...]]:
     """Adapt one real steering outcome to the reusable UI/ledger feature contract."""
-    features = tuple(FeatureDefinition(element.key, element.question_type, element.feature_names,
-                                       element.definition_fingerprint)
-                     for element in outcome.cyclotron.elements)
+    features = tuple(
+        FeatureDefinition(element.key, element.question_type, element.feature_names, element.definition_fingerprint)
+        for element in outcome.cyclotron.elements
+    )
     proposal = outcome.proposal
-    feature_key = (proposal.add_element.key if proposal.add_element is not None
-                   else proposal.add_programmatic_element or proposal.context_policy_name or "context-policy")
+    feature_key = (
+        proposal.add_element.key
+        if proposal.add_element is not None
+        else proposal.add_programmatic_element or proposal.context_policy_name or "context-policy"
+    )
     decision = outcome.history[-1].decision
-    status = {"rejected": "rejected", "fit-failed": "fit-failed",
-              "not-better-on-development": "not-promoted", "promoted": "promoted"}[decision]
-    return features, (FeatureActivity(outcome.history[-1].proposal_fingerprint, feature_key, status,
-                                      outcome.history[-1].reason, None),)
+    status = {
+        "rejected": "rejected",
+        "fit-failed": "fit-failed",
+        "not-better-on-development": "not-promoted",
+        "promoted": "promoted",
+    }[decision]
+    return features, (
+        FeatureActivity(outcome.history[-1].proposal_fingerprint, feature_key, status, outcome.history[-1].reason, None),
+    )
 
 
 def _guard_initial_lineage(cyclotron: Cyclotron, policy: ContextPolicy) -> None:
@@ -230,8 +288,12 @@ def _parse_proposal(raw: Mapping[str, object], allowed_policies: Mapping[str, Co
 def _apply(cyclotron: Cyclotron, proposal: SteeringProposal, candidate_policy: ContextPolicy) -> Cyclotron:
     element = proposal.add_element
     if proposal.add_programmatic_element == CURRENT_DATETIME_ELEMENT:
-        element = Element(CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE,
-                          (CURRENT_DATETIME_ELEMENT,), _proposal_fingerprint({"kind": CURRENT_DATETIME_ELEMENT}))
+        element = Element(
+            CURRENT_DATETIME_ELEMENT,
+            CURRENT_DATETIME_QUESTION_TYPE,
+            (CURRENT_DATETIME_ELEMENT,),
+            _proposal_fingerprint({"kind": CURRENT_DATETIME_ELEMENT}),
+        )
     if element is not None and element.key in {element.key for element in cyclotron.elements}:
         raise ValueError("proposal cannot duplicate its element")
     elements = cyclotron.elements if proposal.context_policy_name is not None else cyclotron.elements + (element,)
@@ -247,8 +309,13 @@ def _declared_features(cyclotron: Cyclotron) -> tuple[str, ...]:
     return features
 
 
-def _validate_refit(refit: object, candidate: Cyclotron, candidate_policy: ContextPolicy,
-                    declared_features: tuple[str, ...], protected_ids: Sequence[str]) -> None:
+def _validate_refit(
+    refit: object,
+    candidate: Cyclotron,
+    candidate_policy: ContextPolicy,
+    declared_features: tuple[str, ...],
+    protected_ids: Sequence[str],
+) -> None:
     if not isinstance(refit, LearnedHead):
         raise ValueError("numerical fitter must return the core LearnedHead")
     if refit.feature_names != declared_features:
@@ -270,5 +337,6 @@ def _validate_refit(refit: object, candidate: Cyclotron, candidate_policy: Conte
 
 def _proposal_fingerprint(value: object) -> str:
     import hashlib
+
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

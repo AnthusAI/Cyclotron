@@ -18,18 +18,26 @@ from .context import FixedExampleList
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 
 TASK = DecisionTask("tone", ("pos", "neg"), "Choose the tone.")
-ROWS = [LabeledItem(Item(f"{label}-{n}", {"text": f"a {label} sample number {n}"}), label)
-        for label in TASK.labels for n in range(4)]
+ROWS = [
+    LabeledItem(Item(f"{label}-{n}", {"text": f"a {label} sample number {n}"}), label) for label in TASK.labels for n in range(4)
+]
 BY_ID = {row.item.id: row for row in ROWS}
-FIXED = FixedExampleList.from_items(TASK, [BY_ID[i] for i in ("pos-0", "pos-1", "neg-0", "neg-1")],
-                                    [BY_ID["pos-2"], BY_ID["neg-2"]])
-CYCLOTRON = json.dumps({"questions": {"tone": {"type": "choice", "criteria": {"pos": None, "neg": None}},
-                                      "tone.sport": {"type": "noul"}},
-                        "weights": {"tone": 2.0, "tone.sport": 1.0}}, sort_keys=True)
-ENGINE = {"adapter": "jev", "configured_model": "fake-1", "model_identity": "jev:fake-1",
-          "reported_model": "fake-1"}
-TARGETS = [Item("new-a", {"text": "a brand new text to classify"}), Item("new-b", {"text": "another unseen one"}),
-           BY_ID["pos-0"].item]
+FIXED = FixedExampleList.from_items(
+    TASK, [BY_ID[i] for i in ("pos-0", "pos-1", "neg-0", "neg-1")], [BY_ID["pos-2"], BY_ID["neg-2"]]
+)
+CYCLOTRON = json.dumps(
+    {
+        "questions": {"tone": {"type": "choice", "criteria": {"pos": None, "neg": None}}, "tone.sport": {"type": "noul"}},
+        "weights": {"tone": 2.0, "tone.sport": 1.0},
+    },
+    sort_keys=True,
+)
+ENGINE = {"adapter": "jev", "configured_model": "fake-1", "model_identity": "jev:fake-1", "reported_model": "fake-1"}
+TARGETS = [
+    Item("new-a", {"text": "a brand new text to classify"}),
+    Item("new-b", {"text": "another unseen one"}),
+    BY_ID["pos-0"].item,
+]
 
 
 class Rubric:
@@ -43,8 +51,9 @@ class Rubric:
         return self._questions
 
     def predict(self, answers):
-        logit = (self.weights["tone"] * (answers["tone"]["probabilities"]["pos"] - 0.5)
-                 + self.weights["tone.sport"] * (answers["tone.sport"]["noul"] - 0.5))
+        logit = self.weights["tone"] * (answers["tone"]["probabilities"]["pos"] - 0.5) + self.weights["tone.sport"] * (
+            answers["tone.sport"]["noul"] - 0.5
+        )
         p = 1 / (1 + 2.718281828 ** (-logit))
         label = "pos" if p >= 0.5 else "neg"
         return DecisionResult(label, {"pos": p, "neg": 1 - p}, confidence=max(p, 1 - p))
@@ -52,7 +61,7 @@ class Rubric:
 
 def _unit(*parts):
     digest = hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).digest()
-    return int.from_bytes(digest[:8], "big") / 2 ** 64
+    return int.from_bytes(digest[:8], "big") / 2**64
 
 
 class Response:
@@ -74,16 +83,26 @@ class FakeEngine:
             if question["type"] == "noul":
                 answers[name] = {"type": "noul", "noul": u}
             else:
-                answers[name] = {"type": "choice", "choice": "pos" if u >= 0.5 else "neg",
-                                 "probabilities": {"pos": u, "neg": 1 - u}}
+                answers[name] = {
+                    "type": "choice",
+                    "choice": "pos" if u >= 0.5 else "neg",
+                    "probabilities": {"pos": u, "neg": 1 - u},
+                }
         return Response(answers, self.model)
 
 
 def _bundle(examples=FIXED):
     rows = [BY_ID[i] for i in examples.example_ids + examples.reserve_ids] if examples else []
-    return ClassifierBundle(TASK, CYCLOTRON, Rubric(CYCLOTRON), examples=examples, example_rows=rows,
-                            engine=ENGINE, head={"features": ["tone", "tone.sport"], "fit_id": "f1"},
-                            lineage={"round": 3, "labels_fingerprint": "0" * 64})
+    return ClassifierBundle(
+        TASK,
+        CYCLOTRON,
+        Rubric(CYCLOTRON),
+        examples=examples,
+        example_rows=rows,
+        engine=ENGINE,
+        head={"features": ["tone", "tone.sport"], "fit_id": "f1"},
+        lineage={"round": 3, "labels_fingerprint": "0" * 64},
+    )
 
 
 def _classify(bundle, engine, targets=TARGETS):
@@ -151,8 +170,7 @@ def test_the_manifest_is_text_free_and_records_hashes_lineage_and_engine(tmp_pat
 def test_an_edited_file_is_rejected_before_any_model_call(tmp_path, name):
     _bundle().save(tmp_path / "b")
     path = tmp_path / "b" / name
-    path.write_text(path.read_text().replace("sample", "simple", 1).replace("2.0", "3.0", 1)
-                    .replace('"round":3', '"round":4', 1))
+    path.write_text(path.read_text().replace("sample", "simple", 1).replace("2.0", "3.0", 1).replace('"round":3', '"round":4', 1))
     with pytest.raises(BundleValidationError):
         _load(tmp_path / "b")
 
@@ -186,6 +204,6 @@ def test_example_rows_must_match_the_list():
 
 def test_saving_refuses_to_overwrite_a_different_bundle(tmp_path):
     _bundle().save(tmp_path / "b")
-    _bundle().save(tmp_path / "b")   # the same bundle again is fine
+    _bundle().save(tmp_path / "b")  # the same bundle again is fine
     with pytest.raises(BundleValidationError):
         _bundle(examples=None).save(tmp_path / "b")

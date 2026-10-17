@@ -18,6 +18,7 @@ a list (the shape of ``adapters/jev.py``) or ``state = {text}`` when it has none
 target that is itself one of the examples sees that label's reserve instead (the
 ``FixedExampleList`` rule). The rubric then turns the answers into a ``DecisionResult``.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -37,8 +38,7 @@ MANIFEST_FILE = "bundle.json"
 EXAMPLES_FILE = "examples.jsonl"
 CYCLOTRON_FILE = "cyclotron.yaml"
 DISPLAY_ORDER = "canonical"
-_TOP_KEYS = {"bundle_version", "bundle_hash", "task", "engine", "rubric", "fewshot", "head",
-             "retrieval", "lineage"}
+_TOP_KEYS = {"bundle_version", "bundle_hash", "task", "engine", "rubric", "fewshot", "head", "retrieval", "lineage"}
 _ENGINE_KEYS = {"adapter", "configured_model", "model_identity"}
 
 
@@ -61,13 +61,13 @@ class Rubric(Protocol):
 @dataclass(frozen=True)
 class ClassifierBundle:
     task: DecisionTask
-    cyclotron: str                                  # the rubric-and-head payload, opaque to core
-    rubric: Rubric                                  # ``cyclotron`` parsed by the caller
-    examples: FixedExampleList | None = None        # None: zero-shot
-    example_rows: Sequence[LabeledItem] = ()        # the list's examples and reserves, with texts
+    cyclotron: str  # the rubric-and-head payload, opaque to core
+    rubric: Rubric  # ``cyclotron`` parsed by the caller
+    examples: FixedExampleList | None = None  # None: zero-shot
+    example_rows: Sequence[LabeledItem] = ()  # the list's examples and reserves, with texts
     engine: Mapping[str, str] = field(default_factory=dict)
-    head: Mapping[str, Any] = field(default_factory=dict)          # text-free head summary
-    provenance: Mapping[str, Any] = field(default_factory=dict)    # who proposed the questions
+    head: Mapping[str, Any] = field(default_factory=dict)  # text-free head summary
+    provenance: Mapping[str, Any] = field(default_factory=dict)  # who proposed the questions
     fewshot_audit: Mapping[str, Any] = field(default_factory=dict)  # the list optimizer's record
     lineage: Mapping[str, Any] = field(default_factory=dict)
 
@@ -102,10 +102,16 @@ class ClassifierBundle:
     def context_for(self, target: Item) -> tuple[LabeledItem, ...]:
         if self.examples is None:
             return ()
-        plan = build_context_plan(self.task, target, self.example_rows, self.examples,
-                                  budget=ContextBudget(per_label=self.examples.per_label),
-                                  display_order=DISPLAY_ORDER, order_seed=0,
-                                  presentation_label_order=self.task.labels)
+        plan = build_context_plan(
+            self.task,
+            target,
+            self.example_rows,
+            self.examples,
+            budget=ContextBudget(per_label=self.examples.per_label),
+            display_order=DISPLAY_ORDER,
+            order_seed=0,
+            presentation_label_order=self.task.labels,
+        )
         return plan.examples
 
     def request_for(self, target: Item) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -115,8 +121,7 @@ class ClassifierBundle:
         questions = {name: dict(q) for name, q in self.rubric.questions().items()}
         if self.examples is None:
             return {"text": text}, questions
-        shown = [{"text": row.item.values[self.task.input_field], "label": row.label}
-                 for row in self.context_for(target)]
+        shown = [{"text": row.item.values[self.task.input_field], "label": row.label} for row in self.context_for(target)]
         return {"labeled_examples": shown, "target": {"text": text}}, questions
 
     async def classify(self, target: Item, client: Any) -> DecisionResult:
@@ -126,35 +131,47 @@ class ClassifierBundle:
         reported = getattr(response, "model", None)
         expected = self.engine.get("reported_model")
         if reported and expected and reported != expected:
-            warnings.warn(f"the engine reported model {reported!r}; the bundle was built with {expected!r}",
-                          BundleModelWarning, stacklevel=2)
+            warnings.warn(
+                f"the engine reported model {reported!r}; the bundle was built with {expected!r}",
+                BundleModelWarning,
+                stacklevel=2,
+            )
         answers = {name: _mapping(answer) for name, answer in _mapping(getattr(response, "answers", {})).items()}
         return self.task.validate_result(self.rubric.predict(answers))
 
     # ---- persistence ---------------------------------------------------------------------
 
     def _examples_text(self) -> str:
-        return "".join(_canonical({"id": row.item.id, "label": row.label,
-                                   "text": row.item.values[self.task.input_field]}) + "\n"
-                       for row in self.example_rows)
+        return "".join(
+            _canonical({"id": row.item.id, "label": row.label, "text": row.item.values[self.task.input_field]}) + "\n"
+            for row in self.example_rows
+        )
 
     def manifest(self) -> dict[str, Any]:
         fewshot = None
         if self.examples is not None:
-            fewshot = {"policy": self.examples.name, "fingerprint": self.examples.fingerprint,
-                       "per_label": self.examples.per_label,
-                       "examples": [ref.as_dict() for ref in self.examples.examples],
-                       "reserves": [ref.as_dict() for ref in self.examples.reserves],
-                       "display_order": DISPLAY_ORDER, "presentation_label_order": list(self.task.labels),
-                       "examples_sha256": _sha(self._examples_text()), "audit": dict(self.fewshot_audit)}
+            fewshot = {
+                "policy": self.examples.name,
+                "fingerprint": self.examples.fingerprint,
+                "per_label": self.examples.per_label,
+                "examples": [ref.as_dict() for ref in self.examples.examples],
+                "reserves": [ref.as_dict() for ref in self.examples.reserves],
+                "display_order": DISPLAY_ORDER,
+                "presentation_label_order": list(self.task.labels),
+                "examples_sha256": _sha(self._examples_text()),
+                "audit": dict(self.fewshot_audit),
+            }
         questions = {name: _sha(_canonical(q)) for name, q in sorted(self.rubric.questions().items())}
         document = {
             "bundle_version": BUNDLE_VERSION,
-            "task": {"name": self.task.name, "labels": list(self.task.labels),
-                     "input_field": self.task.input_field, "fingerprint": self.task.fingerprint},
+            "task": {
+                "name": self.task.name,
+                "labels": list(self.task.labels),
+                "input_field": self.task.input_field,
+                "fingerprint": self.task.fingerprint,
+            },
             "engine": dict(self.engine),
-            "rubric": {"cyclotron_sha256": _sha(self.cyclotron), "questions": questions,
-                       "provenance": dict(self.provenance)},
+            "rubric": {"cyclotron_sha256": _sha(self.cyclotron), "questions": questions, "provenance": dict(self.provenance)},
             "fewshot": fewshot,
             "head": dict(self.head),
             "retrieval": None,
@@ -187,13 +204,13 @@ class ClassifierBundle:
         return manifest["bundle_hash"]
 
 
-def load_bundle(directory: str | Path, task: DecisionTask, parse_rubric: Callable[[str], Rubric], *,
-                configured_model: str | None = None) -> ClassifierBundle:
+def load_bundle(
+    directory: str | Path, task: DecisionTask, parse_rubric: Callable[[str], Rubric], *, configured_model: str | None = None
+) -> ClassifierBundle:
     """Verify every hash, the task fingerprint and (if given) the configured engine model."""
     directory = Path(directory)
     try:
-        document = json.loads((directory / MANIFEST_FILE).read_text(encoding="utf-8"),
-                              object_pairs_hook=_unique_object)
+        document = json.loads((directory / MANIFEST_FILE).read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
     except (OSError, json.JSONDecodeError) as error:
         raise BundleValidationError("bundle.json is missing or not valid JSON") from error
     if not isinstance(document, dict) or set(document) != _TOP_KEYS:
@@ -209,8 +226,7 @@ def load_bundle(directory: str | Path, task: DecisionTask, parse_rubric: Callabl
     if not isinstance(engine, dict) or _ENGINE_KEYS - set(engine):
         raise BundleValidationError("engine block is invalid")
     if configured_model is not None and engine["configured_model"] != configured_model:
-        raise BundleValidationError(f"the bundle was built for {engine['configured_model']!r}, "
-                                    f"not {configured_model!r}")
+        raise BundleValidationError(f"the bundle was built for {engine['configured_model']!r}, not {configured_model!r}")
     if document["retrieval"] is not None:
         raise BundleValidationError("retrieval bundles are not supported yet")
     cyclotron = (directory / CYCLOTRON_FILE).read_text(encoding="utf-8")
@@ -220,8 +236,7 @@ def load_bundle(directory: str | Path, task: DecisionTask, parse_rubric: Callabl
     examples, rows = None, []
     if fewshot is not None:
         try:
-            examples = FixedExampleList.from_configuration({"examples": fewshot["examples"],
-                                                            "reserves": fewshot["reserves"]})
+            examples = FixedExampleList.from_configuration({"examples": fewshot["examples"], "reserves": fewshot["reserves"]})
         except (KeyError, TypeError, ValueError) as error:
             raise BundleValidationError("the example list is invalid") from error
         if examples.fingerprint != fewshot["fingerprint"]:
@@ -233,9 +248,18 @@ def load_bundle(directory: str | Path, task: DecisionTask, parse_rubric: Callabl
             raw = json.loads(line)
             rows.append(LabeledItem(Item(raw["id"], {task.input_field: raw["text"]}), raw["label"]))
     rubric = parse_rubric(cyclotron)
-    bundle = ClassifierBundle(task, cyclotron, rubric, examples=examples, example_rows=rows, engine=engine,
-                              head=document["head"], provenance=document["rubric"]["provenance"],
-                              fewshot_audit=(fewshot or {}).get("audit") or {}, lineage=document["lineage"])
+    bundle = ClassifierBundle(
+        task,
+        cyclotron,
+        rubric,
+        examples=examples,
+        example_rows=rows,
+        engine=engine,
+        head=document["head"],
+        provenance=document["rubric"]["provenance"],
+        fewshot_audit=(fewshot or {}).get("audit") or {},
+        lineage=document["lineage"],
+    )
     if bundle.bundle_hash != supplied:
         raise BundleValidationError("the reloaded bundle does not reproduce its hash")
     return bundle

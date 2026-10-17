@@ -1,4 +1,5 @@
 """A reviewer answers the whole checklist for an item and saves it as one review."""
+
 import pytest
 
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
@@ -20,8 +21,9 @@ def review_events(cyclotron):
 def test_one_call_labels_every_output_with_one_review_event_each(tmp_path):
     with Cyclotron.open(tmp_path / "c", CHECKLIST, Model()) as cyclotron:
         decision = run(cyclotron.decide(item("ref-1")))
-        reviews = run(cyclotron.review(decision.decision_id, labels=ALL, explanation="Local news, but stale",
-                                       review_id="checklist-1"))
+        reviews = run(
+            cyclotron.review(decision.decision_id, labels=ALL, explanation="Local news, but stale", review_id="checklist-1")
+        )
         events = review_events(cyclotron)
         pending = {cid: cyclotron.status(cid).pending.decisions_awaiting_review for cid in ALL}
         state = cyclotron.db.execute("SELECT state FROM decisions WHERE id=?", (decision.decision_id,)).fetchone()[0]
@@ -59,8 +61,7 @@ def test_a_checklist_counts_toward_the_window_of_each_labeled_output_only(tmp_pa
 
 @pytest.mark.slow
 def test_each_labeled_output_learns_once_and_no_optimizer_run_is_duplicated(tmp_path):
-    definition = CyclotronDefinition("newsroom", (RELEVANT, TIMELY, LOCAL), seed="checklist-seed",
-                                     rubric_changes_every=1)
+    definition = CyclotronDefinition("newsroom", (RELEVANT, TIMELY, LOCAL), seed="checklist-seed", rubric_changes_every=1)
 
     def optimizer_runs(directory, together):
         calls = []
@@ -73,10 +74,13 @@ def test_each_labeled_output_learns_once_and_no_optimizer_run_is_duplicated(tmp_
                 else:
                     for cid in ALL:
                         run(cyclotron.review(decision.decision_id, label, classifier=cid))
-            per_output = {cid: (sum(e["kind"] == "optimization-stage-started" for e in wheel.history(100000)),
-                                sum(e["kind"] == "trigger-evaluated" and e["stage"] == "rubric"
-                                    for e in wheel.history(100000)))
-                          for cid, wheel in cyclotron.wheels.items()}
+            per_output = {
+                cid: (
+                    sum(e["kind"] == "optimization-stage-started" for e in wheel.history(100000)),
+                    sum(e["kind"] == "trigger-evaluated" and e["stage"] == "rubric" for e in wheel.history(100000)),
+                )
+                for cid, wheel in cyclotron.wheels.items()
+            }
             return per_output, len(calls)
 
     together = optimizer_runs(tmp_path / "together", True)
@@ -99,8 +103,9 @@ def test_resubmitting_a_checklist_is_safe_and_a_changed_one_is_refused(tmp_path)
     assert len(events) == 3
 
 
-@pytest.mark.parametrize("labels", [{"relevant": "include", "unknown": "include"},
-                                    {"relevant": "include", "timely": "maybe"}, {}])
+@pytest.mark.parametrize(
+    "labels", [{"relevant": "include", "unknown": "include"}, {"relevant": "include", "timely": "maybe"}, {}]
+)
 def test_an_invalid_checklist_records_nothing(tmp_path, labels):
     with Cyclotron.open(tmp_path / "c", CHECKLIST, Model()) as cyclotron:
         decision = run(cyclotron.decide(item("ref-1")))

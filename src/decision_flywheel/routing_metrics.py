@@ -14,6 +14,7 @@ window of rows:
   many the whole system gets right when every decision sent to a reviewer
   counts as right (the reviewer's label is the answer).
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -57,11 +58,19 @@ def least_confident_capture(rows: Sequence[Decision], percents: Sequence[int] = 
             cut = sorted(row.confidence for row in rows)[size - 1]
             below = [row for row in rows if row.confidence < cut]
             tied = [row for row in rows if row.confidence == cut]
-            caught = sum(not row.right for row in below) + Fraction(size - len(below), len(tied)) * sum(not row.right for row in tied)
-        result.append({"percent": percent, "reviewed": size, "mistakes": mistakes,
-                       "mistakes_caught": float(caught),
-                       "share_of_mistakes": float(caught / mistakes) if mistakes else None,
-                       "tied_at_cut": len(tied)})
+            caught = sum(not row.right for row in below) + Fraction(size - len(below), len(tied)) * sum(
+                not row.right for row in tied
+            )
+        result.append(
+            {
+                "percent": percent,
+                "reviewed": size,
+                "mistakes": mistakes,
+                "mistakes_caught": float(caught),
+                "share_of_mistakes": float(caught / mistakes) if mistakes else None,
+                "tied_at_cut": len(tied),
+            }
+        )
     return result
 
 
@@ -73,14 +82,19 @@ def threshold_rule(rows: Sequence[Decision], thresholds: Sequence[str] = THRESHO
         threshold = float(text)
         approved = [row for row in rows if row.confidence >= threshold - 1e-12]
         right = sum(row.right for row in approved)
-        result.append({
-            "threshold": threshold, "items": len(rows), "approved": len(approved), "approved_right": right,
-            "promised": sum(row.confidence for row in approved) / len(approved) if approved else None,
-            "got": right / len(approved) if approved else None,
-            "to_reviewers": len(rows) - len(approved),
-            "whole_system_right": right + len(rows) - len(approved),
-            "whole_system_accuracy": (right + len(rows) - len(approved)) / len(rows) if rows else None,
-        })
+        result.append(
+            {
+                "threshold": threshold,
+                "items": len(rows),
+                "approved": len(approved),
+                "approved_right": right,
+                "promised": sum(row.confidence for row in approved) / len(approved) if approved else None,
+                "got": right / len(approved) if approved else None,
+                "to_reviewers": len(rows) - len(approved),
+                "whole_system_right": right + len(rows) - len(approved),
+                "whole_system_accuracy": (right + len(rows) - len(approved)) / len(rows) if rows else None,
+            }
+        )
     return result
 
 

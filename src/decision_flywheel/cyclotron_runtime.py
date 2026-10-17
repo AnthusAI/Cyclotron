@@ -4,6 +4,7 @@ This module owns the cyclotron application's use of ``WorkspaceSession``.  It
 keeps the API command runner independent of shared-request composition,
 per-classifier wheels, and asynchronous decision providers.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,12 +44,22 @@ class CyclotronSession:
 class CyclotronRuntime:
     """Compose and execute source-neutral cyclotron sessions for one host."""
 
-    def __init__(self, store, directory: str | Path, *, model_factory: Callable,
-                 sink_factory: Callable, redact: Sequence[str] = (), storage_factory=None, execution_guard=None):
+    def __init__(
+        self,
+        store,
+        directory: str | Path,
+        *,
+        model_factory: Callable,
+        sink_factory: Callable,
+        redact: Sequence[str] = (),
+        storage_factory=None,
+        execution_guard=None,
+    ):
         self.store = store
         self.directory = Path(directory) if directory is not None else None
-        self.storage_factory,self.execution_guard=storage_factory,execution_guard
-        if self.directory is None and storage_factory is None:raise ValueError("explicit cloud storage factory required")
+        self.storage_factory, self.execution_guard = storage_factory, execution_guard
+        if self.directory is None and storage_factory is None:
+            raise ValueError("explicit cloud storage factory required")
         self.model_factory = model_factory
         self.sink_factory = sink_factory
         self.redact = tuple(redact)
@@ -61,9 +72,21 @@ class CyclotronRuntime:
         """
         values = dict(config)
         allowed = {
-            "selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
-            "rubric_changes_every", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
-            "classifier_ids", "item_list_id", "priming_list_id", "cyclotron_id", "cyclotron_definition_revision",
+            "selection_policy",
+            "max_requests",
+            "max_optimizer_calls",
+            "optimize_every",
+            "rubric_changes_every",
+            "seed",
+            "decisions_model",
+            "decisions_provider",
+            "optimizer_model",
+            "optimizer_transport",
+            "classifier_ids",
+            "item_list_id",
+            "priming_list_id",
+            "cyclotron_id",
+            "cyclotron_definition_revision",
         }
         if set(values) - allowed:
             raise ValueError("unknown run configuration option")
@@ -71,15 +94,30 @@ class CyclotronRuntime:
             if values.get("classifier_ids"):
                 raise ValueError("select a cyclotron or independent classifiers, not both")
             definition = self.store.cyclotron_definition(
-                values["cyclotron_id"], values.get("cyclotron_definition_revision"),
+                values["cyclotron_id"],
+                values.get("cyclotron_definition_revision"),
             )
-            settings = {key: value for key, value in definition["settings"].items()
-                        if key in {"selection_policy", "seed", "decisions_model", "decisions_provider", "optimizer_model", "optimizer_transport",
-                                   "optimize_every", "rubric_changes_every"}}
-            if ('decisions_provider' in values and
-                values['decisions_provider']!=settings.get('decisions_provider','jev') and
-                'decisions_model' not in values):
-                settings.pop('decisions_model',None)
+            settings = {
+                key: value
+                for key, value in definition["settings"].items()
+                if key
+                in {
+                    "selection_policy",
+                    "seed",
+                    "decisions_model",
+                    "decisions_provider",
+                    "optimizer_model",
+                    "optimizer_transport",
+                    "optimize_every",
+                    "rubric_changes_every",
+                }
+            }
+            if (
+                "decisions_provider" in values
+                and values["decisions_provider"] != settings.get("decisions_provider", "jev")
+                and "decisions_model" not in values
+            ):
+                settings.pop("decisions_model", None)
             values = {**settings, **values}
             values["cyclotron_definition_revision"] = definition["revision"]
             values["cyclotron_definition_fingerprint"] = definition["fingerprint"]
@@ -87,25 +125,33 @@ class CyclotronRuntime:
             values["classifier_revisions"] = {row["id"]: row["revision"] for row in definition["classifiers"]}
         if not values.get("classifier_ids") or not values.get("item_list_id"):
             raise ValueError("choose classifiers and an item list")
-        for key, default in (("max_requests", 500), ("max_optimizer_calls", 1000),
-                             ("optimize_every", 20), ("rubric_changes_every", 2)):
+        for key, default in (
+            ("max_requests", 500),
+            ("max_optimizer_calls", 1000),
+            ("optimize_every", 20),
+            ("rubric_changes_every", 2),
+        ):
             value = values.setdefault(key, default)
             if type(value) is not int or value < 1:
                 raise ValueError("run ceilings and cadences must be positive integers")
         values.setdefault("selection_policy", {"primary": "accuracy"})
         values["selection_policy"] = asdict(SelectionPolicy(**values["selection_policy"]))
         values.setdefault("seed", "arxiv-web-v1")
-        values=normalize_decision_settings(values)
+        values = normalize_decision_settings(values)
         values.setdefault("optimizer_model", "gpt-6-luna")
         from .adapters.optimizer_transport import validate_optimizer_transport
-        values['optimizer_transport']=validate_optimizer_transport(values.get('optimizer_transport','openai'))
+
+        values["optimizer_transport"] = validate_optimizer_transport(values.get("optimizer_transport", "openai"))
         values["evaluation_protocol"] = "protected-feedback-v1"
-        values = freeze_configuration(self.store, values,selection_policy_override='selection_policy' in config)
+        values = freeze_configuration(self.store, values, selection_policy_override="selection_policy" in config)
         # The catalog can refresh while a run is being created. Resolve the
         # immutable references we just froze, never enumerate "latest" again.
         items = [
-            {**self.store.item_revision(values["item_list_id"], row["id"], row["revision"]),
-             "revision": row["revision"], "fingerprint": row["fingerprint"]}
+            {
+                **self.store.item_revision(values["item_list_id"], row["id"], row["revision"]),
+                "revision": row["revision"],
+                "fingerprint": row["fingerprint"],
+            }
             for row in values["item_revisions"]
         ]
         return values, items
@@ -139,29 +185,60 @@ class CyclotronRuntime:
                 continue
             if item_id not in order:
                 order.append(item_id)
-            votes[key] = {"classifier_id": classifier_id, "label": feedback["final_answer_value"],
-                          "comment": feedback.get("edit_comment_value") or "", "request_id": feedback["id"]}
+            votes[key] = {
+                "classifier_id": classifier_id,
+                "label": feedback["final_answer_value"],
+                "comment": feedback.get("edit_comment_value") or "",
+                "request_id": feedback["id"],
+            }
         source_items = {row["id"]: row for row in self.store.items(source_run_id)}
-        eligible = [item_id for item_id in order if item_id in source_items
-                    and all((item_id, ref["id"]) in votes for ref in refs)]
+        eligible = [
+            item_id for item_id in order if item_id in source_items and all((item_id, ref["id"]) in votes for ref in refs)
+        ]
         if not eligible:
             raise ValueError("no fully labeled source items available for this cyclotron")
         values, _ = self.normalize_run_config({**config, "item_list_id": source["config"]["item_list_id"]})
-        frozen = {**values, "input_mode": "replay", "source_run_id": source_run_id,
-                  "learning_policy": "fresh-replay", "replay_count": len(eligible)}
-        frozen["item_revisions"] = [{"id": source_items[item_id]["id"], "revision": source_items[item_id]["revision"],
-                                     "fingerprint": source_items[item_id]["fingerprint"]} for item_id in eligible]
+        frozen = {
+            **values,
+            "input_mode": "replay",
+            "source_run_id": source_run_id,
+            "learning_policy": "fresh-replay",
+            "replay_count": len(eligible),
+        }
+        frozen["item_revisions"] = [
+            {
+                "id": source_items[item_id]["id"],
+                "revision": source_items[item_id]["revision"],
+                "fingerprint": source_items[item_id]["fingerprint"],
+            }
+            for item_id in eligible
+        ]
         return self.store.create_run(
-            name, "live", frozen, items=[source_items[item_id] for item_id in eligible],
-            frozen_feedback=[(item_id, ref["id"], votes[(item_id, ref["id"])])
-                             for item_id in eligible for ref in refs],
-            initial_events=[("replay-created", {"kind": "replay-created", "source_run_id": source_run_id,
-                              "sample_count": len(eligible), "initial_state": "empty context and no fitted heads"})],
+            name,
+            "live",
+            frozen,
+            items=[source_items[item_id] for item_id in eligible],
+            frozen_feedback=[(item_id, ref["id"], votes[(item_id, ref["id"])]) for item_id in eligible for ref in refs],
+            initial_events=[
+                (
+                    "replay-created",
+                    {
+                        "kind": "replay-created",
+                        "source_run_id": source_run_id,
+                        "sample_count": len(eligible),
+                        "initial_state": "empty context and no fitted heads",
+                    },
+                )
+            ],
         )
 
-    def open_session(self, run_id: str, config: Mapping[str, object],
-                     _items: Sequence[Mapping[str, object]],
-                     _current: Mapping[str, object] | None) -> CyclotronSession:
+    def open_session(
+        self,
+        run_id: str,
+        config: Mapping[str, object],
+        _items: Sequence[Mapping[str, object]],
+        _current: Mapping[str, object] | None,
+    ) -> CyclotronSession:
         """Open the pinned cyclotron configuration without changing it."""
         if "classifiers" not in config:
             raise ValueError("cyclotron runtime requires a frozen cyclotron configuration")
@@ -175,15 +252,28 @@ class CyclotronRuntime:
             # buffered trace behind.
             configure_batch(200)
         workspace = WorkspaceSession(
-            self.store, run, self.directory / run_id if self.directory is not None else None, model, optimizer,
-            observer, redact=self.redact, storage=self.storage_factory(run_id) if self.storage_factory else None,
+            self.store,
+            run,
+            self.directory / run_id if self.directory is not None else None,
+            model,
+            optimizer,
+            observer,
+            redact=self.redact,
+            storage=self.storage_factory(run_id) if self.storage_factory else None,
             execution_guard=self.execution_guard,
         )
         return CyclotronSession(workspace)
 
-    async def execute(self, session: ApplicationSession, kind: str,
-                      payload: Mapping[str, object], _current: Mapping[str, object] | None,
-                      config: Mapping[str, object], *, request_id: str | None = None) -> RuntimeCommand:
+    async def execute(
+        self,
+        session: ApplicationSession,
+        kind: str,
+        payload: Mapping[str, object],
+        _current: Mapping[str, object] | None,
+        config: Mapping[str, object],
+        *,
+        request_id: str | None = None,
+    ) -> RuntimeCommand:
         """Execute a cyclotron command; storage remains API-owned.
 
         ``WorkspaceSession`` persists its own cyclotron-facing state because
@@ -227,11 +317,16 @@ class CyclotronRuntime:
                 shown = await workspace.prepare()
                 if shown.get("finished"):
                     return RuntimeCommand(shown)
-                return RuntimeCommand(await workspace.feedback({
-                    "item_id": shown["item"]["id"],
-                    "presentation_id": shown["prediction"]["presentation_id"],
-                    "labels": [],
-                }, f"replay:{shown['item']['id']}"))
+                return RuntimeCommand(
+                    await workspace.feedback(
+                        {
+                            "item_id": shown["item"]["id"],
+                            "presentation_id": shown["prediction"]["presentation_id"],
+                            "labels": [],
+                        },
+                        f"replay:{shown['item']['id']}",
+                    )
+                )
             raise ValueError("use catalog label correction; automatic learning rollback is not supported")
         finally:
             flush = getattr(workspace.observer, "flush", None)
@@ -239,8 +334,15 @@ class CyclotronRuntime:
                 flush()
 
 
-def run_cyclotron_command(runtime: CyclotronRuntime, session: CyclotronSession, kind: str,
-                          payload: Mapping[str, object], current: Mapping[str, object] | None,
-                          config: Mapping[str, object], *, request_id: str | None = None) -> RuntimeCommand:
+def run_cyclotron_command(
+    runtime: CyclotronRuntime,
+    session: CyclotronSession,
+    kind: str,
+    payload: Mapping[str, object],
+    current: Mapping[str, object] | None,
+    config: Mapping[str, object],
+    *,
+    request_id: str | None = None,
+) -> RuntimeCommand:
     """Synchronous adapter for serialized command workers."""
     return asyncio.run(runtime.execute(session, kind, payload, current, config, request_id=request_id))

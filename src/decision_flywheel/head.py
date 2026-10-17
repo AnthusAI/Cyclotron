@@ -1,4 +1,5 @@
 """A deterministic numerical head with trusted-label and OOF-calibration guards."""
+
 from __future__ import annotations
 
 import hashlib
@@ -61,15 +62,30 @@ class OutOfFoldPredictions:
         if not self.classes or len(set(self.classes)) != len(self.classes):
             raise ValueError("out-of-fold classes must be unique and non-empty")
         count = len(self.item_ids)
-        fields = (self.logits, self.labels, self.weights, self.folds, self.fit_ids, self.fit_labels,
-                  self.normalization_fit_ids, self.normalizers)
+        fields = (
+            self.logits,
+            self.labels,
+            self.weights,
+            self.folds,
+            self.fit_ids,
+            self.fit_labels,
+            self.normalization_fit_ids,
+            self.normalizers,
+        )
         if not count or any(len(field) != count for field in fields):
             raise ValueError("out-of-fold prediction fields must have the same non-zero length")
         if len(set(self.item_ids)) != count or any(not isinstance(item, str) or not item for item in self.item_ids):
             raise ValueError("out-of-fold item IDs must be unique non-empty strings")
         for item_id, logits, label, weight, fold, fitted_ids, fitted_labels, normalization_ids, normalizer in zip(
-            self.item_ids, self.logits, self.labels, self.weights, self.folds, self.fit_ids, self.fit_labels,
-            self.normalization_fit_ids, self.normalizers,
+            self.item_ids,
+            self.logits,
+            self.labels,
+            self.weights,
+            self.folds,
+            self.fit_ids,
+            self.fit_labels,
+            self.normalization_fit_ids,
+            self.normalizers,
         ):
             if len(logits) != len(self.classes):
                 raise ValueError("out-of-fold logits must cover every class")
@@ -109,41 +125,45 @@ class Calibration:
             raise ValueError("calibration accepts out-of-fold predictions only")
         if _finite_number("temperature", self.temperature) <= 0:
             raise ValueError("temperature must be a positive finite number")
-        if self.method not in {'temperature','isotonic'}:
+        if self.method not in {"temperature", "isotonic"}:
             raise ValueError("calibration method must be temperature or isotonic")
-        if self.method == 'isotonic' and not self.isotonic_knots:
+        if self.method == "isotonic" and not self.isotonic_knots:
             raise ValueError("isotonic calibration needs fitted knots")
 
 
 def _isotonic_knots(scores, labels, weights):
-    blocks=[]
-    for score,target,weight in sorted(zip(scores, labels, weights), key=lambda row: row[0]):
-        blocks.append([score,score,target*weight,weight])
-        while len(blocks)>1 and blocks[-2][2]/blocks[-2][3] > blocks[-1][2]/blocks[-1][3]:
-            right=blocks.pop(); left=blocks.pop(); blocks.append([left[0],right[1],left[2]+right[2],left[3]+right[3]])
-    return tuple(((left+right)/2,total/weight) for left,right,total,weight in blocks)
+    blocks = []
+    for score, target, weight in sorted(zip(scores, labels, weights), key=lambda row: row[0]):
+        blocks.append([score, score, target * weight, weight])
+        while len(blocks) > 1 and blocks[-2][2] / blocks[-2][3] > blocks[-1][2] / blocks[-1][3]:
+            right = blocks.pop()
+            left = blocks.pop()
+            blocks.append([left[0], right[1], left[2] + right[2], left[3] + right[3]])
+    return tuple(((left + right) / 2, total / weight) for left, right, total, weight in blocks)
 
 
 def _isotonic_probability(knots, score):
-    for knot,value in knots:
-        if score <= knot: return value
+    for knot, value in knots:
+        if score <= knot:
+            return value
     return knots[-1][1]
 
 
-def calibrate(predictions: OutOfFoldPredictions, *, method: str = 'auto') -> Calibration:
+def calibrate(predictions: OutOfFoldPredictions, *, method: str = "auto") -> Calibration:
     """Fit one propensity-weighted multiclass temperature from structural OOF proof."""
     if not isinstance(predictions, OutOfFoldPredictions):
         raise ValueError("calibration accepts out-of-fold predictions only")
 
-    if method not in {'auto','temperature','isotonic'}:
+    if method not in {"auto", "temperature", "isotonic"}:
         raise ValueError("calibration method must be auto, temperature, or isotonic")
     # Isotonic needs substantial independent evidence.  ``auto`` is selected
     # by a deterministic held-out split of the already OOF rows; it is not a
     # threshold that silently promotes the more flexible calibrator.
     eligible_isotonic = len(predictions.labels) >= 100 and len(predictions.classes) == 2 and len(set(predictions.labels)) == 2
-    chosen = 'isotonic' if method == 'isotonic' else 'temperature'
-    if chosen == 'isotonic' and (len(predictions.classes) != 2 or len(set(predictions.labels)) != 2):
-        raise ValueError('isotonic calibration needs two classes with both labels represented')
+    chosen = "isotonic" if method == "isotonic" else "temperature"
+    if chosen == "isotonic" and (len(predictions.classes) != 2 or len(set(predictions.labels)) != 2):
+        raise ValueError("isotonic calibration needs two classes with both labels represented")
+
     def loss(temperature: float) -> float:
         total = 0.0
         total_weight = 0.0
@@ -154,31 +174,64 @@ def calibrate(predictions: OutOfFoldPredictions, *, method: str = 'auto') -> Cal
         return total / total_weight
 
     temperature = min((0.5 + step / 100 for step in range(151)), key=lambda value: (loss(value), value))
-    if method == 'auto' and eligible_isotonic:
-        positive=predictions.classes[0]
-        held=[i for i,item_id in enumerate(predictions.item_ids) if int(hashlib.sha256(item_id.encode()).hexdigest()[:8],16)%5 == 0]
-        fit=[i for i in range(len(predictions.labels)) if i not in held]
-        if len(held) >= 20 and {predictions.labels[i] for i in held} == set(predictions.classes) and {predictions.labels[i] for i in fit} == set(predictions.classes):
-            knots=_isotonic_knots([_softmax(predictions.logits[i],1.)[0] for i in fit],
-                [float(predictions.labels[i] == positive) for i in fit],[predictions.weights[i] for i in fit])
-            isotonic_brier=sum(predictions.weights[i]*(_isotonic_probability(knots,_softmax(predictions.logits[i],1.)[0])-float(predictions.labels[i] == positive))**2 for i in held)/sum(predictions.weights[i] for i in held)
-            temperature_brier=sum(predictions.weights[i]*(_softmax(predictions.logits[i],temperature)[0]-float(predictions.labels[i] == positive))**2 for i in held)/sum(predictions.weights[i] for i in held)
-            if isotonic_brier + .005 < temperature_brier:
-                chosen='isotonic'
-                auto_reason=f'auto: held-out OOF Brier improved from {temperature_brier:.6f} to {isotonic_brier:.6f}'
+    if method == "auto" and eligible_isotonic:
+        positive = predictions.classes[0]
+        held = [
+            i
+            for i, item_id in enumerate(predictions.item_ids)
+            if int(hashlib.sha256(item_id.encode()).hexdigest()[:8], 16) % 5 == 0
+        ]
+        fit = [i for i in range(len(predictions.labels)) if i not in held]
+        if (
+            len(held) >= 20
+            and {predictions.labels[i] for i in held} == set(predictions.classes)
+            and {predictions.labels[i] for i in fit} == set(predictions.classes)
+        ):
+            knots = _isotonic_knots(
+                [_softmax(predictions.logits[i], 1.0)[0] for i in fit],
+                [float(predictions.labels[i] == positive) for i in fit],
+                [predictions.weights[i] for i in fit],
+            )
+            isotonic_brier = sum(
+                predictions.weights[i]
+                * (
+                    _isotonic_probability(knots, _softmax(predictions.logits[i], 1.0)[0])
+                    - float(predictions.labels[i] == positive)
+                )
+                ** 2
+                for i in held
+            ) / sum(predictions.weights[i] for i in held)
+            temperature_brier = sum(
+                predictions.weights[i]
+                * (_softmax(predictions.logits[i], temperature)[0] - float(predictions.labels[i] == positive)) ** 2
+                for i in held
+            ) / sum(predictions.weights[i] for i in held)
+            if isotonic_brier + 0.005 < temperature_brier:
+                chosen = "isotonic"
+                auto_reason = f"auto: held-out OOF Brier improved from {temperature_brier:.6f} to {isotonic_brier:.6f}"
             else:
-                auto_reason=f'auto: retained temperature; held-out OOF Brier {temperature_brier:.6f} vs isotonic {isotonic_brier:.6f}'
+                auto_reason = (
+                    f"auto: retained temperature; held-out OOF Brier {temperature_brier:.6f} vs isotonic {isotonic_brier:.6f}"
+                )
         else:
-            auto_reason='auto: retained temperature; deterministic OOF holdout lacked class coverage'
-    elif method == 'auto':
-        auto_reason='auto: retained temperature; insufficient binary OOF evidence'
-    if chosen == 'temperature':
-        reason = 'explicit temperature scaling' if method == 'temperature' else auto_reason
-        return Calibration(temperature, method='temperature', selection_reason=reason)
+            auto_reason = "auto: retained temperature; deterministic OOF holdout lacked class coverage"
+    elif method == "auto":
+        auto_reason = "auto: retained temperature; insufficient binary OOF evidence"
+    if chosen == "temperature":
+        reason = "explicit temperature scaling" if method == "temperature" else auto_reason
+        return Calibration(temperature, method="temperature", selection_reason=reason)
     positive = predictions.classes[0]
-    knots=_isotonic_knots([_softmax(logits,1.)[0] for logits in predictions.logits],
-        [float(label == positive) for label in predictions.labels],predictions.weights)
-    return Calibration(temperature, method='isotonic', selection_reason='explicit isotonic challenger' if method == 'isotonic' else auto_reason, isotonic_knots=knots)
+    knots = _isotonic_knots(
+        [_softmax(logits, 1.0)[0] for logits in predictions.logits],
+        [float(label == positive) for label in predictions.labels],
+        predictions.weights,
+    )
+    return Calibration(
+        temperature,
+        method="isotonic",
+        selection_reason="explicit isotonic challenger" if method == "isotonic" else auto_reason,
+        isotonic_knots=knots,
+    )
 
 
 @dataclass(frozen=True)
@@ -220,9 +273,10 @@ class LearnedHead:
 
     def _logits(self, values: Mapping[str, float]) -> tuple[float, ...]:
         normalised = self._normalised_values(values)
-        logits = tuple(self.weights[label]["intercept"] + sum(self.weights[label][name] * normalised[name]
-                                                                 for name in self.feature_names)
-                       for label in self.classes)
+        logits = tuple(
+            self.weights[label]["intercept"] + sum(self.weights[label][name] * normalised[name] for name in self.feature_names)
+            for label in self.classes
+        )
         if not all(math.isfinite(value) for value in logits):
             raise ValueError("prediction logits must stay finite")
         return logits
@@ -231,22 +285,34 @@ class LearnedHead:
         return dict(zip(self.classes, _softmax(self._logits(values), 1.0)))
 
     def probabilities(self, values: Mapping[str, float]) -> dict[str, float]:
-        probabilities=_softmax(self._logits(values), self.calibration.temperature)
-        if self.calibration.method == 'temperature': return dict(zip(self.classes, probabilities))
-        raw=_softmax(self._logits(values), 1.)[0]
-        calibrated=_isotonic_probability(self.calibration.isotonic_knots,raw)
-        calibrated=max(0.,min(1.,calibrated))
-        return {self.classes[0]:calibrated,self.classes[1]:1-calibrated}
+        probabilities = _softmax(self._logits(values), self.calibration.temperature)
+        if self.calibration.method == "temperature":
+            return dict(zip(self.classes, probabilities))
+        raw = _softmax(self._logits(values), 1.0)[0]
+        calibrated = _isotonic_probability(self.calibration.isotonic_knots, raw)
+        calibrated = max(0.0, min(1.0, calibrated))
+        return {self.classes[0]: calibrated, self.classes[1]: 1 - calibrated}
 
     def predict(self, values: Mapping[str, float]) -> str:
         probabilities = self.probabilities(values)
         return max(self.classes, key=lambda label: (probabilities[label], label))
 
 
-def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_features: Sequence[str],
-                     development_ids: Sequence[str], scoreboard_ids: Sequence[str], cyclotron_fingerprint: str,
-                     policy_fingerprint: str, context_artifact_fingerprint: str, source_model_provenance: str,
-                     folds: int = 3, training_class_weighting: str = "natural", calibration_method: str = 'auto') -> LearnedHead:
+def fit_learned_head(
+    task: DecisionTask,
+    rows: Sequence[HeadRow],
+    *,
+    declared_features: Sequence[str],
+    development_ids: Sequence[str],
+    scoreboard_ids: Sequence[str],
+    cyclotron_fingerprint: str,
+    policy_fingerprint: str,
+    context_artifact_fingerprint: str,
+    source_model_provenance: str,
+    folds: int = 3,
+    training_class_weighting: str = "natural",
+    calibration_method: str = "auto",
+) -> LearnedHead:
     """Fit numbers on trusted train rows; dev and scoreboard remain ID-only firewalls."""
     names = tuple(declared_features)
     if not names or len(set(names)) != len(names) or any(not isinstance(name, str) or not name for name in names):
@@ -271,35 +337,58 @@ def fit_learned_head(task: DecisionTask, rows: Sequence[HeadRow], *, declared_fe
     weights = _training_weights(propensities, labels, training_class_weighting)
     # Calibration represents the review-selection-corrected natural label
     # distribution, not the artificially equalized training distribution.
-    oof = _out_of_fold(task.labels, names, training_ids, raw_matrix, labels, propensities,
-                       _inverse_propensity_weights(propensities), folds, training_class_weighting)
+    oof = _out_of_fold(
+        task.labels,
+        names,
+        training_ids,
+        raw_matrix,
+        labels,
+        propensities,
+        _inverse_propensity_weights(propensities),
+        folds,
+        training_class_weighting,
+    )
     calibration = calibrate(oof, method=calibration_method)
     fitted = _fit(task.labels, names, matrix, labels, weights)
-    provenance = HeadProvenance(training_ids, tuple(development_ids), tuple(scoreboard_ids), tuple(weights),
-                                cyclotron_fingerprint, policy_fingerprint, context_artifact_fingerprint,
-                                source_model_provenance, training_class_weighting)
+    provenance = HeadProvenance(
+        training_ids,
+        tuple(development_ids),
+        tuple(scoreboard_ids),
+        tuple(weights),
+        cyclotron_fingerprint,
+        policy_fingerprint,
+        context_artifact_fingerprint,
+        source_model_provenance,
+        training_class_weighting,
+    )
     # Include the complete text-free provenance, not merely the resulting
     # coefficients. Different task, selection, context, or source-model
     # contracts can happen to yield identical numerical parameters.
-    refitted = _fingerprint({
-        "calibration": {"method": calibration.method, "temperature": calibration.temperature,
-                        "knots": calibration.isotonic_knots, "reason": calibration.selection_reason},
-        "context_artifact": context_artifact_fingerprint,
-        "development_ids": tuple(development_ids),
-        "features": names,
-        "normalizers": normalizers,
-        "policy": policy_fingerprint,
-        "scoreboard_ids": tuple(scoreboard_ids),
-        "cyclotron": cyclotron_fingerprint,
-        "source_model": source_model_provenance,
-        "task": task.fingerprint,
-        "training_ids": training_ids,
-        "training_labels": tuple(labels),
-        "training_propensities": tuple(propensities),
-        "training_class_weighting": training_class_weighting,
-        "training_values": raw_matrix,
-        "weights": fitted,
-    })
+    refitted = _fingerprint(
+        {
+            "calibration": {
+                "method": calibration.method,
+                "temperature": calibration.temperature,
+                "knots": calibration.isotonic_knots,
+                "reason": calibration.selection_reason,
+            },
+            "context_artifact": context_artifact_fingerprint,
+            "development_ids": tuple(development_ids),
+            "features": names,
+            "normalizers": normalizers,
+            "policy": policy_fingerprint,
+            "scoreboard_ids": tuple(scoreboard_ids),
+            "cyclotron": cyclotron_fingerprint,
+            "source_model": source_model_provenance,
+            "task": task.fingerprint,
+            "training_ids": training_ids,
+            "training_labels": tuple(labels),
+            "training_propensities": tuple(propensities),
+            "training_class_weighting": training_class_weighting,
+            "training_values": raw_matrix,
+            "weights": fitted,
+        }
+    )
     return LearnedHead(tuple(task.labels), names, fitted, normalizers, calibration, oof, provenance, refitted)
 
 
@@ -382,19 +471,24 @@ def _training_weights(propensities, labels, weighting):
         raise ValueError("training labels and propensities must have equal lengths")
     if weighting == "natural":
         return weights
-    totals = {label: math.fsum(w for w, actual in zip(weights, labels) if actual == label)
-              for label in set(labels)}
+    totals = {label: math.fsum(w for w, actual in zip(weights, labels) if actual == label) for label in set(labels)}
     return [w * len(weights) / (len(totals) * totals[label]) for w, label in zip(weights, labels)]
 
 
-def _fit(classes: Sequence[str], names: tuple[str, ...], matrix, labels, weights, *, epochs: int = 400,
-         learning_rate: float = 0.15) -> dict[str, dict[str, float]]:
+def _fit(
+    classes: Sequence[str], names: tuple[str, ...], matrix, labels, weights, *, epochs: int = 400, learning_rate: float = 0.15
+) -> dict[str, dict[str, float]]:
     parameters = {label: {"intercept": 0.0, **{name: 0.0 for name in names}} for label in classes}
     for _ in range(epochs):
         gradients = {label: {"intercept": 0.0, **{name: 0.0 for name in names}} for label in classes}
         for row, actual, weight in zip(matrix, labels, weights):
-            probabilities = _softmax(tuple(parameters[label]["intercept"] + sum(
-                parameters[label][name] * row[name] for name in names) for label in classes), 1.0)
+            probabilities = _softmax(
+                tuple(
+                    parameters[label]["intercept"] + sum(parameters[label][name] * row[name] for name in names)
+                    for label in classes
+                ),
+                1.0,
+            )
             for index, label in enumerate(classes):
                 error = (1.0 if label == actual else 0.0) - probabilities[index]
                 gradients[label]["intercept"] += weight * error
@@ -406,8 +500,17 @@ def _fit(classes: Sequence[str], names: tuple[str, ...], matrix, labels, weights
     return parameters
 
 
-def _out_of_fold(classes, names, item_ids, matrix, labels, propensities, calibration_weights,
-                 folds: int, training_class_weighting: str = "natural") -> OutOfFoldPredictions:
+def _out_of_fold(
+    classes,
+    names,
+    item_ids,
+    matrix,
+    labels,
+    propensities,
+    calibration_weights,
+    folds: int,
+    training_class_weighting: str = "natural",
+) -> OutOfFoldPredictions:
     fold_by_index: dict[int, int] = {}
     for label in classes:
         indices = [index for index, actual in enumerate(labels) if actual == label]
@@ -429,12 +532,17 @@ def _out_of_fold(classes, names, item_ids, matrix, labels, propensities, calibra
         held_matrix = _transform_matrix([matrix[index] for index in held], names, fitted_normalizers)
         # Weight each fitting partition from its own propensities. A held-out
         # item's selection probability must not affect the model scoring it.
-        fitted = _fit(classes, names, train_matrix, list(training_labels),
-                      _training_weights([propensities[index] for index in train], training_labels,
-                                        training_class_weighting))
+        fitted = _fit(
+            classes,
+            names,
+            train_matrix,
+            list(training_labels),
+            _training_weights([propensities[index] for index in train], training_labels, training_class_weighting),
+        )
         for index, held_row in zip(held, held_matrix):
-            outputs[index] = tuple(fitted[label]["intercept"] + sum(fitted[label][name] * held_row[name]
-                                                                       for name in names) for label in classes)
+            outputs[index] = tuple(
+                fitted[label]["intercept"] + sum(fitted[label][name] * held_row[name] for name in names) for label in classes
+            )
             fit_ids[index] = tuple(item_ids[position] for position in train)
             fit_labels[index] = training_labels
             fold_normalizers[index] = fitted_normalizers
@@ -442,9 +550,18 @@ def _out_of_fold(classes, names, item_ids, matrix, labels, propensities, calibra
     assert all(value is not None for value in fit_ids)
     assert all(value is not None for value in fit_labels)
     assert all(value is not None for value in fold_normalizers)
-    return OutOfFoldPredictions(tuple(classes), tuple(item_ids), tuple(outputs), tuple(labels), tuple(calibration_weights),
-                                 tuple(fold_by_index[index] for index in range(len(matrix))),
-                                 tuple(fit_ids), tuple(fit_labels), tuple(fit_ids), tuple(fold_normalizers))
+    return OutOfFoldPredictions(
+        tuple(classes),
+        tuple(item_ids),
+        tuple(outputs),
+        tuple(labels),
+        tuple(calibration_weights),
+        tuple(fold_by_index[index] for index in range(len(matrix))),
+        tuple(fit_ids),
+        tuple(fit_labels),
+        tuple(fit_ids),
+        tuple(fold_normalizers),
+    )
 
 
 def _softmax(logits: Sequence[float], temperature: float) -> tuple[float, ...]:

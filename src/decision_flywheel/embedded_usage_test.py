@@ -1,4 +1,5 @@
 """An application can state what its cyclotron's model calls cost, per window of decisions."""
+
 import pytest
 
 from .batched_classification import BatchedAnswers
@@ -7,8 +8,10 @@ from .embedded_cyclotron_test import RELEVANT, item, run
 from .models import DecisionResult
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 
-PRICES = {"decision_model": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0},
-          "optimizer": {"input_usd_per_mtok": 0.40, "cached_input_usd_per_mtok": 0.10, "output_usd_per_mtok": 1.60}}
+PRICES = {
+    "decision_model": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0},
+    "optimizer": {"input_usd_per_mtok": 0.40, "cached_input_usd_per_mtok": 0.10, "output_usd_per_mtok": 1.60},
+}
 
 
 class Model:
@@ -19,10 +22,16 @@ class Model:
 
     async def classify_many(self, configs, target, training, **kwargs):
         self.calls += 1
-        p = .8 if "yes" in target.values["text"] else .3
-        return BatchedAnswers({cid: {"decision": DecisionResult("include" if p > .5 else "exclude",
-                                                                {"include": p, "exclude": 1 - p})} for cid in configs},
-                              "metered", {"input_tokens": 1000, "output_tokens": 10}, 1)
+        p = 0.8 if "yes" in target.values["text"] else 0.3
+        return BatchedAnswers(
+            {
+                cid: {"decision": DecisionResult("include" if p > 0.5 else "exclude", {"include": p, "exclude": 1 - p})}
+                for cid in configs
+            },
+            "metered",
+            {"input_tokens": 1000, "output_tokens": 10},
+            1,
+        )
 
 
 def test_paid_decision_requests_are_counted_per_window_and_cached_answers_are_free(tmp_path):
@@ -37,19 +46,29 @@ def test_paid_decision_requests_are_counted_per_window_and_cached_answers_are_fr
     assert model.calls == 3
     assert [w["decision_model"]["requests"] for w in usage["windows"]] == [2, 1]
     assert [(w["first_cycle"], w["last_cycle"]) for w in usage["windows"]] == [(1, 2), (3, 3)]
-    assert usage["total"]["decision_model"] == {"requests": 3, "input_tokens": 3000, "cached_input_tokens": 0,
-                                                "output_tokens": 30, "usd": pytest.approx(3000 * 0.042 / 1e6)}
+    assert usage["total"]["decision_model"] == {
+        "requests": 3,
+        "input_tokens": 3000,
+        "cached_input_tokens": 0,
+        "output_tokens": 30,
+        "usd": pytest.approx(3000 * 0.042 / 1e6),
+    }
     assert usage["total"]["optimizer"]["requests"] == 0
     assert [row["n"] for row in log] == [1, 2, 3] and log[0]["reviews"] == {}
     assert log[0]["item"] == {"text": "yes 0"}
 
 
 def test_optimizer_calls_count_toward_the_decision_whose_review_drove_them(tmp_path):
-    optimizer = OptimizerAgent(lambda _: OptimizerReply(
-        '{"rationale":"Editors include yes items","rubric":"Include items that say yes."}', "fake-optimizer",
-        usage={"prompt_tokens": 2000, "completion_tokens": 50, "prompt_tokens_details": {"cached_tokens": 500}}))
-    definition = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=1000,
-                                     rubric_changes_every=1)
+    optimizer = OptimizerAgent(
+        lambda _: OptimizerReply(
+            '{"rationale":"Editors include yes items","rubric":"Include items that say yes."}',
+            "fake-optimizer",
+            usage={"prompt_tokens": 2000, "completion_tokens": 50, "prompt_tokens_details": {"cached_tokens": 500}},
+        )
+    )
+    definition = CyclotronDefinition(
+        "papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=1000, rubric_changes_every=1
+    )
     with Cyclotron.open(tmp_path / "c", definition, Model(), optimizer, max_requests=500, review_program=None) as cyclotron:
         for index in range(6):
             decision = run(cyclotron.decide(item(f"learn-{index}", ("yes " if index % 2 else "no ") + str(index))))
@@ -80,6 +99,7 @@ def test_usage_needs_both_prices(tmp_path):
 
 def _two_outputs(**options):
     from .embedded_cyclotron import ClassifierSpec
+
     timely = ClassifierSpec("timely", ("include", "exclude"), "Is this timely?", positive_label="include")
     return CyclotronDefinition("newsroom", (RELEVANT, timely), seed="usage-seed", **options)
 
@@ -94,8 +114,9 @@ def _sums_to_total(usage):
 
 def test_decision_model_usage_is_split_by_each_outputs_share_of_the_request(tmp_path):
     long_rubric = "Include sources about defending AI systems. " * 40
-    with Cyclotron.open(tmp_path / "c", _two_outputs(), Model(), review_program=None,
-                        seed_rubrics={"relevant": long_rubric}) as cyclotron:
+    with Cyclotron.open(
+        tmp_path / "c", _two_outputs(), Model(), review_program=None, seed_rubrics={"relevant": long_rubric}
+    ) as cyclotron:
         for index in range(3):
             run(cyclotron.decide(item(f"i-{index}", f"yes {index}")))
         usage = cyclotron.usage(PRICES)
@@ -118,11 +139,21 @@ def test_optimizer_usage_belongs_to_the_output_whose_learning_made_the_calls(tmp
 
     def complete(messages):
         calls.append(messages)
-        return OptimizerReply('{"rationale":"Editors include yes items","rubric":"Include items that say yes."}',
-                              "fake-optimizer", usage={"prompt_tokens": 2000, "completion_tokens": 50})
+        return OptimizerReply(
+            '{"rationale":"Editors include yes items","rubric":"Include items that say yes."}',
+            "fake-optimizer",
+            usage={"prompt_tokens": 2000, "completion_tokens": 50},
+        )
+
     optimizer = OptimizerAgent(complete)
-    with Cyclotron.open(tmp_path / "c", _two_outputs(optimize_every=1000, rubric_changes_every=1), Model(), optimizer,
-                        max_requests=500, review_program=None) as cyclotron:
+    with Cyclotron.open(
+        tmp_path / "c",
+        _two_outputs(optimize_every=1000, rubric_changes_every=1),
+        Model(),
+        optimizer,
+        max_requests=500,
+        review_program=None,
+    ) as cyclotron:
         for index in range(12):
             decision = run(cyclotron.decide(item(f"learn-{index}", ("yes " if index % 2 else "no ") + str(index))))
             run(cyclotron.review(decision.decision_id, "include" if index % 2 else "exclude", classifier="relevant"))
@@ -146,11 +177,22 @@ def test_a_request_recorded_before_shares_were_kept_is_split_evenly(tmp_path):
 
 
 def test_deferred_learning_usage_is_counted(tmp_path):
-    optimizer = OptimizerAgent(lambda _: OptimizerReply(
-        '{"rationale":"Editors include yes items","rubric":"Include items that say yes."}', "fake-optimizer",
-        usage={"prompt_tokens": 2000, "completion_tokens": 50}))
-    with Cyclotron.open(tmp_path / "c", _two_outputs(optimize_every=1000, rubric_changes_every=1), Model(), optimizer,
-                        max_requests=500, review_program=None, learning="deferred") as cyclotron:
+    optimizer = OptimizerAgent(
+        lambda _: OptimizerReply(
+            '{"rationale":"Editors include yes items","rubric":"Include items that say yes."}',
+            "fake-optimizer",
+            usage={"prompt_tokens": 2000, "completion_tokens": 50},
+        )
+    )
+    with Cyclotron.open(
+        tmp_path / "c",
+        _two_outputs(optimize_every=1000, rubric_changes_every=1),
+        Model(),
+        optimizer,
+        max_requests=500,
+        review_program=None,
+        learning="deferred",
+    ) as cyclotron:
         for index in range(12):
             decision = run(cyclotron.decide(item(f"learn-{index}", ("yes " if index % 2 else "no ") + str(index))))
             run(cyclotron.review(decision.decision_id, "include" if index % 2 else "exclude", classifier="relevant"))

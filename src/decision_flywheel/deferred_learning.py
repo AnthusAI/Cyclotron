@@ -6,6 +6,7 @@ While a pass awaits an asynchronous optimizer provider call it lends the
 engine's lock, so reviews and decisions interleave; a pass whose state changed
 meanwhile is superseded and stays queued. The cyclotron delegates to it.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -82,8 +83,7 @@ class DeferredLearning:
             # The earliest unlearned count is kept, so the pass sees every cadence boundary crossed since.
             engine.root_storage.enqueue_learning(classifier, len(training) + len(development) - 1, _now())
 
-    async def run(self, *, limit: int | None = None,
-                  execution_guard: ExecutionGuard | None = None) -> list[dict[str, Any]]:
+    async def run(self, *, limit: int | None = None, execution_guard: ExecutionGuard | None = None) -> list[dict[str, Any]]:
         engine = self.engine
         if limit is not None and (type(limit) is not int or limit < 1):
             raise ValueError("limit must be a positive integer")
@@ -103,11 +103,20 @@ class DeferredLearning:
                 covered, reviews = len(training) + len(development), engine.root_storage.review_count(cid)
                 hold_lock = execution_guard is not None or superseded_before >= engine.max_superseded_passes
                 if hold_lock and execution_guard is None:
-                    wheel._emit({"kind": "learning-window-withheld", "superseded_passes": superseded_before,
-                                 "limit": engine.max_superseded_passes,
-                                 "reason": "repeatedly superseded; this pass keeps the store lock through its optimizer calls"})
-                state = {"evidence": wheel._evidence((*training, *development)), "start": self._row_marks(wheel),
-                         "lent": [], "hold_lock": hold_lock}
+                    wheel._emit(
+                        {
+                            "kind": "learning-window-withheld",
+                            "superseded_passes": superseded_before,
+                            "limit": engine.max_superseded_passes,
+                            "reason": "repeatedly superseded; this pass keeps the store lock through its optimizer calls",
+                        }
+                    )
+                state = {
+                    "evidence": wheel._evidence((*training, *development)),
+                    "start": self._row_marks(wheel),
+                    "lent": [],
+                    "hold_lock": hold_lock,
+                }
                 started = time.perf_counter()
                 cycle = wheel.cycle(None, reason="deferred-learning").__enter__()
                 tokens = (self._learning.set(cid), self._pass_state.set(state))
@@ -127,13 +136,16 @@ class DeferredLearning:
                     self._pass_state.reset(tokens[1])
                 cycle.__exit__(None, None, None)
                 self._record_pass_batches()
-                record = {"classifier": cid, "since_count": since, "warnings": warnings,
-                          "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
+                record = {
+                    "classifier": cid,
+                    "since_count": since,
+                    "warnings": warnings,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                }
                 if superseded:
                     self._drop_pending(wheel, state)
                     record.update(superseded=True, reason=superseded)
-                    wheel._emit({"kind": "deferred-learning-superseded", **record,
-                                 "superseded_passes": superseded_before + 1})
+                    wheel._emit({"kind": "deferred-learning-superseded", **record, "superseded_passes": superseded_before + 1})
                     with engine.root_storage.transaction():
                         engine.root_storage.supersede_learning(seq)
                 else:
@@ -183,20 +195,33 @@ class DeferredLearning:
 
         def own(table, rowid):
             return rowid > start.get(table, 0) and not any(
-                before.get(table, 0) < rowid <= after.get(table, 0) for before, after in state["lent"])
+                before.get(table, 0) < rowid <= after.get(table, 0) for before, after in state["lent"]
+            )
+
         for kind, rowid, key in wheel.pending_storage.pending():
             if not own(kind, rowid):
                 continue
             if kind == "runtime_answers":
-                wheel._emit({"kind": "decision-request-abandoned", "request_fingerprint": key,
-                             "reason": "the learning pass that made this request stopped before its answer was recorded",
-                             "repeat_charge_possible": True})
+                wheel._emit(
+                    {
+                        "kind": "decision-request-abandoned",
+                        "request_fingerprint": key,
+                        "reason": "the learning pass that made this request stopped before its answer was recorded",
+                        "repeat_charge_possible": True,
+                    }
+                )
             wheel.pending_storage.discard(kind, rowid, key)
         for rowid, key, owner in shared.storage.pending_operations():
             if own("shared:batches", rowid):
-                wheel._emit({"kind": "decision-request-abandoned", "request_fingerprint": key, "shared_batch": True,
-                             "reason": "the learning pass that made this request stopped before its answer was recorded",
-                             "repeat_charge_possible": True})
+                wheel._emit(
+                    {
+                        "kind": "decision-request-abandoned",
+                        "request_fingerprint": key,
+                        "shared_batch": True,
+                        "reason": "the learning pass that made this request stopped before its answer was recorded",
+                        "repeat_charge_possible": True,
+                    }
+                )
                 shared.storage.abandon_learning(key, owner)
 
     def _record_pass_batches(self) -> None:

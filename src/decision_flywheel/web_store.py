@@ -1,4 +1,5 @@
 """Native console composition over shared catalog, definition and run APIs."""
+
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,7 +10,7 @@ from .run_storage import _UNSET, SQLiteRunStorage
 from .workspace_catalog import WorkspaceCatalog
 
 
-class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
+class WebStore(WorkspaceCatalog, Cyclotrons, CyclotronDefinitions):
     def __init__(self, path, *, catalog_storage=None, definition_storage=None, run_storage=None, priming_storage=None):
         self.catalog_storage, self.definition_storage = catalog_storage, definition_storage
         self.path = Path(path)
@@ -20,6 +21,7 @@ class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
         self.run_storage = run_storage if run_storage is not None else native
         self.initialize_catalog()
         from .priming_storage import SQLitePrimingStorage
+
         self.priming_storage = priming_storage if priming_storage is not None else SQLitePrimingStorage(self.connect)
         self.initialize_cyclotrons()
         self.initialize_cyclotron_definitions()
@@ -28,13 +30,12 @@ class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
     def connect(self):
         db = sqlite3.connect(self.path, timeout=10)
         db.row_factory = sqlite3.Row
-        db.execute('PRAGMA foreign_keys=ON')
+        db.execute("PRAGMA foreign_keys=ON")
         try:
             with db:
                 yield db
         finally:
             db.close()
-
 
     # Legacy Cyclotrons composition uses these pure record decoders. Reuse the
     # adapter's helpers so the facade does not duplicate their implementation.
@@ -43,7 +44,9 @@ class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
     _job = staticmethod(SQLiteRunStorage._job)
 
     def create_run(self, name, mode, config, *, items=(), frozen_feedback=(), initial_events=()):
-        return self.run_storage.create_run(name, mode, config, items=items, frozen_feedback=frozen_feedback, initial_events=initial_events)
+        return self.run_storage.create_run(
+            name, mode, config, items=items, frozen_feedback=frozen_feedback, initial_events=initial_events
+        )
 
     def run(self, run_id):
         return self.run_storage.run(run_id)
@@ -120,8 +123,10 @@ class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):
     def export_storage(self, *, max_records=10000, max_bytes=64000000):
         """Native composition migration; not a hosted authority selector."""
         from .console_snapshot import export_console
-        return export_console(self.connect,max_records=max_records,max_bytes=max_bytes)
 
-    def restore_storage(self,snapshot, *, max_records=10000, max_bytes=64000000):
+        return export_console(self.connect, max_records=max_records, max_bytes=max_bytes)
+
+    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
         from .console_snapshot import restore_console
-        return restore_console(self.connect,snapshot,max_records=max_records,max_bytes=max_bytes)
+
+        return restore_console(self.connect, snapshot, max_records=max_records, max_bytes=max_bytes)

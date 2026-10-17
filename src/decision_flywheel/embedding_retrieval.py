@@ -10,6 +10,7 @@ the embedded text). The cache never stores text, so it can be kept beside
 results. Search is exact cosine over an in-memory matrix (numpy if installed,
 pure Python otherwise); ties break by ascending ID.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -129,15 +130,24 @@ class VectorCache:
 
     def put_many(self, embedder: str, vectors: Mapping[str, Sequence[float]]) -> None:
         loaded = self._load()
-        new = {digest: tuple(float(value) for value in vector) for digest, vector in sorted(vectors.items())
-               if (embedder, digest) not in loaded}
+        new = {
+            digest: tuple(float(value) for value in vector)
+            for digest, vector in sorted(vectors.items())
+            if (embedder, digest) not in loaded
+        }
         if not new:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             for digest, vector in new.items():
-                handle.write(json.dumps({"embedder": embedder, "text_sha256": digest, "vector": list(vector)},
-                                        separators=(",", ":"), sort_keys=True) + "\n")
+                handle.write(
+                    json.dumps(
+                        {"embedder": embedder, "text_sha256": digest, "vector": list(vector)},
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    + "\n"
+                )
                 loaded[(embedder, digest)] = vector
 
 
@@ -204,8 +214,12 @@ class EmbeddingRetriever:
 
     @property
     def configuration(self) -> Mapping[str, object]:
-        return {"kind": "embedding", "version": EMBEDDING_RETRIEVER_VERSION,
-                "embedder": self.embedder_identity, "store": dict(self.new_store().configuration)}
+        return {
+            "kind": "embedding",
+            "version": EMBEDDING_RETRIEVER_VERSION,
+            "embedder": self.embedder_identity,
+            "store": dict(self.new_store().configuration),
+        }
 
     @property
     def fingerprint(self) -> str:
@@ -224,7 +238,7 @@ class EmbeddingRetriever:
                     missing.setdefault(digest, embedding_text(text))
         pending = sorted(missing.items())
         for start in range(0, len(pending), self.batch_size):
-            batch = pending[start:start + self.batch_size]
+            batch = pending[start : start + self.batch_size]
             vectors = list(self.embed([text for _, text in batch]))
             if len(vectors) != len(batch):
                 raise ValueError("the embedder returned a different number of vectors than texts")
@@ -245,10 +259,10 @@ class EmbeddingRetriever:
         if len(dimensions) > 1:
             raise ValueError("the embedder returned vectors of different dimensions")
         store = self.new_store()
-        store.upsert([VectorRow(row.item.id, row.label, input_hash(task, row.item), vector)
-                      for row, vector in zip(rows, vectors)])
-        return EmbeddingIndex(self, task, store, rows,
-                              stable_hash([self.fingerprint, pool_fingerprint(task, rows)]))
+        store.upsert(
+            [VectorRow(row.item.id, row.label, input_hash(task, row.item), vector) for row, vector in zip(rows, vectors)]
+        )
+        return EmbeddingIndex(self, task, store, rows, stable_hash([self.fingerprint, pool_fingerprint(task, rows)]))
 
 
 @dataclass(frozen=True)

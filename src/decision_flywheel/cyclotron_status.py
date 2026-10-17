@@ -6,6 +6,7 @@ use reviews the cyclotron selected; reviews a reviewer chose for themselves
 (``selected_by == "reviewer"``) are excluded because they are not a random
 or policy-selected sample of decisions.
 """
+
 from __future__ import annotations
 
 import json
@@ -126,28 +127,58 @@ class CyclotronStatus:
         a, c, r, p = self.alignment, self.calibration, self.review_rate, self.pending
         return {
             "schema": self.schema,
-            "cyclotron": {"id": self.cyclotron_id, "classifier": self.classifier,
-                          "version": self.version, "refits": self.refits, "fingerprint": self.fingerprint,
-                          "primedExamples": self.primed_examples},
+            "cyclotron": {
+                "id": self.cyclotron_id,
+                "classifier": self.classifier,
+                "version": self.version,
+                "refits": self.refits,
+                "fingerprint": self.fingerprint,
+                "primedExamples": self.primed_examples,
+            },
             "asOf": self.as_of,
-            "alignment": {"window": a.window, "labels": a.labels, "accuracy": a.accuracy,
-                          "precision": a.precision, "recall": a.recall,
-                          "positiveLabel": a.positive_label, "measuredOn": a.measured_on},
-            "calibration": {"saysSure": c.says_sure, "isRight": c.is_right, "gapPoints": c.gap_points,
-                            "curve": [{"bin": b.bin, "count": b.count, "confidence": b.confidence,
-                                       "accuracy": b.accuracy} for b in c.curve]},
-            "reviewRate": {"state": r.state, "rate": r.rate, "reason": r.reason,
-                           "auditFloor": r.audit_floor, "confidenceThreshold": r.confidence_threshold,
-                           "override": None if r.override is None else {
-                               "rate": r.override.rate, "expiresAt": r.override.expires_at,
-                               "setBy": r.override.set_by, "setAt": r.override.set_at},
-                           "nextCheckAfterDecisions": r.next_check_after_decisions,
-                           "nextStep": r.next_step,
-                           "expectedReviewsPerWeek": r.expected_reviews_per_week},
-            "lastChange": None if self.last_change is None else {
-                "kind": self.last_change.kind, "fromVersion": self.last_change.from_version,
-                "toVersion": self.last_change.to_version, "at": self.last_change.at,
-                "summary": self.last_change.summary, "labels": self.last_change.labels},
+            "alignment": {
+                "window": a.window,
+                "labels": a.labels,
+                "accuracy": a.accuracy,
+                "precision": a.precision,
+                "recall": a.recall,
+                "positiveLabel": a.positive_label,
+                "measuredOn": a.measured_on,
+            },
+            "calibration": {
+                "saysSure": c.says_sure,
+                "isRight": c.is_right,
+                "gapPoints": c.gap_points,
+                "curve": [{"bin": b.bin, "count": b.count, "confidence": b.confidence, "accuracy": b.accuracy} for b in c.curve],
+            },
+            "reviewRate": {
+                "state": r.state,
+                "rate": r.rate,
+                "reason": r.reason,
+                "auditFloor": r.audit_floor,
+                "confidenceThreshold": r.confidence_threshold,
+                "override": None
+                if r.override is None
+                else {
+                    "rate": r.override.rate,
+                    "expiresAt": r.override.expires_at,
+                    "setBy": r.override.set_by,
+                    "setAt": r.override.set_at,
+                },
+                "nextCheckAfterDecisions": r.next_check_after_decisions,
+                "nextStep": r.next_step,
+                "expectedReviewsPerWeek": r.expected_reviews_per_week,
+            },
+            "lastChange": None
+            if self.last_change is None
+            else {
+                "kind": self.last_change.kind,
+                "fromVersion": self.last_change.from_version,
+                "toVersion": self.last_change.to_version,
+                "at": self.last_change.at,
+                "summary": self.last_change.summary,
+                "labels": self.last_change.labels,
+            },
             "pending": {"decisionsAwaitingReview": p.decisions_awaiting_review, "staleSince": p.stale_since},
         }
 
@@ -160,6 +191,7 @@ class CyclotronOverview:
     until one is measured). ``limiting`` is the output that decided the last
     review-rate window check (None before the first check, or with one output).
     """
+
     cyclotron_id: str
     review_rate: ReviewRate
     outputs: tuple[CyclotronStatus, ...]
@@ -168,8 +200,13 @@ class CyclotronOverview:
 
     def to_json(self) -> dict[str, Any]:
         statuses = [status.to_json() for status in self.outputs]
-        return {"cyclotron": self.cyclotron_id, "worstOutput": self.worst, "limitingOutput": self.limiting,
-                "reviewRate": statuses[0]["reviewRate"] if statuses else None, "outputs": statuses}
+        return {
+            "cyclotron": self.cyclotron_id,
+            "worstOutput": self.worst,
+            "limitingOutput": self.limiting,
+            "reviewRate": statuses[0]["reviewRate"] if statuses else None,
+            "outputs": statuses,
+        }
 
 
 def worst_output(statuses) -> str | None:
@@ -192,8 +229,12 @@ def all_events(wheel) -> list[dict]:
         cursor = page["cursor"]
 
 
-STRUCTURE = (("rubric", "rubric"), ("example_ids", "example list"),
-             ("tasks", "supporting questions"), ("dynamic_elements", "dynamic inputs"))
+STRUCTURE = (
+    ("rubric", "rubric"),
+    ("example_ids", "example list"),
+    ("tasks", "supporting questions"),
+    ("dynamic_elements", "dynamic inputs"),
+)
 
 
 def _plain(value):
@@ -227,29 +268,49 @@ class VersionTracker:
             after = current.get("config") or {}
             changed = [name for key, name in STRUCTURE if before.get(key) != after.get(key)]
             if changed:
-                self.last_change = LastChange("promoted", self.version, self.version + 1, event.get("created_at"),
-                                              event.get("change_summary") or "Changed the " + ", ".join(changed) + ".")
+                self.last_change = LastChange(
+                    "promoted",
+                    self.version,
+                    self.version + 1,
+                    event.get("created_at"),
+                    event.get("change_summary") or "Changed the " + ", ".join(changed) + ".",
+                )
                 self.version, self.refits = self.version + 1, 0
             else:
                 head = current.get("head") or {}
                 count = len(((head.get("provenance") or {}).get("training_ids")) or ())
                 self.refits += 1
-                self.last_change = LastChange("refit", self.version, self.version, event.get("created_at"),
-                                              f"Refit the ML model on {count} labels.", labels=count)
+                self.last_change = LastChange(
+                    "refit",
+                    self.version,
+                    self.version,
+                    event.get("created_at"),
+                    f"Refit the ML model on {count} labels.",
+                    labels=count,
+                )
             self.snapshot = current
             return self.last_change
         elif kind == "candidate-rejected":
-            self.last_change = LastChange("dropped", self.version, self.version, event.get("created_at"),
-                                          str(event.get("reason") or "Candidate dropped."))
+            self.last_change = LastChange(
+                "dropped", self.version, self.version, event.get("created_at"), str(event.get("reason") or "Candidate dropped.")
+            )
             return self.last_change
         return None
 
 
-def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str, classifier: str,
-                       labels: tuple[str, ...], fingerprint: str, positive_label: str | None = None,
-                       window: int = 200, review_rate: ReviewRate | None = None,
-                       now: datetime | None = None,
-                       initial_snapshot: Mapping[str, Any] | None = None) -> CyclotronStatus:
+def status_from_events(
+    events: Iterable[Mapping[str, Any]],
+    *,
+    cyclotron_id: str,
+    classifier: str,
+    labels: tuple[str, ...],
+    fingerprint: str,
+    positive_label: str | None = None,
+    window: int = 200,
+    review_rate: ReviewRate | None = None,
+    now: datetime | None = None,
+    initial_snapshot: Mapping[str, Any] | None = None,
+) -> CyclotronStatus:
     """Build the snapshot from flywheel events; no model calls, no hidden state."""
     labels = tuple(labels)
     if positive_label is None and len(labels) == 2:
@@ -304,20 +365,44 @@ def status_from_events(events: Iterable[Mapping[str, Any]], *, cyclotron_id: str
     alignment = _alignment(metrics, window, positive_label)
     calibration = _calibration(metrics)
     stale_since = _stale_since(events)
-    return CyclotronStatus(cyclotron_id, classifier, versions.version, fingerprint,
-                           (now or datetime.now(timezone.utc)).isoformat(), alignment, calibration,
-                           review_rate or FULL_REVIEW, versions.last_change, Pending(len(awaiting), stale_since),
-                           refits=versions.refits)
+    return CyclotronStatus(
+        cyclotron_id,
+        classifier,
+        versions.version,
+        fingerprint,
+        (now or datetime.now(timezone.utc)).isoformat(),
+        alignment,
+        calibration,
+        review_rate or FULL_REVIEW,
+        versions.last_change,
+        Pending(len(awaiting), stale_since),
+        refits=versions.refits,
+    )
 
 
-def status_from_flywheel(wheel, *, cyclotron_id: str, positive_label: str | None = None, window: int = 200,
-                         review_rate: ReviewRate | None = None, now: datetime | None = None) -> CyclotronStatus:
+def status_from_flywheel(
+    wheel,
+    *,
+    cyclotron_id: str,
+    positive_label: str | None = None,
+    window: int = 200,
+    review_rate: ReviewRate | None = None,
+    now: datetime | None = None,
+) -> CyclotronStatus:
     """Snapshot one running classifier (a DecisionFlywheel) of a cyclotron."""
     task = wheel.initial.task
-    return status_from_events(all_events(wheel), cyclotron_id=cyclotron_id, classifier=task.name,
-                              labels=tuple(task.labels), fingerprint=wheel.active.fingerprint,
-                              positive_label=positive_label, window=window, review_rate=review_rate, now=now,
-                              initial_snapshot=initial_snapshot(wheel))
+    return status_from_events(
+        all_events(wheel),
+        cyclotron_id=cyclotron_id,
+        classifier=task.name,
+        labels=tuple(task.labels),
+        fingerprint=wheel.active.fingerprint,
+        positive_label=positive_label,
+        window=window,
+        review_rate=review_rate,
+        now=now,
+        initial_snapshot=initial_snapshot(wheel),
+    )
 
 
 def initial_snapshot(wheel) -> dict:
@@ -325,6 +410,7 @@ def initial_snapshot(wheel) -> dict:
     from dataclasses import asdict
 
     from .flywheel import FittedClassifier
+
     return asdict(FittedClassifier(getattr(wheel, "version_baseline", wheel.initial)))
 
 
@@ -347,8 +433,7 @@ def _calibration(metrics) -> Calibration:
     curve = metrics["calibration"] if metrics else None
     if not curve or not curve["count"]:
         return Calibration(None, None, None, ())
-    bins = tuple(CalibrationBin(b["lower"], b["count"], b["mean_confidence"], b["accuracy"])
-                 for b in curve["bins"] if b["count"])
+    bins = tuple(CalibrationBin(b["lower"], b["count"], b["mean_confidence"], b["accuracy"]) for b in curve["bins"] if b["count"])
     total = sum(b.count for b in bins)
     says_sure = sum(b.confidence * b.count for b in bins) / total
     is_right = sum(b.accuracy * b.count for b in bins) / total
@@ -361,7 +446,6 @@ def _stale_since(events) -> str | None:
     for event in events:
         if event.get("kind") == "promoted":
             earliest = None
-        elif (event.get("kind") == "human-feedback" and event.get("action") != "retracted"
-              and earliest is None):
+        elif event.get("kind") == "human-feedback" and event.get("action") != "retracted" and earliest is None:
             earliest = event.get("created_at")
     return earliest

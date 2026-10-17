@@ -1,4 +1,5 @@
 """Each storage protocol and both of its adapters declare the same methods with the same parameters."""
+
 from inspect import Parameter, signature
 
 import pytest
@@ -24,23 +25,33 @@ PROTOCOLS_WITH_ADAPTERS = [
 
 
 def protocol_method_names(protocol):
-    return sorted(name for name, member in vars(protocol).items() if callable(member) and not name.startswith('_'))
+    return sorted(name for name, member in vars(protocol).items() if callable(member) and not name.startswith("_"))
 
 
 def parameter_shape(method):
-    return [(parameter.name, parameter.kind, parameter.default if parameter.default is not Parameter.empty else None)
-            for name, parameter in signature(method).parameters.items() if name != 'self']
+    return [
+        (parameter.name, parameter.kind, parameter.default if parameter.default is not Parameter.empty else None)
+        for name, parameter in signature(method).parameters.items()
+        if name != "self"
+    ]
 
 
-@pytest.mark.parametrize('protocol,sqlite_adapter,s3_adapter', PROTOCOLS_WITH_ADAPTERS,
-                         ids=[protocol.__name__ for protocol, _, _ in PROTOCOLS_WITH_ADAPTERS])
+@pytest.mark.parametrize(
+    "protocol,sqlite_adapter,s3_adapter",
+    PROTOCOLS_WITH_ADAPTERS,
+    ids=[protocol.__name__ for protocol, _, _ in PROTOCOLS_WITH_ADAPTERS],
+)
 def test_both_adapters_implement_every_protocol_method_with_its_parameters(protocol, sqlite_adapter, s3_adapter):
     method_names = protocol_method_names(protocol)
     assert method_names
     for adapter in (sqlite_adapter, s3_adapter):
         missing = [name for name in method_names if not callable(getattr(adapter, name, None))]
-        assert missing == [], f'{adapter.__name__} lacks {missing}'
-    mismatched = [name for name in method_names
-                  if not parameter_shape(getattr(protocol, name)) == parameter_shape(getattr(sqlite_adapter, name))
-                  == parameter_shape(getattr(s3_adapter, name))]
+        assert missing == [], f"{adapter.__name__} lacks {missing}"
+    mismatched = [
+        name
+        for name in method_names
+        if not parameter_shape(getattr(protocol, name))
+        == parameter_shape(getattr(sqlite_adapter, name))
+        == parameter_shape(getattr(s3_adapter, name))
+    ]
     assert mismatched == []

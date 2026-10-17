@@ -17,6 +17,7 @@ retrieval:
   store: {kind: memory}           # memory | s3vectors | dynamodb (design-only stubs)
 ```
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -64,9 +65,9 @@ class EmbeddingOptions:
 class StoreOptions:
     kind: str = "memory"
     vector_bucket: str | None = None  # s3vectors
-    table_name: str | None = None     # dynamodb
-    index_name: str | None = None     # s3vectors, dynamodb
-    region: str | None = None         # s3vectors, dynamodb
+    table_name: str | None = None  # dynamodb
+    index_name: str | None = None  # s3vectors, dynamodb
+    region: str | None = None  # s3vectors, dynamodb
 
     def __post_init__(self) -> None:
         if self.kind not in STORE_KINDS:
@@ -134,9 +135,13 @@ def _require_known(data: Mapping[str, Any], kind: type, where: str) -> None:
         raise ValueError(f"unknown {where} keys: {sorted(unknown)}")
 
 
-def build_retrieval_policy(config: RetrievalConfig, *, embedder: Any = None,
-                           protected_ids: Iterable[str] = (),
-                           protected_input_hashes: Iterable[str] = ()) -> PerLabelRetrieval | None:
+def build_retrieval_policy(
+    config: RetrievalConfig,
+    *,
+    embedder: Any = None,
+    protected_ids: Iterable[str] = (),
+    protected_input_hashes: Iterable[str] = (),
+) -> PerLabelRetrieval | None:
     """Return the retrieval ``ContextPolicy`` for a config, or ``None`` when retrieval is off.
 
     For the embedding backend, ``embedder`` (a callable with an ``identity``)
@@ -159,7 +164,11 @@ def build_retrieval_policy(config: RetrievalConfig, *, embedder: Any = None,
             else:
                 raise ValueError(f"embedding provider {options.provider!r} needs an injected embedder")
         retriever = EmbeddingRetriever.from_embedder(
-            embedder, cache=VectorCache(options.cache) if options.cache else None,
-            new_store=config.store.factory())
-    return PerLabelRetrieval(retriever, per_label=config.per_label, protected_ids=frozenset(protected_ids),
-                             protected_input_hashes=frozenset(protected_input_hashes))
+            embedder, cache=VectorCache(options.cache) if options.cache else None, new_store=config.store.factory()
+        )
+    return PerLabelRetrieval(
+        retriever,
+        per_label=config.per_label,
+        protected_ids=frozenset(protected_ids),
+        protected_input_hashes=frozenset(protected_input_hashes),
+    )

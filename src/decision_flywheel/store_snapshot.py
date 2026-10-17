@@ -3,6 +3,7 @@
 The archive holds every store file of a cyclotron directory plus a manifest
 with a digest of each file, so a restore refuses a damaged or foreign archive.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,11 +36,15 @@ def store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, P
     return paths
 
 
-def write_store_snapshot(path, definition: CyclotronDefinition,
-                         connections: Mapping[str, sqlite3.Connection]) -> dict[str, Any]:
+def write_store_snapshot(path, definition: CyclotronDefinition, connections: Mapping[str, sqlite3.Connection]) -> dict[str, Any]:
     path = Path(path)
-    manifest = {"schema": STORE_SCHEMA, "cyclotron": definition.id,
-                "definition_fingerprint": definition.fingerprint, "created_at": _now(), "files": []}
+    manifest = {
+        "schema": STORE_SCHEMA,
+        "cyclotron": definition.id,
+        "definition_fingerprint": definition.fingerprint,
+        "created_at": _now(),
+        "files": [],
+    }
     with tempfile.TemporaryDirectory() as scratch:
         with tarfile.open(Path(scratch) / "store.tar.gz", "w:gz") as archive:
             for name, connection in connections.items():
@@ -74,8 +79,12 @@ def restore_store_snapshot(archive_path, directory, *, lease=None) -> dict[str, 
                 raise ValueError("not a cyclotron store snapshot")
             allowed = {entry["name"]: entry["sha256"] for entry in manifest["files"]}
             for name, digest in allowed.items():
-                if name not in STORE_FILES and not (name.startswith(f"{CLASSIFIER_DIRECTORY}/") and name.count("/") == 1
-                                                    and name.endswith(".sqlite3") and ".." not in name):
+                if name not in STORE_FILES and not (
+                    name.startswith(f"{CLASSIFIER_DIRECTORY}/")
+                    and name.count("/") == 1
+                    and name.endswith(".sqlite3")
+                    and ".." not in name
+                ):
                     raise ValueError(f"unexpected file in snapshot: {name}")
                 data = archive.extractfile(name).read()
                 if hashlib.sha256(data).hexdigest() != digest:

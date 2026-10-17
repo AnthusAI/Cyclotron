@@ -2,6 +2,7 @@
 
 Ideas themselves stay in ``control_ideas``; this ledger only references their ids.
 """
+
 import json
 from datetime import datetime, timezone
 from math import exp, lgamma, log
@@ -29,8 +30,9 @@ def beta_interval(correct, total, level=0.95):
     def cdf(x):  # I_x(a, b) = P(Binomial(a+b-1, x) >= a) for integer a, b
         if x <= 0 or x >= 1:
             return float(x >= 1)
-        return sum(exp(lgamma(m + 1) - lgamma(i + 1) - lgamma(m - i + 1) + i * log(x) + (m - i) * log(1 - x))
-                   for i in range(a, m + 1))
+        return sum(
+            exp(lgamma(m + 1) - lgamma(i + 1) - lgamma(m - i + 1) + i * log(x) + (m - i) * log(1 - x)) for i in range(a, m + 1)
+        )
 
     def quantile(q):
         lo, hi = 0.0, 1.0
@@ -49,7 +51,9 @@ def _now():
 class HypothesisLedger:
     def __init__(self, db=None, *, clock=_now, storage=None):
         from .hypothesis_storage import SQLiteHypothesisStorage
-        if storage is None and db is None: raise ValueError('hypothesis storage required')
+
+        if storage is None and db is None:
+            raise ValueError("hypothesis storage required")
         self.storage = storage if storage is not None else SQLiteHypothesisStorage(db)
         self.clock = clock
         self.storage.ensure()
@@ -57,20 +61,36 @@ class HypothesisLedger:
     def record_evaluations(self, idea_id, rows, context_version):
         """Rows replace the same idea/item/context evidence identity."""
         at = self.clock()
-        self.storage.record_evaluations([(idea_id, str(r['item_id']), int(bool(r['correct'])),
-            r.get('label'), r.get('choice'), r.get('confidence'), context_version, at) for r in rows])
+        self.storage.record_evaluations(
+            [
+                (
+                    idea_id,
+                    str(r["item_id"]),
+                    int(bool(r["correct"])),
+                    r.get("label"),
+                    r.get("choice"),
+                    r.get("confidence"),
+                    context_version,
+                    at,
+                )
+                for r in rows
+            ]
+        )
 
     def record_verdict(self, idea_id, verdict, reason, evidence=None):
-        if verdict not in VERDICTS: raise ValueError(f'unknown verdict {verdict!r}')
+        if verdict not in VERDICTS:
+            raise ValueError(f"unknown verdict {verdict!r}")
         self.storage.append_verdict((idea_id, self.clock(), verdict, reason, _json(evidence or {})))
 
     def verdicts(self, idea_id):
-        return [{'at':at,'verdict':v,'reason':r,'evidence':json.loads(e or '{}')}
-            for at,v,r,e in self.storage.verdicts(idea_id)]
+        return [
+            {"at": at, "verdict": v, "reason": r, "evidence": json.loads(e or "{}")}
+            for at, v, r, e in self.storage.verdicts(idea_id)
+        ]
 
     def _latest(self, idea_id, exclude=frozenset(), context_version=None):
         """Latest per-item evidence, optionally restricted to one context."""
-        return {item:bool(correct) for item,correct in self.storage.latest(idea_id,context_version) if item not in exclude}
+        return {item: bool(correct) for item, correct in self.storage.latest(idea_id, context_version) if item not in exclude}
 
     def items_evaluated(self, idea_id):
         return frozenset(self._latest(idea_id))
@@ -86,12 +106,19 @@ class HypothesisLedger:
         shared = sorted(set(a) & set(b))
         gained = [i for i in shared if a[i] and not b[i]]
         lost = [i for i in shared if b[i] and not a[i]]
-        return {"shared": len(shared), "gained": len(gained), "lost": len(lost), "net": len(gained) - len(lost),
-                "p_value": sign_test(len(gained), len(lost)), "gained_items": gained, "lost_items": lost}
+        return {
+            "shared": len(shared),
+            "gained": len(gained),
+            "lost": len(lost),
+            "net": len(gained) - len(lost),
+            "p_value": sign_test(len(gained), len(lost)),
+            "gained_items": gained,
+            "lost_items": lost,
+        }
 
     def running_score(self, idea_id, since=None, *, strict=False):
         """Beta(1,1) posterior over accuracy, optionally only evaluations at/after (or strictly after) ``since``."""
-        marks = self.storage.marks(idea_id,since,strict=strict)
+        marks = self.storage.marks(idea_id, since, strict=strict)
         n, k = len(marks), sum(marks)
         low, high = beta_interval(k, n)
         return {"n": n, "correct": k, "mean": (k + 1) / (n + 2), "low": low, "high": high}
@@ -122,8 +149,16 @@ class HypothesisLedger:
     def _idea_ids(self, context_version=None):
         return self.storage.idea_ids(context_version)
 
-    def summary_for_optimizer(self, *, limit=10, incumbent_id=None, max_item_ids=5, exclude_items=frozenset(),
-                              context_version=None, skip_ids=frozenset()):
+    def summary_for_optimizer(
+        self,
+        *,
+        limit=10,
+        incumbent_id=None,
+        max_item_ids=5,
+        exclude_items=frozenset(),
+        context_version=None,
+        skip_ids=frozenset(),
+    ):
         """Compact deterministic digest, best accuracy first. Item-id lists are capped and sorted.
         ``exclude_items`` hides items (for example a held-out reserve) from every count and list.
         ``context_version`` restricts the digest to one kind of evidence; ``skip_ids`` drops ids (old incumbents)."""
@@ -133,18 +168,29 @@ class HypothesisLedger:
             got = self._latest(idea_id, exclude_items, context_version)
             if not got:
                 continue
-            entry = {"idea_id": idea_id, "text": self._idea_text(idea_id), "items_tested": len(got),
-                     "accuracy": round(sum(got.values()) / len(got), 4)}
+            entry = {
+                "idea_id": idea_id,
+                "text": self._idea_text(idea_id),
+                "items_tested": len(got),
+                "accuracy": round(sum(got.values()) / len(got), 4),
+            }
             if incumbent_id:
                 pair = self.paired_comparison(idea_id, incumbent_id, exclude_items, context_version)
-                entry.update(fixed=pair["gained_items"][:max_item_ids], fixed_count=pair["gained"],
-                             broke=pair["lost_items"][:max_item_ids], broke_count=pair["lost"])
+                entry.update(
+                    fixed=pair["gained_items"][:max_item_ids],
+                    fixed_count=pair["gained"],
+                    broke=pair["lost_items"][:max_item_ids],
+                    broke_count=pair["lost"],
+                )
             last = (self.verdicts(idea_id) or [None])[-1]
             entry["last_verdict"] = last and {"verdict": last["verdict"], "reason": last["reason"]}
             idea = self._idea_payload(idea_id) or {}
             if idea.get("operator"):  # lineage is shown only for ideas that have it
-                entry.update(operator=idea["operator"], parents=[p[:8] for p in idea.get("parents", ())],
-                             outcome=last["verdict"] if last else "untested")
+                entry.update(
+                    operator=idea["operator"],
+                    parents=[p[:8] for p in idea.get("parents", ())],
+                    outcome=last["verdict"] if last else "untested",
+                )
             rows.append(entry)
         rows.sort(key=lambda r: (-r["accuracy"], -r["items_tested"], r["idea_id"]))
         return rows[:limit]
@@ -157,17 +203,23 @@ class HypothesisLedger:
                 per_item.setdefault(item, []).append(ok)
         return sorted(i for i, marks in per_item.items() if len(marks) >= min_ideas and not any(marks))
 
-
     # -- lineage and operators (Stage 2c) ----------------------------------------------------------------------
     def lineage(self, idea_id):
         """The idea's operator, parents, novelty and verdict, then every ancestor reachable through ``parents``
         (nearest first, each once). Parents that are not stored ideas (the incumbent) appear as bare ids."""
+
         def describe(i, depth):
             idea = self._idea_payload(i) or {}
             last = (self.verdicts(i) or [None])[-1]
-            return {"idea_id": i, "depth": depth, "operator": idea.get("operator"),
-                    "parents": list(idea.get("parents", ())), "novelty": idea.get("novelty"),
-                    "outcome": last["verdict"] if last else None}
+            return {
+                "idea_id": i,
+                "depth": depth,
+                "operator": idea.get("operator"),
+                "parents": list(idea.get("parents", ())),
+                "novelty": idea.get("novelty"),
+                "outcome": last["verdict"] if last else None,
+            }
+
         root = describe(idea_id, 0)
         seen, queue, ancestors = {idea_id}, [(p, 1) for p in root["parents"]], []
         while queue:
@@ -202,9 +254,15 @@ class HypothesisLedger:
             row["promoted"] += "promoted" in seen
             if nets:
                 row["nets"].append(nets[-1])  # the latest recorded look at this idea
-        return {op: {"proposed": r["proposed"], "advanced": r["advanced"], "promoted": r["promoted"],
-                     "mean_forward_net": round(sum(r["nets"]) / len(r["nets"]), 4) if r["nets"] else None}
-                for op, r in sorted(out.items())}
+        return {
+            op: {
+                "proposed": r["proposed"],
+                "advanced": r["advanced"],
+                "promoted": r["promoted"],
+                "mean_forward_net": round(sum(r["nets"]) / len(r["nets"]), 4) if r["nets"] else None,
+            }
+            for op, r in sorted(out.items())
+        }
 
     # -- diagnosis (Stage 2d) ---------------------------------------------------------------------------------
     def _diagnosis_tables(self):
@@ -212,7 +270,7 @@ class HypothesisLedger:
 
     def record_cause(self, round_number, cause):
         self._diagnosis_tables()
-        self.storage.save_cause((cause['id'],round_number,_json(cause)))
+        self.storage.save_cause((cause["id"], round_number, _json(cause)))
 
     def causes(self, round_number=None):
         self._diagnosis_tables()
@@ -220,20 +278,44 @@ class HypothesisLedger:
 
     def record_element_evaluation(self, element, round_number, *, question, source, n, metrics, kept, reason):
         self._diagnosis_tables()
-        cv=metrics.get('cv') or {}
-        self.storage.save_element((element,round_number,question,source,n,metrics.get('auc_label'),
-            cv.get('mean_log_loss_gain'),cv.get('lower_log_loss_gain'),cv.get('mean_accuracy_gain'),
-            int(bool(kept)),reason,_json(metrics),self.clock()))
+        cv = metrics.get("cv") or {}
+        self.storage.save_element(
+            (
+                element,
+                round_number,
+                question,
+                source,
+                n,
+                metrics.get("auc_label"),
+                cv.get("mean_log_loss_gain"),
+                cv.get("lower_log_loss_gain"),
+                cv.get("mean_accuracy_gain"),
+                int(bool(kept)),
+                reason,
+                _json(metrics),
+                self.clock(),
+            )
+        )
 
     def element_evaluations(self, *, kept=None):
         """Latest evaluation per element (newest round wins), optionally only kept or only not kept."""
         self._diagnosis_tables()
         out = {}
         for row in self.storage.elements():
-            out[row[0]] = {"element": row[0], "round": row[1], "question": row[2], "source": row[3], "n": row[4],
-                           "auc_label": row[5], "mean_log_loss_gain": row[6], "lower_log_loss_gain": row[7],
-                           "mean_accuracy_gain": row[8], "kept": bool(row[9]), "reason": row[10],
-                           "metrics": json.loads(row[11])}
+            out[row[0]] = {
+                "element": row[0],
+                "round": row[1],
+                "question": row[2],
+                "source": row[3],
+                "n": row[4],
+                "auc_label": row[5],
+                "mean_log_loss_gain": row[6],
+                "lower_log_loss_gain": row[7],
+                "mean_accuracy_gain": row[8],
+                "kept": bool(row[9]),
+                "reason": row[10],
+                "metrics": json.loads(row[11]),
+            }
         return [r for _, r in sorted(out.items()) if kept is None or r["kept"] == kept]
 
     def cause_outcomes(self):
@@ -242,8 +324,16 @@ class HypothesisLedger:
         evidence yet). Causes no idea addressed appear with an empty list."""
         stored = {c["id"]: c for c in self.causes()}
         payloads = [json.loads(p) for p in self.storage.idea_payloads()]
-        out = {cid: {"name": c.get("name"), "cell": c.get("cell"), "confirmed": c.get("confirmed"),
-                     "trial_passed": (c.get("trial") or {}).get("passed"), "ideas": []} for cid, c in stored.items()}
+        out = {
+            cid: {
+                "name": c.get("name"),
+                "cell": c.get("cell"),
+                "confirmed": c.get("confirmed"),
+                "trial_passed": (c.get("trial") or {}).get("passed"),
+                "ideas": [],
+            }
+            for cid, c in stored.items()
+        }
         for idea in payloads:
             for cid in idea.get("addresses") or ():
                 if cid not in out:
@@ -252,9 +342,15 @@ class HypothesisLedger:
                 last = history[-1] if history else None
                 seen = [v for v in history if isinstance(v["evidence"].get("gained"), int)]
                 evidence = seen[-1]["evidence"] if seen else {}
-                out[cid]["ideas"].append({"idea_id": idea["id"], "operator": idea.get("operator"),
-                                          "verdict": last["verdict"] if last else None,
-                                          "gained": evidence.get("gained"), "lost": evidence.get("lost")})
+                out[cid]["ideas"].append(
+                    {
+                        "idea_id": idea["id"],
+                        "operator": idea.get("operator"),
+                        "verdict": last["verdict"] if last else None,
+                        "gained": evidence.get("gained"),
+                        "lost": evidence.get("lost"),
+                    }
+                )
         for row in out.values():
             row["ideas"].sort(key=lambda r: r["idea_id"])
             nets = [r["gained"] - r["lost"] for r in row["ideas"] if r["gained"] is not None and r["lost"] is not None]
@@ -267,14 +363,15 @@ class HypothesisLedger:
         """item -> {label, choices (wrong answers seen)} for items each given idea answered wrongly."""
         out = {}
         for idea_id in ids:
-            for item,label,choice in self.storage.wrong(idea_id,context_version):
+            for item, label, choice in self.storage.wrong(idea_id, context_version):
                 if item not in exclude_items:
                     rec = out.setdefault(item, {"label": label, "choices": []})
                     rec["choices"].append(choice)
         return out
 
-    def error_records(self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None,
-                      recent=20):
+    def error_records(
+        self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None, recent=20
+    ):
         """Stories to aim at: first those every tried idea gets wrong (stubborn), then the incumbent's newest errors.
         Each row is {item_id, label, choice, kind}; ``choice`` is the wrong answer given."""
         rows, seen = [], set()
@@ -284,17 +381,32 @@ class HypothesisLedger:
             rec = wrong.get(item)
             if rec:
                 seen.add(item)
-                rows.append({"item_id": item, "label": rec["label"], "kind": "stubborn",
-                             "choice": max(set(rec["choices"]), key=lambda c: (rec["choices"].count(c), str(c)))})
+                rows.append(
+                    {
+                        "item_id": item,
+                        "label": rec["label"],
+                        "kind": "stubborn",
+                        "choice": max(set(rec["choices"]), key=lambda c: (rec["choices"].count(c), str(c))),
+                    }
+                )
         if incumbent_id:
-            for item,label,choice in self.storage.wrong(incumbent_id,context_version,recent=recent):
+            for item, label, choice in self.storage.wrong(incumbent_id, context_version, recent=recent):
                 if item not in seen and item not in exclude_items:
                     seen.add(item)
                     rows.append({"item_id": item, "label": label, "choice": choice, "kind": "incumbent-error"})
         return rows
 
-    def complementary_pair(self, *, incumbent_id=None, ids=None, context_version=None, min_items=10, min_fix=2,
-                           skip_ids=frozenset(), exclude_pairs=frozenset()):
+    def complementary_pair(
+        self,
+        *,
+        incumbent_id=None,
+        ids=None,
+        context_version=None,
+        min_items=10,
+        min_fix=2,
+        skip_ids=frozenset(),
+        exclude_pairs=frozenset(),
+    ):
         """The pair of ideas (the incumbent may be one) that fix the most DIFFERENT stories.
 
         For ideas X and Y on the stories both were scored on: fixes_Y_not_X = Y right and X wrong, fixes_X_not_Y the
@@ -315,11 +427,14 @@ class HypothesisLedger:
             if base is None or idea_id == incumbent_id:
                 return 0
             shared = set(pool[idea_id]) & set(base)
-            return int(sum(pool[idea_id][i] and not base[i] for i in shared) > sum(base[i] and not pool[idea_id][i] for i in shared))
+            return int(
+                sum(pool[idea_id][i] and not base[i] for i in shared) > sum(base[i] and not pool[idea_id][i] for i in shared)
+            )
+
         best, best_key = None, None
         names = sorted(pool)
         for n, a in enumerate(names):
-            for b in names[n + 1:]:
+            for b in names[n + 1 :]:
                 shared = sorted(set(pool[a]) & set(pool[b]))
                 if len(shared) < min_items or frozenset((a, b)) in exclude_pairs:
                     continue
@@ -330,6 +445,12 @@ class HypothesisLedger:
                 key = (min(len(a_not_b), len(b_not_a)), positive(a) + positive(b), len(shared))
                 if best_key is None or key > best_key:
                     best_key = key
-                    best = {"a": a, "b": b, "score": key[0], "shared": len(shared),
-                            "fixes_a_not_b": a_not_b, "fixes_b_not_a": b_not_a}
+                    best = {
+                        "a": a,
+                        "b": b,
+                        "score": key[0],
+                        "shared": len(shared),
+                        "fixes_a_not_b": a_not_b,
+                        "fixes_b_not_a": b_not_a,
+                    }
         return best or {"skipped": f"no pair where each idea fixes at least {min_fix} stories the other gets wrong"}

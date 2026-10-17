@@ -16,6 +16,7 @@ A sibling's ML model is refit after any context change, and a refit can
 recover part of a regression. The check measures the effect a promotion has
 on the sibling's served decisions before that refit, so it is conservative.
 """
+
 from __future__ import annotations
 
 import math
@@ -33,8 +34,9 @@ class SiblingPolicy:
     by more than ``max_regression``; ``record`` promotes on the output's own
     evidence and only records the effect on each sibling.
     """
+
     action: str = "refuse"
-    max_regression: float = 0.
+    max_regression: float = 0.0
 
     def __post_init__(self):
         if self.action not in ACTIONS:
@@ -57,8 +59,13 @@ def sibling_effect(policy: SiblingPolicy, metric: str, incumbent: float, candida
     """Classify one sibling's change in its own promotion metric (higher-is-better scores)."""
     change = candidate - incumbent
     regressed = change < -policy.max_regression - 1e-12
-    return {"status": "regressed" if regressed else "no-regression", "metric": metric,
-            "incumbent_score": incumbent, "candidate_score": candidate, "change": change}
+    return {
+        "status": "regressed" if regressed else "no-regression",
+        "metric": metric,
+        "incumbent_score": incumbent,
+        "candidate_score": candidate,
+        "change": change,
+    }
 
 
 class SiblingCheck:
@@ -77,33 +84,50 @@ class SiblingCheck:
 
     def sibling_questions(self) -> dict:
         """Each sibling's current supporting questions, in the optimizer's proposal shape."""
-        return {identifier: [{"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
-                             for task in self.wheels[identifier].active.config.tasks]
-                for identifier in self.siblings() if self.wheels[identifier].active.config.tasks}
+        return {
+            identifier: [
+                {"name": task.name, "instructions": task.instructions, "labels": list(task.labels)}
+                for task in self.wheels[identifier].active.config.tasks
+            ]
+            for identifier in self.siblings()
+            if self.wheels[identifier].active.config.tasks
+        }
 
     def shared_owners(self, config) -> dict:
         """Supporting questions of ``config`` that siblings also ask, with every owner (asked once)."""
         from .batched_classification import shared_questions
+
         if not self.sharing():
             return {}
         configs = {**{identifier: wheel.active.config for identifier, wheel in self.wheels.items()}, self.owner: config}
         shared = shared_questions(configs)
-        return {task.name: shared[(task.name, task.instructions, tuple(task.labels))] for task in config.tasks
-                if (task.name, task.instructions, tuple(task.labels)) in shared}
+        return {
+            task.name: shared[(task.name, task.instructions, tuple(task.labels))]
+            for task in config.tasks
+            if (task.name, task.instructions, tuple(task.labels)) in shared
+        }
 
     def evidence(self) -> dict:
         """Round-cache identity: a sibling's new development labels must re-run the check."""
-        return {"policy": asdict(self.policy),
-                "siblings": {identifier: self.wheels[identifier]._evidence(self.partitions(identifier)[1])
-                             for identifier in self.siblings()}}
+        return {
+            "policy": asdict(self.policy),
+            "siblings": {
+                identifier: self.wheels[identifier]._evidence(self.partitions(identifier)[1]) for identifier in self.siblings()
+            },
+        }
 
     async def evaluate(self, config, now) -> dict:
         owner = self.wheels[self.owner]
-        record = {"policy": asdict(self.policy), "owner": self.owner,
-                  "shared_supporting_questions": self.shared_owners(config)}
+        record = {"policy": asdict(self.policy), "owner": self.owner, "shared_supporting_questions": self.shared_owners(config)}
         if config.fingerprint == owner.active.config.fingerprint:
-            return {**record, "context_changed": False, "siblings": {}, "regressed": [], "refused": False,
-                    "reason": "candidate leaves the shared decision request unchanged"}
+            return {
+                **record,
+                "context_changed": False,
+                "siblings": {},
+                "regressed": [],
+                "refused": False,
+                "reason": "candidate leaves the shared decision request unchanged",
+            }
         configs = {identifier: wheel.active.config for identifier, wheel in self.wheels.items()}
         pools = {identifier: self.partitions(identifier)[0] for identifier in self.wheels}
         siblings = {}
@@ -113,8 +137,11 @@ class SiblingCheck:
             labels = wheel.initial.task.labels
             counts = {label: sum(row.label == label for row in development) for label in labels}
             if min(counts.values()) < wheel.min_evaluation_per_class:
-                siblings[identifier] = {"status": "insufficient-evidence", "development_counts": counts,
-                                        "minimum_development_per_class": wheel.min_evaluation_per_class}
+                siblings[identifier] = {
+                    "status": "insufficient-evidence",
+                    "development_counts": counts,
+                    "minimum_development_per_class": wheel.min_evaluation_per_class,
+                }
                 continue
             metric, score = _metric(wheel)
             with self.shared.bound(configs, pools):
@@ -124,20 +151,35 @@ class SiblingCheck:
             try:
                 effect = sibling_effect(self.policy, metric, score(incumbent), score(candidate))
             except ValueError:
-                siblings[identifier] = {"status": "insufficient-evidence", "development_counts": counts,
-                                        "reason": "sibling metric needs class coverage in the evaluated sample"}
+                siblings[identifier] = {
+                    "status": "insufficient-evidence",
+                    "development_counts": counts,
+                    "reason": "sibling metric needs class coverage in the evaluated sample",
+                }
                 continue
-            siblings[identifier] = {**effect, "development_counts": counts,
-                                    "sample_ids": candidate["sample_ids"],
-                                    "incumbent_accuracy": incumbent["accuracy"],
-                                    "candidate_accuracy": candidate["accuracy"],
-                                    "sibling_version": wheel.active.fingerprint}
+            siblings[identifier] = {
+                **effect,
+                "development_counts": counts,
+                "sample_ids": candidate["sample_ids"],
+                "incumbent_accuracy": incumbent["accuracy"],
+                "candidate_accuracy": candidate["accuracy"],
+                "sibling_version": wheel.active.fingerprint,
+            }
         regressed = [identifier for identifier, effect in siblings.items() if effect["status"] == "regressed"]
         refused = bool(regressed) and self.policy.action == "refuse"
-        reason = ("candidate regresses sibling " + ", ".join(regressed) + " on its development labels" if regressed
-                  else "no sibling regressed on its development labels")
-        return {**record, "context_changed": True, "siblings": siblings, "regressed": regressed,
-                "refused": refused, "reason": reason}
+        reason = (
+            "candidate regresses sibling " + ", ".join(regressed) + " on its development labels"
+            if regressed
+            else "no sibling regressed on its development labels"
+        )
+        return {
+            **record,
+            "context_changed": True,
+            "siblings": siblings,
+            "regressed": regressed,
+            "refused": refused,
+            "reason": reason,
+        }
 
 
 def install_sibling_checks(wheels: Mapping, shared, partitions: Callable, policy: SiblingPolicy | None = None):

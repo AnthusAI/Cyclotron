@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 
 [project.optional-dependencies]
-dev = ["decision-flywheel[reviewer,accounts,accounts-cloud,priming]", "ruff>=0.6", "pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
+dev = ["decision-flywheel[reviewer,accounts,accounts-cloud,priming]", "ruff>=0.15.5,<0.16", "pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
 tools = [
     "build>=1.2",
     "kanbus==0.33.0",

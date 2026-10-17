@@ -1,4 +1,5 @@
 """The review-rate program watches every output, not just the first one."""
+
 import json
 
 from .classifier_config import ClassifierConfig
@@ -50,7 +51,7 @@ def test_a_new_version_of_any_output_raises_the_rate_and_names_it(tmp_path):
     with Cyclotron.open(tmp_path / "c", TWO, Model(), review_program=FAST) as cyclotron:
         decide_and_review_both(cyclotron, 0, 20)
         run(cyclotron.decide(item("probe", "sure probe")))
-        assert cyclotron.overview().review_rate.rate == .5
+        assert cyclotron.overview().review_rate.rate == 0.5
         wheel = cyclotron.wheels["timely"]
         wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric="Prefer this week's news.")))
         decision = run(cyclotron.decide(item("after", "sure after")))
@@ -73,11 +74,9 @@ def test_a_single_output_store_keeps_its_program_state_and_evidence_shape(tmp_pa
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
         decide_and_review(cyclotron, 0, 20)
         run(cyclotron.decide(item("probe", "sure probe")))
-        state = json.loads(cyclotron.db.execute(
-            "SELECT value FROM meta WHERE key='review_program_state'").fetchone()[0])
+        state = json.loads(cyclotron.db.execute("SELECT value FROM meta WHERE key='review_program_state'").fetchone()[0])
         events = rate_events(cyclotron)
         overview = cyclotron.overview()
-    assert set(state) == {"index", "raised", "consecutive", "checked_windows", "version", "reason",
-                          "last_check", "override"}
+    assert set(state) == {"index", "raised", "consecutive", "checked_windows", "version", "reason", "last_check", "override"}
     assert "output" not in state["last_check"] and "output" not in events[-1]
     assert overview.limiting is None and [s.classifier for s in overview.outputs] == ["relevant"]

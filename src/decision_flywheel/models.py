@@ -1,4 +1,5 @@
 """Stable, provider-neutral contracts for structured decisions."""
+
 from __future__ import annotations
 
 import hashlib
@@ -46,7 +47,8 @@ class LabeledItem:
 
     def __post_init__(self) -> None:
         if self.initial_answer_value is not None and (
-                not isinstance(self.initial_answer_value, str) or not self.initial_answer_value.strip()):
+            not isinstance(self.initial_answer_value, str) or not self.initial_answer_value.strip()
+        ):
             raise ValueError("initial answer must be a non-empty string or None")
         if not isinstance(self.context, Mapping):
             raise ValueError("labeled item context must be a mapping")
@@ -124,14 +126,15 @@ class DecisionTask:
             probabilities[canonical] = probability
         if set(probabilities) != set(self.labels):
             raise ValueError("probability distribution must cover every task label and no others")
-        if not all(isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value)
-                   and 0.0 <= value <= 1.0 for value in probabilities.values()):
+        if not all(
+            isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value) and 0.0 <= value <= 1.0
+            for value in probabilities.values()
+        ):
             raise ValueError("probabilities must be finite numbers between zero and one")
         # Providers commonly round each choice independently (for example,
         # three displayed 0.33 values).  Preserve those values for auditing;
         # validate their plausible rounding error instead of renormalizing.
-        if not math.isclose(sum(probabilities.values()), 1.0, rel_tol=0.0,
-                            abs_tol=PROBABILITY_SUM_TOLERANCE):
+        if not math.isclose(sum(probabilities.values()), 1.0, rel_tol=0.0, abs_tol=PROBABILITY_SUM_TOLERANCE):
             raise ValueError("probabilities must sum to one within rounding tolerance")
         return replace(result, label=label, probabilities=probabilities)
 
@@ -175,6 +178,7 @@ class ModelCapabilities:
     A capability describes supported request or response modes, not a promise
     that every provider response includes an optional field.
     """
+
     supports_labeled_context: bool = True
     supports_probability_distributions: bool = False
 
@@ -188,6 +192,4 @@ class DecisionModel(Protocol):
     name: str
     capabilities: ModelCapabilities
 
-    async def decide(self, task: DecisionTask, target: Item,
-                     context: Sequence[LabeledItem]) -> DecisionResult:
-        ...
+    async def decide(self, task: DecisionTask, target: Item, context: Sequence[LabeledItem]) -> DecisionResult: ...

@@ -1,4 +1,5 @@
 """Every code sample in docs/embedding.md runs, and the quoted ones match their sources."""
+
 import json
 import re
 from pathlib import Path

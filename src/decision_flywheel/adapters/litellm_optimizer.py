@@ -1,4 +1,5 @@
 """Explicit, lazy LiteLLM transport for native decision-context optimization."""
+
 from __future__ import annotations
 
 from ..optimizer_agent import OptimizerReply
@@ -21,6 +22,7 @@ class LiteLLMOptimizer:
     def from_environment(cls, *, model: str, max_calls: int = 10, asynchronous: bool = False):
         from dotenv import load_dotenv
         from litellm import completion
+
         load_dotenv(override=False)
         acompletion = None
         if asynchronous:
@@ -35,8 +37,15 @@ class LiteLLMOptimizer:
     def _arguments(self, messages):
         # Fail explicitly for unsupported JSON mode; do not drop it or retry
         # a second paid call. Credentials stay in the SDK's environment.
-        return dict(model=self.model, messages=messages, response_format={"type": "json_object"},
-                    num_retries=0, max_retries=0, timeout=60, drop_params=False)
+        return dict(
+            model=self.model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            num_retries=0,
+            max_retries=0,
+            timeout=60,
+            drop_params=False,
+        )
 
     def __call__(self, messages):
         self._reserve()

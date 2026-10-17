@@ -12,6 +12,7 @@ One optimizer call per round carries every operator's block and the reply labels
 A bold proposal rejected by the novelty gate may be re-requested (``novelty_retries`` extra calls, default 1, only
 when something was rejected). Everything shown to the optimizer is capped (see ``OPERATOR_CAPS``).
 """
+
 import re
 
 from .flywheel import _json
@@ -26,7 +27,7 @@ def _shingles(text):
     words = re.findall(r"[a-z0-9']+", str(text).lower())
     if len(words) < SHINGLE:
         return set(words)
-    return {tuple(words[i:i + SHINGLE]) for i in range(len(words) - SHINGLE + 1)}
+    return {tuple(words[i : i + SHINGLE]) for i in range(len(words) - SHINGLE + 1)}
 
 
 def text_novelty(a, b):
@@ -45,7 +46,7 @@ def nearest_novelty(text, references):
 
 def _clip(value, width):
     text = " ".join(str(value).split())
-    return text if len(text) <= width else text[:width - 1] + "…"
+    return text if len(text) <= width else text[: width - 1] + "…"
 
 
 def target_stories(wheel, ledger, training, development, protected, sample):
@@ -56,11 +57,11 @@ def target_stories(wheel, ledger, training, development, protected, sample):
     with the same text as one, are never shown. Groups are error directions (true label, wrong answer); the sample
     takes one story from each group in turn, stubborn stories first."""
     from .context import _normalized_text
+
     task = wheel.initial.task
     hidden_ids = {r.item.id for r in development} | {i.id for i in protected}
     hidden_text = {_normalized_text(r.item, task) for r in development} | {_normalized_text(i, task) for i in protected}
-    rows = {r.item.id: r for r in training
-            if r.item.id not in hidden_ids and _normalized_text(r.item, task) not in hidden_text}
+    rows = {r.item.id: r for r in training if r.item.id not in hidden_ids and _normalized_text(r.item, task) not in hidden_text}
     records = ledger.error_records(incumbent_id=incumbent_id(wheel), exclude_items=frozenset(hidden_ids), recent=200)
     groups = {}
     for rec in records:
@@ -78,10 +79,18 @@ def target_stories(wheel, ledger, training, development, protected, sample):
         body = values.get(task.input_field)
         if body is None:
             body = " ".join(str(v) for v in values.values())
-        stories.append({"id": row.item.id, "title": _clip(values["title"], 160) if values.get("title") else None,
-                        "excerpt": _clip(body, OPERATOR_CAPS["story_chars"]), "true_label": row.label,
-                        "answered": rec["choice"], "error_direction": f"true {rec['label']}, answered {rec['choice']}",
-                        "found_by": rec["kind"], "human_explanation": row.context.get("human_feedback")})
+        stories.append(
+            {
+                "id": row.item.id,
+                "title": _clip(values["title"], 160) if values.get("title") else None,
+                "excerpt": _clip(body, OPERATOR_CAPS["story_chars"]),
+                "true_label": row.label,
+                "answered": rec["choice"],
+                "error_direction": f"true {rec['label']}, answered {rec['choice']}",
+                "found_by": rec["kind"],
+                "human_explanation": row.context.get("human_feedback"),
+            }
+        )
     return stories
 
 
@@ -92,26 +101,36 @@ def _rubric_of(idea):
 def combine_block(wheel, ledger, ideas, count):
     """(request, parents, None) for the best complementary pair, or (None, None, reason)."""
     from .shadow_evaluation import SHADOW
+
     inc = incumbent_id(wheel)
     by_id = {i["id"]: i for i in ideas if _rubric_of(i)}
     old = wheel.shadow_storage.incumbent_ids() - {inc}
     done = {frozenset(i["parents"]) for i in ideas if i.get("operator") == "combine" and len(i.get("parents", ())) == 2}
-    pair = ledger.complementary_pair(incumbent_id=inc, ids=[*by_id, inc], context_version=SHADOW, skip_ids=old,
-                                     exclude_pairs=done)
+    pair = ledger.complementary_pair(
+        incumbent_id=inc, ids=[*by_id, inc], context_version=SHADOW, skip_ids=old, exclude_pairs=done
+    )
     if "skipped" in pair:
         return None, None, pair["skipped"]
     cap = OPERATOR_CAPS["parent_item_ids"]
     parents = []
     for name, _, mine in ((pair["a"], pair["b"], pair["fixes_a_not_b"]), (pair["b"], pair["a"], pair["fixes_b_not_a"])):
         rubric = wheel.active.config.rubric if name == inc else _rubric_of(by_id[name])
-        entry = {"id": name, "is_incumbent": name == inc, "rubric": _clip(rubric, OPERATOR_CAPS["parent_rubric_chars"]),
-                 "fixes_that_the_other_misses": len(mine), "story_ids_fixed_only_by_this": mine[:cap]}
+        entry = {
+            "id": name,
+            "is_incumbent": name == inc,
+            "rubric": _clip(rubric, OPERATOR_CAPS["parent_rubric_chars"]),
+            "fixes_that_the_other_misses": len(mine),
+            "story_ids_fixed_only_by_this": mine[:cap],
+        }
         if name != inc:
             vs = ledger.paired_comparison(name, inc, context_version=SHADOW)
             entry["versus_incumbent"] = {"fixed": vs["gained"], "broke": vs["lost"], "shared": vs["shared"]}
         parents.append(entry)
-    return ({"count": count, "parents": parents, "shared_stories": pair["shared"], "score": pair["score"]},
-            [pair["a"], pair["b"]], None)
+    return (
+        {"count": count, "parents": parents, "shared_stories": pair["shared"], "score": pair["score"]},
+        [pair["a"], pair["b"]],
+        None,
+    )
 
 
 def plan_round(wheel, ledger, ideas, training, development, protected, mix, diagnosis=None):
@@ -134,13 +153,17 @@ def plan_round(wheel, ledger, ideas, training, development, protected, mix, diag
         else:
             spec, parents, reason = combine_block(wheel, ledger, ideas, count)
             from .diagnosis import passing_causes
+
             passing = passing_causes(diagnosis)
             if spec:
                 requests[op] = spec
             elif len(passing) >= 2:
                 # No complementary pair of ideas yet: merge the patches of causes that passed the trial instead.
-                requests[op] = {"count": count, "parents": [], "cause_patches": [
-                    {"id": c["id"], "cell": c["cell"], "patch": c["patch"]} for c in passing]}
+                requests[op] = {
+                    "count": count,
+                    "parents": [],
+                    "cause_patches": [{"id": c["id"], "cell": c["cell"], "patch": c["patch"]} for c in passing],
+                }
                 parents = []
             else:
                 skipped.append((op, reason))
@@ -152,6 +175,7 @@ def _screen(wheel, labeled, requests, parents, control, references, gate, cause_
     With a diagnosis (``cause_ids`` is the set of this round's cause ids) each proposal's ``addresses`` is validated;
     a proposal naming an unknown cause is dropped and recorded."""
     from .diagnosis import validate_addresses
+
     kept, meta, rejected, seen = [], [], 0, set()
     for item in labeled:
         item = dict(item)
@@ -167,20 +191,30 @@ def _screen(wheel, labeled, requests, parents, control, references, gate, cause_
         proposal = validate_proposals([item], control, 1)[0]
         key = _json(proposal[control])
         if key in seen:
-            wheel._emit({"kind": "proposal-operator-skipped", "operator": operator,
-                         "reason": "a duplicate of another proposal in the same reply"})
+            wheel._emit(
+                {
+                    "kind": "proposal-operator-skipped",
+                    "operator": operator,
+                    "reason": "a duplicate of another proposal in the same reply",
+                }
+            )
             continue
         novelty = nearest_novelty(str(proposal[control]), references)
         if operator == "bold" and novelty < gate:
-            wheel._emit({"kind": "proposal-novelty-rejected", "operator": operator, "novelty": novelty,
-                         "min_novelty": gate})
+            wheel._emit({"kind": "proposal-novelty-rejected", "operator": operator, "novelty": novelty, "min_novelty": gate})
             rejected += 1
             continue
         seen.add(key)
         references = [*references, str(proposal[control])]
         kept.append(proposal)
-        meta.append({"operator": operator, "parents": list(parents) if operator == "combine" else [],
-                     "novelty": novelty, **({"addresses": addresses} if cause_ids is not None else {})})
+        meta.append(
+            {
+                "operator": operator,
+                "parents": list(parents) if operator == "combine" else [],
+                "novelty": novelty,
+                **({"addresses": addresses} if cause_ids is not None else {}),
+            }
+        )
     return kept, meta, rejected
 
 
@@ -191,6 +225,7 @@ async def ask_round(wheel, build_briefing, context, control, ideas, training, de
     ``diagnosis`` (Stage 2d, ``diagnosis.run_diagnosis``) adds the confusion summary, causes and elements to the prompt
     and makes each proposal carry validated ``addresses``; it applies to the operator path only."""
     from .idea_screening import ask_proposals
+
     config = wheel.idea_screening
     mix = config.effective_mix()
     if mix is None or control != "rubric":
@@ -198,14 +233,20 @@ async def ask_round(wheel, build_briefing, context, control, ideas, training, de
         return await ask_proposals(wheel, build_briefing({"proposals_requested": count, **context}), control, count), None
     if getattr(wheel.optimizer, "propose_operators", None) is None:
         total = sum(mix.values())
-        wheel._emit({"kind": "proposal-operator-skipped", "operator": "all",
-                     "reason": "the optimizer has no propose_operators; used the plain multi-proposal request"})
+        wheel._emit(
+            {
+                "kind": "proposal-operator-skipped",
+                "operator": "all",
+                "reason": "the optimizer has no propose_operators; used the plain multi-proposal request",
+            }
+        )
         return await ask_proposals(wheel, build_briefing({"proposals_requested": total, **context}), control, total), None
     ledger = HypothesisLedger(storage=wheel.hypothesis_storage)
     requests, parents, skipped = plan_round(wheel, ledger, ideas, training, development, protected, mix, diagnosis)
     cause_ids = None
     if diagnosis:
         from .diagnosis import diagnosis_block
+
         context = {**context, "diagnosis": diagnosis_block(diagnosis)}
         cause_ids = {c["id"] for c in diagnosis["causes"]}
     for op, reason in skipped:
@@ -213,23 +254,50 @@ async def ask_round(wheel, build_briefing, context, control, ideas, training, de
     references = [wheel.active.config.rubric, *(_rubric_of(i) for i in ideas if _rubric_of(i))]
     total = sum(spec["count"] for spec in requests.values())
     briefing = build_briefing({"proposals_requested": total, "operator_requests": requests, **context})
-    labeled = await ask_optimizer(wheel.optimizer, 'propose_operators', briefing)
+    labeled = await ask_optimizer(wheel.optimizer, "propose_operators", briefing)
     proposals, meta, rejected = _screen(wheel, labeled, requests, parents, control, references, config.min_novelty, cause_ids)
     for attempt in range(config.novelty_retries):
         if not rejected or "bold" not in requests:
             break
-        wheel._emit({"kind": "proposal-operator-retry", "operator": "bold", "rejected": rejected,
-                     "attempt": attempt + 1, "min_novelty": config.min_novelty})
-        retry = {"bold": {**requests["bold"], "count": rejected, "retry_note":
-                          "the previous bold proposals were too close to the incumbent or a prior idea"}}
-        labeled = await ask_optimizer(wheel.optimizer, 'propose_operators',
-            build_briefing({"proposals_requested": rejected, "operator_requests": retry, **context}))
-        more, more_meta, rejected = _screen(wheel, labeled, retry, parents, control,
-                                            [*references, *(str(p[control]) for p in proposals)], config.min_novelty,
-                                            cause_ids)
+        wheel._emit(
+            {
+                "kind": "proposal-operator-retry",
+                "operator": "bold",
+                "rejected": rejected,
+                "attempt": attempt + 1,
+                "min_novelty": config.min_novelty,
+            }
+        )
+        retry = {
+            "bold": {
+                **requests["bold"],
+                "count": rejected,
+                "retry_note": "the previous bold proposals were too close to the incumbent or a prior idea",
+            }
+        }
+        labeled = await ask_optimizer(
+            wheel.optimizer,
+            "propose_operators",
+            build_briefing({"proposals_requested": rejected, "operator_requests": retry, **context}),
+        )
+        more, more_meta, rejected = _screen(
+            wheel,
+            labeled,
+            retry,
+            parents,
+            control,
+            [*references, *(str(p[control]) for p in proposals)],
+            config.min_novelty,
+            cause_ids,
+        )
         proposals, meta = proposals + more, meta + more_meta
     if rejected:
-        wheel._emit({"kind": "proposal-operator-skipped", "operator": "bold",
-                     "reason": f"{rejected} bold proposals stayed below min_novelty {config.min_novelty} after "
-                               f"{config.novelty_retries} retries"})
+        wheel._emit(
+            {
+                "kind": "proposal-operator-skipped",
+                "operator": "bold",
+                "reason": f"{rejected} bold proposals stayed below min_novelty {config.min_novelty} after "
+                f"{config.novelty_retries} retries",
+            }
+        )
     return proposals, meta

@@ -1,4 +1,5 @@
 """Executable end-to-end Gherkin contract for the reusable flywheel."""
+
 import asyncio
 
 from pytest_bdd import given, scenarios, then, when
@@ -32,33 +33,53 @@ class ScriptedDecisionModel:
             )
         request = config.request(target, training, now=now)
         if event_sink:
-            event_sink({"kind": "decision-request", "target_id": target.id, "model": self.model_identity,
-                        "state": request["state"], "questions": request["questions"]})
-            event_sink({"kind": "decision-response", "target_id": target.id, "model": self.model_identity,
-                        "answers": {name: {"choice": result.label, "probabilities": result.probabilities}
-                                    for name, result in answers.items()}})
+            event_sink(
+                {
+                    "kind": "decision-request",
+                    "target_id": target.id,
+                    "model": self.model_identity,
+                    "state": request["state"],
+                    "questions": request["questions"],
+                }
+            )
+            event_sink(
+                {
+                    "kind": "decision-response",
+                    "target_id": target.id,
+                    "model": self.model_identity,
+                    "answers": {
+                        name: {"choice": result.label, "probabilities": result.probabilities} for name, result in answers.items()
+                    },
+                }
+            )
         return ClassifiedAnswers(answers, self.model_identity, {"input_tokens": 1}, 0)
 
 
 def _optimizer():
-    return OptimizerAgent(lambda _: OptimizerReply(
-        '{"rationale":"The feedback separates useful work",'
-        '"rubric":"Prefer useful work",'
-        '"example_ids":["train-0","train-1"],'
-        '"tasks":[{"name":"useful","instructions":"Is this useful?","labels":["yes","no"]}]}',
-        "scripted-optimizer-v1",
-    ))
+    return OptimizerAgent(
+        lambda _: OptimizerReply(
+            '{"rationale":"The feedback separates useful work",'
+            '"rubric":"Prefer useful work",'
+            '"example_ids":["train-0","train-1"],'
+            '"tasks":[{"name":"useful","instructions":"Is this useful?","labels":["yes","no"]}]}',
+            "scripted-optimizer-v1",
+        )
+    )
 
 
 def _labels():
     training = tuple(
-        LabeledItem(Item(f"train-{index}", {"text": f"{'yes' if index % 2 else 'no'} training {index}"}),
-                    "include" if index % 2 else "exclude")
+        LabeledItem(
+            Item(f"train-{index}", {"text": f"{'yes' if index % 2 else 'no'} training {index}"}),
+            "include" if index % 2 else "exclude",
+        )
         for index in range(6)
     )
     development = tuple(
-        LabeledItem(Item(f"development-{index}", {"text": f"{'yes' if index % 2 else 'no'} development {index}"}),
-                    "include" if index % 2 else "exclude")
+        LabeledItem(
+            Item(f"development-{index}", {"text": f"{'yes' if index % 2 else 'no'} development {index}"}),
+            "include" if index % 2 else "exclude",
+        )
         for index in range(2)
     )
     return training, development
@@ -80,10 +101,14 @@ def reusable_flywheel(tmp_path):
 
 @when("the application improves the classifier")
 def improve_classifier(state):
-    state["result"] = asyncio.run(state["wheel"].improve(
-        state["training"], state["development"], protected=(),
-        propensities={row.item.id: 1.0 for row in state["training"]},
-    ))
+    state["result"] = asyncio.run(
+        state["wheel"].improve(
+            state["training"],
+            state["development"],
+            protected=(),
+            propensities={row.item.id: 1.0 for row in state["training"]},
+        )
+    )
 
 
 @then("the optimizer proposal, decision requests, and fitted head are observable")
@@ -92,8 +117,16 @@ def observable_loop(state):
     assert state["result"]["promoted"]
     assert wheel.active.head is not None
     kinds = {event["kind"] for event in wheel.history(10_000)}
-    assert {"optimizer-request", "optimizer-response", "proposal-validated", "decision-request",
-            "decision-response", "fit-started", "fit-completed", "promoted"} <= kinds
+    assert {
+        "optimizer-request",
+        "optimizer-response",
+        "proposal-validated",
+        "decision-request",
+        "decision-response",
+        "fit-started",
+        "fit-completed",
+        "promoted",
+    } <= kinds
 
 
 @then("a new prediction is served by the fitted head")

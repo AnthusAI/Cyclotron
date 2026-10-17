@@ -4,6 +4,7 @@
 The 400-item recording is the default; ``--operational-items`` runs a longer
 corpus with the same plan, models, and cadences. Live calls need --confirm-live.
 """
+
 import argparse
 import asyncio
 import hashlib
@@ -32,75 +33,113 @@ from decision_flywheel.replay_feedback_policy import (
 )
 from decision_flywheel.trace_artifact import read_trace, render_trace
 
-DEFAULT_MODES=('all','reject_half','casual_ten_percent')
-BASELINE_RUBRIC=("Publish only when the article clearly reports an achieved, concrete benefit or constructive outcome "
- "for people, communities, knowledge, safety, health, fairness, or the environment. Reject routine coverage, "
- "campaign promises or plans without demonstrated results, sports or celebrity results without wider public benefit, "
- "and articles primarily about tragedy, violence, conflict, wrongdoing, or unresolved harm. When the evidence is mixed, "
- "do not assume a benefit that the article does not establish.")
+DEFAULT_MODES = ("all", "reject_half", "casual_ten_percent")
+BASELINE_RUBRIC = (
+    "Publish only when the article clearly reports an achieved, concrete benefit or constructive outcome "
+    "for people, communities, knowledge, safety, health, fairness, or the environment. Reject routine coverage, "
+    "campaign promises or plans without demonstrated results, sports or celebrity results without wider public benefit, "
+    "and articles primarily about tragedy, violence, conflict, wrongdoing, or unresolved harm. When the evidence is mixed, "
+    "do not assume a benefit that the article does not establish."
+)
 
-def rows(path, fields=('text',)):
-    return tuple(LabeledItem(Item(r['id'],{field:r[field] for field in fields}),r.get('simulated_label',r.get('label')),
-        context={'human_feedback':r.get('simulated_rationale','reviewed editorial label')})
-        for r in map(json.loads,path.read_text().splitlines()))
 
-def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
+def rows(path, fields=("text",)):
+    return tuple(
+        LabeledItem(
+            Item(r["id"], {field: r[field] for field in fields}),
+            r.get("simulated_label", r.get("label")),
+            context={"human_feedback": r.get("simulated_rationale", "reviewed editorial label")},
+        )
+        for r in map(json.loads, path.read_text().splitlines())
+    )
 
-def atomic_write(path,text):
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def atomic_write(path, text):
     """Write beside the target and rename, so a full disk cannot leave an empty results file."""
-    tmp=path.with_name(path.name+'.tmp')
-    tmp.write_text(text); tmp.replace(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
 
 def event_counts(database):
-    if not database.exists(): return {'decision_requests':0,'optimizer_requests':0,'completed_cycles':0,'unfinished_cycles':0}
-    connection=sqlite3.connect(f'file:{database}?mode=ro',uri=True)
-    events=[json.loads(row[0]) for row in connection.execute('SELECT payload FROM runtime_events ORDER BY id')]
+    if not database.exists():
+        return {"decision_requests": 0, "optimizer_requests": 0, "completed_cycles": 0, "unfinished_cycles": 0}
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    events = [json.loads(row[0]) for row in connection.execute("SELECT payload FROM runtime_events ORDER BY id")]
     connection.close()
-    starts={event.get('cycle_id') for event in events if event.get('kind')=='cycle-started'}
-    closed={event.get('cycle_id') for event in events if event.get('kind') in {'cycle-completed','cycle-failed'}}
-    return {'decision_requests':sum(event.get('kind')=='features-requested' for event in events),
-            'optimizer_requests':sum(event.get('kind')=='optimizer-request' for event in events),
-            'completed_cycles':sum(event.get('kind')=='cycle-completed' for event in events),
-            'unfinished_cycles':len(starts-closed)}
+    starts = {event.get("cycle_id") for event in events if event.get("kind") == "cycle-started"}
+    closed = {event.get("cycle_id") for event in events if event.get("kind") in {"cycle-completed", "cycle-failed"}}
+    return {
+        "decision_requests": sum(event.get("kind") == "features-requested" for event in events),
+        "optimizer_requests": sum(event.get("kind") == "optimizer-request" for event in events),
+        "completed_cycles": sum(event.get("kind") == "cycle-completed" for event in events),
+        "unfinished_cycles": len(starts - closed),
+    }
+
 
 def write_budget_ledger(output, decision_cap, optimizer_cap, modes):
-    modes={mode:event_counts(output/mode/'runtime.sqlite3') for mode in modes}
-    totals={'decision_requests':sum(row['decision_requests'] for row in modes.values()),
-            'optimizer_requests':sum(row['optimizer_requests'] for row in modes.values())}
-    ledger={'ledger_type':'editorial-study-global-cap-audit','version':1,
-            'source_of_truth':'immutable features-requested and optimizer-request events in each mode runtime.sqlite3',
-            'caps':{'decision_requests':decision_cap,'optimizer_requests':optimizer_cap},
-            'consumed':totals,
-            'remaining':{'decision_requests':decision_cap-totals['decision_requests'],
-                         'optimizer_requests':optimizer_cap-totals['optimizer_requests']},
-            'modes':modes}
-    if min(ledger['remaining'].values())<0: raise RuntimeError('immutable run ledger already exceeds the authorized cap')
-    (output/'global_budget_ledger.json').write_text(json.dumps(ledger,indent=2)+'\n')
+    modes = {mode: event_counts(output / mode / "runtime.sqlite3") for mode in modes}
+    totals = {
+        "decision_requests": sum(row["decision_requests"] for row in modes.values()),
+        "optimizer_requests": sum(row["optimizer_requests"] for row in modes.values()),
+    }
+    ledger = {
+        "ledger_type": "editorial-study-global-cap-audit",
+        "version": 1,
+        "source_of_truth": "immutable features-requested and optimizer-request events in each mode runtime.sqlite3",
+        "caps": {"decision_requests": decision_cap, "optimizer_requests": optimizer_cap},
+        "consumed": totals,
+        "remaining": {
+            "decision_requests": decision_cap - totals["decision_requests"],
+            "optimizer_requests": optimizer_cap - totals["optimizer_requests"],
+        },
+        "modes": modes,
+    }
+    if min(ledger["remaining"].values()) < 0:
+        raise RuntimeError("immutable run ledger already exceeds the authorized cap")
+    (output / "global_budget_ledger.json").write_text(json.dumps(ledger, indent=2) + "\n")
     return ledger
 
+
 def policy_for(mode, seed):
-    if mode=='metric_taper': return MetricTaperPolicy(seed=seed)
-    if mode in {'least_confident_25','random_25','mixed_25'}:
-        return ConfidenceFeedbackPolicy(mode.rsplit('_',1)[0],rate=.25,audit_rate=.05,seed=seed)
-    if mode in {'all','reject_half','casual_ten_percent'}: return ReplayFeedbackPolicy(mode,seed)
-    if mode=='first_50_all_then_half': return onboarding_all_then_half(seed=seed)
-    if mode=='publish_priority_taper': return onboarding_publish_priority_taper(seed=seed)
-    if mode=='first_100_all_then_half': return onboarding_first_hundred_then_half(seed=seed)
-    raise ValueError(f'unknown feedback mode: {mode}')
+    if mode == "metric_taper":
+        return MetricTaperPolicy(seed=seed)
+    if mode in {"least_confident_25", "random_25", "mixed_25"}:
+        return ConfidenceFeedbackPolicy(mode.rsplit("_", 1)[0], rate=0.25, audit_rate=0.05, seed=seed)
+    if mode in {"all", "reject_half", "casual_ten_percent"}:
+        return ReplayFeedbackPolicy(mode, seed)
+    if mode == "first_50_all_then_half":
+        return onboarding_all_then_half(seed=seed)
+    if mode == "publish_priority_taper":
+        return onboarding_publish_priority_taper(seed=seed)
+    if mode == "first_100_all_then_half":
+        return onboarding_first_hundred_then_half(seed=seed)
+    raise ValueError(f"unknown feedback mode: {mode}")
+
 
 def selection_policy(args):
     from decision_flywheel.selection_policy import SelectionPolicy
-    cap = getattr(args, 'provisional_rate_allowance', None)
-    if args.selection_primary is None: return SelectionPolicy(primary='accuracy', provisional_rate_allowance=cap)
-    return SelectionPolicy(primary=args.selection_primary, provisional_rate_allowance=cap,
-                           positive_class='publish' if args.selection_primary in ('precision','recall','f1') else None)
+
+    cap = getattr(args, "provisional_rate_allowance", None)
+    if args.selection_primary is None:
+        return SelectionPolicy(primary="accuracy", provisional_rate_allowance=cap)
+    return SelectionPolicy(
+        primary=args.selection_primary,
+        provisional_rate_allowance=cap,
+        positive_class="publish" if args.selection_primary in ("precision", "recall", "f1") else None,
+    )
+
 
 def proposal_options(args):
     """Stage 2c options; absent or unset flags leave the engine defaults (the default shadow mix)."""
     out = {}
-    if getattr(args, 'proposal_mix', None) is not None:
-        out['proposal_mix'] = args.proposal_mix
-    for name in ('min_novelty', 'target_sample'):
+    if getattr(args, "proposal_mix", None) is not None:
+        out["proposal_mix"] = args.proposal_mix
+    for name in ("min_novelty", "target_sample"):
         if getattr(args, name, None) is not None:
             out[name] = getattr(args, name)
     return out
@@ -108,6 +147,7 @@ def proposal_options(args):
 
 def proposal_mix_type(text):
     from decision_flywheel.idea_screening import parse_proposal_mix
+
     try:
         return parse_proposal_mix(text)
     except ValueError as error:
@@ -116,160 +156,447 @@ def proposal_mix_type(text):
 
 def diagnosis_options(args):
     """Stage 2d options; absent or unset flags leave the engine defaults. Without --diagnosis nothing is recorded."""
-    if not getattr(args, 'diagnosis', False):
+    if not getattr(args, "diagnosis", False):
         return {}
     from decision_flywheel.idea_screening import DiagnosisConfig
-    names={'samples':'diagnosis_samples','independent':'diagnosis_independent','element_candidates':'element_candidates',
-           'element_sample':'element_sample','max_jev_calls':'diagnosis_max_jev_calls'}
-    return {'diagnosis':DiagnosisConfig(enabled=True,**{field:getattr(args,flag) for field,flag in names.items()
-                                                         if getattr(args,flag,None) is not None})}
+
+    names = {
+        "samples": "diagnosis_samples",
+        "independent": "diagnosis_independent",
+        "element_candidates": "element_candidates",
+        "element_sample": "element_sample",
+        "max_jev_calls": "diagnosis_max_jev_calls",
+    }
+    return {
+        "diagnosis": DiagnosisConfig(
+            enabled=True, **{field: getattr(args, flag) for field, flag in names.items() if getattr(args, flag, None) is not None}
+        )
+    }
 
 
 def idea_screening_config(args):
     from decision_flywheel.idea_screening import IdeaScreeningConfig
-    return IdeaScreeningConfig(enabled=args.idea_screening,max_candidates=args.screening_max_candidates,
-        proposals_per_round=args.screening_proposals,finalists=args.screening_finalists,
-        reserve_fraction=args.screening_reserve,alpha=args.screening_alpha,max_screen_calls=args.screening_max_calls,
-        mode=args.screening_mode,shadow_ideas=args.shadow_ideas,shadow_min_items=args.shadow_min_items,
-        shadow_evict_after=args.shadow_evict_after,shadow_looks=args.shadow_looks,max_shadow_calls=args.max_shadow_calls,
-        **proposal_options(args),**diagnosis_options(args))
+
+    return IdeaScreeningConfig(
+        enabled=args.idea_screening,
+        max_candidates=args.screening_max_candidates,
+        proposals_per_round=args.screening_proposals,
+        finalists=args.screening_finalists,
+        reserve_fraction=args.screening_reserve,
+        alpha=args.screening_alpha,
+        max_screen_calls=args.screening_max_calls,
+        mode=args.screening_mode,
+        shadow_ideas=args.shadow_ideas,
+        shadow_min_items=args.shadow_min_items,
+        shadow_evict_after=args.shadow_evict_after,
+        shadow_looks=args.shadow_looks,
+        max_shadow_calls=args.max_shadow_calls,
+        **proposal_options(args),
+        **diagnosis_options(args),
+    )
+
 
 def evaluation_policy(args):
-    defaults=EvaluationPolicy()
-    return EvaluationPolicy(initial_recency_allowance=defaults.initial_recency_allowance if args.provisional_allowance is None else args.provisional_allowance,
-                            recency_decay_per_class=defaults.recency_decay_per_class if args.recency_decay_per_class is None else args.recency_decay_per_class)
+    defaults = EvaluationPolicy()
+    return EvaluationPolicy(
+        initial_recency_allowance=defaults.initial_recency_allowance
+        if args.provisional_allowance is None
+        else args.provisional_allowance,
+        recency_decay_per_class=defaults.recency_decay_per_class
+        if args.recency_decay_per_class is None
+        else args.recency_decay_per_class,
+    )
+
 
 def seed_answers(target, source):
     """Copy completed exact-request answers from an earlier run; the cache key is the full request."""
-    target.parent.mkdir(parents=True,exist_ok=True)
-    db=sqlite3.connect(target,uri=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(target, uri=True)
     try:
-        db.execute('CREATE TABLE IF NOT EXISTS runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)')
-        db.execute('ATTACH DATABASE ? AS source',(f'file:{source}?mode=ro',))
+        db.execute("CREATE TABLE IF NOT EXISTS runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
+        db.execute("ATTACH DATABASE ? AS source", (f"file:{source}?mode=ro",))
         with db:
-            db.execute("INSERT OR IGNORE INTO runtime_answers SELECT key,status,payload FROM source.runtime_answers WHERE status='complete'")
-        db.execute('DETACH DATABASE source')
-    finally: db.close()
+            db.execute(
+                "INSERT OR IGNORE INTO runtime_answers SELECT key,status,payload FROM source.runtime_answers WHERE status='complete'"
+            )
+        db.execute("DETACH DATABASE source")
+    finally:
+        db.close()
+
 
 def build_plan(task, operational, seed, development_rate=None):
     # All operational items are eligible for feedback; a fixed stratified dev
     # slice is for candidate comparison only, never hidden from the all arm.
-    dev=[]; training=[]
+    dev = []
+    training = []
     if development_rate is not None:
         # A label-independent share of the stream, so development evidence
         # arrives as the run goes rather than only by the corpus's end.
         for r in operational:
-            (dev if development_assignment(seed,r.item.id,rate=development_rate) else training).append(r)
-        return ReplayPlan(tuple(operational),tuple(training),tuple(dev),(),(len(operational),),seed)
+            (dev if development_assignment(seed, r.item.id, rate=development_rate) else training).append(r)
+        return ReplayPlan(tuple(operational), tuple(training), tuple(dev), (), (len(operational),), seed)
     for label in task.labels:
-        group=sorted((r for r in operational if r.label==label),key=lambda r:hashlib.sha256(f'{seed}:{r.item.id}'.encode()).hexdigest())
-        dev.extend(group[:20]); training.extend(group[20:])
-    return ReplayPlan(tuple(operational),tuple(training),tuple(dev),(),(len(operational),),seed)
+        group = sorted(
+            (r for r in operational if r.label == label), key=lambda r: hashlib.sha256(f"{seed}:{r.item.id}".encode()).hexdigest()
+        )
+        dev.extend(group[:20])
+        training.extend(group[20:])
+    return ReplayPlan(tuple(operational), tuple(training), tuple(dev), (), (len(operational),), seed)
+
 
 async def main_async(args):
-    if digest(args.operational_corpus)!=args.operational_sha256: raise ValueError('operational corpus hash mismatch')
-    if digest(args.bootstrap_corpus)!=args.bootstrap_sha256: raise ValueError('bootstrap corpus hash mismatch')
-    task=DecisionTask('editorial',('publish','reject'),'Include items with a meaningful constructive or public-benefit outcome; reject harm-dominant or routine items.')
-    operational,bootstrap=rows(args.operational_corpus,args.item_fields),rows(args.bootstrap_corpus,args.item_fields)
-    count=args.operational_items
-    if len(operational)!=count or len({r.item.id for r in operational})!=count: raise ValueError(f'operational corpus must contain exactly {count} unique rows')
-    if {r.item.id for r in operational}&{r.item.id for r in bootstrap}: raise ValueError('bootstrap IDs overlap operational stream')
-    if len(bootstrap)<12 or any(sum(r.label==label for r in bootstrap)<6 for label in task.labels): raise ValueError('bootstrap needs at least six labels per class')
+    if digest(args.operational_corpus) != args.operational_sha256:
+        raise ValueError("operational corpus hash mismatch")
+    if digest(args.bootstrap_corpus) != args.bootstrap_sha256:
+        raise ValueError("bootstrap corpus hash mismatch")
+    task = DecisionTask(
+        "editorial",
+        ("publish", "reject"),
+        "Include items with a meaningful constructive or public-benefit outcome; reject harm-dominant or routine items.",
+    )
+    operational, bootstrap = rows(args.operational_corpus, args.item_fields), rows(args.bootstrap_corpus, args.item_fields)
+    count = args.operational_items
+    if len(operational) != count or len({r.item.id for r in operational}) != count:
+        raise ValueError(f"operational corpus must contain exactly {count} unique rows")
+    if {r.item.id for r in operational} & {r.item.id for r in bootstrap}:
+        raise ValueError("bootstrap IDs overlap operational stream")
+    if len(bootstrap) < 12 or any(sum(r.label == label for r in bootstrap) < 6 for label in task.labels):
+        raise ValueError("bootstrap needs at least six labels per class")
     if args.resume:
-        if not args.output.exists(): raise ValueError('--resume needs the existing study output directory')
-        old=json.loads((args.output/'protocol.json').read_text())
-        for key,value in {'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,
-                          'decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
-                          'operational_items':count}.items():
-            if old.get(key)!=value: raise ValueError(f'--resume protocol mismatch for {key}')
-        if tuple(old.get('modes',()))!=args.modes: raise ValueError('--resume protocol mismatch for modes')
-        if any(event_counts(args.output/mode/'runtime.sqlite3')['unfinished_cycles'] for mode in args.modes):
-            raise RuntimeError('a mode has an unfinished cycle; wait for its owning process to reach a terminal state')
+        if not args.output.exists():
+            raise ValueError("--resume needs the existing study output directory")
+        old = json.loads((args.output / "protocol.json").read_text())
+        for key, value in {
+            "operational_sha256": args.operational_sha256,
+            "bootstrap_sha256": args.bootstrap_sha256,
+            "decision_cap_total": args.max_decision_calls,
+            "optimizer_cap_total": args.max_optimizer_calls,
+            "operational_items": count,
+        }.items():
+            if old.get(key) != value:
+                raise ValueError(f"--resume protocol mismatch for {key}")
+        if tuple(old.get("modes", ())) != args.modes:
+            raise ValueError("--resume protocol mismatch for modes")
+        if any(event_counts(args.output / mode / "runtime.sqlite3")["unfinished_cycles"] for mode in args.modes):
+            raise RuntimeError("a mode has an unfinished cycle; wait for its owning process to reach a terminal state")
     else:
-        args.output.mkdir(parents=True,exist_ok=False)
-    plan=build_plan(task,operational,args.seed,args.development_rate)
-    protocol={'operational_sha256':args.operational_sha256,'bootstrap_sha256':args.bootstrap_sha256,'modes':args.modes,
-      'operational_items':count,'decision_model':args.decision_model,'decision_provider':args.decision_provider,**({'decision_rubric_placement':args.decision_rubric_placement} if args.decision_provider=='foundry' else {}),'selection_policy':asdict(selection_policy(args)),'idea_screening':idea_screening_config(args).as_json(),'item_fields':list(args.item_fields),'optimizer_model':args.model,'baseline_rubric':BASELINE_RUBRIC if args.baseline_rubric=='curated' else '','baseline_provenance':'curated from the product intent and v1 failure analysis; not derived from operational labels at runtime' if args.baseline_rubric=='curated' else 'none: an empty rubric, as in the first 400-cycle recording',
-      'feedback_disclosure':f'all reveals all {count} post-prediction labels; selective policies disclose their realized rate','decision_cap_total':args.max_decision_calls,'optimizer_cap_total':args.max_optimizer_calls,
-      'transport_retries':{'count':args.transport_retries,'scope':('OpenAI SDK retries of connection errors, 408, 409, 429 and 5xx for '+('decision and optimizer calls' if args.decision_provider=='openai' else 'optimizer calls only; Jev decision calls are not retried')+'; retried attempts are not in the recorded usage')},
-      'rubric_trigger':{'basis':args.rubric_trigger_basis,'every':args.rubric_changes_every,
-                        'max_attempts':args.max_rubric_optimizations}}
+        args.output.mkdir(parents=True, exist_ok=False)
+    plan = build_plan(task, operational, args.seed, args.development_rate)
+    protocol = {
+        "operational_sha256": args.operational_sha256,
+        "bootstrap_sha256": args.bootstrap_sha256,
+        "modes": args.modes,
+        "operational_items": count,
+        "decision_model": args.decision_model,
+        "decision_provider": args.decision_provider,
+        **({"decision_rubric_placement": args.decision_rubric_placement} if args.decision_provider == "foundry" else {}),
+        "selection_policy": asdict(selection_policy(args)),
+        "idea_screening": idea_screening_config(args).as_json(),
+        "item_fields": list(args.item_fields),
+        "optimizer_model": args.model,
+        "baseline_rubric": BASELINE_RUBRIC if args.baseline_rubric == "curated" else "",
+        "baseline_provenance": "curated from the product intent and v1 failure analysis; not derived from operational labels at runtime"
+        if args.baseline_rubric == "curated"
+        else "none: an empty rubric, as in the first 400-cycle recording",
+        "feedback_disclosure": f"all reveals all {count} post-prediction labels; selective policies disclose their realized rate",
+        "decision_cap_total": args.max_decision_calls,
+        "optimizer_cap_total": args.max_optimizer_calls,
+        "transport_retries": {
+            "count": args.transport_retries,
+            "scope": (
+                "OpenAI SDK retries of connection errors, 408, 409, 429 and 5xx for "
+                + (
+                    "decision and optimizer calls"
+                    if args.decision_provider == "openai"
+                    else "optimizer calls only; Jev decision calls are not retried"
+                )
+                + "; retried attempts are not in the recorded usage"
+            ),
+        },
+        "rubric_trigger": {
+            "basis": args.rubric_trigger_basis,
+            "every": args.rubric_changes_every,
+            "max_attempts": args.max_rubric_optimizations,
+        },
+    }
     if args.development_rate is not None or args.provisional_allowance is not None or args.recency_decay_per_class is not None:
-        protocol['rubric_gate']={'development':(f'label-independent hash share {args.development_rate} of the stream' if args.development_rate is not None
-                                                else 'fixed 20 per class from the whole corpus'),
-                                 'development_items':len(plan.development),
-                                 'evaluation_policy':asdict(evaluation_policy(args))}
+        protocol["rubric_gate"] = {
+            "development": (
+                f"label-independent hash share {args.development_rate} of the stream"
+                if args.development_rate is not None
+                else "fixed 20 per class from the whole corpus"
+            ),
+            "development_items": len(plan.development),
+            "evaluation_policy": asdict(evaluation_policy(args)),
+        }
     if args.seed_answers_from:
-        protocol['seeded_answers']={'source':str(args.seed_answers_from),
-            'scope':'exact decision requests already answered in the source run are served from its answers; nothing else is copied'}
-    if not args.resume: (args.output/'protocol.json').write_text(json.dumps(protocol,indent=2)+'\n')
-    ledger=write_budget_ledger(args.output,args.max_decision_calls,args.max_optimizer_calls,args.modes)
-    if not args.confirm_live: return
-    lock=args.output/'.recovery.lock'
+        protocol["seeded_answers"] = {
+            "source": str(args.seed_answers_from),
+            "scope": "exact decision requests already answered in the source run are served from its answers; nothing else is copied",
+        }
+    if not args.resume:
+        (args.output / "protocol.json").write_text(json.dumps(protocol, indent=2) + "\n")
+    ledger = write_budget_ledger(args.output, args.max_decision_calls, args.max_optimizer_calls, args.modes)
+    if not args.confirm_live:
+        return
+    lock = args.output / ".recovery.lock"
     try:
-        descriptor=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY); os.close(descriptor)
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(descriptor)
     except FileExistsError:
-        raise RuntimeError('another recovery process owns this study output') from None
+        raise RuntimeError("another recovery process owns this study output") from None
     try:
-      for mode in args.modes:
-        out=args.output/mode
-        current=event_counts(out/'runtime.sqlite3')
-        if current['completed_cycles']==len(operational): continue
-        ledger=write_budget_ledger(args.output,args.max_decision_calls,args.max_optimizer_calls,args.modes)
-        remaining_decisions=ledger['remaining']['decision_requests']
-        remaining_optimizers=ledger['remaining']['optimizer_requests']
-        if remaining_decisions<1 or remaining_optimizers<1: raise RuntimeError('global authorized budget is exhausted')
-        out.mkdir(exist_ok=True)
-        if args.decision_provider=='jev':
-            from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
-            adapter=JevAdapter.from_environment(configuration=JevConfiguration(model=args.decision_model))
-        elif args.decision_provider=='kev':
-            from decision_flywheel.adapters.kev import KevAdapter, KevConfiguration
-            adapter=KevAdapter(configuration=KevConfiguration(model=args.decision_model,revision=args.decision_revision,base_url=__import__('os').environ.get('KEV_BASE_URL','http://127.0.0.1:8009')))
-        elif args.decision_provider=='foundry':
-            from decision_flywheel.adapters.microsoft_decision import MicrosoftDecisionAdapter
-            adapter=MicrosoftDecisionAdapter.from_environment(revision=args.decision_revision,rubric_placement=args.decision_rubric_placement)
-        else:
-            adapter=OpenAIDecisionAdapter.from_environment(configuration=OpenAIDecisionConfiguration(args.decision_model,300))
-        transport=OpenAIOptimizer.from_environment(model=args.model,max_calls=remaining_optimizers)
-        if args.transport_retries:
-            # Opt-in for long runs: one dropped connection otherwise ends the run.
-            # Retried attempts are not in the recorded usage; the protocol says so.
-            if args.decision_provider=='openai':
-                adapter.client=adapter.client.with_options(max_retries=args.transport_retries)
-            transport.client=transport.client.with_options(max_retries=args.transport_retries)
-        if args.seed_answers_from and current['completed_cycles']==0:
-            seed_answers(out/'runtime.sqlite3',args.seed_answers_from)
-        wheel=DecisionFlywheel(out/'runtime.sqlite3',ClassifierConfig(task,BASELINE_RUBRIC if args.baseline_rubric=='curated' else ''),adapter,OptimizerAgent(transport),max_requests=remaining_decisions,
-                               evaluation_policy=evaluation_policy(args),selection_policy=selection_policy(args),idea_screening=idea_screening_config(args))
-        try:
-            report=await run_cycle_replay(wheel,plan,optimize_every=200,retrain_every=200,stages=('rubric',),
-              feedback_policy=policy_for(mode,args.seed),negative_label='reject',max_rubric_optimizations=(args.max_rubric_optimizations or remaining_optimizers),
-              initial_training=bootstrap[:8],initial_development=bootstrap[8:12],resume=args.resume and current['completed_cycles']>0,
-              retry_failed_requests=args.retry_failed_requests,rubric_changes_every=args.rubric_changes_every,
-              rubric_trigger_basis=args.rubric_trigger_basis)
-            prior=(out/'results.json')
-            if report.get('resumed_from_cycles') and prior.exists():
-                old_cycles=json.loads(prior.read_text()).get('cycles',[])
-                report['cycles']=[*old_cycles,*report['cycles']]
-            report['disclosure']={'operational_items':count,'feedback_revealed':sum(x['feedback_selected'] for x in report['cycles']),
-              'dev_role_items':len(plan.development),'scoreboard_role_items':0}
-            atomic_write(out/'results.json',json.dumps(report,indent=2)+'\n')
-            if args.playback:
-                events=read_trace(out/'runtime.sqlite3')
-                (out/'playback.html').write_text(render_trace(events,class_config=[{'label':'publish','role':'positive'},{'label':'reject','role':'negative'}]))
-        finally: wheel.close()
-        write_budget_ledger(args.output,args.max_decision_calls,args.max_optimizer_calls,args.modes)
+        for mode in args.modes:
+            out = args.output / mode
+            current = event_counts(out / "runtime.sqlite3")
+            if current["completed_cycles"] == len(operational):
+                continue
+            ledger = write_budget_ledger(args.output, args.max_decision_calls, args.max_optimizer_calls, args.modes)
+            remaining_decisions = ledger["remaining"]["decision_requests"]
+            remaining_optimizers = ledger["remaining"]["optimizer_requests"]
+            if remaining_decisions < 1 or remaining_optimizers < 1:
+                raise RuntimeError("global authorized budget is exhausted")
+            out.mkdir(exist_ok=True)
+            if args.decision_provider == "jev":
+                from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
+
+                adapter = JevAdapter.from_environment(configuration=JevConfiguration(model=args.decision_model))
+            elif args.decision_provider == "kev":
+                from decision_flywheel.adapters.kev import KevAdapter, KevConfiguration
+
+                adapter = KevAdapter(
+                    configuration=KevConfiguration(
+                        model=args.decision_model,
+                        revision=args.decision_revision,
+                        base_url=__import__("os").environ.get("KEV_BASE_URL", "http://127.0.0.1:8009"),
+                    )
+                )
+            elif args.decision_provider == "foundry":
+                from decision_flywheel.adapters.microsoft_decision import MicrosoftDecisionAdapter
+
+                adapter = MicrosoftDecisionAdapter.from_environment(
+                    revision=args.decision_revision, rubric_placement=args.decision_rubric_placement
+                )
+            else:
+                adapter = OpenAIDecisionAdapter.from_environment(
+                    configuration=OpenAIDecisionConfiguration(args.decision_model, 300)
+                )
+            transport = OpenAIOptimizer.from_environment(model=args.model, max_calls=remaining_optimizers)
+            if args.transport_retries:
+                # Opt-in for long runs: one dropped connection otherwise ends the run.
+                # Retried attempts are not in the recorded usage; the protocol says so.
+                if args.decision_provider == "openai":
+                    adapter.client = adapter.client.with_options(max_retries=args.transport_retries)
+                transport.client = transport.client.with_options(max_retries=args.transport_retries)
+            if args.seed_answers_from and current["completed_cycles"] == 0:
+                seed_answers(out / "runtime.sqlite3", args.seed_answers_from)
+            wheel = DecisionFlywheel(
+                out / "runtime.sqlite3",
+                ClassifierConfig(task, BASELINE_RUBRIC if args.baseline_rubric == "curated" else ""),
+                adapter,
+                OptimizerAgent(transport),
+                max_requests=remaining_decisions,
+                evaluation_policy=evaluation_policy(args),
+                selection_policy=selection_policy(args),
+                idea_screening=idea_screening_config(args),
+            )
+            try:
+                report = await run_cycle_replay(
+                    wheel,
+                    plan,
+                    optimize_every=200,
+                    retrain_every=200,
+                    stages=("rubric",),
+                    feedback_policy=policy_for(mode, args.seed),
+                    negative_label="reject",
+                    max_rubric_optimizations=(args.max_rubric_optimizations or remaining_optimizers),
+                    initial_training=bootstrap[:8],
+                    initial_development=bootstrap[8:12],
+                    resume=args.resume and current["completed_cycles"] > 0,
+                    retry_failed_requests=args.retry_failed_requests,
+                    rubric_changes_every=args.rubric_changes_every,
+                    rubric_trigger_basis=args.rubric_trigger_basis,
+                )
+                prior = out / "results.json"
+                if report.get("resumed_from_cycles") and prior.exists():
+                    old_cycles = json.loads(prior.read_text()).get("cycles", [])
+                    report["cycles"] = [*old_cycles, *report["cycles"]]
+                report["disclosure"] = {
+                    "operational_items": count,
+                    "feedback_revealed": sum(x["feedback_selected"] for x in report["cycles"]),
+                    "dev_role_items": len(plan.development),
+                    "scoreboard_role_items": 0,
+                }
+                atomic_write(out / "results.json", json.dumps(report, indent=2) + "\n")
+                if args.playback:
+                    events = read_trace(out / "runtime.sqlite3")
+                    (out / "playback.html").write_text(
+                        render_trace(
+                            events,
+                            class_config=[{"label": "publish", "role": "positive"}, {"label": "reject", "role": "negative"}],
+                        )
+                    )
+            finally:
+                wheel.close()
+            write_budget_ledger(args.output, args.max_decision_calls, args.max_optimizer_calls, args.modes)
     finally:
-      lock.unlink(missing_ok=True)
+        lock.unlink(missing_ok=True)
+
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--operational-corpus',type=Path,required=True); p.add_argument('--operational-sha256',required=True); p.add_argument('--bootstrap-corpus',type=Path,required=True); p.add_argument('--bootstrap-sha256',required=True); p.add_argument('--output',type=Path,required=True); p.add_argument('--seed',default='editorial-prequential-v1'); p.add_argument('--model',default='gpt-4.1-mini',help='optimizer model, and the decision model unless --decision-model is given'); p.add_argument('--selection-primary',choices=('accuracy','balanced_accuracy','balanced_brier','brier','precision','recall','f1'),help='optimization goal for candidate selection; precision, recall and F1 are for the publish class (engine default: accuracy)'); p.add_argument('--item-fields',default='text',help='comma-separated corpus fields the decision model sees (default text; the labeler saw title and text)'); p.add_argument('--decision-provider',choices=('openai','jev','kev','foundry'),default='openai',help='foundry calls Microsoft-Decision-1 on Microsoft Foundry (AZURE_FOUNDRY_API_KEY, AZURE_FOUNDRY_ENDPOINT, AZURE_FOUNDRY_DEPLOYMENT; --decision-model is only the recorded deployment label); kev uses a local Kev server (KEV_BASE_URL, default http://127.0.0.1:8009); it costs nothing'); p.add_argument('--decision-model'); p.add_argument('--decision-rubric-placement',choices=('criteria','state'),default='criteria',help='foundry only: put the rubric in the decision question criteria (as Jev does) or inside the state (as Kev does)'); p.add_argument('--decision-revision',help='pin the decision model revision (Kev: part of the model identity, so caches do not mix)'); p.add_argument('--max-decision-calls',type=int,default=6000); p.add_argument('--max-optimizer-calls',type=int,default=60); p.add_argument('--max-rubric-optimizations',type=int); p.add_argument('--rubric-changes-every',type=int,default=6,help='run a rubric step after this many label transitions (consecutive labeled stories whose labels differ). Transitions are rare on lopsided tasks, so a high value delays the first rubric; default 6 (was 20), see docs/using-cyclotron.md'); p.add_argument('--rubric-trigger-basis',choices=('label_transitions','revealed_feedback_count'),default='label_transitions'); p.add_argument('--confirm-live',action='store_true'); p.add_argument('--resume',action='store_true'); p.add_argument('--retry-failed-requests',action='store_true'); p.add_argument('--modes',default=','.join(DEFAULT_MODES)); p.add_argument('--operational-items',type=int,default=400); p.add_argument('--no-playback',dest='playback',action='store_false'); p.add_argument('--transport-retries',type=int,default=0); p.add_argument('--development-rate',type=float,help='development role by a label-independent hash share of the stream instead of a fixed 20 per class'); p.add_argument('--provisional-allowance',type=float,help='Brier allowance for provisional rubric changes (engine default 2.0)'); p.add_argument('--provisional-rate-allowance',type=float,default=None,help='caps how far a rate objective may regress when accepting a provisional rubric change; 0 means no regression allowed'); p.add_argument('--recency-decay-per-class',type=int,help='development labels per class at which the provisional phase ends (engine default 20)'); p.add_argument('--seed-answers-from',type=Path,help='serve exact decision requests answered in this earlier runtime store'); p.add_argument('--idea-screening',action='store_true',help='opt in: screen several rubric ideas per round and confirm finalists on a growing hash-defined reserve of development items (accuracy objective only)'); p.add_argument('--screening-proposals',type=int,default=3); p.add_argument('--screening-finalists',type=int,default=2); p.add_argument('--screening-max-candidates',type=int,default=8); p.add_argument('--screening-reserve',type=float,default=0.2); p.add_argument('--screening-alpha',type=float,default=0.05); p.add_argument('--screening-max-calls',type=int,default=2000,help='per-round ceiling on screening scorer calls'); p.add_argument('--screening-mode',choices=('shadow','dev_screen'),default='shadow',help='with --idea-screening: shadow scores a few ideas on every new story before its label is revealed (default); dev_screen is the Stage 2 screen on the development partition'); p.add_argument('--shadow-ideas',type=int,default=4,help='ideas scored in shadow at once'); p.add_argument('--shadow-min-items',type=int,default=40,help='shared forward stories between promotion looks'); p.add_argument('--shadow-evict-after',type=int,default=30,help='evict an idea with no advantage after this many shared forward stories'); p.add_argument('--shadow-looks',type=int,default=10,help='promotion looks per idea; the p-value threshold is alpha/looks'); p.add_argument('--max-shadow-calls',type=int,default=3000,help='ceiling on shadow decision calls'); p.add_argument('--proposal-mix',type=proposal_mix_type,help='shadow mode: proposals per round by operator, e.g. bold=2,target=2,combine=2 (the default); mutate=N is the plain multi-proposal request; replaces --screening-proposals in shadow mode'); p.add_argument('--min-novelty',type=float,help='bold proposals closer than this text distance (0-1) to the incumbent or a prior idea are rejected (default 0.35)'); p.add_argument('--target-sample',type=int,help='stubborn stories shown to the target operator (default 8)'); p.add_argument('--diagnosis',action='store_true',help='shadow mode: before each rubric proposal call, summarise the incumbent errors, diagnose root causes with several optimizer calls, trial each cause on held-aside errors and screen yes/no elements with the decision model (Stage 2d)'); p.add_argument('--diagnosis-samples',type=int,help='errors per diagnosis sample (default 8)'); p.add_argument('--diagnosis-independent',type=int,help='independent diagnoses per error cell; one more sample is held aside for the cause trial (default 2)'); p.add_argument('--element-candidates',type=int,help='generic yes/no elements the reconcile call may add (default 8)'); p.add_argument('--element-sample',type=int,help='revealed training stories scored for element screening (default 200)'); p.add_argument('--diagnosis-max-jev-calls',type=int,help='decision-model requests per round for the cause trial and element screening together (default 400)'); p.add_argument('--baseline-rubric',choices=('curated','none'),default='curated',help='none starts from an empty rubric, as the first 400-cycle recording did'); args=p.parse_args(argv)
-    if args.decision_provider=='foundry' and not args.decision_model: p.error('--decision-provider foundry needs --decision-model, the deployment label recorded in the protocol')
-    args.decision_model=args.decision_model or args.model; args.item_fields=tuple(f.strip() for f in args.item_fields.split(',') if f.strip()); args.modes=tuple(part.strip() for part in args.modes.split(',') if part.strip());
-    if not args.modes or len(set(args.modes))!=len(args.modes): p.error('--modes must be a non-empty unique comma-separated list')
-    if args.diagnosis and not (args.idea_screening and args.screening_mode=='shadow'): p.error('--diagnosis needs --idea-screening with --screening-mode shadow')
-    try: idea_screening_config(args)
-    except ValueError as error: p.error(str(error))
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--operational-corpus", type=Path, required=True)
+    p.add_argument("--operational-sha256", required=True)
+    p.add_argument("--bootstrap-corpus", type=Path, required=True)
+    p.add_argument("--bootstrap-sha256", required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--seed", default="editorial-prequential-v1")
+    p.add_argument(
+        "--model", default="gpt-4.1-mini", help="optimizer model, and the decision model unless --decision-model is given"
+    )
+    p.add_argument(
+        "--selection-primary",
+        choices=("accuracy", "balanced_accuracy", "balanced_brier", "brier", "precision", "recall", "f1"),
+        help="optimization goal for candidate selection; precision, recall and F1 are for the publish class (engine default: accuracy)",
+    )
+    p.add_argument(
+        "--item-fields",
+        default="text",
+        help="comma-separated corpus fields the decision model sees (default text; the labeler saw title and text)",
+    )
+    p.add_argument(
+        "--decision-provider",
+        choices=("openai", "jev", "kev", "foundry"),
+        default="openai",
+        help="foundry calls Microsoft-Decision-1 on Microsoft Foundry (AZURE_FOUNDRY_API_KEY, AZURE_FOUNDRY_ENDPOINT, AZURE_FOUNDRY_DEPLOYMENT; --decision-model is only the recorded deployment label); kev uses a local Kev server (KEV_BASE_URL, default http://127.0.0.1:8009); it costs nothing",
+    )
+    p.add_argument("--decision-model")
+    p.add_argument(
+        "--decision-rubric-placement",
+        choices=("criteria", "state"),
+        default="criteria",
+        help="foundry only: put the rubric in the decision question criteria (as Jev does) or inside the state (as Kev does)",
+    )
+    p.add_argument(
+        "--decision-revision", help="pin the decision model revision (Kev: part of the model identity, so caches do not mix)"
+    )
+    p.add_argument("--max-decision-calls", type=int, default=6000)
+    p.add_argument("--max-optimizer-calls", type=int, default=60)
+    p.add_argument("--max-rubric-optimizations", type=int)
+    p.add_argument(
+        "--rubric-changes-every",
+        type=int,
+        default=6,
+        help="run a rubric step after this many label transitions (consecutive labeled stories whose labels differ). Transitions are rare on lopsided tasks, so a high value delays the first rubric; default 6 (was 20), see docs/using-cyclotron.md",
+    )
+    p.add_argument(
+        "--rubric-trigger-basis", choices=("label_transitions", "revealed_feedback_count"), default="label_transitions"
+    )
+    p.add_argument("--confirm-live", action="store_true")
+    p.add_argument("--resume", action="store_true")
+    p.add_argument("--retry-failed-requests", action="store_true")
+    p.add_argument("--modes", default=",".join(DEFAULT_MODES))
+    p.add_argument("--operational-items", type=int, default=400)
+    p.add_argument("--no-playback", dest="playback", action="store_false")
+    p.add_argument("--transport-retries", type=int, default=0)
+    p.add_argument(
+        "--development-rate",
+        type=float,
+        help="development role by a label-independent hash share of the stream instead of a fixed 20 per class",
+    )
+    p.add_argument(
+        "--provisional-allowance", type=float, help="Brier allowance for provisional rubric changes (engine default 2.0)"
+    )
+    p.add_argument(
+        "--provisional-rate-allowance",
+        type=float,
+        default=None,
+        help="caps how far a rate objective may regress when accepting a provisional rubric change; 0 means no regression allowed",
+    )
+    p.add_argument(
+        "--recency-decay-per-class",
+        type=int,
+        help="development labels per class at which the provisional phase ends (engine default 20)",
+    )
+    p.add_argument("--seed-answers-from", type=Path, help="serve exact decision requests answered in this earlier runtime store")
+    p.add_argument(
+        "--idea-screening",
+        action="store_true",
+        help="opt in: screen several rubric ideas per round and confirm finalists on a growing hash-defined reserve of development items (accuracy objective only)",
+    )
+    p.add_argument("--screening-proposals", type=int, default=3)
+    p.add_argument("--screening-finalists", type=int, default=2)
+    p.add_argument("--screening-max-candidates", type=int, default=8)
+    p.add_argument("--screening-reserve", type=float, default=0.2)
+    p.add_argument("--screening-alpha", type=float, default=0.05)
+    p.add_argument("--screening-max-calls", type=int, default=2000, help="per-round ceiling on screening scorer calls")
+    p.add_argument(
+        "--screening-mode",
+        choices=("shadow", "dev_screen"),
+        default="shadow",
+        help="with --idea-screening: shadow scores a few ideas on every new story before its label is revealed (default); dev_screen is the Stage 2 screen on the development partition",
+    )
+    p.add_argument("--shadow-ideas", type=int, default=4, help="ideas scored in shadow at once")
+    p.add_argument("--shadow-min-items", type=int, default=40, help="shared forward stories between promotion looks")
+    p.add_argument(
+        "--shadow-evict-after",
+        type=int,
+        default=30,
+        help="evict an idea with no advantage after this many shared forward stories",
+    )
+    p.add_argument("--shadow-looks", type=int, default=10, help="promotion looks per idea; the p-value threshold is alpha/looks")
+    p.add_argument("--max-shadow-calls", type=int, default=3000, help="ceiling on shadow decision calls")
+    p.add_argument(
+        "--proposal-mix",
+        type=proposal_mix_type,
+        help="shadow mode: proposals per round by operator, e.g. bold=2,target=2,combine=2 (the default); mutate=N is the plain multi-proposal request; replaces --screening-proposals in shadow mode",
+    )
+    p.add_argument(
+        "--min-novelty",
+        type=float,
+        help="bold proposals closer than this text distance (0-1) to the incumbent or a prior idea are rejected (default 0.35)",
+    )
+    p.add_argument("--target-sample", type=int, help="stubborn stories shown to the target operator (default 8)")
+    p.add_argument(
+        "--diagnosis",
+        action="store_true",
+        help="shadow mode: before each rubric proposal call, summarise the incumbent errors, diagnose root causes with several optimizer calls, trial each cause on held-aside errors and screen yes/no elements with the decision model (Stage 2d)",
+    )
+    p.add_argument("--diagnosis-samples", type=int, help="errors per diagnosis sample (default 8)")
+    p.add_argument(
+        "--diagnosis-independent",
+        type=int,
+        help="independent diagnoses per error cell; one more sample is held aside for the cause trial (default 2)",
+    )
+    p.add_argument("--element-candidates", type=int, help="generic yes/no elements the reconcile call may add (default 8)")
+    p.add_argument("--element-sample", type=int, help="revealed training stories scored for element screening (default 200)")
+    p.add_argument(
+        "--diagnosis-max-jev-calls",
+        type=int,
+        help="decision-model requests per round for the cause trial and element screening together (default 400)",
+    )
+    p.add_argument(
+        "--baseline-rubric",
+        choices=("curated", "none"),
+        default="curated",
+        help="none starts from an empty rubric, as the first 400-cycle recording did",
+    )
+    args = p.parse_args(argv)
+    if args.decision_provider == "foundry" and not args.decision_model:
+        p.error("--decision-provider foundry needs --decision-model, the deployment label recorded in the protocol")
+    args.decision_model = args.decision_model or args.model
+    args.item_fields = tuple(f.strip() for f in args.item_fields.split(",") if f.strip())
+    args.modes = tuple(part.strip() for part in args.modes.split(",") if part.strip())
+    if not args.modes or len(set(args.modes)) != len(args.modes):
+        p.error("--modes must be a non-empty unique comma-separated list")
+    if args.diagnosis and not (args.idea_screening and args.screening_mode == "shadow"):
+        p.error("--diagnosis needs --idea-screening with --screening-mode shadow")
+    try:
+        idea_screening_config(args)
+    except ValueError as error:
+        p.error(str(error))
     asyncio.run(main_async(args))
-if __name__=='__main__': main()
+
+
+if __name__ == "__main__":
+    main()
