@@ -90,6 +90,7 @@ def test_fake_confidence_stays_a_valid_probability_when_browser_checks_make_many
         assert sum(probabilities.values())==pytest.approx(1)
 
 
+@pytest.mark.slow
 def test_scripted_activity_records_real_worker_learning_phases_without_paid_clients(tmp_path,monkeypatch):
     from decision_flywheel.web_store import WebStore
     module=fixture_script()

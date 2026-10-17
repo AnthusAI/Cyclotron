@@ -723,6 +723,7 @@ def test_the_real_agent_carries_the_diagnosis_instructions_and_counts_its_ceilin
 
 # -- 9. end to end: the study script path -----------------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_a_fresh_shadow_replay_with_diagnosis_starts_completes_and_diagnoses(tmp_path):
     prompts = []
 

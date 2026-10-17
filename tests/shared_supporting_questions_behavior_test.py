@@ -3,6 +3,8 @@ import asyncio
 from datetime import datetime, timezone
 import json
 
+import pytest
+
 from decision_flywheel.batched_classification import BatchedAnswers, answer_groups, batch_request
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
@@ -82,6 +84,7 @@ def test_a_question_both_outputs_ask_appears_once_in_the_request_and_costs_less_
     assert len(json.dumps(request)) < len(json.dumps(duplicate.requests[0]))
 
 
+@pytest.mark.slow
 def test_the_shared_answer_reaches_both_ml_models(tmp_path):
     _, histories = drive(tmp_path, {"relevant": [QUESTION], "timely": [QUESTION]})
     for classifier, history in histories.items():

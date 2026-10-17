@@ -61,6 +61,7 @@ def decide_and_review(cyclotron, count, *, prefix="learn", selected_by=None, aud
         reviewed += 1
 
 
+@pytest.mark.slow
 def test_a_learned_rubric_shows_as_a_clear_improvement_on_the_frozen_held_out_set(tmp_path):
     model = RubricReadingModel()
     with Cyclotron.open(tmp_path / "c", learning_definition(), model, rubric_optimizer(), max_requests=2000) as cyclotron:
@@ -87,6 +88,7 @@ def test_a_learned_rubric_shows_as_a_clear_improvement_on_the_frozen_held_out_se
     assert repeated["change"] == report["change"]
 
 
+@pytest.mark.slow
 def test_before_learning_there_is_nothing_to_compare(tmp_path):
     with Cyclotron.open(tmp_path / "c", learning_definition(), RubricReadingModel(), max_requests=500) as cyclotron:
         decide_and_review(cyclotron, 30)
@@ -97,6 +99,7 @@ def test_before_learning_there_is_nothing_to_compare(tmp_path):
     assert report["headline"]["changePoints"] == 0
 
 
+@pytest.mark.slow
 def test_a_frozen_set_never_changes_and_freezing_again_adds_a_newer_set(tmp_path):
     with Cyclotron.open(tmp_path / "c", learning_definition(), RubricReadingModel(), max_requests=500) as cyclotron:
         with pytest.raises(ValueError, match="freeze a held-out set first"):

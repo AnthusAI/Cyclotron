@@ -40,6 +40,7 @@ def test_seeded_supporting_questions_appear_in_the_first_request(tmp_path):
     assert model.requests[0]["relevant"] == (DecisionTask("mentions_yes", ("yes", "no"), "Does the text say yes?"),)
 
 
+@pytest.mark.slow
 def test_seeded_supporting_questions_feed_the_first_ml_model_fit(tmp_path):
     from .flywheel_test import agent
     definition = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=8,

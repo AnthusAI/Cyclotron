@@ -56,6 +56,7 @@ def test_a_checklist_counts_toward_the_window_of_each_labeled_output_only(tmp_pa
     assert check["output"] == "local" and not check["enough_evidence"]
 
 
+@pytest.mark.slow
 def test_each_labeled_output_learns_once_and_no_optimizer_run_is_duplicated(tmp_path):
     definition = CyclotronDefinition("newsroom", (RELEVANT, TIMELY, LOCAL), seed="checklist-seed",
                                      rubric_changes_every=1)

@@ -67,6 +67,7 @@ def test_an_output_that_was_not_requested_can_only_be_reviewed_as_the_reviewers_
     assert reviews["relevant"].selected_by == "reviewer" and reviews["timely"].selected_by == "program"
 
 
+@pytest.mark.slow
 def test_audit_sampling_and_propensities_are_per_output(tmp_path):
     with Cyclotron.open(tmp_path / "c", TWO, Model(), review_program=FAST, max_requests=500) as cyclotron:
         quiet(cyclotron)
@@ -81,6 +82,7 @@ def test_audit_sampling_and_propensities_are_per_output(tmp_path):
     assert feedback[-1]["selection_propensity"] == FAST.audit_share
 
 
+@pytest.mark.slow
 def test_routing_replays_the_same_selections_in_a_new_store(tmp_path):
     def selections(directory):
         with Cyclotron.open(directory, TWO, Model(), review_program=FAST) as cyclotron:

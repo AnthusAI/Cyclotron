@@ -1,5 +1,7 @@
 import asyncio
 import json
+import pytest
+
 from .cycle_replay import run_cycle_replay
 from .replay import plan_replay
 from .replay_test import rows
@@ -55,6 +57,7 @@ def test_transition_replay_runs_on_eligible_label_changes_not_protected_votes(tm
     wheel.close()
 
 
+@pytest.mark.slow
 def test_protected_replay_votes_do_not_trigger_fixed_learning_cadences(tmp_path):
     wheel=DecisionFlywheel(tmp_path/'protected.sqlite',ClassifierConfig(TASK),FakeModel(),OptimizerAgent(lambda _:OptimizerReply('{"rubric":"Guidance"}','fake')),max_requests=2000)
     plan=plan_replay(TASK,rows(),seed='cycles',batch_size=18)
@@ -64,6 +67,7 @@ def test_protected_replay_votes_do_not_trigger_fixed_learning_cadences(tmp_path)
     wheel.close()
 
 
+@pytest.mark.slow
 def test_operational_replay_records_latest_two_hundred_paired_calibration_samples(tmp_path):
     from .models import Item,LabeledItem
     ordered=tuple(LabeledItem(Item(f'paper-{i}',{'text':f'Unique abstract {i}'}),TASK.labels[i%2]) for i in range(205))

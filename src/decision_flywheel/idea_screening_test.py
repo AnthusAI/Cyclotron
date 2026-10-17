@@ -109,6 +109,7 @@ def test_default_is_off_and_uses_the_one_proposal_path(tmp_path):
     wheel.close()
 
 
+@pytest.mark.slow
 def test_three_proposals_are_screened_confirmed_and_the_better_one_is_promoted(tmp_path):
     wheel, model = make(tmp_path, ["worse", "better", "same"])
     result = run(wheel, rows(0, 300))
@@ -326,6 +327,7 @@ def test_an_exact_pattern_of_four_gained_and_one_lost_per_round_clears_in_three_
     assert [o[2] for o in outcomes] == [False, False, True, True, True]
 
 
+@pytest.mark.slow
 def test_the_staged_rubric_path_screens_several_proposals_and_promotes_through_improve(tmp_path):
     wheel, model = make(tmp_path, ["worse", "better", "same"])
     result = asyncio.run(wheel.optimize_stage("rubric", TRAIN, rows(0, 300), protected=PROTECTED, propensities=PROPS))
@@ -340,6 +342,7 @@ def test_the_staged_rubric_path_screens_several_proposals_and_promotes_through_i
     wheel.close()
 
 
+@pytest.mark.slow
 def test_the_same_inputs_repeat_the_same_round_exactly(tmp_path):
     def snapshot(name):
         wheel, _ = make(tmp_path, ["worse", "better", "same"], name=name)
