@@ -35,7 +35,7 @@ wrong or inconsistent, the loop learns that.
 
 Related documents:
 
-- [README](../README.md): the core library, the classifier request, and the optimizer's three controls.
+- [Design journal](design-journal.md): the core library, the classifier request, and the optimizer's three controls.
 - [docs/embedding.md](embedding.md): putting a cyclotron inside an application.
 - [docs/hypothesis-portfolio.md](hypothesis-portfolio.md): keeping many ideas and screening them (experimental).
 - [docs/replicates.md](replicates.md): running the same setup several times to see the spread.
@@ -128,7 +128,7 @@ Source: `scripts/run_editorial_prequential_study.py` (the bootstrap check and th
 - What to do: use the adapter for your decision model and check where it puts the rubric. If you write your own
   adapter, test the same rubric in two places on a fixed sample before you trust any result.
 
-Source: README, "The classifier at the center of the flywheel" (Jev sends the rubric as the criterion of the first
+Source: design journal, "The classifier at the center of the flywheel" (Jev sends the rubric as the criterion of the first
 label). The 84.5 and 77.5 percent figures are in `docs/experiments/setup-findings-20261011.md`.
 
 ## 3. The starting point
