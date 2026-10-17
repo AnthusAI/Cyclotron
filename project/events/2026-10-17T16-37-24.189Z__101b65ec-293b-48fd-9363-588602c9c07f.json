@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "101b65ec-293b-48fd-9363-588602c9c07f",
+  "issue_id": "decision-flywheel-29a4d939-0ee0-469b-922c-71fa0c855aa1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T16:37:24.189Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "S3 stores: release owned runtimes on a mid-open failure and unify journal error handling",
+    "description": "Problem 1: S3CyclotronStores.runtime_for_classifier acquires the fenced runtime before DecisionFlywheel returns (src/decision_flywheel/s3_embedded_storage.py:182). If the constructor raises, the runtime is owned but not in Cyclotron.wheels, Cyclotron.close() never releases it (embedded_cyclotron.py:531), and S3CyclotronStores.release() releases only the root (:192). There is no timeout takeover, so the next open fails with 'runtime already owned'. S3WorkspaceStores.close() (s3_workspace_storage.py:56) already loops over its runtimes; port that into S3CyclotronStores.release() and have Cyclotron.close() call storage.release() on the failure path.\nProblem 2: uncertain-write handling differs per adapter. S3EmbeddedStorage and S3RuntimeStores poison the handle on JournalUncertain (s3_embedded_storage.py:72, s3_runtime_storage.py:70); S3ReviewStorage.transaction (s3_review_storage.py:69), S3ConsoleStorage (s3_console_storage.py:94) and S3OAuthSessions let it propagate with no invalidation, and console re-raises raw JournalConflict where review translates it to ValueError. decision_fingerprint raises StopIteration on a missing id (s3_embedded_storage.py:106) where SQLite raises TypeError. JournalLimit surfaces as a bare ValueError from domain APIs such as freeze_held_out_set.\nDo: one shared commit helper used by every S3 adapter with one contract for conflict, uncertain and limit; a small storage exception family (StorageConflict, StorageUncertain, StorageLimit, StorageMissing) declared in the protocol modules and raised by both adapters; specs for the mid-open failure path using the synthetic ConditionalS3 fake.\nDone when: a constructor failure during open leaves no owned runtime; every S3 adapter raises the same exception types for the same journal outcomes; specs pass for both adapters. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+    "labels": []
+  }
+}

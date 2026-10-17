@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d5873b1c-7645-4a6e-8c89-eb54321c4feb",
+  "issue_id": "decision-flywheel-f774f913-de47-44ac-b819-cdadddee64db",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T16:37:22.757Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Version, changelog, tracker and AGENTS.md hygiene",
+    "description": "Four small drifts a reader meets first. (1) pyproject.toml and src/decision_flywheel/__init__.py on develop say 0.6.0 while main has released 0.21.0: semantic-release bumps the version on main and main is never merged back (git log origin/develop..origin/main shows the bump commits), so anyone installing from develop, including Papyrus pinning a commit, gets a package that reports 0.6.0. Fix: merge main back into develop now, and make scripts/dev/release_to_main.sh merge main back into develop after a successful promotion. (2) CHANGELOG.md says it is maintained by semantic-release but is 62 hand-written lines headed 'unreleased' for work that shipped across several releases, with nothing for 0.7 through 0.21 and no entry for web package 0.2.2 (root package.json says 0.2.2). Either make semantic-release write it (changelog_file is configured but the format it expects is absent) or drop the claim and keep it by hand per release. (3) AGENTS.md points at CONTRIBUTING_AGENT.md, which does not exist (only CONTRIBUTING_AGENT.template.md). Render it or fix the reference. (4) The tracker has 15 in-progress items, nine untouched since 8 and 9 October, including tasks that have shipped (the status widget, the review control contract, snapshot and restore, the cyclotron-status/v1 schema). Close the shipped ones with a closing comment naming the PR.\nDone when: develop reports the released version, the changelog claim is true, AGENTS.md links resolve, no shipped item is in progress. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+    "issue_type": "chore",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+    "labels": []
+  }
+}

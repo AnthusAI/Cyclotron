@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dc01c415-3567-41e8-bc62-f5ada48ced5d",
+  "issue_id": "decision-flywheel-57b3fa83-9807-4fee-94d8-735a5dc6ad58",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T16:37:27.587Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Cyclotron-web: one local check command and a repin procedure",
+    "description": "Repository: AnthusAI/Cyclotron-web. Standing rule: CI for private repos runs locally (no GitHub Actions minutes). Run the full gate locally before merging. Nothing in that repository runs its whole gate locally: npm test covers the recordings check and unit tests only; typecheck, build, the editorial Python tests (python -m unittest discover -s editorial -p 'test_*.py') and the infra tests (npm test --prefix infra) are separate commands, and the documented typecheck fails after a plain install because the root tsconfig.json:19 includes **/*.ts, so infra/bin/cyclotron-marketing.ts is type-checked and fails on a missing aws-cdk-lib until npm ci --prefix infra runs. The CodeBuild spec (infra/lib/cyclotron-marketing-pipeline-stack.ts:61) does that; the README's development steps do not. README.md:17 shows a stale pin (59d36c5) while package.json pins a565daf, README.md:115 references ../Decision-Flywheel/ (the old repo name), and there is no repin procedure in that repository (the only one is Cyclotron's docs/shared-priming-release.md).\nDo: add npm run check (npm ci, npm ci --prefix infra, typecheck, test, infra test, editorial tests, build) and make scripts/require-main.mjs or the deploy path run it; add docs/repin.md (bump the tarball URL in package.json to a tagged release commit, npm install, npm run check, record the pin) and drop the literal hash from the README; fix the ../Decision-Flywheel reference; set license UNLICENSED in package.json. Also: scripts/og.mjs:6 hard-codes a macOS Chrome path and scripts/render-accountability-cover.mjs imports sharp, which is not a dependency; anthus-footer resolves over git+ssh with no integrity check (prefer a tarball URL like the cyclotron pin).\nDone when: npm run check passes from a clean clone, the README's development section says to run it, docs/repin.md exists. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+    "labels": []
+  }
+}

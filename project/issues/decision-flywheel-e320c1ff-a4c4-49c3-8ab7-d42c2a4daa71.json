@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "title": "Review follow-ups: scale, consolidate, gate, front door (2026-10-17)",
+  "description": "Work items from the full review of Cyclotron and Cyclotron-web delivered 2026-10-17. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17). Each child issue is one PR-sized change with its own definition of done; the review doc has the file:line evidence. Priority 0 items carry the headline metric and the scaling ceiling; priority 1 items are the gate and the front door; priority 2 items are consolidation. The two open bugs from the 1,200-cycle study (reader lock fails the writer after five seconds; replay resume re-records a cycle) are already filed and belong with this epic's scaling work. Standing rule: CI for private repos runs locally (no GitHub Actions minutes). Run the full gate locally before merging.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:36:48.906631Z",
+  "updated_at": "2026-10-17T16:36:48.906851Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

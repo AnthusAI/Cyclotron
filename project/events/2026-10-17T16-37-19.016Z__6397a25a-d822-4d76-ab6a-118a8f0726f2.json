@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "event_id": "6397a25a-d822-4d76-ab6a-118a8f0726f2",
+  "issue_id": "decision-flywheel-b602c4b5-b595-4254-8713-9f84d6bdeeb7",
+  "event_type": "issue_deleted",
+  "occurred_at": "2026-10-17T16:37:19.016Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Probe2",
+    "issue_type": "task",
+    "status": "open"
+  }
+}

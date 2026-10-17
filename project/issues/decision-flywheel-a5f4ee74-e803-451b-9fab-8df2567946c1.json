@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-a5f4ee74-e803-451b-9fab-8df2567946c1",
+  "title": "Contract tests shared by the SQLite and S3 storage adapters",
+  "description": "Both adapters must keep working, but parity rests on matching protocol signatures and small per-adapter test files (five embedded S3 tests against three SQLite). Only the console storage reruns its native tests against S3 (src/decision_flywheel/s3_console_storage_test.py:145). EmbeddedStorage declares export_storage and restore_storage (embedded_storage.py:53) that S3EmbeddedStorage lacks.\nDo: a parametrized pytest fixture that yields each storage domain (embedded, runtime, review, evaluation, batch) backed by SQLite in a temp dir and by the synthetic S3 fake, and one behaviour spec module per protocol exercising ordering, duplicate identities, latest_decision skipping superseded, learning-queue operations, meta round-trip, and the exception family from the S3 error-handling issue. Either implement export_storage/restore_storage on S3 or remove them from the protocol and move them to a SQLite-only mixin. Also fix the two open study bugs in the SQLite runtime store as part of the SQLite side: open the runtime database in WAL mode with a busy timeout above five seconds (tracker: 'A reader holding the runtime store for over five seconds fails the running step') and make replay resume idempotent for an interrupted cycle (tracker: 'Resuming a replay after a failed or killed cycle re-records that cycle's feedback'); close those two issues when done.\nDone when: every protocol has a shared spec that runs against both back ends in make test, the protocol and the adapters agree method for method, the two study bugs are closed. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:37:24.802773Z",
+  "updated_at": "2026-10-17T16:37:24.802919Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

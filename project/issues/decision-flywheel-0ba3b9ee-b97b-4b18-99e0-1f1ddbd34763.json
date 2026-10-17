@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-0ba3b9ee-b97b-4b18-99e0-1f1ddbd34763",
+  "title": "GraphQL error masking, payload validation, central secret redaction, and hosted config without hard-coded endpoints",
+  "description": "Hygiene findings in the application layer. (1) No MaskErrors extension anywhere in src/; Strawberry returns str(exc) to clients. priming_command calls actions[action](**payload) (src/decision_flywheel/web_api.py:207), so an unknown key returns a Python TypeError with the function signature, and storage exceptions can carry paths or hosts. Add strawberry.extensions.MaskErrors with an allowlist for ValueError, and validate payload keys explicitly for priming_command and held_out_command. (2) Secret redaction is applied per mutation: label_item, save_classifier, ingest_events and create_run scan payloads; the native submit_command (web_api.py:363) does not. Factor one refuse_credentials(value) helper and apply it in every mutation that persists caller input. (3) HostedConfig hard-codes a concrete execute-api URL as the default central_endpoint (hosted_runtime.py:41) and signs with 'us-east-1' regardless of config.region (:70). Make both required configuration read from the environment. (4) Loopback auth trusts the literal host 'testclient' in production code (web_api.py:444); inject trusted hosts from tests instead. (5) run_events subscribers poll SQLite every 200 ms with no cap on subscribers (web_api.py:370); cap subscribers or share one poller per run.\nDone when: specs cover an unknown payload key (masked, no signature), a credential in submit_command refused, hosted config failing closed without region and endpoint, and no 'testclient' string outside tests. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:37:25.250984Z",
+  "updated_at": "2026-10-17T16:37:25.251118Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}

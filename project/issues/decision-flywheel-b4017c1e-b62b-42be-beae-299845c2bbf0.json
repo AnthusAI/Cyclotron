@@ -1,0 +1,22 @@
+{
+  "id": "decision-flywheel-b4017c1e-b62b-42be-beae-299845c2bbf0",
+  "title": "Materialize active labels instead of scanning the newest 100,000 runtime events",
+  "description": "Problem: feedback_partitions and feedback_propensities (src/decision_flywheel/learning_loop.py:23 and :46) rebuild a classifier's active label set from wheel.history(100000), and history returns the NEWEST N events (runtime_storage.py:58, s3_runtime_storage.py:115). A store with more than 100,000 runtime events silently drops its oldest labels from training, development and the audit firewall. There are 22 call sites of history(100000) across the package (cycle_replay.py:35, cycles.py:22, application_runtime.py:284 and others). Every call also JSON-parses the whole window, so each decide and each learning pass is O(events).\nAlso: Cyclotron._partitions calls _item_values (embedded_cyclotron.py:1602), which loads and parses EVERY item in the store on every decide; on the S3 adapter items() reads the whole store document (s3_embedded_storage.py:88).\nDo: (1) keep a materialized active-labels view per classifier (a table in SQLite, a section of the runtime document in S3) updated when a human-feedback event is recorded, and read partitions from it; or use events_of (runtime_storage.py:78), which has no cap, where a full scan is still needed. (2) Give decide a per-item lookup instead of _item_values; only the learning pass needs all items. (3) Add a spec that records 100,001+ events (or lowers the cap in a test seam) and asserts no label is lost, for both SQLite and S3 fakes. (4) Remove or justify each remaining history(100000) call.\nDone when: no label-bearing read depends on the history limit; decide does not read every item; specs cover both adapters; make test passes. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+  "type": "task",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T16:37:19.579297Z",
+  "updated_at": "2026-10-17T16:37:19.579410Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {},
+  "agent": null,
+  "agent_assignment": null
+}
