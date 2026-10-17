@@ -1,13 +1,49 @@
-# Shared priming source review candidate
+# Shared priming release and pin
 
-Local branch: `codex/priming-shared-release`. No remote branch, PR, tag, npm or
-PyPI publication was created. Approval target is precisely the public source
-branch **AnthusAI/Cyclotron:codex/priming-shared-release**, a **draft PR into main**,
-and, only after review/authorized merge and a reviewed package version bump to
-**0.2.2**, proposed **ui-v0.2.2**. The current0.2.1 manifest supports the Git-SHA
-review candidate; it is not ready to receive that tag. The tag is not
-required to install an immutable reviewed Git commit and is not created here.
-No cloud activation is part of this source review.
+## Published pin
+
+The review candidate below shipped as one commit,
+**a565dafb1f6953e1eb4d2efb1069396303afe0c6** on `main`. Both halves of the
+integration come from that commit, and a host pins the commit, never a tag or a
+branch.
+
+| Half | Release | Pin |
+|---|---|---|
+| Python engine | [v0.21.0](https://github.com/AnthusAI/Cyclotron/releases/tag/v0.21.0) | `decision-flywheel[web,priming] @ git+https://github.com/AnthusAI/Cyclotron.git@a565dafb1f6953e1eb4d2efb1069396303afe0c6` |
+| UI package | [ui-v0.2.2](https://github.com/AnthusAI/Cyclotron/releases/tag/ui-v0.2.2) | `https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.2/cyclotron-0.2.2.tgz` with lock integrity `sha512-Ot4SdcoBRveNugFh3fhggp/JlK02JKPrfnFIIgkojVy08whfQ5TQ1XQ04Tx6V/IIaW13xHk0l248zFPM99tvVQ==` (SHA-256 `fa96b15afb0c3c89a9cc89dcb40b5f327360f0fb703710a44188ed080b00636f`) |
+
+A host that also reads repository files outside the package, such as
+`docs/diagrams`, pins the source archive of the same commit instead:
+`https://github.com/AnthusAI/Cyclotron/archive/a565dafb1f6953e1eb4d2efb1069396303afe0c6.tar.gz`.
+Cyclotron-web does this.
+
+Verified 2026-10-17:
+
+- `v0.21.0` peels to the pinned commit and `ui-v0.2.2` points at it. The
+  [Test and release run](https://github.com/AnthusAI/Cyclotron/actions/runs/39011967316)
+  on the main promotion `733ef29` passed test, diagrams and release.
+- The uploaded `cyclotron-0.2.2.tgz` unpacks to exactly the 36 files that
+  `npm pack` produces at the pinned commit, so the asset is the tagged source.
+- A fresh virtualenv installing `@v0.21.0` resolves to the pinned commit and
+  reports version 0.21.0.
+- A fresh Next 15.5 / React 19 app with `transpilePackages: ["cyclotron"]`,
+  installed from the release asset, imports every concrete export in
+  `package.json` (including `components/priming-panel` and `priming-client`)
+  and prerenders.
+- Cyclotron-web pinned to the commit archive passes its tests, typecheck and
+  static build.
+
+Neither GitHub release is marked immutable, so the tags themselves can still be
+moved by a repository admin. The commit hash and the lock integrity above do not
+depend on the tags. Hosted activation still needs real account authorization
+and storage acceptance; this pin does not claim either.
+
+## Review candidate (historical)
+
+The rest of this document is the source review record that preceded the
+release. It describes the local branch `codex/priming-shared-release` as it
+stood before promotion, including the 0.2.1 manifest and the `FULL_SHA`
+placeholder that the published pin above now fills.
 
 ## Composition
 
