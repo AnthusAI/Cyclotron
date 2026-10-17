@@ -133,8 +133,9 @@ mutation { heldOutCommand(action: "freeze" | "evaluate", payload: JSON!): JSON }
 ```
 
 `decision_flywheel.held_out_service.HeldOutService` implements them. The host
-supplies `open_cyclotron(cyclotron_id)`, which opens the authorized store for
-one call and raises for any other; a scale-to-zero host such as Papyrus holds
+supplies `open_cyclotron(cyclotron_id, max_requests=None)`, which opens the
+authorized store for one call and raises for any other (evaluating reopens with
+`max_requests` equal to the confirmed request bound); a scale-to-zero host such as Papyrus holds
 the store's lease only while the call runs.
 
 - **Embedded (Papyrus).** Papyrus's own API mounts the two operations with a
@@ -142,7 +143,10 @@ the store's lease only while the call runs.
   and places `HeldOutPanel` beside the status card. Papyrus owns that UI path.
 - **Central lab.** `create_app(held_out=HeldOutService(...))` serves the same
   operations. Hosted account mode accepts only an account-scoped service on
-  the workspace (`workspace.held_out`), never a global one.
+  the workspace (`workspace.held_out`), never a global one. `HostedRuntime(open_cyclotron=...)`
+wires that service from `open_cyclotron(account_id, cyclotron_id, max_requests)`
+and the one `HostedConfig.allow_live`; `create_app` refuses services whose
+`allow_live` flags disagree, and `capabilities.liveEnabled` reports the shared flag.
 
 `evaluate` needs live authority (`allow_live=True`) and the caller must send
 `confirmedRequestBound` equal to the bound the overview showed; the panel's

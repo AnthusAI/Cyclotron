@@ -199,10 +199,10 @@ def test_the_shared_graphql_operations_freeze_then_evaluate_only_with_live_autho
     with Cyclotron.open(tmp_path / "c", learning_definition(), model, max_requests=500) as cyclotron:
         decide_and_review(cyclotron, 4, audit_only=True)
 
-    def open_authorized_cyclotron(cyclotron_id):
+    def open_authorized_cyclotron(cyclotron_id, max_requests=None):
         if cyclotron_id != "papyrus-relevance":
             raise PermissionError("not this caller's cyclotron")
-        return Cyclotron.open(tmp_path / "c", learning_definition(), model, max_requests=500)
+        return Cyclotron.open(tmp_path / "c", learning_definition(), model, max_requests=max_requests or 500)
 
     def graphql_client(allow_live):
         client = TestClient(create_app(WebStore(tmp_path / "db"),

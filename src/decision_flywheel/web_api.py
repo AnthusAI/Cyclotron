@@ -171,7 +171,8 @@ class Query:
     @strawberry.field
     async def capabilities(self, info: strawberry.Info) -> Capabilities:
         service = info.context.get('service')
-        return Capabilities(live_enabled=bool(service and service.allow_live),item_count=len(service.articles) if service else 0)
+        live_enabled = info.context['allow_live'] if 'allow_live' in info.context else bool(service and service.allow_live)
+        return Capabilities(live_enabled=live_enabled,item_count=len(service.articles) if service else 0)
 
     @strawberry.field
     async def runs(self, info: strawberry.Info) -> list[Run]:
@@ -377,6 +378,14 @@ class Subscription:
             await asyncio.sleep(.2)
 
 
+def agreed_live_authority(*services):
+    """The one paid-call flag every configured service must share; disagreement is a configuration error."""
+    flags = {bool(service.allow_live) for service in services if service is not None and hasattr(service, 'allow_live')}
+    if len(flags) > 1:
+        raise ValueError('live-call authority must agree across the worker, held-out and priming services')
+    return flags.pop() if flags else False
+
+
 class AccountAuthorization(SchemaExtension):
     async def on_execute(self):
         context = self.execution_context.context
@@ -390,6 +399,7 @@ class AccountAuthorization(SchemaExtension):
                 context['priming_service']=lambda:workspace.priming
             if getattr(workspace,"held_out",None) is not None:
                 context['held_out_service']=lambda:workspace.held_out
+            context['allow_live']=agreed_live_authority(workspace.service,getattr(workspace,"held_out",None),getattr(workspace,"priming",None))
         yield
 
     async def on_stream_result(self, result):
@@ -412,6 +422,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         raise ValueError('hosted account access cannot use a global priming service')
     if account_access and held_out is not None:
         raise ValueError('hosted account access cannot use a global held-out service')
+    shared_live_authority = agreed_live_authority(service, held_out, priming)
     def held_out_service():
         if held_out is None:
             raise ValueError('held-out reports are not configured for this workspace')
@@ -489,7 +500,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
             raise HTTPException(403, 'access refused')
         return {'store':None if account_access else store,'service':service,'redact':redact,
             'account_access':account_access,'connection':connection,'priming_service':priming_service,
-            'held_out_service':held_out_service}
+            'held_out_service':held_out_service,'allow_live':shared_live_authority}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')
