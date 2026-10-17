@@ -462,7 +462,9 @@ const nextConfig = { transpilePackages: ["cyclotron"] }
 
 Import `cyclotron/styles/components.css` once. It holds component rules only:
 no global reset and no theme, and it reads the host's theme tokens when they
-exist. Do not import `styles/shared.css`, the console's theme.
+exist. Do not import `styles/shared.css`, the console's theme. That covers the
+plain-CSS tier only; `priming-panel` and the other Tailwind-tier exports are
+listed in the README and need Tailwind v4 in the host.
 
 ```tsx
 import {ReviewControl,type ReviewControlReview,type ReviewReason} from '../components/review-control'

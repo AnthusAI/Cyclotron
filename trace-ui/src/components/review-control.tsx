@@ -57,7 +57,7 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
   // Ids derive from the item and decision so server and client renders agree
   // even when a host page's component trees differ (React's useId would not).
   const id=`cyclotron-review-${`${itemId}-${decision.decisionId}`.replace(/[^A-Za-z0-9_-]/g,'_')}`
-  const thumbs=(mode??(decision.classes.length===2?'thumbs':'labels'))==='thumbs'
+  const thumbs=decision.classes.length===2&&(mode??'thumbs')==='thumbs'
   const positive=positiveLabel??decision.classes[0]
   const negative=decision.classes.find(label=>label!==positive)??decision.classes[1]
   // The draft belongs to one decision; a new decision starts empty.
@@ -69,7 +69,6 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
   const setChoice=(value:string|null)=>update({choice:value})
   const setReasonCode=(value:string)=>update({reasonCode:value})
   const setExplanation=(value:string)=>update({explanation:value})
-  if(thumbs&&decision.classes.length!==2)throw new Error('thumbs mode needs exactly two classes')
 
   const reason=reasons.find(row=>row.code===reasonCode)
   const needsReason=thumbs&&choice===negative&&reasons.length>0

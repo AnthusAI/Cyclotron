@@ -110,9 +110,14 @@ import type {CyclotronStatus} from "cyclotron/cyclotron-status"
 import type {CyclotronDecision, CyclotronEvent} from "cyclotron/sdk-types"
 ```
 
-The two embeddable components need no Tailwind. The console's `components/ui/*`
-primitives use Tailwind classes, so an application that imports them adds
-`@source "../node_modules/cyclotron/trace-ui/src";` to its CSS.
+The web package has two styling tiers (the README lists the exports in each).
+The plain-CSS tier (`review-control`, `cyclotron-status`, `held-out-report`,
+`cycle-mark`, `cyclotron-brand`) needs only `components.css`. The Tailwind tier
+(`priming-panel`, `labeling-review`, `lab-metrics`, `cycle-timeline`, the metrics
+components and `components/ui/*`) uses Tailwind utility classes and the shadcn
+theme tokens, so an application that imports them adds
+`@source "../node_modules/cyclotron/trace-ui/src";` to its CSS and uses
+`cyclotron/tailwind-preset`.
 `styles/shared.css` is the console and marketing theme: it imports
 `components.css` and adds a global reset and `:root` tokens, so do not import
 it into another application. Build the tarball with `make pack-ui`.

@@ -63,7 +63,7 @@ export type HeldOutReportViewProps={
 }
 
 /**
- * The before-and-after measurement on a frozen held-out set, rendered from a cyclotron-cyclotron-held-out-report/v1 document.
+ * The before-and-after measurement on a frozen held-out set, rendered from a cyclotron-held-out-report/v1 document.
  * Data only unless onFreeze or onEvaluate is given. Styles: styles/components.css.
  */
 export function HeldOutReportView({report,sets=[],classifierName,onFreeze,onEvaluate,requestBound,busy=false}:HeldOutReportViewProps){
