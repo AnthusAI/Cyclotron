@@ -529,18 +529,22 @@ class Cyclotron:
         self.close()
 
     def close(self) -> None:
-        for wheel in self.wheels.values():
-            wheel.close()
-        self.wheels = {}
-        if self.shared is not None:
-            self.shared.close()
-            self.shared = None
-        if getattr(self,'root_storage',None) is not None:
-            self.root_storage.close()
-            self.db = None
-        if self.lease is not None:
-            self.lease.release()
-            self.lease = None
+        # Ownership is released even when closing an opened part fails, so a
+        # failure part-way through opening never leaves a store owned.
+        try:
+            for wheel in self.wheels.values():
+                wheel.close()
+            self.wheels = {}
+            if self.shared is not None:
+                self.shared.close()
+                self.shared = None
+            if getattr(self,'root_storage',None) is not None:
+                self.root_storage.close()
+                self.db = None
+        finally:
+            if self.lease is not None:
+                lease, self.lease = self.lease, None
+                lease.release()
 
     @asynccontextmanager
     async def execution(self, *, execution_guard: ExecutionGuard | None = None):

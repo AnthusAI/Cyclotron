@@ -11,7 +11,8 @@ from dataclasses import asdict,replace
 from hashlib import sha256
 import json
 from uuid import uuid4
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid
+from .s3_journal import S3Journal,commit_with_contract,uuid
+from .storage_errors import StorageConflict,StorageUncertain
 from .console_snapshot import TABLES,SEQUENCES,SCHEMA,validate as validate_console
 from .catalog_storage import encoded,timestamp
 from .cyclotrons import load_config
@@ -43,7 +44,7 @@ class S3ConsoleStorage:
     def __init__(self,journal,*,max_records,max_conflicts=8):
         if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
             raise ValueError('scoped canonical console journal and explicit limits required')
-        self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts
+        self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts;self.poisoned=False
         self._tx=ContextVar('s3_console_transaction',default=None)
         self._claim=ContextVar('s3_console_claim',default=None)
         self._granted=set()
@@ -91,23 +92,28 @@ class S3ConsoleStorage:
         value=self._read();job=one(value,'web_jobs',id=job_id)
         if job is None or job['status']!='running' or value['claims'].get(job_id)!={'owner':owner,'fence':fence}:raise ValueError('stale command capability')
         return _CommandView(self,(job_id,owner,fence),job['run_id'])
+    def _poison(self):self.poisoned=True
+    def _refuse_when_poisoned(self):
+        if self.poisoned:raise StorageUncertain('uncertain console write; reopen/reconcile before continuing')
     def _mutate(self,fn):
         if self._tx.get() is not None:return fn(self._tx.get())
+        self._refuse_when_poisoned()
         for _ in range(self.max_conflicts):
             record=self._record();self._check_claim(record.value);value=deepcopy(record.value);result=fn(value);self._validate(value)
             if value==record.value:return result
-            try:self.journal.commit(record,value)
-            except JournalConflict:continue
+            try:commit_with_contract(self.journal,record,value,invalidate=self._poison)
+            except StorageConflict:continue
             return result
         raise ValueError('console contention limit reached; retry with same operation identity')
     @contextmanager
     def transaction(self):
         if self._tx.get() is not None:raise ValueError('nested console transaction')
+        self._refuse_when_poisoned()
         record=self._record();self._check_claim(record.value);value=deepcopy(record.value);token=self._tx.set(value)
         try:
             yield self
             self._validate(value)
-            if value!=record.value:self.journal.commit(record,value)
+            if value!=record.value:commit_with_contract(self.journal,record,value,invalidate=self._poison)
         finally:self._tx.reset(token)
     def close(self):pass
     def export_storage(self,*,max_records=10000,max_bytes=64000000):

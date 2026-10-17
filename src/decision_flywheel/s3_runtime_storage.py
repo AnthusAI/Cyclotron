@@ -6,7 +6,8 @@ mutation checks the same owner/fence stored with its data, never a DDB lease.
 """
 from copy import deepcopy
 import json
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid,decode
+from .s3_journal import S3Journal,commit_with_contract,uuid,decode
+from .storage_errors import StorageConflict,StorageLimit
 from .learning_storage import ARTIFACTS,artifact_table
 from .active_labels import ACTIVE_LABELS_STATE_KEY,FEEDBACK_EVENT_KIND,dump_active_labels,load_active_labels,rebuild_active_labels,record_feedback_event
 
@@ -42,7 +43,7 @@ class S3RuntimeStores:
         if any(not isinstance(data[k],dict) for k in DICT_FIELDS) or any(not isinstance(data[k],list) for k in LIST_FIELDS):raise ValueError('invalid runtime records')
         if not isinstance(data['artifacts'],dict) or set(data['artifacts'])!=set(ARTIFACTS) or any(not isinstance(v,dict) for v in data['artifacts'].values()):raise ValueError('invalid learning kinds')
         count=sum(len(data[k]) for k in (*DICT_FIELDS,*LIST_FIELDS))+sum(map(len,data['artifacts'].values()))
-        if count>self.max_records:raise ValueError('canonical runtime record budget exceeded; no truncation')
+        if count>self.max_records:raise StorageLimit('canonical runtime record budget exceeded; no truncation')
     def initialize(self):self._validate(self.journal.initialize(empty()).value)
     def _owned(self,value):
         if self.authority is None or (value['owner'],value['fence'])!=self.authority:
@@ -66,11 +67,11 @@ class S3RuntimeStores:
             value=deepcopy(record.value);result=fn(value)
             self._validate(value)
             if value==record.value:return result
-            try:self._cached=self.journal.commit(record,value)
-            except JournalConflict:self._cached=None;continue
-            except JournalUncertain:self.poisoned=True;self._cached=None;raise
+            try:self._cached=commit_with_contract(self.journal,record,value,invalidate=self._poison)
+            except StorageConflict:self._cached=None;continue
             return result
         raise RuntimeOwnershipError('runtime contention limit reached')
+    def _poison(self):self.poisoned=True;self._cached=None
     def change(self,fn):return self._change(lambda value:fn(value['data'],value))
     def acquire(self,owner):
         uuid(owner)
