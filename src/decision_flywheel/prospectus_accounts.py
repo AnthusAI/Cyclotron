@@ -140,6 +140,7 @@ class AccountWorkspace:
     account_id: str = ''
     request_session: VerifiedAccountSession | None = field(default=None, repr=False)
     priming: object = field(default=None, repr=False)
+    held_out: object = field(default=None, repr=False)
 
 
 class AccountWorkspaceAccess:

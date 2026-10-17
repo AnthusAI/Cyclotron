@@ -10,9 +10,11 @@ or in the central lab (``create_app(held_out=...)``):
 Freezing makes no model call. Evaluating does, so it needs live authority and
 the caller must confirm the request bound the overview showed.
 
-The host supplies ``open_cyclotron(cyclotron_id)``, a context manager that
-opens the authorized cyclotron for one call (``Cyclotron.open`` is one) and
-raises for any cyclotron the caller may not reach. Each call opens and closes
+The host supplies ``open_cyclotron(cyclotron_id, max_requests=None)``, a context
+manager that opens the authorized cyclotron for one call (``Cyclotron.open`` is
+one) and raises for any cyclotron the caller may not reach. Evaluating reopens
+with ``max_requests`` set to the confirmed request bound, so the request budget
+always covers the evaluation. Each call opens and closes
 it, so a scale-to-zero host holds the store's lease only while it works.
 """
 from __future__ import annotations
@@ -23,7 +25,7 @@ COMMANDS = ("freeze", "evaluate")
 
 
 class HeldOutService:
-    def __init__(self, open_cyclotron: Callable[[str], ContextManager[Any]], *, allow_live: bool = False):
+    def __init__(self, open_cyclotron: Callable[..., ContextManager[Any]], *, allow_live: bool = False):
         self.open_cyclotron = open_cyclotron
         self.allow_live = allow_live
 
@@ -46,13 +48,16 @@ class HeldOutService:
         if action == "evaluate" and not self.allow_live:
             raise ValueError("held-out evaluation calls the decision model and requires explicit live authority")
         classifier, set_id = payload.get("classifier"), payload.get("setId")
-        with self.open_cyclotron(str(payload.get("cyclotronId"))) as cyclotron:
-            if action == "freeze":
+        cyclotron_id = str(payload.get("cyclotronId"))
+        if action == "freeze":
+            with self.open_cyclotron(cyclotron_id) as cyclotron:
                 async with cyclotron.execution():
                     return cyclotron.freeze_held_out_set(classifier)
+        with self.open_cyclotron(cyclotron_id) as cyclotron:
             async with cyclotron.execution():
                 request_bound = cyclotron.held_out_request_bound(classifier, set_id=set_id)
-            if payload.get("confirmedRequestBound") != request_bound:
-                raise ValueError(f"confirm up to {request_bound} decision-model requests to evaluate")
+        if payload.get("confirmedRequestBound") != request_bound:
+            raise ValueError(f"confirm up to {request_bound} decision-model requests to evaluate")
+        with self.open_cyclotron(cyclotron_id, max_requests=max(request_bound, 1)) as cyclotron:
             return await cyclotron.evaluate_held_out(classifier, set_id=set_id,
                                                      minimum_per_label=payload.get("minimumPerLabel"))
