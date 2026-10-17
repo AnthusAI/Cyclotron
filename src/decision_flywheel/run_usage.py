@@ -8,7 +8,8 @@ source; a cached input token is billed at the cached rate when one is given.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable, Mapping
+import json
+from typing import Iterable, Mapping, Sequence
 
 CALLS = {"decision-response": "decision_model", "optimizer-response": "optimizer"}
 
@@ -105,3 +106,75 @@ def usage_by_window(events: Iterable[Mapping], prices: Mapping[str, Mapping[str,
                     for index, slot in sorted(windows.items())],
         "total": _block(total, prices, first, last),
     }
+
+
+def stored_usage_by_window(root_storage, output_ids: Sequence[str], prices: Mapping[str, Mapping[str, float]], *,
+                           window: int = 100) -> dict:
+    """Per-window and total usage recorded in an embedded cyclotron's root store, with the split by output.
+
+    Window 1 holds decisions 1 to ``window`` in the order they were made; a
+    decision-model request made while reviewing or learning counts toward the
+    decision it served.
+    """
+    if type(window) is not int or window < 1:
+        raise ValueError("window must be a positive integer")
+    if set(prices) != {"decision_model", "optimizer"}:
+        raise ValueError("prices must give decision_model and optimizer list prices")
+    position = {decision_id: index for index, (decision_id,) in enumerate(root_storage.decision_ids())}
+    times = [json.loads(payload)["createdAt"] for (payload,) in root_storage.decision_payloads()]
+    windows: dict[int, dict] = {}
+    total = {"decision_model": _empty(), "optimizer": _empty()}
+    for decision_id, model, prompt, cached, output in root_storage.usage_counts():
+        index = position.get(decision_id)
+        targets = [total[model]]
+        if index is not None:
+            targets.append(windows.setdefault(index // window, {"decision_model": _empty(), "optimizer": _empty()})[model])
+        for counts in targets:
+            counts["requests"] += 1
+            counts["input_tokens"] += prompt
+            counts["cached_input_tokens"] += cached
+            counts["output_tokens"] += output
+    blocks = []
+    for index in range((len(times) + window - 1) // window):
+        first, last = index * window, min(len(times), (index + 1) * window) - 1
+        models = windows.get(index, {"decision_model": _empty(), "optimizer": _empty()})
+        blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
+                       **_block(models, prices, times[first], times[last])})
+    return {"window_size": window, "windows": blocks,
+            "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices),
+            "outputs": stored_usage_by_output(root_storage, output_ids, prices)}
+
+
+def stored_usage_by_output(root_storage, output_ids: Sequence[str], prices: Mapping[str, Mapping[str, float]]) -> dict:
+    """An estimated split of the total by output; the outputs sum to the total.
+
+    Optimizer calls are measured per output (each output's learning makes
+    its own calls). A shared decision-model request is split by each
+    output's share of the request bytes; a request recorded before shares
+    were kept is split evenly.
+    """
+    ids = list(output_ids)
+    per = {cid: {"decision_model": _empty(), "optimizer": _empty()} for cid in ids}
+    shares: dict[int, dict[str, float]] = {}
+    for usage_id, classifier, share in root_storage.usage_shares():
+        shares.setdefault(usage_id, {})[classifier] = share
+    for usage_id, model, prompt, cached, output, source in root_storage.usage_by_output():
+        if model == "optimizer":
+            owner = (source or "").rsplit(":", 1)[0]
+            split = {owner: 1.0} if owner in per else {cid: 1 / len(ids) for cid in ids}
+        else:
+            split = {cid: share for cid, share in shares.get(usage_id, {}).items() if cid in per}
+            if not split:
+                split = {cid: 1 / len(ids) for cid in ids}
+            scale = sum(split.values())
+            split = {cid: share / scale for cid, share in split.items()}
+        for cid, share in split.items():
+            counts = per[cid][model]
+            counts["requests"] += share
+            counts["input_tokens"] += prompt * share
+            counts["cached_input_tokens"] += cached * share
+            counts["output_tokens"] += output * share
+    return {"estimate": ("Decision-model usage is split by each output's share of the shared request bytes "
+                         "(evenly for requests recorded before shares were kept); optimizer usage is measured "
+                         "per output. Outputs sum to the total."),
+            "by_output": {cid: _block(per[cid], prices) for cid in ids}}
