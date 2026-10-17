@@ -25,6 +25,7 @@
     "trace-ui/src/CalibrationProvenance.tsx",
     "trace-ui/src/components/priming-panel.tsx",
     "trace-ui/src/primingClient.ts",
+    "trace-ui/src/requestId.ts",
     "trace-ui/src/components/held-out-report.tsx",
     "trace-ui/src/heldOutReport.ts"
   ],

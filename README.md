@@ -123,6 +123,19 @@ becomes active only when its configured evaluation accepts it.
 
 The setup and usage guide, built from our own runs, is [docs/using-cyclotron.md](docs/using-cyclotron.md). Read it before your first run.
 
+## Web components and their two styling tiers
+
+The npm package `cyclotron` (private, released as a GitHub tarball `ui-v<version>`
+by `scripts/dev/release_ui.sh`) exports React components in two tiers:
+
+| Tier | Exports | Host needs |
+|---|---|---|
+| Plain CSS | `components/review-control`, `components/cyclotron-status`, `components/held-out-report`, `components/cycle-mark`, `components/cyclotron-brand` | `import "cyclotron/styles/components.css"` once. No Tailwind. |
+| Tailwind | `components/priming-panel`, `components/labeling-review`, `components/lab-metrics`, `components/cycle-timeline`, `components/classifier-metrics`, `components/ui/*` | Tailwind v4 with `@source "../node_modules/cyclotron/trace-ui/src";`, the shadcn theme tokens, and `cyclotron/tailwind-preset`. |
+
+A host that imports only plain-CSS exports never adopts Tailwind. Importing
+`priming-panel` means adopting it. See [docs/embedding.md](docs/embedding.md).
+
 ## More documentation
 
 - [Embedding walk-through, widgets and operational notes](docs/embedding.md)

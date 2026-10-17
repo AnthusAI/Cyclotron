@@ -3,6 +3,7 @@ import {Button} from './ui/button'
 import {Input} from './ui/input'
 import {Label} from './ui/label'
 import {LabelingReview} from './labeling-review'
+import {requestId} from '../requestId'
 
 export type ClassifierRef={id:string;revision:number}
 export type PrimingField={name:string;label:string;required?:boolean;multiline?:boolean}
@@ -23,7 +24,7 @@ function InputFields({fields,values,onChange,disabled}:{fields:PrimingField[];va
 
 function download(content:string,encoding:string,name:string){
  const bytes=encoding==='base64'?Uint8Array.from(atob(content),c=>c.charCodeAt(0)):content
- const url=URL.createObjectURL(new Blob([bytes]));const anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click();URL.revokeObjectURL(url)
+ const url=URL.createObjectURL(new Blob([bytes],{type:name.endsWith('.xlsx')?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'text/csv;charset=utf-8'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click();URL.revokeObjectURL(url)
 }
 
 /** Host supplies transport; Papyrus and standalone Cyclotron share this workflow. */
@@ -66,7 +67,7 @@ export function PrimingPanel({client,listId,classifiers,initialDraftId,pollInter
   }catch(reason){if(mounted.current&&generation===epoch.current)setError((reason as Error).message)}finally{if(mounted.current&&generation===epoch.current){setBusy(false);setStarting(false)}}
  }
  const start=(action:string,payload:Record<string,unknown>)=>{
-  cancelled.current=false;setStarting(true);setDraft(null);void execute(action,{identifier:crypto.randomUUID(),list_id:listId,refs:JSON.parse(pins),...payload})
+  cancelled.current=false;setStarting(true);setDraft(null);void execute(action,{identifier:requestId(),list_id:listId,refs:JSON.parse(pins),...payload})
  }
  const cancel=()=>{
   cancelled.current=true
@@ -94,7 +95,7 @@ export function PrimingPanel({client,listId,classifiers,initialDraftId,pollInter
    {draft?.errors.length?<ul role="alert" className="space-y-1 text-sm text-destructive">{draft.errors.map((row,index)=><li key={index}>Row {row.row} · {row.field}: {row.message}</li>)}</ul>:null}
    {draft&&['running','queued','starting'].includes(draft.status)?<p role="status">Curation in progress… <Button variant="outline" disabled={busy} onClick={()=>void execute('poll',{identifier:draft.id})}>Check progress</Button></p>:null}
    {draft?.status==='preview'?<><p className="text-sm font-medium">Preview · {draft.rows.length} example{draft.rows.length===1?'':'s'}. Nothing saved yet.</p>{draft.rows.map((row,index)=><article key={row.item.id} className="space-y-3 rounded-md border border-border p-3"><h3 className="break-words font-semibold">{String(row.item.values.title??row.item.id)}</h3>{renderItem?renderItem(row.item):<dl className="space-y-2">{Object.entries(row.item.values).map(([key,value])=><div key={key}><dt className="text-xs font-medium text-muted-foreground">{key}</dt><dd className="whitespace-pre-wrap text-sm">{typeof value==='string'?value:JSON.stringify(value)}</dd></div>)}</dl>}<details><summary className="text-sm font-medium">Exact item values supplied to each decision model</summary><pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{JSON.stringify(row.model_representation,null,2)}</pre></details>{contract.classifiers.map(classifier=><LabelingReview key={classifier.id} targetId={`priming-${row.item.id}-${classifier.id}`} classifierName={classifier.name} classes={classifier.config.classes.map(c=>c.label)} selectedLabel={labels[index]?.[classifier.id]?.label??''} explanationDraft={labels[index]?.[classifier.id]?.rationale??''} busy={busy} onSelectedLabelChange={value=>updateLabel(index,classifier.id,'label',value)} onExplanationDraftChange={value=>updateLabel(index,classifier.id,'rationale',value)}/>)}</article>)}<Button disabled={busy||!validLabels} onClick={()=>void execute('accept',{identifier:draft.id,version:draft.version,labels})}>Accept examples and labels</Button></>:null}
-   {draft&&draft.source.kind==='transform'&&['preview','clarification','failed','invalid'].includes(draft.status)?<form className="space-y-3 rounded-md border border-border p-3" onSubmit={event=>{event.preventDefault();void execute('feedback',{identifier:draft.id,version:draft.version,request_id:crypto.randomUUID(),reason:feedback,inputs:answers})}}><Label htmlFor={`feedback-${draft.id}`}>Transformation feedback</Label><textarea id={`feedback-${draft.id}`} required className="min-h-20 w-full rounded-md border border-input bg-background p-2 text-sm" value={feedback} onChange={event=>setFeedback(event.target.value)} disabled={busy}/><p className="text-xs text-muted-foreground">Describe extraction or curation changes here. Your label explanation is recorded separately.</p><InputFields fields={draft.fields} values={answers} onChange={(key,value)=>setAnswers(old=>({...old,[key]:value}))} disabled={busy}/><Button variant="outline" disabled={busy||!feedback.trim()}>{draft.status==='clarification'?'Send clarification':'Reject preview and revise'}</Button></form>:null}
+   {draft&&draft.source.kind==='transform'&&['preview','clarification','failed','invalid'].includes(draft.status)?<form className="space-y-3 rounded-md border border-border p-3" onSubmit={event=>{event.preventDefault();void execute('feedback',{identifier:draft.id,version:draft.version,request_id:requestId(),reason:feedback,inputs:answers})}}><Label htmlFor={`feedback-${draft.id}`}>Transformation feedback</Label><textarea id={`feedback-${draft.id}`} required className="min-h-20 w-full rounded-md border border-input bg-background p-2 text-sm" value={feedback} onChange={event=>setFeedback(event.target.value)} disabled={busy}/><p className="text-xs text-muted-foreground">Describe extraction or curation changes here. Your label explanation is recorded separately.</p><InputFields fields={draft.fields} values={answers} onChange={(key,value)=>setAnswers(old=>({...old,[key]:value}))} disabled={busy}/><Button variant="outline" disabled={busy||!feedback.trim()}>{draft.status==='clarification'?'Send clarification':'Reject preview and revise'}</Button></form>:null}
    {(draft&&!['accepted','cancelled'].includes(draft.status))||starting?<Button variant="ghost" onClick={cancel}>Cancel import</Button>:null}
    {draft?.status==='cancelled'?<p role="status">Import cancelled. No examples were saved.{draft.remote_cancel==='pending'?' Remote cancellation is pending; retry cancellation to confirm.':''}</p>:null}
    {draft?.remote_cancel==='pending'?<Button onClick={cancel} disabled={busy}>Retry cancellation</Button>:null}

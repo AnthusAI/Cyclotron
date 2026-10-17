@@ -79,6 +79,12 @@ it('maps thumbs to a chosen positive class and offers one button per class in la
   expect(onReview).toHaveBeenCalledWith(expect.objectContaining({itemId:'ref-2',decisionId:'d-2',label:'never'}))
 })
 
+it('falls back to one button per class when thumbs mode is requested with more than two classes',()=>{
+  const three={decisionId:'d-2',label:'later',confidence:null,classes:['now','later','never']}
+  render(<ReviewControl itemId="ref-2" decision={three} mode="thumbs" />)
+  expect(screen.getByRole('button',{name:'never'})).toBeVisible()
+})
+
 it('clears its draft when the decision changes',()=>{
   const {rerender}=render(<ReviewControl itemId="ref-1" decision={decision} />)
   fireEvent.click(screen.getByRole('button',{name:'Yes: include'}))
