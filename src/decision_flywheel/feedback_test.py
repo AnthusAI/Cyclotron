@@ -4,16 +4,15 @@ from .feedback import (
     LABEL_SOURCE_FINAL,
     LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED,
     LABEL_SOURCE_UNRESOLVED,
+    Cyclotron,
     Decision,
     Element,
     Feature,
     FeatureCoverage,
     FeedbackItem,
     ScoreResult,
-    Cyclotron,
 )
 from .models import DecisionTask
-
 
 TASK = DecisionTask("review", ("approve", "reject"), "Choose an outcome.")
 HASH = "a" * 64
@@ -21,9 +20,13 @@ HASH = "a" * 64
 
 def test_a_review_correction_preserves_initial_final_comment_source_and_propensity():
     feedback = FeedbackItem(
-        id="feedback-1", item_id="item-1", score_name="review",
-        initial_answer_value="Reject", final_answer_value="Approve!",
-        edit_comment_value="The policy exception applies.", label_source=LABEL_SOURCE_FINAL,
+        id="feedback-1",
+        item_id="item-1",
+        score_name="review",
+        initial_answer_value="Reject",
+        final_answer_value="Approve!",
+        edit_comment_value="The policy exception applies.",
+        label_source=LABEL_SOURCE_FINAL,
         selection_propensity=0.25,
     )
 
@@ -36,20 +39,32 @@ def test_a_review_correction_preserves_initial_final_comment_source_and_propensi
 
 def test_unverified_or_missing_propensity_feedback_never_becomes_a_trusted_training_label():
     unverified = FeedbackItem(
-        id="feedback-1", item_id="item-1", score_name="review", final_answer_value="approve",
-        label_source=LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED, selection_propensity=0.5,
+        id="feedback-1",
+        item_id="item-1",
+        score_name="review",
+        final_answer_value="approve",
+        label_source=LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED,
+        selection_propensity=0.5,
     )
     unresolved = FeedbackItem(
-        id="feedback-2", item_id="item-2", score_name="review", final_answer_value="approve",
+        id="feedback-2",
+        item_id="item-2",
+        score_name="review",
+        final_answer_value="approve",
         label_source=LABEL_SOURCE_UNRESOLVED,
     )
 
     assert unverified.trusted_label(TASK) is None
     assert unresolved.trusted_label(TASK) is None
     with pytest.raises(ValueError, match="selection_propensity"):
-        FeedbackItem(id="feedback-3", item_id="item-3", score_name="review",
-                     final_answer_value="approve", label_source=LABEL_SOURCE_FINAL,
-                     selection_propensity=None).training_label(TASK)
+        FeedbackItem(
+            id="feedback-3",
+            item_id="item-3",
+            score_name="review",
+            final_answer_value="approve",
+            label_source=LABEL_SOURCE_FINAL,
+            selection_propensity=None,
+        ).training_label(TASK)
 
 
 @pytest.mark.parametrize("propensity", [0, 1.1, True, float("inf")])
@@ -61,9 +76,13 @@ def test_a_feedback_propensity_must_be_a_finite_probability(propensity):
 def test_decision_lineage_links_context_request_cyclotron_and_complete_features():
     coverage = FeatureCoverage(("tone.positive", "policy.exception"), ("tone.positive", "policy.exception"))
     decision = Decision(
-        value="approve", model_provenance="local-rule-model-v1", policy_fingerprint=HASH,
-        context_artifact_fingerprint="b" * 64, request_fingerprint="c" * 64,
-        cyclotron_fingerprint="d" * 64, feature_coverage=coverage,
+        value="approve",
+        model_provenance="local-rule-model-v1",
+        policy_fingerprint=HASH,
+        context_artifact_fingerprint="b" * 64,
+        request_fingerprint="c" * 64,
+        cyclotron_fingerprint="d" * 64,
+        feature_coverage=coverage,
     )
     result = ScoreResult(item_id="item-1", score_name="review", decision=decision)
 
@@ -83,8 +102,7 @@ def test_cyclotron_lineage_changes_when_its_policy_or_parent_changes():
     element = Element("tone", "choice", ("tone.positive",), definition_fingerprint=HASH)
     first = Cyclotron("review", 1, (element,), policy_fingerprint="b" * 64)
     changed_policy = Cyclotron("review", 1, (element,), policy_fingerprint="c" * 64)
-    child = Cyclotron("review", 2, (element,), policy_fingerprint="b" * 64,
-                      parent_fingerprint=first.fingerprint)
+    child = Cyclotron("review", 2, (element,), policy_fingerprint="b" * 64, parent_fingerprint=first.fingerprint)
 
     assert first.fingerprint != changed_policy.fingerprint
     assert child.parent_fingerprint == first.fingerprint

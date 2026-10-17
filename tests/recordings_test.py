@@ -1,4 +1,5 @@
 """The recording catalog, driven by synthetic run directories (no live calls, no keys)."""
+
 import hashlib
 import importlib.util
 import json
@@ -26,52 +27,112 @@ LABELS = ("publish", "reject")
 def make_run(root, name="run", count=8, rubric="", activation=3, decision_ok=4, mode="all", reviewed=None, hide_unreviewed=False):
     """A synthetic recorded run (protocol, results, events) plus a relabeled corpus and manifest."""
     root.mkdir(parents=True, exist_ok=True)
-    corpus = [{"id": f"item-{n}", "title": f"Story {n}", "source_url": f"https://example.org/{n}", "license": "CC BY 2.5",
-               "license_url": "https://example.org/license", "simulated_label": "reject" if n % 4 else "publish"}
-              for n in range(1, count + 1)]
+    corpus = [
+        {
+            "id": f"item-{n}",
+            "title": f"Story {n}",
+            "source_url": f"https://example.org/{n}",
+            "license": "CC BY 2.5",
+            "license_url": "https://example.org/license",
+            "simulated_label": "reject" if n % 4 else "publish",
+        }
+        for n in range(1, count + 1)
+    ]
     (root / "corpus.jsonl").write_text("".join(json.dumps(r) + "\n" for r in corpus))
-    manifest = {"corpus": "fake-corpus", "actual_count": count, "label_disclosure": "simulated_semantic_editorial_labels",
-                "dataset": "wikinews", "dataset_revision": "r1", "license": "CC BY 2.5", "license_url": "https://example.org/license",
-                "operational_sha256": hashlib.sha256((root / "corpus.jsonl").read_bytes()).hexdigest(),
-                "label_provenance": "Labels are simulated; two blind passes agreed."}
+    manifest = {
+        "corpus": "fake-corpus",
+        "actual_count": count,
+        "label_disclosure": "simulated_semantic_editorial_labels",
+        "dataset": "wikinews",
+        "dataset_revision": "r1",
+        "license": "CC BY 2.5",
+        "license_url": "https://example.org/license",
+        "operational_sha256": hashlib.sha256((root / "corpus.jsonl").read_bytes()).hexdigest(),
+        "label_provenance": "Labels are simulated; two blind passes agreed.",
+    }
     (root / "manifest.json").write_text(json.dumps(manifest))
     run = root / name
     mode_name, mode = mode, run / mode
     mode.mkdir(parents=True)
-    protocol = {"operational_items": count, "decision_model": "jev-1.13.0", "decision_provider": "jev",
-                "optimizer_model": "gpt-6-luna", "baseline_rubric": rubric,
-                "operational_sha256": manifest["operational_sha256"],
-                "selection_policy": {"primary": "accuracy"}, "rubric_trigger": {"basis": "label_transitions", "every": 20, "max_attempts": None},
-                "idea_screening": {"enabled": False}, "modes": [mode_name], "decision_cap_total": 100, "optimizer_cap_total": 5}
+    protocol = {
+        "operational_items": count,
+        "decision_model": "jev-1.13.0",
+        "decision_provider": "jev",
+        "optimizer_model": "gpt-6-luna",
+        "baseline_rubric": rubric,
+        "operational_sha256": manifest["operational_sha256"],
+        "selection_policy": {"primary": "accuracy"},
+        "rubric_trigger": {"basis": "label_transitions", "every": 20, "max_attempts": None},
+        "idea_screening": {"enabled": False},
+        "modes": [mode_name],
+        "decision_cap_total": 100,
+        "optimizer_cap_total": 5,
+    }
     (run / "protocol.json").write_text(json.dumps(protocol))
     metrics = {"count": 1, "accuracy": 1.0, "brier": 0.0, "calibration": {"ece": 0.0}, "per_class": {}, "confusion_matrix": {}}
     cycles, events = [], []
     for n, record in enumerate(corpus, start=1):
         actual = record["simulated_label"]
         other = LABELS[actual == "publish"]
-        predicted = actual if n > 4 else other   # wrong in the first window, right after
+        predicted = actual if n > 4 else other  # wrong in the first window, right after
         dm = actual if n <= decision_ok else other
-        cycles.append({"cycle_number": n, "item_id": record["id"], "predicted_label": predicted, "human_label": None if hide_unreviewed and reviewed is not None and n not in reviewed else actual,
-                       "feedback_selected": reviewed is None or n in reviewed, "feedback_propensity": 1.0, "role": "training", "metrics": metrics,
-                       "outcomes": [], "requests": 1})
+        cycles.append(
+            {
+                "cycle_number": n,
+                "item_id": record["id"],
+                "predicted_label": predicted,
+                "human_label": None if hide_unreviewed and reviewed is not None and n not in reviewed else actual,
+                "feedback_selected": reviewed is None or n in reviewed,
+                "feedback_propensity": 1.0,
+                "role": "training",
+                "metrics": metrics,
+                "outcomes": [],
+                "requests": 1,
+            }
+        )
         minute = f"2026-10-09T{10 + n // 60:02d}:{n % 60:02d}"
         events += [
             {"kind": "cycle-started", "cycle_number": n, "created_at": f"{minute}:00+00:00"},
-            {"kind": "prediction", "cycle_number": n, "cycle_item_id": record["id"], "label": predicted, "confidence": .8,
-             "probabilities": {predicted: .8, LABELS[predicted == "publish"]: .2}, "decision_model_label": dm,
-             "decision_model_probabilities": {dm: .7, LABELS[dm == "publish"]: .3}},
+            {
+                "kind": "prediction",
+                "cycle_number": n,
+                "cycle_item_id": record["id"],
+                "label": predicted,
+                "confidence": 0.8,
+                "probabilities": {predicted: 0.8, LABELS[predicted == "publish"]: 0.2},
+                "decision_model_label": dm,
+                "decision_model_probabilities": {dm: 0.7, LABELS[dm == "publish"]: 0.3},
+            },
             {"kind": "decision-response", "cycle_number": n, "usage": {"input_tokens": 1000, "output_tokens": 10}},
-            *([{"kind": "human-feedback", "action": "submitted", "cycle_number": n,
-                "feedback": {"item_id": record["id"], "final_answer_value": actual, "edit_comment_value": "why"}}]
-              if reviewed is None or n in reviewed else []),
+            *(
+                [
+                    {
+                        "kind": "human-feedback",
+                        "action": "submitted",
+                        "cycle_number": n,
+                        "feedback": {"item_id": record["id"], "final_answer_value": actual, "edit_comment_value": "why"},
+                    }
+                ]
+                if reviewed is None or n in reviewed
+                else []
+            ),
             {"kind": "cycle-completed", "cycle_number": n, "created_at": f"{minute}:30+00:00"},
         ]
         if n == activation:
-            events.append({"kind": "optimizer-response", "cycle_number": n, "usage": {"input_tokens": 2000, "output_tokens": 100}})
+            events.append(
+                {"kind": "optimizer-response", "cycle_number": n, "usage": {"input_tokens": 2000, "output_tokens": 100}}
+            )
             events.append({"kind": "classifier-activated", "cycle_number": n})
-    (mode / "results.json").write_text(json.dumps({
-        "cycles": cycles, "disclosure": {"operational_items": count}, "protocol": {"task": "t" * 64},
-        "feedback_policy": {"mode": mode_name}}))
+    (mode / "results.json").write_text(
+        json.dumps(
+            {
+                "cycles": cycles,
+                "disclosure": {"operational_items": count},
+                "protocol": {"task": "t" * 64},
+                "feedback_policy": {"mode": mode_name},
+            }
+        )
+    )
     con = sqlite3.connect(mode / "runtime.sqlite3")
     con.execute("CREATE TABLE runtime_events (id INTEGER PRIMARY KEY, payload TEXT)")
     con.executemany("INSERT INTO runtime_events (payload) VALUES (?)", [(json.dumps(e),) for e in events])
@@ -90,10 +151,35 @@ def add(tmp_path, rid="first", catalog=None, run=None, **kw):
     if run is None:
         run = make_run(tmp_path / "src", name=kw.pop("name", "run"))
     run_dir, manifest, corpus = run
-    args = ["add", str(run_dir), "--id", rid, "--title", "A title", "--summary", "A summary.",
-            "--notice", "It starts blank.", "--notice", "The first rubric lifts it.", "--tag", "blank-start", "--tag", "jev",
-            "--corpus-manifest", str(manifest), "--corpus", str(corpus), "--window-size", "4",
-            "--engine-commit", "abc123", "--catalog", str(catalog), *kw.get("extra", [])]
+    args = [
+        "add",
+        str(run_dir),
+        "--id",
+        rid,
+        "--title",
+        "A title",
+        "--summary",
+        "A summary.",
+        "--notice",
+        "It starts blank.",
+        "--notice",
+        "The first rubric lifts it.",
+        "--tag",
+        "blank-start",
+        "--tag",
+        "jev",
+        "--corpus-manifest",
+        str(manifest),
+        "--corpus",
+        str(corpus),
+        "--window-size",
+        "4",
+        "--engine-commit",
+        "abc123",
+        "--catalog",
+        str(catalog),
+        *kw.get("extra", []),
+    ]
     cli(*args)
     return catalog
 
@@ -110,8 +196,12 @@ def test_add_builds_a_valid_draft_with_results_cost_and_setup(tmp_path):
     assert r["setup"]["starting_rubric"] == "blank" and "starting_rubric_text" not in r["setup"]
     assert r["setup"]["parameters"]["rubric_changes_every"] == 20 and r["setup"]["parameters"]["idea_screening"] is None
     corpus_sha = hashlib.sha256((tmp_path / "src" / "corpus.jsonl").read_bytes()).hexdigest()
-    assert r["setup"]["corpus"] == {"id": "fake-corpus", "stories": 8, "sha256": corpus_sha,
-                                    "label_provenance": "Labels are simulated; two blind passes agreed."}
+    assert r["setup"]["corpus"] == {
+        "id": "fake-corpus",
+        "stories": 8,
+        "sha256": corpus_sha,
+        "label_provenance": "Labels are simulated; two blind passes agreed.",
+    }
     assert r["setup"]["window_size"] == 4 and r["setup"]["decision_provider"] == "jev"
     w = r["results"]["windows"]
     assert [(x["first_cycle"], x["last_cycle"]) for x in w] == [(1, 4), (5, 8)]
@@ -154,8 +244,24 @@ def test_starting_rubric_blank_curated_and_custom(tmp_path):
 def test_add_validates_required_fields(tmp_path):
     with pytest.raises(SystemExit, match="notice must be a list|title is required"):
         run, manifest, corpus = make_run(tmp_path / "src")
-        cli("add", str(run), "--id", "x", "--title", " ", "--summary", "s", "--corpus-manifest", str(manifest),
-            "--corpus", str(corpus), "--window-size", "4", "--catalog", str(tmp_path / "c"))
+        cli(
+            "add",
+            str(run),
+            "--id",
+            "x",
+            "--title",
+            " ",
+            "--summary",
+            "s",
+            "--corpus-manifest",
+            str(manifest),
+            "--corpus",
+            str(corpus),
+            "--window-size",
+            "4",
+            "--catalog",
+            str(tmp_path / "c"),
+        )
     assert not (tmp_path / "c" / "x").exists()
 
 
@@ -167,8 +273,26 @@ def test_old_manifest_uses_the_fixture_disclosure(tmp_path):
     old["item_set_sha256"] = "0" * 64
     manifest.write_text(json.dumps(old))
     catalog = tmp_path / "c"
-    cli("add", str(run), "--id", "old", "--title", "T", "--summary", "S", "--notice", "n", "--corpus-manifest", str(manifest),
-        "--corpus", str(corpus), "--window-size", "50", "--catalog", str(catalog))
+    cli(
+        "add",
+        str(run),
+        "--id",
+        "old",
+        "--title",
+        "T",
+        "--summary",
+        "S",
+        "--notice",
+        "n",
+        "--corpus-manifest",
+        str(manifest),
+        "--corpus",
+        str(corpus),
+        "--window-size",
+        "50",
+        "--catalog",
+        str(catalog),
+    )
     r = rec(catalog, "old")
     fixture = json.loads((catalog / "old" / "fixture.json").read_text())
     assert r["setup"]["corpus"]["label_provenance"] == fixture["disclosure"]
@@ -260,7 +384,7 @@ def test_export_published_drops_source_orders_and_is_deterministic(tmp_path):
     out = tmp_path / "site"
     cli("export-published", "--to", str(out), "--catalog", str(catalog))
     index = json.loads((out / "index.json").read_text())
-    assert [r["id"] for r in index["recordings"]] == ["second", "third", "first"]   # newest first, then id
+    assert [r["id"] for r in index["recordings"]] == ["second", "third", "first"]  # newest first, then id
     assert set(index["recordings"][0]) == {"id", "title", "summary", "tags", "featured"}
     exported = json.loads((out / "second" / "recording.json").read_text())
     assert "source" not in exported and exported["id"] == "second"
@@ -272,7 +396,7 @@ def test_export_published_drops_source_orders_and_is_deterministic(tmp_path):
     cli("publish", "first", "--featured", "--catalog", str(catalog))
     cli("export-published", "--to", str(out), "--catalog", str(catalog))
     assert [r["id"] for r in json.loads((out / "index.json").read_text())["recordings"]][0] == "first"
-    assert (catalog / "second" / "recording.json").read_text().count('"source"') == 1   # local copy keeps it
+    assert (catalog / "second" / "recording.json").read_text().count('"source"') == 1  # local copy keeps it
 
 
 def test_export_removes_stale_only_in_a_marked_directory(tmp_path):
@@ -286,7 +410,7 @@ def test_export_removes_stale_only_in_a_marked_directory(tmp_path):
     cli("unpublish", "second", "--catalog", str(catalog))
     cli("export-published", "--to", str(out), "--catalog", str(catalog))
     assert not (out / "second").exists() and (out / "first").is_dir()
-    assert (out / "notes" / "keep.txt").is_file()          # not a recording directory
+    assert (out / "notes" / "keep.txt").is_file()  # not a recording directory
     # An unmarked directory is never cleaned, even of recording-shaped directories.
     other = tmp_path / "other"
     (other / "old").mkdir(parents=True)
@@ -320,8 +444,12 @@ def test_add_records_the_review_policy_for_full_and_partial_review(tmp_path):
     assert full == {"policy": "all", "summary": "Every story is reviewed.", "stories_reviewed": 8, "stories_total": 8}
     run = make_run(tmp_path / "b", mode="casual_ten_percent", reviewed={2})
     casual = rec(add(tmp_path, "casual", run=run), "casual")["setup"]["review"]
-    assert casual == {"policy": "casual_ten_percent", "summary": "One story in ten is reviewed.",
-                      "stories_reviewed": 1, "stories_total": 8}
+    assert casual == {
+        "policy": "casual_ten_percent",
+        "summary": "One story in ten is reviewed.",
+        "stories_reviewed": 1,
+        "stories_total": 8,
+    }
     run = make_run(tmp_path / "c", mode="reject_half", reviewed={1, 2, 5})
     half = rec(add(tmp_path, "half", run=run), "half")["setup"]["review"]
     assert half["policy"] == "reject_half" and half["stories_reviewed"] == 3
@@ -338,9 +466,13 @@ def test_review_is_optional_but_validated(tmp_path):
     old = json.loads(json.dumps(r))
     del old["setup"]["review"]
     assert R.validate_recording(old) == []
-    for bad in ("all", {"policy": "all"}, {"policy": "", "summary": "x", "stories_reviewed": 1, "stories_total": 2},
-                {"policy": "all", "summary": "x", "stories_reviewed": 3, "stories_total": 2},
-                {"policy": "all", "summary": "x", "stories_reviewed": "1", "stories_total": 2}):
+    for bad in (
+        "all",
+        {"policy": "all"},
+        {"policy": "", "summary": "x", "stories_reviewed": 1, "stories_total": 2},
+        {"policy": "all", "summary": "x", "stories_reviewed": 3, "stories_total": 2},
+        {"policy": "all", "summary": "x", "stories_reviewed": "1", "stories_total": 2},
+    ):
         broken = json.loads(json.dumps(r))
         broken["setup"]["review"] = bad
         assert any("setup.review" in p for p in R.validate_recording(broken)), bad
@@ -395,10 +527,10 @@ def test_onboarding_policy_sentences_hyphenated_and_underscored(tmp_path):
         "first-50-all-then-half": "Every story for the first 50 stories, then half of the stories.",
         "first_100_all_then_half": "Every story for the first 100 stories, then half of the stories.",
         "publish-priority-taper": "For the first 50 stories, every story the model calls publish and half of those it "
-                                  "calls reject; after that, half of the publishes and a quarter of the rejects.",
+        "calls reject; after that, half of the publishes and a quarter of the rejects.",
         "first-100-all-then-half": "Every story for the first 100 stories, then half of the stories.",
         "publish_priority_taper": "For the first 50 stories, every story the model calls publish and half of those it "
-                                  "calls reject; after that, half of the publishes and a quarter of the rejects.",
+        "calls reject; after that, half of the publishes and a quarter of the rejects.",
         "first_50_all_then_half": "Every story for the first 50 stories, then half of the stories.",
     }
     for name, sentence in expected.items():
@@ -411,15 +543,22 @@ def test_onboarding_policy_sentences_hyphenated_and_underscored(tmp_path):
 
 # ---------------------------------------------------------------- comparison-ready recordings
 
+
 def fx(cycles):
     return {"scenarios": {"run": {"cycles": cycles}}}
 
 
 def cyc(n, gold, final, raw, story=None):
     other = lambda x: "reject" if x == "publish" else "publish"
-    return {"n": n, "actual": gold, "predicted": final, "probabilities": {final: .9, other(final): .1},
-            "decision_model_probabilities": {raw: .6, other(raw): .4}, "feedback_revealed": True,
-            "article": {"id": story or f"s{n}"}}
+    return {
+        "n": n,
+        "actual": gold,
+        "predicted": final,
+        "probabilities": {final: 0.9, other(final): 0.1},
+        "decision_model_probabilities": {raw: 0.6, other(raw): 0.4},
+        "feedback_revealed": True,
+        "article": {"id": story or f"s{n}"},
+    }
 
 
 def test_publish_metrics_hand_computed():
@@ -438,22 +577,35 @@ def test_publish_metrics_hand_computed():
 def test_mcnemar_exact_matches_hand_computation():
     assert R.mcnemar_exact(0, 0) == 1.0
     assert R.mcnemar_exact(5, 5) == 1.0
-    assert R.mcnemar_exact(0, 5) == pytest.approx(2 / 32)          # 2 * (1/32)
-    assert R.mcnemar_exact(2, 8) == pytest.approx(2 * 56 / 1024)   # n=10, tail = 1+10+45 = 56
+    assert R.mcnemar_exact(0, 5) == pytest.approx(2 / 32)  # 2 * (1/32)
+    assert R.mcnemar_exact(2, 8) == pytest.approx(2 * 56 / 1024)  # n=10, tail = 1+10+45 = 56
 
 
 def test_fingerprint_is_stable_and_ignores_the_decision_model():
-    setup = {"corpus": {"id": "c", "sha256": "ab" * 32}, "window_size": 4, "review": {"policy": "all"},
-             "parameters": {"rubric_changes_every": 20, "rubric_trigger_basis": "x", "max_rubric_optimizations": None},
-             "optimizer_model": "o", "objective": "accuracy", "starting_rubric": "blank",
-             "decision_model": "jev", "decision_model_detail": {"name": "jev", "revision": "1"}}
+    setup = {
+        "corpus": {"id": "c", "sha256": "ab" * 32},
+        "window_size": 4,
+        "review": {"policy": "all"},
+        "parameters": {"rubric_changes_every": 20, "rubric_trigger_basis": "x", "max_rubric_optimizations": None},
+        "optimizer_model": "o",
+        "objective": "accuracy",
+        "starting_rubric": "blank",
+        "decision_model": "jev",
+        "decision_model_detail": {"name": "jev", "revision": "1"},
+    }
     base = R.compute_benchmark(setup, 8)
     assert base == R.compute_benchmark(json.loads(json.dumps(setup)), 8) and base["id"] == "c-" + base["fingerprint"][:8]
     other_model = dict(setup, decision_model="kev", decision_model_detail={"name": "kev", "revision": "2"})
     assert R.compute_benchmark(other_model, 8)["fingerprint"] == base["fingerprint"]
-    changes = [("window_size", 5), ("review", {"policy": "reject_half"}), ("optimizer_model", "p"), ("objective", "f1"),
-               ("starting_rubric", "curated"), ("corpus", {"id": "c", "sha256": "cd" * 32}),
-               ("parameters", {"rubric_changes_every": 40, "rubric_trigger_basis": "x", "max_rubric_optimizations": None})]
+    changes = [
+        ("window_size", 5),
+        ("review", {"policy": "reject_half"}),
+        ("optimizer_model", "p"),
+        ("objective", "f1"),
+        ("starting_rubric", "curated"),
+        ("corpus", {"id": "c", "sha256": "cd" * 32}),
+        ("parameters", {"rubric_changes_every": 40, "rubric_trigger_basis": "x", "max_rubric_optimizations": None}),
+    ]
     for key, value in changes:
         assert R.compute_benchmark(dict(setup, **{key: value}), 8)["fingerprint"] != base["fingerprint"], key
     assert R.compute_benchmark(setup, 4)["fingerprint"] != base["fingerprint"]
@@ -468,11 +620,21 @@ def test_add_writes_identity_benchmark_predictions_and_classification_results(tm
     assert r["setup"]["decision_model_detail"] == {"name": "jev-1.13.0", "revision": "r7", "provider": "jev", "hosting": "hosted"}
     assert r["benchmark"]["id"].startswith("fake-corpus-") and r["benchmark"]["comparable"] is True
     rows = R.read_predictions(catalog / "first" / "predictions.jsonl")
-    assert len(rows) == 8 and rows[0]["id"] == "item-1" and set(rows[0]) == {"n", "id", "gold", "raw_label", "raw_probs", "final_label", "final_probs", "reviewed"}
+    assert (
+        len(rows) == 8
+        and rows[0]["id"] == "item-1"
+        and set(rows[0]) == {"n", "id", "gold", "raw_label", "raw_probs", "final_label", "final_probs", "reviewed"}
+    )
     assert r["predictions_sha256"] == hashlib.sha256((catalog / "first" / "predictions.jsonl").read_bytes()).hexdigest()
-    assert r["results"]["windows"][0]["final_publish"] == {"precision": 0.0, "recall": 0.0, "f1": None}  # all four inverted; f1 undefined at 0/0
+    assert r["results"]["windows"][0]["final_publish"] == {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": None,
+    }  # all four inverted; f1 undefined at 0/0
     assert r["results"]["raw_accuracy"] == 0.5 and r["results"]["final_accuracy"] == 0.5
-    assert json.loads((catalog / "first" / "fixture.json").read_text())["scenarios"]["run"]["cycles"][0]["article"]["id"] == "item-1"
+    assert (
+        json.loads((catalog / "first" / "fixture.json").read_text())["scenarios"]["run"]["cycles"][0]["article"]["id"] == "item-1"
+    )
     cli("publish", "first", "--catalog", str(catalog))
     cli("export-published", "--to", str(tmp_path / "site"), "--catalog", str(catalog))
     assert (tmp_path / "site" / "first" / "predictions.jsonl").is_file()
@@ -491,7 +653,7 @@ def test_compare_refuses_other_benchmarks_and_runs_paired_tests_on_the_same_one(
     assert cli("compare", "first", "second", "--catalog", str(catalog), "--disagreements", "3") == 0
     out = capsys.readouterr().out
     assert "exact McNemar" in out and "final decisions: 8 scored" in out and "raw decision-model answers: 8 scored" in out
-    assert "only first right 0, only second right 4" in out and "p = 0.1250" in out   # raw: 2*(1/16)
+    assert "only first right 0, only second right 4" in out and "p = 0.1250" in out  # raw: 2*(1/16)
     assert "final accuracy" in out and "final publish recall" in out
 
 
@@ -524,7 +686,9 @@ def test_upgrade_backfills_an_old_recording_idempotently(tmp_path):
     assert R.read_predictions(catalog / "first" / "predictions.jsonl")[0]["id"] == "item-1"
     for key in ("status", "notice", "fixture_sha256", "cost"):
         assert new[key] == old[key]
-    assert [w["cyclotron_accuracy"] for w in new["results"]["windows"]] == [w["cyclotron_accuracy"] for w in old["results"]["windows"]]
+    assert [w["cyclotron_accuracy"] for w in new["results"]["windows"]] == [
+        w["cyclotron_accuracy"] for w in old["results"]["windows"]
+    ]
     cli("upgrade", "first", "--catalog", str(catalog))
     assert path.read_bytes() == first and fixture_path.read_bytes() == before
 
@@ -552,8 +716,12 @@ def test_a_foundry_recording_publishes_the_model_not_the_deployment_and_prices_i
     protocol_path.write_text(json.dumps(protocol))
     r = rec(add(tmp_path, run=run))
     assert r["setup"]["decision_model"] == "microsoft-decision-1"
-    assert r["setup"]["decision_model_detail"] == {"name": "microsoft-decision-1", "revision": None,
-                                                   "provider": "foundry", "hosting": "hosted"}
+    assert r["setup"]["decision_model_detail"] == {
+        "name": "microsoft-decision-1",
+        "revision": None,
+        "provider": "foundry",
+        "hosting": "hosted",
+    }
     assert "private-deployment-name" not in json.dumps(r)
     assert r["cost"]["decision_model_usd"] is not None
     assert "Microsoft-Decision-1" in json.dumps(r["cost"])

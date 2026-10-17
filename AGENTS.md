@@ -24,6 +24,7 @@ and keep provider-specific behavior inside adapters.
 ## Commands
 
 ```bash
-make test
-make check   # the merge gate: pytest, trace-ui tests and build, bundle drift
+make test       # fast loop, skips tests marked slow
+make test-all   # the whole suite
+make check      # the merge gate: the whole suite, trace-ui tests and build, bundle drift
 ```

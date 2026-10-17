@@ -1,4 +1,5 @@
 """The replicate harness, driven by a fake study script (no live calls, no keys)."""
+
 import importlib.util
 import json
 import sqlite3
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-FAKE = r'''
+FAKE = r"""
 import argparse, json, sqlite3, sys
 from pathlib import Path
 p = argparse.ArgumentParser()
@@ -54,7 +55,7 @@ con.commit(); con.close()
 (out / "global_budget_ledger.json").write_text(json.dumps({"consumed": {
     "decision_requests": c.get("jev", 100), "optimizer_requests": c.get("opt", 5)}}))
 sys.exit(c.get("exit", 0))
-'''
+"""
 
 
 def _mod():
@@ -80,9 +81,21 @@ def rig(tmp_path):
 
     def run(base, *extra, out="out"):
         mod = _mod()
-        code = mod.main(["--base-args-file", str(base), "--study-script", str(fake),
-                         "--out-dir", str(tmp_path / out), "--poll-seconds", "0.01", *extra])
+        code = mod.main(
+            [
+                "--base-args-file",
+                str(base),
+                "--study-script",
+                str(fake),
+                "--out-dir",
+                str(tmp_path / out),
+                "--poll-seconds",
+                "0.01",
+                *extra,
+            ]
+        )
         return code, tmp_path / out
+
     return setup, run, None
 
 
@@ -118,8 +131,7 @@ def test_dry_run_prints_exact_commands_and_runs_nothing(rig, capsys, tmp_path):
 
 def test_summary_math_against_hand_computation(rig):
     setup, run, _ = rig
-    cfg = {"default": {"cyclotron": [40, 80, 90, 100], "decision": [50, 60, 70, 80],
-                       "activations": [90, 150], "head_from": 211}}
+    cfg = {"default": {"cyclotron": [40, 80, 90, 100], "decision": [50, 60, 70, 80], "activations": [90, 150], "head_from": 211}}
     code, out = run(setup(cfg), "--replicates", "1", "--parallel", "1")
     assert code == 0
     r = json.loads((out / "replicates-summary.json").read_text())["replicates"]["rep-1"]
@@ -144,9 +156,15 @@ def test_windows_cover_only_whole_windows(rig):
 
 def test_aggregate_median_bootstrap_and_reliability():
     mod = _mod()
-    reps = {f"rep-{i}": {"status": "complete", "final_window_accuracy": f, "post_warmup_accuracy": q,
-                         "majority_baseline_by_window": [60.0]}
-            for i, (f, q) in enumerate([(95, 90), (81, 85), (60, 70), (90, 88)], 1)}
+    reps = {
+        f"rep-{i}": {
+            "status": "complete",
+            "final_window_accuracy": f,
+            "post_warmup_accuracy": q,
+            "majority_baseline_by_window": [60.0],
+        }
+        for i, (f, q) in enumerate([(95, 90), (81, 85), (60, 70), (90, 88)], 1)
+    }
     reps["rep-5"] = {"status": "incomplete"}
     agg = mod.aggregate(reps)
     fw = agg["final_window_accuracy"]
@@ -184,8 +202,7 @@ def test_global_cap_guard_stops_launching(rig):
     base = setup({"default": {"opt": 10}}, "--max-optimizer-calls 10")
     code, out = run(base, "--replicates", "4", "--parallel", "1", "--max-total-optimizer-calls", "25")
     s = json.loads((out / "replicates-summary.json").read_text())
-    assert [s["replicates"][f"rep-{i}"]["status"] for i in (1, 2, 3, 4)] == \
-        ["complete", "complete", "incomplete", "incomplete"]
+    assert [s["replicates"][f"rep-{i}"]["status"] for i in (1, 2, 3, 4)] == ["complete", "complete", "incomplete", "incomplete"]
     assert any("global cap guard" in n for n in s["launch_notes"])
     assert not (out / "rep-3").exists()
 
@@ -202,8 +219,8 @@ def test_guard_uses_consumed_calls_not_just_caps(rig):
 def test_guard_counts_running_replicates_at_their_caps():
     mod = _mod()
     g = mod.Guard(250, None, 100, 1)
-    assert g.allows([], 1)[0]            # 2 x 100 <= 250
-    assert not g.allows([], 2)[0]        # 3 x 100 > 250
+    assert g.allows([], 1)[0]  # 2 x 100 <= 250
+    assert not g.allows([], 2)[0]  # 3 x 100 > 250
     assert g.allows([{"decision_requests": 20}], 1)[0]
     assert not g.allows([{"decision_requests": 60}], 1)[0]
 
@@ -280,10 +297,15 @@ def write_partial_run(root, reviewed_only=True, protocol_corpus=None):
         other = "publish" if truth == "reject" else "reject"
         pos = i % 70
         reviewed = i % 3 == 0 and truth == "reject"  # reviewed stories are all "reject"
-        cycles.append({"cycle_number": i + 1, "item_id": row["id"], "predicted_label": truth if pos < 35 else other,
-                       "human_label": truth if (reviewed or not reviewed_only) else None})
-        events.append({"kind": "prediction", "cycle_number": i + 1,
-                       "decision_model_label": truth if pos < 14 else other})
+        cycles.append(
+            {
+                "cycle_number": i + 1,
+                "item_id": row["id"],
+                "predicted_label": truth if pos < 35 else other,
+                "human_label": truth if (reviewed or not reviewed_only) else None,
+            }
+        )
+        events.append({"kind": "prediction", "cycle_number": i + 1, "decision_model_label": truth if pos < 14 else other})
     (mode / "results.json").write_text(json.dumps({"cycles": cycles}))
     con = sqlite3.connect(mode / "runtime.sqlite3")
     con.execute("create table runtime_events (id integer primary key, payload text not null)")
@@ -314,7 +336,8 @@ def test_without_a_corpus_recorded_labels_are_used_and_the_summary_says_so(tmp_p
     assert s["labels"] == "recorded (reviewed stories only)"
     assert s["majority_baseline_by_window"] != pytest.approx([80, 80])  # the old, unreliable number
     assert "Labels: recorded (reviewed stories only)." in mod.render_markdown(
-        {"window_size": 70, "replicates": {"rep-1": {"status": "complete", **s}}, "aggregate": mod.aggregate({"rep-1": s})})
+        {"window_size": 70, "replicates": {"rep-1": {"status": "complete", **s}}, "aggregate": mod.aggregate({"rep-1": s})}
+    )
     assert mod.corpus_arg(["--a", "1", "--operational-corpus", "c.jsonl"]) == "c.jsonl"
     assert mod.corpus_arg(["--operational-corpus=d.jsonl"]) == "d.jsonl"
     assert mod.corpus_arg(["--a"]) is None
@@ -326,7 +349,13 @@ def test_full_review_is_identical_with_or_without_the_corpus(tmp_path):
     without = mod.summarise_replicate(rep, 70)
     with_corpus = mod.summarise_replicate(rep, 70, corpus=str(corpus))
     assert without["labels"] == "recorded" and with_corpus["labels"].startswith("corpus")
-    for key in ("cyclotron_by_window", "decision_model_by_window", "majority_baseline_by_window",
-                "post_warmup_accuracy", "final_window_accuracy", "learning_curve_area"):
+    for key in (
+        "cyclotron_by_window",
+        "decision_model_by_window",
+        "majority_baseline_by_window",
+        "post_warmup_accuracy",
+        "final_window_accuracy",
+        "learning_curve_area",
+    ):
         assert with_corpus[key] == without[key]
     assert without["majority_baseline_by_window"] == pytest.approx([80, 80])

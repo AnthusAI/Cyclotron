@@ -4,18 +4,18 @@ This is deliberately small: it makes the initial review screen useful before a
 provider-backed flywheel exists, while preserving the exact label set used for
 each prediction.  It is not a substitute for the later Jev decision features.
 """
+
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
 import hashlib
 import json
 import math
 import re
-from typing import Iterable
+from collections import Counter
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .reviewer_store import Article
-
 
 _TOKENS = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{1,}")
 _LABELS = ("include", "exclude")
@@ -43,15 +43,17 @@ class ReviewerPrediction:
 def _tokens(article: Article, *, include_metadata: bool) -> tuple[str, ...]:
     source = f"{article.title} {article.abstract}"
     if include_metadata:
-        source = " ".join((source, article.submitted_at, " ".join(article.categories), article.authors,
-                           article.journal_ref or ""))
+        source = " ".join(
+            (source, article.submitted_at, " ".join(article.categories), article.authors, article.journal_ref or "")
+        )
     return tuple(token.lower() for token in _TOKENS.findall(source))
 
 
 def _fingerprint(labels: Iterable[LabeledArticle], *, include_metadata: bool) -> str:
-    payload = {"include_metadata": include_metadata,
-               "labels": [{"id": row.article.id, "label": row.label}
-                          for row in sorted(labels, key=lambda row: row.article.id)]}
+    payload = {
+        "include_metadata": include_metadata,
+        "labels": [{"id": row.article.id, "label": row.label} for row in sorted(labels, key=lambda row: row.article.id)],
+    }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
@@ -60,7 +62,7 @@ def predict_article(article: Article, labels: Iterable[LabeledArticle], *, inclu
     rows = tuple(labels)
     fingerprint = _fingerprint(rows, include_metadata=include_metadata)
     if not rows:
-        return ReviewerPrediction("include", .5, "cold_start_prior", fingerprint, 0)
+        return ReviewerPrediction("include", 0.5, "cold_start_prior", fingerprint, 0)
     documents = Counter(row.label for row in rows)
     counts = {label: Counter() for label in _LABELS}
     totals = Counter()
@@ -84,7 +86,7 @@ def predict_article(article: Article, labels: Iterable[LabeledArticle], *, inclu
     maximum = max(scores.values())
     normalized = {label: math.exp(value - maximum) for label, value in scores.items()}
     probability_include = normalized["include"] / sum(normalized.values())
-    label = "include" if probability_include >= .5 else "exclude"
+    label = "include" if probability_include >= 0.5 else "exclude"
     confidence = probability_include if label == "include" else 1 - probability_include
     kind = "lexical_naive_bayes_metadata" if include_metadata else "lexical_naive_bayes_content_only"
     return ReviewerPrediction(label, confidence, kind, fingerprint, len(rows))

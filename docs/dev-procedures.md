@@ -11,9 +11,15 @@ check without pushing). It builds a throwaway worktree, fast-forwards to
 `origin/main`, merges `origin/develop`, runs `make check` and pushes without
 force. It never touches your checkout.
 
+`make test` is the fast loop: it runs `pytest -m "not slow"`, which skips the
+long replay, study and editorial-corpus tests marked `@pytest.mark.slow` (or a
+module-level `pytestmark`). `make test-all` runs the whole suite. Mark a new
+test slow when it takes more than a few seconds; `pytest --durations=30` shows
+which.
+
 `make check` is the gate, because CI for this private repository runs locally
 and `.github/workflows/release.yml` is kept only for the semantic-release job.
-It runs, in order: `python -m pytest -q`; `npm ci`, `npm test` and
+It runs, in order: `make test-all` (the slow tests included); `npm ci`, `npm test` and
 `npm run build` in `trace-ui`; then `git diff --exit-code` on
 `src/decision_flywheel/vendor/trace-ui`, which fails when the committed bundle
 differs from a fresh build. If it fails on the bundle, commit the rebuilt files.

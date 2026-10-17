@@ -1,4 +1,5 @@
 """The documented embedded-cyclotron quickstart stays runnable offline."""
+
 from pathlib import Path
 
 
