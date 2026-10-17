@@ -60,3 +60,19 @@
 .cyclotron-status-bar > span { display:block; height:100%; background:var(--foreground,#1f1a21); opacity:.55; }
 .cyclotron-status-section { display:flex; flex-direction:column; gap:4px; }
 .cyclotron-status-override { font-weight:600; }
+.cyclotron-held-out-report { display:flex; flex-direction:column; gap:12px; padding:16px; border-radius:var(--radius,0.45rem); background:var(--card,#f6f4f7); color:var(--card-foreground,#1f1a21); font-size:14px; line-height:1.4; }
+.cyclotron-held-out-report h3, .cyclotron-held-out-report p, .cyclotron-held-out-report ul { margin:0; }
+.cyclotron-held-out-report h3 { font-size:1.05em; font-weight:600; }
+.cyclotron-held-out-header p, .cyclotron-held-out-note, .cyclotron-held-out-notes { color:var(--muted-foreground,#5d5361); font-size:.9em; }
+.cyclotron-held-out-notes { padding-left:1.2em; display:flex; flex-direction:column; gap:2px; }
+.cyclotron-held-out-headline { display:flex; flex-direction:column; gap:2px; }
+.cyclotron-held-out-headline-name { font-weight:600; }
+.cyclotron-held-out-headline-value { font-size:1.6em; font-variant-numeric:tabular-nums; }
+.cyclotron-held-out-points { font-size:.6em; color:var(--muted-foreground,#5d5361); }
+.cyclotron-held-out-verdict { font-weight:600; }
+.cyclotron-held-out-table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+.cyclotron-held-out-table th, .cyclotron-held-out-table td { padding:4px 8px; text-align:left; border-bottom:1px solid var(--border,#d9d3dc); }
+.cyclotron-held-out-table thead th { font-weight:600; }
+.cyclotron-held-out-table tbody th { font-weight:400; }
+.cyclotron-held-out-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.cyclotron-held-out-error { color:var(--destructive,#b42318); }

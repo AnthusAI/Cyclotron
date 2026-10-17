@@ -30,6 +30,6 @@ test('packed sources resolve within the tarball and never use the @/ alias',()=>
 })
 
 test('the embeddable surfaces are exported',()=>{
-  for(const name of ['./components/review-control','./components/cyclotron-status','./cyclotron-status','./sdk-types','./styles/components.css','./components/cycle-mark','./components/cyclotron-brand'])
+  for(const name of ['./components/review-control','./components/cyclotron-status','./cyclotron-status','./sdk-types','./styles/components.css','./components/cycle-mark','./components/cyclotron-brand','./components/held-out-report','./held-out-report'])
     expect(manifest.exports).toHaveProperty([name])
 })

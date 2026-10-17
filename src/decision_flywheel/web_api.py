@@ -101,6 +101,11 @@ class Query:
     async def priming_draft(self, info: strawberry.Info, identifier: str) -> JSON:
         return await asyncio.to_thread(info.context['priming_service']().get, identifier)
 
+    @strawberry.field
+    async def held_out_overview(self, info: strawberry.Info, cyclotron_id: strawberry.ID,
+                                classifier: str | None = None) -> JSON:
+        return await info.context['held_out_service']().overview(str(cyclotron_id), classifier)
+
 
     @strawberry.field
     async def cyclotrons(self,info:strawberry.Info)->JSON:
@@ -200,6 +205,10 @@ class Mutation:
         if action not in actions or not isinstance(payload, dict):
             raise ValueError('unknown priming command')
         return await asyncio.to_thread(actions[action], **payload)
+
+    @strawberry.mutation
+    async def held_out_command(self, info: strawberry.Info, action: str, payload: JSON) -> JSON:
+        return await info.context['held_out_service']().command(action, payload)
 
 
     @strawberry.mutation
@@ -379,6 +388,8 @@ class AccountAuthorization(SchemaExtension):
                            verified_session=getattr(workspace,"request_session",None))
             if getattr(workspace,"priming",None) is not None:
                 context['priming_service']=lambda:workspace.priming
+            if getattr(workspace,"held_out",None) is not None:
+                context['held_out_service']=lambda:workspace.held_out
         yield
 
     async def on_stream_result(self, result):
@@ -395,10 +406,16 @@ schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscrip
     extensions=[AccountAuthorization])
 
 
-def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, public_origin=None, event_transport="websocket"):
+def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, held_out=None, public_origin=None, event_transport="websocket"):
     if event_transport not in ("websocket","poll"):raise ValueError("explicit supported event transport required")
     if account_access and priming is not None:
         raise ValueError('hosted account access cannot use a global priming service')
+    if account_access and held_out is not None:
+        raise ValueError('hosted account access cannot use a global held-out service')
+    def held_out_service():
+        if held_out is None:
+            raise ValueError('held-out reports are not configured for this workspace')
+        return held_out
     configured_priming=priming
     def priming_service():
         nonlocal configured_priming
@@ -471,7 +488,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         if not authenticated or not same_origin(connection):
             raise HTTPException(403, 'access refused')
         return {'store':None if account_access else store,'service':service,'redact':redact,
-            'account_access':account_access,'connection':connection,'priming_service':priming_service}
+            'account_access':account_access,'connection':connection,'priming_service':priming_service,
+            'held_out_service':held_out_service}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')
