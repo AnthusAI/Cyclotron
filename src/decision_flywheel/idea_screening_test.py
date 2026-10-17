@@ -1,4 +1,5 @@
 """Idea screening in the live loop: fake decision model and fake optimizer only, no network."""
+
 import asyncio
 import json
 import random
@@ -9,10 +10,9 @@ import pytest
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .flywheel import DecisionFlywheel
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import (CAPS, DevelopmentScorer, IdeaScreeningConfig, confirm, parse_proposals,
-                             reserve_member, validate_proposals)
+from .idea_screening import CAPS, DevelopmentScorer, IdeaScreeningConfig, confirm, reserve_member, validate_proposals
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
-from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
+from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply, parse_proposals
 from .selection_policy import SelectionPolicy
 
 TASK = DecisionTask("inclusion", ("include", "exclude"), "Should this item be included?")
@@ -38,12 +38,14 @@ class RubricModel:
         right = RULES[config.rubric](index)
         label = truth if right else ("exclude" if truth == "include" else "include")
         other = "exclude" if label == "include" else "include"
-        return ClassifiedAnswers({"decision": DecisionResult(label, {label: .9, other: .1})}, "rubric-model",
-                                 {"input_tokens": 1}, 1)
+        return ClassifiedAnswers(
+            {"decision": DecisionResult(label, {label: 0.9, other: 0.1})}, "rubric-model", {"input_tokens": 1}, 1
+        )
 
 
 class Fake:
     """Multi-proposal optimizer; example_ids and tasks controls propose no change."""
+
     def __init__(self, rubrics):
         self.rubrics, self.observer, self.briefings, self.single_calls = rubrics, lambda event: None, [], 0
 
@@ -67,21 +69,29 @@ class Fake:
 
 
 def rows(start, stop):
-    return tuple(LabeledItem(Item(f"d{i}", {"text": f"dev item number {i}"}), "include" if i % 2 else "exclude")
-                 for i in range(start, stop))
+    return tuple(
+        LabeledItem(Item(f"d{i}", {"text": f"dev item number {i}"}), "include" if i % 2 else "exclude")
+        for i in range(start, stop)
+    )
 
 
-TRAIN = tuple(LabeledItem(Item(f"t{i}", {"text": f"train item number {i}"}), "include" if i % 2 else "exclude")
-              for i in range(8))
-PROPS = {row.item.id: 1. for row in TRAIN}
+TRAIN = tuple(LabeledItem(Item(f"t{i}", {"text": f"train item number {i}"}), "include" if i % 2 else "exclude") for i in range(8))
+PROPS = {row.item.id: 1.0 for row in TRAIN}
 PROTECTED = tuple(Item(f"p{i}", {"text": f"protected item number {i}"}) for i in range(10))
-ON = IdeaScreeningConfig(enabled=True, mode="dev_screen", stages=((60, .5), (None, None)), reserve_fraction=.3)
+ON = IdeaScreeningConfig(enabled=True, mode="dev_screen", stages=((60, 0.5), (None, None)), reserve_fraction=0.3)
 
 
 def make(tmp_path, rubrics, *, screening=ON, optimizer=None, name="w.sqlite", **kwargs):
     model = RubricModel()
-    wheel = DecisionFlywheel(tmp_path / name, ClassifierConfig(TASK, rubric="base"), model,
-                             optimizer or Fake(rubrics), max_requests=100000, idea_screening=screening, **kwargs)
+    wheel = DecisionFlywheel(
+        tmp_path / name,
+        ClassifierConfig(TASK, rubric="base"),
+        model,
+        optimizer or Fake(rubrics),
+        max_requests=100000,
+        idea_screening=screening,
+        **kwargs,
+    )
     return wheel, model
 
 
@@ -118,8 +128,11 @@ def test_three_proposals_are_screened_confirmed_and_the_better_one_is_promoted(t
     ledger = wheel.db.execute("SELECT count(DISTINCT idea_id) FROM idea_evaluations").fetchone()[0]
     assert ledger == 4  # three ideas plus the incumbent
     seen = verdicts(wheel)
-    ideas = {i["proposal"]["rubric"]: i["id"] for i in
-             (json.loads(p) for (p,) in wheel.db.execute("SELECT payload FROM control_ideas")) if "rubric" in i["proposal"]}
+    ideas = {
+        i["proposal"]["rubric"]: i["id"]
+        for i in (json.loads(p) for (p,) in wheel.db.execute("SELECT payload FROM control_ideas"))
+        if "rubric" in i["proposal"]
+    }
     assert seen[ideas["better"]][-1]["verdict"] == "promoted"
     assert seen[ideas["better"]][-1]["evidence"]["gained"] > 0 and seen[ideas["better"]][-1]["evidence"]["lost"] == 0
     assert seen[ideas["worse"]][-1]["verdict"] == "screened_out"
@@ -135,8 +148,9 @@ def test_confirmation_accumulates_over_rounds_as_reserve_items_arrive(tmp_path):
     small = run(wheel, rows(0, 60))
     assert not small["promoted"]
     ledger = HypothesisLedger(wheel.db)
-    better = next(i for i, v in verdicts(wheel).items() if "reserve confirmation" in v[-1]["reason"]
-                  and v[-1]["evidence"]["net"] > 0)
+    better = next(
+        i for i, v in verdicts(wheel).items() if "reserve confirmation" in v[-1]["reason"] and v[-1]["evidence"]["net"] > 0
+    )
     assert ledger.verdicts(better)[-1]["verdict"] == "advanced"
     seen_before = len(model.seen)
     big = rows(0, 400)
@@ -145,7 +159,7 @@ def test_confirmation_accumulates_over_rounds_as_reserve_items_arrive(tmp_path):
     evidence = ledger.verdicts(better)[-1]["evidence"]
     assert evidence["shared"] > 18  # more reserve items than the first round had
     salt = f"{TASK.fingerprint}:idea-screening"
-    early = {r.item.id for r in rows(0, 60) if reserve_member(salt, r.item.id, .3)}
+    early = {r.item.id for r in rows(0, 60) if reserve_member(salt, r.item.id, 0.3)}
     assert early <= set(ledger.items_evaluated(better))  # earlier reserve evidence was kept, not redone
     assert len(model.seen) > seen_before
     wheel.close()
@@ -166,6 +180,7 @@ def test_protected_and_training_items_are_never_scored_by_the_screen(tmp_path, m
     async def spy(self, idea, row):
         log.append(row.item.id)
         return await original(self, idea, row)
+
     monkeypatch.setattr(DevelopmentScorer, "__call__", spy)
     wheel, model = make(tmp_path, ["better", "same"])
     dev = rows(0, 200)
@@ -179,7 +194,7 @@ def test_protected_and_training_items_are_never_scored_by_the_screen(tmp_path, m
 
 
 def test_the_screen_call_budget_truncates_and_promotes_nothing(tmp_path):
-    tight = IdeaScreeningConfig(enabled=True, mode="dev_screen", max_screen_calls=40, stages=((60, .5), (None, None)))
+    tight = IdeaScreeningConfig(enabled=True, mode="dev_screen", max_screen_calls=40, stages=((60, 0.5), (None, None)))
     wheel, model = make(tmp_path, ["better", "same"], screening=tight)
     result = run(wheel, rows(0, 300))
     assert not result["promoted"] and wheel.active.config.rubric == "base"
@@ -210,8 +225,15 @@ def test_a_non_accuracy_objective_falls_back_to_the_legacy_path_with_one_event(t
 def test_multi_proposal_parsing_is_strict():
     ok = json.dumps({"proposals": [{"rationale": "a", "rubric": "x"}, {"rationale": "b", "rubric": "y"}]})
     assert len(validate_proposals(parse_proposals(ok, 3), "rubric", 3)) == 2
-    for bad in ("not json", "[]", '{"proposals": []}', '{"proposals": "x"}', '{"proposals": [1]}',
-                '{"proposals": [{}], "extra": 1}', json.dumps({"proposals": [{"rubric": "x"}] * 4})):
+    for bad in (
+        "not json",
+        "[]",
+        '{"proposals": []}',
+        '{"proposals": "x"}',
+        '{"proposals": [1]}',
+        '{"proposals": [{}], "extra": 1}',
+        json.dumps({"proposals": [{"rubric": "x"}] * 4}),
+    ):
         with pytest.raises(ValueError):
             parse_proposals(bad, 3)
     with pytest.raises(ValueError, match="duplicate"):
@@ -227,11 +249,16 @@ def test_the_real_agent_asks_for_distinct_proposals_and_parses_the_reply():
 
     def complete(messages):
         seen.append(messages)
-        return OptimizerReply(json.dumps({"proposals": [{"rationale": "a", "rubric": "x"},
-                                                        {"rationale": "b", "rubric": "y"}]}), "fake")
-    briefing = FeedbackBriefing.build(TASK, TRAIN, current={"control_under_test": "rubric", "proposals_requested": 3,
-                                                            "hypothesis_ledger": [], "stubborn_items": []},
-                                      protected=())
+        return OptimizerReply(
+            json.dumps({"proposals": [{"rationale": "a", "rubric": "x"}, {"rationale": "b", "rubric": "y"}]}), "fake"
+        )
+
+    briefing = FeedbackBriefing.build(
+        TASK,
+        TRAIN,
+        current={"control_under_test": "rubric", "proposals_requested": 3, "hypothesis_ledger": [], "stubborn_items": []},
+        protected=(),
+    )
     assert len(OptimizerAgent(complete).propose_many(briefing)) == 2
     assert "3 DISTINCT proposals" in seen[0][0]["content"] and "hypothesis_ledger" in seen[0][0]["content"]
     single = FeedbackBriefing.build(TASK, TRAIN, current={"control_under_test": "rubric"}, protected=())
@@ -239,7 +266,9 @@ def test_the_real_agent_asks_for_distinct_proposals_and_parses_the_reply():
 
 
 def test_the_configuration_survives_a_restart_and_can_be_replaced(tmp_path):
-    wheel, _ = make(tmp_path, [], screening=IdeaScreeningConfig(enabled=True, mode="dev_screen", finalists=1, proposals_per_round=4))
+    wheel, _ = make(
+        tmp_path, [], screening=IdeaScreeningConfig(enabled=True, mode="dev_screen", finalists=1, proposals_per_round=4)
+    )
     wheel.close()
     wheel, _ = make(tmp_path, [], screening=None)
     assert wheel.idea_screening.enabled and wheel.idea_screening.finalists == 1
@@ -253,7 +282,7 @@ def test_the_configuration_survives_a_restart_and_can_be_replaced(tmp_path):
     with pytest.raises(ValueError):
         IdeaScreeningConfig(finalists=0)
     with pytest.raises(ValueError):
-        IdeaScreeningConfig(reserve_fraction=1.)
+        IdeaScreeningConfig(reserve_fraction=1.0)
 
 
 def test_the_optimizer_digest_is_capped_and_hides_reserve_outcomes(tmp_path):
@@ -278,30 +307,40 @@ def simulate(seed, gain, loss, rounds=6, per_round=20):
 
     async def scorer(idea, row):
         mine, base = truth[row]
-        return {"correct": mine if idea["id"] == "cand" else base, "label": "x", "choice": "x", "confidence": .5}
+        return {"correct": mine if idea["id"] == "cand" else base, "label": "x", "choice": "x", "confidence": 0.5}
 
     async def go():
         for r in range(rounds):
             reserve = list(range((r + 1) * per_round))  # the reserve only grows
-            for i in reserve[r * per_round:]:
+            for i in reserve[r * per_round :]:
                 u = rng.random()
-                truth[i] = (True, False) if u < gain else (False, True) if u < gain + loss else \
-                    ((x := rng.random() < .7), x)
-            out = await confirm(["cand"], {"cand": {"id": "cand"}}, {"id": "inc"}, reserve, scorer, ledger,
-                                alpha=.05, max_calls=10 ** 6, calls_used=0, item_id=lambda row: str(row))
+                truth[i] = (True, False) if u < gain else (False, True) if u < gain + loss else ((x := rng.random() < 0.7), x)
+            out = await confirm(
+                ["cand"],
+                {"cand": {"id": "cand"}},
+                {"id": "inc"},
+                reserve,
+                scorer,
+                ledger,
+                alpha=0.05,
+                max_calls=10**6,
+                calls_used=0,
+                item_id=lambda row: str(row),
+            )
             if out["cleared"]:
                 return r + 1
         return None
+
     return asyncio.run(go())
 
 
 def test_a_real_paired_advantage_is_promoted_within_a_few_rounds_and_a_null_one_rarely():
-    real = [simulate(s, .20, .05, rounds=10) for s in range(60)]   # about 20 gained and 5 lost per 100 reserve items
-    null = [simulate(s, .10, .10, rounds=6) for s in range(300)]   # six looks at the growing reserve
-    assert sum(r is not None for r in real) / len(real) >= .9
+    real = [simulate(s, 0.20, 0.05, rounds=10) for s in range(60)]  # about 20 gained and 5 lost per 100 reserve items
+    null = [simulate(s, 0.10, 0.10, rounds=6) for s in range(300)]  # six looks at the growing reserve
+    assert sum(r is not None for r in real) / len(real) >= 0.9
     assert sorted(r for r in real if r)[len(real) // 2] <= 6
     false_rate = sum(r is not None for r in null) / len(null)
-    assert false_rate <= .10, false_rate
+    assert false_rate <= 0.10, false_rate
 
 
 def test_an_exact_pattern_of_four_gained_and_one_lost_per_round_clears_in_three_rounds():
@@ -318,10 +357,22 @@ def test_an_exact_pattern_of_four_gained_and_one_lost_per_round_clears_in_three_
                 base = k == 0 or k > 4
                 if k > 4:
                     cand = base = k % 2 == 0
-                return {"correct": cand if idea["id"] == "cand" else base, "label": "x", "choice": "x", "confidence": .5}
-            out = await confirm(["cand"], {"cand": {"id": "cand"}}, {"id": "inc"}, reserve, scorer, ledger,
-                                alpha=.05, max_calls=10 ** 6, calls_used=0, item_id=lambda row: str(row))
+                return {"correct": cand if idea["id"] == "cand" else base, "label": "x", "choice": "x", "confidence": 0.5}
+
+            out = await confirm(
+                ["cand"],
+                {"cand": {"id": "cand"}},
+                {"id": "inc"},
+                reserve,
+                scorer,
+                ledger,
+                alpha=0.05,
+                max_calls=10**6,
+                calls_used=0,
+                item_id=lambda row: str(row),
+            )
             outcomes.append((out["paired"]["cand"]["gained"], out["paired"]["cand"]["lost"], bool(out["cleared"])))
+
     asyncio.run(go())
     assert [o[:2] for o in outcomes[:3]] == [(4, 1), (8, 2), (12, 3)]
     assert [o[2] for o in outcomes] == [False, False, True, True, True]
@@ -347,9 +398,13 @@ def test_the_same_inputs_repeat_the_same_round_exactly(tmp_path):
     def snapshot(name):
         wheel, _ = make(tmp_path, ["worse", "better", "same"], name=name)
         run(wheel, rows(0, 300))
-        out = (wheel.db.execute("SELECT idea_id,item_id,correct,context_version FROM idea_evaluations ORDER BY 1,2,4").fetchall(),
-               sorted((v, r) for rs in verdicts(wheel).values() for _, v, r, _ in
-                      [(x["at"], x["verdict"], x["reason"], 0) for x in rs]))
+        out = (
+            wheel.db.execute("SELECT idea_id,item_id,correct,context_version FROM idea_evaluations ORDER BY 1,2,4").fetchall(),
+            sorted(
+                (v, r) for rs in verdicts(wheel).values() for _, v, r, _ in [(x["at"], x["verdict"], x["reason"], 0) for x in rs]
+            ),
+        )
         wheel.close()
         return out
+
     assert snapshot("a.sqlite") == snapshot("b.sqlite")

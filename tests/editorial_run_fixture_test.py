@@ -1,4 +1,5 @@
 """The 400-cycle editorial recording's routing metrics and model cost, pinned."""
+
 import importlib.util
 import json
 import sqlite3
@@ -14,7 +15,9 @@ RECORDING = json.loads((ROOT / "tests/fixtures/editorial-run-v1-all.json").read_
 
 
 def _exporter():
-    spec = importlib.util.spec_from_file_location("export_editorial_run_fixture", ROOT / "scripts/export_editorial_run_fixture.py")
+    spec = importlib.util.spec_from_file_location(
+        "export_editorial_run_fixture", ROOT / "scripts/export_editorial_run_fixture.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -24,13 +27,13 @@ def _window(cycles, source):
     rows = []
     for label, confidence, publish, actual in cycles:
         if source == "decision_model":
-            label = "publish" if publish >= .5 else "reject"
+            label = "publish" if publish >= 0.5 else "reject"
             confidence = max(publish, 1 - publish)
         rows.append(Decision(label, confidence, actual))
     return rows
 
 
-def _rule(rows, threshold=.8):
+def _rule(rows, threshold=0.8):
     return next(row for row in routing(rows)["threshold_rule"] if row["threshold"] == threshold)
 
 
@@ -44,10 +47,11 @@ def test_the_rule_at_080_approves_everything_before_and_74_after():
 
 
 def test_the_least_confident_fifteen_percent_holds_few_of_the_last_windows_mistakes():
-    capture = next(row for row in routing(_window(RECORDING["cycles"][-100:], "cyclotron"))["least_confident"]
-                   if row["percent"] == 15)
+    capture = next(
+        row for row in routing(_window(RECORDING["cycles"][-100:], "cyclotron"))["least_confident"] if row["percent"] == 15
+    )
     assert capture["mistakes"] == 18
-    assert capture["share_of_mistakes"] == pytest.approx(.248, abs=.001)
+    assert capture["share_of_mistakes"] == pytest.approx(0.248, abs=0.001)
 
 
 def test_the_400_cycle_run_cost_under_a_dollar_at_list_prices():
@@ -56,39 +60,78 @@ def test_the_400_cycle_run_cost_under_a_dollar_at_list_prices():
     for row in RECORDING["events"]:
         event = dict(zip(fields[row[0]], row))
         if "prompt_tokens" in event:
-            event["usage"] = {"prompt_tokens": event.pop("prompt_tokens"), "completion_tokens": event.pop("completion_tokens"),
-                              "prompt_tokens_details": {"cached_tokens": event.pop("cached_tokens")}}
+            event["usage"] = {
+                "prompt_tokens": event.pop("prompt_tokens"),
+                "completion_tokens": event.pop("completion_tokens"),
+                "prompt_tokens_details": {"cached_tokens": event.pop("cached_tokens")},
+            }
         events.append(event)
     prices = _exporter().PRICES["gpt-4.1-mini"]
     usage = usage_by_window(events, {"decision_model": prices, "optimizer": prices})
     total = usage["total"]
     assert {key: total["decision_model"][key] for key in ("requests", "input_tokens", "output_tokens")} == {
-        "requests": 1152, "input_tokens": 998301, "output_tokens": 28792}
+        "requests": 1152,
+        "input_tokens": 998301,
+        "output_tokens": 28792,
+    }
     assert {key: total["optimizer"][key] for key in ("requests", "input_tokens", "output_tokens")} == {
-        "requests": 8, "input_tokens": 804912, "output_tokens": 5140}
-    assert total["usd"] == pytest.approx(.7756, abs=1e-4)
+        "requests": 8,
+        "input_tokens": 804912,
+        "output_tokens": 5140,
+    }
+    assert total["usd"] == pytest.approx(0.7756, abs=1e-4)
     assert [window["decision_model"]["requests"] for window in usage["windows"]] == [157, 252, 643, 100]
     assert round(total["wall_clock_seconds"] / 60) == 56
 
 
 def test_window_metrics_give_per_class_precision_recall_and_f1():
     metrics = _exporter()._confidence_metrics(
-        [("publish", {"publish": .9, "reject": .1}, "publish"), ("publish", {"publish": .6, "reject": .4}, "reject"),
-         ("reject", {"publish": .2, "reject": .8}, "reject")], ("publish", "reject"))
+        [
+            ("publish", {"publish": 0.9, "reject": 0.1}, "publish"),
+            ("publish", {"publish": 0.6, "reject": 0.4}, "reject"),
+            ("reject", {"publish": 0.2, "reject": 0.8}, "reject"),
+        ],
+        ("publish", "reject"),
+    )
     assert metrics["accuracy"] == pytest.approx(2 / 3)
-    assert metrics["per_class"]["publish"] == {"precision": .5, "recall": 1.0, "f1": pytest.approx(2 / 3), "predicted": 2, "actual": 1}
-    assert metrics["mean_confidence"] == pytest.approx((.9 + .6 + .8) / 3)
+    assert metrics["per_class"]["publish"] == {
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": pytest.approx(2 / 3),
+        "predicted": 2,
+        "actual": 1,
+    }
+    assert metrics["mean_confidence"] == pytest.approx((0.9 + 0.6 + 0.8) / 3)
 
 
 def _recording(root, count):
     """A minimal recorded run of ``count`` cycles: corpus, manifest, results and runtime events."""
     labels = ("publish", "reject")
-    corpus = [{"id": f"item-{n}", "title": f"Story {n}", "source_url": f"https://example.org/{n}", "license": "CC BY 2.5",
-               "license_url": "https://example.org/license", "simulated_label": labels[n % 2]} for n in range(1, count + 1)]
+    corpus = [
+        {
+            "id": f"item-{n}",
+            "title": f"Story {n}",
+            "source_url": f"https://example.org/{n}",
+            "license": "CC BY 2.5",
+            "license_url": "https://example.org/license",
+            "simulated_label": labels[n % 2],
+        }
+        for n in range(1, count + 1)
+    ]
     (root / "corpus.jsonl").write_text("".join(json.dumps(record) + "\n" for record in corpus))
-    (root / "manifest.json").write_text(json.dumps({
-        "actual_count": count, "label_disclosure": "simulated_semantic_editorial_labels", "dataset": "wikinews",
-        "dataset_revision": "r1", "license": "CC BY 2.5", "license_url": "https://example.org/license", "item_set_sha256": "0" * 64}))
+    (root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "actual_count": count,
+                "label_disclosure": "simulated_semantic_editorial_labels",
+                "dataset": "wikinews",
+                "dataset_revision": "r1",
+                "license": "CC BY 2.5",
+                "license_url": "https://example.org/license",
+                "item_set_sha256": "0" * 64,
+            }
+        )
+    )
     run = root / "all"
     run.mkdir()
     metrics = {"count": 1, "accuracy": 1.0, "brier": 0.0, "calibration": {"ece": 0.0}, "per_class": {}, "confusion_matrix": {}}
@@ -96,22 +139,50 @@ def _recording(root, count):
     for n, record in enumerate(corpus, start=1):
         actual = record["simulated_label"]
         predicted = labels[actual == "publish"] if n <= count // 2 and n % 4 == 0 else actual
-        cycles.append({"cycle_number": n, "item_id": record["id"], "predicted_label": predicted, "human_label": actual,
-                       "feedback_selected": True, "feedback_propensity": 1.0, "role": "training", "metrics": metrics,
-                       "outcomes": [], "requests": 1})
+        cycles.append(
+            {
+                "cycle_number": n,
+                "item_id": record["id"],
+                "predicted_label": predicted,
+                "human_label": actual,
+                "feedback_selected": True,
+                "feedback_propensity": 1.0,
+                "role": "training",
+                "metrics": metrics,
+                "outcomes": [],
+                "requests": 1,
+            }
+        )
         minute = f"2026-10-09T{10 + n // 60:02d}:{n % 60:02d}"
         events += [
             {"kind": "cycle-started", "cycle_number": n, "created_at": f"{minute}:00+00:00"},
-            {"kind": "prediction", "cycle_number": n, "cycle_item_id": record["id"], "label": predicted, "confidence": .8,
-             "probabilities": {predicted: .8, labels[predicted == "publish"]: .2}},
+            {
+                "kind": "prediction",
+                "cycle_number": n,
+                "cycle_item_id": record["id"],
+                "label": predicted,
+                "confidence": 0.8,
+                "probabilities": {predicted: 0.8, labels[predicted == "publish"]: 0.2},
+            },
             {"kind": "decision-response", "cycle_number": n, "usage": {"prompt_tokens": 1000, "completion_tokens": 10}},
-            {"kind": "human-feedback", "action": "submitted", "cycle_number": n,
-             "feedback": {"item_id": record["id"], "final_answer_value": actual, "edit_comment_value": "why"}},
+            {
+                "kind": "human-feedback",
+                "action": "submitted",
+                "cycle_number": n,
+                "feedback": {"item_id": record["id"], "final_answer_value": actual, "edit_comment_value": "why"},
+            },
             {"kind": "cycle-completed", "cycle_number": n, "created_at": f"{minute}:30+00:00"},
         ]
-    (run / "results.json").write_text(json.dumps({
-        "cycles": cycles, "disclosure": {"operational_items": count}, "protocol": {"task": "t" * 64},
-        "feedback_policy": {"mode": "all"}}))
+    (run / "results.json").write_text(
+        json.dumps(
+            {
+                "cycles": cycles,
+                "disclosure": {"operational_items": count},
+                "protocol": {"task": "t" * 64},
+                "feedback_policy": {"mode": "all"},
+            }
+        )
+    )
     connection = sqlite3.connect(run / "runtime.sqlite3")
     connection.execute("CREATE TABLE runtime_events (id INTEGER PRIMARY KEY, payload TEXT)")
     connection.executemany("INSERT INTO runtime_events (payload) VALUES (?)", [(json.dumps(event),) for event in events])
@@ -134,8 +205,8 @@ def test_a_cycle_cut_exports_only_the_first_cycles_with_their_own_usage_and_wind
     assert scenario["usage_total"]["wall_clock_seconds"] == (200 // 60 * 60 + 200 % 60 - 1) * 60 + 30
     # The evaluator-only windows compare the cut's first and last 100: one in four is wrong through cycle 150.
     windows = scenario["evaluator_only_windows"]
-    assert windows["first_100"]["accuracy"] == pytest.approx(.75)
-    assert windows["last_100"]["accuracy"] == pytest.approx(.88)
+    assert windows["first_100"]["accuracy"] == pytest.approx(0.75)
+    assert windows["last_100"]["accuracy"] == pytest.approx(0.88)
     whole = tmp_path / "whole.json"
     _exporter().main(arguments + ["--output", str(whole)])
     assert "cycle_cut" not in json.loads(whole.read_text())
@@ -169,10 +240,17 @@ PINNED_DEFAULT_SHA256 = "ade6f56cbc9ca116c8fe4ebbfee06f8c97d72e1e5b05df205550b68
 def _relabeled(root, count, **overrides):
     """Turn ``_recording``'s manifest into the relabeled form, hashed by operational_sha256."""
     import hashlib
+
     manifest = json.loads((root / "manifest.json").read_text())
     manifest.pop("item_set_sha256", None)
-    manifest.update({"corpus": "editorial-relabel-v3-1", "operational_sha256": hashlib.sha256((root / "corpus.jsonl").read_bytes()).hexdigest(),
-                     "label_provenance": "Labels are simulated; two blind passes agreed.", **overrides})
+    manifest.update(
+        {
+            "corpus": "editorial-relabel-v3-1",
+            "operational_sha256": hashlib.sha256((root / "corpus.jsonl").read_bytes()).hexdigest(),
+            "label_provenance": "Labels are simulated; two blind passes agreed.",
+            **overrides,
+        }
+    )
     (root / "manifest.json").write_text(json.dumps(manifest))
     return manifest
 
@@ -184,6 +262,7 @@ def _main(arguments, output, *extra):
 
 def test_without_window_size_the_output_is_unchanged_from_the_100_cycle_exporter(tmp_path):
     import hashlib
+
     arguments = _recording(tmp_path, 200)
     output = tmp_path / "default.json"
     fixture = _main(arguments, output)
@@ -216,12 +295,16 @@ def test_window_size_sets_windows_routing_and_evaluator_only_blocks(tmp_path):
 @pytest.mark.parametrize("cycles, size", [("280", "100"), ("100", "70"), ("0", "70"), ("350", "70")])
 def test_cycles_must_be_a_multiple_of_the_window_size(tmp_path, cycles, size):
     with pytest.raises(SystemExit, match="--cycles"):
-        _exporter().main(_recording(tmp_path, 300) + ["--output", str(tmp_path / "x.json"), "--cycles", cycles, "--window-size", size])
+        _exporter().main(
+            _recording(tmp_path, 300) + ["--output", str(tmp_path / "x.json"), "--cycles", cycles, "--window-size", size]
+        )
 
 
 def test_window_size_needs_schema_2(tmp_path):
     with pytest.raises(SystemExit, match="--window-size"):
-        _exporter().main(_recording(tmp_path, 300) + ["--output", str(tmp_path / "x.json"), "--schema-version", "1", "--window-size", "70"])
+        _exporter().main(
+            _recording(tmp_path, 300) + ["--output", str(tmp_path / "x.json"), "--schema-version", "1", "--window-size", "70"]
+        )
 
 
 def test_a_relabeled_manifest_is_accepted_and_carries_provenance_and_the_operational_hash(tmp_path):
@@ -262,24 +345,37 @@ def test_the_old_manifest_form_keeps_its_checks_and_message(tmp_path):
 
 def test_luna_is_priced_per_request_with_the_above_272k_tier():
     luna = _exporter().PRICES["gpt-6-luna"]
-    assert (luna["input_usd_per_mtok"], luna["output_usd_per_mtok"], luna["cached_input_usd_per_mtok"]) == (.10, .50, .01)
-    assert (luna["above_input_tokens"], luna["above_input_usd_per_mtok"], luna["above_output_usd_per_mtok"]) == (272000, .20, .75)
+    assert (luna["input_usd_per_mtok"], luna["output_usd_per_mtok"], luna["cached_input_usd_per_mtok"]) == (0.10, 0.50, 0.01)
+    assert (luna["above_input_tokens"], luna["above_input_usd_per_mtok"], luna["above_output_usd_per_mtok"]) == (
+        272000,
+        0.20,
+        0.75,
+    )
     assert luna["source"] == "LiteLLM model price table (standard tier), read 2026-10-11"
-    events = [{"kind": "optimizer-response", "cycle_number": 1, "usage": {"prompt_tokens": 100_000, "completion_tokens": 1000,
-                                                                            "prompt_tokens_details": {"cached_tokens": 50_000}}},
-              {"kind": "optimizer-response", "cycle_number": 1, "usage": {"prompt_tokens": 300_000, "completion_tokens": 2000}}]
+    events = [
+        {
+            "kind": "optimizer-response",
+            "cycle_number": 1,
+            "usage": {"prompt_tokens": 100_000, "completion_tokens": 1000, "prompt_tokens_details": {"cached_tokens": 50_000}},
+        },
+        {"kind": "optimizer-response", "cycle_number": 1, "usage": {"prompt_tokens": 300_000, "completion_tokens": 2000}},
+    ]
     prices = {"decision_model": _exporter().PRICES["jev"], "optimizer": luna}
     total = usage_by_window(events, prices, window=1)["total"]["optimizer"]
     assert total["tier_requests"] == 1 and total["input_tokens"] == 400_000
-    expected = (50_000 * .10 + 50_000 * .01 + 1000 * .50 + 300_000 * .20 + 2000 * .75) / 1e6
+    expected = (50_000 * 0.10 + 50_000 * 0.01 + 1000 * 0.50 + 300_000 * 0.20 + 2000 * 0.75) / 1e6
     assert total["usd"] == pytest.approx(expected, abs=1e-6)
     # Below the tier nothing changes: all requests at the standard rate.
     flat = usage_by_window(events[:1], prices, window=1)["total"]["optimizer"]
-    assert flat["tier_requests"] == 0 and flat["usd"] == pytest.approx((50_000 * .10 + 50_000 * .01 + 1000 * .50) / 1e6, abs=1e-6)
+    assert flat["tier_requests"] == 0 and flat["usd"] == pytest.approx(
+        (50_000 * 0.10 + 50_000 * 0.01 + 1000 * 0.50) / 1e6, abs=1e-6
+    )
 
 
 def test_the_fixture_names_the_luna_optimizer_in_its_price_basis(tmp_path):
-    fixture = _main(_recording(tmp_path, 100), tmp_path / "p.json", "--decision-model-price", "jev", "--optimizer-price", "gpt-6-luna")
+    fixture = _main(
+        _recording(tmp_path, 100), tmp_path / "p.json", "--decision-model-price", "jev", "--optimizer-price", "gpt-6-luna"
+    )
     basis = fixture["attribution"]["price_basis"]
-    assert basis["optimizer"]["model"] == "gpt-6-luna" and basis["optimizer"]["output_usd_per_mtok"] == .50
+    assert basis["optimizer"]["model"] == "gpt-6-luna" and basis["optimizer"]["output_usd_per_mtok"] == 0.50
     assert basis["decision_model"]["model"] == "jev"

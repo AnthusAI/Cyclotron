@@ -5,10 +5,12 @@ questions are shared are written once, when a store is created, so reopening
 never changes a store's initial context. Primed examples added after creation
 are recorded as additions and applied to each output's example list once.
 """
+
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from .classifier_config import ClassifierConfig
 from .embedded_records import ClassifierSpec, CyclotronDefinition, _json
@@ -30,16 +32,16 @@ def normalize_supporting_questions(definition: CyclotronDefinition, seeds) -> di
         rows = []
         for question in questions:
             if isinstance(question, DecisionTask):
-                question = {"name": question.name, "instructions": question.instructions,
-                            "labels": list(question.labels)}
+                question = {"name": question.name, "instructions": question.instructions, "labels": list(question.labels)}
             if not isinstance(question, Mapping) or set(question) != {"name", "instructions", "labels"}:
                 raise ValueError("a supporting question has exactly name, instructions and labels")
-            task = DecisionTask(question["name"], question["labels"], question["instructions"],
-                                specs[classifier].input_field)
+            task = DecisionTask(question["name"], question["labels"], question["instructions"], specs[classifier].input_field)
             rows.append({"name": task.name, "instructions": task.instructions, "labels": list(task.labels)})
         # The same validation the optimizer's proposals pass: unique, not "decision".
-        ClassifierConfig(specs[classifier].task, tasks=tuple(
-            DecisionTask(row["name"], tuple(row["labels"]), row["instructions"]) for row in rows))
+        ClassifierConfig(
+            specs[classifier].task,
+            tasks=tuple(DecisionTask(row["name"], tuple(row["labels"]), row["instructions"]) for row in rows),
+        )
         normalized[classifier] = rows
     return normalized
 
@@ -50,8 +52,14 @@ def priming_includes(saved_priming: Mapping[str, Any], requested_priming: Mappin
 
 
 class StoreSeeds:
-    def __init__(self, root_storage, *, seed_rubrics: Mapping[str, str], seed_supporting_questions: Mapping[str, list],
-                 requested_sharing: bool | None):
+    def __init__(
+        self,
+        root_storage,
+        *,
+        seed_rubrics: Mapping[str, str],
+        seed_supporting_questions: Mapping[str, list],
+        requested_sharing: bool | None,
+    ):
         self.root_storage = root_storage
         self.seed_rubrics = seed_rubrics
         self.seed_supporting_questions = seed_supporting_questions
@@ -81,12 +89,12 @@ class StoreSeeds:
         before sharing existed keeps asking every copy separately, so its
         requests, answers and ML model features never change on upgrade.
         """
-        row = self.root_storage.meta('share_supporting_questions')
+        row = self.root_storage.meta("share_supporting_questions")
         if row is not None:
             return json.loads(row[0])
         sharing = (self.requested_sharing is not False) if created else False
         with self.root_storage.transaction():
-            self.root_storage.insert_meta('share_supporting_questions', _json(sharing))
+            self.root_storage.insert_meta("share_supporting_questions", _json(sharing))
         return sharing
 
     def supporting_questions(self, spec: ClassifierSpec, *, created: bool) -> tuple[DecisionTask, ...]:
@@ -120,15 +128,17 @@ def apply_priming_additions(root_storage, wheels: Mapping[str, Any]) -> None:
     """
     additions = stored_priming_additions(root_storage)
     for addition in additions:
-        for cid, example_ids in addition['examples'].items():
-            if cid in addition['applied']:
+        for cid, example_ids in addition["examples"].items():
+            if cid in addition["applied"]:
                 continue
             wheel = wheels[cid]
             missing_example_ids = [key for key in example_ids if key not in wheel.active.config.example_ids]
             if missing_example_ids:
                 count = len(missing_example_ids)
-                wheel.extend_example_list(missing_example_ids, change_summary=(
-                    f"Added {count} primed example{'' if count == 1 else 's'} to the example list."))
-            addition['applied'][cid] = wheel.active.fingerprint
+                wheel.extend_example_list(
+                    missing_example_ids,
+                    change_summary=(f"Added {count} primed example{'' if count == 1 else 's'} to the example list."),
+                )
+            addition["applied"][cid] = wheel.active.fingerprint
             with root_storage.transaction():
                 root_storage.put_meta(PRIMING_ADDITIONS_KEY, _json(additions))

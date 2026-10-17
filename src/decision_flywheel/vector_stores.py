@@ -10,10 +10,11 @@ AWS facts were checked on 2026-10-01 against official pages (see
 DECISION_FLYWHEEL_DESIGN.md, Appendix B). Pricing came from a summarizing fetch,
 and some items are unverified: re-check before building.
 """
+
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Mapping, Sequence
 
 from .retrieval import VectorRow
 
@@ -45,18 +46,25 @@ class S3VectorsStore:
 
     @property
     def configuration(self) -> Mapping[str, object]:
-        return {"kind": "s3vectors", "approximate": True, "vector_bucket": self.vector_bucket,
-                "index_name": self.index_name, "region": self.region}
+        return {
+            "kind": "s3vectors",
+            "approximate": True,
+            "vector_bucket": self.vector_bucket,
+            "index_name": self.index_name,
+            "region": self.region,
+        }
 
     def upsert(self, rows: Sequence[VectorRow]) -> None:
         raise NotImplementedError(
             "S3VectorsStore is a design-only stub: PutVectors (batches of <=500) is not implemented. "
-            "Use the default in-memory store (store.kind: memory).")
+            "Use the default in-memory store (store.kind: memory)."
+        )
 
     def query(self, vector, top_k, label_filter=None):
         raise NotImplementedError(
             "S3VectorsStore is a design-only stub: QueryVectors with a label filter is not implemented. "
-            "Use the default in-memory store (store.kind: memory).")
+            "Use the default in-memory store (store.kind: memory)."
+        )
 
 
 @dataclass(frozen=True)
@@ -88,15 +96,22 @@ class DynamoDBVectorStore:
 
     @property
     def configuration(self) -> Mapping[str, object]:
-        return {"kind": "dynamodb", "approximate": True, "table_name": self.table_name,
-                "index_name": self.index_name, "region": self.region}
+        return {
+            "kind": "dynamodb",
+            "approximate": True,
+            "table_name": self.table_name,
+            "index_name": self.index_name,
+            "region": self.region,
+        }
 
     def upsert(self, rows: Sequence[VectorRow]) -> None:
         raise NotImplementedError(
             "DynamoDBVectorStore is a design-only stub: writing vector items is not implemented. "
-            "Use the default in-memory store (store.kind: memory).")
+            "Use the default in-memory store (store.kind: memory)."
+        )
 
     def query(self, vector, top_k, label_filter=None):
         raise NotImplementedError(
             "DynamoDBVectorStore is a design-only stub: SearchVectors is not implemented. "
-            "Use the default in-memory store (store.kind: memory).")
+            "Use the default in-memory store (store.kind: memory)."
+        )

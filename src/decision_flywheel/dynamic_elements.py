@@ -4,13 +4,13 @@ Dynamic context is intentionally explicit and narrow.  It is never sampled
 from a host clock during fitting or replay: callers provide one timezone-aware
 instant for the request, and the resulting state can be recorded with it.
 """
+
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Mapping
 
 from .feedback import Cyclotron
-
 
 CURRENT_DATETIME_ELEMENT = "current_datetime"
 CURRENT_DATETIME_QUESTION_TYPE = "programmatic_datetime"

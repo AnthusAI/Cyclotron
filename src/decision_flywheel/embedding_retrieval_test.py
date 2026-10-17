@@ -5,20 +5,40 @@ from types import SimpleNamespace
 
 import pytest
 
-from .embedding_retrieval import (EmbeddingRetriever, HashingEmbedder, InMemoryVectorStore, OpenAIEmbedder,
-                                  VectorCache, text_sha256)
+from .embedding_retrieval import (
+    EmbeddingRetriever,
+    HashingEmbedder,
+    InMemoryVectorStore,
+    OpenAIEmbedder,
+    VectorCache,
+    text_sha256,
+)
 from .models import DecisionTask, Item, LabeledItem
 from .retrieval import PerLabelRetrieval, VectorRow
 
 TASK = DecisionTask("topic", ("a", "b"), "Classify the target.")
 VECTORS = {
     "target": [1.0, 0.0],
-    "a near": [0.9, 0.1], "a tie one": [0.5, 0.5], "a tie two": [0.5, 0.5], "a far": [0.0, 1.0],
-    "b near": [1.0, 0.05], "b mid": [0.6, 0.4], "b far": [-1.0, 0.0],
+    "a near": [0.9, 0.1],
+    "a tie one": [0.5, 0.5],
+    "a tie two": [0.5, 0.5],
+    "a far": [0.0, 1.0],
+    "b near": [1.0, 0.05],
+    "b mid": [0.6, 0.4],
+    "b far": [-1.0, 0.0],
 }
-POOL = [LabeledItem(Item(item_id, {"text": text}), text[0])
-        for item_id, text in [("a-1", "a near"), ("a-3", "a tie two"), ("a-2", "a tie one"), ("a-4", "a far"),
-                              ("b-1", "b near"), ("b-2", "b mid"), ("b-3", "b far")]]
+POOL = [
+    LabeledItem(Item(item_id, {"text": text}), text[0])
+    for item_id, text in [
+        ("a-1", "a near"),
+        ("a-3", "a tie two"),
+        ("a-2", "a tie one"),
+        ("a-4", "a far"),
+        ("b-1", "b near"),
+        ("b-2", "b mid"),
+        ("b-3", "b far"),
+    ]
+]
 
 
 class CountingEmbed:
@@ -40,7 +60,10 @@ def test_embedding_retrieval_returns_exact_cosine_neighbours_per_label_without_t
     context = PerLabelRetrieval(retriever).select(TASK, Item("t", {"text": "target"}), pool, per_label=3)
 
     assert [item_id for item_id, _ in index.top_per_label(Item("t", {"text": "target"}), "a", 3, {"t"})] == [
-        "a-1", "a-2", "a-3"]  # a-2 and a-3 tie exactly, so ascending ID decides
+        "a-1",
+        "a-2",
+        "a-3",
+    ]  # a-2 and a-3 tie exactly, so ascending ID decides
     assert [row.item.id for row in context] == ["a-1", "a-2", "a-3", "b-1", "b-2", "b-3"]
 
 
@@ -89,9 +112,12 @@ def test_the_retriever_fingerprint_changes_with_the_embedder_identity():
     small = EmbeddingRetriever.from_embedder(OpenAIEmbedder(dimensions=512))
     large = EmbeddingRetriever.from_embedder(OpenAIEmbedder(dimensions=1536))
 
-    assert small.configuration == {"kind": "embedding", "version": "1",
-                                   "embedder": "openai:text-embedding-3-small:512",
-                                   "store": {"kind": "memory", "approximate": False}}
+    assert small.configuration == {
+        "kind": "embedding",
+        "version": "1",
+        "embedder": "openai:text-embedding-3-small:512",
+        "store": {"kind": "memory", "approximate": False},
+    }
     assert small.fingerprint != large.fingerprint
     assert small.fingerprint != EmbeddingRetriever.from_embedder(HashingEmbedder(512)).fingerprint
     with pytest.raises(ValueError, match="embedder_identity"):
@@ -107,8 +133,9 @@ def test_the_hashing_embedder_is_deterministic_and_offline():
 
 def test_the_memory_store_searches_exactly_with_label_filters_and_id_tie_breaks():
     store = InMemoryVectorStore()
-    store.upsert([VectorRow("z", "a", "h1", (2.0, 0.0)), VectorRow("y", "a", "h2", (1.0, 0.0)),
-                  VectorRow("x", "b", "h3", (0.0, 3.0))])
+    store.upsert(
+        [VectorRow("z", "a", "h1", (2.0, 0.0)), VectorRow("y", "a", "h2", (1.0, 0.0)), VectorRow("x", "b", "h3", (0.0, 3.0))]
+    )
 
     assert store.query([5.0, 0.0], 2) == [("y", 1.0), ("z", 1.0)]
     assert store.query([0.0, 1.0], 5, label_filter="b") == [("x", 1.0)]
@@ -120,8 +147,9 @@ def test_the_openai_embedder_sends_one_request_through_an_injected_client_and_ne
 
     def create(**request):
         calls.append(request)
-        return SimpleNamespace(data=[SimpleNamespace(index=1, embedding=[0.0, 1.0]),
-                                     SimpleNamespace(index=0, embedding=[1.0, 0.0])])
+        return SimpleNamespace(
+            data=[SimpleNamespace(index=1, embedding=[0.0, 1.0]), SimpleNamespace(index=0, embedding=[1.0, 0.0])]
+        )
 
     embedder = OpenAIEmbedder(client=SimpleNamespace(embeddings=SimpleNamespace(create=create)))
 
@@ -132,9 +160,12 @@ def test_the_openai_embedder_sends_one_request_through_an_injected_client_and_ne
 
 
 def test_importing_retrieval_modules_does_not_import_provider_or_aws_sdks():
-    code = ("import sys, decision_flywheel.retrieval_config; "
-            "print(sorted(m for m in ('openai', 'boto3', 'dotenv') if m in sys.modules))")
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
-                            env={"PYTHONPATH": ":".join(sys.path)})
+    code = (
+        "import sys, decision_flywheel.retrieval_config; "
+        "print(sorted(m for m in ('openai', 'boto3', 'dotenv') if m in sys.modules))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True, env={"PYTHONPATH": ":".join(sys.path)}
+    )
 
     assert result.stdout.strip() == "[]"

@@ -1,6 +1,7 @@
 """Outcomes every storage adapter reports the same way, whatever its backend."""
-from contextlib import contextmanager
+
 import sqlite3
+from contextlib import contextmanager
 
 
 class StorageConflict(RuntimeError):
@@ -22,5 +23,7 @@ class StorageMissing(LookupError):
 @contextmanager
 def refusing_duplicate_identity(message):
     """SQLite adapters report a repeated identity as the ValueError the S3 adapters raise."""
-    try: yield
-    except sqlite3.IntegrityError as error: raise ValueError(message) from error
+    try:
+        yield
+    except sqlite3.IntegrityError as error:
+        raise ValueError(message) from error

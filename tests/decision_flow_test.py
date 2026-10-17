@@ -11,9 +11,7 @@ from decision_flywheel.models import DecisionTask, Item, LabeledItem
 class FakeSystemOneClient:
     async def system_one(self, *, state, questions):
         self.state = state
-        answer = SimpleNamespace(
-            model_dump=lambda: {"choice": "YES!", "probabilities": {"yes": 0.75, "NO!": 0.25}}
-        )
+        answer = SimpleNamespace(model_dump=lambda: {"choice": "YES!", "probabilities": {"yes": 0.75, "NO!": 0.25}})
         return SimpleNamespace(answers={"topic": answer}, model="fake-system-one", usage={"tokens": 12})
 
 
@@ -33,6 +31,4 @@ def test_a_selected_context_produces_a_validated_offline_decision(policy):
     assert result.label == "yes"
     assert result.probabilities == {"yes": 0.75, "no": 0.25}
     assert client.state["target"] == {"text": "target lexical signal"}
-    assert {example["text"] for example in client.state["labeled_examples"]} == {
-        "yes lexical signal", "no lexical signal"
-    }
+    assert {example["text"] for example in client.state["labeled_examples"]} == {"yes lexical signal", "no lexical signal"}

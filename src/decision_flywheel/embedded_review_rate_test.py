@@ -1,5 +1,5 @@
 """The cyclotron decides how many items people review, and says why."""
-import asyncio
+
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
@@ -19,6 +19,7 @@ FAST = ReviewProgram(window=10, min_window_labels=5, max_gap_points=100)
 
 class Model:
     """'low' items get 60% confidence; everything else 90%."""
+
     model_identity = "scripted-confidence"
 
     def __init__(self):
@@ -26,9 +27,10 @@ class Model:
 
     async def classify_many(self, configs, target, training, **kwargs):
         self.calls += 1
-        p = .6 if "low" in target.values["text"] else .9
-        return BatchedAnswers({cid: {"decision": DecisionResult("include", {"include": p, "exclude": 1 - p})}
-                               for cid in configs}, "scripted", {}, 1)
+        p = 0.6 if "low" in target.values["text"] else 0.9
+        return BatchedAnswers(
+            {cid: {"decision": DecisionResult("include", {"include": p, "exclude": 1 - p})} for cid in configs}, "scripted", {}, 1
+        )
 
 
 def decide_and_review(cyclotron, start, count, label="include", text="sure"):
@@ -51,7 +53,7 @@ def test_onboarding_reviews_everything_and_says_what_comes_next(tmp_path):
         rate = cyclotron.status().to_json()["reviewRate"]
     assert all(d.review.selected and d.review.reason in ("program", "audit") for d in decisions)
     assert all(d.review.propensity == 1.0 and d.review.detail for d in decisions)
-    assert rate["state"] == "onboarding" and rate["rate"] == 1.0 and rate["auditFloor"] == .05
+    assert rate["state"] == "onboarding" and rate["rate"] == 1.0 and rate["auditFloor"] == 0.05
     assert rate["nextCheckAfterDecisions"] == 7
     assert rate["nextStep"].startswith("Steps down to 50% after 2 more windows of 10 decisions")
 
@@ -62,7 +64,7 @@ def test_two_good_windows_step_the_rate_down_and_confident_decisions_are_sampled
         later = decide_and_review(cyclotron, 20, 60)
         rate = cyclotron.status().to_json()["reviewRate"]
         events = rate_events(cyclotron)
-    assert events[0]["state"] == "tapering" and events[0]["rate"] == .5
+    assert events[0]["state"] == "tapering" and events[0]["rate"] == 0.5
     assert events[0]["evidence"]["accuracy"] == 1.0 and events[0]["window"] == 2
     assert rate["state"] in ("tapering", "steady") and rate["rate"] < 1.0
     unselected = [d for d in later if not d.review.selected]
@@ -79,7 +81,7 @@ def test_low_confidence_is_reviewed_at_every_rate(tmp_path):
 
 def test_unselected_decisions_are_not_pending_and_a_reviewer_may_still_review_them(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
-        cyclotron.set_review_rate(0., set_by="managing-editor")
+        cyclotron.set_review_rate(0.0, set_by="managing-editor")
         decisions = [run(cyclotron.decide(item(f"i-{i}", f"sure {i}"))) for i in range(40)]
         skipped = next(d for d in decisions if not d.review.selected)
         selected = [d for d in decisions if d.review.selected]
@@ -118,7 +120,7 @@ def test_a_promoted_version_goes_back_to_full_review(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
         decide_and_review(cyclotron, 0, 20)
         run(cyclotron.decide(item("probe", "sure probe")))
-        assert cyclotron.status().review_rate.rate == .5
+        assert cyclotron.status().review_rate.rate == 0.5
         wheel = cyclotron.wheels["relevant"]
         wheel._activate(FittedClassifier(ClassifierConfig(wheel.initial.task, rubric="Prefer primary sources.")))
         decision = run(cyclotron.decide(item("after", "sure after")))
@@ -130,9 +132,9 @@ def test_a_promoted_version_goes_back_to_full_review(tmp_path):
 def test_an_override_reports_who_set_it_and_ends_at_its_expiry(tmp_path, monkeypatch):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
         expires = datetime.now(timezone.utc) + timedelta(days=1)
-        cyclotron.set_review_rate(.25, set_by="managing-editor", expires_at=expires)
+        cyclotron.set_review_rate(0.25, set_by="managing-editor", expires_at=expires)
         rate = cyclotron.status().to_json()["reviewRate"]
-        assert rate["state"] == "manual" and rate["rate"] == .25
+        assert rate["state"] == "manual" and rate["rate"] == 0.25
         assert rate["override"]["setBy"] == "managing-editor" and rate["override"]["expiresAt"] == expires.isoformat()
         assert "Manual rate of 25% set by managing-editor" in rate["reason"]
 
@@ -142,13 +144,14 @@ def test_an_override_reports_who_set_it_and_ends_at_its_expiry(tmp_path, monkeyp
             @classmethod
             def now(cls, tz=None):
                 return real.now(tz) + timedelta(days=2)
+
         monkeypatch.setattr(embedded_cyclotron, "datetime", Later)
         run(cyclotron.decide(item("later", "sure later")))
         rate = cyclotron.status().to_json()["reviewRate"]
         assert rate["state"] == "onboarding" and rate["override"] is None
         assert "expired" in rate_events(cyclotron)[-1]["reason"]
         with pytest.raises(ValueError):
-            cyclotron.set_review_rate(.5, set_by="")
+            cyclotron.set_review_rate(0.5, set_by="")
 
 
 def test_a_cyclotron_without_a_program_reviews_everything(tmp_path):
@@ -163,8 +166,11 @@ def test_selection_propensities_reach_the_feedback_used_for_fitting(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
         decisions = decide_and_review(cyclotron, 0, 60)
         sampled = next(d for d in decisions[20:] if d.review.selected and d.review.propensity < 1)
-        feedback = next(e["feedback"] for e in cyclotron.wheels["relevant"].history(100000)
-                        if e["kind"] == "human-feedback" and e["feedback"]["item_id"] == sampled.item_id)
+        feedback = next(
+            e["feedback"]
+            for e in cyclotron.wheels["relevant"].history(100000)
+            if e["kind"] == "human-feedback" and e["feedback"]["item_id"] == sampled.item_id
+        )
     assert feedback["selection_propensity"] == sampled.review.propensity
 
 

@@ -5,29 +5,52 @@ raises and finished windows as decisions arrive, chooses which outputs of a
 decision go to review, and reports the rate to status. ``Cyclotron`` delegates
 to it and keeps the public methods.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import replace
-from typing import Any, Callable, Mapping
+from datetime import datetime, timedelta
+from typing import Any
 
 from .cyclotron_status import FULL_REVIEW, ReviewRate, ReviewRateOverride, status_from_flywheel
 from .embedded_records import ClassifierSpec, CyclotronDefinition, Review, ReviewSelection, _json
-from .review_program import (Override, ProgramState, ReviewProgram, check_window, combine_evidence, current_rate,
-                             expected_item_reviews, next_step, raise_for_version, raise_for_versions, select,
-                             state_name, window_evidence)
+from .review_program import (
+    Override,
+    ProgramState,
+    ReviewProgram,
+    check_window,
+    combine_evidence,
+    current_rate,
+    expected_item_reviews,
+    next_step,
+    raise_for_version,
+    raise_for_versions,
+    select,
+    state_name,
+    window_evidence,
+)
 
 FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
 PROGRAM_STATE_KEY = "review_program_state"
 
 
 class ReviewRateController:
-    def __init__(self, *, program: ReviewProgram | None, definition: CyclotronDefinition,
-                 specs: Mapping[str, ClassifierSpec], versions, wheels: Mapping[str, Any], root_storage,
-                 append_event: Callable[[Mapping[str, Any]], dict],
-                 active_review: Callable[[str, str], Review | None],
-                 observer: Callable[[dict], None], clock: Callable[[], datetime]):
+    def __init__(
+        self,
+        *,
+        program: ReviewProgram | None,
+        definition: CyclotronDefinition,
+        specs: Mapping[str, ClassifierSpec],
+        versions,
+        wheels: Mapping[str, Any],
+        root_storage,
+        append_event: Callable[[Mapping[str, Any]], dict],
+        active_review: Callable[[str, str], Review | None],
+        observer: Callable[[dict], None],
+        clock: Callable[[], datetime],
+    ):
         self.program = program
         self.definition = definition
         self.specs = specs
@@ -63,10 +86,18 @@ class ReviewRateController:
             outputs[cid] = ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
         requested = [cid for cid, own in outputs.items() if own.selected]
         reasons = {outputs[cid].reason for cid in requested}
-        detail = ("Requested: " + "; ".join(f"{cid} ({outputs[cid].detail})" for cid in requested) if requested
-                  else "No output requested: " + "; ".join(f"{cid} ({own.detail})" for cid, own in outputs.items()))
-        return ReviewSelection(bool(requested), ("program" if "program" in reasons else "audit") if requested else None,
-                               max(own.propensity for own in outputs.values()), detail, outputs)
+        detail = (
+            "Requested: " + "; ".join(f"{cid} ({outputs[cid].detail})" for cid in requested)
+            if requested
+            else "No output requested: " + "; ".join(f"{cid} ({own.detail})" for cid, own in outputs.items())
+        )
+        return ReviewSelection(
+            bool(requested),
+            ("program" if "program" in reasons else "audit") if requested else None,
+            max(own.propensity for own in outputs.values()),
+            detail,
+            outputs,
+        )
 
     def advance(self) -> tuple[float, int]:
         """Apply expired overrides, version raises and finished windows; return the rate and decision count."""
@@ -76,16 +107,16 @@ class ReviewRateController:
         if state.override and not Override(**state.override).active(now):
             expired = Override(**state.override)
             state.override = None
-            events.append(self._rate_event(state, now, f"The manual rate of {round(expired.rate * 100)}% set by "
-                                                       f"{expired.set_by} expired."))
+            events.append(
+                self._rate_event(state, now, f"The manual rate of {round(expired.rate * 100)}% set by {expired.set_by} expired.")
+            )
         if len(self.specs) == 1:
             state, raised = raise_for_version(self.program, state, self._primary_version())
             if raised:
                 events.append(self._rate_event(state, now, state.reason))
         else:
             # Every output is watched: a new version of any one raises the rate.
-            state, output = raise_for_versions(self.program, state,
-                                               {cid: self.versions[cid].version for cid in self.specs})
+            state, output = raise_for_versions(self.program, state, {cid: self.versions[cid].version for cid in self.specs})
             if output is not None:
                 events.append(self._rate_event(state, now, state.reason, output=output))
         decided = self.root_storage.decision_count()
@@ -94,8 +125,16 @@ class ReviewRateController:
             evidence = self._window_evidence(window)
             state, change = check_window(self.program, state, evidence)
             if change:
-                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window,
-                                               **({"output": evidence["output"]} if "output" in evidence else {})))
+                events.append(
+                    self._rate_event(
+                        state,
+                        now,
+                        state.reason,
+                        evidence=evidence,
+                        window=window,
+                        **({"output": evidence["output"]} if "output" in evidence else {}),
+                    )
+                )
         with self.root_storage.transaction():
             self.root_storage.put_meta(PROGRAM_STATE_KEY, _json(state.to_json()))
             appended = [self.append_event(event) for event in events]
@@ -118,8 +157,12 @@ class ReviewRateController:
             raise ValueError("expiry must be a future, timezone-aware time")
         state = self.state()
         now = self.clock()
-        state.override = {"rate": float(rate), "expires_at": expires_at.isoformat() if expires_at else None,
-                          "set_by": set_by, "set_at": now.isoformat()}
+        state.override = {
+            "rate": float(rate),
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "set_by": set_by,
+            "set_at": now.isoformat(),
+        }
         with self.root_storage.transaction():
             self.root_storage.put_meta(PROGRAM_STATE_KEY, _json(state.to_json()))
             event = self.append_event(self._rate_event(state, now, f"Manual rate of {round(rate * 100)}% set by {set_by}."))
@@ -160,19 +203,26 @@ class ReviewRateController:
                 routed = "outputs" in decision["review"]
                 decisions.append(tuple(values) if routed else (None if None in values else min(values),))
         rate = current_rate(self.program, state, now)
-        return ReviewRate(state_name(self.program, state, now), rate,
-                          (f"Manual rate of {round(override.rate * 100)}% set by {override.set_by}."
-                           if active else state.reason),
-                          audit_floor=self.program.audit_share, confidence_threshold=self.program.confidence_threshold,
-                          override=ReviewRateOverride(override.rate, override.expires_at, override.set_by, override.set_at)
-                          if active else None,
-                          next_check_after_decisions=until,
-                          next_step=next_step(self.program, state, decisions_until_check=until, now=now),
-                          expected_reviews_per_week=expected_item_reviews(self.program, rate, decisions))
+        return ReviewRate(
+            state_name(self.program, state, now),
+            rate,
+            (f"Manual rate of {round(override.rate * 100)}% set by {override.set_by}." if active else state.reason),
+            audit_floor=self.program.audit_share,
+            confidence_threshold=self.program.confidence_threshold,
+            override=ReviewRateOverride(override.rate, override.expires_at, override.set_by, override.set_at) if active else None,
+            next_check_after_decisions=until,
+            next_step=next_step(self.program, state, decisions_until_check=until, now=now),
+            expected_reviews_per_week=expected_item_reviews(self.program, rate, decisions),
+        )
 
     def _rate_event(self, state: ProgramState, now: datetime, reason: str, **details) -> dict:
-        return {"kind": "review-rate-changed", "state": state_name(self.program, state, now),
-                "rate": current_rate(self.program, state, now), "reason": reason, **details}
+        return {
+            "kind": "review-rate-changed",
+            "state": state_name(self.program, state, now),
+            "rate": current_rate(self.program, state, now),
+            "reason": reason,
+            **details,
+        }
 
     def _primary(self) -> ClassifierSpec:
         return self.definition.classifiers[0]
@@ -182,15 +232,19 @@ class ReviewRateController:
 
     def _window_evidence(self, window: int) -> dict:
         """One finished window's evidence: the only output's, or the worst of every output's."""
-        evidence = {cid: window_evidence(self.program, self._window_reviews(window, cid), self._gap_points(cid))
-                    for cid in self.specs}
+        evidence = {
+            cid: window_evidence(self.program, self._window_reviews(window, cid), self._gap_points(cid)) for cid in self.specs
+        }
         return evidence[self._primary().id] if len(evidence) == 1 else combine_evidence(evidence)
 
     def _gap_points(self, classifier: str | None = None) -> int | None:
         spec = self.specs[classifier] if classifier else self._primary()
-        return status_from_flywheel(self.wheels[spec.id], cyclotron_id=self.definition.id,
-                                    positive_label=spec.positive_label,
-                                    window=self.program.calibration_window).calibration.gap_points
+        return status_from_flywheel(
+            self.wheels[spec.id],
+            cyclotron_id=self.definition.id,
+            positive_label=spec.positive_label,
+            window=self.program.calibration_window,
+        ).calibration.gap_points
 
     def _window_reviews(self, window: int, classifier: str | None = None) -> list[dict]:
         """Program and audit reviews of one output's decisions in one finished window."""

@@ -34,6 +34,7 @@ The source result files remain local study artifacts. This exporter emits only
 the pre-vote prediction, revealed simulated label, public metrics, lifecycle
 outcomes, and source attribution required by the marketing playback.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -51,21 +52,44 @@ WINDOW = 100
 # List prices, USD per million tokens. gpt-4.1-mini is not in Hard-Decisions'
 # engines.yaml, so its source is OpenAI's model page.
 PRICES = {
-    "gpt-4.1-mini": {"input_usd_per_mtok": 0.40, "cached_input_usd_per_mtok": 0.10, "output_usd_per_mtok": 1.60,
-                     "source": "developers.openai.com/api/docs/models/gpt-4.1-mini, read 2026-10-09"},
-    "gpt-4.1": {"input_usd_per_mtok": 2.00, "cached_input_usd_per_mtok": 0.50, "output_usd_per_mtok": 8.00,
-                "source": "developers.openai.com/api/docs/models/gpt-4.1, read 2026-10-09"},
+    "gpt-4.1-mini": {
+        "input_usd_per_mtok": 0.40,
+        "cached_input_usd_per_mtok": 0.10,
+        "output_usd_per_mtok": 1.60,
+        "source": "developers.openai.com/api/docs/models/gpt-4.1-mini, read 2026-10-09",
+    },
+    "gpt-4.1": {
+        "input_usd_per_mtok": 2.00,
+        "cached_input_usd_per_mtok": 0.50,
+        "output_usd_per_mtok": 8.00,
+        "source": "developers.openai.com/api/docs/models/gpt-4.1, read 2026-10-09",
+    },
     # Per-request tiering: a request whose input exceeds 272,000 tokens is billed at the above-tier rates.
-    "gpt-6-luna": {"input_usd_per_mtok": 0.10, "cached_input_usd_per_mtok": 0.01, "output_usd_per_mtok": 0.50,
-                   "above_input_tokens": 272000, "above_input_usd_per_mtok": 0.20, "above_output_usd_per_mtok": 0.75,
-                   "source": "LiteLLM model price table (standard tier), read 2026-10-11"},
+    "gpt-6-luna": {
+        "input_usd_per_mtok": 0.10,
+        "cached_input_usd_per_mtok": 0.01,
+        "output_usd_per_mtok": 0.50,
+        "above_input_tokens": 272000,
+        "above_input_usd_per_mtok": 0.20,
+        "above_output_usd_per_mtok": 0.75,
+        "source": "LiteLLM model price table (standard tier), read 2026-10-11",
+    },
     "jev": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0, "source": "TypeSafe's published price"},
-    "microsoft-decision-1": {"input_usd_per_mtok": 0.042, "output_usd_per_mtok": 0.0,
-                             "source": "Microsoft's published price for Microsoft-Decision-1"},
-    "kev": {"input_usd_per_mtok": 0.0, "output_usd_per_mtok": 0.0, "source": "runs locally on the study machine; no per-call charge"},
+    "microsoft-decision-1": {
+        "input_usd_per_mtok": 0.042,
+        "output_usd_per_mtok": 0.0,
+        "source": "Microsoft's published price for Microsoft-Decision-1",
+    },
+    "kev": {
+        "input_usd_per_mtok": 0.0,
+        "output_usd_per_mtok": 0.0,
+        "source": "runs locally on the study machine; no per-call charge",
+    },
 }
 
-RUBRIC_SUMMARY = "Publish articles with a meaningful constructive or public-benefit outcome; reject harm-dominant or routine items."
+RUBRIC_SUMMARY = (
+    "Publish articles with a meaningful constructive or public-benefit outcome; reject harm-dominant or routine items."
+)
 
 
 def public_excerpt(title: str) -> str:
@@ -86,7 +110,9 @@ def read(path: Path, count: int, cut: int | None = None) -> dict:
     completed = len(data.get("cycles", []))
     if completed != count and (cut is None or completed < cut):
         # A cut may come from a recording that stopped early, as long as it covers the cut.
-        raise SystemExit(f"{path}: requires exactly {count} completed cycles" + (f", or at least {cut} for the cut" if cut else ""))
+        raise SystemExit(
+            f"{path}: requires exactly {count} completed cycles" + (f", or at least {cut} for the cut" if cut else "")
+        )
     if data.get("disclosure", {}).get("operational_items") != count:
         raise SystemExit(f"{path}: expected {count} operational items")
     return data
@@ -122,9 +148,16 @@ def public_feedback_schedule(policy: object) -> dict:
         for phase in phases:
             if not isinstance(phase, dict):
                 raise SystemExit("feedback-policy phase is invalid")
-            public_phase = {key: phase[key] for key in ("start_cycle", "end_cycle") if key in phase and (isinstance(phase[key], int) or phase[key] is None)}
+            public_phase = {
+                key: phase[key]
+                for key in ("start_cycle", "end_cycle")
+                if key in phase and (isinstance(phase[key], int) or phase[key] is None)
+            }
             label_rates = phase.get("predicted_label_rates")
-            if not isinstance(label_rates, dict) or not all(isinstance(label, str) and isinstance(rate, (int, float)) and 0 <= rate <= 1 for label, rate in label_rates.items()):
+            if not isinstance(label_rates, dict) or not all(
+                isinstance(label, str) and isinstance(rate, (int, float)) and 0 <= rate <= 1
+                for label, rate in label_rates.items()
+            ):
                 raise SystemExit("feedback-policy predicted_label_rates is invalid")
             public_phase["predicted_label_rates"] = label_rates
             public_phases.append(public_phase)
@@ -138,7 +171,8 @@ V3_FIELDS = ("dataset", "dataset_revision", "license", "license_url", "operation
 def is_relabel_manifest(manifest: dict) -> bool:
     """The relabeled-corpus manifest form: hashed by ``operational_sha256``, not ``item_set_sha256``."""
     return manifest.get("corpus") == "editorial-relabel-v3-1" or (
-        "operational_sha256" in manifest and "item_set_sha256" not in manifest)
+        "operational_sha256" in manifest and "item_set_sha256" not in manifest
+    )
 
 
 def check_relabel_manifest(manifest: dict, corpus: Path) -> None:
@@ -203,7 +237,9 @@ def public_events(outcomes: list[dict]) -> list[dict]:
             events.append({"type": "head", "outcome": "promoted" if result.get("promoted") else "rejected", "reason": None})
         else:
             validation = result.get("validation_status")
-            event_outcome = "promoted" if result.get("promoted") else "provisional" if validation == "provisional" else "not activated"
+            event_outcome = (
+                "promoted" if result.get("promoted") else "provisional" if validation == "provisional" else "not activated"
+            )
             events.append({"type": "proposal", "stage": stage, "outcome": event_outcome, "reason": None})
     return events
 
@@ -222,7 +258,11 @@ def evaluator_window(cycles: list[dict], predictions: dict[int, dict], reference
     for bucket in range(10):
         members = [value for value in values if min(9, int(value[0] * 10)) == bucket]
         if members:
-            ece += len(members) / total * abs(sum(value[0] for value in members) / len(members) - sum(value[1] for value in members) / len(members))
+            ece += (
+                len(members)
+                / total
+                * abs(sum(value[0] for value in members) / len(members) - sum(value[1] for value in members) / len(members))
+            )
     return {
         "count": total,
         "accuracy": sum(value[1] for value in values) / total,
@@ -235,11 +275,7 @@ def compact_calibration(provenance: object) -> dict | None:
     """Keep method metadata, never the fitted-head training identifiers."""
     if not isinstance(provenance, dict):
         return None
-    return {
-        key: provenance[key]
-        for key in ("fit_on", "method", "selection_reason")
-        if provenance.get(key) is not None
-    }
+    return {key: provenance[key] for key in ("fit_on", "method", "selection_reason") if provenance.get(key) is not None}
 
 
 EXPORTED_KINDS = ("prediction", "human-feedback", "decision-response", "optimizer-response", "cycle-started", "cycle-completed")
@@ -342,9 +378,12 @@ def compact_cycle(cycle: dict, event: dict, article: dict, comments: dict[int, s
         "feedback_propensity": cycle["feedback_propensity"],
         "partition": cycle["role"],
         "metrics": {
-            "count": metrics["count"], "accuracy": metrics["accuracy"],
-            "brier": metrics["brier"], "calibration": {"ece": metrics["calibration"]["ece"]},
-            "per_class": metrics["per_class"], "confusion_matrix": metrics["confusion_matrix"],
+            "count": metrics["count"],
+            "accuracy": metrics["accuracy"],
+            "brier": metrics["brier"],
+            "calibration": {"ece": metrics["calibration"]["ece"]},
+            "per_class": metrics["per_class"],
+            "confusion_matrix": metrics["confusion_matrix"],
         },
         "events": public_events(cycle["outcomes"]),
         "requests": cycle["requests"],
@@ -360,7 +399,11 @@ def _confidence_metrics(rows: list[tuple[str, dict, str]], labels: tuple[str, ..
     for bucket in range(10):
         members = [index for index, value in enumerate(confidences) if min(9, int(value * 10)) == bucket]
         if members:
-            ece += len(members) / total * abs(sum(confidences[i] for i in members) / len(members) - sum(right[i] for i in members) / len(members))
+            ece += (
+                len(members)
+                / total
+                * abs(sum(confidences[i] for i in members) / len(members) - sum(right[i] for i in members) / len(members))
+            )
     per_class = {}
     for name in labels:
         predicted = sum(label == name for label, _, _ in rows)
@@ -373,8 +416,10 @@ def _confidence_metrics(rows: list[tuple[str, dict, str]], labels: tuple[str, ..
     return {
         "count": total,
         "accuracy": sum(right) / total,
-        "brier": sum(sum((probabilities.get(name, 0.0) - (name == actual)) ** 2 for name in labels)
-                     for _, probabilities, actual in rows) / total,
+        "brier": sum(
+            sum((probabilities.get(name, 0.0) - (name == actual)) ** 2 for name in labels) for _, probabilities, actual in rows
+        )
+        / total,
         "ece": ece,
         "mean_confidence": sum(confidences) / total,
         "per_class": per_class,
@@ -391,7 +436,7 @@ def scenario_windows(cycles, predictions, reference_labels, labels, usage, size=
     usage_windows = {window["window"]: window for window in usage["windows"]}
     windows = []
     for index in range(0, len(cycles), size):
-        chunk = cycles[index:index + size]
+        chunk = cycles[index : index + size]
         cyclotron, decision_model = [], []
         for cycle in chunk:
             event = predictions[cycle["cycle_number"]]
@@ -401,28 +446,41 @@ def scenario_windows(cycles, predictions, reference_labels, labels, usage, size=
             decision_model.append((decision_model_choice(raw, labels), raw, actual))
         lifecycle = [event for cycle in chunk for event in public_events(cycle["outcomes"])]
         window_usage = usage_windows.get(index // size + 1, {})
-        windows.append({
-            "window": index // size + 1,
-            "first_cycle": chunk[0]["cycle_number"], "last_cycle": chunk[-1]["cycle_number"],
-            "label_source": "Frozen simulated reference labels, evaluator-only; never learner feedback.",
-            "cyclotron": _confidence_metrics(cyclotron, labels),
-            "decision_model": _confidence_metrics(decision_model, labels),
-            "routing": {
-                "cyclotron": routing([Decision(label, probabilities[label], actual) for label, probabilities, actual in cyclotron]),
-                "decision_model": routing([Decision(label, probabilities[label], actual) for label, probabilities, actual in decision_model]),
-            },
-            "feedback_revealed": sum(bool(cycle["feedback_selected"]) for cycle in chunk),
-            "optimizer_events": {
-                "proposals": sum(event["type"] == "proposal" for event in lifecycle),
-                "proposals_promoted": sum(event["type"] == "proposal" and event["outcome"] == "promoted" for event in lifecycle),
-                "ml_model_refits": sum(event["type"] == "head" for event in lifecycle),
-                "ml_model_refits_promoted": sum(event["type"] == "head" and event["outcome"] == "promoted" for event in lifecycle),
-            },
-            "model_calls": {"decision_model": window_usage.get("decision_model", {}).get("requests", 0),
-                            "optimizer": window_usage.get("optimizer", {}).get("requests", 0)},
-            "wall_clock_seconds": window_usage.get("wall_clock_seconds"),
-            "usage": {key: window_usage[key] for key in ("decision_model", "optimizer", "usd") if key in window_usage},
-        })
+        windows.append(
+            {
+                "window": index // size + 1,
+                "first_cycle": chunk[0]["cycle_number"],
+                "last_cycle": chunk[-1]["cycle_number"],
+                "label_source": "Frozen simulated reference labels, evaluator-only; never learner feedback.",
+                "cyclotron": _confidence_metrics(cyclotron, labels),
+                "decision_model": _confidence_metrics(decision_model, labels),
+                "routing": {
+                    "cyclotron": routing(
+                        [Decision(label, probabilities[label], actual) for label, probabilities, actual in cyclotron]
+                    ),
+                    "decision_model": routing(
+                        [Decision(label, probabilities[label], actual) for label, probabilities, actual in decision_model]
+                    ),
+                },
+                "feedback_revealed": sum(bool(cycle["feedback_selected"]) for cycle in chunk),
+                "optimizer_events": {
+                    "proposals": sum(event["type"] == "proposal" for event in lifecycle),
+                    "proposals_promoted": sum(
+                        event["type"] == "proposal" and event["outcome"] == "promoted" for event in lifecycle
+                    ),
+                    "ml_model_refits": sum(event["type"] == "head" for event in lifecycle),
+                    "ml_model_refits_promoted": sum(
+                        event["type"] == "head" and event["outcome"] == "promoted" for event in lifecycle
+                    ),
+                },
+                "model_calls": {
+                    "decision_model": window_usage.get("decision_model", {}).get("requests", 0),
+                    "optimizer": window_usage.get("optimizer", {}).get("requests", 0),
+                },
+                "wall_clock_seconds": window_usage.get("wall_clock_seconds"),
+                "usage": {key: window_usage[key] for key in ("decision_model", "optimizer", "usd") if key in window_usage},
+            }
+        )
     return windows
 
 
@@ -436,10 +494,15 @@ def main(argv=None) -> int:
     parser.add_argument("--title", default="Curated editorial demo")
     parser.add_argument("--decision-model-price", choices=sorted(PRICES), default="gpt-4.1-mini")
     parser.add_argument("--optimizer-price", choices=sorted(PRICES), default="gpt-4.1-mini")
-    parser.add_argument("--cycles", type=int, default=None,
-                        help="export only the first N recorded cycles (schema 2; a multiple of 100)")
-    parser.add_argument("--window-size", type=int, default=None,
-                        help=f"cycles per window (schema 2; default {WINDOW}); --cycles must be a multiple of it")
+    parser.add_argument(
+        "--cycles", type=int, default=None, help="export only the first N recorded cycles (schema 2; a multiple of 100)"
+    )
+    parser.add_argument(
+        "--window-size",
+        type=int,
+        default=None,
+        help=f"cycles per window (schema 2; default {WINDOW}); --cycles must be a multiple of it",
+    )
     args = parser.parse_args(argv)
     size = WINDOW if args.window_size is None else args.window_size
     if args.window_size is not None and (args.schema_version != 2 or size < 1):
@@ -447,11 +510,19 @@ def main(argv=None) -> int:
     manifest = json.loads(args.corpus_manifest.read_text())
     count = manifest.get("actual_count")
     relabeled = is_relabel_manifest(manifest)
-    if relabeled and args.schema_version == 2 and manifest.get("label_disclosure") == "simulated_semantic_editorial_labels" \
-            and isinstance(count, int) and count >= size:
+    if (
+        relabeled
+        and args.schema_version == 2
+        and manifest.get("label_disclosure") == "simulated_semantic_editorial_labels"
+        and isinstance(count, int)
+        and count >= size
+    ):
         check_relabel_manifest(manifest, args.corpus)
-    elif relabeled or manifest.get("label_disclosure") != "simulated_semantic_editorial_labels" or (
-            count != 400 if args.schema_version == 1 else not isinstance(count, int) or count < 100):
+    elif (
+        relabeled
+        or manifest.get("label_disclosure") != "simulated_semantic_editorial_labels"
+        or (count != 400 if args.schema_version == 1 else not isinstance(count, int) or count < 100)
+    ):
         raise SystemExit("corpus manifest is not a reviewed simulated-label editorial corpus of the expected length")
     cut = args.cycles
     if cut is not None and (args.schema_version != 2 or cut < size or cut % size or cut > count):
@@ -464,8 +535,11 @@ def main(argv=None) -> int:
     for name, run in runs.items():
         if cut is not None:
             run["cycles"] = run["cycles"][:cut]
-        if ({cycle.get("item_id") for cycle in run["cycles"]} != set(corpus) if cut is None
-                else not {cycle.get("item_id") for cycle in run["cycles"]} <= set(corpus)):
+        if (
+            {cycle.get("item_id") for cycle in run["cycles"]} != set(corpus)
+            if cut is None
+            else not {cycle.get("item_id") for cycle in run["cycles"]} <= set(corpus)
+        ):
             raise SystemExit(f"{name}: frozen results do not match the reviewed public corpus")
         for cycle in run["cycles"]:
             revealed = cycle.get("human_label")
@@ -477,8 +551,7 @@ def main(argv=None) -> int:
     for name, run in runs.items():
         events = read_events(scenario_dirs[name] / "runtime.sqlite3")
         if cut is not None:
-            events = [event for event in events
-                      if not isinstance(event.get("cycle_number"), int) or event["cycle_number"] <= cut]
+            events = [event for event in events if not isinstance(event.get("cycle_number"), int) or event["cycle_number"] <= cut]
         predictions = read_logged_predictions(scenario_dirs[name] / "runtime.sqlite3", run["cycles"], events)
         comments = read_logged_feedback(scenario_dirs[name] / "runtime.sqlite3", run["cycles"], events)
         scenario = {
@@ -494,12 +567,20 @@ def main(argv=None) -> int:
             usage = usage_by_window(events, prices, window=size)
             scenario["windows"] = scenario_windows(run["cycles"], predictions, reference_labels, labels, usage, size)
             scenario["usage_total"] = usage["total"]
-        scenario["cycles"] = [compact_cycle(cycle, predictions[cycle["cycle_number"]],
-                               {"id": cycle["item_id"], **corpus[cycle["item_id"]]}, comments)
-                              for cycle in run["cycles"]]
+        scenario["cycles"] = [
+            compact_cycle(
+                cycle, predictions[cycle["cycle_number"]], {"id": cycle["item_id"], **corpus[cycle["item_id"]]}, comments
+            )
+            for cycle in run["cycles"]
+        ]
         scenarios[name] = scenario
-    attribution = {"dataset": manifest["dataset"], "revision": manifest["dataset_revision"], "license": manifest["license"],
-                   "license_url": manifest["license_url"], "corpus_sha256": manifest["operational_sha256" if relabeled else "item_set_sha256"]}
+    attribution = {
+        "dataset": manifest["dataset"],
+        "revision": manifest["dataset_revision"],
+        "license": manifest["license"],
+        "license_url": manifest["license_url"],
+        "corpus_sha256": manifest["operational_sha256" if relabeled else "item_set_sha256"],
+    }
     if args.schema_version == 2:
         attribution["price_basis"] = {
             "basis": "list prices, USD per million tokens, applied to the provider-reported usage on every recorded call",
@@ -521,7 +602,9 @@ def main(argv=None) -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     args.output.write_text(encoded + "\n")
-    print(json.dumps({"output": str(args.output), "sha256": hashlib.sha256(encoded.encode()).hexdigest(), "scenarios": list(runs)}))
+    print(
+        json.dumps({"output": str(args.output), "sha256": hashlib.sha256(encoded.encode()).hexdigest(), "scenarios": list(runs)})
+    )
     return 0
 
 

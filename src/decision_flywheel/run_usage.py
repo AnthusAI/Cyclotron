@@ -5,11 +5,12 @@ Counts come from a runtime's own events: every ``decision-response`` and
 ran in. Cost is computed at list prices given by the caller, who states their
 source; a cached input token is billed at the cached rate when one is given.
 """
+
 from __future__ import annotations
 
-from datetime import datetime
 import json
-from typing import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 
 CALLS = {"decision-response": "decision_model", "optimizer-response": "optimizer"}
 
@@ -38,13 +39,18 @@ def cost_usd(counts: Mapping[str, int], price: Mapping[str, float]) -> float:
     # Requests whose input exceeded the price's ``above_input_tokens`` are billed whole at the above-tier rates
     # (counted separately in the ``tier_*`` fields); the cached rate is the same in both tiers.
     tier = {key: counts.get(key, 0) for key in TIER_KEYS}
-    uncached = counts["input_tokens"] - counts["cached_input_tokens"] - (tier["tier_input_tokens"] - tier["tier_cached_input_tokens"])
+    uncached = (
+        counts["input_tokens"] - counts["cached_input_tokens"] - (tier["tier_input_tokens"] - tier["tier_cached_input_tokens"])
+    )
     cached = counts["cached_input_tokens"] - tier["tier_cached_input_tokens"]
     output = counts["output_tokens"] - tier["tier_output_tokens"]
     total = uncached * price["input_usd_per_mtok"] + cached * cached_rate + output * price["output_usd_per_mtok"]
     if tier["tier_requests"]:
-        total += ((tier["tier_input_tokens"] - tier["tier_cached_input_tokens"]) * price["above_input_usd_per_mtok"]
-                  + tier["tier_cached_input_tokens"] * cached_rate + tier["tier_output_tokens"] * price["above_output_usd_per_mtok"])
+        total += (
+            (tier["tier_input_tokens"] - tier["tier_cached_input_tokens"]) * price["above_input_usd_per_mtok"]
+            + tier["tier_cached_input_tokens"] * cached_rate
+            + tier["tier_output_tokens"] * price["above_output_usd_per_mtok"]
+        )
     return total / 1e6
 
 
@@ -77,8 +83,10 @@ def usage_by_window(events: Iterable[Mapping], prices: Mapping[str, Mapping[str,
         kind, number = event.get("kind"), event.get("cycle_number")
         slot = None
         if isinstance(number, int) and number >= 1:
-            slot = windows.setdefault((number - 1) // window, {"models": {name: _empty(tiered[name]) for name in CALLS.values()},
-                                                                "start": None, "end": None, "cycles": 0})
+            slot = windows.setdefault(
+                (number - 1) // window,
+                {"models": {name: _empty(tiered[name]) for name in CALLS.values()}, "start": None, "end": None, "cycles": 0},
+            )
         if kind == "cycle-started" and slot is not None:
             slot["start"] = slot["start"] or event.get("created_at")
             first = first or event.get("created_at")
@@ -89,7 +97,7 @@ def usage_by_window(events: Iterable[Mapping], prices: Mapping[str, Mapping[str,
         elif kind in CALLS:
             name = CALLS[kind]
             prompt, cached, output = _usage(event.get("usage"))
-            for counts in ([total[name]] + ([slot["models"][name]] if slot is not None else [])):
+            for counts in [total[name]] + ([slot["models"][name]] if slot is not None else []):
                 counts["requests"] += 1
                 counts["input_tokens"] += prompt
                 counts["cached_input_tokens"] += cached
@@ -101,15 +109,22 @@ def usage_by_window(events: Iterable[Mapping], prices: Mapping[str, Mapping[str,
                     counts["tier_output_tokens"] += output
     return {
         "window_size": window,
-        "windows": [{"window": index + 1, "first_cycle": index * window + 1, "last_cycle": index * window + slot["cycles"],
-                     **_block(slot["models"], prices, slot["start"], slot["end"])}
-                    for index, slot in sorted(windows.items())],
+        "windows": [
+            {
+                "window": index + 1,
+                "first_cycle": index * window + 1,
+                "last_cycle": index * window + slot["cycles"],
+                **_block(slot["models"], prices, slot["start"], slot["end"]),
+            }
+            for index, slot in sorted(windows.items())
+        ],
         "total": _block(total, prices, first, last),
     }
 
 
-def stored_usage_by_window(root_storage, output_ids: Sequence[str], prices: Mapping[str, Mapping[str, float]], *,
-                           window: int = 100) -> dict:
+def stored_usage_by_window(
+    root_storage, output_ids: Sequence[str], prices: Mapping[str, Mapping[str, float]], *, window: int = 100
+) -> dict:
     """Per-window and total usage recorded in an embedded cyclotron's root store, with the split by output.
 
     Window 1 holds decisions 1 to ``window`` in the order they were made; a
@@ -138,11 +153,20 @@ def stored_usage_by_window(root_storage, output_ids: Sequence[str], prices: Mapp
     for index in range((len(times) + window - 1) // window):
         first, last = index * window, min(len(times), (index + 1) * window) - 1
         models = windows.get(index, {"decision_model": _empty(), "optimizer": _empty()})
-        blocks.append({"window": index + 1, "first_cycle": first + 1, "last_cycle": last + 1,
-                       **_block(models, prices, times[first], times[last])})
-    return {"window_size": window, "windows": blocks,
-            "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices),
-            "outputs": stored_usage_by_output(root_storage, output_ids, prices)}
+        blocks.append(
+            {
+                "window": index + 1,
+                "first_cycle": first + 1,
+                "last_cycle": last + 1,
+                **_block(models, prices, times[first], times[last]),
+            }
+        )
+    return {
+        "window_size": window,
+        "windows": blocks,
+        "total": _block(total, prices, times[0], times[-1]) if times else _block(total, prices),
+        "outputs": stored_usage_by_output(root_storage, output_ids, prices),
+    }
 
 
 def stored_usage_by_output(root_storage, output_ids: Sequence[str], prices: Mapping[str, Mapping[str, float]]) -> dict:
@@ -174,7 +198,11 @@ def stored_usage_by_output(root_storage, output_ids: Sequence[str], prices: Mapp
             counts["input_tokens"] += prompt * share
             counts["cached_input_tokens"] += cached * share
             counts["output_tokens"] += output * share
-    return {"estimate": ("Decision-model usage is split by each output's share of the shared request bytes "
-                         "(evenly for requests recorded before shares were kept); optimizer usage is measured "
-                         "per output. Outputs sum to the total."),
-            "by_output": {cid: _block(per[cid], prices) for cid in ids}}
+    return {
+        "estimate": (
+            "Decision-model usage is split by each output's share of the shared request bytes "
+            "(evenly for requests recorded before shares were kept); optimizer usage is measured "
+            "per output. Outputs sum to the total."
+        ),
+        "by_output": {cid: _block(per[cid], prices) for cid in ids},
+    }

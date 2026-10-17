@@ -1,7 +1,13 @@
 import pytest
 
-from .storage_contract_backends import (BACKEND_NAMES, BatchBackend, EmbeddedBackend, EvaluationBackend,
-                                        ReviewBackend, RuntimeBackend)
+from .storage_contract_backends import (
+    BACKEND_NAMES,
+    BatchBackend,
+    EmbeddedBackend,
+    EvaluationBackend,
+    ReviewBackend,
+    RuntimeBackend,
+)
 
 
 def _backend_fixture(backend_class):

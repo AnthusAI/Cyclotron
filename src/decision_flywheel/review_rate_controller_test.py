@@ -1,4 +1,5 @@
 """The review-rate controller chooses what goes to review and keeps the operator's override."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -10,10 +11,10 @@ from .embedded_review_rate_test import FAST
 
 def test_a_cyclotron_without_a_program_sends_every_decision_to_review_with_full_propensity(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=None) as cyclotron:
-        selection = cyclotron.review_rate.select("any-item", {"relevant": .99})
+        selection = cyclotron.review_rate.select("any-item", {"relevant": 0.99})
         assert selection.selected and selection.reason == "program" and selection.propensity == 1.0
         with pytest.raises(ValueError, match="no review-rate program"):
-            cyclotron.review_rate.set_rate(.5, set_by="editor")
+            cyclotron.review_rate.set_rate(0.5, set_by="editor")
 
 
 def test_the_controller_stores_its_state_in_the_root_store_and_clearing_an_absent_override_changes_nothing(tmp_path):
@@ -21,7 +22,7 @@ def test_the_controller_stores_its_state_in_the_root_store_and_clearing_an_absen
         cyclotron.review_rate.clear_rate(set_by="editor")
         assert cyclotron.subscribe()["events"] == []
         expires = datetime.now(timezone.utc) + timedelta(days=1)
-        cyclotron.review_rate.set_rate(.3, set_by="editor", expires_at=expires)
+        cyclotron.review_rate.set_rate(0.3, set_by="editor", expires_at=expires)
         assert cyclotron.review_rate.state().override["set_by"] == "editor"
         assert cyclotron.root_storage.meta("review_program_state") is not None
         cyclotron.review_rate.clear_rate(set_by="editor")

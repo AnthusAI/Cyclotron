@@ -5,6 +5,7 @@ part of every sibling's context. These specs use a scripted batched model in
 which the ``relevant`` rubric can interfere with the ``timely`` answers, the
 way prompt interference does with a real model.
 """
+
 import asyncio
 import json
 
@@ -25,11 +26,12 @@ ITEMS = 32
 
 
 def answer(p):
-    return DecisionResult("include" if p > .5 else "exclude", {"include": p, "exclude": 1 - p})
+    return DecisionResult("include" if p > 0.5 else "exclude", {"include": p, "exclude": 1 - p})
 
 
 class InterferingModel:
     """``relevant`` improves with the helpful rubric; with interference, that rubric makes ``timely`` uninformative."""
+
     model_identity = "scripted-interference"
 
     def __init__(self, interfering=True):
@@ -38,8 +40,8 @@ class InterferingModel:
     async def classify_many(self, configs, target, training, **kwargs):
         text = target.values["text"]
         helped = HELPFUL_RUBRIC in (configs["relevant"].rubric or "")
-        relevant = (.85 if "yes" in text else .15) if helped else .55
-        timely = .55 if helped and self.interfering else (.85 if "fresh" in text else .15)
+        relevant = (0.85 if "yes" in text else 0.15) if helped else 0.55
+        timely = 0.55 if helped and self.interfering else (0.85 if "fresh" in text else 0.15)
         answers = {"relevant": {"decision": answer(relevant)}, "timely": {"decision": answer(timely)}}
         return BatchedAnswers({cid: answers[cid] for cid in configs}, "scripted", {}, 1)
 
@@ -50,8 +52,9 @@ def optimizer():
 
 
 def drive(tmp_path, model, **definition_options):
-    definition = CyclotronDefinition("newsroom", (RELEVANT, TIMELY), seed="sibling-seed", optimize_every=1000,
-                                     rubric_changes_every=1, **definition_options)
+    definition = CyclotronDefinition(
+        "newsroom", (RELEVANT, TIMELY), seed="sibling-seed", optimize_every=1000, rubric_changes_every=1, **definition_options
+    )
     with Cyclotron.open(tmp_path / "c", definition, model, optimizer(), max_requests=5000) as cyclotron:
         decisions = []
         for index in range(ITEMS):
@@ -62,10 +65,11 @@ def drive(tmp_path, model, **definition_options):
         for decision, _, fresh in decisions:
             asyncio.run(cyclotron.review(decision.decision_id, "include" if fresh else "exclude", classifier="timely"))
         for decision, says_yes, _ in decisions:
-            asyncio.run(cyclotron.review(decision.decision_id, "include" if says_yes else "exclude",
-                                         classifier="relevant"))
-        return ({cid: wheel.history(100000) for cid, wheel in cyclotron.wheels.items()},
-                {cid: wheel.active.config.rubric for cid, wheel in cyclotron.wheels.items()})
+            asyncio.run(cyclotron.review(decision.decision_id, "include" if says_yes else "exclude", classifier="relevant"))
+        return (
+            {cid: wheel.history(100000) for cid, wheel in cyclotron.wheels.items()},
+            {cid: wheel.active.config.rubric for cid, wheel in cyclotron.wheels.items()},
+        )
 
 
 def measured(history):

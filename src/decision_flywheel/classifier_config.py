@@ -1,11 +1,12 @@
 """Versioned decision request structure; optimizer edits never contain weights."""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 
 from .context import _normalized_text
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
@@ -14,6 +15,7 @@ from .models import DecisionResult, DecisionTask, Item, LabeledItem
 @dataclass(frozen=True)
 class ClassifiedAnswers:
     """One paid response, with usage counted once rather than per feature."""
+
     answers: Mapping[str, DecisionResult]
     model: str | None
     usage: Mapping[str, object] | None
@@ -54,9 +56,13 @@ class ClassifierConfig:
         return hashlib.sha256(encoded.encode()).hexdigest()
 
     def briefing_state(self) -> dict:
-        return {"rubric": self.rubric, "example_ids": list(self.example_ids),
-                "tasks": [asdict(task) for task in self.tasks],
-                "dynamic_elements": list(self.dynamic_elements), "version": self.fingerprint}
+        return {
+            "rubric": self.rubric,
+            "example_ids": list(self.example_ids),
+            "tasks": [asdict(task) for task in self.tasks],
+            "dynamic_elements": list(self.dynamic_elements),
+            "version": self.fingerprint,
+        }
 
     def apply(self, proposal: Mapping[str, object], training: Sequence[LabeledItem]) -> ClassifierConfig:
         allowed = {"rationale", "rubric", "example_ids", "tasks", "dynamic_elements"}
@@ -82,8 +88,9 @@ class ClassifierConfig:
                     raise ValueError("task must contain only name, instructions and labels")
                 built.append(DecisionTask(raw["name"], raw["labels"], raw["instructions"], self.task.input_field))
             tasks = tuple(built)
-        return ClassifierConfig(self.task, proposal.get("rubric", self.rubric), tuple(examples), tasks,
-                                tuple(dynamic), self.fingerprint)
+        return ClassifierConfig(
+            self.task, proposal.get("rubric", self.rubric), tuple(examples), tasks, tuple(dynamic), self.fingerprint
+        )
 
     def _pool(self, training: Sequence[LabeledItem]) -> dict[str, LabeledItem]:
         pool = {}
@@ -107,17 +114,24 @@ class ClassifierConfig:
             row = pool[key]
             if key == target.id or _normalized_text(row.item, self.task) == _normalized_text(target, self.task):
                 continue
-            examples.append({**dict(row.item.values), "label": self.task.validate_label(row.label),
-                             **dict(row.context)})
+            examples.append({**dict(row.item.values), "label": self.task.validate_label(row.label), **dict(row.context)})
         state = {"target": dict(target.values), "rubric": self.rubric, "examples": examples}
         if "current_datetime" in self.dynamic_elements:
             if now is None or now.tzinfo is None or now.utcoffset() is None:
                 raise ValueError("current_datetime requires an explicit timezone-aware instant")
             state["current_datetime"] = now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
         def question(task, main=False):
             suffix = " Use state.rubric as the human's decision criteria." if main else ""
-            return {"type": "choice", "instructions": task.instructions + suffix +
-                    " Classify only state.target; state.examples are labeled demonstrations.",
-                    "options": list(task.labels)}
-        return {"state": state, "questions": {"decision": question(self.task, True),
-                                               **{task.name: question(task) for task in self.tasks}}}
+            return {
+                "type": "choice",
+                "instructions": task.instructions
+                + suffix
+                + " Classify only state.target; state.examples are labeled demonstrations.",
+                "options": list(task.labels),
+            }
+
+        return {
+            "state": state,
+            "questions": {"decision": question(self.task, True), **{task.name: question(task) for task in self.tasks}},
+        }

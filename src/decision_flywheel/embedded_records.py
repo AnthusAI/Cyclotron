@@ -3,19 +3,20 @@
 These are the records an application sees (definitions, decisions, reviews) and
 the single-writer lease. ``embedded_cyclotron`` re-exports every public name.
 """
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Any
 
 from .models import DecisionTask
 from .selection_policy import SelectionPolicy
 from .sibling_check import SiblingPolicy
-
 
 ExecutionGuard = Callable[[], None | Awaitable[None]]
 
@@ -31,6 +32,7 @@ def _now() -> str:
 @dataclass(frozen=True)
 class ClassifierSpec:
     """One classifier: a reviewed output of the cyclotron, with its own labels and ML model."""
+
     id: str
     labels: tuple[str, ...]
     question: str
@@ -57,6 +59,7 @@ class ClassifierSpec:
 @dataclass(frozen=True)
 class CyclotronDefinition:
     """The application's cyclotron: an identity, its classifiers, and learning cadence."""
+
     id: str
     classifiers: tuple[ClassifierSpec, ...]
     seed: str = "cyclotron-v1"
@@ -97,15 +100,16 @@ class ReviewSelection:
     ``audit`` (the random audit share), or None when the decision is not sent
     to review. ``detail`` says the same in words.
     """
+
     selected: bool
     reason: str | None
     propensity: float
     detail: str = ""
     # With several outputs, each output's own selection; the fields above
     # summarize them (selected when any output is requested).
-    outputs: Mapping[str, "ReviewSelection"] | None = None
+    outputs: Mapping[str, ReviewSelection] | None = None
 
-    def for_output(self, classifier: str) -> "ReviewSelection":
+    def for_output(self, classifier: str) -> ReviewSelection:
         """This output's selection: its own with several outputs, else the decision's."""
         return self.outputs[classifier] if self.outputs else self
 
@@ -128,6 +132,7 @@ class ClassifierDecision:
 @dataclass(frozen=True)
 class Decision:
     """The cyclotron's decision about one item, with one result per classifier."""
+
     decision_id: str
     item_id: str
     created_at: str
@@ -156,24 +161,44 @@ class Decision:
         return self._only().version
 
     def to_json(self) -> dict[str, Any]:
-        return {"decisionId": self.decision_id, "itemId": self.item_id, "createdAt": self.created_at,
-                "classifiers": {cid: {"label": r.label, "confidence": r.confidence,
-                                      "probabilities": dict(r.probabilities) if r.probabilities else None,
-                                      "version": r.version, "fingerprint": r.fingerprint}
-                                for cid, r in self.results.items()},
-                "review": _selection_json(self.review)}
+        return {
+            "decisionId": self.decision_id,
+            "itemId": self.item_id,
+            "createdAt": self.created_at,
+            "classifiers": {
+                cid: {
+                    "label": r.label,
+                    "confidence": r.confidence,
+                    "probabilities": dict(r.probabilities) if r.probabilities else None,
+                    "version": r.version,
+                    "fingerprint": r.fingerprint,
+                }
+                for cid, r in self.results.items()
+            },
+            "review": _selection_json(self.review),
+        }
 
     @classmethod
-    def from_json(cls, value) -> "Decision":
-        return cls(value["decisionId"], value["itemId"], value["createdAt"],
-                   {cid: ClassifierDecision(cid, r["label"], r["confidence"], r["probabilities"], r["version"],
-                                            r["fingerprint"]) for cid, r in value["classifiers"].items()},
-                   _selection(value["review"]))
+    def from_json(cls, value) -> Decision:
+        return cls(
+            value["decisionId"],
+            value["itemId"],
+            value["createdAt"],
+            {
+                cid: ClassifierDecision(cid, r["label"], r["confidence"], r["probabilities"], r["version"], r["fingerprint"])
+                for cid, r in value["classifiers"].items()
+            },
+            _selection(value["review"]),
+        )
 
 
 def _selection_json(selection: ReviewSelection) -> dict[str, Any]:
-    value = {"selected": selection.selected, "reason": selection.reason,
-             "propensity": selection.propensity, "detail": selection.detail}
+    value = {
+        "selected": selection.selected,
+        "reason": selection.reason,
+        "propensity": selection.propensity,
+        "detail": selection.detail,
+    }
     if selection.outputs is not None:
         value["outputs"] = {cid: _selection_json(output) for cid, output in selection.outputs.items()}
     return value
@@ -183,13 +208,19 @@ def _selection(value: Mapping[str, Any]) -> ReviewSelection:
     if "detail" not in value:  # decisions saved before the review-rate program
         return ReviewSelection(value["selected"], "program", value["propensity"], value["reason"])
     outputs = value.get("outputs")
-    return ReviewSelection(value["selected"], value["reason"], value["propensity"], value["detail"],
-                           {cid: _selection(output) for cid, output in outputs.items()} if outputs is not None else None)
+    return ReviewSelection(
+        value["selected"],
+        value["reason"],
+        value["propensity"],
+        value["detail"],
+        {cid: _selection(output) for cid, output in outputs.items()} if outputs is not None else None,
+    )
 
 
 @dataclass(frozen=True)
 class Review:
     """One recorded review: a label, a correction, an undo, or a review without a label."""
+
     review_id: str
     decision_id: str
     item_id: str
@@ -204,10 +235,19 @@ class Review:
     optimization_warnings: tuple = ()
 
     def to_json(self) -> dict[str, Any]:
-        return {"reviewId": self.review_id, "decisionId": self.decision_id, "itemId": self.item_id,
-                "classifier": self.classifier, "kind": self.kind, "label": self.label,
-                "explanation": self.explanation, "reasonCode": self.reason_code, "reviewer": self.reviewer,
-                "selectedBy": self.selected_by, "createdAt": self.created_at}
+        return {
+            "reviewId": self.review_id,
+            "decisionId": self.decision_id,
+            "itemId": self.item_id,
+            "classifier": self.classifier,
+            "kind": self.kind,
+            "label": self.label,
+            "explanation": self.explanation,
+            "reasonCode": self.reason_code,
+            "reviewer": self.reviewer,
+            "selectedBy": self.selected_by,
+            "createdAt": self.created_at,
+        }
 
 
 class StoreLocked(RuntimeError):
@@ -228,6 +268,7 @@ class FileLease:
 
     def acquire(self) -> None:
         import fcntl
+
         self.path.parent.mkdir(parents=True, exist_ok=True)
         handle = open(self.path, "a+")
         try:
@@ -240,6 +281,7 @@ class FileLease:
     def release(self) -> None:
         if self._handle is not None:
             import fcntl
+
             fcntl.flock(self._handle, fcntl.LOCK_UN)
             self._handle.close()
             self._handle = None

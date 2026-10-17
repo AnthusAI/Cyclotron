@@ -1,4 +1,5 @@
 """A store snapshot is one archive of every store file, with a digest of each."""
+
 import tarfile
 
 from .embedded_cyclotron import Cyclotron
@@ -15,4 +16,3 @@ def test_the_archive_lists_every_store_file_of_the_definition(tmp_path):
     assert set(STORE_FILES) < names and classifier_store_name("relevant") in names
     with tarfile.open(tmp_path / "archive.tar.gz") as archive:
         assert set(archive.getnames()) == names | {"manifest.json"}
-

@@ -1,12 +1,11 @@
 """A cyclotron store moves between workers, has one writer, and survives a crash between its two stores."""
-import asyncio
-import json
+
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +17,7 @@ SECRET = "sk-live-not-a-real-key-123"
 
 class KeyedModel(Model):
     """A decision model that holds a provider key, as real adapters do."""
+
     api_key = SECRET
 
 
@@ -48,16 +48,20 @@ def test_a_second_writer_is_refused_before_anything_is_opened(tmp_path):
 def test_an_application_lease_guards_the_store(tmp_path):
     class Claim:
         held = False
+
         def __init__(self):
             self.calls = []
+
         def acquire(self):
             self.calls.append("acquire")
             if Claim.held:
                 raise StoreLocked("assignment claimed by another worker")
             Claim.held = True
+
         def release(self):
             self.calls.append("release")
             Claim.held = False
+
     claim = Claim()
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), lease=claim):
         with pytest.raises(StoreLocked, match="another worker"):
@@ -98,6 +102,7 @@ def test_restore_refuses_an_existing_store_and_a_damaged_archive(tmp_path):
                 data = data[:-1] + bytes([data[-1] ^ 1])
             member.size = len(data)
             import io
+
             target.addfile(member, io.BytesIO(data))
     with pytest.raises(ValueError, match="damaged"):
         Cyclotron.restore(damaged, tmp_path / "b")
@@ -126,12 +131,13 @@ def test_replaying_recorded_labels_rebuilds_the_same_labels_and_partitions(tmp_p
     with Cyclotron.open(tmp_path / "b", DEFINITION, Model()) as rebuilt:
         assert run(rebuilt.replay(labels)) == len(labels) == 3
         assert [(r["item"].id, r["label"], r["selected_by"]) for r in rebuilt.labels()] == [
-            (r["item"].id, r["label"], r["selected_by"]) for r in labels]
+            (r["item"].id, r["label"], r["selected_by"]) for r in labels
+        ]
         assert [[row.item.id for row in group] for group in rebuilt._partitions("relevant")[:2]] == partitions
         assert rebuilt.status().alignment.labels == alignment.labels
 
 
-CHILD = textwrap.dedent('''
+CHILD = textwrap.dedent("""
     import asyncio, os, sys
     from decision_flywheel import embedded_cyclotron, flywheel
     from decision_flywheel.embedded_cyclotron import Cyclotron, CyclotronDefinition
@@ -171,7 +177,7 @@ CHILD = textwrap.dedent('''
         os._exit(0)
 
     asyncio.run(main())
-''')
+""")
 
 
 def crash(tmp_path, point):
@@ -194,8 +200,11 @@ def test_a_crash_after_the_classifier_records_a_review_loses_no_event(tmp_path):
         review = cyclotron.subscribe(limit=1000)["events"][1]["review"]
         assert (review["reviewId"], review["label"], review["reasonCode"]) == ("message-1", "exclude", "out_of_scope")
         decision_id = review["decisionId"]
-        again = run(cyclotron.review(decision_id, "exclude", review_id="message-1",
-                                     explanation="Vendor marketing.", reason_code="out_of_scope"))
+        again = run(
+            cyclotron.review(
+                decision_id, "exclude", review_id="message-1", explanation="Vendor marketing.", reason_code="out_of_scope"
+            )
+        )
         assert again.review_id == "message-1"
         feedback = [e for e in cyclotron.wheels["relevant"].history(100000) if e["kind"] == "human-feedback"]
         assert len(feedback) == 1
@@ -217,8 +226,9 @@ def test_a_crash_before_a_decision_is_saved_is_resumed_without_a_model_call(tmp_
 
 def test_a_crash_right_after_an_activation_still_reports_the_change(tmp_path):
     crash(tmp_path, "activation")
-    definition = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="spec-seed",
-                                     optimize_every=1000, rubric_changes_every=1)
+    definition = CyclotronDefinition(
+        "papyrus-relevance", (RELEVANT,), seed="spec-seed", optimize_every=1000, rubric_changes_every=1
+    )
     with Cyclotron.open(tmp_path / "c", definition, Model()) as cyclotron:
         changes = [e for e in cyclotron.subscribe(limit=1000)["events"] if e["kind"] in ("promoted", "refit")]
         assert len(changes) == 1

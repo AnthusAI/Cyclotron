@@ -3,96 +3,147 @@
 Messages identify canonical work; they contain no human authority. A worker
 never steals a running claim or repeats a paid request after uncertain delivery.
 """
+
 import asyncio
 from uuid import uuid4
+
 from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
 
 
-class CommandReconciliationRequired(RuntimeError):pass
+class CommandReconciliationRequired(RuntimeError):
+    pass
 
 
 class AuthorizedModel:
-    def __init__(self,model,guard):self.model,self.guard=model,guard
-    def __getattr__(self,name):return getattr(self.model,name)
-    async def classify_many(self,*args,**kwargs):
+    def __init__(self, model, guard):
+        self.model, self.guard = model, guard
+
+    def __getattr__(self, name):
+        return getattr(self.model, name)
+
+    async def classify_many(self, *args, **kwargs):
         await self.guard()
-        return await self.model.classify_many(*args,**kwargs)
+        return await self.model.classify_many(*args, **kwargs)
 
 
 class CommandEventSink:
-    def __init__(self,view,run_id,check,*,batch_size=100):
-        self.view,self.run_id,self.check=view,run_id,check
-        self.pending=[];self.set_batch_size(batch_size)
-    def set_batch_size(self,value):
-        if type(value) is not int or not 1<=value<=200 or self.pending:raise ValueError('bounded empty event buffer required')
-        self.batch_size=value
-    def ingest(self,source_id,event):
-        self.pending.append((source_id,event))
-        if len(self.pending)>=self.batch_size:self.flush()
+    def __init__(self, view, run_id, check, *, batch_size=100):
+        self.view, self.run_id, self.check = view, run_id, check
+        self.pending = []
+        self.set_batch_size(batch_size)
+
+    def set_batch_size(self, value):
+        if type(value) is not int or not 1 <= value <= 200 or self.pending:
+            raise ValueError("bounded empty event buffer required")
+        self.batch_size = value
+
+    def ingest(self, source_id, event):
+        self.pending.append((source_id, event))
+        if len(self.pending) >= self.batch_size:
+            self.flush()
+
     def flush(self):
-        if not self.pending:return
+        if not self.pending:
+            return
         self.check()
-        self.view.append_batch(self.run_id,list(self.pending))
+        self.view.append_batch(self.run_id, list(self.pending))
         self.pending.clear()
 
 
 class _Effects:
     """Fresh human permission immediately before console business-state writes."""
-    WRITES={'set_status','complete_run','append_batch','append_event','update_item',
-            'record_item_prediction','checkpoint_cyclotron','label_item','retract_item_label','finish_command'}
-    def __init__(self,view,check):self._view,self._check=view,check
-    def __getattr__(self,name):
-        if name.startswith('_'):raise AttributeError(name)
-        target=getattr(self._view,name)
-        if name not in self.WRITES:return target
-        def effect(*args,**kwargs):
+
+    WRITES = {
+        "set_status",
+        "complete_run",
+        "append_batch",
+        "append_event",
+        "update_item",
+        "record_item_prediction",
+        "checkpoint_cyclotron",
+        "label_item",
+        "retract_item_label",
+        "finish_command",
+    }
+
+    def __init__(self, view, check):
+        self._view, self._check = view, check
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        target = getattr(self._view, name)
+        if name not in self.WRITES:
+            return target
+
+        def effect(*args, **kwargs):
             self._check()
-            return target(*args,**kwargs)
+            return target(*args, **kwargs)
+
         return effect
 
 
 class HostedCommandWorker:
-    def __init__(self,store_for_account,authorization,runtime_for_command,*,allow_live=False):
-        self.allow_live=allow_live
-        self.store_for_account,self.authorization,self.runtime_for_command=store_for_account,authorization,runtime_for_command
+    def __init__(self, store_for_account, authorization, runtime_for_command, *, allow_live=False):
+        self.allow_live = allow_live
+        self.store_for_account, self.authorization, self.runtime_for_command = (
+            store_for_account,
+            authorization,
+            runtime_for_command,
+        )
 
-    async def process(self,message):
-        if not self.allow_live:raise ValueError("live worker requires separate operator authority")
-        if not isinstance(message,dict) or set(message)!={'accountId','runId','jobId'}:raise ValueError('delivery contains references only')
-        for key in message:uuid(message[key])
-        store=await asyncio.to_thread(self.store_for_account,message['accountId'])
-        job,actor=await asyncio.to_thread(store.command_envelope,message['jobId'])
-        if actor.account_id!=message['accountId'] or actor.run_id!=message['runId'] or job['run_id']!=actor.run_id:
-            raise AccountAccessDenied('delivery target does not match canonical actor')
-        guard=self.authorization.guard(actor)
+    async def process(self, message):
+        if not self.allow_live:
+            raise ValueError("live worker requires separate operator authority")
+        if not isinstance(message, dict) or set(message) != {"accountId", "runId", "jobId"}:
+            raise ValueError("delivery contains references only")
+        for key in message:
+            uuid(message[key])
+        store = await asyncio.to_thread(self.store_for_account, message["accountId"])
+        job, actor = await asyncio.to_thread(store.command_envelope, message["jobId"])
+        if actor.account_id != message["accountId"] or actor.run_id != message["runId"] or job["run_id"] != actor.run_id:
+            raise AccountAccessDenied("delivery target does not match canonical actor")
+        guard = self.authorization.guard(actor)
         await guard()
-        if job['status'] in ('completed','failed','interrupted'):return {'status':job['status'],'jobId':job['id']}
-        if job['status']!='pending':raise CommandReconciliationRequired('running command requires scoped reconciliation')
-        owner=str(uuid4())
-        claim=await asyncio.to_thread(store.claim_command,owner=owner,job_id=job['id'])
-        if claim is None:raise CommandReconciliationRequired('command already claimed; never infer a receipt')
-        view=await asyncio.to_thread(store.for_command,job['id'],owner,claim['claim_fence'])
-        current=await asyncio.to_thread(store.command_actor,job['id'],owner,claim['claim_fence'])
-        if current!=actor:raise CommandReconciliationRequired('canonical queued actor changed')
+        if job["status"] in ("completed", "failed", "interrupted"):
+            return {"status": job["status"], "jobId": job["id"]}
+        if job["status"] != "pending":
+            raise CommandReconciliationRequired("running command requires scoped reconciliation")
+        owner = str(uuid4())
+        claim = await asyncio.to_thread(store.claim_command, owner=owner, job_id=job["id"])
+        if claim is None:
+            raise CommandReconciliationRequired("command already claimed; never infer a receipt")
+        view = await asyncio.to_thread(store.for_command, job["id"], owner, claim["claim_fence"])
+        current = await asyncio.to_thread(store.command_actor, job["id"], owner, claim["claim_fence"])
+        if current != actor:
+            raise CommandReconciliationRequired("canonical queued actor changed")
+
         def check():
             self.authorization.check(actor)
             view.run(actor.run_id)  # Fresh execution fence as well as human permission.
-        async def owned_guard():await asyncio.to_thread(check)
+
+        async def owned_guard():
+            await asyncio.to_thread(check)
+
         await owned_guard()  # After confirmed execution ownership, before opening operation state.
-        effects=_Effects(view,check)
-        runtime=self.runtime_for_command(effects,owned_guard,check)
-        run=await asyncio.to_thread(effects.run,actor.run_id)
-        items=await asyncio.to_thread(effects.items,actor.run_id)
-        shown=await asyncio.to_thread(effects.current_item,actor.run_id)
-        session=None
+        effects = _Effects(view, check)
+        runtime = self.runtime_for_command(effects, owned_guard, check)
+        run = await asyncio.to_thread(effects.run, actor.run_id)
+        items = await asyncio.to_thread(effects.items, actor.run_id)
+        shown = await asyncio.to_thread(effects.current_item, actor.run_id)
+        session = None
         try:
-            session=await asyncio.to_thread(runtime.open_session,actor.run_id,run['config'],items,shown)
-            result=await runtime.execute(session,job['kind'],job['payload'],shown,run['config'],request_id=job['request_id'])
+            session = await asyncio.to_thread(runtime.open_session, actor.run_id, run["config"], items, shown)
+            result = await runtime.execute(
+                session, job["kind"], job["payload"], shown, run["config"], request_id=job["request_id"]
+            )
             await owned_guard()
         finally:
-            if session is not None:await asyncio.to_thread(session.close)
+            if session is not None:
+                await asyncio.to_thread(session.close)
         # API updates are owned by WorkspaceSession, exactly as in the native runner.
-        if result.updates:raise ValueError('console runtime returned unsupported external item updates')
-        await asyncio.to_thread(effects.finish_command,job['id'],'completed',dict(result.result))
-        return {'status':'completed','jobId':job['id']}
+        if result.updates:
+            raise ValueError("console runtime returned unsupported external item updates")
+        await asyncio.to_thread(effects.finish_command, job["id"], "completed", dict(result.result))
+        return {"status": "completed", "jobId": job["id"]}

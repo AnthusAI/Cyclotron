@@ -1,18 +1,26 @@
 """Text-free events emitted while a reusable flywheel is measuring a round."""
+
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-from typing import Callable
 
-
-_EVENT_TYPES = frozenset({
-    "round-started", "trial-started", "decision-reused", "decision-requested",
-    "decision-completed", "decision-failed", "trial-completed", "trial-incomplete",
-    "round-completed",
-})
+_EVENT_TYPES = frozenset(
+    {
+        "round-started",
+        "trial-started",
+        "decision-reused",
+        "decision-requested",
+        "decision-completed",
+        "decision-failed",
+        "trial-completed",
+        "trial-incomplete",
+        "round-completed",
+    }
+)
 
 
 def _fingerprint(value: object) -> str:
@@ -53,7 +61,7 @@ class FlywheelEvent:
             raise ValueError("created_at must be non-empty")
 
     @classmethod
-    def from_document(cls, value: object) -> "FlywheelEvent":
+    def from_document(cls, value: object) -> FlywheelEvent:
         expected = {"event_type", "trial_name", "request_fingerprint", "calls_attempted", "calls_succeeded", "created_at"}
         if not isinstance(value, dict) or set(value) != expected:
             raise ValueError("event stream entry has unexpected fields")

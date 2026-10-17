@@ -1,18 +1,18 @@
 """A deterministic, synthetic optimize-save-decide walkthrough with no network."""
+
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .artifacts import create_artifact, load_artifact
 from .budget import ContextBudget
 from .context import PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from .optimizer import TrialSpec, search_context_policies
-
 
 POOL_REVISION = "synthetic-demo-v1"
 MODEL_FINGERPRINT = "synthetic-rule-model-v1"
@@ -25,13 +25,11 @@ class SyntheticRuleModel:
     fingerprint = MODEL_FINGERPRINT
     capabilities = ModelCapabilities()
 
-    async def decide(self, task: DecisionTask, target: Item,
-                     context: Sequence[LabeledItem]) -> DecisionResult:
+    async def decide(self, task: DecisionTask, target: Item, context: Sequence[LabeledItem]) -> DecisionResult:
         text = target.values[task.input_field]
         marker, expected = ("crisp", "approve") if "crisp" in text else ("cold", "reject")
         has_matching_example = len(context) == len(task.labels) and any(
-            example.label == expected and marker in example.item.values[task.input_field]
-            for example in context
+            example.label == expected and marker in example.item.values[task.input_field] for example in context
         )
         prediction = expected if has_matching_example else next(label for label in task.labels if label != expected)
         return DecisionResult(prediction, model=self.name)
@@ -64,28 +62,30 @@ async def run_demo(output_directory: Path) -> dict[str, object]:
     """
     task, pool, development, target = synthetic_inputs()
     trials = (
-        TrialSpec(RandomBalanced(seed=1), per_label=0, name="random-zero",
-                  budget=ContextBudget(per_label=0)),
-        TrialSpec(RandomBalanced(seed=1), per_label=1, name="random-seed-1",
-                  budget=ContextBudget(per_label=1)),
-        TrialSpec(RandomBalanced(seed=2), per_label=1, name="random-seed-2",
-                  budget=ContextBudget(per_label=1)),
-        TrialSpec(PrototypeBalanced(), per_label=1, name="prototype-size-1",
-                  budget=ContextBudget(per_label=1)),
-        TrialSpec(PrototypeBalanced(), per_label=2, name="prototype-size-2",
-                  budget=ContextBudget(per_label=2)),
-        TrialSpec(PerLabelLexicalRetrieval(), per_label=1, name="lexical-size-1",
-                  budget=ContextBudget(per_label=1)),
-        TrialSpec(PerLabelLexicalRetrieval(), per_label=2, name="lexical-size-2",
-                  budget=ContextBudget(per_label=2)),
+        TrialSpec(RandomBalanced(seed=1), per_label=0, name="random-zero", budget=ContextBudget(per_label=0)),
+        TrialSpec(RandomBalanced(seed=1), per_label=1, name="random-seed-1", budget=ContextBudget(per_label=1)),
+        TrialSpec(RandomBalanced(seed=2), per_label=1, name="random-seed-2", budget=ContextBudget(per_label=1)),
+        TrialSpec(PrototypeBalanced(), per_label=1, name="prototype-size-1", budget=ContextBudget(per_label=1)),
+        TrialSpec(PrototypeBalanced(), per_label=2, name="prototype-size-2", budget=ContextBudget(per_label=2)),
+        TrialSpec(PerLabelLexicalRetrieval(), per_label=1, name="lexical-size-1", budget=ContextBudget(per_label=1)),
+        TrialSpec(PerLabelLexicalRetrieval(), per_label=2, name="lexical-size-2", budget=ContextBudget(per_label=2)),
     )
     checkpoint: dict[str, dict[str, str]] = {}
     call_accounting: dict[str, int | str] = {}
     model = SyntheticRuleModel()
     optimization = await search_context_policies(
-        task, pool, development, model, trials, max_model_calls=14, objective="accuracy",
-        checkpoint=checkpoint, call_accounting=call_accounting, model_fingerprint=MODEL_FINGERPRINT,
-        display_order="canonical", order_seed=0,
+        task,
+        pool,
+        development,
+        model,
+        trials,
+        max_model_calls=14,
+        objective="accuracy",
+        checkpoint=checkpoint,
+        call_accounting=call_accounting,
+        model_fingerprint=MODEL_FINGERPRINT,
+        display_order="canonical",
+        order_seed=0,
     )
     if optimization.winner is None:
         raise RuntimeError("the deterministic synthetic demo did not freeze a winner")
@@ -113,16 +113,15 @@ async def run_demo(output_directory: Path) -> dict[str, object]:
         "trial_objectives": {trial.trial_name: trial.objective for trial in optimization.trials},
         "winner": optimization.winner.trial_name,
     }
-    (destination / "summary.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    (destination / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the offline synthetic Decision Flywheel walkthrough.")
-    parser.add_argument("--output", type=Path, default=Path("demo-output"),
-                        help="folder for text-free artifact.json and summary.json")
+    parser.add_argument(
+        "--output", type=Path, default=Path("demo-output"), help="folder for text-free artifact.json and summary.json"
+    )
     args = parser.parse_args()
     print(json.dumps(asyncio.run(run_demo(args.output)), indent=2, sort_keys=True))
 
