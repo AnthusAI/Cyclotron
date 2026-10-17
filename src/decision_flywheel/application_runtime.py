@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .classifier_config import ClassifierConfig
-from .classification_metrics import classification_metrics
+from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_calibration_metrics
+from .feedback_trigger import learning_feedback
 from .flywheel import DecisionFlywheel
 from .reviewer_core import reviewer_item, reviewer_task
 from .reviewer_flywheel import ReviewerFlywheel
@@ -68,6 +69,7 @@ class RuntimeCommand:
 
     result: Mapping[str, object]
     updates: tuple[ItemUpdate, ...] = ()
+    prepares_next_item_after_feedback: bool = True
 
 
 @dataclass
@@ -181,23 +183,25 @@ class ArticleReviewRuntime:
     def normalize_run_config(self, config: Mapping[str, object], items: Sequence[Mapping[str, object]]) -> dict:
         values = dict(config)
         allowed = {"selection_policy", "max_requests", "max_optimizer_calls", "optimize_every",
-                   "rubric_changes_every", "seed", "decisions_model", "optimizer_model"}
+                   "rubric_changes_every", "seed", "decisions_model", "optimizer_model", "optimizer_transport"}
         if set(values) - allowed:
             raise ValueError("unknown run configuration option")
-        for key, default in (("max_requests", 500), ("max_optimizer_calls", 10),
+        for key, default in (("max_requests", 500), ("max_optimizer_calls", 1000),
                              ("optimize_every", 20), ("rubric_changes_every", 2)):
             value = values.setdefault(key, default)
             if type(value) is not int or value < 1:
                 raise ValueError("run ceilings and cadences must be positive integers")
-        values.setdefault("selection_policy", {"primary": "accuracy"})
+        values.setdefault("selection_policy", {"primary": "f1", "positive_class": "include"})
         policy = SelectionPolicy(**values["selection_policy"])
         if policy.positive_class and policy.positive_class not in live_review_labels():
             raise ValueError("unknown positive class")
-        from dataclasses import asdict
         values["selection_policy"] = asdict(policy)
         values.setdefault("seed", "arxiv-web-v1")
         values.setdefault("decisions_model", "jev-1.13.0")
         values.setdefault("optimizer_model", "gpt-6-luna")
+        from .adapters.optimizer_transport import validate_optimizer_transport
+        values["optimizer_transport"] = validate_optimizer_transport(values.get("optimizer_transport", "openai"))
+        values["evaluation_protocol"] = "protected-feedback-v1"
         values["class_config"] = [{"label": "include", "role": "positive"},
                                   {"label": "exclude", "role": "negative"}]
         values["dataset_fingerprint"] = hashlib.sha256(
@@ -261,7 +265,8 @@ class ArticleReviewRuntime:
                 reviewer.store.record_skip(item_id)
                 reviewer.core._emit({"kind": "human-skipped", "target_id": item_id})
             reviewer.finish_cycle()
-            return RuntimeCommand({"reviewed": item_id}, (ItemUpdate(item_id, reviewed=True),))
+            return RuntimeCommand({"reviewed": item_id}, (ItemUpdate(item_id, reviewed=True),),
+                                  prepares_next_item_after_feedback=False)
         if kind == "undo":
             reviewer.finish_cycle()
             article = reviewer.store.undo_last_vote()
@@ -280,10 +285,12 @@ class ArticleReviewRuntime:
         every = config["optimize_every"]
         if reviewer.feedback_trigger(every):
             reviewer.improve(stage="rubric", trigger="label-transitions")
-        count = sum(event["kind"] == "human-feedback" and event.get("action") == "submitted"
-                    for event in reviewer.core.events_of(('human-feedback',)))
+        history = reviewer.core.events_of(("human-feedback",))
+        latest = next((event for event in reversed(history) if event["kind"] == "human-feedback"), None)
+        eligible = bool(latest and learning_feedback(latest) and latest.get("action") == "submitted")
+        count = sum(learning_feedback(event) and event.get("action") == "submitted" for event in history)
         for stage in ("questions", "examples", "classifier"):
-            due = count > 0 and count % every == 0
+            due = eligible and count > 0 and count % every == 0
             reviewer.current_cycle.check_trigger(
                 stage, due=due,
                 reason="label cadence reached" if due else "label cadence not reached",
@@ -294,17 +301,10 @@ class ArticleReviewRuntime:
 
     @staticmethod
     def _metrics(reviewer: ReviewerFlywheel) -> None:
-        truth, labels, probabilities = [], [], []
-        for vote in reviewer.store._active_actions().values():
-            if vote.action != "vote" or not vote.presentation_id:
-                continue
-            shown = next(presentation for presentation in reviewer.store.presentations_for(vote.article_id)
-                         if presentation.id == vote.presentation_id)
-            truth.append(vote.label)
-            labels.append(shown.predicted_label)
-            probabilities.append({label: shown.confidence if label == shown.predicted_label else 1 - shown.confidence
-                                  for label in reviewer.core.initial.task.labels})
-        metrics = classification_metrics(reviewer.core.initial.task.labels, truth, labels, probabilities)
-        reviewer.core._emit({"kind": "cycle-metrics",
-                             "metric_scope": "prequential reviewed predictions; not final held-out model accuracy",
-                             "metrics": metrics})
+        metrics = reviewed_calibration_metrics(
+            reviewer.core.initial.task.labels, reviewer.core.events_of(REVIEW_BINDING_EVENT_KINDS))
+        reviewer.core._emit({
+            "kind": "cycle-metrics",
+            "metric_scope": "latest 200 human-labeled items; prequential predictions, not final held-out model accuracy",
+            "metrics": metrics,
+        })

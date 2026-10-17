@@ -3,7 +3,7 @@
   "title": "Make ArticleReviewRuntime the default WebWorker runtime and delete the legacy branch",
   "description": "src/decision_flywheel/web_worker.py still carries a second article-review implementation that duplicates application_runtime.py and has already diverged: _run_inputs (web_worker.py:93) versus normalize_run_config (application_runtime.py:181) differ in defaults (max_optimizer_calls 1000 versus 10, selection policy f1/include versus accuracy); the legacy prepare/label/undo path (web_worker.py:282) versus execute (application_runtime.py:223); _optimize has an eligible check in one and not the other; _metrics uses different metric functions. WebWorker(runtime=None) is the production default, so the seam is bypassed.\nDo: make ArticleReviewRuntime the default runtime, delete the legacy branch and its tests that only test the legacy branch, reconcile the two sets of defaults deliberately (record which default wins and why in the commit message), and confirm the local web workspace (make web) behaves the same for prepare, label, undo and optimize.\nDone when: one implementation remains, web_worker_test.py and application_runtime_behavior_test.py pass, the workspace runs. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -12,11 +12,14 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-10-17T16:37:25.651495Z",
-  "updated_at": "2026-10-17T16:37:25.651613Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T17:25:35.483440Z",
+  "closed_at": "2026-10-17T17:25:35.483250Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }
