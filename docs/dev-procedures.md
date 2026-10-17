@@ -9,7 +9,7 @@ Work on a branch off `origin/develop`; merge to `develop` when green; promote
 `develop` to `main` with `scripts/dev/release_to_main.sh` (add `--dry-run` to
 check without pushing). It builds a throwaway worktree, fast-forwards to
 `origin/main`, merges `origin/develop`, runs `make check` and pushes without
-force. It never touches your checkout.
+force, waits for the release commit semantic-release adds to `main`, then merges `main` back into `develop` so `develop` reports the released version. It never touches your checkout.
 
 `make test` is the fast loop: it runs `pytest -m "not slow"`, which skips the
 long replay, study and editorial-corpus tests marked `@pytest.mark.slow` (or a
