@@ -86,6 +86,8 @@ class S3EmbeddedStorage:
     def put_meta(self,key,payload):self._write(lambda data:data['meta'].__setitem__(key,payload))
     def put_item(self,identifier,payload,fingerprint):self._write(lambda data:data['items'].__setitem__(identifier,[payload,fingerprint]))
     def items(self):return [(key,row[0]) for key,row in self._data()['items'].items()]
+    def item_values(self,identifier):
+        row=self._data()['items'].get(identifier);return row[0] if row else None
     def insert_decision(self,row):
         def apply(data):
             if any(r[0]==row[0] for r in data['decisions']):raise ValueError('duplicate decision identity')

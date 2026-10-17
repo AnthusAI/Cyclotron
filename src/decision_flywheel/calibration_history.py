@@ -9,6 +9,9 @@ from .calibration_metrics import reliability_curve
 from .output_comparison import compare_outputs
 
 
+REVIEW_BINDING_EVENT_KINDS = ('prediction', 'displayed-prediction-reused', 'human-feedback')
+
+
 def _review_bindings(events):
     predictions={};prediction_ids={};reviewed=OrderedDict();bindings={}
     for event in events:

@@ -41,13 +41,13 @@ import sqlite3
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 from uuid import uuid4
 
-from .calibration_history import reviewed_prediction_bindings
+from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
 from .cyclotron_status import (FULL_REVIEW, CyclotronOverview, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
                               initial_snapshot, status_from_flywheel, worst_output)
 from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel
-from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions,
+from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions, labeled_partitions,
                             learn_from_review, record_cycle_metrics, review_role)
 from .models import DecisionTask, Item
 from .selection_policy import SelectionPolicy
@@ -687,7 +687,8 @@ class Cyclotron:
             # A suspended cycle from an interrupted decide is resumed here, and
             # the shared request cache answers it without a new model call.
             results, _ = await decide_with_shared_context(self.wheels, self.shared, item, self._partitions,
-                                                          now=datetime.now(timezone.utc))
+                                                          now=datetime.now(timezone.utc),
+                                                          labeled_only_partitions=self._labeled_partitions)
             self._sync()
             decision_id = str(uuid4())
             selection = self._select(item.id, {cid: result.confidence for cid, result in results.items()})
@@ -1073,7 +1074,7 @@ class Cyclotron:
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f"{name} must be text")
             explanation = (explanation.strip() or None) if explanation else None
-            target = Item(decision.item_id, self._item_values()[decision.item_id])
+            target = Item(decision.item_id, self._known_item_values(decision.item_id))
             # Validate every entry before recording any of them.
             plans = []
             for cid, value in entries.items():
@@ -1180,8 +1181,8 @@ class Cyclotron:
             if active is None or active.label is None:
                 raise ValueError("this decision has no label to undo")
             original = self._feedback_event(wheel, active.review_id)
-            target = Item(decision.item_id, self._item_values()[decision.item_id])
-            shown = reviewed_prediction_bindings(wheel.history(100000)).get(original["feedback"]["id"])
+            target = Item(decision.item_id, self._known_item_values(decision.item_id))
+            shown = reviewed_prediction_bindings(wheel.events_of(REVIEW_BINDING_EVENT_KINDS)).get(original["feedback"]["id"])
             if shown is None:
                 raise ValueError("the reviewed label has no recorded decision")
             with wheel.cycle(target, reason="human-retraction"):
@@ -1603,6 +1604,20 @@ class Cyclotron:
         training, development, protected = feedback_partitions(self.wheels[classifier], self._item_values(), self.definition.seed)
         return (*self.priming_examples.get(classifier,()),*training), development, protected
 
+    def _labeled_partitions(self, classifier: str):
+        training, development = labeled_partitions(self.wheels[classifier], self._item_values_for, self.definition.seed)
+        return (*self.priming_examples.get(classifier,()),*training), development
+
+    def _item_values_for(self, item_id: str) -> dict | None:
+        values = self.root_storage.item_values(item_id)
+        return None if values is None else json.loads(values)
+
+    def _known_item_values(self, item_id: str) -> dict:
+        values = self._item_values_for(item_id)
+        if values is None:
+            raise KeyError(item_id)
+        return values
+
     def _item_values(self) -> dict[str, dict]:
         return {item_id: json.loads(values) for item_id, values in
                 self.root_storage.items()}
@@ -1653,14 +1668,14 @@ class Cyclotron:
 
     @staticmethod
     def _feedback_event(wheel, review_id: str) -> dict:
-        event = next((e for e in reversed(wheel.history(100000))
+        event = next((e for e in reversed(wheel.events_of(('human-feedback',)))
                       if e["kind"] == "human-feedback" and e["feedback"]["id"] == review_id), None)
         if event is None:
             raise ValueError("the reviewed label is missing from the classifier history")
         return event
 
     def _close_waiting_cycles(self, item_id: str, decision_id: str, reason: str) -> None:
-        target = Item(item_id, self._item_values()[item_id])
+        target = Item(item_id, self._known_item_values(item_id))
         for wheel in self.wheels.values():
             cycle = wheel.resume_cycle(target)
             if cycle is not None:

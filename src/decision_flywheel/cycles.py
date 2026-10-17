@@ -19,7 +19,7 @@ class Cycle:
         if wheel._cycle_running:
             raise RuntimeError('one operational cycle may run at a time')
         closed = set()
-        for event in reversed(wheel.history(100000)):
+        for event in reversed(wheel.events_of(('cycle-started','cycle-completed','cycle-failed'))):
             if event['kind'] in ('cycle-completed','cycle-failed'):
                 closed.add(event.get('cycle_id'))
             if event['kind']=='cycle-started':

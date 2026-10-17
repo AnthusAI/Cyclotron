@@ -5,7 +5,7 @@ from uuid import uuid4
 import hashlib
 from copy import copy
 from .classifier_config import ClassifierConfig
-from .calibration_history import reviewed_prediction_bindings
+from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .feedback import FeedbackItem,LABEL_SOURCE_VETTED
 from .flywheel import DecisionFlywheel
 from .models import DecisionTask,Item
@@ -78,7 +78,7 @@ class WorkspaceSession:
                     storage=None if storage is None else storage.runtime(identifier))
             install_sibling_checks(self.wheels,self.shared,self.partitions,SiblingPolicy(**self.config.get('sibling_policy',{})))
             transport=getattr(optimizer,'complete',None)
-            if hasattr(transport,'calls'):transport.calls=sum(sum(e['kind']=='optimizer-request' for e in wheel.history(100000)) for wheel in self.wheels.values())
+            if hasattr(transport,'calls'):transport.calls=sum(sum(e['kind']=='optimizer-request' for e in wheel.events_of(('optimizer-request',))) for wheel in self.wheels.values())
         except BaseException:
             if storage is not None:storage.close()
             raise
@@ -178,7 +178,7 @@ class WorkspaceSession:
             await self.authorize()
             identifier=label['classifier_id'];wheel=self.wheels[identifier]
             feedback_id=f'{request_id}:{identifier}'
-            existing=next((e['feedback'] for e in wheel.history(100000) if e['kind']=='human-feedback' and e['feedback']['id']==feedback_id),None)
+            existing=next((e['feedback'] for e in wheel.events_of(('human-feedback',)) if e['feedback']['id']==feedback_id),None)
             if existing:
                 if existing['final_answer_value']!=label['label'] or (existing.get('edit_comment_value') or '')!=label.get('comment',''):
                     raise ValueError('feedback identity has different content')
@@ -227,7 +227,7 @@ class WorkspaceSession:
         await self.authorize()
         results=[]
         for identifier,wheel in self.wheels.items():
-            feedback=next((e['feedback'] for e in reversed(wheel.history(100000)) if e['kind']=='human-feedback' and e.get('action')=='submitted'),None)
+            feedback=next((e['feedback'] for e in reversed(wheel.events_of(('human-feedback',))) if e.get('action')=='submitted'),None)
             if not feedback:continue
             target=self.items[feedback['item_id']]
             with wheel.cycle(Item(target['id'],target['values']),reason='optimization-resume') as cycle:
@@ -260,7 +260,7 @@ class WorkspaceSession:
             if not isinstance(comment,str):raise ValueError('comment must be text')
             expected=label.get('expected_feedback_id')
             if not isinstance(expected,str) or not expected:raise ValueError('correction needs the expected feedback identity')
-            history=wheel.history(100000);feedback_id=f'{request_id}:{identifier}'
+            history=wheel.events_of(('human-feedback',));feedback_id=f'{request_id}:{identifier}'
             existing=next((e for e in history if e['kind']=='human-feedback' and e['feedback']['id']==feedback_id),None)
             if existing:
                 if (existing['feedback']['item_id']!=item_id or existing['feedback']['final_answer_value']!=canonical or
@@ -277,7 +277,7 @@ class WorkspaceSession:
         item=self.items[item_id];target=Item(item_id,item['values'])
         for identifier,wheel,canonical,comment,original,existing,feedback_id,expected in plans:
             if any(e['kind']=='feedback-correction-completed' and e.get('feedback_id')==feedback_id
-                   for e in wheel.history(100000)):continue
+                   for e in wheel.events_of(('feedback-correction-completed',))):continue
             cycle=wheel.resume_cycle(target) if existing else None
             with_cycle=cycle or wheel.cycle(target,reason='human-correction').__enter__()
             try:
@@ -308,18 +308,15 @@ class WorkspaceSession:
         if not isinstance(request_id,str) or not request_id:raise ValueError('undo needs a command identity')
         if self.config.get('input_mode')=='replay':raise ValueError('frozen replay feedback cannot be undone')
         owner=next(iter(self.wheels.values()))
-        history=owner.history(100000)
+        history=owner.events_of(('feedback-undo-completed','feedback-undo-started'))
         completed=next((e for e in history if e['kind']=='feedback-undo-completed' and e.get('request_id')==request_id),None)
         if completed:return completed['result']
         plan=next((e for e in history if e['kind']=='feedback-undo-started' and e.get('request_id')==request_id),None)
         if plan is None:
             active={}
             for identifier,wheel in self.wheels.items():
-                for event in wheel.history(100000):
-                    if event['kind']!='human-feedback':continue
-                    key=(identifier,event['feedback']['item_id'])
-                    active.pop(key,None)
-                    if event.get('action')=='submitted':active[key]=event
+                for event in wheel.active_labels():
+                    active[(identifier,event['feedback']['item_id'])]=event
             local={key:event for key,event in active.items()
                    if not (event['feedback'].get('review_provenance') or '').startswith('replayed-human-vote:')}
             if not local:return {'undone':None}
@@ -335,7 +332,7 @@ class WorkspaceSession:
         # Resolve all saved reviews before retracting anything. Missing trace
         # provenance cannot be replaced with an unrelated retrospective score.
         for identifier,wheel in self.wheels.items():
-            history=wheel.history(100000)
+            history=wheel.events_of(REVIEW_BINDING_EVENT_KINDS)
             ref=next((row for row in plan['targets'] if row['classifier_id']==identifier),None)
             feedback_id=ref['feedback_id'] if ref else next(e['feedback']['id'] for e in reversed(history)
                 if e['kind']=='human-feedback' and e['feedback']['item_id']==item_id)
@@ -343,7 +340,7 @@ class WorkspaceSession:
             if prediction is None:raise ValueError('saved review has no recorded pre-vote prediction')
             reused_predictions[identifier]=prediction
         for ref in plan['targets']:
-            identifier=ref['classifier_id'];wheel=self.wheels[identifier];history=wheel.history(100000)
+            identifier=ref['classifier_id'];wheel=self.wheels[identifier];history=wheel.events_of(('human-feedback','feedback-retraction-completed'))
             if any(e['kind']=='feedback-retraction-completed' and e.get('request_id')==request_id for e in history):continue
             original=next(e for e in history if e['kind']=='human-feedback' and e['feedback']['id']==ref['feedback_id'])
             current=next(e for e in reversed(history) if e['kind']=='human-feedback' and e['feedback']['item_id']==item_id)

@@ -110,3 +110,15 @@ def test_owned_snapshot_refresh_detects_operator_fence_change_before_operation_s
     # production has no online takeover/reset endpoint.
     record=root.journal.read();value=deepcopy(record.value);value['owner'],value['fence']=root.authority
     root.journal.commit(record,value);engine.close()
+
+
+def test_one_item_can_be_read_without_listing_every_item():
+    from .s3_embedded_storage import S3EmbeddedStorage
+    from .s3_journal_test import journal
+    storage = S3EmbeddedStorage(journal(name='root-item-lookup'), max_records=1000)
+    storage.initialize()
+    storage.acquire(str(uuid4()))
+    with storage.transaction():
+        storage.put_item('known', '{"text":"yes"}', 'fingerprint')
+    assert storage.item_values('known') == '{"text":"yes"}'
+    assert storage.item_values('missing') is None

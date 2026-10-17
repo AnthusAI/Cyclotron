@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Event, Thread
 
 from .classifier_config import ClassifierConfig
-from .calibration_history import reviewed_calibration_metrics
+from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_calibration_metrics
 from .flywheel import DecisionFlywheel
 from .reviewer_core import reviewer_item, reviewer_task
 from .reviewer_flywheel import ReviewerFlywheel
@@ -361,7 +361,7 @@ class WebWorker:
     def _optimize(self, reviewer, config):
         if reviewer.feedback_trigger(config['optimize_every']):
             reviewer.improve(stage='rubric',trigger='label-transitions')
-        history=reviewer.core.history(100000)
+        history=reviewer.core.events_of(('human-feedback',))
         latest=next((e for e in reversed(history) if e['kind']=='human-feedback'),None)
         eligible=bool(latest and learning_feedback(latest) and latest.get('action')=='submitted')
         count = sum(learning_feedback(e) and e.get('action')=='submitted' for e in history)
@@ -374,6 +374,6 @@ class WebWorker:
 
     @staticmethod
     def _metrics(reviewer):
-        metrics = reviewed_calibration_metrics(reviewer.core.initial.task.labels,reviewer.core.history(100000))
+        metrics = reviewed_calibration_metrics(reviewer.core.initial.task.labels,reviewer.core.events_of(REVIEW_BINDING_EVENT_KINDS))
         reviewer.core._emit({'kind':'cycle-metrics','metric_scope':'latest 200 human-labeled items; prequential predictions, not final held-out model accuracy',
                             'metrics':metrics})

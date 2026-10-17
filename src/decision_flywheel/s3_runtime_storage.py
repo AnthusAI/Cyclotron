@@ -8,6 +8,7 @@ from copy import deepcopy
 import json
 from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid,decode
 from .learning_storage import ARTIFACTS,artifact_table
+from .active_labels import ACTIVE_LABELS_STATE_KEY,FEEDBACK_EVENT_KIND,dump_active_labels,load_active_labels,rebuild_active_labels,record_feedback_event
 
 class RuntimeOwnershipError(RuntimeError):pass
 
@@ -88,6 +89,10 @@ class S3RuntimeStores:
     @staticmethod
     def ordinal(value):value['ordinal']+=1;return value['ordinal']
 
+def _active_by_item(data):
+    saved=data['state'].get(ACTIVE_LABELS_STATE_KEY)
+    return load_active_labels(saved) if saved is not None else rebuild_active_labels(data['events'])
+
 class _View:
     def __init__(self,store):self.store=store
     def read(self):return self.store._read()
@@ -110,8 +115,20 @@ class _State(_View):
         json_text(payload)
         def apply(data,value):
             identifier=(data['events'][-1][0] if data['events'] else 0)+1
-            data['events'].append([identifier,payload]);return identifier
+            data['events'].append([identifier,payload]);event=json.loads(payload)
+            if event.get('kind')==FEEDBACK_EVENT_KIND:
+                active_by_item=_active_by_item(data)
+                record_feedback_event(active_by_item,identifier,event)
+                data['state'][ACTIVE_LABELS_STATE_KEY]=dump_active_labels(active_by_item)
+            return identifier
         return self.change(apply)
+    def active_labels(self):
+        def materialize(data,value):
+            if ACTIVE_LABELS_STATE_KEY not in data['state']:data['state'][ACTIVE_LABELS_STATE_KEY]=dump_active_labels(_active_by_item(data))
+            return data['state'][ACTIVE_LABELS_STATE_KEY]
+        saved=self.read()['state'].get(ACTIVE_LABELS_STATE_KEY)
+        if saved is None:saved=self.change(materialize)
+        return tuple(load_active_labels(saved).values())
     def history(self,limit=100):
         rows=self.read()['events'];rows=rows if limit<0 else rows[-limit:] if limit else []
         return tuple({**json.loads(payload),'event_id':identifier} for identifier,payload in rows)

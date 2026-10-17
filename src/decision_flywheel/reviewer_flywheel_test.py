@@ -14,7 +14,7 @@ def test_protected_vote_does_not_advance_non_rubric_review_cadence():
     checks=[]
     events=[{'kind':'human-feedback','action':'submitted','assignment':'train','cycle_id':'one'},
             {'kind':'human-feedback','action':'submitted','assignment':'rolling_audit','cycle_id':'two'}]
-    reviewer=SimpleNamespace(stage='examples',core=SimpleNamespace(history=lambda _:events),
+    reviewer=SimpleNamespace(stage='examples',core=SimpleNamespace(events_of=lambda _:events),
         current_cycle=SimpleNamespace(check_trigger=lambda stage,**check:checks.append(check)))
     assert not ReviewerFlywheel.feedback_trigger(reviewer,1)
     assert checks[0]['details']['feedback_count']==1
