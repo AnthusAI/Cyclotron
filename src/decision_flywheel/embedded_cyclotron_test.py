@@ -236,6 +236,7 @@ def test_reviews_drive_the_existing_learning_loop_when_an_optimizer_is_supplied(
     assert [e["kind"] for e in events if e["kind"] in ("decision", "review")][:2] == ["decision", "review"]
 
 
+@pytest.mark.slow
 def test_a_promoted_version_reaches_subscribers_and_the_status(tmp_path):
     from .optimizer_agent import OptimizerAgent, OptimizerReply
     optimizer = OptimizerAgent(lambda _: OptimizerReply(

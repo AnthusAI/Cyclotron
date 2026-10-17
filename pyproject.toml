@@ -58,3 +58,4 @@ decision_flywheel = ["vendor/vis-timeline/*.txt", "vendor/vis-timeline/*.md", "v
 testpaths = ["src", "tests"]
 pythonpath = ["src"]
 python_files = ["*_test.py"]
+markers = ["slow: long replay, study and editorial-corpus tests; make test skips them, make test-all and make check run them"]

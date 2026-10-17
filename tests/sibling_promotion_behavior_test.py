@@ -8,11 +8,15 @@ way prompt interference does with a real model.
 import asyncio
 import json
 
+import pytest
+
 from decision_flywheel.batched_classification import BatchedAnswers
 from decision_flywheel.embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from decision_flywheel.models import DecisionResult, Item
 from decision_flywheel.optimizer_agent import OptimizerAgent, OptimizerReply
 from decision_flywheel.sibling_check import SiblingPolicy
+
+pytestmark = pytest.mark.slow
 
 RELEVANT = ClassifierSpec("relevant", ("include", "exclude"), "Is this relevant?", positive_label="include")
 TIMELY = ClassifierSpec("timely", ("include", "exclude"), "Is this timely?", positive_label="include")

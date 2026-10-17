@@ -158,6 +158,7 @@ def test_a_cyclotron_without_a_program_reviews_everything(tmp_path):
     assert all(d.review.selected for d in decisions)
 
 
+@pytest.mark.slow
 def test_selection_propensities_reach_the_feedback_used_for_fitting(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model(), review_program=FAST) as cyclotron:
         decisions = decide_and_review(cyclotron, 0, 60)

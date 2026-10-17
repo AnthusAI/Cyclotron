@@ -429,6 +429,7 @@ class HashModel:
                                  {"input_tokens": 1}, 1)
 
 
+@pytest.mark.slow
 def test_a_fresh_replay_with_the_new_mix_starts_completes_and_records_lineage(tmp_path):
     prompts, counter = [], [0]
 

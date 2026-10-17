@@ -55,6 +55,7 @@ def checklist(cyclotron, index, outputs):
     return run(cyclotron.review(decision.decision_id, labels={spec.id: label(index) for spec in outputs}))
 
 
+@pytest.mark.slow
 def test_a_deferred_review_returns_before_any_optimizer_call_and_queues_each_output(tmp_path):
     transport = Transport()
     with Cyclotron.open(tmp_path / "c", definition(), Model(), OptimizerAgent(transport), max_requests=1000,
@@ -72,6 +73,7 @@ def test_a_deferred_review_returns_before_any_optimizer_call_and_queues_each_out
     assert all(len(events) == 1 for events in recorded.values())
 
 
+@pytest.mark.slow
 def test_learning_after_each_review_matches_inline_learning(tmp_path):
     def runs(directory, learning):
         transport, calls = Transport(), []

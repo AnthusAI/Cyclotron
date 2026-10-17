@@ -16,6 +16,8 @@ from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .replay import plan_replay
 from .shadow_evaluation import ShadowEvaluator, clears_look
 
+pytestmark = pytest.mark.slow
+
 TASK = DecisionTask("inclusion", ("include", "exclude"), "Should this item be included?")
 
 

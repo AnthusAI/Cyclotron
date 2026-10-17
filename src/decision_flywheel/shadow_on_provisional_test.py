@@ -2,12 +2,16 @@
 Fake decision model and fake optimizer only, no network."""
 import json
 
+import pytest
+
 from .classifier_config import ClassifierConfig
 from .cycle_replay import run_cycle_replay
 from .flywheel import DecisionFlywheel
 from .idea_screening import IdeaScreeningConfig
 from .replay import plan_replay
 from .shadow_evaluation_test import RIGHT, TASK, Fake, RubricModel, base_right, replay_rows, run
+
+pytestmark = pytest.mark.slow
 
 
 class BlankStartOptimizer(Fake):
