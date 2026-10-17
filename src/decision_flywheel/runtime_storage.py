@@ -9,6 +9,9 @@ from pathlib import Path
 import sqlite3
 from typing import Protocol
 
+from .active_labels import (ACTIVE_LABELS_STATE_KEY, FEEDBACK_EVENT_KIND, dump_active_labels, load_active_labels,
+    rebuild_active_labels, record_feedback_event)
+
 
 class RuntimeStateStorage(Protocol):
     def bind_contract(self, expected: str) -> None: ...
@@ -19,6 +22,7 @@ class RuntimeStateStorage(Protocol):
     def trace_events(self, *, after_event_id=0, limit=100) -> dict: ...
     def event_payloads(self, kinds: tuple[str,...]) -> Iterable[str]: ...
     def events_of(self, kinds: tuple[str,...]) -> tuple[dict,...]: ...
+    def active_labels(self) -> tuple[dict,...]: ...
     def next_cycle_number(self) -> int: ...
     def close(self) -> None: ...
 
@@ -52,8 +56,33 @@ class SQLiteRuntimeStateStorage:
         with self.db: self.db.execute('INSERT OR REPLACE INTO runtime_state VALUES (?,?)',(key,payload))
 
     def append_event(self,payload):
-        json.loads(payload)
-        with self.db: return self.db.execute('INSERT INTO runtime_events(payload) VALUES (?)',(payload,)).lastrowid
+        event=json.loads(payload)
+        with self.db:
+            if not self.db.in_transaction: self.db.execute('BEGIN IMMEDIATE')
+            identifier=self.db.execute('INSERT INTO runtime_events(payload) VALUES (?)',(payload,)).lastrowid
+            if event.get('kind')==FEEDBACK_EVENT_KIND:
+                active_by_item=self._active_labels_by_item()
+                record_feedback_event(active_by_item,identifier,event)
+                self._save_active_labels(active_by_item)
+            return identifier
+
+    def _active_labels_by_item(self):
+        saved=self.state(ACTIVE_LABELS_STATE_KEY)
+        if saved is not None: return load_active_labels(saved)
+        return rebuild_active_labels(self.db.execute('SELECT id,payload FROM runtime_events ORDER BY id'))
+
+    def _save_active_labels(self,active_by_item):
+        self.db.execute('INSERT OR REPLACE INTO runtime_state VALUES (?,?)',(ACTIVE_LABELS_STATE_KEY,dump_active_labels(active_by_item)))
+
+    def active_labels(self):
+        saved=self.state(ACTIVE_LABELS_STATE_KEY)
+        if saved is None:
+            with self.db:
+                if not self.db.in_transaction: self.db.execute('BEGIN IMMEDIATE')
+                active_by_item=self._active_labels_by_item()
+                self._save_active_labels(active_by_item)
+            return tuple(active_by_item.values())
+        return tuple(load_active_labels(saved).values())
 
     def history(self,limit=100):
         # Preserve the existing local history API; browser trace paging below

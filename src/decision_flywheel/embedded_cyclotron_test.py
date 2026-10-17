@@ -268,3 +268,29 @@ def test_a_seed_rubric_starts_the_classifier_and_is_fixed_when_the_store_is_crea
         assert cyclotron.status().version == 1
     with pytest.raises(ValueError, match="seed_rubrics"):
         Cyclotron.open(tmp_path / "d", DEFINITION, Model(), seed_rubrics={"other": "x"})
+
+
+def test_deciding_reads_only_the_labeled_items_never_the_whole_item_store(tmp_path):
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model()) as cyclotron:
+        labeled = []
+        for index in range(3):
+            decision = run(cyclotron.decide(item(f"labeled-{index}")))
+            run(cyclotron.review(decision.decision_id, "include", explanation="note"))
+            labeled.append(f"labeled-{index}")
+        for index in range(5):
+            run(cyclotron.decide(item(f"unlabeled-{index}")))
+        looked_up = []
+        storage = cyclotron.root_storage
+        original_lookup = storage.item_values
+
+        def forbidden_items():
+            raise AssertionError("deciding read every item")
+
+        def recording_lookup(identifier):
+            looked_up.append(identifier)
+            return original_lookup(identifier)
+
+        storage.items = forbidden_items
+        storage.item_values = recording_lookup
+        run(cyclotron.decide(item("new-item")))
+    assert set(looked_up) == set(labeled)

@@ -32,7 +32,7 @@ async def run_cycle_replay(wheel, plan, *, optimize_every=20, retrain_every=20,
         raise ValueError('cycle cadences and coverage must be positive integers')
     if not stages or any(stage not in {'rubric','questions','examples'} for stage in stages):
         raise ValueError('choose separate decision-context optimization stages')
-    prior_events=wheel.history(100000)
+    prior_events=wheel.full_history()
     # Declaring a selection policy or idea screening at construction records
     # its configuration; that alone does not make a runtime used.
     configuration_only={'selection-policy-configured','idea-screening-configured'}

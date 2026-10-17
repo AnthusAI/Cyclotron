@@ -60,7 +60,7 @@ class ReviewerFlywheel:
                 self.current_cycle.check_trigger('rubric', **check)
             return check['due']
         from .feedback_trigger import learning_feedback
-        history=self.core.history(100000)
+        history=self.core.events_of(('human-feedback',))
         latest=next((event for event in reversed(history) if event['kind']=='human-feedback'),None)
         count=sum(learning_feedback(event) and event.get('action')=='submitted' and event.get('cycle_id') is not None for event in history)
         due = bool(latest and learning_feedback(latest) and latest.get('action')=='submitted' and count > 0 and count % every == 0)

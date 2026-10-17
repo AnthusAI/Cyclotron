@@ -303,6 +303,18 @@ class DecisionFlywheel:
     def history(self, limit: int = 100) -> tuple[dict, ...]:
         return self.runtime_storage.history(limit)
 
+    def events_of(self, kinds: tuple[str, ...]) -> tuple[dict, ...]:
+        """Every event of the named kinds in order, with no recency window."""
+        return self.runtime_storage.events_of(kinds)
+
+    def full_history(self) -> tuple[dict, ...]:
+        """Every event in order, with no recency window."""
+        return self.runtime_storage.history(-1)
+
+    def active_labels(self) -> tuple[dict, ...]:
+        """The submitted feedback events still in force, in arrival order."""
+        return self.runtime_storage.active_labels()
+
     def trace_events(self, *, after_event_id=0, limit=100):
         """Ordered events with the same durable database-scoped cursor."""
         return self.runtime_storage.trace_events(after_event_id=after_event_id,limit=limit)

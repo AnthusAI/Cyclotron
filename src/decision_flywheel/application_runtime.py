@@ -281,7 +281,7 @@ class ArticleReviewRuntime:
         if reviewer.feedback_trigger(every):
             reviewer.improve(stage="rubric", trigger="label-transitions")
         count = sum(event["kind"] == "human-feedback" and event.get("action") == "submitted"
-                    for event in reviewer.core.history(100000))
+                    for event in reviewer.core.events_of(('human-feedback',)))
         for stage in ("questions", "examples", "classifier"):
             due = count > 0 and count % every == 0
             reviewer.current_cycle.check_trigger(
