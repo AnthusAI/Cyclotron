@@ -142,7 +142,7 @@ class _State(_View):
         if not isinstance(kinds,tuple) or not 1<=len(kinds)<=100 or any(not isinstance(k,str) for k in kinds):raise ValueError('bounded event kinds required')
         return iter([payload for _,payload in self.read()['events'] if json.loads(payload).get('kind') in kinds])
     def events_of(self,kinds):
-        if not isinstance(kinds,tuple) or not 1<=len(kinds)<=100:raise ValueError('bounded event kinds required')
+        if not isinstance(kinds,tuple) or not 1<=len(kinds)<=100 or any(not isinstance(k,str) for k in kinds):raise ValueError('bounded event kinds required')
         return tuple({**json.loads(p),'event_id':i} for i,p in self.read()['events'] if json.loads(p).get('kind') in kinds)
     def next_cycle_number(self):return max((json.loads(p).get('cycle_number',0) or 0 for _,p in self.read()['events']),default=0)+1
 

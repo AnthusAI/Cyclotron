@@ -4,6 +4,8 @@ from pathlib import Path
 import sqlite3
 from typing import Protocol
 
+from .storage_errors import refusing_duplicate_identity
+
 
 class ReviewStorage(Protocol):
     def bind_study(self, values: dict[str,str]) -> None: ...
@@ -36,8 +38,14 @@ class SQLiteReviewStorage:
             self.db.execute('BEGIN IMMEDIATE')
             yield self
 
+    @contextmanager
+    def _joining_transaction(self):
+        if self.db.in_transaction: yield self
+        else:
+            with self.transaction(): yield self
+
     def bind_study(self,values):
-        with self.transaction():
+        with self._joining_transaction():
             for key,value in values.items():
                 row=self.db.execute('SELECT value FROM study_metadata WHERE key=?',(key,)).fetchone()
                 if row is not None and row[0]!=value:
@@ -97,7 +105,7 @@ class SQLiteReviewStorage:
 
     def import_articles(self,records):
         imported=0
-        with self.transaction():
+        with self._joining_transaction():
             for identifier,title,abstract,submitted,categories,authors,journal,assignment in records:
                 existing=self.db.execute('SELECT title,abstract,submitted_at,categories_json,authors,journal_ref FROM articles WHERE id=?',(identifier,)).fetchone()
                 supplied=(title,abstract,submitted,categories,authors,journal)
@@ -133,9 +141,9 @@ class SQLiteReviewStorage:
         row=self.db.execute('SELECT * FROM presentations WHERE id=?',(identifier,)).fetchone()
         return dict(row) if row else None
     def append_presentation(self,row):
-        self.db.execute('INSERT INTO presentations(id,article_id,predicted_label,confidence,predictor_kind,predictor_fingerprint,training_label_count,shown_at) VALUES (?,?,?,?,?,?,?,?)',row)
+        with refusing_duplicate_identity('duplicate presentation identity'): self.db.execute('INSERT INTO presentations(id,article_id,predicted_label,confidence,predictor_kind,predictor_fingerprint,training_label_count,shown_at) VALUES (?,?,?,?,?,?,?,?)',row)
     def append_action(self,row):
-        self.db.execute('INSERT INTO review_events(id,article_id,action,label,comment,created_at,undoes_event_id,presentation_id) VALUES (?,?,?,?,?,?,?,?)',row)
+        with refusing_duplicate_identity('duplicate review action identity'): self.db.execute('INSERT INTO review_events(id,article_id,action,label,comment,created_at,undoes_event_id,presentation_id) VALUES (?,?,?,?,?,?,?,?)',row)
 
     def export_storage(self,*,max_records=10000,max_bytes=64000000):
         from .domain_snapshots import review_codec

@@ -14,13 +14,18 @@ class Cycle:
         self.token = None
 
     @classmethod
-    def resume(cls, wheel, item):
-        """Reattach to this item's latest unfinished cycle, skipping other work."""
+    def resume(cls, wheel, item, *, include_failed=False):
+        """Reattach to this item's latest unfinished cycle, skipping other work.
+
+        A failed cycle counts as unfinished only when ``include_failed`` is set,
+        so a replay can complete the cycle it was running under its own number.
+        """
         if wheel._cycle_running:
             raise RuntimeError('one operational cycle may run at a time')
+        closing_kinds = ('cycle-completed',) if include_failed else ('cycle-completed','cycle-failed')
         closed = set()
         for event in reversed(wheel.events_of(('cycle-started','cycle-completed','cycle-failed'))):
-            if event['kind'] in ('cycle-completed','cycle-failed'):
+            if event['kind'] in closing_kinds:
                 closed.add(event.get('cycle_id'))
             if event['kind']=='cycle-started':
                 if event['cycle_id'] in closed or event.get('cycle_item_id') != item.id:
@@ -41,6 +46,8 @@ class Cycle:
 
     def __enter__(self):
         wheel = self.wheel
+        if self.token is not None:
+            return self
         if wheel._cycle_running:
             raise RuntimeError('one operational cycle may run at a time')
         number = wheel.runtime_storage.next_cycle_number()
