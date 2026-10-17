@@ -10,11 +10,14 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Awaitable, Callable, Mapping
 
 from .models import DecisionTask
 from .selection_policy import SelectionPolicy
 from .sibling_check import SiblingPolicy
+
+
+ExecutionGuard = Callable[[], None | Awaitable[None]]
 
 
 def _json(value) -> str:
