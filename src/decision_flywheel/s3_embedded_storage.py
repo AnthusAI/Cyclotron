@@ -9,7 +9,8 @@ from contextvars import ContextVar
 from copy import deepcopy
 from hashlib import sha256
 from uuid import uuid4
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid
+from .s3_journal import S3Journal,commit_with_contract,uuid
+from .storage_errors import StorageMissing,StorageLimit
 from .s3_runtime_storage import RuntimeOwnershipError,S3RuntimeStores
 from .s3_batch_storage import S3BatchStorage
 
@@ -30,7 +31,7 @@ class S3EmbeddedStorage:
         data=value['data']
         if not isinstance(data,dict) or set(data)!=set(empty()['data']):raise ValueError('complete embedded domains required')
         if any(not isinstance(data[k],dict if k in ('meta','items') else list) for k in data):raise ValueError('invalid embedded records')
-        if sum(map(len,data.values()))>self.max_records:raise ValueError('embedded record budget exceeded; no truncation')
+        if sum(map(len,data.values()))>self.max_records:raise StorageLimit('embedded record budget exceeded; no truncation')
     def initialize(self):self._validate(self.journal.initialize(empty()).value)
     def _owned(self,value):
         if self.authority is None or (value['owner'],value['fence'])!=self.authority:raise RuntimeOwnershipError('embedded execution ownership unavailable')
@@ -57,6 +58,7 @@ class S3EmbeddedStorage:
         self._cached=None
         if self.poisoned:raise RuntimeOwnershipError('uncertain root transaction; reopen/reconcile before continuing')
         record=self.journal.read();self._validate(record.value);self._owned(record.value);self._cached=record
+    def _poison(self):self.poisoned=True;self._cached=None
     def _data(self):
         value=self._transaction.get()
         return value['data'] if value is not None else self._record().value['data']
@@ -68,8 +70,7 @@ class S3EmbeddedStorage:
             yield self
             self._validate(value)
             if value!=record.value:
-                try:self._cached=self.journal.commit(record,value)
-                except (JournalUncertain,JournalConflict):self.poisoned=True;self._cached=None;raise
+                self._cached=commit_with_contract(self.journal,record,value,invalidate=self._poison,invalidate_on_conflict=True)
         finally:self._transaction.reset(token)
     def _write(self,fn):
         if self._transaction.get() is not None:return fn(self._data())
@@ -105,7 +106,10 @@ class S3EmbeddedStorage:
     def decision_payloads(self):return [(r[4],) for r in self._data()['decisions']]
     def window_decisions(self,limit,offset):return [(r[0],r[4]) for r in self._data()['decisions'][offset:offset+limit]]
     def decision(self,identifier):return next(((r[4],) for r in self._data()['decisions'] if r[0]==identifier),None)
-    def decision_fingerprint(self,identifier):return next(r[2] for r in self._data()['decisions'] if r[0]==identifier)
+    def decision_fingerprint(self,identifier):
+        row=next((r for r in self._data()['decisions'] if r[0]==identifier),None)
+        if row is None:raise StorageMissing(f'unknown decision {identifier}')
+        return row[2]
     def latest_decision(self,item_id):return next(((r[3],r[4]) for r in reversed(self._data()['decisions']) if r[1]==item_id and r[3]!='superseded'),None)
     def latest_id(self,item_id=None):return next(((r[0],) for r in reversed(self._data()['decisions']) if item_id is None or r[1]==item_id),None)
     def insert_review(self,identifier,decision_id,classifier,payload):
@@ -191,4 +195,12 @@ class S3CyclotronStores:
         # Native ownership excludes other writers; CAS still fences every write.
         self.root_storage.refresh()
         for runtime in self.runtimes.values():runtime.refresh()
-    def release(self):self.root_storage.release()
+    def release(self):
+        errors=[]
+        runtimes=list(self.runtimes.values());self.runtimes={}
+        for runtime in runtimes:
+            try:runtime.close()
+            except BaseException as error:errors.append(error)
+        try:self.root_storage.release()
+        except BaseException as error:errors.append(error)
+        if errors:raise errors[0]

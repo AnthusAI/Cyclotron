@@ -9,11 +9,12 @@ import json
 import re
 from uuid import uuid4,UUID
 from .storage_payloads import S3Payloads,PayloadRef
+from .storage_errors import StorageConflict,StorageUncertain,StorageLimit
 
-class JournalConflict(RuntimeError): pass
+class JournalConflict(StorageConflict): pass
 class JournalUnavailable(RuntimeError): pass
-class JournalUncertain(RuntimeError): pass
-class JournalLimit(ValueError): pass
+class JournalUncertain(StorageUncertain): pass
+class JournalLimit(StorageLimit): pass
 
 def encode(value):
     return json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()
@@ -153,3 +154,20 @@ class S3Journal:
             {'digest':expected.reference.digest,'length':expected.reference.length})
         etag=self._put(self.head_key,head,expected.etag)
         return JournalRecord(self.namespace,expected.anchor,expected.revision+1,commit_id,etag,reference,decode(encode(value)))
+
+
+def commit_with_contract(journal,expected,value,*,invalidate=None,invalidate_on_conflict=False):
+    """The one commit path for every S3 adapter.
+
+    Conflict, uncertain and limit outcomes always surface as the shared storage
+    exception family. The caller's invalidate hook runs before an uncertain
+    outcome (and optionally a conflict) propagates, so no handle keeps serving
+    memory that may be stale. Retrying a conflict stays the caller's decision.
+    """
+    try:return journal.commit(expected,value)
+    except StorageUncertain:
+        if invalidate is not None:invalidate()
+        raise
+    except StorageConflict:
+        if invalidate is not None and invalidate_on_conflict:invalidate()
+        raise

@@ -1,7 +1,8 @@
 """Canonical S3 evaluation clock/trace and explicit whole-plan ownership."""
 from copy import deepcopy
 import json
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid,encode,decode
+from .s3_journal import S3Journal,commit_with_contract,uuid,encode,decode
+from .storage_errors import StorageConflict
 from .s3_runtime_storage import RuntimeOwnershipError
 
 
@@ -31,13 +32,13 @@ class S3EvaluationStorage:
         record=self.journal.read();self._validate(record.value)
         if owned and (self.authority is None or (record.value['owner'],record.value['fence'])!=self.authority):raise RuntimeOwnershipError('evaluation ownership unavailable')
         return record
+    def _poison(self):self.poisoned=True
     def _change(self,fn,*,owned=True,recovery=False):
         for _ in range(8):
             record=self._record(owned=owned,recovery=recovery);value=deepcopy(record.value);result=fn(value);self._validate(value)
             if value==record.value:return result
-            try:self.journal.commit(record,value)
-            except JournalConflict:continue
-            except JournalUncertain:self.poisoned=True;raise
+            try:commit_with_contract(self.journal,record,value,invalidate=self._poison)
+            except StorageConflict:continue
             return result
         raise RuntimeOwnershipError('evaluation contention limit reached')
     def acquire(self,owner):

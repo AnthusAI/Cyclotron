@@ -11,7 +11,8 @@ from dataclasses import asdict,replace
 from hashlib import sha256
 import json
 from uuid import uuid4
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain,uuid
+from .s3_journal import S3Journal,commit_with_contract,uuid
+from .storage_errors import StorageConflict
 from .console_snapshot import TABLES,SEQUENCES,SCHEMA,validate as validate_console
 from .catalog_storage import encoded,timestamp
 from .cyclotrons import load_config
@@ -96,8 +97,8 @@ class S3ConsoleStorage:
         for _ in range(self.max_conflicts):
             record=self._record();self._check_claim(record.value);value=deepcopy(record.value);result=fn(value);self._validate(value)
             if value==record.value:return result
-            try:self.journal.commit(record,value)
-            except JournalConflict:continue
+            try:commit_with_contract(self.journal,record,value)
+            except StorageConflict:continue
             return result
         raise ValueError('console contention limit reached; retry with same operation identity')
     @contextmanager
@@ -107,7 +108,7 @@ class S3ConsoleStorage:
         try:
             yield self
             self._validate(value)
-            if value!=record.value:self.journal.commit(record,value)
+            if value!=record.value:commit_with_contract(self.journal,record,value)
         finally:self._tx.reset(token)
     def close(self):pass
     def export_storage(self,*,max_records=10000,max_bytes=64000000):

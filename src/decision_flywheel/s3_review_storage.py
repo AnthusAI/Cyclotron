@@ -4,7 +4,8 @@ from contextvars import ContextVar
 from copy import deepcopy
 import json
 import math
-from .s3_journal import S3Journal,JournalConflict,encode
+from .s3_journal import S3Journal,commit_with_contract,encode
+from .storage_errors import StorageLimit
 
 COLUMNS={
  'study_metadata':('key','value'),
@@ -26,8 +27,8 @@ class S3ReviewStorage:
     def _validate(self,value,*,max_records=None,max_bytes=None):
         if not isinstance(value,dict) or set(value)!=set(empty()) or value['schema']!='cyclotron-review-source/v1' or value['metadata']!={'sequences':{}} or not isinstance(value['tables'],dict) or set(value['tables'])!=set(COLUMNS):raise ValueError('invalid complete reviewer snapshot')
         tables=value['tables']
-        if any(not isinstance(r,list) for r in tables.values()) or sum(map(len,tables.values()))>min(self.max_records,max_records or self.max_records):raise ValueError('review source record budget exceeded')
-        if len(encode(value))>min(self.journal.max_bytes,max_bytes or self.journal.max_bytes):raise ValueError('review source byte budget exceeded')
+        if any(not isinstance(r,list) for r in tables.values()) or sum(map(len,tables.values()))>min(self.max_records,max_records or self.max_records):raise StorageLimit('review source record budget exceeded')
+        if len(encode(value))>min(self.journal.max_bytes,max_bytes or self.journal.max_bytes):raise StorageLimit('review source byte budget exceeded')
         for table,columns in COLUMNS.items():
             ordinals,ids=set(),set()
             for row in tables[table]:
@@ -69,8 +70,7 @@ class S3ReviewStorage:
             yield self
             self._validate(value)
             if value!=record.value:
-                try:self.journal.commit(record,value)
-                except JournalConflict:raise ValueError('review source changed; refresh before retrying the human action') from None
+                commit_with_contract(self.journal,record,value)
         finally:self._tx.reset(token)
     def _write(self,fn):
         if self._tx.get() is not None:return fn(self._tx.get())

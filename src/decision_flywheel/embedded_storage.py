@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 from typing import Protocol
+from .storage_errors import StorageConflict,StorageUncertain,StorageLimit,StorageMissing
 
 SCHEMA_SQL = '\n            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, item_values TEXT NOT NULL, fingerprint TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, item_fingerprint TEXT NOT NULL,\n                state TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE INDEX IF NOT EXISTS decisions_by_item ON decisions(item_id);\n            CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,\n                classifier TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,\n                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL, superseded INTEGER NOT NULL DEFAULT 0);\n            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,\n                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,\n                source TEXT);\n            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,\n                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));\n        '
 
@@ -91,7 +92,10 @@ class SQLiteEmbeddedStorage:
     def decision_payloads(self): return self.db.execute('SELECT payload FROM decisions ORDER BY rowid').fetchall()
     def window_decisions(self,limit,offset): return self.db.execute('SELECT id,payload FROM decisions ORDER BY rowid LIMIT ? OFFSET ?',(limit,offset)).fetchall()
     def decision(self,identifier): return self.db.execute('SELECT payload FROM decisions WHERE id=?',(identifier,)).fetchone()
-    def decision_fingerprint(self,identifier): return self.db.execute('SELECT item_fingerprint FROM decisions WHERE id=?',(identifier,)).fetchone()[0]
+    def decision_fingerprint(self,identifier):
+        row = self.db.execute('SELECT item_fingerprint FROM decisions WHERE id=?',(identifier,)).fetchone()
+        if row is None: raise StorageMissing(f'unknown decision {identifier}')
+        return row[0]
     def latest_decision(self,item_id): return self.db.execute("SELECT state,payload FROM decisions WHERE item_id=? AND state!='superseded' ORDER BY rowid DESC LIMIT 1",(item_id,)).fetchone()
     def latest_id(self,item_id=None):
         if item_id is not None: return self.db.execute('SELECT id FROM decisions WHERE item_id=? ORDER BY rowid DESC LIMIT 1',(item_id,)).fetchone()
