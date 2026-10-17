@@ -33,7 +33,7 @@ import os
 import tarfile
 import tempfile
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -43,7 +43,7 @@ from uuid import uuid4
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
-from .cyclotron_status import (FULL_REVIEW, CyclotronOverview, CyclotronStatus, ReviewRate, ReviewRateOverride, VersionTracker,
+from .cyclotron_status import (CyclotronOverview, CyclotronStatus, VersionTracker,
                               initial_snapshot, status_from_flywheel, worst_output)
 from .embedded_records import (ClassifierDecision, ClassifierSpec, CyclotronDefinition, Decision, FileLease, Review,
                                ReviewSelection, StoreLocked, _json, _now, _selection)
@@ -52,11 +52,10 @@ from .flywheel import DecisionFlywheel
 from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions, labeled_partitions,
                             learn_from_review, record_cycle_metrics, review_role)
 from .models import DecisionTask, Item
-from .review_program import (REASONS, Override, ProgramState, ReviewProgram, check_window, combine_evidence,
-                             current_rate, raise_for_versions,
-                             expected_item_reviews, next_step, raise_for_version, select, state_name, window_evidence)
+from .review_program import REASONS, ProgramState, ReviewProgram
 from .optimizer_agent import OptimizationSuperseded
 from .shared_decisions import SharedDecisions
+from .review_rate_controller import ReviewRateController
 from .sibling_check import install_sibling_checks
 
 __all__ = ["ClassifierDecision", "ClassifierSpec", "Cyclotron", "CyclotronDefinition", "Decision", "ExecutionGuard",
@@ -67,7 +66,6 @@ ExecutionGuard = Callable[[], None | Awaitable[None]]
 _NO_LABEL = object()  # review() was called without a single label
 STORE_SCHEMA = "cyclotron-store/v1"
 STORE_FILES = ("cyclotron.sqlite3", "shared.sqlite3")
-FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
 
 
 def _usage_counts(usage) -> tuple[int, int, int]:
@@ -243,6 +241,10 @@ class Cyclotron:
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
         install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
+        self.review_rate = ReviewRateController(
+            program=self.program, definition=definition, specs=self.specs, versions=self.versions, wheels=self.wheels,
+            root_storage=self.root_storage, append_event=self._append, active_review=self._active_review,
+            observer=self.observer, clock=lambda: datetime.now(timezone.utc))
         self._apply_priming_additions()
         self._sync()
 
@@ -495,170 +497,21 @@ class Cyclotron:
     # Review rate ----------------------------------------------------------
 
     def _select(self, item_id: str, confidences: Mapping[str, float | None]) -> ReviewSelection:
-        """Advance the review-rate program to this decision, then choose which outputs to review.
-
-        With one output the whole decision is selected, as before. With
-        several, each output is selected on its own confidence and its own
-        random draw, so a confident output is not sent just because a sibling
-        is unsure, and audit sampling and propensities stay per output. Draws
-        are keyed by the item, the decision's position and the output, so a
-        store replays the same selections; they never read a label.
-        """
-        if self.program is None:
-            whole = ReviewSelection(True, "program", 1.0, FULL_REVIEW_DETAIL)
-            return whole if len(confidences) == 1 else replace(whole, outputs={cid: whole for cid in confidences})
-        rate, decided = self._advance_program()
-        if len(confidences) == 1:
-            confidence = next(iter(confidences.values()))
-            chosen = select(self.program, rate, key=f"{item_id}:{decided + 1}", confidence=confidence)
-            return ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
-        outputs = {}
-        for cid, confidence in confidences.items():
-            chosen = select(self.program, rate, key=f"{item_id}:{decided + 1}:{cid}", confidence=confidence)
-            outputs[cid] = ReviewSelection(chosen.selected, chosen.reason, chosen.propensity, chosen.detail)
-        requested = [cid for cid, own in outputs.items() if own.selected]
-        reasons = {outputs[cid].reason for cid in requested}
-        detail = ("Requested: " + "; ".join(f"{cid} ({outputs[cid].detail})" for cid in requested) if requested
-                  else "No output requested: " + "; ".join(f"{cid} ({own.detail})" for cid, own in outputs.items()))
-        return ReviewSelection(bool(requested), ("program" if "program" in reasons else "audit") if requested else None,
-                               max(own.propensity for own in outputs.values()), detail, outputs)
-
-    def _advance_program(self) -> tuple[float, int]:
-        """Apply expired overrides, version raises and finished windows; return the rate and decision count."""
-        now = datetime.now(timezone.utc)
-        state = self._program_state()
-        events = []
-        if state.override and not Override(**state.override).active(now):
-            expired = Override(**state.override)
-            state.override = None
-            events.append(self._rate_event(state, now, f"The manual rate of {round(expired.rate * 100)}% set by "
-                                                       f"{expired.set_by} expired."))
-        if len(self.specs) == 1:
-            state, raised = raise_for_version(self.program, state, self._primary_version())
-            if raised:
-                events.append(self._rate_event(state, now, state.reason))
-        else:
-            # Every output is watched: a new version of any one raises the rate.
-            state, output = raise_for_versions(self.program, state,
-                                               {cid: self.versions[cid].version for cid in self.specs})
-            if output is not None:
-                events.append(self._rate_event(state, now, state.reason, output=output))
-        decided = self.root_storage.decision_count()
-        while state.checked_windows < decided // self.program.window:
-            window = state.checked_windows + 1
-            evidence = self._window_evidence(window)
-            state, change = check_window(self.program, state, evidence)
-            if change:
-                events.append(self._rate_event(state, now, state.reason, evidence=evidence, window=window,
-                                               **({"output": evidence["output"]} if "output" in evidence else {})))
-        with self.root_storage.transaction():
-            self.root_storage.put_meta('review_program_state',_json(state.to_json()))
-            appended = [self._append(event) for event in events]
-        for event in appended:
-            self.observer(event)
-        return current_rate(self.program, state, now), decided
+        return self.review_rate.select(item_id, confidences)
 
     def set_review_rate(self, rate: float, *, set_by: str, expires_at: datetime | None = None) -> None:
         """An operator override of the review rate, with an optional expiry.
 
         Low-confidence decisions and the audit share are still reviewed.
         """
-        if self.program is None:
-            raise ValueError("this cyclotron has no review-rate program")
-        if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not 0 <= rate <= 1:
-            raise ValueError("rate must be between zero and one")
-        if not isinstance(set_by, str) or not set_by.strip():
-            raise ValueError("an override needs the person who set it")
-        if expires_at is not None and (expires_at.tzinfo is None or expires_at <= datetime.now(timezone.utc)):
-            raise ValueError("expiry must be a future, timezone-aware time")
-        state = self._program_state()
-        state.override = {"rate": float(rate), "expires_at": expires_at.isoformat() if expires_at else None,
-                          "set_by": set_by, "set_at": _now()}
-        now = datetime.now(timezone.utc)
-        with self.root_storage.transaction():
-            self.root_storage.put_meta('review_program_state',_json(state.to_json()))
-            event = self._append(self._rate_event(state, now, f"Manual rate of {round(rate * 100)}% set by {set_by}."))
-        self.observer(event)
+        self.review_rate.set_rate(rate, set_by=set_by, expires_at=expires_at)
 
     def clear_review_rate(self, *, set_by: str) -> None:
         """End an operator override; the program's own rate applies again."""
-        state = self._program_state()
-        if not state.override:
-            return
-        state.override = None
-        now = datetime.now(timezone.utc)
-        with self.root_storage.transaction():
-            self.root_storage.put_meta('review_program_state',_json(state.to_json()))
-            event = self._append(self._rate_event(state, now, f"Manual rate cleared by {set_by}."))
-        self.observer(event)
+        self.review_rate.clear_rate(set_by=set_by)
 
     def _program_state(self) -> ProgramState:
-        row = self.root_storage.meta('review_program_state')
-        return ProgramState.from_json(json.loads(row[0]) if row else None)
-
-    def _rate_event(self, state: ProgramState, now: datetime, reason: str, **details) -> dict:
-        return {"kind": "review-rate-changed", "state": state_name(self.program, state, now),
-                "rate": current_rate(self.program, state, now), "reason": reason, **details}
-
-    def _primary(self) -> ClassifierSpec:
-        return self.definition.classifiers[0]
-
-    def _primary_version(self) -> int:
-        return self.versions[self._primary().id].version
-
-    def _window_evidence(self, window: int) -> dict:
-        """One finished window's evidence: the only output's, or the worst of every output's."""
-        evidence = {cid: window_evidence(self.program, self._window_reviews(window, cid), self._gap_points(cid))
-                    for cid in self.specs}
-        return evidence[self._primary().id] if len(evidence) == 1 else combine_evidence(evidence)
-
-    def _gap_points(self, classifier: str | None = None) -> int | None:
-        spec = self.specs[classifier] if classifier else self._primary()
-        return status_from_flywheel(self.wheels[spec.id], cyclotron_id=self.definition.id,
-                                    positive_label=spec.positive_label,
-                                    window=self.program.calibration_window).calibration.gap_points
-
-    def _window_reviews(self, window: int, classifier: str | None = None) -> list[dict]:
-        """Program and audit reviews of one output's decisions in one finished window."""
-        cid = classifier or self._primary().id
-        size = self.program.window
-        rows = []
-        for decision_id, payload in self.root_storage.window_decisions(size,(window - 1) * size):
-            review = self._active_review(decision_id, cid)
-            if review is None or review.selected_by not in ("program", "audit"):
-                continue
-            result = json.loads(payload)["classifiers"][cid]
-            rows.append({"confidence": result["confidence"], "decision": result["label"], "label": review.label})
-        return rows
-
-    def _review_rate_status(self) -> ReviewRate:
-        if self.program is None:
-            return FULL_REVIEW
-        now = datetime.now(timezone.utc)
-        state = self._program_state()
-        override = Override(**state.override) if state.override else None
-        active = override is not None and override.active(now)
-        decided = self.root_storage.decision_count()
-        until = self.program.window - decided % self.program.window
-        week_ago = (now - timedelta(days=7)).isoformat()
-        decisions = []
-        for (payload,) in self.root_storage.decision_payloads():
-            decision = json.loads(payload)
-            if decision["createdAt"] >= week_ago:
-                values = [r["confidence"] for r in decision["classifiers"].values()]
-                # Routed decisions draw per output; older ones were selected as a whole on the lowest confidence.
-                routed = "outputs" in decision["review"]
-                decisions.append(tuple(values) if routed else (None if None in values else min(values),))
-        rate = current_rate(self.program, state, now)
-        return ReviewRate(state_name(self.program, state, now), rate,
-                          (f"Manual rate of {round(override.rate * 100)}% set by {override.set_by}."
-                           if active else state.reason),
-                          audit_floor=self.program.audit_share, confidence_threshold=self.program.confidence_threshold,
-                          override=ReviewRateOverride(override.rate, override.expires_at, override.set_by, override.set_at)
-                          if active else None,
-                          next_check_after_decisions=until,
-                          next_step=next_step(self.program, state, decisions_until_check=until, now=now),
-                          expected_reviews_per_week=expected_item_reviews(self.program, rate, decisions))
+        return self.review_rate.state()
 
     def _insert_decision(self, decision: Decision, fingerprint: str) -> None:
         with self.root_storage.transaction():
@@ -1002,7 +855,7 @@ class Cyclotron:
             classifier = next(iter(self.specs))
         spec = self.specs[classifier]
         status = status_from_flywheel(self.wheels[classifier], cyclotron_id=self.definition.id,
-                                      positive_label=spec.positive_label, review_rate=self._review_rate_status())
+                                      positive_label=spec.positive_label, review_rate=self.review_rate.status())
         return replace(status, primed_examples=len(self.priming_examples.get(classifier, ())))
 
     def subscribe(self, after: int = 0, limit: int = 100) -> dict[str, Any]:
