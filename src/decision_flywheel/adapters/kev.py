@@ -1,4 +1,4 @@
-"""HTTP adapter for Kev's documented TypeSafe System One endpoint."""
+"""HTTP adapter for Kev, a decision model run as a local server exposing the System One endpoint."""
 from __future__ import annotations
 
 from dataclasses import dataclass

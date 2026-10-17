@@ -1,4 +1,4 @@
-"""Jev's TypeSafe System One adapter with an injectable synchronous client."""
+"""Adapter for Jev, TypeSafe AI's hosted System One decision model, with an injectable synchronous client."""
 from __future__ import annotations
 
 import asyncio
