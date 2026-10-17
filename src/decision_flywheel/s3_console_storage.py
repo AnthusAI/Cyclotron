@@ -11,7 +11,7 @@ from dataclasses import asdict,replace
 from hashlib import sha256
 import json
 from uuid import uuid4
-from .s3_journal import S3Journal,commit_with_contract,uuid
+from .journal import Journal,commit_with_contract,uuid
 from .storage_errors import StorageConflict
 from .console_snapshot import TABLES,SEQUENCES,SCHEMA,validate as validate_console
 from .catalog_storage import encoded,timestamp
@@ -42,7 +42,7 @@ def insert(value,domain,fields):
 
 class S3ConsoleStorage:
     def __init__(self,journal,*,max_records,max_conflicts=8):
-        if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
+        if not isinstance(journal,Journal) or type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
             raise ValueError('scoped canonical console journal and explicit limits required')
         self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts
         self._tx=ContextVar('s3_console_transaction',default=None)

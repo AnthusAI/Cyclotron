@@ -8,13 +8,13 @@ import json
 from .batch_storage import (BatchRecord,BatchConflict,BatchInProgress,BatchUncertain,
                             validate_request,validate_snapshot)
 from .decision_cache import CacheMiss
-from .s3_journal import S3Journal,JournalConflict,JournalUncertain
+from .journal import Journal,JournalConflict,JournalUncertain
 
 EMPTY={'schema':'cyclotron-shared-batches/v1','batches':[],'attempts':[],'history':[]}
 
 class S3BatchStorage:
     def __init__(self,journal,*,max_records,max_conflicts=8):
-        if not isinstance(journal,S3Journal):raise ValueError('canonical S3 journal required')
+        if not isinstance(journal,Journal):raise ValueError('canonical journal required')
         if type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
             raise ValueError('explicit record budget and bounded contention retries required')
         self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts

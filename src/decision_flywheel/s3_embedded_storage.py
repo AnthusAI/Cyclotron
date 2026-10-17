@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from hashlib import sha256
 from uuid import uuid4
-from .s3_journal import S3Journal,commit_with_contract,uuid
+from .journal import Journal,commit_with_contract,uuid
 from .storage_errors import StorageMissing,StorageLimit
 from .s3_runtime_storage import RuntimeOwnershipError,S3RuntimeStores
 from .s3_batch_storage import S3BatchStorage
@@ -21,7 +21,7 @@ def empty():
 
 class S3EmbeddedStorage:
     def __init__(self,journal,*,max_records,cache_owned=False):
-        if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1:raise ValueError('scoped journal and record budget required')
+        if not isinstance(journal,Journal) or type(max_records) is not int or max_records<1:raise ValueError('scoped journal and record budget required')
         self.journal=journal;self.max_records=max_records;self.authority=None;self.poisoned=False;self.cache_owned=cache_owned;self._cached=None
         self._transaction=ContextVar('s3_embedded_transaction',default=None)
     def _validate(self,value):
@@ -174,8 +174,7 @@ class S3CyclotronStores:
         root=self.root_storage.journal
         name=sha256((root.namespace+'\0'+identifier).encode()).hexdigest()
         result=self.journal_for(domain,name)
-        if (not isinstance(result,S3Journal) or result.payloads.scope!=root.payloads.scope
-                or result.payloads.bucket!=root.payloads.bucket or result.payloads.owner!=root.payloads.owner):
+        if not isinstance(result,Journal) or result.boundary!=root.boundary:
             raise PermissionError('cloud composition journal scope mismatch')
         return result
     def acquire(self):

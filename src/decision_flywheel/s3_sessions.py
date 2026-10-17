@@ -14,7 +14,7 @@ import time
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from .account_sessions import ConsoleSession, PendingLogin, SessionRejected, digest
 from .prospectus_accounts import ProspectusUnavailable
-from .s3_journal import encode, decode, JournalConflict
+from .journal import encode, decode, JournalConflict
 
 
 class SessionStoreUnavailable(ProspectusUnavailable):
@@ -100,9 +100,7 @@ class S3OAuthSessions:
 
     def _read(self, kind, reference):
         journal = self._journal(kind, reference)
-        if journal._get(journal.anchor_key, missing=True) is None:
-            if journal._get(journal.head_key, missing=True) is not None: raise ValueError('session anchor missing')
-            return None
+        if not journal.exists(): return None
         record = journal.read(); value = record.value
         if (set(value) != {'schema','kind','reference','active','expiresAt','encrypted'}
                 or value['schema'] != 'oauth-record/v1' or value['kind'] != kind or value['reference'] != reference

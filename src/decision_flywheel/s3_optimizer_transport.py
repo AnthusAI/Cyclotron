@@ -11,7 +11,7 @@ from uuid import uuid4
 from hashlib import sha256
 from .s3_batch_storage import S3BatchStorage
 from .batch_storage import BatchInProgress
-from .s3_journal import encode,decode
+from .journal import encode,decode
 from .optimizer_agent import OptimizerReply
 
 class S3OptimizerTransport:
