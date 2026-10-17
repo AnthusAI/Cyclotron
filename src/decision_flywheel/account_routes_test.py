@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from .account_routes import HostedAccounts
 from .account_sessions import OAuthConfig
-from .account_sessions_test import CLIENT, ISSUER
+from .account_sessions_test import CLIENT, ISSUER, identity
 from .prospectus_accounts import AccountAccessDenied, AccountsClient, AccountWorkspace, ProspectusUnavailable
 from .web_api import create_app
 from .web_store import WebStore
