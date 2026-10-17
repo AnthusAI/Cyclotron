@@ -53,6 +53,8 @@ from .run_usage import _usage as _usage_counts, stored_usage_by_window
 from .shared_decisions import SharedDecisions
 from .review_rate_controller import ReviewRateController
 from .sibling_check import install_sibling_checks
+from .store_seeding import (StoreSeeds, apply_priming_additions, normalize_supporting_questions, priming_includes,
+                            stored_priming_additions)
 from .store_snapshot import classifier_store_name, restore_store_snapshot, store_paths, write_store_snapshot
 
 __all__ = ["ClassifierDecision", "ClassifierSpec", "Cyclotron", "CyclotronDefinition", "Decision", "ExecutionGuard",
@@ -60,38 +62,6 @@ __all__ = ["ClassifierDecision", "ClassifierSpec", "Cyclotron", "CyclotronDefini
 SELECTED_BY = REASONS
 LEARNING_MODES = ("inline", "deferred")
 _NO_LABEL = object()  # review() was called without a single label
-
-
-def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, list[dict]]:
-    """Validate seed supporting questions into the optimizer's own question shape."""
-    specs = {spec.id: spec for spec in definition.classifiers}
-    seeds = dict(seeds or {})
-    if set(seeds) - set(specs):
-        raise ValueError("seed_supporting_questions maps classifier ids to supporting questions")
-    normalized = {}
-    for classifier, questions in seeds.items():
-        if isinstance(questions, (str, Mapping)) or not isinstance(questions, Sequence):
-            raise ValueError("seed_supporting_questions needs a list of questions per classifier")
-        rows = []
-        for question in questions:
-            if isinstance(question, DecisionTask):
-                question = {"name": question.name, "instructions": question.instructions,
-                            "labels": list(question.labels)}
-            if not isinstance(question, Mapping) or set(question) != {"name", "instructions", "labels"}:
-                raise ValueError("a supporting question has exactly name, instructions and labels")
-            task = DecisionTask(question["name"], question["labels"], question["instructions"],
-                                specs[classifier].input_field)
-            rows.append({"name": task.name, "instructions": task.instructions, "labels": list(task.labels)})
-        # The same validation the optimizer's proposals pass: unique, not "decision".
-        ClassifierConfig(specs[classifier].task, tasks=tuple(
-            DecisionTask(row["name"], tuple(row["labels"]), row["instructions"]) for row in rows))
-        normalized[classifier] = rows
-    return normalized
-
-
-def _priming_includes(saved_priming: Mapping[str, Any], requested_priming: Mapping[str, Any]) -> bool:
-    """A reopen may pass the examples a store was created with after more were added."""
-    return all(row in saved_priming.get(cid, ()) for cid, rows in requested_priming.items() for row in rows)
 
 
 class Cyclotron:
@@ -121,7 +91,7 @@ class Cyclotron:
         self.priming_redaction = tuple(redact)
         self.requested_priming = None if priming_examples is None else encode_priming(
             dict(priming_examples), {spec.id:spec.task for spec in definition.classifiers}, redact=redact)
-        self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
+        self.seed_supporting_questions = normalize_supporting_questions(definition, seed_supporting_questions)
         if share_supporting_questions is not None and not isinstance(share_supporting_questions, bool):
             raise ValueError("share_supporting_questions must be a bool")
         self.requested_sharing = share_supporting_questions
@@ -176,7 +146,7 @@ class Cyclotron:
         from .priming_context import decode_priming
         stored_priming = self.root_storage.meta('priming_examples')
         saved_priming = json.loads(stored_priming[0]) if stored_priming else {}
-        if stored_priming and self.requested_priming is not None and not _priming_includes(saved_priming, self.requested_priming):
+        if stored_priming and self.requested_priming is not None and not priming_includes(saved_priming, self.requested_priming):
             raise ValueError("this store has different accepted priming; add new examples with add_priming_examples")
         if not stored_priming and self.requested_priming:
             if saved:
@@ -185,11 +155,14 @@ class Cyclotron:
         with self.root_storage.transaction():
             self.root_storage.insert_meta('priming_examples',_json(saved_priming),ignore=True)
         self.priming_examples = decode_priming(saved_priming)
+        seeds = StoreSeeds(self.root_storage, seed_rubrics=self.seed_rubrics,
+                           seed_supporting_questions=self.seed_supporting_questions,
+                           requested_sharing=self.requested_sharing)
         self._batch_log: ContextVar[list | None] = ContextVar(f"cyclotron_batches_{id(self)}", default=None)
         self._batches = []
         self.shared = SharedDecisions(self.directory / "shared.sqlite3" if self.directory is not None else None, model, max_requests=0,
                                       observer=self._on_batch,
-                                      share_supporting_questions=self._sharing(created=saved is None),
+                                      share_supporting_questions=seeds.sharing(created=saved is None),
                                       storage=self.storage.batch_storage if self.storage is not None else None)
         # The shared ceiling counts every attempt in the store's lifetime; this
         # open authorizes max_requests more.
@@ -206,8 +179,8 @@ class Cyclotron:
             added_example_ids = {key for addition in additions for key in addition['examples'].get(spec.id, ())}
             # The store's creation configuration stays version 1; later additions apply as new versions.
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task, example_ids=tuple(key for key in primed_example_ids if key not in added_example_ids), rubric=self._seed(spec.id),
-                                       tasks=self._seed_questions(spec, created=saved is None)),
+                path, ClassifierConfig(spec.task, example_ids=tuple(key for key in primed_example_ids if key not in added_example_ids), rubric=seeds.rubric(spec.id),
+                                       tasks=seeds.supporting_questions(spec, created=saved is None)),
                 # Each output gets its own copy so its optimizer events reach only its own
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
                 self.shared.adapter(spec.id), self._optimizer_for(optimizer, spec.id),
@@ -226,55 +199,6 @@ class Cyclotron:
             observer=self.observer, clock=lambda: datetime.now(timezone.utc))
         self._apply_priming_additions()
         self._sync()
-
-    def _seed(self, classifier: str) -> str:
-        """The first rubric for a classifier: fixed when its store is first opened.
-
-        The seed is not part of the definition, so an application can derive it
-        from its own parameters (for example a publication's doctrine). Later
-        changes to those parameters do not rewrite a store's rubric; the LLM
-        optimizer owns it from then on.
-        """
-        key = f"seed_rubric:{classifier}"
-        row = self.root_storage.meta(key)
-        if row is not None:
-            return json.loads(row[0])
-        seed = self.seed_rubrics.get(classifier, "")
-        with self.root_storage.transaction():
-            self.root_storage.insert_meta(key,_json(seed))
-        return seed
-
-    def _sharing(self, *, created: bool) -> bool:
-        """Whether identical supporting questions are asked once: fixed when the store is created.
-
-        New stores share unless the application opts out. A store created
-        before sharing existed keeps asking every copy separately, so its
-        requests, answers and ML model features never change on upgrade.
-        """
-        row = self.root_storage.meta('share_supporting_questions')
-        if row is not None:
-            return json.loads(row[0])
-        sharing = (self.requested_sharing is not False) if created else False
-        with self.root_storage.transaction():
-            self.root_storage.insert_meta('share_supporting_questions',_json(sharing))
-        return sharing
-
-    def _seed_questions(self, spec: ClassifierSpec, *, created: bool) -> tuple[DecisionTask, ...]:
-        """The first supporting questions for a classifier: fixed when its store is first opened.
-
-        Like the seed rubric, they are a starting point the optimizer may
-        revise, replace or drop. A store created before seeding existed keeps
-        an empty seed, so reopening it never changes its initial context.
-        """
-        key = f"seed_supporting_questions:{spec.id}"
-        row = self.root_storage.meta(key)
-        if row is None:
-            raw = self.seed_supporting_questions.get(spec.id, []) if created else []
-            with self.root_storage.transaction():
-                self.root_storage.insert_meta(key,_json(raw))
-        else:
-            raw = json.loads(row[0])
-        return tuple(DecisionTask(q["name"], tuple(q["labels"]), q["instructions"], spec.input_field) for q in raw)
 
     @classmethod
     def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> "Cyclotron":
@@ -390,29 +314,10 @@ class Cyclotron:
         return [{key: value for key, value in addition.items() if key != 'applied'} for addition in self._priming_additions()]
 
     def _priming_additions(self) -> list[dict[str, Any]]:
-        stored = self.root_storage.meta('priming_additions')
-        return json.loads(stored[0]) if stored else []
+        return stored_priming_additions(self.root_storage)
 
     def _apply_priming_additions(self) -> None:
-        """Bring each output's example list up to its recorded additions, once each.
-
-        An addition is marked applied per output, so an example the optimizer
-        later swaps out of the list is not put back on reopen.
-        """
-        additions = self._priming_additions()
-        for addition in additions:
-            for cid, example_ids in addition['examples'].items():
-                if cid in addition['applied']:
-                    continue
-                wheel = self.wheels[cid]
-                missing_example_ids = [key for key in example_ids if key not in wheel.active.config.example_ids]
-                if missing_example_ids:
-                    count = len(missing_example_ids)
-                    wheel.extend_example_list(missing_example_ids, change_summary=(
-                        f"Added {count} primed example{'' if count == 1 else 's'} to the example list."))
-                addition['applied'][cid] = wheel.active.fingerprint
-                with self.root_storage.transaction():
-                    self.root_storage.put_meta('priming_additions', _json(additions))
+        apply_priming_additions(self.root_storage, self.wheels)
 
     # Decide ---------------------------------------------------------------
 
