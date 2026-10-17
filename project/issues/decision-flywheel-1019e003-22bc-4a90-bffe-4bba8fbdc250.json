@@ -9,7 +9,12 @@
   "creator": null,
   "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
   "labels": [],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-0dafa816-04ce-421f-902e-3a8d7d309aab",
+      "type": "blocked-by"
+    }
+  ],
   "comments": [
     {
       "id": "fa187af1-68c1-42fc-8e43-200dabed6b76",
@@ -43,7 +48,7 @@
     }
   ],
   "created_at": "2026-10-16T20:46:53.160804Z",
-  "updated_at": "2026-10-17T06:22:40.097469Z",
+  "updated_at": "2026-10-17T06:24:14.213976Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

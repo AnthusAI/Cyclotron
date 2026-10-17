@@ -9,7 +9,16 @@
   "creator": null,
   "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
   "labels": [],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-1019e003-22bc-4a90-bffe-4bba8fbdc250",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-b5f1a414-eaba-4362-b1e0-d9a0da0e94ca",
+      "type": "blocked-by"
+    }
+  ],
   "comments": [
     {
       "id": "b4f3173f-80bf-4ebe-a2dd-73dc2ca5730a",
@@ -43,7 +52,7 @@
     }
   ],
   "created_at": "2026-10-16T20:46:53.012198Z",
-  "updated_at": "2026-10-17T06:22:39.971584Z",
+  "updated_at": "2026-10-17T06:24:14.189608Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
