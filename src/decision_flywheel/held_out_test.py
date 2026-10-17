@@ -8,8 +8,8 @@ from .batched_classification import BatchedAnswers
 from .embedded_cyclotron import Cyclotron, CyclotronDefinition
 from .embedded_cyclotron_test import RELEVANT, item
 from .learning_loop import review_role
-from .held_out import (Endpoint, HeldOutItem, HeldOutSet, build_report, load_report_schema, sign_test_p_value,
-                       weighted_metrics)
+from .held_out import (Endpoint, HeldOutItem, HeldOutSet, bootstrap_intervals, build_report, load_report_schema,
+                       sign_test_p_value, weighted_metrics)
 from .models import DecisionResult
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 
@@ -178,6 +178,60 @@ def test_a_claim_needs_enough_labels_of_each_kind(include_count, expected_verdic
     jsonschema.validate(report, load_report_schema())
     assert report["change"]["verdict"] == expected_verdict
     assert report["headline"]["changePoints"] == 50.
+
+
+def heavy_items_lost_while_light_items_gained():
+    include_items = [held_out_item(f"in-{index}", "include") for index in range(10)]
+    light_exclude_items = [held_out_item(f"light-{index}", "exclude") for index in range(20)]
+    heavy_exclude_items = [held_out_item(f"heavy-{index}", "exclude", .01) for index in range(6)]
+    items = include_items + light_exclude_items + heavy_exclude_items
+    before_predictions = {row.item_id: row.label for row in items}
+    before_predictions.update({row.item_id: "include" for row in light_exclude_items})
+    after_predictions = {row.item_id: row.label for row in items}
+    after_predictions.update({row.item_id: "include" for row in heavy_exclude_items})
+    return (HeldOutSet.freeze("papyrus-relevance", "relevant", items),
+            Endpoint(1, 0, "first", "first", before_predictions), Endpoint(2, 0, "active", "active", after_predictions))
+
+
+def test_the_verdict_follows_the_weighted_change_even_when_item_counts_point_the_other_way():
+    held_out_set, before, after = heavy_items_lost_while_light_items_gained()
+    report = build_report(held_out_set, labels=LABELS, positive_label="include", before=before, after=after)
+    jsonschema.validate(report, load_report_schema())
+    assert report["change"]["gained"] == 20 and report["change"]["lost"] == 6
+    assert report["change"]["pValue"] < report["change"]["significanceLevel"]
+    assert report["headline"]["changePoints"] < 0
+    assert report["headline"]["changeInterval"]["high"] < 0
+    assert report["change"]["verdict"] == "worse"
+    assert "verdict follows the weighted interval" in report["change"]["summary"]
+
+
+def test_intervals_surround_the_headline_and_are_reproducible_for_the_same_set():
+    held_out_set, before, after = heavy_items_lost_while_light_items_gained()
+    first = build_report(held_out_set, labels=LABELS, positive_label="include", before=before, after=after)
+    second = build_report(held_out_set, labels=LABELS, positive_label="include", before=before, after=after)
+    assert first["headline"] == second["headline"]
+    for point, interval in ((first["headline"]["before"], first["headline"]["beforeInterval"]),
+                            (first["headline"]["after"], first["headline"]["afterInterval"]),
+                            (first["headline"]["changePoints"], first["headline"]["changeInterval"])):
+        assert interval["low"] <= point <= interval["high"]
+    other_set = HeldOutSet.freeze("papyrus-relevance", "relevant", held_out_set.items[:-1])
+    shifted = bootstrap_intervals(other_set.set_id, LABELS, other_set.items, before.predictions, after.predictions)
+    assert shifted != {key: first["headline"][key + "Interval"] for key in ("before", "after", "change")}
+
+
+def test_a_change_interval_that_includes_zero_is_not_a_clear_change():
+    items = [held_out_item(f"in-{index}", "include") for index in range(12)] + [
+        held_out_item(f"out-{index}", "exclude") for index in range(12)]
+    held_out_set = HeldOutSet.freeze("papyrus-relevance", "relevant", items)
+    before_predictions = {row.item_id: row.label for row in items}
+    before_predictions["in-1"], before_predictions["out-1"] = "exclude", "include"
+    before = Endpoint(1, 0, "first", "first", before_predictions)
+    after_predictions = {row.item_id: row.label for row in items}
+    after_predictions["in-0"], after_predictions["out-0"] = "exclude", "include"
+    report = build_report(held_out_set, labels=LABELS, positive_label="include", before=before,
+                          after=Endpoint(2, 0, "active", "active", after_predictions))
+    assert report["headline"]["changeInterval"]["low"] < 0 < report["headline"]["changeInterval"]["high"]
+    assert report["change"]["verdict"] == "no-clear-change"
 
 
 def test_items_used_for_training_since_freezing_are_left_out_and_counted():

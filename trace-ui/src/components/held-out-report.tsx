@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react'
-import type {HeldOutClient,HeldOutMetrics,HeldOutOverview,HeldOutReport,HeldOutSetSummary,HeldOutVerdict} from '../heldOutReport'
+import type {HeldOutClient,HeldOutInterval,HeldOutMetrics,HeldOutOverview,HeldOutReport,HeldOutSetSummary,HeldOutVerdict} from '../heldOutReport'
 
 const percent=(value:number|null|undefined)=>value==null?'Not measured':`${Math.round(value*100)}%`
 const day=(value:string|null|undefined)=>{
@@ -29,6 +29,10 @@ function pValueText(pValue:number){
 function changePointsText(points:number|null){
   if(points==null)return null
   return `${points>0?'+':''}${points.toFixed(1)} points`
+}
+
+function intervalText(interval:HeldOutInterval|null|undefined,format:(value:number)=>string){
+  return interval?`95% interval ${format(interval.low)} to ${format(interval.high)}`:null
 }
 
 function metricRows(report:HeldOutReport){
@@ -81,6 +85,13 @@ export function HeldOutReportView({report,sets=[],classifierName,onFreeze,onEval
   const verdict=VERDICTS[report.change.verdict]
   const set=report.heldOutSet
   const points=changePointsText(report.headline.changePoints)
+  const pointsInterval=intervalText(report.headline.changeInterval,value=>`${value>0?'+':''}${value.toFixed(1)}`)
+  const sharesInterval=(label:string,interval:HeldOutInterval|null|undefined)=>{
+    const text=intervalText(interval,value=>percent(value))
+    return text?`${label} ${text}`:null
+  }
+  const endpointIntervals=[sharesInterval('Before',report.headline.beforeInterval),sharesInterval('After',report.headline.afterInterval)]
+    .filter(Boolean).join(' · ')
   return <section className="cyclotron-held-out-report" aria-label={`${title} before and after`} data-verdict={report.change.verdict}>
     <header className="cyclotron-held-out-header">
       <h3>{title}: before and after</h3>
@@ -89,6 +100,7 @@ export function HeldOutReportView({report,sets=[],classifierName,onFreeze,onEval
     <div className="cyclotron-held-out-headline" data-testid="cyclotron-held-out-headline">
       <p className="cyclotron-held-out-headline-name">{report.headline.name}</p>
       <p className="cyclotron-held-out-headline-value">{percent(report.headline.before)} → {percent(report.headline.after)}{points?<span className="cyclotron-held-out-points"> {points}</span>:null}</p>
+      {pointsInterval?<p className="cyclotron-held-out-interval" data-testid="cyclotron-held-out-interval">Change {pointsInterval} points{endpointIntervals?` · ${endpointIntervals}`:''}</p>:null}
       <p className="cyclotron-held-out-verdict" data-verdict={report.change.verdict}><span aria-hidden="true">{verdict.mark} </span>{verdict.words}</p>
       <p className="cyclotron-held-out-note">{report.headline.definition}</p>
     </div>
@@ -105,13 +117,13 @@ export function HeldOutReportView({report,sets=[],classifierName,onFreeze,onEval
       </tr>)}</tbody>
     </table>
     <p className="cyclotron-held-out-note">Before: {report.before.description} After: {report.after.description}</p>
-    <p data-testid="cyclotron-held-out-pairs">Newly right on {report.change.gained} · newly wrong on {report.change.lost} · sign test {pValueText(report.change.pValue)}</p>
+    <p data-testid="cyclotron-held-out-pairs">Newly right on {report.change.gained} · newly wrong on {report.change.lost} · sign test {pValueText(report.change.pValue)} (item counts, unweighted)</p>
     <p>{report.change.summary}</p>
     <ul className="cyclotron-held-out-notes">
       <li>{set.selection}</li>
       {set.weighted?<li>Some items were reviewed at a reduced rate, so each counts with the inverse of its chance of review and the numbers stand for every audit decision.</li>:null}
       {set.excludedSinceFrozen?<li>{plural(set.excludedSinceFrozen,'frozen item')} later used for training {set.excludedSinceFrozen===1?'is':'are'} left out.</li>:null}
-      {set.labelsChangedSinceFrozen?<li>{plural(set.labelsChangedSinceFrozen,'label')} corrected since freezing; the frozen labels are still used.</li>:null}
+      {set.labelsChangedSinceFrozen?<li>{plural(set.labelsChangedSinceFrozen,'label')} corrected since freezing; scoring uses the frozen labels, so this count is informational.</li>:null}
       <li>This evaluation made {plural(report.cost.newRequests,'new model request')} and answered {report.cost.cachedRequests} from cache.</li>
     </ul>
     {actions}

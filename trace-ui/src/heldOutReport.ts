@@ -15,6 +15,8 @@ export type HeldOutMetrics={
   recallByLabel:Record<string,number|null>
 }
 
+export type HeldOutInterval={low:number;high:number}
+
 export type HeldOutEndpoint={version:number;refits:number;fingerprint:string;description:string;metrics:HeldOutMetrics}
 
 export type HeldOutSetSummary={
@@ -37,10 +39,18 @@ export type HeldOutReport={
     scoredLabelCounts:Record<string,number>
     /** Frozen items since used for training, so not scored. */
     excludedSinceFrozen:number
-    /** Frozen items whose label was later corrected; the frozen label is still used. */
+    /** Frozen items whose label was later corrected; the frozen label is still used for scoring and this count is informational. */
     labelsChangedSinceFrozen:number
+    scoringNote?:string
   }
-  headline:{metric:'balancedAccuracy';name:string;definition:string;before:number|null;after:number|null;changePoints:number|null}
+  headline:{
+    metric:'balancedAccuracy';name:string;definition:string;before:number|null;after:number|null;changePoints:number|null
+    /** 95% bootstrap intervals over the held-out items; before and after are shares, the change is in points. The verdict follows the change interval. */
+    beforeInterval?:HeldOutInterval|null
+    afterInterval?:HeldOutInterval|null
+    changeInterval?:HeldOutInterval|null
+    intervalDescription?:string
+  }
   before:HeldOutEndpoint
   after:HeldOutEndpoint
   change:{
@@ -48,7 +58,7 @@ export type HeldOutReport={
     lost:number
     bothRight:number
     bothWrong:number
-    /** Exact two-sided sign test on gained versus lost. */
+    /** Exact two-sided sign test on gained versus lost, counting items without weights; it does not decide the verdict. */
     pValue:number
     significanceLevel:number
     minimumPerLabel:number

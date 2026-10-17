@@ -19,6 +19,15 @@ it('leads with the headline change and the verdict in words',()=>{
   expect(screen.getByText(/40 held-out items \(12 include, 28 exclude\)/)).toBeVisible()
 })
 
+it('shows the bootstrap intervals beside the headline and omits them for older reports',()=>{
+  const {rerender}=render(<HeldOutReportView report={report} />)
+  expect(screen.getByTestId('cyclotron-held-out-interval')).toHaveTextContent(
+    'Change 95% interval +22.4 to +58.9 points · Before 95% interval 39% to 54% · After 95% interval 76% to 96%')
+  const {beforeInterval,afterInterval,changeInterval,...withoutIntervals}=report.headline
+  rerender(<HeldOutReportView report={{...report,headline:withoutIntervals}} />)
+  expect(screen.queryByTestId('cyclotron-held-out-interval')).toBeNull()
+})
+
 it('shows both endpoints side by side for every measure',()=>{
   render(<HeldOutReportView report={report} />)
   const table=screen.getByRole('table')
@@ -34,7 +43,7 @@ it('explains weighting, leftovers and cost in plain notes',()=>{
   render(<HeldOutReportView report={adjusted} />)
   expect(screen.getByText(/each counts with the inverse of its chance of review/)).toBeVisible()
   expect(screen.getByText('1 frozen item later used for training is left out.')).toBeVisible()
-  expect(screen.getByText('2 labels corrected since freezing; the frozen labels are still used.')).toBeVisible()
+  expect(screen.getByText('2 labels corrected since freezing; scoring uses the frozen labels, so this count is informational.')).toBeVisible()
   expect(screen.getByText('This evaluation made 44 new model requests and answered 36 from cache.')).toBeVisible()
 })
 
