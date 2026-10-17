@@ -110,7 +110,11 @@
         "labelsChangedSinceFrozen": {
           "type": "integer",
           "minimum": 0,
-          "description": "Frozen items whose reviewed label has since been corrected; the frozen label is still used."
+          "description": "Frozen items whose reviewed label has since been corrected; the frozen label is still used for scoring and this count is informational."
+        },
+        "scoringNote": {
+          "type": "string",
+          "description": "States that scoring uses the frozen labels and labelsChangedSinceFrozen is informational."
         }
       }
     },
@@ -157,6 +161,70 @@
             "null"
           ],
           "description": "After minus before, in percentage points."
+        },
+        "beforeInterval": {
+          "description": "95% bootstrap interval for the weighted headline before, as a share between 0 and 1.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "low",
+            "high"
+          ],
+          "properties": {
+            "low": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            }
+          }
+        },
+        "afterInterval": {
+          "description": "95% bootstrap interval for the weighted headline after, as a share between 0 and 1.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "low",
+            "high"
+          ],
+          "properties": {
+            "low": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            }
+          }
+        },
+        "changeInterval": {
+          "description": "95% bootstrap interval for the paired change after minus before, in percentage points; the verdict follows it.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "low",
+            "high"
+          ],
+          "properties": {
+            "low": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            }
+          }
+        },
+        "intervalDescription": {
+          "type": "string",
+          "description": "How the intervals were made."
         }
       }
     },

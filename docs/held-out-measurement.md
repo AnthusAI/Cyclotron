@@ -40,17 +40,29 @@ propensity), so the numbers stand for every decision in the audit share and
 not only the uncertain ones that were reviewed. While every decision is
 reviewed, every weight is 1.
 
-**Is the change real?** The report counts the items the active classifier
-newly gets right (`gained`) and newly gets wrong (`lost`), and runs an exact
-two-sided sign test on those pairs. The verdict is:
+**Is the change real?** The report puts a 95% interval on the headline before
+and after and on the paired change (`headline.beforeInterval`,
+`afterInterval`, `changeInterval`; the change in percentage points). The
+intervals come from a bootstrap over the held-out items: 1,000 resamples with
+replacement, each recomputing the weighted balanced accuracy of both endpoints,
+from a generator seeded by the set id so the same set and predictions always
+give the same intervals. The verdict follows the weighted change interval, so
+it cannot contradict the headline number:
 
 | Verdict | When |
 | --- | --- |
 | `nothing-learned-yet` | The active classifier is still version 1 with no ML model. |
 | `too-few-labels` | The rarest label has fewer than `minimumPerLabel` held-out items (default 10). Numbers are shown, no claim is made. |
-| `improved` | p < 0.05 and gained > lost. |
-| `worse` | p < 0.05 and lost > gained. |
-| `no-clear-change` | Anything else. |
+| `improved` | The change interval is entirely above zero. |
+| `worse` | The change interval is entirely below zero. |
+| `no-clear-change` | The change interval includes zero. |
+
+The report still counts the items the active classifier newly gets right
+(`gained`) and newly gets wrong (`lost`) and runs an exact two-sided sign test
+on those pairs (`pValue`). Those are unweighted item counts shown for
+transparency; once the review rate tapers they can point the other way from the
+weighted headline, and `change.summary` says the verdict follows the weighted
+interval. Reports written before the intervals existed carry no interval fields.
 
 Only `improved` supports a public claim such as the marketing site's.
 
@@ -71,8 +83,9 @@ from that share:
 - If a frozen item is later reviewed by a reviewer's own choice it moves into
   training; it is then left out of evaluations and counted as
   `excludedSinceFrozen`. A label corrected after freezing is counted as
-  `labelsChangedSinceFrozen`; the frozen label is still used, so a set never
-  changes underneath a comparison.
+  `labelsChangedSinceFrozen`; scoring always uses the frozen label, so a set
+  never changes underneath a comparison, and that count is informational only
+  (the report says so in `heldOutSet.scoringNote`).
 
 Sets and reports are stored in the cyclotron's own store, so they work the
 same on the local SQLite store and the S3 cloud store, and travel with
@@ -107,7 +120,8 @@ Each takes `classifier=` for a cyclotron with several outputs, and
 with an example beside it and TypeScript types in the package
 (`cyclotron/held-out-report`). Its parts:
 
-- `headline`: the metric, its definition, before, after and `changePoints`.
+- `headline`: the metric, its definition, before, after, `changePoints` and the
+  three 95% bootstrap intervals.
 - `before` and `after`: version, refits, fingerprint and all metrics.
 - `change`: gained, lost, both right, both wrong, the p-value, the verdict and
   a one-paragraph `summary` a person can read.
