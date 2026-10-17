@@ -8,7 +8,7 @@ from uuid import uuid4
 from .s3_embedded_storage import S3EmbeddedStorage
 from .s3_runtime_storage import S3RuntimeStores
 from .s3_batch_storage import S3BatchStorage
-from .s3_journal import encode
+from .journal import encode
 
 
 class S3WorkspaceStores:
@@ -23,8 +23,7 @@ class S3WorkspaceStores:
     def _journal(self,domain,name):
         journal=self.journal_for(domain,name)
         original=self.root.journal
-        if (journal.payloads.scope!=original.payloads.scope or journal.payloads.bucket!=original.payloads.bucket
-                or journal.payloads.owner!=original.payloads.owner):raise ValueError('workspace storage scope mismatch')
+        if journal.boundary!=original.boundary:raise ValueError('workspace storage scope mismatch')
         return journal
 
     def acquire(self,config):

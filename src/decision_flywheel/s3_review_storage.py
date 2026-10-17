@@ -4,7 +4,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 import json
 import math
-from .s3_journal import S3Journal,commit_with_contract,encode
+from .journal import Journal,commit_with_contract,encode
 from .storage_errors import StorageLimit
 
 COLUMNS={
@@ -22,7 +22,7 @@ def append(value,table,row):
 
 class S3ReviewStorage:
     def __init__(self,journal,*,max_records):
-        if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1:raise ValueError('canonical S3 journal and reviewer record budget required')
+        if not isinstance(journal,Journal) or type(max_records) is not int or max_records<1:raise ValueError('canonical journal and reviewer record budget required')
         self.journal=journal;self.max_records=max_records;self._tx=ContextVar('s3_review_transaction',default=None)
     def _validate(self,value,*,max_records=None,max_bytes=None):
         if not isinstance(value,dict) or set(value)!=set(empty()) or value['schema']!='cyclotron-review-source/v1' or value['metadata']!={'sequences':{}} or not isinstance(value['tables'],dict) or set(value['tables'])!=set(COLUMNS):raise ValueError('invalid complete reviewer snapshot')

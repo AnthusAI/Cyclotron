@@ -6,7 +6,7 @@ mutation checks the same owner/fence stored with its data, never a DDB lease.
 """
 from copy import deepcopy
 import json
-from .s3_journal import S3Journal,commit_with_contract,uuid,decode
+from .journal import Journal,commit_with_contract,uuid,decode
 from .storage_errors import StorageConflict,StorageLimit
 from .learning_storage import ARTIFACTS,artifact_table
 from .active_labels import ACTIVE_LABELS_STATE_KEY,FEEDBACK_EVENT_KIND,dump_active_labels,load_active_labels,rebuild_active_labels,record_feedback_event
@@ -28,7 +28,7 @@ def json_text(value):
 class S3RuntimeStores:
     requires_durable_optimizer=True
     def __init__(self,journal,*,max_records,max_conflicts=8,cache_owned=False):
-        if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
+        if not isinstance(journal,Journal) or type(max_records) is not int or max_records<1 or type(max_conflicts) is not int or not 1<=max_conflicts<=100:
             raise ValueError('canonical journal and bounded records/conflicts required')
         self.journal=journal;self.max_records=max_records;self.max_conflicts=max_conflicts;self.authority=None;self.poisoned=False;self.cache_owned=cache_owned;self._cached=None
         self.runtime_storage=_State(self);self.runtime_cache=_Cache(self);self.learning_storage=_Learning(self)

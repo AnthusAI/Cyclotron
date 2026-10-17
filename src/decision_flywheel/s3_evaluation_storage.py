@@ -1,7 +1,7 @@
 """Canonical S3 evaluation clock/trace and explicit whole-plan ownership."""
 from copy import deepcopy
 import json
-from .s3_journal import S3Journal,commit_with_contract,uuid,encode,decode
+from .journal import Journal,commit_with_contract,uuid,encode,decode
 from .storage_errors import StorageConflict
 from .s3_runtime_storage import RuntimeOwnershipError
 
@@ -10,7 +10,7 @@ def empty():return {'schema':'cyclotron-s3-evaluation/v1','owner':None,'fence':0
 
 class S3EvaluationStorage:
     def __init__(self,journal,*,max_records):
-        if not isinstance(journal,S3Journal) or type(max_records) is not int or max_records<1:raise ValueError('canonical evaluation journal and record budget required')
+        if not isinstance(journal,Journal) or type(max_records) is not int or max_records<1:raise ValueError('canonical evaluation journal and record budget required')
         self.journal=journal;self.max_records=max_records;self.authority=None;self.poisoned=False
     def _validate(self,value):
         if not isinstance(value,dict) or set(value)!=set(empty()) or value['schema']!='cyclotron-s3-evaluation/v1':raise ValueError('invalid S3 evaluation')

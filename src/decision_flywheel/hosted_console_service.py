@@ -2,7 +2,7 @@
 import asyncio
 import hmac
 from .prospectus_accounts import VerifiedAccountSession,AccountAccessDenied,ProspectusUnavailable
-from .s3_journal import uuid,encode
+from .journal import uuid,encode
 
 
 class HostedConsoleService:
