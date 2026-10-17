@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "531b7b2f-bcef-4a18-be7c-d66fbbf4f512",
+  "issue_id": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-14T11:55:48.891Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "M1: Preview, revise and atomically accept curated examples",
+    "description": "Deliver a Python transformer contract, durable drafts, configurable input UI and explicit human classification. Optional entry from item lists; retries and cancellation preserve integrity. No automatic URL fetching or Tactus integration until a host supplies a secured transformer.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Curated Example Priming"
+    }
+  }
+}

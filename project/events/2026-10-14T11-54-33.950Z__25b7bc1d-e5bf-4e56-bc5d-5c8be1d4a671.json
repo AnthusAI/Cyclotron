@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "25b7bc1d-e5bf-4e56-bc5d-5c8be1d4a671",
+  "issue_id": "decision-flywheel-da886c09-7acb-45d3-acf8-c81585f26d8a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-14T11:54:33.950Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Optional curated-example priming",
+    "description": "Operators may deliberately curate representative examples before operation. Priming is optional; arbitrary structured item types and configurable inputs are supported. Preserve raw input and transformation provenance separately from explicit human classification rationale.",
+    "issue_type": "initiative",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Curated Example Priming"
+    }
+  }
+}

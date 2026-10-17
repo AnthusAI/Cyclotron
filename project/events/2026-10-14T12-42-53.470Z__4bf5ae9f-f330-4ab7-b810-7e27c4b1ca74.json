@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "4bf5ae9f-f330-4ab7-b810-7e27c4b1ca74",
+  "issue_id": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-14T12:42:53.470Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Deliver a Python transformer contract, durable drafts, configurable input UI and explicit human classification. Optional entry from item lists; retries and cancellation preserve integrity. No automatic URL fetching or Tactus integration until a host supplies a secured transformer.",
+        "to": "M1: Optional priming through validated structured files and language-neutral external HTTP transformation. Configurable item schema and classifier revisions drive templates, labels and rationales. Async start/status/clarification/feedback/cancel yields complete candidates; explicit preview acceptance commits items and human classifications with raw provenance and exact model representation. First integration reuses Papyrus scholarly and web curation planners and shared embedded UI. Local tests/preview only; draft PRs, no merge/deploy/IAM. Earlier callable draft at 2a45f44 is superseded."
+      }
+    }
+  }
+}

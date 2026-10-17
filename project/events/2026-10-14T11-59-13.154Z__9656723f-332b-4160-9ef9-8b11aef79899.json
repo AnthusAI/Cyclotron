@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "9656723f-332b-4160-9ef9-8b11aef79899",
+  "issue_id": "decision-flywheel-479b4a63-6bfe-4524-9b29-7ae2e71d20ad",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-14T11:59:13.154Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "3c4f308b-a9c6-4abd-9ff2-e544a357f37c",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "Curated Example Priming"
+    }
+  }
+}
