@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cb1a794a-0012-47fd-9276-82246476d246",
+  "issue_id": "decision-flywheel-e03422c5-8abb-4206-a6be-c1d168d3aff6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T16:37:21.151Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "One local check command for Cyclotron, run by release_to_main.sh",
+    "description": "Standing rule: CI for private repos runs locally (no GitHub Actions minutes). Run the full gate locally before merging. Today make test runs pytest only (12 minutes locally, see the suite-speed issue); the trace-ui suite (cd trace-ui && npm test, 263 tests) and the trace-ui build are separate targets that nothing runs before a merge, and a fresh npm run build rewrites src/decision_flywheel/vendor/trace-ui/web.css, viewer.css and web.js, meaning the committed bundle that pip installs is stale against the source.\nDo: add a make check target that runs, in order: ruff (once the lint issue lands), python -m pytest, cd trace-ui && npm ci && npm test && npm run build, then git diff --exit-code src/decision_flywheel/vendor/trace-ui to catch bundle drift. Make scripts/dev/release_to_main.sh run make check instead of the test suite alone. Document make check in docs/dev-procedures.md as the gate. Keep .github/workflows/release.yml for the semantic-release job but do not rely on its test job.\nDone when: make check passes on develop with a fresh trace-ui build committed, release_to_main.sh calls it, and dev-procedures.md says so. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+    "labels": []
+  }
+}

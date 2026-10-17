@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "53bb240d-44b9-4e39-8603-0145a766a322",
+  "issue_id": "decision-flywheel-5fb3685b-ca6a-444f-828e-6f5dd5ed3197",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T16:37:23.308Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Cut the README to the quickstarts and links; move the design journal under docs/",
+    "description": "README.md is 1,750 lines. It carries a 350-line 'Design and implementation status' section (lines 296 to 643), a duplicated heading ('Set up a cyclotron for a recurring decision' at lines 69 and 73), and the two quickstarts buried between them. For the portfolio goal the README is what a reader or a host developer judges first.\nDo: keep in README (target 150 lines): what Cyclotron is (the first three paragraphs are good), the two quickstarts (the core-quickstart and embedded-quickstart blocks are test-enforced by tests/readme_*_test.py; keep the markers), the Jev/Kev/Laya note, a short 'what it adds around a decision model', and a links section to docs/. Move 'Design and implementation status', 'The classifier at the center of the flywheel', 'Collect human feedback', 'Analyze feedback', 'Separate learning from evaluation', 'Show the optimizer's work', 'Try the current implementation', 'Local web workspace' and 'Workspace catalog' into docs/ pages (one page per theme, or one docs/design-journal.md), preserving every link target. Fix the duplicated heading. Check tests/embedding_docs_test.py and any glossary test still pass.\nDone when: README under about 200 lines, quickstart tests and glossary test pass, no dead links from README to docs. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+    "labels": []
+  }
+}

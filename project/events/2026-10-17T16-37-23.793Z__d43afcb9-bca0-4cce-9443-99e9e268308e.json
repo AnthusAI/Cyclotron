@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d43afcb9-bca0-4cce-9443-99e9e268308e",
+  "issue_id": "decision-flywheel-317eab4e-611d-4be3-98d8-6bd683ec40b0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T16:37:23.793Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Held-out report: weighted bootstrap interval and a verdict that matches the weighted headline",
+    "description": "The headline is inverse-propensity weighted balanced accuracy, but the sign test counts gained and lost items unweighted (src/decision_flywheel/held_out.py:150 sign_test_p_value, build_report at :197). Once the review rate tapers, a few heavy-weight items can move the headline one way while the count of gained and lost items points the other, so the verdict and the number can disagree. The report also gives no uncertainty on the number itself.\nDo: (1) add a bootstrap over held-out items (resample with replacement, recompute weighted balanced accuracy for before, after and the paired change; 1,000 resamples, seeded from the set id so it is reproducible) and put 95% intervals in headline.beforeInterval, headline.afterInterval and headline.changeInterval; (2) base the verdict on the weighted change interval (improved when the interval excludes zero and is positive; worse when negative), keeping the sign test counts in change for transparency, or state in change.summary that the verdict is about item counts; (3) say in the report and in docs/held-out-measurement.md that scoring uses the frozen label and labelsChangedSinceFrozen is informational; (4) bump the schema to cyclotron-held-out-report/v1 with optional new fields (additive) and update the JSON Schema, the TypeScript type in trace-ui/src/heldOutReport.ts and the card to show the interval; (5) specs in held_out_test.py for a case where weighting and counts disagree.\nDone when: the card shows an interval, verdict and headline cannot contradict each other, schema and TS type validate, specs pass. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
+    "labels": []
+  }
+}
