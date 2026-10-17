@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-0517ead2-625d-4fe1-948d-8e6751f72ffa",
+  "title": "Let a running cyclotron take newly accepted primed examples",
+  "description": "## Why\nThe hosted priming demo (paste a URL, label it publish or reject with an optional explanation, save, and see the classifier use it) cannot work on a running newsroom: an embedded store only accepts priming when it is first created, and refuses new examples on reopen.\n\n## What\n- `Cyclotron.add_priming_examples(examples, *, added_by)` adds accepted, human-labeled examples to an existing store, with no model call.\n- Each output that gains examples appends them to its fixed example list as a new version (`lastChange.summary`: \"Added N primed example(s) to the example list.\"). Unreviewed decisions are decided again by that version.\n- The learned head no longer matches the changed context, so the new version starts unfitted until the next learning pass.\n- Idempotent for identical examples; refuses changed content for a known identity, items already decided, unknown labels, and a blank `added_by`.\n- `priming_additions()` records who added which examples and when. Additions are applied once per output, so an example the optimizer later swaps out is not put back on reopen; an interrupted addition completes on reopen.\n- Reopening with the creation-time `priming_examples` still works after additions.\n\n```gherkin\nFeature: Priming a running cyclotron\n  Scenario: A saved example reaches the next decision\n    Given a running cyclotron with no primed examples\n    When an editor adds a primed example labeled \"exclude\" with an explanation\n    Then the cyclotron is at version 2 with 1 primed example\n    And the next decision request carries that example in its example list",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T11:54:10.579572Z",
+  "updated_at": "2026-10-17T11:54:27.116838Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}
