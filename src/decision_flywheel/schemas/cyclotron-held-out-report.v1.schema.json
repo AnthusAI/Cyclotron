@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AnthusAI/Cyclotron/schemas/cyclotron-held-out-report.v1.schema.json",
+  "title": "cyclotron-held-out-report/v1",
+  "description": "One before-and-after measurement of a classifier on a frozen held-out set: the classifier as its store was created versus the classifier active now, scored on the same items with the same request clock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "cyclotron",
+    "evaluatedAt",
+    "positiveLabel",
+    "heldOutSet",
+    "headline",
+    "before",
+    "after",
+    "change",
+    "cost",
+    "items"
+  ],
+  "properties": {
+    "schema": {
+      "const": "cyclotron-held-out-report/v1"
+    },
+    "cyclotron": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "classifier"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "classifier": {
+          "type": "string"
+        }
+      }
+    },
+    "evaluatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "positiveLabel": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "heldOutSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "frozenAt",
+        "items",
+        "labelCounts",
+        "weighted",
+        "selection",
+        "scored",
+        "scoredLabelCounts",
+        "excludedSinceFrozen",
+        "labelsChangedSinceFrozen"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "frozenAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items frozen into the set."
+        },
+        "labelCounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "weighted": {
+          "type": "boolean",
+          "description": "True when some item was reviewed with a selection probability below one."
+        },
+        "selection": {
+          "type": "string"
+        },
+        "scored": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items scored in this evaluation."
+        },
+        "scoredLabelCounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "excludedSinceFrozen": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Frozen items that have since been used for training and so are not scored."
+        },
+        "labelsChangedSinceFrozen": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Frozen items whose reviewed label has since been corrected; the frozen label is still used."
+        }
+      }
+    },
+    "headline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "name",
+        "definition",
+        "before",
+        "after",
+        "changePoints"
+      ],
+      "properties": {
+        "metric": {
+          "const": "balancedAccuracy"
+        },
+        "name": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "before": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "after": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "changePoints": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "After minus before, in percentage points."
+        }
+      }
+    },
+    "before": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "refits",
+        "fingerprint",
+        "description",
+        "metrics"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "refits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "balancedAccuracy",
+            "accuracy",
+            "precision",
+            "recall",
+            "recallByLabel"
+          ],
+          "properties": {
+            "balancedAccuracy": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Mean of the per-label recalls that could be measured."
+            },
+            "accuracy": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "precision": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "For the positive label, or the macro average when positiveLabel is null."
+            },
+            "recall": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "For the positive label, or the macro average when positiveLabel is null."
+            },
+            "recallByLabel": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "description": "Weighted by each item's inverse selection propensity."
+        }
+      }
+    },
+    "after": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "refits",
+        "fingerprint",
+        "description",
+        "metrics"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "refits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "balancedAccuracy",
+            "accuracy",
+            "precision",
+            "recall",
+            "recallByLabel"
+          ],
+          "properties": {
+            "balancedAccuracy": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Mean of the per-label recalls that could be measured."
+            },
+            "accuracy": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "precision": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "For the positive label, or the macro average when positiveLabel is null."
+            },
+            "recall": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "For the positive label, or the macro average when positiveLabel is null."
+            },
+            "recallByLabel": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "description": "Weighted by each item's inverse selection propensity."
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gained",
+        "lost",
+        "bothRight",
+        "bothWrong",
+        "pValue",
+        "significanceLevel",
+        "minimumPerLabel",
+        "verdict",
+        "summary"
+      ],
+      "properties": {
+        "gained": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items the active classifier gets right and the first one got wrong."
+        },
+        "lost": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items the first classifier got right and the active one gets wrong."
+        },
+        "bothRight": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bothWrong": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pValue": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Exact two-sided sign test on gained versus lost."
+        },
+        "significanceLevel": {
+          "type": "number"
+        },
+        "minimumPerLabel": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "verdict": {
+          "enum": [
+            "improved",
+            "worse",
+            "no-clear-change",
+            "too-few-labels",
+            "nothing-learned-yet"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "newRequests",
+        "cachedRequests",
+        "promptTokens",
+        "outputTokens"
+      ],
+      "properties": {
+        "newRequests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cachedRequests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "promptTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "itemId",
+          "label",
+          "weight",
+          "before",
+          "after",
+          "outcome"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 1
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "gained",
+              "lost",
+              "bothRight",
+              "bothWrong"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -310,6 +310,23 @@ question it shares. Split request and token counts can be fractional.
 by older stores have no shares and are split evenly. A deferred learning pass
 counts toward the latest decision.
 
+## Before and after on a held-out set
+
+The status card reports agreement on recent reviews. The headline evidence
+that a cyclotron learned is a separate measurement: the classifier as the
+store was created versus the classifier active now, on a frozen set of audit
+reviews neither has trained on.
+
+```python
+cyclotron.freeze_held_out_set()
+report = asyncio.run(cyclotron.evaluate_held_out())
+print(report["headline"]["before"], report["headline"]["after"], report["change"]["verdict"])
+```
+
+[held-out-measurement.md](held-out-measurement.md) defines the metric, the
+held-out set, the report format and the shared GraphQL operations behind the
+`HeldOutPanel` card.
+
 ## The review program and its override
 
 The default `ReviewProgram` starts by reviewing every decision. It steps the

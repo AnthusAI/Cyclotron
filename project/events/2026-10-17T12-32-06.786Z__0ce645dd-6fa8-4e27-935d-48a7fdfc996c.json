@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0ce645dd-6fa8-4e27-935d-48a7fdfc996c",
+  "issue_id": "decision-flywheel-97fadf54-9ece-4426-aa92-383c8a3e9fae",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T12:32:06.786Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Measure before and after on a fixed held-out set and show it in the shared UI",
+    "description": "## Why\nCyclotron is the evidence product. The headline is a visible before-and-after number from human labels in a hosted Papyrus newsroom (Ryan, portfolio review 2026-10-16). Papyrus owns the UI path; Cyclotron owns the metric, the held-out set and the report format, exposed through the shared remote and embedded UI.\n\n## What\n- Metric: balanced accuracy (mean per-label agreement), with accuracy, positive-label precision and recall, and per-label agreement. Items weighted by inverse selection propensity so tapered review rates do not bias it.\n- Held-out set: frozen from program- or audit-selected reviews of audit-share items, which never train, tune or prime. Frozen sets copy values and labels and never change.\n- Endpoints: version 1 as created (seed rubric and priming) versus the active classifier, same items and request clock. Paired exact sign test; verdict improved, worse, no-clear-change, too-few-labels (default 10 per label) or nothing-learned-yet.\n- Report: cyclotron-held-out-report/v1 JSON Schema, example and TypeScript types.\n- Engine: freeze_held_out_set, held_out_request_bound, evaluate_held_out, held_out_reports on both the SQLite and S3 stores.\n- Shared UI: HeldOutReportView and HeldOutPanel, createHeldOutClient, and GraphQL heldOutOverview / heldOutCommand served by HeldOutService in either mode. Evaluation needs live authority and a confirmed request bound.\n- Docs: docs/held-out-measurement.md.\n\n```gherkin\nFeature: Before and after on a fixed held-out set\n  Scenario: A learned rubric shows as a clear improvement\n    Given a cyclotron that promoted a new version from reviews\n    And a held-out set frozen from its audit reviews\n    When the held-out set is evaluated\n    Then the report shows version 1 and the active version on the same items\n    And the verdict is improved only when the sign test clears and each label has enough items\n  Scenario: Re-evaluating costs nothing when nothing changed\n    When the same set is evaluated again\n    Then no new decision-model request is made\n```\n\nRemaining for hosted acceptance: Papyrus mounts HeldOutService behind its account and publication grant and places HeldOutPanel; a live evaluation on a hosted newsroom needs its own approved budget.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+    "labels": []
+  }
+}

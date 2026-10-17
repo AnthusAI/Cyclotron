@@ -1,0 +1,406 @@
+{
+  "schema": "cyclotron-held-out-report/v1",
+  "cyclotron": {
+    "id": "papyrus-relevance",
+    "classifier": "relevant"
+  },
+  "evaluatedAt": "2026-10-17T12:00:00+00:00",
+  "positiveLabel": "include",
+  "heldOutSet": {
+    "id": "held-out-4ab69e61bd4d6c24",
+    "frozenAt": "2026-10-16T09:00:00+00:00",
+    "items": 40,
+    "labelCounts": {
+      "include": 12,
+      "exclude": 28
+    },
+    "weighted": true,
+    "selection": "Reviews the cyclotron selected for items in its audit share. Those items never train, tune or prime a classifier.",
+    "scored": 40,
+    "scoredLabelCounts": {
+      "include": 12,
+      "exclude": 28
+    },
+    "excludedSinceFrozen": 0,
+    "labelsChangedSinceFrozen": 0
+  },
+  "headline": {
+    "metric": "balancedAccuracy",
+    "name": "Balanced accuracy",
+    "definition": "How often it agrees with reviewers on each label, averaged over labels, so a rare label counts as much as a common one.",
+    "before": 0.45833333333333337,
+    "after": 0.8690476190476191,
+    "changePoints": 41.1
+  },
+  "before": {
+    "version": 1,
+    "refits": 0,
+    "fingerprint": "9c1f0d3a9c1f0d3a9c1f0d3a9c1f0d3a9c1f0d3a9c1f0d3a9c1f0d3a9c1f0d3a",
+    "description": "As the store was created: the seed rubric and priming examples, before any review.",
+    "metrics": {
+      "balancedAccuracy": 0.45833333333333337,
+      "accuracy": 0.4897959183673469,
+      "precision": 0.35714285714285715,
+      "recall": 0.23809523809523808,
+      "recallByLabel": {
+        "include": 0.23809523809523808,
+        "exclude": 0.6785714285714286
+      }
+    }
+  },
+  "after": {
+    "version": 4,
+    "refits": 2,
+    "fingerprint": "e04a7b21e04a7b21e04a7b21e04a7b21e04a7b21e04a7b21e04a7b21e04a7b21",
+    "description": "The classifier active now.",
+    "metrics": {
+      "balancedAccuracy": 0.8690476190476191,
+      "accuracy": 0.8775510204081632,
+      "precision": 0.8947368421052632,
+      "recall": 0.8095238095238095,
+      "recallByLabel": {
+        "include": 0.8095238095238095,
+        "exclude": 0.9285714285714286
+      }
+    }
+  },
+  "change": {
+    "gained": 13,
+    "lost": 0,
+    "bothRight": 24,
+    "bothWrong": 3,
+    "pValue": 0.000244140625,
+    "significanceLevel": 0.05,
+    "minimumPerLabel": 10,
+    "verdict": "improved",
+    "summary": "Balanced accuracy went from 46% to 87% (+41.1 points). It newly got 13 right and newly got 0 wrong (sign test p < 0.001). The improvement is clear on this held-out set."
+  },
+  "cost": {
+    "newRequests": 44,
+    "cachedRequests": 36,
+    "promptTokens": 61520,
+    "outputTokens": 3980
+  },
+  "items": [
+    {
+      "itemId": "ref-in-00",
+      "label": "include",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-in-01",
+      "label": "include",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-in-02",
+      "label": "include",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-in-03",
+      "label": "include",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-in-04",
+      "label": "include",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-in-05",
+      "label": "include",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "include",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-in-06",
+      "label": "include",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "include",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-in-07",
+      "label": "include",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "include",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-in-08",
+      "label": "include",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "include",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-in-09",
+      "label": "include",
+      "weight": 4.0,
+      "before": "exclude",
+      "after": "include",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-in-10",
+      "label": "include",
+      "weight": 4.0,
+      "before": "exclude",
+      "after": "include",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-in-11",
+      "label": "include",
+      "weight": 4.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothWrong"
+    },
+    {
+      "itemId": "ref-out-00",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothWrong"
+    },
+    {
+      "itemId": "ref-out-01",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "include",
+      "outcome": "bothWrong"
+    },
+    {
+      "itemId": "ref-out-02",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-03",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-04",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-05",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-06",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-07",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-08",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "include",
+      "after": "exclude",
+      "outcome": "gained"
+    },
+    {
+      "itemId": "ref-out-09",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-10",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-11",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-12",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-13",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-14",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-15",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-16",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-17",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-18",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-19",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-20",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-21",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-22",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-23",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-24",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-25",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-26",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    },
+    {
+      "itemId": "ref-out-27",
+      "label": "exclude",
+      "weight": 1.0,
+      "before": "exclude",
+      "after": "exclude",
+      "outcome": "bothRight"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "name": "cyclotron",
   "version": "0.2.2",
   "private": true,
-  "description": "Cyclotron's embeddable web components (review control, status widget), their styles, and the TypeScript types for the application SDK and cyclotron-status/v1.",
+  "description": "Cyclotron's embeddable web components (review control, status widget, held-out before-and-after card), their styles, and the TypeScript types for the application SDK, cyclotron-status/v1 and cyclotron-held-out-report/v1.",
   "files": [
     "trace-ui/src/components/ui",
     "trace-ui/src/components/lab-metrics.tsx",
@@ -24,7 +24,9 @@
     "trace-ui/src/cycleSchedule.ts",
     "trace-ui/src/CalibrationProvenance.tsx",
     "trace-ui/src/components/priming-panel.tsx",
-    "trace-ui/src/primingClient.ts"
+    "trace-ui/src/primingClient.ts",
+    "trace-ui/src/components/held-out-report.tsx",
+    "trace-ui/src/heldOutReport.ts"
   ],
   "exports": {
     "./components/ui/*": "./trace-ui/src/components/ui/*.tsx",
@@ -42,7 +44,9 @@
     "./components/cyclotron-brand": "./trace-ui/src/CyclotronBrand.tsx",
     "./components/cycle-mark": "./trace-ui/src/components/ui/cycle-mark.tsx",
     "./components/priming-panel": "./trace-ui/src/components/priming-panel.tsx",
-    "./priming-client": "./trace-ui/src/primingClient.ts"
+    "./priming-client": "./trace-ui/src/primingClient.ts",
+    "./components/held-out-report": "./trace-ui/src/components/held-out-report.tsx",
+    "./held-out-report": "./trace-ui/src/heldOutReport.ts"
   },
   "dependencies": {
     "@fontsource-variable/oxanium": "^5.3.0",
