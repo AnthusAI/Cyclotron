@@ -5,30 +5,32 @@ only the structured facts a UI needs to show how a flywheel is operating:
 which policy is active, what trials were measured, their outcomes, and whether
 new input has made the latest policy stale.
 """
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
 from .context import input_hash
 from .models import DecisionTask, LabeledItem
 
-
 _OUTCOMES = frozenset({"promoted", "incumbent-retained", "incomplete"})
 _TRIAL_STATUSES = frozenset({"completed", "incomplete", "not-run"})
 _OBJECTIVES = frozenset({"accuracy", "macro-f1", "brier"})
-_FEATURE_ACTIVITY_STATUSES = frozenset({"proposed", "awaiting-review", "rejected", "evaluated", "promoted",
-                                        "not-promoted", "fit-failed", "guard-rejected"})
+_FEATURE_ACTIVITY_STATUSES = frozenset(
+    {"proposed", "awaiting-review", "rejected", "evaluated", "promoted", "not-promoted", "fit-failed", "guard-rejected"}
+)
 
 
 def _fingerprint(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
-                                      ensure_ascii=False).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
 
 
 def _digest(name: str, value: object) -> str:
@@ -42,8 +44,7 @@ def feedback_fingerprint(task: DecisionTask, labels: tuple[LabeledItem, ...] | l
     records = []
     for row in sorted(labels, key=lambda candidate: candidate.item.id):
         context = json.dumps(dict(row.context), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        records.append((row.item.id, row.label, input_hash(task, row.item),
-                        hashlib.sha256(context.encode("utf-8")).hexdigest()))
+        records.append((row.item.id, row.label, input_hash(task, row.item), hashlib.sha256(context.encode("utf-8")).hexdigest()))
     return _fingerprint(records)
 
 
@@ -72,9 +73,9 @@ class TrialActivity:
         _count("cached trial decisions", self.cached_decisions)
         if self.cached_decisions > self.decisions:
             raise ValueError("cached trial decisions cannot exceed decisions")
-        if self.objective is not None and (isinstance(self.objective, bool)
-                                           or not isinstance(self.objective, (float, int))
-                                           or not math.isfinite(self.objective)):
+        if self.objective is not None and (
+            isinstance(self.objective, bool) or not isinstance(self.objective, (float, int)) or not math.isfinite(self.objective)
+        ):
             raise ValueError("trial objective must be finite or omitted")
 
 
@@ -92,9 +93,12 @@ class FeatureDefinition:
             raise ValueError("feature key must be non-empty")
         if not isinstance(self.question_type, str) or not self.question_type:
             raise ValueError("feature question type must be non-empty")
-        if (not isinstance(self.feature_names, tuple) or not self.feature_names
-                or any(not isinstance(name, str) or not name for name in self.feature_names)
-                or len(set(self.feature_names)) != len(self.feature_names)):
+        if (
+            not isinstance(self.feature_names, tuple)
+            or not self.feature_names
+            or any(not isinstance(name, str) or not name for name in self.feature_names)
+            or len(set(self.feature_names)) != len(self.feature_names)
+        ):
             raise ValueError("feature names must be unique non-empty strings")
         _digest("feature definition fingerprint", self.definition_fingerprint)
 
@@ -122,9 +126,11 @@ class FeatureActivity:
             raise ValueError("feature activity status is not recognized")
         if self.reason_code is not None and (not isinstance(self.reason_code, str) or not self.reason_code):
             raise ValueError("feature activity reason code must be non-empty or omitted")
-        if self.objective_delta is not None and (isinstance(self.objective_delta, bool)
-                                                 or not isinstance(self.objective_delta, (float, int))
-                                                 or not math.isfinite(self.objective_delta)):
+        if self.objective_delta is not None and (
+            isinstance(self.objective_delta, bool)
+            or not isinstance(self.objective_delta, (float, int))
+            or not math.isfinite(self.objective_delta)
+        ):
             raise ValueError("feature activity objective delta must be finite or omitted")
 
 
@@ -175,12 +181,15 @@ class FlywheelRound:
             raise ValueError("trials must be TrialActivity values")
         if len({trial.name for trial in self.trials}) != len(self.trials):
             raise ValueError("trial names must be unique")
-        if (not isinstance(self.active_features, tuple)
-                or any(not isinstance(feature, FeatureDefinition) for feature in self.active_features)
-                or len({feature.key for feature in self.active_features}) != len(self.active_features)):
+        if (
+            not isinstance(self.active_features, tuple)
+            or any(not isinstance(feature, FeatureDefinition) for feature in self.active_features)
+            or len({feature.key for feature in self.active_features}) != len(self.active_features)
+        ):
             raise ValueError("active features must have unique keys")
-        if (not isinstance(self.feature_activity, tuple)
-                or any(not isinstance(activity, FeatureActivity) for activity in self.feature_activity)):
+        if not isinstance(self.feature_activity, tuple) or any(
+            not isinstance(activity, FeatureActivity) for activity in self.feature_activity
+        ):
             raise ValueError("feature activity must contain FeatureActivity values")
 
     @property
@@ -200,29 +209,54 @@ class FlywheelRound:
         return value
 
     @classmethod
-    def from_document(cls, value: object) -> "FlywheelRound":
+    def from_document(cls, value: object) -> FlywheelRound:
         if not isinstance(value, dict):
             raise ValueError("run ledger entry must be an object")
-        expected = {"task_fingerprint", "input_fingerprint", "active_policy_fingerprint", "model_fingerprint",
-                    "feedback_count", "candidate_count", "development_count", "objective_name", "winner",
-                    "promoted", "outcome", "calls_attempted", "calls_succeeded", "trials", "created_at"}
+        expected = {
+            "task_fingerprint",
+            "input_fingerprint",
+            "active_policy_fingerprint",
+            "model_fingerprint",
+            "feedback_count",
+            "candidate_count",
+            "development_count",
+            "objective_name",
+            "winner",
+            "promoted",
+            "outcome",
+            "calls_attempted",
+            "calls_succeeded",
+            "trials",
+            "created_at",
+        }
         optional = {"active_features", "feature_activity"}
         expected |= optional
-        if ((set(value) != expected and set(value) != expected - optional) or not isinstance(value["trials"], list)
-                or ("active_features" in value and not isinstance(value["active_features"], list))
-                or ("feature_activity" in value and not isinstance(value["feature_activity"], list))):
+        if (
+            (set(value) != expected and set(value) != expected - optional)
+            or not isinstance(value["trials"], list)
+            or ("active_features" in value and not isinstance(value["active_features"], list))
+            or ("feature_activity" in value and not isinstance(value["feature_activity"], list))
+        ):
             raise ValueError("run ledger entry has unexpected fields")
         try:
             trials = tuple(TrialActivity(**trial) for trial in value["trials"])
-            active_features = tuple(FeatureDefinition(
-                feature["key"], feature["question_type"], tuple(feature["feature_names"]),
-                feature["definition_fingerprint"]
-            ) for feature in value.get("active_features", []))
+            active_features = tuple(
+                FeatureDefinition(
+                    feature["key"], feature["question_type"], tuple(feature["feature_names"]), feature["definition_fingerprint"]
+                )
+                for feature in value.get("active_features", [])
+            )
             feature_activity = tuple(FeatureActivity(**activity) for activity in value.get("feature_activity", []))
-            return cls(**{key: value[key] for key in expected if key not in {
-                "trials", "active_features", "feature_activity"
-            } and key in value
-            }, trials=trials, active_features=active_features, feature_activity=feature_activity)
+            return cls(
+                **{
+                    key: value[key]
+                    for key in expected
+                    if key not in {"trials", "active_features", "feature_activity"} and key in value
+                },
+                trials=trials,
+                active_features=active_features,
+                feature_activity=feature_activity,
+            )
         except (TypeError, ValueError) as error:
             raise ValueError("run ledger entry is invalid") from error
 
@@ -282,7 +316,5 @@ class JsonlRunLedger:
         latest = history[-1] if history else None
         if latest is None:
             return FlywheelStatus("never-run", None, 0)
-        phase: Literal["current", "stale"] = (
-            "current" if latest.input_fingerprint == current_input_fingerprint else "stale"
-        )
+        phase: Literal["current", "stale"] = "current" if latest.input_fingerprint == current_input_fingerprint else "stale"
         return FlywheelStatus(phase, latest, len(history))

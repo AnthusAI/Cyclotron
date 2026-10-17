@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Promote origin/develop to origin/main safely, from a throwaway worktree.
 #
-#   scripts/dev/release_to_main.sh            # test, then push main
+#   scripts/dev/release_to_main.sh            # run make check, then push main
 #   scripts/dev/release_to_main.sh --dry-run  # merge and test, do not push
 #
 # Steps: fetch; worktree off origin/main on a temporary branch; fast-forward
-# it to origin/main; merge origin/develop; run the full suite; push the
+# it to origin/main; merge origin/develop; run the full gate (make check); push the
 # temporary branch to main (never forced); remove the worktree and branch.
 # It never touches your checkout. Set CW_WORK to change the worktree folder
 # (default /private/tmp/cw-work). Needs the repo's .venv for the tests.
@@ -26,8 +26,8 @@ cd "$dir"
 git merge --ff-only -q origin/main
 git merge --no-edit -q origin/develop
 echo "merged develop into main candidate: $(git log --oneline -1)"
-"$python" -m pytest -q
-if [ "$dry" = 1 ]; then echo "dry run: tests passed, not pushing"; exit 0; fi
+make check PYTHON="$python"
+if [ "$dry" = 1 ]; then echo "dry run: make check passed, not pushing"; exit 0; fi
 git fetch -q origin
 git merge-base --is-ancestor origin/main HEAD || { echo "origin/main moved; rerun"; exit 1; }
 git push origin "$branch:main"

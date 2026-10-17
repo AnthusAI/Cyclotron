@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import random
 import sqlite3
 from types import SimpleNamespace
 
@@ -60,8 +59,9 @@ def test_noise_rarely_clears_the_gate():
     items = [f"q{i}" for i in range(150)]
     false_positives = 0
     for seed in range(200):
-        r = run(FakeScorer(base=0.7, good=0.7, salt=seed), candidates=ids, items=items, seed=seed,
-                stages=((30, 0.5), (None, None)))
+        r = run(
+            FakeScorer(base=0.7, good=0.7, salt=seed), candidates=ids, items=items, seed=seed, stages=((30, 0.5), (None, None))
+        )
         false_positives += bool(r.cleared)
     assert false_positives / 200 <= 0.10
 

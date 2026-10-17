@@ -22,7 +22,8 @@
       "exclude": 28
     },
     "excludedSinceFrozen": 0,
-    "labelsChangedSinceFrozen": 0
+    "labelsChangedSinceFrozen": 0,
+    "scoringNote": "Scoring uses the label frozen with each item; labelsChangedSinceFrozen counts later corrections and is informational only."
   },
   "headline": {
     "metric": "balancedAccuracy",
@@ -30,7 +31,20 @@
     "definition": "How often it agrees with reviewers on each label, averaged over labels, so a rare label counts as much as a common one.",
     "before": 0.45833333333333337,
     "after": 0.8690476190476191,
-    "changePoints": 41.1
+    "changePoints": 41.1,
+    "beforeInterval": {
+      "low": 0.3869047619047619,
+      "high": 0.5416666666666666
+    },
+    "afterInterval": {
+      "low": 0.7589285714285714,
+      "high": 0.9583333333333334
+    },
+    "changeInterval": {
+      "low": 22.4,
+      "high": 58.9
+    },
+    "intervalDescription": "95% interval from 1000 bootstrap resamples of the held-out items, each item weighted by its inverse selection propensity; scoring uses the labels frozen with the set."
   },
   "before": {
     "version": 1,
@@ -73,7 +87,7 @@
     "significanceLevel": 0.05,
     "minimumPerLabel": 10,
     "verdict": "improved",
-    "summary": "Balanced accuracy went from 46% to 87% (+41.1 points). It newly got 13 right and newly got 0 wrong (sign test p < 0.001). The improvement is clear on this held-out set."
+    "summary": "Balanced accuracy went from 46% to 87% (+41.1 points, 95% interval +22.4 to +58.9). Counting items without weights, it newly got 13 right and newly got 0 wrong (sign test p < 0.001); the verdict follows the weighted interval, not these counts. The weighted improvement is clear on this held-out set."
   },
   "cost": {
     "newRequests": 44,

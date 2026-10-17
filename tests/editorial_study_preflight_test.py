@@ -1,4 +1,5 @@
 """The editorial study records its protocol before any live call."""
+
 import hashlib
 import importlib.util
 import json
@@ -14,8 +15,10 @@ def _study():
 
 
 def _corpus(path, prefix, count):
-    lines = [json.dumps({"id": f"{prefix}-{i}", "text": f"story {i}",
-                         "simulated_label": "publish" if i % 2 else "reject"}) for i in range(count)]
+    lines = [
+        json.dumps({"id": f"{prefix}-{i}", "text": f"story {i}", "simulated_label": "publish" if i % 2 else "reject"})
+        for i in range(count)
+    ]
     path.write_text("\n".join(lines) + "\n")
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -24,10 +27,26 @@ def test_a_dry_run_records_the_rubric_trigger_and_spends_nothing(tmp_path):
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
     output = tmp_path / "study"
-    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                   "--output", str(output), "--rubric-trigger-basis", "revealed_feedback_count",
-                   "--rubric-changes-every", "25", "--max-rubric-optimizations", "3"])
+    _study().main(
+        [
+            "--operational-corpus",
+            str(operational),
+            "--operational-sha256",
+            operational_sha,
+            "--bootstrap-corpus",
+            str(bootstrap),
+            "--bootstrap-sha256",
+            bootstrap_sha,
+            "--output",
+            str(output),
+            "--rubric-trigger-basis",
+            "revealed_feedback_count",
+            "--rubric-changes-every",
+            "25",
+            "--max-rubric-optimizations",
+            "3",
+        ]
+    )
     protocol = json.loads((output / "protocol.json").read_text())
     assert protocol["rubric_trigger"] == {"basis": "revealed_feedback_count", "every": 25, "max_attempts": 3}
     ledger = json.loads((output / "global_budget_ledger.json").read_text())
@@ -38,10 +57,26 @@ def test_a_longer_corpus_from_an_empty_rubric_is_declared_in_the_protocol(tmp_pa
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 1200), _corpus(bootstrap, "boot", 12)
     output = tmp_path / "study"
-    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                   "--output", str(output), "--operational-items", "1200", "--baseline-rubric", "none",
-                   "--modes", "all"])
+    _study().main(
+        [
+            "--operational-corpus",
+            str(operational),
+            "--operational-sha256",
+            operational_sha,
+            "--bootstrap-corpus",
+            str(bootstrap),
+            "--bootstrap-sha256",
+            bootstrap_sha,
+            "--output",
+            str(output),
+            "--operational-items",
+            "1200",
+            "--baseline-rubric",
+            "none",
+            "--modes",
+            "all",
+        ]
+    )
     protocol = json.loads((output / "protocol.json").read_text())
     assert protocol["operational_items"] == 1200 and protocol["modes"] == ["all"]
     assert protocol["baseline_rubric"] == "" and protocol["baseline_provenance"].startswith("none")
@@ -50,21 +85,50 @@ def test_a_longer_corpus_from_an_empty_rubric_is_declared_in_the_protocol(tmp_pa
 
 def test_the_declared_length_must_match_the_corpus(tmp_path):
     import pytest
+
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
     with pytest.raises(ValueError, match="exactly 1200"):
-        _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                       "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                       "--output", str(tmp_path / "study"), "--operational-items", "1200"])
+        _study().main(
+            [
+                "--operational-corpus",
+                str(operational),
+                "--operational-sha256",
+                operational_sha,
+                "--bootstrap-corpus",
+                str(bootstrap),
+                "--bootstrap-sha256",
+                bootstrap_sha,
+                "--output",
+                str(tmp_path / "study"),
+                "--operational-items",
+                "1200",
+            ]
+        )
 
 
 def test_a_rubric_gate_configuration_is_declared_and_spreads_development_through_the_stream(tmp_path):
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
     output = tmp_path / "study"
-    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                   "--output", str(output), "--development-rate", "0.25", "--provisional-allowance", "0.05"])
+    _study().main(
+        [
+            "--operational-corpus",
+            str(operational),
+            "--operational-sha256",
+            operational_sha,
+            "--bootstrap-corpus",
+            str(bootstrap),
+            "--bootstrap-sha256",
+            bootstrap_sha,
+            "--output",
+            str(output),
+            "--development-rate",
+            "0.25",
+            "--provisional-allowance",
+            "0.05",
+        ]
+    )
     gate = json.loads((output / "protocol.json").read_text())["rubric_gate"]
     assert gate["evaluation_policy"]["initial_recency_allowance"] == 0.05
     assert gate["evaluation_policy"]["recency_decay_per_class"] == 20
@@ -74,18 +138,24 @@ def test_a_rubric_gate_configuration_is_declared_and_spreads_development_through
     plan = study.build_plan(study.DecisionTask("editorial", ("publish", "reject"), "q"), rows, "seed", 0.25)
     first_200 = {row.item.id for row in rows[:200]}
     fixed = study.build_plan(study.DecisionTask("editorial", ("publish", "reject"), "q"), rows, "seed")
-    early = lambda p: min(sum(row.label == label and row.item.id in first_200 for row in p.development) for label in ("publish", "reject"))
+    early = lambda p: min(
+        sum(row.label == label and row.item.id in first_200 for row in p.development) for label in ("publish", "reject")
+    )
     # A fixed 20 per class from the whole corpus has only about half its development labels by mid-run.
     assert early(fixed) <= 12 < 15 <= early(plan)
 
 
 def test_seeded_answers_copy_only_completed_exact_requests(tmp_path):
     import sqlite3
+
     source = tmp_path / "source.sqlite3"
     db = sqlite3.connect(source)
     db.execute("CREATE TABLE runtime_answers (key TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT)")
-    db.executemany("INSERT INTO runtime_answers VALUES (?,?,?)", [("a", "complete", "{}"), ("b", "pending", None), ("c", "failed", None)])
-    db.commit(); db.close()
+    db.executemany(
+        "INSERT INTO runtime_answers VALUES (?,?,?)", [("a", "complete", "{}"), ("b", "pending", None), ("c", "failed", None)]
+    )
+    db.commit()
+    db.close()
     target = tmp_path / "run" / "runtime.sqlite3"
     _study().seed_answers(target, source)
     assert sqlite3.connect(target).execute("SELECT key,status FROM runtime_answers").fetchall() == [("a", "complete")]
@@ -95,11 +165,30 @@ def test_the_decision_model_and_provider_are_declared_separately_from_the_optimi
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
     output = tmp_path / "study"
-    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                   "--output", str(output), "--decision-provider", "jev", "--decision-model", "jev-1.13.0"])
+    _study().main(
+        [
+            "--operational-corpus",
+            str(operational),
+            "--operational-sha256",
+            operational_sha,
+            "--bootstrap-corpus",
+            str(bootstrap),
+            "--bootstrap-sha256",
+            bootstrap_sha,
+            "--output",
+            str(output),
+            "--decision-provider",
+            "jev",
+            "--decision-model",
+            "jev-1.13.0",
+        ]
+    )
     protocol = json.loads((output / "protocol.json").read_text())
-    assert (protocol["decision_provider"], protocol["decision_model"], protocol["optimizer_model"]) == ("jev", "jev-1.13.0", "gpt-4.1-mini")
+    assert (protocol["decision_provider"], protocol["decision_model"], protocol["optimizer_model"]) == (
+        "jev",
+        "jev-1.13.0",
+        "gpt-4.1-mini",
+    )
 
 
 def test_the_decision_model_can_see_the_title_as_the_labeler_did(tmp_path):
@@ -114,9 +203,22 @@ def test_the_optimization_goal_is_declared_for_the_publish_class(tmp_path):
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
     output = tmp_path / "study"
-    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                   "--output", str(output), "--selection-primary", "precision"])
+    _study().main(
+        [
+            "--operational-corpus",
+            str(operational),
+            "--operational-sha256",
+            operational_sha,
+            "--bootstrap-corpus",
+            str(bootstrap),
+            "--bootstrap-sha256",
+            bootstrap_sha,
+            "--output",
+            str(output),
+            "--selection-primary",
+            "precision",
+        ]
+    )
     policy = json.loads((output / "protocol.json").read_text())["selection_policy"]
     assert (policy["primary"], policy["positive_class"]) == ("precision", "publish")
 
@@ -125,9 +227,20 @@ def test_the_rubric_trigger_defaults_to_six_label_transitions(tmp_path):
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
     output = tmp_path / "study"
-    _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                   "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                   "--output", str(output)])
+    _study().main(
+        [
+            "--operational-corpus",
+            str(operational),
+            "--operational-sha256",
+            operational_sha,
+            "--bootstrap-corpus",
+            str(bootstrap),
+            "--bootstrap-sha256",
+            bootstrap_sha,
+            "--output",
+            str(output),
+        ]
+    )
     protocol = json.loads((output / "protocol.json").read_text())
     assert protocol["rubric_trigger"]["every"] == 6 and protocol["rubric_trigger"]["basis"] == "label_transitions"
 
@@ -139,10 +252,25 @@ def test_the_foundry_provider_records_its_deployment_label_and_rubric_placement(
     for placement in (None, "state"):
         output = tmp_path / f"study-{placement}"
         extra = ["--decision-rubric-placement", placement] if placement else []
-        _study().main(["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-                       "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha,
-                       "--output", str(output), "--decision-provider", "foundry",
-                       "--decision-model", "my-deployment", *extra])
+        _study().main(
+            [
+                "--operational-corpus",
+                str(operational),
+                "--operational-sha256",
+                operational_sha,
+                "--bootstrap-corpus",
+                str(bootstrap),
+                "--bootstrap-sha256",
+                bootstrap_sha,
+                "--output",
+                str(output),
+                "--decision-provider",
+                "foundry",
+                "--decision-model",
+                "my-deployment",
+                *extra,
+            ]
+        )
         protocols[placement] = json.loads((output / "protocol.json").read_text())
     assert protocols[None]["decision_provider"] == "foundry" and protocols[None]["decision_model"] == "my-deployment"
     assert protocols[None]["decision_rubric_placement"] == "criteria"
@@ -151,10 +279,19 @@ def test_the_foundry_provider_records_its_deployment_label_and_rubric_placement(
 
 def test_other_providers_do_not_record_a_rubric_placement_and_foundry_needs_a_deployment_label(tmp_path):
     import pytest
+
     operational, bootstrap = tmp_path / "operational.jsonl", tmp_path / "bootstrap.jsonl"
     operational_sha, bootstrap_sha = _corpus(operational, "op", 400), _corpus(bootstrap, "boot", 12)
-    base = ["--operational-corpus", str(operational), "--operational-sha256", operational_sha,
-            "--bootstrap-corpus", str(bootstrap), "--bootstrap-sha256", bootstrap_sha]
+    base = [
+        "--operational-corpus",
+        str(operational),
+        "--operational-sha256",
+        operational_sha,
+        "--bootstrap-corpus",
+        str(bootstrap),
+        "--bootstrap-sha256",
+        bootstrap_sha,
+    ]
     _study().main([*base, "--output", str(tmp_path / "jev"), "--decision-provider", "jev", "--decision-model", "j"])
     assert "decision_rubric_placement" not in json.loads((tmp_path / "jev" / "protocol.json").read_text())
     with pytest.raises(SystemExit):

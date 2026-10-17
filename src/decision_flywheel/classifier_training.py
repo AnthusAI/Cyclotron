@@ -1,4 +1,5 @@
 """Fit and evaluate retained question features separately from context discovery."""
+
 import json
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
@@ -8,9 +9,19 @@ from .selection_policy import SelectionPolicy
 
 
 @track_answer_dependencies
-async def train_classifier(wheel, training, development, *, protected, propensities,
-                           min_development_per_class=20, retry_interrupted=False,
-                           apply_promotion=True, feature_groups=(), max_group_configurations=8):
+async def train_classifier(
+    wheel,
+    training,
+    development,
+    *,
+    protected,
+    propensities,
+    min_development_per_class=20,
+    retry_interrupted=False,
+    apply_promotion=True,
+    feature_groups=(),
+    max_group_configurations=8,
+):
     if type(min_development_per_class) is not int or min_development_per_class < 1:
         raise ValueError("development class floor must be positive")
     wheel._validate_partitions(training, development, protected, propensities)
@@ -18,9 +29,14 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     wheel.reconcile_model_context(training)
     counts = {label: sum(r.label == label for r in development) for label in wheel.initial.task.labels}
     if min(counts.values()) < min_development_per_class:
-        result = {"stage": "classifier", "promoted": False, "development_counts": counts,
-                  "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
-                  "reason": "waiting for development class coverage", "minimum_development_per_class": min_development_per_class}
+        result = {
+            "stage": "classifier",
+            "promoted": False,
+            "development_counts": counts,
+            "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
+            "reason": "waiting for development class coverage",
+            "minimum_development_per_class": min_development_per_class,
+        }
         wheel._emit({"kind": "classifier-training-completed", **result})
         return result
     # All trials share the incumbent. Wording revisions and removals change one
@@ -29,107 +45,175 @@ async def train_classifier(wheel, training, development, *, protected, propensit
     additions = []
     revisions = []
     for entry in wheel.feature_bank():
-        question = entry['question']
-        current = next((task for task in tasks if task['name'] == question['name']), None)
+        question = entry["question"]
+        current = next((task for task in tasks if task["name"] == question["name"]), None)
         if current is not None and current != question:
-            revisions.append((f"revision:{entry['id']}",
-                [question if task['name'] == question['name'] else task for task in tasks]))
+            revisions.append(
+                (f"revision:{entry['id']}", [question if task["name"] == question["name"] else task for task in tasks])
+            )
         elif current is None:
-            additions.append((entry['id'], question))
+            additions.append((entry["id"], question))
     configs = [("current", tasks)]
     configs.extend((f"addition:{key}", tasks + [question]) for key, question in additions)
     configs.extend(revisions)
-    configs.extend((f"without:{task['name']}", [other for other in tasks if other['name'] != task['name']])
-                   for task in tasks)
+    configs.extend((f"without:{task['name']}", [other for other in tasks if other["name"] != task["name"]]) for task in tasks)
     from .feature_experiments import plan_feature_groups
-    group_plan = plan_feature_groups(tasks, wheel.feature_bank(), feature_groups,
-                                    max_configurations=max_group_configurations)
-    group_experiments = {trial['name']: trial['experiment'] for trial in group_plan}
-    configs.extend((trial['name'], trial['tasks']) for trial in group_plan)
-    evidence = {"version": wheel.active.fingerprint, "training": wheel._evidence(training),
-                "model_context": wheel.model_context(wheel.active.config, training),
-                "optimizer_context": wheel.optimizer_context,
-                "development": wheel._evidence(development), "protected": sorted(i.id for i in protected),
-                "propensities": propensities, "bank": [e["id"] for e in wheel.feature_bank()], "floor": min_development_per_class,
-                "apply_promotion": apply_promotion, "policy": "question-revisions-and-ablation-v2",
-                "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None}
+
+    group_plan = plan_feature_groups(tasks, wheel.feature_bank(), feature_groups, max_configurations=max_group_configurations)
+    group_experiments = {trial["name"]: trial["experiment"] for trial in group_plan}
+    configs.extend((trial["name"], trial["tasks"]) for trial in group_plan)
+    evidence = {
+        "version": wheel.active.fingerprint,
+        "training": wheel._evidence(training),
+        "model_context": wheel.model_context(wheel.active.config, training),
+        "optimizer_context": wheel.optimizer_context,
+        "development": wheel._evidence(development),
+        "protected": sorted(i.id for i in protected),
+        "propensities": propensities,
+        "bank": [e["id"] for e in wheel.feature_bank()],
+        "floor": min_development_per_class,
+        "apply_promotion": apply_promotion,
+        "policy": "question-revisions-and-ablation-v2",
+        "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
+    }
     # Opt-in search is a different experiment. Empty plans preserve existing
     # cache identities and do not make deployed sessions repeat paid fits.
     if group_plan:
         evidence.update(group_plan=group_plan, max_group_configurations=max_group_configurations)
     key = _hash(evidence)
-    wheel.learning_storage.ensure('classifier')
-    key, saved = wheel.cached_artifact('classifier_training', 'id', key)
+    wheel.learning_storage.ensure("classifier")
+    key, saved = wheel.cached_artifact("classifier_training", "id", key)
     if saved and saved[0] == "complete":
         return json.loads(saved[1])
     if saved and not retry_interrupted:
         return {"stage": "classifier", "promoted": False, "reason": "interrupted training requires explicit retry"}
     now = datetime.fromisoformat(json.loads(saved[1])["time"]) if saved else datetime.now(timezone.utc)
-    wheel.learning_storage.begin('classifier',key,_json({'time':now.isoformat()}))
-    wheel._emit({"kind": "classifier-training-started", "configurations": len(configs),
-                 "weightings": ["natural", "equal_class"], **({'feature_group_plan': group_plan} if group_plan else {})})
+    wheel.learning_storage.begin("classifier", key, _json({"time": now.isoformat()}))
+    wheel._emit(
+        {
+            "kind": "classifier-training-started",
+            "configurations": len(configs),
+            "weightings": ["natural", "equal_class"],
+            **({"feature_group_plan": group_plan} if group_plan else {}),
+        }
+    )
     previous_weighting = wheel.training_class_weighting
     previous_evaluation = wheel.evaluation_weighting
     trials = []
     try:
         wheel.evaluation_weighting = "equal_class"
         if wheel.active.head is not None:
-            raw = replace(wheel.active, head=None, answer_dependencies=(), training_evidence=wheel._evidence(training),
-                          development_evidence=wheel._evidence(development))
+            raw = replace(
+                wheel.active,
+                head=None,
+                answer_dependencies=(),
+                training_evidence=wheel._evidence(training),
+                development_evidence=wheel._evidence(development),
+            )
             baseline = await wheel._score(wheel.active, development, training, now)
             metrics = await wheel._score(raw, development, training, now)
             # Fallback only for policy-less wheels; the flywheel now always carries a policy (default accuracy).
             policy = wheel.selection_policy or SelectionPolicy()
             selection = policy.compare(baseline, metrics)
-            safe = metrics['balanced_accuracy'] >= baseline['balanced_accuracy'] and all(
-                metrics['per_class'][label]['recall'] >= baseline['per_class'][label]['recall']
-                for label in wheel.initial.task.labels)
-            improved = selection['improved'] and (wheel.selection_policy is not None or safe)
-            trial_key = _hash({'classifier_training':key,'candidate':'raw_decision'})
-            trial = {'feature_set':'raw_decision','improved':bool(improved),'promoted':False,
-                     'trial_fingerprint':trial_key,'incumbent':baseline,'candidate':metrics,
-                     'selection':selection,'promotion_metric':policy.primary,
-                     'selection_policy':asdict(wheel.selection_policy) if wheel.selection_policy else None,
-                     'recall_safeguard_passed':safe,'reason':selection['reason'] if improved else 'raw decision candidate did not pass selection'}
-            wheel.runtime_cache.save_completed_round(trial_key,
-                    _json({'result':trial,'fitted_candidate':asdict(raw),
-                        'answer_dependencies':wheel.collected_answer_dependencies(),
-                        'candidate_model_context':wheel.model_context(raw.config, training),
-                        'baseline_version':wheel.active.fingerprint,'training_evidence':wheel._evidence(training),
-                        'development_evidence':wheel._evidence(development)}))
-            wheel._emit({'kind':'candidate-evaluated',**trial})
+            safe = metrics["balanced_accuracy"] >= baseline["balanced_accuracy"] and all(
+                metrics["per_class"][label]["recall"] >= baseline["per_class"][label]["recall"]
+                for label in wheel.initial.task.labels
+            )
+            improved = selection["improved"] and (wheel.selection_policy is not None or safe)
+            trial_key = _hash({"classifier_training": key, "candidate": "raw_decision"})
+            trial = {
+                "feature_set": "raw_decision",
+                "improved": bool(improved),
+                "promoted": False,
+                "trial_fingerprint": trial_key,
+                "incumbent": baseline,
+                "candidate": metrics,
+                "selection": selection,
+                "promotion_metric": policy.primary,
+                "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
+                "recall_safeguard_passed": safe,
+                "reason": selection["reason"] if improved else "raw decision candidate did not pass selection",
+            }
+            wheel.runtime_cache.save_completed_round(
+                trial_key,
+                _json(
+                    {
+                        "result": trial,
+                        "fitted_candidate": asdict(raw),
+                        "answer_dependencies": wheel.collected_answer_dependencies(),
+                        "candidate_model_context": wheel.model_context(raw.config, training),
+                        "baseline_version": wheel.active.fingerprint,
+                        "training_evidence": wheel._evidence(training),
+                        "development_evidence": wheel._evidence(development),
+                    }
+                ),
+            )
+            wheel._emit({"kind": "candidate-evaluated", **trial})
             trials.append(trial)
         for name, definitions in configs:
             for weighting in ("natural", "equal_class"):
                 wheel.training_class_weighting = weighting
-                trial = await wheel.improve(training, development, protected=protected, propensities=propensities,
+                trial = await wheel.improve(
+                    training,
+                    development,
+                    protected=protected,
+                    propensities=propensities,
                     candidate_proposal={"rationale": "Separate numerical classifier training", "tasks": definitions},
-                    retry_interrupted=retry_interrupted, apply_promotion=False, evaluation_time=now)
+                    retry_interrupted=retry_interrupted,
+                    apply_promotion=False,
+                    evaluation_time=now,
+                )
                 baseline, candidate = trial.get("incumbent"), trial.get("candidate")
-                safe = bool(baseline and candidate and candidate["balanced_accuracy"] >= baseline["balanced_accuracy"]
-                    and all(candidate["per_class"][label]["recall"] >= baseline["per_class"][label]["recall"]
-                            for label in wheel.initial.task.labels))
+                safe = bool(
+                    baseline
+                    and candidate
+                    and candidate["balanced_accuracy"] >= baseline["balanced_accuracy"]
+                    and all(
+                        candidate["per_class"][label]["recall"] >= baseline["per_class"][label]["recall"]
+                        for label in wheel.initial.task.labels
+                    )
+                )
                 recorded = {**trial, "feature_set": name, "recall_safeguard_passed": safe}
                 if name in group_experiments:
-                    recorded['feature_experiment'] = group_experiments[name]
-                    wheel._emit({'kind': 'feature-group-trial-completed', 'stage': 'classifier',
-                                 'training_class_weighting': weighting, **recorded})
+                    recorded["feature_experiment"] = group_experiments[name]
+                    wheel._emit(
+                        {
+                            "kind": "feature-group-trial-completed",
+                            "stage": "classifier",
+                            "training_class_weighting": weighting,
+                            **recorded,
+                        }
+                    )
                 trials.append(recorded)
         qualified = [t for t in trials if t.get("improved") and (wheel.selection_policy or t["recall_safeguard_passed"])]
-        best = (max(qualified, key=lambda t: wheel.selection_policy.rank(t['candidate'])) if wheel.selection_policy
-                else min(qualified, key=lambda t: t["candidate"]["balanced_brier"])) if qualified else None
+        best = (
+            (
+                max(qualified, key=lambda t: wheel.selection_policy.rank(t["candidate"]))
+                if wheel.selection_policy
+                else min(qualified, key=lambda t: t["candidate"]["balanced_brier"])
+            )
+            if qualified
+            else None
+        )
         if best and apply_promotion:
             wheel.promote_trial(best["trial_fingerprint"], training, development)
-        result = {"stage": "classifier", "promoted": bool(best and apply_promotion), "trials": trials,
-                  "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
-                  "selected": best, "development_counts": counts,
-                  "answer_dependencies": wheel.collected_answer_dependencies(),
-                  "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
-                  "reason": (best['reason'] if wheel.selection_policy else "lower balanced Brier with no per-class recall regression") if best else "no candidate passed promotion safeguards"}
+        result = {
+            "stage": "classifier",
+            "promoted": bool(best and apply_promotion),
+            "trials": trials,
+            "evaluation_independent_of_optimizer_context": not wheel.optimizer_context["evaluation_context_exposed"],
+            "selected": best,
+            "development_counts": counts,
+            "answer_dependencies": wheel.collected_answer_dependencies(),
+            "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
+            "reason": (best["reason"] if wheel.selection_policy else "lower balanced Brier with no per-class recall regression")
+            if best
+            else "no candidate passed promotion safeguards",
+        }
         if group_plan:
-            result['feature_group_plan'] = group_plan
-        aliases=(_hash({**evidence,'version':wheel.active.fingerprint}),) if result['promoted'] else ()
-        wheel.learning_storage.complete('classifier',key,_json(result),aliases=aliases)
+            result["feature_group_plan"] = group_plan
+        aliases = (_hash({**evidence, "version": wheel.active.fingerprint}),) if result["promoted"] else ()
+        wheel.learning_storage.complete("classifier", key, _json(result), aliases=aliases)
         wheel._emit({"kind": "classifier-training-completed", **result})
         return result
     finally:

@@ -1,5 +1,6 @@
 """Definition API shared by local, remote and embedded consumers."""
-from .definition_storage import SQLiteDefinitionStorage, encode
+
+from .definition_storage import SQLiteDefinitionStorage
 
 
 class CyclotronDefinitions:
@@ -31,11 +32,13 @@ class CyclotronDefinitions:
     def register_run_definition(self, db, run_id, identifier, name, config):
         """Legacy native composition; never a portable SQL interface."""
         hook = getattr(self.definition_storage, "register_run_definition", None)
-        if hook is None: raise NotImplementedError("native definition composition unavailable")
+        if hook is None:
+            raise NotImplementedError("native definition composition unavailable")
         return hook(db, run_id, identifier, name, config)
 
     def advance_classifier_definitions(self, db, identifier, revision):
         """Legacy native composition; never a portable SQL interface."""
         hook = getattr(self.definition_storage, "advance_classifier_definitions", None)
-        if hook is None: raise NotImplementedError("native definition composition unavailable")
+        if hook is None:
+            raise NotImplementedError("native definition composition unavailable")
         return hook(db, identifier, revision)

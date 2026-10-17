@@ -1,4 +1,5 @@
 """The TypeScript types an application imports name every key the SDK writes."""
+
 from pathlib import Path
 
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
@@ -25,7 +26,7 @@ def test_decision_review_and_event_keys_are_typed(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model()) as cyclotron:
         decision = run(cyclotron.decide(item("ref-1")))
         review = run(cyclotron.review(decision.decision_id, "exclude", explanation="Vendor marketing."))
-        cyclotron.set_review_rate(.5, set_by="editor")
+        cyclotron.set_review_rate(0.5, set_by="editor")
         events = cyclotron.subscribe(limit=1000)["events"]
     two = CyclotronDefinition("newsroom", (RELEVANT, ClassifierSpec("timely", ("include", "exclude"), "Timely?")))
     with Cyclotron.open(tmp_path / "two", two, Model()) as cyclotron:

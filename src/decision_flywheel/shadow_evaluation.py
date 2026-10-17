@@ -26,6 +26,7 @@ Rules this module enforces:
   active. After a promotion the old rows stay in the ledger, but they never pair with the new incumbent, and every
   remaining idea starts a fresh comparison (and fresh looks) on the stories that follow.
 """
+
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -50,6 +51,7 @@ def clears_look(gained, lost, alpha, looks, ideas=1):
 @dataclass(frozen=True)
 class ShadowCycle:
     """What was scored for one story, held until its label is known."""
+
     seq: int
     item_id: str
     incumbent_id: str
@@ -90,10 +92,11 @@ class ShadowEvaluator:
 
     def _ideas(self):
         from .control_scheduler import ControlScheduler
+
         return {idea["id"]: idea for idea in ControlScheduler(self.wheel).ideas()}
 
     def _set_status(self, idea_id, status):
-        self.storage.set_status(idea_id,status)
+        self.storage.set_status(idea_id, status)
 
     def _changes_incumbent(self, idea, training):
         """The configuration this idea would run (incumbent plus its one change), or None if it changes nothing."""
@@ -102,8 +105,7 @@ class ShadowEvaluator:
         except ValueError:
             return None
         control = idea["control"]
-        return config if config.briefing_state()[control] != self.wheel.active.config.briefing_state()[control] \
-            else None
+        return config if config.briefing_state()[control] != self.wheel.active.config.briefing_state()[control] else None
 
     # -- the shadow set --------------------------------------------------------------------------------------
     def fill_slots(self, training):
@@ -112,8 +114,10 @@ class ShadowEvaluator:
         if free <= 0:
             return []
         known = self.storage.known()
-        waiting = sorted((i for i in self._ideas().values() if i["control"] in SHADOW_CONTROLS and i["id"] not in known),
-                         key=lambda i: (-i.get("created_seq", -1), i["id"]))
+        waiting = sorted(
+            (i for i in self._ideas().values() if i["control"] in SHADOW_CONTROLS and i["id"] not in known),
+            key=lambda i: (-i.get("created_seq", -1), i["id"]),
+        )
         joined = []
         for idea in waiting:
             if len(joined) == free:
@@ -121,9 +125,16 @@ class ShadowEvaluator:
             if self._changes_incumbent(idea, training) is None:
                 continue
             seq = max(self.seq(), idea.get("created_seq", 0))
-            self.storage.join(idea["id"],idea["control"],seq)
-            self.wheel._emit({"kind": "shadow-idea-added", "idea_id": idea["id"], "control": idea["control"],
-                              "joined_seq": seq, "proposal": idea["proposal"]})
+            self.storage.join(idea["id"], idea["control"], seq)
+            self.wheel._emit(
+                {
+                    "kind": "shadow-idea-added",
+                    "idea_id": idea["id"],
+                    "control": idea["control"],
+                    "joined_seq": seq,
+                    "proposal": idea["proposal"],
+                }
+            )
             joined.append(idea["id"])
         return joined
 
@@ -146,18 +157,27 @@ class ShadowEvaluator:
         if previous != reason:
             self._set_state("shadow_stopped", reason)
             if reason:
-                self.wheel._emit({"kind": "shadow-scoring-stopped", "reason": reason, "shadow_calls": self.calls(),
-                                  "requests": self.wheel.requests, "ceiling": self.wheel.max_requests})
+                self.wheel._emit(
+                    {
+                        "kind": "shadow-scoring-stopped",
+                        "reason": reason,
+                        "shadow_calls": self.calls(),
+                        "requests": self.wheel.requests,
+                        "ceiling": self.wheel.max_requests,
+                    }
+                )
         return reason is not None
 
-    async def score_cycle(self, item, training, *, eligible, incumbent_choice, incumbent_confidence,
-                          protected_ids=(), reserve=0, now=None):
+    async def score_cycle(
+        self, item, training, *, eligible, incumbent_choice, incumbent_confidence, protected_ids=(), reserve=0, now=None
+    ):
         """Advance the sequence, then score every eligible shadow idea on ``item``.
 
         ``eligible`` must be true only for a story whose label will be revealed and that is not protected; the
         shadow ideas never score anything else. ``reserve`` is the number of requests to leave for normal work.
         The label is NOT an input: ``record`` receives it afterwards."""
         from .observability import RequestBudgetExhausted
+
         seq = self.begin_cycle()
         if not eligible or item.id in set(protected_ids):
             return None
@@ -175,49 +195,81 @@ class ShadowEvaluator:
             if config is None:
                 self._evict(member["idea_id"], "the idea no longer changes the incumbent or cannot be applied", {})
                 continue
-            self.storage.scored(member["idea_id"],item.id,seq)
+            self.storage.scored(member["idea_id"], item.id, seq)
             try:
                 batch = await self.wheel._answers(config, item, training, now)
             except RequestBudgetExhausted:
                 self._stopped("the request ceiling was reached")
                 break
             except Exception as error:  # a shadow failure must never block normal decisions
-                self.wheel._emit({"kind": "shadow-scoring-failed", "idea_id": member["idea_id"], "item_id": item.id,
-                                  "error_type": type(error).__name__})
+                self.wheel._emit(
+                    {
+                        "kind": "shadow-scoring-failed",
+                        "idea_id": member["idea_id"],
+                        "item_id": item.id,
+                        "error_type": type(error).__name__,
+                    }
+                )
                 continue
             answer = batch.answers["decision"]
             confidence = answer.probabilities[answer.label] if answer.probabilities else answer.confidence
             scored.append((member["idea_id"], answer.label, confidence))
         if not scored:
             return None
-        cycle = ShadowCycle(seq, item.id, incumbent_id(self.wheel), incumbent_choice, incumbent_confidence,
-                            tuple(scored))
+        cycle = ShadowCycle(seq, item.id, incumbent_id(self.wheel), incumbent_choice, incumbent_confidence, tuple(scored))
         # One event per story with every voter's choice (no label), so disagreement can be analysed later.
-        self.wheel._emit({"kind": "portfolio-scored", "item_id": item.id, "seq": seq,
-                          "incumbent": {"id": cycle.incumbent_id, "choice": incumbent_choice,
-                                        "confidence": incumbent_confidence},
-                          "ideas": [{"idea_id": i, "choice": c, "confidence": p} for i, c, p in scored]})
+        self.wheel._emit(
+            {
+                "kind": "portfolio-scored",
+                "item_id": item.id,
+                "seq": seq,
+                "incumbent": {"id": cycle.incumbent_id, "choice": incumbent_choice, "confidence": incumbent_confidence},
+                "ideas": [{"idea_id": i, "choice": c, "confidence": p} for i, c, p in scored],
+            }
+        )
         return cycle
 
     def record(self, cycle, label):
         """The label is now known: store per-(idea, story) correctness, the incumbent's included."""
         if cycle is None:
             return
-        self.storage.incumbent(cycle.incumbent_id,self.wheel.active.config.rubric[:200],cycle.seq)
+        self.storage.incumbent(cycle.incumbent_id, self.wheel.active.config.rubric[:200], cycle.seq)
         for idea_id, choice, confidence in cycle.scored:
-            self.ledger.record_evaluations(idea_id, [{"item_id": cycle.item_id, "correct": choice == label,
-                "label": label, "choice": choice, "confidence": confidence}], SHADOW)
-        self.ledger.record_evaluations(cycle.incumbent_id, [{"item_id": cycle.item_id,
-            "correct": cycle.incumbent_choice == label, "label": label, "choice": cycle.incumbent_choice,
-            "confidence": cycle.incumbent_confidence}], SHADOW)
+            self.ledger.record_evaluations(
+                idea_id,
+                [
+                    {
+                        "item_id": cycle.item_id,
+                        "correct": choice == label,
+                        "label": label,
+                        "choice": choice,
+                        "confidence": confidence,
+                    }
+                ],
+                SHADOW,
+            )
+        self.ledger.record_evaluations(
+            cycle.incumbent_id,
+            [
+                {
+                    "item_id": cycle.item_id,
+                    "correct": cycle.incumbent_choice == label,
+                    "label": label,
+                    "choice": cycle.incumbent_choice,
+                    "confidence": cycle.incumbent_confidence,
+                }
+            ],
+            SHADOW,
+        )
 
     # -- looks, eviction, promotion --------------------------------------------------------------------------
     def _looks_taken(self, idea_id, incumbent):
-        return self.storage.looks_taken(idea_id,incumbent)
+        return self.storage.looks_taken(idea_id, incumbent)
 
     def _advanced_already(self, idea_id, incumbent):
-        return any(v["verdict"] == "advanced" and v["evidence"].get("incumbent") == incumbent
-                   for v in self.ledger.verdicts(idea_id))
+        return any(
+            v["verdict"] == "advanced" and v["evidence"].get("incumbent") == incumbent for v in self.ledger.verdicts(idea_id)
+        )
 
     async def review(self, training, development, *, source):
         """Update every active idea against the CURRENT incumbent; promote at most one that clears a look.
@@ -228,29 +280,53 @@ class ShadowEvaluator:
             idea_id = member["idea_id"]
             pair = self.ledger.paired_comparison(idea_id, inc, context_version=SHADOW)
             n, gained, lost = pair["shared"], pair["gained"], pair["lost"]
-            stats = {"shared": n, "gained": gained, "lost": lost, "net": gained - lost, "p_value": pair["p_value"],
-                     "incumbent": inc}
+            stats = {
+                "shared": n,
+                "gained": gained,
+                "lost": lost,
+                "net": gained - lost,
+                "p_value": pair["p_value"],
+                "incumbent": inc,
+            }
             if n >= config.shadow_min_items and gained > lost and not self._advanced_already(idea_id, inc):
-                self.ledger.record_verdict(idea_id, "advanced",
-                    f"on {n} forward stories it fixed {gained} and broke {lost} versus the incumbent; "
-                    "still collecting evidence", {**stats, "stage": SHADOW})
+                self.ledger.record_verdict(
+                    idea_id,
+                    "advanced",
+                    f"on {n} forward stories it fixed {gained} and broke {lost} versus the incumbent; still collecting evidence",
+                    {**stats, "stage": SHADOW},
+                )
             if n >= config.shadow_evict_after and gained <= lost:
-                self._evict(idea_id, f"on {n} forward stories it fixed {gained} and broke {lost} versus the "
-                                     "incumbent, no advantage, so it left the shadow set", stats)
+                self._evict(
+                    idea_id,
+                    f"on {n} forward stories it fixed {gained} and broke {lost} versus the "
+                    "incumbent, no advantage, so it left the shadow set",
+                    stats,
+                )
                 continue
             taken = self._looks_taken(idea_id, inc)
             if taken < config.shadow_looks and n >= (taken + 1) * config.shadow_min_items:
                 ok = clears_look(gained, lost, config.alpha, config.shadow_looks, config.shadow_ideas)
                 taken += 1
-                self.storage.look((idea_id,inc,taken,n,gained,lost,pair["p_value"],int(ok),seq))
-                self.wheel._emit({"kind": "shadow-look", "idea_id": idea_id, "look": taken, "cleared": ok,
-                                  "threshold": look_threshold(config.alpha, config.shadow_looks, config.shadow_ideas), **stats})
+                self.storage.look((idea_id, inc, taken, n, gained, lost, pair["p_value"], int(ok), seq))
+                self.wheel._emit(
+                    {
+                        "kind": "shadow-look",
+                        "idea_id": idea_id,
+                        "look": taken,
+                        "cleared": ok,
+                        "threshold": look_threshold(config.alpha, config.shadow_looks, config.shadow_ideas),
+                        **stats,
+                    }
+                )
                 if ok:
                     cleared.append((-(gained - lost), pair["p_value"], idea_id, {**stats, "looks": taken}))
                 elif taken >= config.shadow_looks:
-                    self._evict(idea_id, f"used all {config.shadow_looks} looks without clearing the "
-                                         f"alpha-spending threshold (fixed {gained}, broke {lost} on {n} stories)",
-                                {**stats, "looks": taken})
+                    self._evict(
+                        idea_id,
+                        f"used all {config.shadow_looks} looks without clearing the "
+                        f"alpha-spending threshold (fixed {gained}, broke {lost} on {n} stories)",
+                        {**stats, "looks": taken},
+                    )
         if not cleared:
             self.fill_slots(training)
             return None
@@ -268,29 +344,59 @@ class ShadowEvaluator:
         idea = scheduler_ideas[idea_id]
         previous = wheel.active.config.briefing_state()
         config = wheel.active.config.apply(idea["proposal"], training)
-        evidence = {**stats, "alpha": self.config.alpha, "looks_allowed": self.config.shadow_looks,
-                    "threshold": look_threshold(self.config.alpha, self.config.shadow_looks, self.config.shadow_ideas), "stage": SHADOW}
-        reason = (f"cleared forward shadow evaluation: on {stats['shared']} stories it fixed {stats['gained']} and broke "
-                  f"{stats['lost']} versus the incumbent (p={stats['p_value']:.4f}, look {stats['looks']} of "
-                  f"{self.config.shadow_looks}, threshold {evidence['threshold']:.4f})")
+        evidence = {
+            **stats,
+            "alpha": self.config.alpha,
+            "looks_allowed": self.config.shadow_looks,
+            "threshold": look_threshold(self.config.alpha, self.config.shadow_looks, self.config.shadow_ideas),
+            "stage": SHADOW,
+        }
+        reason = (
+            f"cleared forward shadow evaluation: on {stats['shared']} stories it fixed {stats['gained']} and broke "
+            f"{stats['lost']} versus the incumbent (p={stats['p_value']:.4f}, look {stats['looks']} of "
+            f"{self.config.shadow_looks}, threshold {evidence['threshold']:.4f})"
+        )
         siblings = await wheel.sibling_effects(config, datetime.now(timezone.utc))
         if siblings and siblings["refused"]:
             self._evict(idea_id, siblings["reason"], {**stats, "sibling_effects": siblings})
             return False
-        wheel._emit({"kind": "idea-promoted-by-shadow", "idea_id": idea_id, "control": idea["control"],
-                     "proposal": idea["proposal"], "evidence": evidence, "reason": reason, "source": source,
-                     "previous": previous, "candidate": config.briefing_state()})
-        wheel._activate(FittedClassifier(config, None, wheel._evidence(training), wheel._evidence(development),
-                                         "evaluated"))
-        wheel._emit({"kind": "promoted", "promoted": True, "promotion_path": "shadow-evaluation",
-                     "idea_id": idea_id, "version": wheel.active.fingerprint, "reason": reason,
-                     "selection": None, "shadow_evidence": evidence,
-                     **({"sibling_effects": siblings} if siblings is not None else {})})
+        wheel._emit(
+            {
+                "kind": "idea-promoted-by-shadow",
+                "idea_id": idea_id,
+                "control": idea["control"],
+                "proposal": idea["proposal"],
+                "evidence": evidence,
+                "reason": reason,
+                "source": source,
+                "previous": previous,
+                "candidate": config.briefing_state(),
+            }
+        )
+        wheel._activate(FittedClassifier(config, None, wheel._evidence(training), wheel._evidence(development), "evaluated"))
+        wheel._emit(
+            {
+                "kind": "promoted",
+                "promoted": True,
+                "promotion_path": "shadow-evaluation",
+                "idea_id": idea_id,
+                "version": wheel.active.fingerprint,
+                "reason": reason,
+                "selection": None,
+                "shadow_evidence": evidence,
+                **({"sibling_effects": siblings} if siblings is not None else {}),
+            }
+        )
         self.ledger.record_verdict(idea_id, "promoted", reason, evidence)
         self._set_status(idea_id, "promoted")
-        idea["attempts"].append({"feedback_fingerprint": f"shadow:{self.seq()}", "result": {
-            "promoted": True, "promotion_path": "shadow-evaluation", "evidence": evidence}})
+        idea["attempts"].append(
+            {
+                "feedback_fingerprint": f"shadow:{self.seq()}",
+                "result": {"promoted": True, "promotion_path": "shadow-evaluation", "evidence": evidence},
+            }
+        )
         from .control_scheduler import ControlScheduler
+
         ControlScheduler(wheel).save(idea)
         self.fill_slots(training)
         return True
@@ -301,8 +407,15 @@ class ShadowEvaluator:
         out = []
         for member in self.active():
             pair = self.ledger.paired_comparison(member["idea_id"], inc, context_version=SHADOW)
-            out.append({**member, "shared": pair["shared"], "gained": pair["gained"], "lost": pair["lost"],
-                        "looks": self._looks_taken(member["idea_id"], inc)})
+            out.append(
+                {
+                    **member,
+                    "shared": pair["shared"],
+                    "gained": pair["gained"],
+                    "lost": pair["lost"],
+                    "looks": self._looks_taken(member["idea_id"], inc),
+                }
+            )
         return {"seq": self.seq(), "calls": self.calls(), "incumbent": inc, "active": out}
 
     def optimizer_digest(self):
@@ -311,27 +424,41 @@ class ShadowEvaluator:
         inc = incumbent_id(self.wheel)
         old = self.storage.incumbent_ids()
         status = self.storage.statuses()
-        rows = self.ledger.summary_for_optimizer(limit=CAPS["ledger_ideas"], incumbent_id=inc,
-                                                 max_item_ids=CAPS["item_ids_per_idea"], context_version=SHADOW,
-                                                 skip_ids=old)
+        rows = self.ledger.summary_for_optimizer(
+            limit=CAPS["ledger_ideas"],
+            incumbent_id=inc,
+            max_item_ids=CAPS["item_ids_per_idea"],
+            context_version=SHADOW,
+            skip_ids=old,
+        )
         for row in rows:
             row["shadow_status"] = status.get(row["idea_id"])
-        return {"hypothesis_ledger": rows,
-                "stubborn_items": self.ledger.stubborn_items(context_version=SHADOW)[:CAPS["stubborn_items"]]}
+        return {
+            "hypothesis_ledger": rows,
+            "stubborn_items": self.ledger.stubborn_items(context_version=SHADOW)[: CAPS["stubborn_items"]],
+        }
 
 
 async def shadow_stage(wheel, proposals, training, development, lineage=None):
     """Rubric stage in shadow mode: save the proposals as ideas, give them free shadow slots, then look at the
     evidence already collected. Nothing is scored on the development partition."""
     from .control_scheduler import ControlScheduler
+
     control = "rubric"
-    cycle = wheel.learning_storage.count('rubric')
+    cycle = wheel.learning_storage.count("rubric")
     ControlScheduler(wheel).admit_proposals(control, proposals, training, cycle, lineage)
     shadow = ShadowEvaluator(wheel)
     shadow.fill_slots(training)
     promoted = await shadow.review(training, development, source="rubric-trigger")
     snapshot = shadow.snapshot()
     wheel._emit({"kind": "shadow-stage-completed", "promoted_idea": promoted, **snapshot})
-    return {"promoted": promoted is not None, "promoted_idea": promoted, "shadow": snapshot,
-            "reason": ("an idea cleared forward shadow evaluation and is the new decision context" if promoted else
-                       "no idea has cleared forward shadow evaluation yet; evidence keeps accumulating")}
+    return {
+        "promoted": promoted is not None,
+        "promoted_idea": promoted,
+        "shadow": snapshot,
+        "reason": (
+            "an idea cleared forward shadow evaluation and is the new decision context"
+            if promoted
+            else "no idea has cleared forward shadow evaluation yet; evidence keeps accumulating"
+        ),
+    }

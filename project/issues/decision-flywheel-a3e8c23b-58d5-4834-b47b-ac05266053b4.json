@@ -3,17 +3,27 @@
   "title": "Resuming a replay after a failed or killed cycle re-records that cycle's feedback",
   "description": "Found during the 1,200-cycle editorial study (decision-flywheel-8f3a052a). When a replay stops inside a cycle (a step raises, a provider call fails, or the process is killed), restarting the study on the same output directory is not safe: the resume path replays that cycle's human feedback again, recording it a second time, and numbers the redo as the next cycle instead of completing the interrupted one. The event log then has duplicate feedback for one item and cycle numbers that no longer line up one-to-one with corpus items, so per-window metrics and the fixture exporter (which require exactly one prediction per cycle) are wrong or fail. Workaround used in the study: never resume; start a fresh output directory. Expected: on resume, an incomplete cycle (cycle-started without cycle-completed) is either completed under its own number or rolled back atomically, and feedback already recorded for its item is not recorded again. Acceptance: a spec that kills a replay mid-cycle (after feedback is recorded, before cycle-completed) and resumes it ends with one feedback event per item, contiguous cycle numbers matching corpus order, and the same cycle count as an uninterrupted run.",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-8db070d7-be98-4676-952f-c6cb12db2397",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "cf2a7cdd-0099-4626-afe6-c879a145a4f9",
+      "author": "claude",
+      "text": "run_cycle_replay(resume=True) now reattaches to the interrupted cycle (failed or killed) under its own cycle id and number via Cycle.resume(include_failed=True), reuses the prediction that cycle already recorded, and does not record its human feedback a second time. The unfinished-cycle refusal is gone. Spec in cycle_replay_test.py kills a replay after the vote is recorded (step raises, and process dies without cycle-failed) and checks one feedback event per item, contiguous cycle numbers and the uninterrupted cycle and prediction counts.",
+      "created_at": "2026-10-17T17:30:22.622184Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
   "created_at": "2026-10-09T19:18:45.536475Z",
-  "updated_at": "2026-10-09T19:18:48.213059Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T17:30:22.622184Z",
+  "closed_at": "2026-10-17T17:30:22.622184Z",
   "agent": {
     "platform": "claude_code",
     "model": "Claude Opus 5.5",

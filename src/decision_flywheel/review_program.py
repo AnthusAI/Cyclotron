@@ -9,12 +9,14 @@ experiments set them.
 Selection never reads the hidden label: it uses the decision's confidence, the
 current rate, and a deterministic random draw keyed by the decision.
 """
+
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
-import hashlib
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 REASONS = ("program", "audit", "reviewer")
 
@@ -22,11 +24,12 @@ REASONS = ("program", "audit", "reviewer")
 @dataclass(frozen=True)
 class ReviewProgram:
     """Configuration of the default review-rate program."""
-    rates: tuple[float, ...] = (1.0, .5, .25, .1)
-    audit_share: float = .05
-    confidence_threshold: float = .7
-    target_accuracy: float = .85
-    max_gap_points: float = 5.
+
+    rates: tuple[float, ...] = (1.0, 0.5, 0.25, 0.1)
+    audit_share: float = 0.05
+    confidence_threshold: float = 0.7
+    target_accuracy: float = 0.85
+    max_gap_points: float = 5.0
     window: int = 100
     windows_required: int = 2
     calibration_window: int = 200
@@ -36,8 +39,12 @@ class ReviewProgram:
     def __post_init__(self):
         object.__setattr__(self, "rates", tuple(float(rate) for rate in self.rates))
         rates = self.rates
-        if not rates or rates[0] != 1. or any(not 0 < rate <= 1 for rate in rates) or any(
-                later >= earlier for earlier, later in zip(rates, rates[1:])):
+        if (
+            not rates
+            or rates[0] != 1.0
+            or any(not 0 < rate <= 1 for rate in rates)
+            or any(later >= earlier for earlier, later in zip(rates, rates[1:]))
+        ):
             raise ValueError("rates must start at 1.0 and decrease strictly, each in (0, 1]")
         for name in ("audit_share", "confidence_threshold", "target_accuracy"):
             value = getattr(self, name)
@@ -58,6 +65,7 @@ class ReviewProgram:
 @dataclass(frozen=True)
 class Selection:
     """Whether one decision goes to review, why, and with what probability."""
+
     selected: bool
     reason: str | None
     propensity: float
@@ -78,6 +86,7 @@ class Override:
 @dataclass
 class ProgramState:
     """The program's durable state; the application stores it as JSON."""
+
     index: int = 0
     raised: bool = False
     consecutive: int = 0
@@ -97,7 +106,7 @@ class ProgramState:
         return value
 
     @classmethod
-    def from_json(cls, value: Mapping[str, Any] | None) -> "ProgramState":
+    def from_json(cls, value: Mapping[str, Any] | None) -> ProgramState:
         return cls(**value) if value else cls()
 
 
@@ -106,7 +115,7 @@ def _percent(value: float) -> str:
 
 
 def _draw(seed: str, key: str) -> float:
-    return int.from_bytes(hashlib.sha256(f"{seed}:{key}".encode()).digest()[:8], "big") / 2 ** 64
+    return int.from_bytes(hashlib.sha256(f"{seed}:{key}".encode()).digest()[:8], "big") / 2**64
 
 
 def current_rate(program: ReviewProgram, state: ProgramState, now: datetime) -> float:
@@ -120,8 +129,9 @@ def select(program: ReviewProgram, rate: float, *, key: str, confidence: float |
     """Choose before the label exists: low confidence always, otherwise a random share."""
     if confidence is None or confidence < program.confidence_threshold:
         shown = "unknown" if confidence is None else _percent(confidence)
-        return Selection(True, "program", 1.0,
-                         f"Confidence {shown} is below the {_percent(program.confidence_threshold)} threshold.")
+        return Selection(
+            True, "program", 1.0, f"Confidence {shown} is below the {_percent(program.confidence_threshold)} threshold."
+        )
     propensity = max(rate, program.audit_share)
     draw = _draw(program.seed, key)
     if draw < program.audit_share:
@@ -147,14 +157,12 @@ def window_evidence(program: ReviewProgram, reviews: Sequence[Mapping[str, Any]]
     Confident decisions are sampled uniformly at the window's rate, so their
     reviews estimate accuracy at the threshold without bias.
     """
-    confident = [row for row in reviews if row["confidence"] is not None
-                 and row["confidence"] >= program.confidence_threshold]
+    confident = [row for row in reviews if row["confidence"] is not None and row["confidence"] >= program.confidence_threshold]
     correct = sum(row["decision"] == row["label"] for row in confident)
     accuracy = correct / len(confident) if confident else None
     enough = len(confident) >= program.min_window_labels and gap_points is not None
     met = bool(enough and accuracy >= program.target_accuracy and gap_points < program.max_gap_points)
-    return {"labels": len(confident), "accuracy": accuracy, "gap_points": gap_points,
-            "enough_evidence": enough, "met": met}
+    return {"labels": len(confident), "accuracy": accuracy, "gap_points": gap_points, "enough_evidence": enough, "met": met}
 
 
 def combine_evidence(evidence: Mapping[str, Mapping[str, Any]]) -> dict:
@@ -166,9 +174,11 @@ def combine_evidence(evidence: Mapping[str, Mapping[str, Any]]) -> dict:
     window count toward stepping down. ``output`` names the deciding output
     and ``outputs`` keeps every output's own evidence.
     """
+
     def accuracy(cid):
         value = evidence[cid]["accuracy"]
-        return (value is None, value if value is not None else 0.)
+        return (value is None, value if value is not None else 0.0)
+
     failing = [cid for cid, e in evidence.items() if e["enough_evidence"] and not e["met"]]
     short = [cid for cid, e in evidence.items() if not e["enough_evidence"]]
     if failing:
@@ -182,17 +192,18 @@ def combine_evidence(evidence: Mapping[str, Mapping[str, Any]]) -> dict:
 
 def check_window(program: ReviewProgram, state: ProgramState, evidence: Mapping[str, Any]) -> tuple[ProgramState, str | None]:
     """Apply one finished window. Returns the new state and the change, if the rate moved."""
-    state = ProgramState(**{**state.to_json(), "checked_windows": state.checked_windows + 1,
-                            "last_check": dict(evidence)})
+    state = ProgramState(**{**state.to_json(), "checked_windows": state.checked_windows + 1, "last_check": dict(evidence)})
     named = f" for {evidence['output']}" if evidence.get("output") is not None else ""
     if not evidence["enough_evidence"]:
-        state.reason = (f"Holding at {_percent(program.rates[state.index])}: only {evidence['labels']} reviewed "
-                        f"confident decisions{named} in the last window; {program.min_window_labels} are needed.")
+        state.reason = (
+            f"Holding at {_percent(program.rates[state.index])}: only {evidence['labels']} reviewed "
+            f"confident decisions{named} in the last window; {program.min_window_labels} are needed."
+        )
         return state, None
     if not evidence["met"]:
         if state.index == 0:
             state.consecutive = 0
-            state.reason = ("Every decision is reviewed: " + _shortfall(program, evidence) + named + ".")
+            state.reason = "Every decision is reviewed: " + _shortfall(program, evidence) + named + "."
             return state, None
         state.index, state.raised, state.consecutive = 0, True, 0
         state.reason = "Back to full review: " + _shortfall(program, evidence) + named + "."
@@ -200,12 +211,15 @@ def check_window(program: ReviewProgram, state: ProgramState, evidence: Mapping[
     state.consecutive += 1
     if state.consecutive >= program.windows_required and state.index < len(program.rates) - 1:
         state.index, state.consecutive = state.index + 1, 0
-        state.reason = (f"Stepped down to {_percent(program.rates[state.index])}: accuracy on confident decisions "
-                        f"{_percent(evidence['accuracy'])} met the {_percent(program.target_accuracy)} target and the "
-                        f"calibration gap was {evidence['gap_points']} points for {program.windows_required} windows in a row.")
+        state.reason = (
+            f"Stepped down to {_percent(program.rates[state.index])}: accuracy on confident decisions "
+            f"{_percent(evidence['accuracy'])} met the {_percent(program.target_accuracy)} target and the "
+            f"calibration gap was {evidence['gap_points']} points for {program.windows_required} windows in a row."
+        )
         return state, "stepped-down"
-    state.reason = (f"Conditions met for {state.consecutive} of {program.windows_required} windows at "
-                    f"{_percent(program.rates[state.index])}.")
+    state.reason = (
+        f"Conditions met for {state.consecutive} of {program.windows_required} windows at {_percent(program.rates[state.index])}."
+    )
     return state, None
 
 
@@ -221,8 +235,9 @@ def raise_for_version(program: ReviewProgram, state: ProgramState, version: int)
     return state, True
 
 
-def raise_for_versions(program: ReviewProgram, state: ProgramState,
-                       versions: Mapping[str, int]) -> tuple[ProgramState, str | None]:
+def raise_for_versions(
+    program: ReviewProgram, state: ProgramState, versions: Mapping[str, int]
+) -> tuple[ProgramState, str | None]:
     """Multi-output form of :func:`raise_for_version`: any output's new version raises the rate.
 
     Returns the new state and the output that raised it, if any. An output
@@ -246,19 +261,21 @@ def raise_for_versions(program: ReviewProgram, state: ProgramState,
     if state.index == 0 and state.consecutive == 0:
         return state, None
     state.index, state.raised, state.consecutive = 0, True, 0
-    state.reason = (f"Back to full review: version {versions[raised_by]} of {raised_by} was promoted "
-                    "and its alignment is not yet measured.")
+    state.reason = (
+        f"Back to full review: version {versions[raised_by]} of {raised_by} was promoted and its alignment is not yet measured."
+    )
     return state, raised_by
 
 
 def _shortfall(program: ReviewProgram, evidence: Mapping[str, Any]) -> str:
     parts = []
     if evidence["accuracy"] is not None and evidence["accuracy"] < program.target_accuracy:
-        parts.append(f"accuracy on confident decisions was {_percent(evidence['accuracy'])}, "
-                     f"below the {_percent(program.target_accuracy)} target")
+        parts.append(
+            f"accuracy on confident decisions was {_percent(evidence['accuracy'])}, "
+            f"below the {_percent(program.target_accuracy)} target"
+        )
     if evidence["gap_points"] is not None and evidence["gap_points"] >= program.max_gap_points:
-        parts.append(f"the calibration gap was {evidence['gap_points']} points, "
-                     f"not under {program.max_gap_points:g}")
+        parts.append(f"the calibration gap was {evidence['gap_points']} points, not under {program.max_gap_points:g}")
     return " and ".join(parts) or "the conditions were not met"
 
 
@@ -269,14 +286,18 @@ def next_step(program: ReviewProgram, state: ProgramState, *, decisions_until_ch
         until = f" until {override.expires_at}" if override.expires_at else ""
         return f"Manual rate of {_percent(override.rate)} set by {override.set_by}{until}; the program resumes after it."
     if state.index == len(program.rates) - 1:
-        return (f"At the lowest rate. The next check is in {decisions_until_check} decisions; review goes back to "
-                f"full if accuracy on confident decisions falls below {_percent(program.target_accuracy)} or the "
-                f"calibration gap reaches {program.max_gap_points:g} points.")
+        return (
+            f"At the lowest rate. The next check is in {decisions_until_check} decisions; review goes back to "
+            f"full if accuracy on confident decisions falls below {_percent(program.target_accuracy)} or the "
+            f"calibration gap reaches {program.max_gap_points:g} points."
+        )
     remaining = program.windows_required - state.consecutive
-    return (f"Steps down to {_percent(program.rates[state.index + 1])} after {remaining} more window"
-            f"{'s' if remaining != 1 else ''} of {program.window} decisions with accuracy on confident decisions "
-            f"of at least {_percent(program.target_accuracy)} (at least {program.min_window_labels} reviewed) and a "
-            f"calibration gap under {program.max_gap_points:g} points. Next check in {decisions_until_check} decisions.")
+    return (
+        f"Steps down to {_percent(program.rates[state.index + 1])} after {remaining} more window"
+        f"{'s' if remaining != 1 else ''} of {program.window} decisions with accuracy on confident decisions "
+        f"of at least {_percent(program.target_accuracy)} (at least {program.min_window_labels} reviewed) and a "
+        f"calibration gap under {program.max_gap_points:g} points. Next check in {decisions_until_check} decisions."
+    )
 
 
 def expected_reviews(program: ReviewProgram, rate: float, confidences: Sequence[float | None]) -> float:
@@ -285,9 +306,7 @@ def expected_reviews(program: ReviewProgram, rate: float, confidences: Sequence[
     return round(low + (len(confidences) - low) * max(rate, program.audit_share), 1)
 
 
-
-def expected_item_reviews(program: ReviewProgram, rate: float,
-                          decisions: Sequence[Sequence[float | None]]) -> float:
+def expected_item_reviews(program: ReviewProgram, rate: float, decisions: Sequence[Sequence[float | None]]) -> float:
     """Expected decisions sent to review when each output is routed on its own.
 
     Each entry holds one decision's per-output confidences. An output below
@@ -298,11 +317,11 @@ def expected_item_reviews(program: ReviewProgram, rate: float,
     :func:`expected_reviews`.
     """
     sampled = max(rate, program.audit_share)
-    total = 0.
+    total = 0.0
     for confidences in decisions:
-        missed = 1.
+        missed = 1.0
         for confidence in confidences:
-            requested = 1. if confidence is None or confidence < program.confidence_threshold else sampled
+            requested = 1.0 if confidence is None or confidence < program.confidence_threshold else sampled
             missed *= 1 - requested
         total += 1 - missed
     return round(total, 1)

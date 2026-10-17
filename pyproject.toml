@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 
 [project.optional-dependencies]
-dev = ["decision-flywheel[reviewer,accounts,accounts-cloud,priming]", "pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
+dev = ["decision-flywheel[reviewer,accounts,accounts-cloud,priming]", "ruff>=0.15.5,<0.16", "pytest>=8", "pytest-bdd>=8,<9", "fastapi>=0.115,<1", "strawberry-graphql[fastapi]>=0.280,<1", "httpx>=0.27,<1"]
 tools = [
     "build>=1.2",
     "kanbus==0.33.0",
@@ -54,7 +54,54 @@ where = ["src"]
 [tool.setuptools.package-data]
 decision_flywheel = ["vendor/vis-timeline/*.txt", "vendor/vis-timeline/*.md", "vendor/vis-timeline/styles/*.css", "vendor/vis-timeline/standalone/umd/*.js", "vendor/trace-ui/*.js", "vendor/trace-ui/*.css", "vendor/trace-ui/*.txt", "schemas/*.json"]
 
+[tool.ruff]
+line-length = 130
+extend-exclude = ["src/decision_flywheel/vendor"]
+
+[tool.ruff.format]
+exclude = [
+    "conftest.py",
+    "src/decision_flywheel/__init__.py",
+    "src/decision_flywheel/held_out_service.py",
+    "src/decision_flywheel/held_out_service_test.py",
+    "src/decision_flywheel/held_out_test.py",
+    "src/decision_flywheel/hosted_runtime.py",
+    "src/decision_flywheel/hosted_runtime_test.py",
+    "src/decision_flywheel/web_api.py",
+    "src/decision_flywheel/web_api_test.py",
+    "src/decision_flywheel/application_runtime.py",
+    "src/decision_flywheel/application_runtime_test.py",
+    "src/decision_flywheel/web_worker.py",
+    "src/decision_flywheel/web_worker_test.py",
+]
+
+[tool.ruff.lint]
+select = ["F", "B", "UP", "I"]
+ignore = ["B008", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"*_test.py" = ["B017", "B023"]
+"src/decision_flywheel/__init__.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/held_out_service.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/held_out_service_test.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/held_out_test.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/hosted_runtime.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/hosted_runtime_test.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/web_api.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/web_api_test.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/application_runtime.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/application_runtime_test.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/web_worker.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/web_worker_test.py" = ["F", "B", "UP", "I"]
+"src/decision_flywheel/account_routes_test.py" = ["F401", "F811"]
+"scripts/*" = ["B023"]
+"src/decision_flywheel/batch_storage.py" = ["B023"]
+"src/decision_flywheel/context.py" = ["B023"]
+"src/decision_flywheel/matched_run_evaluation.py" = ["B023"]
+"src/decision_flywheel/replay.py" = ["B023"]
+
 [tool.pytest.ini_options]
 testpaths = ["src", "tests"]
 pythonpath = ["src"]
 python_files = ["*_test.py"]
+markers = ["slow: long replay, study and editorial-corpus tests; make test skips them, make test-all and make check run them"]

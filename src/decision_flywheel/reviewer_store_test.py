@@ -1,4 +1,5 @@
 """Specs for the local, human-first article-review event store."""
+
 from __future__ import annotations
 
 import pytest
@@ -19,21 +20,18 @@ def _article(number: int = 1) -> Article:
 
 
 def test_learning_feedback_uses_the_recorded_presentation_and_keeps_audits_sealed(tmp_path):
-    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="test",
-                        rolling_audit_rate=0, final_audit_rate=0)
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="test", rolling_audit_rate=0, final_audit_rate=0)
     store.import_articles([_article()])
-    shown = store.record_prediction("arxiv-1", "exclude", .8, "fake", "a" * 64, 0)
+    shown = store.record_prediction("arxiv-1", "exclude", 0.8, "fake", "a" * 64, 0)
     store.record_vote("arxiv-1", "include", comment="Useful", presentation_id=shown.id)
     assert store.learning_feedback()[0].initial_answer_value == "exclude"
     store.close()
-    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="test",
-                        rolling_audit_rate=0, final_audit_rate=0)
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="test", rolling_audit_rate=0, final_audit_rate=0)
     assert store.learning_feedback()[0].initial_answer_value == "exclude"
     store.close()
-    audit = ReviewStore(tmp_path / "audit.sqlite3", study_seed="test",
-                        rolling_audit_rate=1, final_audit_rate=0)
+    audit = ReviewStore(tmp_path / "audit.sqlite3", study_seed="test", rolling_audit_rate=1, final_audit_rate=0)
     audit.import_articles([_article()])
-    shown = audit.record_prediction("arxiv-1", "exclude", .8, "fake", "a" * 64, 0)
+    shown = audit.record_prediction("arxiv-1", "exclude", 0.8, "fake", "a" * 64, 0)
     audit.record_vote("arxiv-1", "include", comment="Sealed", presentation_id=shown.id)
     assert audit.learning_feedback() == ()
     audit.close()
@@ -41,12 +39,12 @@ def test_learning_feedback_uses_the_recorded_presentation_and_keeps_audits_seale
 
 def test_a_review_assignment_is_deterministic_and_never_requires_a_model(tmp_path):
     path = tmp_path / "reviews.sqlite3"
-    first = ReviewStore(path, study_seed="demo-seed", rolling_audit_rate=.2, final_audit_rate=.1)
+    first = ReviewStore(path, study_seed="demo-seed", rolling_audit_rate=0.2, final_audit_rate=0.1)
     first.import_articles((_article(1), _article(2), _article(3)))
     initial = {article.id: first.assignment_for(article.id) for article in first.articles()}
     first.close()
 
-    second = ReviewStore(path, study_seed="demo-seed", rolling_audit_rate=.2, final_audit_rate=.1)
+    second = ReviewStore(path, study_seed="demo-seed", rolling_audit_rate=0.2, final_audit_rate=0.1)
     assert {article.id: second.assignment_for(article.id) for article in second.articles()} == initial
     second.close()
 
@@ -83,8 +81,7 @@ def test_an_article_keeps_the_provenance_fields_a_reviewer_needs_to_see(tmp_path
 def test_an_unreviewed_legacy_article_can_be_enriched_with_new_source_metadata(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     legacy = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",))
-    enriched = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",),
-                       "Ada Lovelace", "Journal of Decisions (2026)")
+    enriched = Article("arxiv-1", "Paper", "Abstract", "2026-10-05", ("cs.AI",), "Ada Lovelace", "Journal of Decisions (2026)")
     store.import_articles((legacy,))
 
     assert store.import_articles((enriched,)) == 0
@@ -126,8 +123,7 @@ def test_only_include_and_exclude_are_valid_human_votes(label, tmp_path):
 
 
 def test_a_final_audit_label_is_never_eligible_for_learning(tmp_path):
-    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
-                        final_audit_rate=1.0)
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0, final_audit_rate=1.0)
     store.import_articles((_article(),))
     store.record_vote("arxiv-1", "include")
 
@@ -137,8 +133,7 @@ def test_a_final_audit_label_is_never_eligible_for_learning(tmp_path):
 
 
 def test_learning_feedback_exposes_only_train_votes_and_their_human_comments(tmp_path):
-    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
-                        final_audit_rate=0)
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0, final_audit_rate=0)
     store.import_articles((_article(),))
     store.record_vote("arxiv-1", "include", comment="Useful implementation detail.")
 
@@ -151,11 +146,10 @@ def test_learning_feedback_exposes_only_train_votes_and_their_human_comments(tmp
 
 
 def test_hard_learning_examples_are_only_wrong_jev_predictions_with_eligible_human_labels(tmp_path):
-    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
-                        final_audit_rate=0)
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0, final_audit_rate=0)
     store.import_articles((_article(1), _article(2)))
-    wrong = store.record_prediction("arxiv-1", "exclude", .8, "jev:incumbent", "a" * 64, 4)
-    local = store.record_prediction("arxiv-2", "exclude", .8, "lexical_naive_bayes", "b" * 64, 4)
+    wrong = store.record_prediction("arxiv-1", "exclude", 0.8, "jev:incumbent", "a" * 64, 4)
+    local = store.record_prediction("arxiv-2", "exclude", 0.8, "lexical_naive_bayes", "b" * 64, 4)
     store.record_vote("arxiv-1", "include", presentation_id=wrong.id)
     store.record_vote("arxiv-2", "include", presentation_id=local.id)
 
@@ -164,12 +158,11 @@ def test_hard_learning_examples_are_only_wrong_jev_predictions_with_eligible_hum
 
 
 def test_hard_learning_examples_prioritize_the_most_confident_wrong_jev_predictions(tmp_path):
-    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0,
-                        final_audit_rate=0)
+    store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed", rolling_audit_rate=0, final_audit_rate=0)
     store.import_articles((_article(1), _article(2), _article(3)))
-    low = store.record_prediction("arxiv-1", "exclude", .55, "jev:incumbent", "a" * 64, 4)
-    high = store.record_prediction("arxiv-2", "exclude", .95, "jev:incumbent", "a" * 64, 4)
-    right = store.record_prediction("arxiv-3", "include", .99, "jev:incumbent", "a" * 64, 4)
+    low = store.record_prediction("arxiv-1", "exclude", 0.55, "jev:incumbent", "a" * 64, 4)
+    high = store.record_prediction("arxiv-2", "exclude", 0.95, "jev:incumbent", "a" * 64, 4)
+    right = store.record_prediction("arxiv-3", "include", 0.99, "jev:incumbent", "a" * 64, 4)
     store.record_vote("arxiv-1", "include", presentation_id=low.id)
     store.record_vote("arxiv-2", "include", presentation_id=high.id)
     store.record_vote("arxiv-3", "include", presentation_id=right.id)
@@ -181,7 +174,7 @@ def test_hard_learning_examples_prioritize_the_most_confident_wrong_jev_predicti
 def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(),))
-    shown = store.record_prediction("arxiv-1", "include", .72, "lexical_naive_bayes", "a" * 64, 4)
+    shown = store.record_prediction("arxiv-1", "include", 0.72, "lexical_naive_bayes", "a" * 64, 4)
 
     vote = store.record_vote("arxiv-1", "exclude", presentation_id=shown.id)
 
@@ -193,8 +186,8 @@ def test_a_human_vote_can_be_linked_to_the_exact_prediction_shown_before_it(tmp_
 def test_prediction_metrics_score_only_predictions_that_were_shown_before_active_votes(tmp_path):
     store = ReviewStore(tmp_path / "reviews.sqlite3", study_seed="demo-seed")
     store.import_articles((_article(1), _article(2)))
-    first = store.record_prediction("arxiv-1", "include", .75, "lexical_naive_bayes", "a" * 64, 3)
-    second = store.record_prediction("arxiv-2", "include", .50, "cold_start_prior", "b" * 64, 0)
+    first = store.record_prediction("arxiv-1", "include", 0.75, "lexical_naive_bayes", "a" * 64, 3)
+    second = store.record_prediction("arxiv-2", "include", 0.50, "cold_start_prior", "b" * 64, 0)
     store.record_vote("arxiv-1", "include", presentation_id=first.id)
     store.record_vote("arxiv-2", "exclude", presentation_id=second.id)
 
@@ -202,7 +195,7 @@ def test_prediction_metrics_score_only_predictions_that_were_shown_before_active
 
     assert metrics.scored_votes == 2
     assert metrics.correct_votes == 1
-    assert metrics.accuracy == .5
+    assert metrics.accuracy == 0.5
     assert metrics.model_refreshes == 2
     assert metrics.latest_training_label_count == 0
     store.close()
@@ -213,10 +206,10 @@ def test_online_metrics_can_exclude_the_sealed_final_audit_and_select_a_classifi
     articles = tuple(_article(i) for i in range(80))
     store.import_articles(articles)
     for article in articles:
-        shown = store.record_prediction(article.id, "include", .7, "jev:flywheel-head", "a"*64, 6)
+        shown = store.record_prediction(article.id, "include", 0.7, "jev:flywheel-head", "a" * 64, 6)
         store.record_vote(article.id, "include", presentation_id=shown.id)
     included = sum(store.assignment_for(article.id) != "final_audit" for article in articles)
-    metrics = store.prediction_metrics(assignments=("train", "rolling_audit"), predictor_fingerprint="a"*64)
+    metrics = store.prediction_metrics(assignments=("train", "rolling_audit"), predictor_fingerprint="a" * 64)
     assert metrics.scored_votes == included < len(articles)
-    assert store.prediction_metrics(assignments=("rolling_audit",), predictor_fingerprint="b"*64).scored_votes == 0
+    assert store.prediction_metrics(assignments=("rolling_audit",), predictor_fingerprint="b" * 64).scored_votes == 0
     store.close()
