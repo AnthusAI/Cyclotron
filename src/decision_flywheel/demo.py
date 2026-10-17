@@ -4,15 +4,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .artifacts import create_artifact, load_artifact
 from .budget import ContextBudget
 from .context import PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from .optimizer import TrialSpec, search_context_policies
-
 
 POOL_REVISION = "synthetic-demo-v1"
 MODEL_FINGERPRINT = "synthetic-rule-model-v1"

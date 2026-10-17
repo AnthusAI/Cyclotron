@@ -1,8 +1,10 @@
 """One exception family and one release contract for every storage adapter."""
 from uuid import uuid4
+
 import pytest
-from .s3_journal_test import ConditionalS3,journal
-from .embedded_cyclotron_test import DEFINITION,Model
+
+from .embedded_cyclotron_test import DEFINITION, Model
+from .s3_journal_test import ConditionalS3, journal
 
 
 def open_stores(client):
@@ -91,8 +93,8 @@ def test_a_conflicting_transaction_raises_the_shared_type(adapter):
 
 
 def test_the_journal_outcomes_are_members_of_the_shared_family():
-    from .journal import JournalConflict,JournalUncertain,JournalLimit
-    from .storage_errors import StorageConflict,StorageUncertain,StorageLimit
+    from .journal import JournalConflict, JournalLimit, JournalUncertain
+    from .storage_errors import StorageConflict, StorageLimit, StorageUncertain
     assert issubclass(JournalConflict,StorageConflict)
     assert issubclass(JournalUncertain,StorageUncertain)
     assert issubclass(JournalLimit,StorageLimit) and issubclass(StorageLimit,ValueError)

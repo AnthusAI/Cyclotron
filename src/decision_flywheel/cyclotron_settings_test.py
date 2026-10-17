@@ -1,4 +1,5 @@
 import pytest
+
 from .cyclotron_settings import validate_shared_settings
 
 

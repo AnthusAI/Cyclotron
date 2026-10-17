@@ -3,9 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from .jev import JevAdapter, JevConfiguration
 from ..models import DecisionTask, Item, LabeledItem
-
+from .jev import JevAdapter, JevConfiguration
 
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only the target.")
 TARGET = Item("target", {"text": "target text"})
@@ -23,6 +22,7 @@ CONTEXT = [LabeledItem(Item("demo", {"text": "demo text"}), "yes")]
 ])
 def test_independent_config_edits_change_the_exact_jev_request_and_keep_the_parent(proposal):
     from datetime import datetime, timezone
+
     from ..classifier_config import ClassifierConfig
     class Client:
         def system_one(self, *, state, questions):

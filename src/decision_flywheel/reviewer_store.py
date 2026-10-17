@@ -6,14 +6,13 @@ can be joined to these immutable events without changing human feedback.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
-from typing import Iterable
 import uuid
-
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 _ASSIGNMENTS = ("train", "rolling_audit", "final_audit")
 _ACTIONS = ("vote", "skip", "undo")
@@ -134,7 +133,7 @@ class ReviewStore:
     def close(self) -> None:
         self.storage.close()
 
-    def __enter__(self) -> "ReviewStore":
+    def __enter__(self) -> ReviewStore:
         return self
 
     def __exit__(self, *_unused: object) -> None:
@@ -145,7 +144,7 @@ class ReviewStore:
 
 
     def _assignment(self, article_id: str) -> str:
-        digest = hashlib.sha256(f"{self.study_seed}:{article_id}".encode("utf-8")).digest()
+        digest = hashlib.sha256(f"{self.study_seed}:{article_id}".encode()).digest()
         fraction = int.from_bytes(digest[:8], "big") / 2**64
         if fraction < self.final_audit_rate:
             return "final_audit"

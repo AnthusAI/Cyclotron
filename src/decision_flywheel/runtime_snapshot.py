@@ -7,8 +7,9 @@ stores are separate compositions and must be migrated with matching snapshots.
 import math
 import re
 import sqlite3
+
 from .catalog_archive import CatalogArchive
-from .catalog_snapshot import budgets,decode,encode
+from .catalog_snapshot import budgets, decode, encode
 from .learning_storage import ARTIFACTS
 
 SCHEMA='cyclotron-runtime/v1'

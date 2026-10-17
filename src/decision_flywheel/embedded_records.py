@@ -5,17 +5,17 @@ the single-writer lease. ``embedded_cyclotron`` re-exports every public name.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Any
 
 from .models import DecisionTask
 from .selection_policy import SelectionPolicy
 from .sibling_check import SiblingPolicy
-
 
 ExecutionGuard = Callable[[], None | Awaitable[None]]
 
@@ -103,9 +103,9 @@ class ReviewSelection:
     detail: str = ""
     # With several outputs, each output's own selection; the fields above
     # summarize them (selected when any output is requested).
-    outputs: Mapping[str, "ReviewSelection"] | None = None
+    outputs: Mapping[str, ReviewSelection] | None = None
 
-    def for_output(self, classifier: str) -> "ReviewSelection":
+    def for_output(self, classifier: str) -> ReviewSelection:
         """This output's selection: its own with several outputs, else the decision's."""
         return self.outputs[classifier] if self.outputs else self
 
@@ -164,7 +164,7 @@ class Decision:
                 "review": _selection_json(self.review)}
 
     @classmethod
-    def from_json(cls, value) -> "Decision":
+    def from_json(cls, value) -> Decision:
         return cls(value["decisionId"], value["itemId"], value["createdAt"],
                    {cid: ClassifierDecision(cid, r["label"], r["confidence"], r["probabilities"], r["version"],
                                             r["fingerprint"]) for cid, r in value["classifiers"].items()},

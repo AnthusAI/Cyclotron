@@ -7,7 +7,6 @@ from .context import PolicyMetadata
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from .optimizer import TrialSpec, search_context_policies
 
-
 TASK = DecisionTask("topic", ("yes", "no"), "Choose one label.")
 CANDIDATES = [
     LabeledItem(Item("yes-good", {"text": "yes good demonstration"}), "yes"),
@@ -148,7 +147,7 @@ def test_optimizer_rejects_candidate_development_id_or_normalized_text_overlap()
 
 def test_optimizer_rejects_untrusted_and_protected_development_records_without_labels():
     untrusted = [LabeledItem(DEVELOPMENT[0].item, "yes", source="untrusted"), DEVELOPMENT[1]]
-    protected_hash = hashlib.sha256("positive development".encode("utf-8")).hexdigest()
+    protected_hash = hashlib.sha256(b"positive development").hexdigest()
 
     with pytest.raises(ValueError, match="trusted"):
         asyncio.run(search_context_policies(

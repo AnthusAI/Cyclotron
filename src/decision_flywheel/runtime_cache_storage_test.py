@@ -1,16 +1,17 @@
 """Native answer revisions and learning trials retain their restart semantics."""
 import asyncio
-from datetime import datetime, timezone
-from dataclasses import asdict
 import json
 import sqlite3
+from dataclasses import asdict
+from datetime import datetime, timezone
+
 import pytest
 
-from .runtime_cache_storage import SQLiteRuntimeCacheStorage
-from .flywheel import DecisionFlywheel
 from .classifier_config import ClassifierConfig
-from .flywheel_test import TASK, TRAIN, DEV, FakeModel, agent
 from .decision_cache import CacheOptions
+from .flywheel import DecisionFlywheel
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel, agent
+from .runtime_cache_storage import SQLiteRuntimeCacheStorage
 
 
 def test_refresh_preserves_old_response_and_history_when_provider_identity_advances(tmp_path):

@@ -1,15 +1,18 @@
 """Small end-to-end replay/playback smoke for the homepage feedback policies."""
 import asyncio
+
 import pytest
-from .models import Item,LabeledItem
-from .replay import plan_replay
-from .cycle_replay import run_cycle_replay
-from .replay_feedback_policy import ReplayFeedbackPolicy
-from .flywheel import DecisionFlywheel
-from .flywheel_test import TASK,FakeModel
+
 from .classifier_config import ClassifierConfig
+from .cycle_replay import run_cycle_replay
+from .flywheel import DecisionFlywheel
+from .flywheel_test import TASK, FakeModel
+from .models import Item, LabeledItem
 from .optimizer_agent import OptimizerAgent
+from .replay import plan_replay
+from .replay_feedback_policy import ReplayFeedbackPolicy
 from .trace_artifact import render_trace
+
 
 @pytest.mark.parametrize('mode',('all','reject_half','casual_ten_percent'))
 def test_small_policy_replay_keeps_withheld_labels_out_of_learning_and_renders_playback(tmp_path,mode):

@@ -1,9 +1,11 @@
 """Reviewer source fidelity and racing human actions on canonical S3."""
 from concurrent.futures import ThreadPoolExecutor
+
 import pytest
-from .s3_journal_test import journal
+
 from .review_storage_test import article
 from .reviewer_store import ReviewStore
+from .s3_journal_test import journal
 
 
 def storage(j=None):

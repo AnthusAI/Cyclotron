@@ -4,10 +4,11 @@ Catalog operations are composed, not reimplemented. This single-owner gateway
 is not a distributed claim/coordinator and must not enable cloud execution until
 that owner contract exists. Pending ambiguous operations never auto-dispatch.
 """
-from datetime import datetime,timezone
+from datetime import datetime, timezone
 from types import MappingProxyType
-from .publication_lab import PublicationActor,PublicationError,text,MAX_BYTES
-from .publication_records import canonical,digest,copied
+
+from .publication_lab import MAX_BYTES, PublicationActor, PublicationError, text
+from .publication_records import canonical, copied, digest
 
 
 class NativeOutputEvaluator:

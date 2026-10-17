@@ -1,8 +1,10 @@
 import asyncio
 from types import SimpleNamespace
-from .openai_decision import OpenAIDecisionAdapter
+
 from ..classifier_config import ClassifierConfig
-from ..models import DecisionTask,Item
+from ..models import DecisionTask, Item
+from .openai_decision import OpenAIDecisionAdapter
+
 
 def test_openai_decision_adapter_requires_and_preserves_provider_probabilities():
  class Create:

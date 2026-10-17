@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 

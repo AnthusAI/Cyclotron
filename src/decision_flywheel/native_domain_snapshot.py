@@ -6,7 +6,8 @@ from a snapshot; it contains raw records, ordinals and sequence watermarks only.
 import math
 import re
 import sqlite3
-from .catalog_snapshot import budgets,decode,encode
+
+from .catalog_snapshot import budgets, decode, encode
 
 
 def normalize(sql): return re.sub(r'\s+','',sql).lower()

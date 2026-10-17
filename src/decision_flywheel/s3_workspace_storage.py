@@ -5,10 +5,11 @@ local path, SQLite fallback or DynamoDB authority is introduced.
 """
 from hashlib import sha256
 from uuid import uuid4
+
+from .journal import encode
+from .s3_batch_storage import S3BatchStorage
 from .s3_embedded_storage import S3EmbeddedStorage
 from .s3_runtime_storage import S3RuntimeStores
-from .s3_batch_storage import S3BatchStorage
-from .journal import encode
 
 
 class S3WorkspaceStores:

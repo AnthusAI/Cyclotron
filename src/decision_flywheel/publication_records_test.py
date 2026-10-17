@@ -1,10 +1,10 @@
 """Frozen source/binding provenance composes the existing revisioned catalog."""
 import pytest
+
 from .models import Item
 from .publication_lab import PublicationBinding
 from .publication_records import PublicationRecords
 from .web_store import WebStore
-
 
 PREDICTION={'decisionId':'decision-1','itemId':'source-1','classifiers':{'intel':{'version':1,'fingerprint':'offline-fixture'}}}
 

@@ -26,16 +26,16 @@ makes no request. ``OPENAI_API_KEY`` comes from the environment.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from datetime import UTC
 import hashlib
 import json
 import os
-from pathlib import Path
 import random
 import re
 import urllib.error
 import urllib.request
+from collections import Counter, defaultdict
+from datetime import UTC
+from pathlib import Path
 
 MODEL = "gpt-4.1-mini-2025-04-14"
 DATASET = "malteos/wikinews"

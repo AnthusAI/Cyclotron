@@ -1,7 +1,8 @@
 """Operator-owned JSON configuration for standalone HTTP transformers."""
 import json
 import os
-from .priming import HTTPTransformer,PrimingService
+
+from .priming import HTTPTransformer, PrimingService
 
 
 def load_priming_service(store,path,*,environment=None,redact=()):

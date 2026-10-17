@@ -1,8 +1,9 @@
 """Explicit human priming is training context, never scored operational feedback."""
-from dataclasses import asdict
 import json
-from .models import Item,LabeledItem
+from dataclasses import asdict
+
 from .catalog_storage import encoded
+from .models import Item, LabeledItem
 
 
 def encode_priming(examples,tasks,*,redact=()):

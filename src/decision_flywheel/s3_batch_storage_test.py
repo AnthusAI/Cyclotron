@@ -1,9 +1,11 @@
 """Complete shared-request domain against canonical S3 CAS; no DynamoDB or SQLite."""
+import json
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
-import json
+
 import pytest
-from .batch_storage import BatchConflict,BatchInProgress,BatchUncertain
+
+from .batch_storage import BatchConflict, BatchInProgress, BatchUncertain
 from .s3_journal_test import journal
 
 
@@ -109,10 +111,11 @@ def test_record_limits_corrupt_state_and_missing_head_fail_closed():
 
 def test_real_shared_consumer_restarts_from_s3_without_sqlite_or_replaying_completed_provider(monkeypatch):
     import asyncio
-    from .shared_decisions import SharedDecisions
-    from .classifier_config import ClassifierConfig
-    from .models import DecisionTask,Item,DecisionResult
+
     from .batched_classification import BatchedAnswers
+    from .classifier_config import ClassifierConfig
+    from .models import DecisionResult, DecisionTask, Item
+    from .shared_decisions import SharedDecisions
     class Model:
         model_identity='synthetic-s3';calls=0
         async def classify_many(self,configs,*args,**kwargs):
@@ -132,9 +135,10 @@ def test_real_shared_consumer_restarts_from_s3_without_sqlite_or_replaying_compl
 
 def test_real_shared_consumer_never_calls_provider_after_uncertain_claim(monkeypatch):
     import asyncio
-    from .shared_decisions import SharedDecisions
+
     from .classifier_config import ClassifierConfig
-    from .models import DecisionTask,Item
+    from .models import DecisionTask, Item
+    from .shared_decisions import SharedDecisions
     class Model:
         model_identity='synthetic-s3';calls=0
         async def classify_many(self,*args,**kwargs):

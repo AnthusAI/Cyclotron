@@ -4,7 +4,7 @@ import json
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 
 

@@ -1,8 +1,10 @@
 """Learning repositories preserve native evidence and transaction boundaries."""
 import json
 import sqlite3
+
 import pytest
-from .learning_storage import SQLiteLearningStorage, SQLiteFeatureStorage, SQLiteControlStorage
+
+from .learning_storage import SQLiteControlStorage, SQLiteFeatureStorage, SQLiteLearningStorage
 
 
 def test_learning_artifacts_keep_pending_progress_and_complete_aliases_atomically(tmp_path):

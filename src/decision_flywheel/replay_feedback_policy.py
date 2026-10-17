@@ -1,7 +1,7 @@
 """Deterministic, pre-label feedback selection for operational replays."""
-from dataclasses import dataclass, field
 import hashlib
-from typing import Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)

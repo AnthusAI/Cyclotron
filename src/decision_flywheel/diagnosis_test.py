@@ -9,9 +9,24 @@ import pytest
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .control_scheduler import ControlScheduler
 from .cycle_replay import run_cycle_replay
-from .diagnosis import (cause_trial, choose_elements, deal, draw_samples, element_metrics, error_summary,
-                        passes_trial, recorded_predictions, run_diagnosis, support, validate_addresses,
-                        validate_diagnosis, validate_reconcile, visible_rows, diagnosis_digest, Asker)
+from .diagnosis import (
+    Asker,
+    cause_trial,
+    choose_elements,
+    deal,
+    diagnosis_digest,
+    draw_samples,
+    element_metrics,
+    error_summary,
+    passes_trial,
+    recorded_predictions,
+    run_diagnosis,
+    support,
+    validate_addresses,
+    validate_diagnosis,
+    validate_reconcile,
+    visible_rows,
+)
 from .element_stats import auc, cv_gain, pearson
 from .flywheel import DecisionFlywheel
 from .hypothesis_ledger import HypothesisLedger

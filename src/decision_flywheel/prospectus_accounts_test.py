@@ -2,14 +2,20 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
-from botocore.credentials import Credentials
-from fastapi.testclient import TestClient
 import httpx
 import pytest
+from botocore.credentials import Credentials
+from fastapi.testclient import TestClient
 
-from .prospectus_accounts import (AccountAccessDenied, AccountWorkspace,
-    AccountWorkspaceAccess, AccountsClient, ProspectusUnavailable, SigV4Transport,
-    VerifiedAccountSession)
+from .prospectus_accounts import (
+    AccountAccessDenied,
+    AccountsClient,
+    AccountWorkspace,
+    AccountWorkspaceAccess,
+    ProspectusUnavailable,
+    SigV4Transport,
+    VerifiedAccountSession,
+)
 from .web_api import create_app
 from .web_store import WebStore
 

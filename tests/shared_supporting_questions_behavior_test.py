@@ -1,7 +1,9 @@
 """A supporting question several outputs ask is asked once, paid once, and feeds each output's ML model."""
 import asyncio
-from datetime import datetime, timezone
 import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -13,8 +15,6 @@ from decision_flywheel.flywheel_test import agent
 from decision_flywheel.models import DecisionResult, DecisionTask, Item, LabeledItem
 from decision_flywheel.shared_decisions import SharedDecisions
 from decision_flywheel.sibling_check import install_sibling_checks
-from pathlib import Path
-import sqlite3
 
 RELEVANT = ClassifierSpec("relevant", ("include", "exclude"), "Is this relevant?", positive_label="include")
 TIMELY = ClassifierSpec("timely", ("include", "exclude"), "Is this timely?", positive_label="include")

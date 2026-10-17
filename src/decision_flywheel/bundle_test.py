@@ -5,8 +5,15 @@ import warnings
 
 import pytest
 
-from .bundle import (EXAMPLES_FILE, MANIFEST_FILE, CYCLOTRON_FILE, BundleModelWarning,
-                     BundleValidationError, ClassifierBundle, load_bundle)
+from .bundle import (
+    CYCLOTRON_FILE,
+    EXAMPLES_FILE,
+    MANIFEST_FILE,
+    BundleModelWarning,
+    BundleValidationError,
+    ClassifierBundle,
+    load_bundle,
+)
 from .context import FixedExampleList
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 

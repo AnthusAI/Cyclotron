@@ -1,12 +1,14 @@
 """Output-scoped commands use native guarded trials and existing catalog records."""
 import asyncio
+
 import pytest
+
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import TASK,TRAIN,DEV,FakeModel
-from .publication_lab import PublicationActor,PublicationBinding,PublicationError
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel
+from .publication_lab import PublicationActor, PublicationBinding, PublicationError
 from .publication_records_test import setup_records
-from .publication_steering import PublicationSteering,NativeOutputEvaluator
+from .publication_steering import NativeOutputEvaluator, PublicationSteering
 
 PROPOSAL={'rubric':'Prioritize practical work','example_ids':['t0','t1'],'tasks':[{'name':'practical','instructions':'Is this practical?','labels':['yes','no']}]}
 

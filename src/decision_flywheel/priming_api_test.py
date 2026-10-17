@@ -1,8 +1,10 @@
 """Same authenticated GraphQL application boundary for embedded and standalone hosts."""
 import base64
 import json
+
 import pytest
 from fastapi.testclient import TestClient
+
 from .web_api import create_app
 from .web_store import WebStore
 
@@ -49,8 +51,8 @@ def test_priming_api_preserves_auth_origin_and_credential_controls(tmp_path):
 
 
 def test_hosted_priming_cannot_fall_back_to_a_global_catalog_or_transformer(tmp_path,monkeypatch):
-    from .prospectus_accounts_test import hosted_client
     from .priming import PrimingService
+    from .prospectus_accounts_test import hosted_client
     client,stores,operations=hosted_client(tmp_path)
     client.cookies.set('synthetic-session','member')
     client.cookies.set('selected-account','a')

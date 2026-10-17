@@ -7,9 +7,9 @@ source; a cached input token is billed at the cached rate when one is given.
 """
 from __future__ import annotations
 
-from datetime import datetime
 import json
-from typing import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 
 CALLS = {"decision-response": "decision_model", "optimizer-response": "optimizer"}
 

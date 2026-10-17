@@ -3,7 +3,6 @@ import sqlite3
 
 from .feature_bank import FeatureBank, probability_diagnostics
 
-
 QUESTION = {"name": "practical", "instructions": "Is practical evaluation central?", "labels": ["yes", "no"]}
 
 

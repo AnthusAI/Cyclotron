@@ -4,7 +4,6 @@ from pytest_bdd import given, scenarios, then, when
 from decision_flywheel.web_store import WebStore
 from decision_flywheel.web_worker import WebWorker
 
-
 scenarios("features/application_runtime.feature")
 
 

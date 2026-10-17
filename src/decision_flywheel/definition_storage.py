@@ -1,9 +1,11 @@
 """Versioned user definitions, independent of runs and learned checkpoints."""
-from datetime import datetime, timezone
 import hashlib
 import json
-from .cyclotrons import load_config, rename_legacy_tables
+from datetime import datetime, timezone
 from typing import Protocol
+
+from .cyclotrons import load_config, rename_legacy_tables
+
 
 class DefinitionStorage(Protocol):
     """Versioned definitions; backend owns membership/activation atomicity."""

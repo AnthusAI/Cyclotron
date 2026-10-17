@@ -3,12 +3,12 @@
 Clients, bucket owner and account/workspace scope are fixed by the host after
 authorization. Importing this module neither imports an AWS SDK nor finds creds.
 """
-from dataclasses import dataclass
-from hashlib import sha256
 import os
-from pathlib import Path
 import re
 import tempfile
+from dataclasses import dataclass
+from hashlib import sha256
+from pathlib import Path
 from typing import Protocol
 
 from .batch_storage import StorageScope

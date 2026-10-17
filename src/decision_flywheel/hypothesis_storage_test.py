@@ -1,8 +1,10 @@
 """Hypothesis algorithms consume evidence records without SQL or lost errors."""
 import sqlite3
+
 import pytest
-from .hypothesis_storage import SQLiteHypothesisStorage
+
 from .hypothesis_ledger import HypothesisLedger
+from .hypothesis_storage import SQLiteHypothesisStorage
 from .learning_storage import SQLiteControlStorage
 
 

@@ -9,17 +9,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.artifacts import ArtifactValidationError, create_artifact, load_compatible_fixed_incumbent
-from decision_flywheel.example_list import improve_example_list
 from decision_flywheel.events import JsonlEventStream
-from decision_flywheel.run_ledger import FlywheelRound, JsonlRunLedger, TrialActivity, feedback_fingerprint
+from decision_flywheel.example_list import improve_example_list
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
+from decision_flywheel.run_ledger import FlywheelRound, JsonlRunLedger, TrialActivity, feedback_fingerprint
 
 
 def _report(improvement, labels, comments: int, hard_examples: int, *, artifact_path: Path, pool_revision: str,

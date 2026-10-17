@@ -12,7 +12,6 @@ from .budget import (
 from .context import PolicyMetadata, RandomBalanced
 from .models import DecisionTask, Item, LabeledItem
 
-
 TASK = DecisionTask("topic", ("yes", "no"), "Choose one label.")
 TARGET = Item("target", {"text": "what is this?"})
 CANDIDATES = [

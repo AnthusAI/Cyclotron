@@ -2,14 +2,14 @@
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from .feedback import Feature, FeedbackItem, LABEL_SOURCE_VETTED
+from .feedback import LABEL_SOURCE_VETTED, Feature, FeedbackItem
 from .head import HeadRow, fit_learned_head
 
 
 async def fit_candidate(wheel, config, training, development, *, protected,
                         propensities, validation_status, now=None, calibration_method=None):
-    from .flywheel import FittedClassifier, _hash
     from .feature_bank import probability_diagnostics
+    from .flywheel import FittedClassifier, _hash
     wheel._validate_partitions(training, development, protected, propensities)
     counts = {label:sum(row.label == label for row in training) for label in config.task.labels}
     if min(counts.values()) < 3:

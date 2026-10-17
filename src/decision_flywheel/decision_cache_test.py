@@ -1,9 +1,10 @@
 import asyncio
+
 import pytest
 
-from .decision_cache import CacheOptions, CacheMiss
-from .observability_test import make_wheel
+from .decision_cache import CacheMiss, CacheOptions
 from .flywheel_test import TRAIN
+from .observability_test import make_wheel
 
 
 def test_identical_requests_are_reused_and_explicit_refresh_preserves_the_old_answer(tmp_path):

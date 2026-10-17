@@ -9,8 +9,8 @@ import argparse
 import asyncio
 import json
 import os
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence
 
 from rich.console import Console
 from rich.panel import Panel
@@ -20,19 +20,19 @@ from rich.text import Text
 
 from .adapters.jev import JevAdapter, JevConfiguration
 from .adapters.workspace import decision_adapter
-from .decision_provider_settings import normalize_decision_settings
-from .credential_redaction import credential_values
 from .artifacts import load_artifact
-from .example_list import plan_example_list_round
+from .classifier_config import ClassifierConfig
+from .credential_redaction import credential_values
+from .decision_provider_settings import normalize_decision_settings
 from .events import FlywheelEvent, JsonlEventStream
+from .example_list import plan_example_list_round
+from .flywheel import DecisionFlywheel
+from .optimizer_agent import OptimizerAgent
 from .reviewer_core import reviewer_item, reviewer_labeled_items, reviewer_task
+from .reviewer_flywheel import ReviewerFlywheel
 from .reviewer_predictor import LabeledArticle, ReviewerPrediction, predict_article
 from .reviewer_store import Article, PredictionMetrics, ReviewStore
 from .run_ledger import FlywheelStatus, JsonlRunLedger, feedback_fingerprint
-from .classifier_config import ClassifierConfig
-from .flywheel import DecisionFlywheel
-from .optimizer_agent import OptimizerAgent
-from .reviewer_flywheel import ReviewerFlywheel
 
 
 def load_articles_jsonl(path: str | Path) -> tuple[Article, ...]:

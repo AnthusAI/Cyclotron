@@ -6,11 +6,12 @@ downloads use an explicitly selected JSONL file at a resolved immutable revision
 This imports items, never labels, and does not start optimization or model calls.
 """
 import argparse
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 import json
 import os
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
+
 from decision_flywheel.web_store import WebStore
 
 
@@ -52,7 +53,7 @@ def main(argv=None):
     earliest=datetime.fromisoformat(args.from_date).replace(tzinfo=timezone.utc)
     if args.dataset:
         if not args.filename: parser.error('--dataset requires --filename (a JSONL metadata file)')
-        from huggingface_hub import HfApi,hf_hub_download
+        from huggingface_hub import HfApi, hf_hub_download
         revision=HfApi().dataset_info(args.dataset,revision=args.revision).sha
         path=Path(hf_hub_download(repo_id=args.dataset,repo_type='dataset',filename=args.filename,revision=revision))
         provenance={'dataset':args.dataset,'revision':revision,'filename':args.filename}

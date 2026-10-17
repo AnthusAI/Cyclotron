@@ -1,6 +1,6 @@
 """Catalog migration through immutable scoped bytes, never live cloud heads."""
-from dataclasses import replace
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -10,7 +10,7 @@ from .catalog_snapshot import encode
 from .catalog_storage_test import populated
 from .payload_index import DynamoPayloadIndex
 from .payload_index_test import Dynamo
-from .storage_payloads import FilePayloads, S3Payloads, PayloadUnavailable, PayloadUncertain
+from .storage_payloads import FilePayloads, PayloadUnavailable, PayloadUncertain, S3Payloads
 from .storage_payloads_test import S3
 from .web_store import WebStore
 

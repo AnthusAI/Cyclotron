@@ -4,7 +4,7 @@ import json
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 
 
@@ -85,7 +85,7 @@ def test_request_preview_is_identical_to_the_sent_messages_and_makes_no_call(tmp
 
 
 def test_feedback_is_traceable_but_recording_it_does_not_train_or_send_protected_labels(tmp_path):
-    from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
+    from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
     wheel = make_wheel(tmp_path / "runtime.sqlite", [])
     feedback = FeedbackItem("vote-1", "protected-item", TASK.name,
         initial_answer_value="exclude", final_answer_value="include",

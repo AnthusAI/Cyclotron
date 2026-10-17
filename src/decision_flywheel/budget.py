@@ -10,12 +10,12 @@ import hashlib
 import json
 import random
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from .context import ContextPolicy, PolicyMetadata, validate_selected_context
 from .models import DecisionTask, Item, LabeledItem
-
 
 _WORDS = re.compile(r"\S+")
 _DISPLAY_ORDERS = frozenset({"canonical", "interleaved", "reversed", "shuffled"})

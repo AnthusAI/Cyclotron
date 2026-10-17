@@ -1,7 +1,9 @@
 """Core runtime repositories use S3 with exclusive fenced ownership, never SQLite."""
 import asyncio
 from uuid import uuid4
+
 import pytest
+
 from .s3_journal_test import journal
 
 
@@ -14,8 +16,8 @@ def stores(j=None):
 
 def cloud_agent(s):
     from .flywheel_test import agent
-    from .s3_optimizer_transport import S3OptimizerTransport
     from .s3_batch_storage import S3BatchStorage
+    from .s3_optimizer_transport import S3OptimizerTransport
     complete=agent([])
     ledger=S3BatchStorage(journal(s.journal.payloads.client,name='optimizer-budget'),max_records=1000)
     ledger.initialize()
@@ -25,7 +27,7 @@ def cloud_agent(s):
 
 
 def test_runtime_owner_is_exclusive_releases_explicitly_and_fences_the_old_handle():
-    from .s3_runtime_storage import S3RuntimeStores,RuntimeOwnershipError
+    from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
     first=stores();j=journal(first.journal.payloads.client,name='classifier-a')
     other=S3RuntimeStores(j,max_records=10000);other.initialize()
     with pytest.raises(RuntimeOwnershipError):other.acquire(str(uuid4()))
@@ -56,9 +58,9 @@ def test_cache_refresh_learning_aliases_and_pending_cleanup_preserve_domain_sema
 
 
 def test_real_core_predict_restart_and_improve_use_only_injected_s3_repositories(monkeypatch):
-    from .flywheel import DecisionFlywheel
     from .classifier_config import ClassifierConfig
-    from .flywheel_test import TASK,TRAIN,DEV,FakeModel
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import DEV, TASK, TRAIN, FakeModel
     def forbidden(*args,**kwargs):raise AssertionError('cloud core opened SQLite')
     monkeypatch.setattr('sqlite3.connect',forbidden)
     s=stores();j=s.journal;model=FakeModel()
@@ -76,8 +78,8 @@ def test_real_core_predict_restart_and_improve_use_only_injected_s3_repositories
 
 
 def test_unknown_acquire_outcome_does_not_grant_runtime_execution():
-    from .s3_runtime_storage import S3RuntimeStores,RuntimeOwnershipError
     from .s3_journal import JournalUncertain
+    from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
     j=journal(name='classifier-a');s=S3RuntimeStores(j,max_records=10000);s.initialize()
     j.payloads.client.lose=lambda key:key==j.head_key
     with pytest.raises(JournalUncertain):s.acquire(str(uuid4()))

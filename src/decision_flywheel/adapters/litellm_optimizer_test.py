@@ -48,6 +48,7 @@ def test_invalid_configuration_is_rejected_before_any_provider_use(model, limit)
 def test_acompletion_is_awaited_under_the_same_ceiling_and_arguments():
     import asyncio
     from types import SimpleNamespace
+
     from .litellm_optimizer import LiteLLMOptimizer
     seen = []
 

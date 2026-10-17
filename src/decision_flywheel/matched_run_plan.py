@@ -1,8 +1,9 @@
 """Read-only preflight for a matched protected joint-cyclotron evaluation."""
-from collections import Counter
 import hashlib
 import json
 import unicodedata
+from collections import Counter
+
 from .feedback_trigger import PROTECTED_ASSIGNMENTS
 
 

@@ -1,8 +1,9 @@
 """Account-scoped BFF service; persist original actor before queue publication."""
 import asyncio
 import hmac
-from .prospectus_accounts import VerifiedAccountSession,AccountAccessDenied,ProspectusUnavailable
-from .journal import uuid,encode
+
+from .journal import encode, uuid
+from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
 
 
 class HostedConsoleService:

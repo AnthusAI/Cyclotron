@@ -1,7 +1,7 @@
 """Native reviewer-source records; human eligibility rules stay shared."""
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-import sqlite3
 from typing import Protocol
 
 from .storage_errors import refusing_duplicate_identity

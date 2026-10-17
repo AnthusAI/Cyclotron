@@ -1,11 +1,12 @@
 import asyncio
+
 import pytest
-from .run_comparison import compare_endpoints
-from .run_comparison import compare_head
-from .trace_artifact import read_trace
-from .flywheel_test import TASK, TRAIN, DEV, FakeModel, agent
-from .flywheel import DecisionFlywheel
+
 from .classifier_config import ClassifierConfig
+from .flywheel import DecisionFlywheel
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel, agent
+from .run_comparison import compare_endpoints, compare_head
+from .trace_artifact import read_trace
 
 
 def test_head_comparison_reuses_identical_requests_and_never_fits_or_promotes(tmp_path):

@@ -1,7 +1,9 @@
 """Compose independent classifier contexts into one provider-neutral request."""
-from dataclasses import dataclass
 import json
-from typing import Mapping, Protocol
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Protocol
+
 from .classifier_config import ClassifierConfig
 from .models import DecisionResult, Item, LabeledItem
 

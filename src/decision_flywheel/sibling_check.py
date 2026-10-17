@@ -18,9 +18,9 @@ on the sibling's served decisions before that refit, so it is conservative.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import asdict, dataclass
 
 ACTIONS = ("refuse", "record")
 

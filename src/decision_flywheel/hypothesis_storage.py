@@ -1,5 +1,6 @@
 """Raw hypothesis/diagnosis evidence; statistical algorithms stay shared."""
 from typing import Protocol
+
 from .learning_storage import SQLiteControlStorage
 
 

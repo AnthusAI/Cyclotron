@@ -2,6 +2,7 @@
 import json
 from types import SimpleNamespace
 from uuid import uuid4
+
 from fastapi import FastAPI
 
 

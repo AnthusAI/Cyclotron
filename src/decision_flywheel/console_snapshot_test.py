@@ -4,10 +4,10 @@ from dataclasses import replace
 
 import pytest
 
-from .console_snapshot import ConsoleArchive
-from .catalog_storage_test import populated
 from .batch_storage import StorageScope
-from .storage_payloads import FilePayloads,S3Payloads
+from .catalog_storage_test import populated
+from .console_snapshot import ConsoleArchive
+from .storage_payloads import FilePayloads, S3Payloads
 from .storage_payloads_test import S3
 from .web_store import WebStore
 
@@ -106,8 +106,8 @@ def test_console_export_uses_one_snapshot_across_catalog_runs_and_event_watermar
 
 
 def test_console_restore_rolls_back_every_domain_after_native_failure(tmp_path,monkeypatch):
-    from contextlib import contextmanager
     import sqlite3
+    from contextlib import contextmanager
     source,_,_=console(tmp_path/'source.sqlite')
     snapshot=source.export_storage()
     destination=WebStore(tmp_path/'destination.sqlite')

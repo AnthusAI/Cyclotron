@@ -3,11 +3,12 @@
 Transactions group known root-domain operations, especially source cursors and
 all derived reviews/events/usage. No SQL emulation or cloud lease is provided.
 """
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-import sqlite3
 from typing import Protocol
-from .storage_errors import StorageMissing,refusing_duplicate_identity
+
+from .storage_errors import StorageMissing, refusing_duplicate_identity
 
 SCHEMA_SQL = '\n            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, item_values TEXT NOT NULL, fingerprint TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, item_fingerprint TEXT NOT NULL,\n                state TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE INDEX IF NOT EXISTS decisions_by_item ON decisions(item_id);\n            CREATE TABLE IF NOT EXISTS reviews (seq INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, decision_id TEXT NOT NULL,\n                classifier TEXT NOT NULL, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);\n            CREATE TABLE IF NOT EXISTS learning_queue (seq INTEGER PRIMARY KEY, classifier TEXT UNIQUE NOT NULL,\n                since_count INTEGER NOT NULL, queued_at TEXT NOT NULL, superseded INTEGER NOT NULL DEFAULT 0);\n            CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY, decision_id TEXT NOT NULL, model TEXT NOT NULL,\n                input_tokens INTEGER NOT NULL, cached_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,\n                source TEXT);\n            CREATE TABLE IF NOT EXISTS usage_shares (usage_id INTEGER NOT NULL, classifier TEXT NOT NULL,\n                share REAL NOT NULL, PRIMARY KEY(usage_id, classifier));\n        '
 

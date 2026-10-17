@@ -1,5 +1,6 @@
 """A runner logs through the API, not through an artifact export."""
 import pytest
+
 from .api_event_sink import GraphQLTraceSink
 
 

@@ -2,7 +2,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
-
 from .web_store import WebStore
 
 

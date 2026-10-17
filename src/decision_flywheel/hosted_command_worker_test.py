@@ -1,19 +1,21 @@
 """One fenced cloud invocation executes existing console commands without files."""
 import asyncio
 from uuid import uuid4
+
 import pytest
-from .s3_workspace_storage_test import fixture,Model
-from .queued_account_authorization_test import fixture as authentication
-from .s3_workspace_storage import S3WorkspaceStores
-from .s3_journal_test import journal
-from .s3_journal import S3Journal
-from .optimizer_agent import DisabledOptimizer
+
 from .cyclotron_runtime import CyclotronRuntime
-from .prospectus_accounts import AccountAccessDenied,ProspectusUnavailable
+from .optimizer_agent import DisabledOptimizer
+from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
+from .queued_account_authorization_test import fixture as authentication
+from .s3_journal import S3Journal
+from .s3_journal_test import journal
+from .s3_workspace_storage import S3WorkspaceStores
+from .s3_workspace_storage_test import Model, fixture
 
 
 def setup():
-    from .hosted_command_worker import HostedCommandWorker,AuthorizedModel,CommandEventSink
+    from .hosted_command_worker import AuthorizedModel, CommandEventSink, HostedCommandWorker
     s,run=fixture();auth,sessions,cookie,original,state=authentication()
     actor=asyncio.run(auth.capture(sessions.get(cookie),original.account_id,run['id'],original.binding))
     model=Model();client=s.journal.payloads.client
@@ -100,8 +102,8 @@ def test_provider_outcome_is_retained_but_revocation_prevents_business_state_and
 
 
 def test_unknown_claim_receipt_cannot_be_recovered_by_redelivery():
-    from .s3_journal import JournalUncertain
     from .hosted_command_worker import CommandReconciliationRequired
+    from .s3_journal import JournalUncertain
     s,run,auth,sessions,cookie,actor,state,model,worker=setup()
     job=s.enqueue_authorized_command(run['id'],'once','prepare',{},actor)
     s.journal.payloads.client.lose=lambda key:key==s.journal.head_key

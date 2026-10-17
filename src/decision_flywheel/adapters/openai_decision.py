@@ -1,9 +1,14 @@
 """OpenAI implementation of Cyclotron's provider-neutral decision contract."""
 from __future__ import annotations
-import asyncio, json, time
+
+import asyncio
+import json
+import time
 from dataclasses import dataclass
-from ..models import DecisionResult, ModelCapabilities
+
 from ..classifier_config import ClassifiedAnswers
+from ..models import DecisionResult, ModelCapabilities
+
 
 @dataclass(frozen=True)
 class OpenAIDecisionConfiguration:

@@ -1,8 +1,8 @@
 """Bounded retrospective feature measurement, never automatic deployment."""
-from collections import Counter
-from datetime import datetime, timezone
 import json
 import math
+from collections import Counter
+from datetime import datetime, timezone
 
 from .classification_metrics import classification_metrics
 from .feature_bank import FeatureBank, probability_diagnostics

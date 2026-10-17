@@ -1,6 +1,6 @@
 """Read actual reviewer source records; never synthesize flywheel events."""
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 
 def read_review_history(database):

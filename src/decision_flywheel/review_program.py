@@ -11,10 +11,11 @@ current rate, and a deterministic random draw keyed by the decision.
 """
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
-import hashlib
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 REASONS = ("program", "audit", "reviewer")
 
@@ -97,7 +98,7 @@ class ProgramState:
         return value
 
     @classmethod
-    def from_json(cls, value: Mapping[str, Any] | None) -> "ProgramState":
+    def from_json(cls, value: Mapping[str, Any] | None) -> ProgramState:
         return cls(**value) if value else cls()
 
 

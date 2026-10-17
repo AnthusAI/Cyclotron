@@ -1,9 +1,11 @@
 """Paid optimizer attempts use canonical S3 ownership/budgets for sync and async calls."""
 import asyncio
+
 import pytest
+
+from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply
 from .s3_batch_storage_test import store
 from .s3_journal_test import journal
-from .optimizer_agent import OptimizerReply,OptimizerAgent,FeedbackBriefing
 
 
 def wrapped(transport,ledger=None,maximum=2):
@@ -24,7 +26,7 @@ def test_completed_identical_prompts_are_distinct_authorized_calls_but_ceiling_s
 
 
 def test_lost_optimizer_claim_receipt_never_dispatches_and_cannot_be_automatically_repaid(monkeypatch):
-    from .batch_storage import BatchUncertain,BatchInProgress
+    from .batch_storage import BatchInProgress, BatchUncertain
     calls=[]
     transport=wrapped(lambda messages:calls.append(messages));claim=transport.storage.claim
     def lose(key,owner):
@@ -70,11 +72,11 @@ def test_async_cancellation_preserves_uncertain_claim_and_credentials_are_reject
 
 
 def test_cloud_sdk_rejects_unmetered_optimizer_before_creating_a_namespace(monkeypatch):
+    from .embedded_cyclotron import Cyclotron
+    from .embedded_cyclotron_test import DEFINITION, Model
+    from .flywheel_test import agent
     from .s3_embedded_storage import S3CyclotronStores
     from .s3_journal_test import ConditionalS3
-    from .embedded_cyclotron import Cyclotron
-    from .embedded_cyclotron_test import DEFINITION,Model
-    from .flywheel_test import agent
     client=ConditionalS3();s=S3CyclotronStores(journal(client,name='root'),max_records=1000,journal_for=lambda domain,name:journal(client,name=domain+'-'+name))
     with pytest.raises(ValueError,match='paid-call transport'):
         Cyclotron.open(None,DEFINITION,Model(),agent([]),storage=s)

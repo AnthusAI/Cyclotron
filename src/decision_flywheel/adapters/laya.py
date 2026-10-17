@@ -4,8 +4,9 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
@@ -75,7 +76,7 @@ class LayaAdapter:
     async def classify_many(self, configurations, target, training, *, now=None,
                             event_sink=None, max_request_bytes=32000, share_supporting_questions=False):
         """Transport scoped context, without promising in-context effectiveness."""
-        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
+        from ..batched_classification import BatchedAnswers, answer_groups, batch_request, question_bindings
         request, identities = batch_request(configurations, target, training, now=now,
                                              max_request_bytes=max_request_bytes, share_questions=share_supporting_questions)
         questions = {key: {"type": value["type"], "instructions": value["instructions"],

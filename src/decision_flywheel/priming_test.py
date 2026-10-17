@@ -1,10 +1,12 @@
 """Synthetic HTTP job contract, explicit human acceptance and persistence firewalls."""
 import base64
 import json
+
 import httpx
 import pytest
+
+from .priming import HTTPTransformer, PrimingService
 from .web_store import WebStore
-from .priming import PrimingService, HTTPTransformer
 
 SCHEMA={'type':'object','properties':{'title':{'type':'string'},'text':{'type':'string','minLength':1}},'required':['title','text'],'additionalProperties':False}
 ITEM={'id':'synthetic-paper','occurred_at':'2026-10-14','values':{'title':'Synthetic paper','text':'Synthetic research content'},'provenance':{'source_url':'https://example.invalid/paper'}}

@@ -1,11 +1,12 @@
 """Durable complete-request batch cache and a run-wide paid-attempt ceiling."""
+import hashlib
+import json
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
-import hashlib
-import json
 from uuid import uuid4
-from .batch_storage import SQLiteBatchStorage, BatchInProgress
+
+from .batch_storage import BatchInProgress, SQLiteBatchStorage
 from .batched_classification import batch_request, output_shares
 from .classifier_config import ClassifiedAnswers
 from .decision_cache import CacheOptions

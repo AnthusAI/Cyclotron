@@ -5,16 +5,17 @@ code exchange. Session updates cannot resurrect logout or replace its actor.
 All methods are blocking and must run off the HTTP event loop.
 """
 import base64
-from dataclasses import asdict
 import hmac
 import re
 import secrets
 import time
+from dataclasses import asdict
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from .account_sessions import ConsoleSession, PendingLogin, SessionRejected, digest
+from .journal import JournalConflict, decode, encode
 from .prospectus_accounts import ProspectusUnavailable
-from .journal import encode, decode, JournalConflict
 
 
 class SessionStoreUnavailable(ProspectusUnavailable):

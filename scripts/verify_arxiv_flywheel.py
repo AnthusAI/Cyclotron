@@ -10,8 +10,8 @@ from pathlib import Path
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.adapters.optimizer_transport import optimizer_transport
-from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.classifier_config import ClassifierConfig
+from decision_flywheel.credential_redaction import credential_values
 from decision_flywheel.flywheel import DecisionFlywheel
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.reviewer_core import reviewer_item, reviewer_task

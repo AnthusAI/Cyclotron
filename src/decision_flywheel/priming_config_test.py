@@ -1,6 +1,8 @@
 """Host configuration resolves credentials privately and never accepts client endpoints."""
 import json
+
 import pytest
+
 from .priming_config import load_priming_service
 from .web_store import WebStore
 

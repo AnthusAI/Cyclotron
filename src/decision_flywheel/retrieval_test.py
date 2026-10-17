@@ -7,8 +7,7 @@ from .context import input_hash
 from .embedding_retrieval import EmbeddingRetriever, HashingEmbedder, InMemoryVectorStore
 from .lexical_retrieval import LexicalRetriever
 from .models import DecisionTask, Item, LabeledItem
-from .retrieval import (PerLabelRetrieval, RetrievalIndex, Retriever, VectorStore, neighbour_label_purity,
-                        pool_fingerprint)
+from .retrieval import PerLabelRetrieval, RetrievalIndex, Retriever, VectorStore, neighbour_label_purity, pool_fingerprint
 
 TASK = DecisionTask("topic", ("a", "b"), "Classify the target.")
 POOL = [

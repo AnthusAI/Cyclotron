@@ -1,11 +1,12 @@
 """HTTP adapter for Kev, a decision model run as a local server exposing the System One endpoint."""
 from __future__ import annotations
 
+import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from numbers import Real
-import time
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
@@ -89,7 +90,7 @@ class KevAdapter:
     async def classify_many(self, configurations, target, training, *, now=None,
                             event_sink=None, max_request_bytes=32000, share_supporting_questions=False):
         """Send the cyclotron once and preserve every feature's distribution."""
-        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
+        from ..batched_classification import BatchedAnswers, answer_groups, batch_request, question_bindings
         request,identities=batch_request(configurations,target,training,now=now,
                                          max_request_bytes=max_request_bytes, share_questions=share_supporting_questions)
         questions={key:{'type':detail['type'],'instructions':detail['instructions'],

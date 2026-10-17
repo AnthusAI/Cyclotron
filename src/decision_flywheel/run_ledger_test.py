@@ -5,8 +5,7 @@ import pytest
 
 from . import JsonlRunLedger as PublicJsonlRunLedger
 from .models import DecisionTask, Item, LabeledItem
-from .run_ledger import (FeatureActivity, FeatureDefinition, FlywheelRound,
-                         JsonlRunLedger, TrialActivity, feedback_fingerprint)
+from .run_ledger import FeatureActivity, FeatureDefinition, FlywheelRound, JsonlRunLedger, TrialActivity, feedback_fingerprint
 
 
 def _round(*, input_fingerprint: str = "a" * 64, policy_fingerprint: str = "b" * 64) -> FlywheelRound:

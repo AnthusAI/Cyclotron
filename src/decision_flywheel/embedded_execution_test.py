@@ -1,6 +1,8 @@
 """Trusted authorization runs after ownership and before any operation state."""
 import asyncio
+
 import pytest
+
 from .embedded_cyclotron import Cyclotron
 from .embedded_cyclotron_test import DEFINITION, Model, item
 
@@ -123,6 +125,7 @@ def test_replay_rechecks_each_separately_owned_decision_and_review(tmp_path):
 
 def test_deferred_learning_reauthorizes_before_reading_each_next_pass(tmp_path):
     from dataclasses import replace
+
     from .embedded_cyclotron import ClassifierSpec
     other=ClassifierSpec('other',('include','exclude'),'Is this a fit?',positive_label='include')
     definition=replace(DEFINITION,classifiers=(*DEFINITION.classifiers,other))
@@ -159,7 +162,7 @@ def test_cancellation_while_waiting_for_ownership_never_invokes_guard(tmp_path):
 
 @pytest.mark.parametrize('revocation',['membership','publication','binding','account','person'])
 def test_host_guard_rechecks_central_membership_and_separate_pinned_publication_authority_after_wait(tmp_path,revocation):
-    from .prospectus_accounts import AccountsClient,AccountAccessDenied
+    from .prospectus_accounts import AccountAccessDenied, AccountsClient
     current={'membership':True,'publication':True,'binding':'revision-1','account':'a','person':'p'}
     checks=[]
     def transport(method,path,token,body):
@@ -187,7 +190,7 @@ def test_host_guard_rechecks_central_membership_and_separate_pinned_publication_
 
 
 def test_guarded_learning_keeps_ownership_through_provider_calls_and_next_caller_reauthorizes(tmp_path):
-    from .embedded_learning_window_test import GatedTransport,store,checklist,OUTPUTS
+    from .embedded_learning_window_test import OUTPUTS, GatedTransport, checklist, store
     transport=GatedTransport()
     with store(tmp_path,transport) as engine:
         for index in range(12): checklist(engine,index,OUTPUTS[:1])

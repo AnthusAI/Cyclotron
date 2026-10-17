@@ -1,7 +1,7 @@
 """Serve one trace viewer on loopback or an explicit LAN address, never neighboring files."""
 import argparse
-from ipaddress import IPv4Address
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import IPv4Address
 from pathlib import Path
 from urllib.parse import urlsplit
 

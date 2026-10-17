@@ -13,7 +13,6 @@ import sqlite3
 from collections import Counter
 from pathlib import Path
 
-
 LABELS = ("publish", "reject")
 WINDOWS = (100, 200)
 

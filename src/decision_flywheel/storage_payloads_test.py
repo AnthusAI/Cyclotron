@@ -4,7 +4,7 @@ from io import BytesIO
 import pytest
 
 from .batch_storage import StorageScope
-from .storage_payloads import FilePayloads, S3Payloads, PayloadCorrupt, PayloadUncertain
+from .storage_payloads import FilePayloads, PayloadCorrupt, PayloadUncertain, S3Payloads
 
 
 class ConditionalFailure(Exception):

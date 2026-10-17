@@ -7,8 +7,7 @@ import pytest
 
 from .context import RandomBalanced
 from .dynamic_elements import current_datetime_state, optimizer_dynamic_element_instruction, with_dynamic_state
-from .feedback import Element, Cyclotron
-
+from .feedback import Cyclotron, Element
 
 HASH = "a" * 64
 

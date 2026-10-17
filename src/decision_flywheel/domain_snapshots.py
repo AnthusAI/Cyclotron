@@ -1,7 +1,8 @@
 """Known embedded/reviewer/evaluation codecs over one shared migration engine."""
 import json
-import sqlite3
 import re
+import sqlite3
+
 from .catalog_archive import CatalogArchive
 from .native_domain_snapshot import NativeDomainCodec
 

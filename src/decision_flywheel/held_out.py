@@ -22,14 +22,15 @@ kept as an unweighted count of items and does not decide the verdict.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
-from math import comb, floor
 import random
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from math import comb, floor
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 SET_SCHEMA = "cyclotron-held-out-set/v1"
 REPORT_SCHEMA = "cyclotron-held-out-report/v1"
@@ -74,7 +75,7 @@ class HeldOutItem:
                 "selectionPropensity": self.selection_propensity, "selectionReason": self.selection_reason}
 
     @classmethod
-    def from_json(cls, value: Mapping[str, Any]) -> "HeldOutItem":
+    def from_json(cls, value: Mapping[str, Any]) -> HeldOutItem:
         return cls(value["itemId"], value["values"], value["label"], value["selectionPropensity"],
                    value["selectionReason"])
 
@@ -91,7 +92,7 @@ class HeldOutSet:
 
     @classmethod
     def freeze(cls, cyclotron_id: str, classifier: str, items: Sequence[HeldOutItem], *,
-               frozen_at: datetime | None = None) -> "HeldOutSet":
+               frozen_at: datetime | None = None) -> HeldOutSet:
         ordered_items = tuple(sorted(items, key=lambda held_out_item: held_out_item.item_id))
         if not ordered_items:
             raise ValueError("a held-out set needs at least one labeled audit item")
@@ -114,7 +115,7 @@ class HeldOutSet:
                 "items": [held_out_item.to_json() for held_out_item in self.items]}
 
     @classmethod
-    def from_json(cls, value: Mapping[str, Any]) -> "HeldOutSet":
+    def from_json(cls, value: Mapping[str, Any]) -> HeldOutSet:
         if value.get("schema") != SET_SCHEMA:
             raise ValueError("not a cyclotron-held-out-set/v1 record")
         return cls(value["id"], value["cyclotron"], value["classifier"], value["frozenAt"],

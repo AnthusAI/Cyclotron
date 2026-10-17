@@ -5,10 +5,11 @@ import json
 from .classifier_config import ClassifierConfig
 from .control_scheduler import ControlScheduler
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel
 from .models import Item, LabeledItem
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .selection_policy import SelectionPolicy as _SP
+
 _BRIER = _SP('balanced_brier')
 
 

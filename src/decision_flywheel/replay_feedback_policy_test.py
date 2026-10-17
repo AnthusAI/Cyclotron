@@ -1,5 +1,11 @@
-from .replay_feedback_policy import (ReplayFeedbackPolicy, FeedbackPhase, PhasedFeedbackPolicy,
-                                     onboarding_all_then_half, onboarding_publish_priority_taper)
+from .replay_feedback_policy import (
+    FeedbackPhase,
+    PhasedFeedbackPolicy,
+    ReplayFeedbackPolicy,
+    onboarding_all_then_half,
+    onboarding_publish_priority_taper,
+)
+
 
 def test_reject_half_never_uses_the_hidden_label_and_is_deterministic():
     policy=ReplayFeedbackPolicy('reject_half','demo')
@@ -65,6 +71,7 @@ def test_mixed_audits_confident_items_at_a_known_rate_and_random_reviews_a_quart
 
 def test_confidence_rules_need_the_issued_confidence():
     import pytest
+
     from .replay_feedback_policy import ConfidenceFeedbackPolicy
     with pytest.raises(ValueError, match='issued confidence'):
         ConfidenceFeedbackPolicy('least_confident').select(item_id='a', predicted_label='publish', negative_label='reject')

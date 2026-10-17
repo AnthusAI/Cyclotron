@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+
 from decision_flywheel.adapters.jev import JevAdapter
 from decision_flywheel.api_event_sink import GraphQLTraceSink
 from decision_flywheel.optimizer_agent import OptimizerAgent, OptimizerReply

@@ -1,10 +1,10 @@
 import asyncio
 from types import SimpleNamespace
 
-from .system_one import SystemOneAdapter
 import pytest
 
 from ..models import DecisionTask, Item, LabeledItem, ModelCapabilities
+from .system_one import SystemOneAdapter
 
 
 class FakeClient:

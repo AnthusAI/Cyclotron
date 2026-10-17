@@ -1,16 +1,18 @@
 """Known domain migrations preserve source IDs and reject incomplete evidence."""
 import asyncio
-from copy import deepcopy
 import sqlite3
+from copy import deepcopy
+
 import pytest
-from .domain_snapshots import embedded_codec,review_codec,evaluation_codec,DomainArchive
-from .embedded_cyclotron import Cyclotron
-from .embedded_cyclotron_test import DEFINITION,Model,item
-from .reviewer_store import ReviewStore
-from .review_storage_test import article
-from .evaluation_storage import SQLiteEvaluationStorage
+
 from .batch_storage import StorageScope
-from .storage_payloads import FilePayloads,S3Payloads
+from .domain_snapshots import DomainArchive, embedded_codec, evaluation_codec, review_codec
+from .embedded_cyclotron import Cyclotron
+from .embedded_cyclotron_test import DEFINITION, Model, item
+from .evaluation_storage import SQLiteEvaluationStorage
+from .review_storage_test import article
+from .reviewer_store import ReviewStore
+from .storage_payloads import FilePayloads, S3Payloads
 from .storage_payloads_test import S3
 
 
@@ -168,7 +170,7 @@ def test_legacy_reviewer_column_upgrades_remain_migratable(tmp_path):
 
 
 def test_embedded_v1_queue_upgrade_and_v2_migration_preserve_bounded_supersession(tmp_path):
-    from .embedded_storage import SQLiteEmbeddedStorage,SCHEMA_SQL
+    from .embedded_storage import SCHEMA_SQL, SQLiteEmbeddedStorage
     old=sqlite3.connect(tmp_path/'old.sqlite')
     old.executescript(SCHEMA_SQL.replace(', superseded INTEGER NOT NULL DEFAULT 0',''))
     old.execute("INSERT INTO learning_queue(classifier,since_count,queued_at) VALUES ('topic',7,'exact clock')")

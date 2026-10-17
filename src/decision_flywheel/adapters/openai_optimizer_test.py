@@ -1,5 +1,6 @@
 """Live optimizer transport is injected and capped; specs use a fake SDK."""
 from types import SimpleNamespace
+
 import pytest
 
 from .openai_optimizer import OpenAIOptimizer

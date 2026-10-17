@@ -1,14 +1,16 @@
 """Bounded structured-file previews and classifier-derived empty templates."""
 import base64
 import csv
-from copy import copy
-from datetime import date, datetime
 import io
 import json
 import zipfile
+from copy import copy
+from datetime import date, datetime
+
 from jsonschema import Draft202012Validator
-from .models import DecisionTask, Item
+
 from .catalog_storage import encoded, timestamp
+from .models import DecisionTask, Item
 
 MAX_BYTES = 4_000_000
 MAX_ROWS = 200
@@ -43,8 +45,8 @@ def template(kind,schema,classifiers):
         return {**result,'content':stream.getvalue(),'encoding':'utf-8'}
     if kind!='xlsx':raise ValueError('template format must be csv or xlsx')
     from openpyxl import Workbook
-    from openpyxl.worksheet.datavalidation import DataValidation
     from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
     wb=Workbook();ws=wb.active;ws.title='Examples';ws.append(names)
     ws.freeze_panes='A2';ws.auto_filter.ref=f'A1:{get_column_letter(len(names))}1'
     choices=wb.create_sheet('Labels');instructions=wb.create_sheet('Instructions')

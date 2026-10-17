@@ -1,7 +1,7 @@
 """Existing review batches must remain stable and require no new dataset calls."""
 import importlib.util
-from pathlib import Path
 import json
+from pathlib import Path
 
 
 def test_a_saved_arxiv_batch_is_reused_without_network_or_overwriting_votes(tmp_path, monkeypatch):

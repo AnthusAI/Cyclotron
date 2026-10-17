@@ -7,17 +7,16 @@ new input has made the latest policy stale.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
 from .context import input_hash
 from .models import DecisionTask, LabeledItem
-
 
 _OUTCOMES = frozenset({"promoted", "incumbent-retained", "incomplete"})
 _TRIAL_STATUSES = frozenset({"completed", "incomplete", "not-run"})
@@ -200,7 +199,7 @@ class FlywheelRound:
         return value
 
     @classmethod
-    def from_document(cls, value: object) -> "FlywheelRound":
+    def from_document(cls, value: object) -> FlywheelRound:
         if not isinstance(value, dict):
             raise ValueError("run ledger entry must be an object")
         expected = {"task_fingerprint", "input_fingerprint", "active_policy_fingerprint", "model_fingerprint",

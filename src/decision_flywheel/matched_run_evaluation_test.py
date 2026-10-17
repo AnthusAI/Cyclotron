@@ -1,12 +1,13 @@
 import asyncio
 from dataclasses import asdict
-from .matched_run_plan_test import source
-from .matched_run_plan import plan_matched_runs
-from .matched_run_evaluation import evaluate_matched_runs
-from .models import DecisionTask,DecisionResult
+
+from .batched_classification import BatchedAnswers
 from .classifier_config import ClassifierConfig
 from .flywheel import FittedClassifier
-from .batched_classification import BatchedAnswers
+from .matched_run_evaluation import evaluate_matched_runs
+from .matched_run_plan import plan_matched_runs
+from .matched_run_plan_test import source
+from .models import DecisionResult, DecisionTask
 
 
 class Model:
@@ -19,9 +20,10 @@ class Model:
 
 def test_an_incompatible_frozen_head_is_rejected_before_either_endpoint_makes_calls(tmp_path):
     import pytest
+
     from .candidate_fitting import fit_candidate
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import FakeModel,TRAIN,DEV,agent
+    from .flywheel_test import DEV, TRAIN, FakeModel, agent
     config=ClassifierConfig(DecisionTask('topic',('include','exclude'),'Choose'))
     wheel=DecisionFlywheel(tmp_path/'fit.sqlite',config,FakeModel(),agent([]))
     try:

@@ -12,7 +12,8 @@ def runtime():
     if _cached_runtime is None:
         from botocore.config import Config
         from botocore.session import get_session
-        from .hosted_runtime import HostedConfig,HostedRuntime
+
+        from .hosted_runtime import HostedConfig, HostedRuntime
         config=HostedConfig.from_environment(os.environ)
         session=get_session()
         settings=Config(signature_version='s3v4',retries={'total_max_attempts':1},connect_timeout=5,read_timeout=10)

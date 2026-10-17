@@ -7,6 +7,7 @@ inside this adapter. External transformation calls never run in a transaction.
 from contextlib import contextmanager
 from typing import Protocol
 
+
 class PrimingTransaction(Protocol):
     def draft(self,identifier: str) -> str | None: ...
     def put_draft(self,identifier: str,payload: str) -> None: ...

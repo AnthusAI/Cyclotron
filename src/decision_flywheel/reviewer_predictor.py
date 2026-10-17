@@ -6,16 +6,15 @@ each prediction.  It is not a substitute for the later Jev decision features.
 """
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
 import hashlib
 import json
 import math
 import re
-from typing import Iterable
+from collections import Counter
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .reviewer_store import Article
-
 
 _TOKENS = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{1,}")
 _LABELS = ("include", "exclude")

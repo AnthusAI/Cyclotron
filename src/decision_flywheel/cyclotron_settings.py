@@ -1,6 +1,6 @@
 """Validate executable shared defaults without discarding extension metadata."""
-from .selection_policy import SelectionPolicy
 from .adapters.optimizer_transport import validate_optimizer_transport
+from .selection_policy import SelectionPolicy
 
 
 def validate_shared_settings(settings):

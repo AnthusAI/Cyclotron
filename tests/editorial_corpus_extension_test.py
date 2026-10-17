@@ -1,9 +1,9 @@
 """The extended editorial corpus keeps its first 400 items byte for byte."""
-from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from .classifier_snapshot import compact_snapshot
 
+
 class Cycle:
     def __init__(self, wheel, item=None, *, reason='item-processing'):
         if item is not None:

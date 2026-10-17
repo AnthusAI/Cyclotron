@@ -1,6 +1,6 @@
 """Outcomes every storage adapter reports the same way, whatever its backend."""
-from contextlib import contextmanager
 import sqlite3
+from contextlib import contextmanager
 
 
 class StorageConflict(RuntimeError):

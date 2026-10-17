@@ -3,11 +3,11 @@
 Corrections refresh the human answer and window order, not the model output.
 Retracting the active review releases that binding for a subsequent fresh review.
 """
-from collections import OrderedDict, Counter
-from .rolling_metrics import recent_reviewed_metrics
+from collections import Counter, OrderedDict
+
 from .calibration_metrics import reliability_curve
 from .output_comparison import compare_outputs
-
+from .rolling_metrics import recent_reviewed_metrics
 
 REVIEW_BINDING_EVENT_KINDS = ('prediction', 'displayed-prediction-reused', 'human-feedback')
 

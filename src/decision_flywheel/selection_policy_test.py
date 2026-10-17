@@ -49,6 +49,7 @@ def test_guardrails_apply_even_to_provisional_recency_acceptance():
 
 def test_cli_exposes_primary_secondary_positive_class_and_safety_bounds():
     import argparse
+
     from .selection_policy import add_selection_arguments, selection_from_arguments
     parser = argparse.ArgumentParser()
     add_selection_arguments(parser)

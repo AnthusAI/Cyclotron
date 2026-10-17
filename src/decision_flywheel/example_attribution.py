@@ -3,9 +3,10 @@
 Effects are conditional on the other examples and their fixed display order.
 Supporting-question confidence is not ground truth for those questions.
 """
+import json
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
-import json
+
 from .classification_metrics import classification_metrics
 from .flywheel import _hash, _json, track_answer_dependencies
 

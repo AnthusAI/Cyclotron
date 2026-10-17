@@ -5,9 +5,9 @@ All tests use temporary stores and offline model/ASGI boundaries.
 """
 import argparse
 import importlib.util
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 
 def main():

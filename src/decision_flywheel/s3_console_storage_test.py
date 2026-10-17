@@ -1,7 +1,9 @@
 """Cloud catalog/definitions/run commands use one S3 authority, never SQLite."""
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
+
 import pytest
+
 from .s3_journal_test import journal
 from .workspace_catalog_test import configuration
 
@@ -95,7 +97,9 @@ def test_command_bound_mutations_are_fenced_with_claim_and_run_boundary():
 
 
 def test_priming_accepts_exact_human_rationale_atomically_into_s3_catalog_without_sqlite(monkeypatch):
-    import base64,json
+    import base64
+    import json
+
     from .priming import PrimingService
     def forbidden(*args,**kwargs):raise AssertionError('cloud priming opened SQLite')
     monkeypatch.setattr('sqlite3.connect',forbidden)
@@ -145,6 +149,7 @@ CONTRACTS={
 def test_existing_public_domain_contract_runs_on_s3_without_sqlite(module_name,test_name,tmp_path,monkeypatch):
     import importlib
     from hashlib import sha256
+
     from .s3_journal_test import ConditionalS3
     module=importlib.import_module('decision_flywheel.'+module_name);client=ConditionalS3()
     def factory(path):return store(journal(client,name=sha256(str(path).encode()).hexdigest()))
@@ -168,7 +173,9 @@ def test_unknown_command_claim_receipt_cannot_become_execution_permission_by_rer
 
 
 def test_lost_file_draft_creation_receipt_can_retry_same_raw_input_without_implicit_acceptance():
-    import base64,json
+    import base64
+    import json
+
     from .priming import PrimingService
     from .s3_journal import JournalUncertain
     s=store();seed(s);s.save_item_list('examples','Examples');service=PrimingService(s)
@@ -184,10 +191,17 @@ def test_lost_file_draft_creation_receipt_can_retry_same_raw_input_without_impli
 
 def test_actual_account_scoped_graphql_switches_s3_workspaces_and_denies_access_without_sqlite(monkeypatch):
     from fastapi.testclient import TestClient
-    from .web_api import create_app
-    from .prospectus_accounts import AccountWorkspaceAccess,AccountsClient,AccountWorkspace,VerifiedAccountSession,AccountAccessDenied
-    from .s3_journal_test import ConditionalS3
+
     from .batch_storage import StorageScope
+    from .prospectus_accounts import (
+        AccountAccessDenied,
+        AccountsClient,
+        AccountWorkspace,
+        AccountWorkspaceAccess,
+        VerifiedAccountSession,
+    )
+    from .s3_journal_test import ConditionalS3
+    from .web_api import create_app
     client=ConditionalS3();account_a,account_b=str(uuid4()),str(uuid4());person=str(uuid4())
     def forbidden(*args,**kwargs):raise AssertionError('hosted GraphQL opened SQLite or local directory')
     monkeypatch.setattr('sqlite3.connect',forbidden);monkeypatch.setattr('pathlib.Path.mkdir',forbidden)
@@ -221,6 +235,7 @@ def test_actual_account_scoped_graphql_switches_s3_workspaces_and_denies_access_
 
 def test_authorized_job_and_original_actor_commit_together_and_cannot_be_rebound():
     from dataclasses import replace
+
     from .queued_account_authorization_test import fixture
     boundary,_,_,actor,_=fixture()
     s=store();run=s.create_run('Live','live',{})
@@ -243,8 +258,9 @@ def test_legacy_jobs_have_no_invented_actor_and_cannot_enter_authorized_worker()
 
 
 def test_legacy_command_cannot_acquire_a_new_actor_through_an_idempotency_retry():
-    from .queued_account_authorization_test import fixture
     import asyncio
+
+    from .queued_account_authorization_test import fixture
     boundary,_,_,actor,_=fixture();s=store();run=s.create_run('Live','live',{})
     actor=asyncio.run(boundary.capture(boundary.sessions.get_ref(actor.session_ref),actor.account_id,run['id'],actor.binding))
     s.command(run['id'],'legacy','prepare',{})

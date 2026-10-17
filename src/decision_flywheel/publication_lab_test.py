@@ -8,9 +8,15 @@ import pytest
 from .batched_classification import BatchedAnswers
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .models import DecisionResult
-from .publication_lab import (PublicationActor, PublicationBinding, PublicationLab,
-                              EmbeddedPublicationClient, HTTPPublicationClient,
-                              PublicationError, create_publication_app)
+from .publication_lab import (
+    EmbeddedPublicationClient,
+    HTTPPublicationClient,
+    PublicationActor,
+    PublicationBinding,
+    PublicationError,
+    PublicationLab,
+    create_publication_app,
+)
 
 DEFINITION = CyclotronDefinition('common-reference-lab', (
     ClassifierSpec('intel', ('accept', 'reject'), 'Accept for Threat Intelligence?'),

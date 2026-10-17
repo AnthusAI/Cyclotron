@@ -1,10 +1,10 @@
 """A cyclotron store moves between workers, has one writer, and survives a crash between its two stores."""
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import textwrap
+from pathlib import Path
 
 import pytest
 

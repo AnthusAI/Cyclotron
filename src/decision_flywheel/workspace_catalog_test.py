@@ -1,5 +1,6 @@
 """Catalog specifications: source-neutral items and immutable classifier revisions."""
 import pytest
+
 from .web_store import WebStore
 
 

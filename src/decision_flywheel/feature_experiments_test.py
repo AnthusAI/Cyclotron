@@ -1,7 +1,7 @@
 """Feature groups are explicit, bounded experiments, not a powerset search."""
 import pytest
-from .feature_experiments import plan_feature_groups
 
+from .feature_experiments import plan_feature_groups
 
 OLD = {'name': 'topic', 'instructions': 'Old topic?', 'labels': ['yes', 'no']}
 OTHER = {'name': 'other', 'instructions': 'Other?', 'labels': ['yes', 'no']}

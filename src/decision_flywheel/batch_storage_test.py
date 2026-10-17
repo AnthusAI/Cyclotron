@@ -1,7 +1,7 @@
 """Shared-request storage specifications, synthetic and cloud-free."""
-from concurrent.futures import ThreadPoolExecutor
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from uuid import uuid4
 

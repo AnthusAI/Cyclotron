@@ -2,17 +2,18 @@
 import argparse
 import asyncio
 import json
+import os
 import sqlite3
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
+
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
+from decision_flywheel.api_event_sink import GraphQLTraceSink
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.flywheel import DecisionFlywheel, FittedClassifier, _restore
 from decision_flywheel.optimizer_agent import OptimizerAgent
-from decision_flywheel.api_event_sink import GraphQLTraceSink
-import os
-from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
+from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.run_comparison import compare_endpoints, compare_head
 from decision_flywheel.trace_artifact import read_trace
 

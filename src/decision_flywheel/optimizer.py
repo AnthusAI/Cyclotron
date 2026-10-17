@@ -4,15 +4,14 @@ from __future__ import annotations
 import hashlib
 import json
 import unicodedata
-from collections.abc import MutableMapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 from .budget import ContextBudget, build_context_plan
 from .context import ContextPolicy, PolicyMetadata
 from .events import EventSink, FlywheelEvent
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
-
 
 Objective = Literal["accuracy", "macro-f1", "brier"]
 MissingProbabilityPolicy = Literal["accuracy", "incomplete"]

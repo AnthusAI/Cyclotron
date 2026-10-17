@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from .laya import LayaAdapter
 from ..models import DecisionTask, Item, LabeledItem
+from .laya import LayaAdapter
 
 
 class FakeLayaModel:

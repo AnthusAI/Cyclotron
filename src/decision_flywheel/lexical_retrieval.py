@@ -13,8 +13,8 @@ import math
 import re
 import unicodedata
 from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Mapping, Sequence
 
 from .context import _text
 from .models import DecisionTask, Item, LabeledItem
@@ -96,7 +96,7 @@ class LexicalRetriever:
         stop = STOPWORDS[self.stopwords]
         return [token for token in TOKENIZERS[self.tokenizer](text) if token not in stop]
 
-    def index(self, task: DecisionTask, pool: Sequence[LabeledItem]) -> "LexicalIndex":
+    def index(self, task: DecisionTask, pool: Sequence[LabeledItem]) -> LexicalIndex:
         return LexicalIndex(self, task, validated_pool(task, pool))
 
 

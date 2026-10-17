@@ -4,14 +4,16 @@ The only domain plugin boundary is HTTP. Endpoints are supplied by the host,
 never by untrusted items. A transformer returns a complete candidate, never a
 classification. Drafts are excluded from operational catalog membership.
 """
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
+
 import httpx
-from .priming_files import checked_schema, read_rows, template, validate_rows, MAX_BYTES
+
 from .catalog_storage import encoded
+from .priming_files import MAX_BYTES, checked_schema, read_rows, template, validate_rows
 
 
 def fingerprint(value):return hashlib.sha256(encoded(value).encode()).hexdigest()
@@ -67,7 +69,7 @@ class PrimingService:
 
     def examples(self,list_id,refs):
         """Accepted, explicitly labeled examples for a new embedded SDK store."""
-        from .priming_context import catalog_priming,decode_priming
+        from .priming_context import catalog_priming, decode_priming
         contract=self.contract(list_id,refs)
         return decode_priming(catalog_priming(self.store,list_id,contract['classifiers'],set(),storage=self.storage))
 

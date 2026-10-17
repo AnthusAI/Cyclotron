@@ -2,13 +2,13 @@
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
-from .account_sessions_test import ISSUER, CLIENT
-from .account_sessions import OAuthConfig
 from .account_routes import HostedAccounts
+from .account_sessions import OAuthConfig
+from .account_sessions_test import CLIENT, ISSUER
 from .prospectus_accounts import AccountAccessDenied, AccountsClient, AccountWorkspace, ProspectusUnavailable
 from .web_api import create_app
 from .web_store import WebStore
@@ -49,9 +49,9 @@ def hosted(tmp_path, identity, request):
     gateway = HostedAccounts(config, AccountsClient(central), lambda identifier: AccountWorkspace(state['stores'][identifier]),
         verifier=verifier, token_client=httpx.AsyncClient(transport=httpx.MockTransport(exchange)))
     if request.param == 's3':
+        from .s3_journal_test import ConditionalS3, journal
         from .s3_sessions import S3OAuthSessions
         from .s3_sessions_test import Cipher
-        from .s3_journal_test import ConditionalS3, journal
         s3 = ConditionalS3()
         state["s3"] = s3
         gateway.sessions = S3OAuthSessions(verifier,
@@ -191,8 +191,9 @@ def test_another_tabs_selection_cannot_redirect_an_older_workspaces_writes(hoste
 
 
 def google_mode(gateway, state):
-    from .google_identity import GoogleIdentityClient
     import time
+
+    from .google_identity import GoogleIdentityClient
     challenge_id = str(uuid4())
     person = {'id': str(uuid4()), 'createdAt': '2026-10-14T00:00:00Z'}
     calls = []

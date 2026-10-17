@@ -4,15 +4,17 @@ Every intentional optimizer call is a new authorized generation, including equal
 prompts. A pending/uncertain generation cannot be repeated by another call. No
 new provider client, credential, background retry or thread is introduced.
 """
-from dataclasses import asdict
-import inspect
 import asyncio
-from uuid import uuid4
+import inspect
+from dataclasses import asdict
 from hashlib import sha256
-from .s3_batch_storage import S3BatchStorage
+from uuid import uuid4
+
 from .batch_storage import BatchInProgress
-from .journal import encode,decode
+from .journal import decode, encode
 from .optimizer_agent import OptimizerReply
+from .s3_batch_storage import S3BatchStorage
+
 
 class S3OptimizerTransport:
     def __init__(self,transport,storage,*,identity,max_calls,max_request_bytes,max_reply_bytes,redact=(),execution_guard=None):

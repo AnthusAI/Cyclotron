@@ -3,12 +3,12 @@
 One explicitly bounded run ledger; immutable transaction values retain exact text
 and all charged history. No SQLite connection or DynamoDB authority is used.
 """
-from copy import deepcopy
 import json
-from .batch_storage import (BatchRecord,BatchConflict,BatchInProgress,BatchUncertain,
-                            validate_request,validate_snapshot)
+from copy import deepcopy
+
+from .batch_storage import BatchConflict, BatchInProgress, BatchRecord, BatchUncertain, validate_request, validate_snapshot
 from .decision_cache import CacheMiss
-from .journal import Journal,JournalConflict,JournalUncertain
+from .journal import Journal, JournalConflict, JournalUncertain
 
 EMPTY={'schema':'cyclotron-shared-batches/v1','batches':[],'attempts':[],'history':[]}
 

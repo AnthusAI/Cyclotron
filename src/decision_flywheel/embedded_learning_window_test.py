@@ -4,8 +4,8 @@ The provider here is a fake that waits on a gate the spec opens, so each spec
 can act while a learning pass is inside a provider call.
 """
 import asyncio
-from dataclasses import replace
 import threading
+from dataclasses import replace
 
 import pytest
 

@@ -3,14 +3,20 @@
 The native host composes cache, learning and forward-evaluation repositories on
 this connection. No cloud constructor or distributed authority is selected here.
 """
-from collections.abc import Iterable
 import json
-from pathlib import Path
 import sqlite3
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Protocol
 
-from .active_labels import (ACTIVE_LABELS_STATE_KEY, FEEDBACK_EVENT_KIND, dump_active_labels, load_active_labels,
-    rebuild_active_labels, record_feedback_event)
+from .active_labels import (
+    ACTIVE_LABELS_STATE_KEY,
+    FEEDBACK_EVENT_KIND,
+    dump_active_labels,
+    load_active_labels,
+    rebuild_active_labels,
+    record_feedback_event,
+)
 
 
 class RuntimeStateStorage(Protocol):

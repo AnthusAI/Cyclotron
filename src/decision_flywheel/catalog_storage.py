@@ -1,8 +1,9 @@
 """Source-neutral, revisioned classifier and item-list catalog for the web store."""
-from datetime import datetime, timezone
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Protocol
+
 from .models import DecisionTask
 
 

@@ -6,9 +6,10 @@ row ordinals preserve existing item order, command dispatch and latest-job rules
 from hashlib import sha256
 
 from .catalog_archive import CatalogArchive
-from .catalog_snapshot import COLUMNS as CATALOG_COLUMNS, KEYS as CATALOG_KEYS
-from .catalog_snapshot import budgets, decode, encode, validate as validate_catalog
-
+from .catalog_snapshot import COLUMNS as CATALOG_COLUMNS
+from .catalog_snapshot import KEYS as CATALOG_KEYS
+from .catalog_snapshot import budgets, decode, encode
+from .catalog_snapshot import validate as validate_catalog
 
 SCHEMA='cyclotron-console/v2'
 TABLES={**CATALOG_COLUMNS,

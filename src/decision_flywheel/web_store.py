@@ -1,11 +1,12 @@
 """Native console composition over shared catalog, definition and run APIs."""
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-import sqlite3
-from .workspace_catalog import WorkspaceCatalog
-from .cyclotrons import Cyclotrons
+
 from .cyclotron_definitions import CyclotronDefinitions
-from .run_storage import SQLiteRunStorage, _UNSET
+from .cyclotrons import Cyclotrons
+from .run_storage import _UNSET, SQLiteRunStorage
+from .workspace_catalog import WorkspaceCatalog
 
 
 class WebStore(WorkspaceCatalog,Cyclotrons,CyclotronDefinitions):

@@ -1,14 +1,21 @@
 """An application can render what a cyclotron is doing from one validated snapshot."""
 import asyncio
-from dataclasses import asdict
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
 from .classifier_config import ClassifierConfig
-from .cyclotron_status import (FULL_REVIEW, SCHEMA_PATH, ReviewRate, ReviewRateOverride, load_schema,
-                               status_from_events, status_from_flywheel)
+from .cyclotron_status import (
+    FULL_REVIEW,
+    SCHEMA_PATH,
+    ReviewRate,
+    ReviewRateOverride,
+    load_schema,
+    status_from_events,
+    status_from_flywheel,
+)
 from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel
 from .flywheel_test import DEV, TASK, TRAIN, FakeModel, agent

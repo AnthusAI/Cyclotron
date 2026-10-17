@@ -8,6 +8,7 @@ from .flywheel import DecisionFlywheel, development_assignment
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .selection_policy import SelectionPolicy as _SP
+
 _BRIER = _SP('balanced_brier')
 
 
@@ -276,6 +277,7 @@ def test_restart_restores_the_head_and_does_not_repeat_cached_feature_calls(tmp_
 def test_a_legacy_fit_is_retained_in_history_but_not_served_with_invented_response_provenance(tmp_path):
     import json
     from dataclasses import asdict
+
     from .candidate_fitting import fit_candidate
     from .flywheel import _restore
     config = ClassifierConfig(TASK, rubric='Practical research', example_ids=('t0', 't1'),
@@ -395,6 +397,7 @@ def test_reverting_a_correction_can_restore_the_original_valid_fit_without_paid_
 def test_a_reader_holding_the_store_open_does_not_fail_or_stall_a_write(tmp_path):
     import sqlite3
     import time
+
     from . import flywheel
     path = tmp_path / "wheel.sqlite"
     wheel = DecisionFlywheel(path, ClassifierConfig(TASK), FakeModel(), agent([]))

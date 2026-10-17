@@ -1,21 +1,24 @@
 """The source-neutral session predicts before learning independent human labels."""
 import asyncio
+
 import pytest
-from .workspace_session import WorkspaceSession
-from .web_store import WebStore
+
 from .batched_classification import BatchedAnswers
+from .flywheel_test import agent
 from .models import DecisionResult
 from .observability import StepFailed
-from .flywheel_test import agent
+from .web_store import WebStore
+from .workspace_session import WorkspaceSession
 
 
 @pytest.mark.parametrize('change', ['sibling_context', 'training_response', 'legacy_fit'])
 def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_prediction(tmp_path, change):
     from dataclasses import replace
-    from .workspace_session import freeze_configuration
+
     from .candidate_fitting import fit_candidate
-    from .models import Item,LabeledItem
-    from .flywheel_test import TRAIN,DEV
+    from .flywheel_test import DEV, TRAIN
+    from .models import Item, LabeledItem
+    from .workspace_session import freeze_configuration
     store=WebStore(tmp_path/'workspace.sqlite')
     for cid in ('a','b'):
         store.save_classifier(cid,cid,{'question':'Choose','classes':[{'label':'include'},{'label':'exclude'}]})
@@ -50,6 +53,7 @@ def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_pr
         else:
             import json
             from dataclasses import asdict
+
             from .flywheel import _restore
             legacy = asdict(wheel.active)
             legacy.pop('answer_dependencies')
@@ -69,9 +73,9 @@ def test_a_changed_feature_source_refits_in_the_joint_context_before_the_next_pr
 
 
 def test_cyclotron_undo_reopens_the_last_item_and_reuses_its_displayed_prediction(tmp_path):
-    from .workspace_session import freeze_configuration
-    from .flywheel import FittedClassifier, development_assignment
     from .classifier_config import ClassifierConfig
+    from .flywheel import FittedClassifier, development_assignment
+    from .workspace_session import freeze_configuration
     store = WebStore(tmp_path / 'workspace.sqlite')
     for cid in ('a', 'b'):
         store.save_classifier(cid, cid, {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
@@ -139,9 +143,9 @@ def test_cyclotron_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
 
 
 def test_corrected_cyclotron_feedback_invalidates_learning_and_survives_restart_without_paid_calls(tmp_path):
-    from .workspace_session import freeze_configuration
-    from .flywheel import FittedClassifier, development_assignment
     from .classifier_config import ClassifierConfig
+    from .flywheel import FittedClassifier, development_assignment
+    from .workspace_session import freeze_configuration
     store = WebStore(tmp_path / 'workspace.sqlite')
     for cid in ('a', 'b'):
         store.save_classifier(cid, cid, {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
@@ -245,10 +249,11 @@ def test_corrected_cyclotron_feedback_invalidates_learning_and_survives_restart_
 
 def test_protected_feedback_corrections_remain_protected_and_never_enter_learning_context(tmp_path):
     from types import SimpleNamespace
-    from .workspace_session import freeze_configuration
-    from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
-    from .flywheel import FittedClassifier
+
     from .classifier_config import ClassifierConfig
+    from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
+    from .flywheel import FittedClassifier
+    from .workspace_session import freeze_configuration
     store = WebStore(tmp_path / 'workspace.sqlite')
     store.save_classifier('a', 'A', {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
     store.save_item_list('items', 'Items')
@@ -281,8 +286,9 @@ def test_protected_feedback_corrections_remain_protected_and_never_enter_learnin
 
 def test_protected_audit_votes_do_not_trigger_learning_or_enter_optimizer_context(tmp_path):
     from types import SimpleNamespace
+
+    from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
     from .workspace_session import freeze_configuration
-    from .feedback import FeedbackItem,LABEL_SOURCE_VETTED
     store=WebStore(tmp_path/'db')
     store.save_classifier('a','A',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('items','Items')
@@ -305,9 +311,9 @@ def test_protected_audit_votes_do_not_trigger_learning_or_enter_optimizer_contex
 
 
 def test_restart_finishes_a_cycle_with_already_durable_feedback_without_repeating_prediction_or_optimization(tmp_path):
-    from .workspace_session import freeze_configuration
-    from .feedback import FeedbackItem,LABEL_SOURCE_VETTED
+    from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
     from .models import Item
+    from .workspace_session import freeze_configuration
     store=WebStore(tmp_path/'web.sqlite')
     store.save_classifier('a','A',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     store.save_item_list('list','List')
@@ -467,6 +473,7 @@ def test_application_traces_and_predictions_name_pinned_definition_revisions_aft
 
 def test_optimizer_traces_belong_only_to_the_classifier_that_requested_them(tmp_path,monkeypatch):
     from types import SimpleNamespace
+
     from .workspace_session import freeze_configuration
     store=WebStore(tmp_path/'web.sqlite')
     for key in ('a','b'):store.save_classifier(key,key,{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})

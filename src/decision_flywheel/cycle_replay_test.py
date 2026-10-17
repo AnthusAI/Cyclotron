@@ -1,13 +1,15 @@
 import asyncio
 import json
+
 import pytest
+
+from .classifier_config import ClassifierConfig
 from .cycle_replay import run_cycle_replay
+from .flywheel import DecisionFlywheel
+from .flywheel_test import TASK, FakeModel
+from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .replay import plan_replay
 from .replay_test import rows
-from .flywheel_test import TASK, FakeModel
-from .flywheel import DecisionFlywheel
-from .classifier_config import ClassifierConfig
-from .optimizer_agent import OptimizerAgent, OptimizerReply
 
 
 def test_each_vote_is_predicted_before_reveal_and_triggered_work_stays_inside_that_item_cycle(tmp_path):
@@ -68,7 +70,7 @@ def test_protected_replay_votes_do_not_trigger_fixed_learning_cadences(tmp_path)
 
 @pytest.mark.slow
 def test_operational_replay_records_latest_two_hundred_paired_calibration_samples(tmp_path):
-    from .models import Item,LabeledItem
+    from .models import Item, LabeledItem
     ordered=tuple(LabeledItem(Item(f'paper-{i}',{'text':f'Unique abstract {i}'}),TASK.labels[i%2]) for i in range(205))
     wheel=DecisionFlywheel(tmp_path/'window.sqlite',ClassifierConfig(TASK),FakeModel(),OptimizerAgent(lambda _:OptimizerReply('{}','fake')),max_requests=300)
     plan=plan_replay(TASK,ordered,seed='window',batch_size=1000)
@@ -202,6 +204,7 @@ def test_revealed_feedback_trigger_resumes_without_duplicate_attempt(tmp_path):
 
 def test_a_replay_can_start_on_a_runtime_that_only_declared_its_selection_policy(tmp_path):
     import pytest
+
     from .selection_policy import SelectionPolicy
     optimizer=OptimizerAgent(lambda _:OptimizerReply('{"rubric":"Guidance"}','fake'))
     wheel=DecisionFlywheel(tmp_path/'goal.sqlite',ClassifierConfig(TASK),FakeModel(),optimizer,max_requests=2000,

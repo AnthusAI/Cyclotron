@@ -3,13 +3,11 @@ import json
 
 import pytest
 
-from .artifacts import (ArtifactValidationError, create_artifact,
-                        load_artifact, load_compatible_fixed_incumbent)
+from .artifacts import ArtifactValidationError, create_artifact, load_artifact, load_compatible_fixed_incumbent
 from .budget import ContextBudget
 from .context import PerLabelLexicalRetrieval, PrototypeBalanced, RandomBalanced
 from .models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from .optimizer import TrialSpec, search_context_policies
-
 
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only target.")
 POOL = [

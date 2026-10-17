@@ -28,9 +28,10 @@ def test_an_added_classifier_starts_a_fresh_version_with_historical_items_first(
 
 def test_changing_one_classifier_changes_the_complete_cyclotron_checkpoint(tmp_path):
     from types import SimpleNamespace
+
     from .classifier_config import ClassifierConfig
-    from .models import DecisionTask
     from .flywheel import FittedClassifier
+    from .models import DecisionTask
     store=WebStore(tmp_path/'web.sqlite')
     row=store.save_classifier('a','A',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     run=store.create_run('A','live',{'classifiers':[row]})
@@ -54,9 +55,10 @@ def test_a_cyclotron_cannot_be_extended_while_a_submission_is_in_progress(tmp_pa
 
 def test_protected_comparison_preflight_reads_pinned_checkpoints_without_writing_or_models(tmp_path):
     from types import SimpleNamespace
+
     from .classifier_config import ClassifierConfig
-    from .models import DecisionTask
     from .flywheel import FittedClassifier
+    from .models import DecisionTask
     store=WebStore(tmp_path/'db')
     classifier=store.save_classifier('topic','Topic',{'question':'Choose','classes':[{'label':'yes'},{'label':'no'}]})
     config={'classifiers':[classifier],'evaluation_protocol':'protected-feedback-v1'}
@@ -74,9 +76,10 @@ def test_protected_comparison_preflight_reads_pinned_checkpoints_without_writing
 
 def _run_with_supporting_question(tmp_path):
     from types import SimpleNamespace
+
     from .classifier_config import ClassifierConfig
-    from .models import DecisionTask
     from .flywheel import FittedClassifier
+    from .models import DecisionTask
     from .workspace_session import freeze_configuration
     store=WebStore(tmp_path/'web.sqlite')
     store.save_classifier('relevant','Relevant',{'question':'Include?','classes':[{'label':'include','role':'positive'},{'label':'exclude','role':'negative'}]})
@@ -111,10 +114,10 @@ def test_a_supporting_question_becomes_an_unlabeled_output_of_a_new_version(tmp_
 
 
 def test_the_new_version_starts_with_the_question_rubric_and_the_source_features_unchanged(tmp_path):
-    from .workspace_session import WorkspaceSession
     from .batched_classification import BatchedAnswers
-    from .models import DecisionResult
     from .flywheel_test import agent
+    from .models import DecisionResult
+    from .workspace_session import WorkspaceSession
     store,parent,_=_run_with_supporting_question(tmp_path)
     version=store.promote_supporting_question(parent['id'],'relevant','names_vendor',classifier_id='vendor',
                                               classifier_name='Names a vendor',name='Newsroom')

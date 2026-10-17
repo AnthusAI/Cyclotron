@@ -6,12 +6,13 @@ Invoke the returned guard after execution ownership and again before every side
 effect. It grants console operations only, never publication/provider grants.
 """
 import asyncio
-from dataclasses import dataclass, field, asdict
 import hashlib
 import hmac
 import re
-from .prospectus_accounts import AccountAccessDenied
+from dataclasses import asdict, dataclass, field
+
 from .journal import encode, uuid
+from .prospectus_accounts import AccountAccessDenied
 
 
 @dataclass(frozen=True)

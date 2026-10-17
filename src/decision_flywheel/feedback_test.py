@@ -4,16 +4,15 @@ from .feedback import (
     LABEL_SOURCE_FINAL,
     LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED,
     LABEL_SOURCE_UNRESOLVED,
+    Cyclotron,
     Decision,
     Element,
     Feature,
     FeatureCoverage,
     FeedbackItem,
     ScoreResult,
-    Cyclotron,
 )
 from .models import DecisionTask
-
 
 TASK = DecisionTask("review", ("approve", "reject"), "Choose an outcome.")
 HASH = "a" * 64

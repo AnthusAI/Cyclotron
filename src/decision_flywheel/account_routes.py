@@ -1,17 +1,16 @@
 """Same-origin OAuth and accounts BFF for the existing Python console."""
 import asyncio
-from contextlib import asynccontextmanager
 import hmac
 import json
+from contextlib import asynccontextmanager
 from urllib.parse import urlencode
 
-from fastapi import HTTPException, Request, Query
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 import httpx
+from fastapi import HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .account_sessions import CognitoTokenVerifier, OAuthSessions, SessionRejected
-from .prospectus_accounts import (AccountAccessDenied, AccountWorkspaceAccess,
-    ProspectusUnavailable, VerifiedAccountSession)
+from .prospectus_accounts import AccountAccessDenied, AccountWorkspaceAccess, ProspectusUnavailable, VerifiedAccountSession
 
 
 class HostedAccounts:

@@ -3,7 +3,9 @@ import base64
 import csv
 import io
 import json
+
 import pytest
+
 from .priming_files import read_rows, template, validate_rows
 
 SCHEMA={'type':'object','properties':{'title':{'type':'string','minLength':1},'abstract':{'type':'string','minLength':1},'count':{'type':'integer'}},'required':['title','abstract'],'additionalProperties':False}

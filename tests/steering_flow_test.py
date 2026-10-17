@@ -2,11 +2,10 @@
 import json
 
 from decision_flywheel.context import RandomBalanced
-from decision_flywheel.feedback import Element, Feature, FeedbackItem, LABEL_SOURCE_FINAL, Cyclotron
+from decision_flywheel.feedback import LABEL_SOURCE_FINAL, Cyclotron, Element, Feature, FeedbackItem
 from decision_flywheel.head import HeadRow, fit_learned_head
 from decision_flywheel.models import DecisionTask
 from decision_flywheel.steering import ScriptedMockManager, run_steering_round
-
 
 HASH = "a" * 64
 

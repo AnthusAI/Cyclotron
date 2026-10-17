@@ -1,7 +1,8 @@
 """Review source transactions preserve what was shown and which vote is active."""
 import pytest
+
 from .review_storage import SQLiteReviewStorage
-from .reviewer_store import ReviewStore,Article
+from .reviewer_store import Article, ReviewStore
 
 
 def article(identifier='one'):

@@ -1,15 +1,17 @@
 """Complete native runtime migration retains evidence, order and lazy schemas."""
-from copy import deepcopy
 import sqlite3
+from copy import deepcopy
+
 import pytest
-from .runtime_snapshot import export_runtime, restore_runtime, RuntimeArchive
+
+from .batch_storage import StorageScope
 from .classifier_config import ClassifierConfig
-from .flywheel import DecisionFlywheel
-from .flywheel_test import TASK,FakeModel,agent
 from .feature_bank import FeatureBank
+from .flywheel import DecisionFlywheel
+from .flywheel_test import TASK, FakeModel, agent
 from .hypothesis_ledger import HypothesisLedger
 from .learning_storage import ARTIFACTS
-from .batch_storage import StorageScope
+from .runtime_snapshot import RuntimeArchive, export_runtime, restore_runtime
 from .storage_payloads import FilePayloads, S3Payloads
 from .storage_payloads_test import S3
 
@@ -163,10 +165,11 @@ def test_runtime_export_is_one_snapshot_while_another_process_updates_two_domain
 
 def test_native_runtime_store_restore_reopens_the_real_cache_without_provider_replay(tmp_path):
     import asyncio
-    from datetime import datetime,timezone
-    from .runtime_storage import SQLiteRuntimeStateStorage
-    from .flywheel_test import TRAIN,DEV
+    from datetime import datetime, timezone
+
     from .decision_cache import CacheOptions
+    from .flywheel_test import DEV, TRAIN
+    from .runtime_storage import SQLiteRuntimeStateStorage
     config=ClassifierConfig(TASK)
     now=datetime(2026,1,1,tzinfo=timezone.utc)
     source=DecisionFlywheel(tmp_path/'source.sqlite',config,FakeModel(),agent([]))

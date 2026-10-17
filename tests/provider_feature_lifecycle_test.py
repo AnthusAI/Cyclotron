@@ -10,7 +10,7 @@ from decision_flywheel.adapters.kev import KevAdapter
 from decision_flywheel.adapters.laya import LayaAdapter
 from decision_flywheel.classifier_config import ClassifierConfig
 from decision_flywheel.flywheel import DecisionFlywheel
-from decision_flywheel.flywheel_test import TASK, TRAIN, DEV
+from decision_flywheel.flywheel_test import DEV, TASK, TRAIN
 from decision_flywheel.models import Item
 from decision_flywheel.optimizer_agent import OptimizerAgent, OptimizerReply
 from decision_flywheel.staged_optimization import optimize_stage

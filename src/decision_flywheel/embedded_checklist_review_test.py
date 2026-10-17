@@ -3,7 +3,8 @@ import pytest
 
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .embedded_cyclotron_test import RELEVANT, Model, item, run
-from .embedded_review_rate_test import FAST, Model as ConfidentModel
+from .embedded_review_rate_test import FAST
+from .embedded_review_rate_test import Model as ConfidentModel
 from .flywheel_test import agent
 
 TIMELY = ClassifierSpec("timely", ("include", "exclude"), "Is this timely?", positive_label="include")

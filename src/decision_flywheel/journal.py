@@ -6,13 +6,15 @@ commit and exists, so any store that offers a conditional write can back them.
 Uncertain writes always raise; observing a claim later never grants dispatch
 permission.
 """
-from dataclasses import dataclass
 import json
 import re
-from typing import Protocol,runtime_checkable
-from uuid import uuid4,UUID
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+from uuid import UUID, uuid4
+
+from .storage_errors import StorageConflict, StorageLimit, StorageUncertain
 from .storage_payloads import PayloadRef
-from .storage_errors import StorageConflict,StorageUncertain,StorageLimit
+
 
 class JournalConflict(StorageConflict): pass
 class JournalUnavailable(RuntimeError): pass

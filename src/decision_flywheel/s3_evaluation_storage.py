@@ -1,8 +1,9 @@
 """Canonical S3 evaluation clock/trace and explicit whole-plan ownership."""
 from copy import deepcopy
-from .journal import Journal,commit_with_contract,uuid,encode,decode
-from .storage_errors import StorageConflict
+
+from .journal import Journal, commit_with_contract, decode, encode, uuid
 from .s3_runtime_storage import RuntimeOwnershipError
+from .storage_errors import StorageConflict
 
 
 def empty():return {'schema':'cyclotron-s3-evaluation/v1','owner':None,'fence':0,'clocks':[],'trace':[],'watermark':0}

@@ -1,12 +1,15 @@
 """Example usefulness must be measured by controlled context changes."""
 import asyncio
+
 import pytest
-from .classifier_config import ClassifierConfig, ClassifiedAnswers
-from .models import DecisionResult, Item, LabeledItem
+
+from .classifier_config import ClassifiedAnswers, ClassifierConfig
+from .example_attribution import measure_example_swaps, plan_swaps
 from .flywheel import DecisionFlywheel
-from .flywheel_test import TASK, TRAIN, DEV, agent
-from .example_attribution import plan_swaps, measure_example_swaps
+from .flywheel_test import DEV, TASK, TRAIN, agent
+from .models import DecisionResult, Item, LabeledItem
 from .selection_policy import SelectionPolicy as _SP
+
 _BRIER = _SP('balanced_brier')
 
 
@@ -21,8 +24,8 @@ class SignalModel:
 
 
 def test_shared_example_measurements_resume_without_a_new_budget_or_a_spurious_context_change(tmp_path):
-    from .shared_decisions import SharedDecisions
     from .batched_classification import BatchedAnswers
+    from .shared_decisions import SharedDecisions
     class Model(SignalModel):
         async def classify_many(self, configs, target, training, **kwargs):
             answers = {}

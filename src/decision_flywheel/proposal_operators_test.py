@@ -10,8 +10,7 @@ from .control_scheduler import ControlScheduler
 from .cycle_replay import run_cycle_replay
 from .flywheel import DecisionFlywheel
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import (DEFAULT_SHADOW_MIX, IdeaScreeningConfig, OPERATOR_CAPS, incumbent_id,
-                             parse_proposal_mix)
+from .idea_screening import DEFAULT_SHADOW_MIX, OPERATOR_CAPS, IdeaScreeningConfig, incumbent_id, parse_proposal_mix
 from .models import DecisionResult, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply, parse_operator_proposals
 from .proposal_operators import ask_round, nearest_novelty, target_stories, text_novelty

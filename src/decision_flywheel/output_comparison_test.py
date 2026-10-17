@@ -1,4 +1,5 @@
 import pytest
+
 from .output_comparison import compare_outputs
 
 

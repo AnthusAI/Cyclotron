@@ -19,8 +19,9 @@ retrieval:
 """
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, fields
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from .embedding_retrieval import EmbeddingRetriever, HashingEmbedder, InMemoryVectorStore, OpenAIEmbedder, VectorCache
 from .lexical_retrieval import LexicalRetriever
@@ -105,7 +106,7 @@ class RetrievalConfig:
         self.lexical.retriever()  # validates the lexical knobs
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any] | None) -> "RetrievalConfig":
+    def from_mapping(cls, data: Mapping[str, Any] | None) -> RetrievalConfig:
         """Parse a ``retrieval:`` block; unknown keys are rejected at every level."""
         data = dict(data or {})
         nested = {"lexical": LexicalOptions, "embedding": EmbeddingOptions, "store": StoreOptions}

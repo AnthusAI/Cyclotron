@@ -1,14 +1,15 @@
 """Microsoft-Decision-1 on Microsoft Foundry, through the System One wire shape Jev and Kev share."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from hashlib import sha256
 import json
 import os
-from numbers import Real
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass
+from hashlib import sha256
+from numbers import Real
+from typing import Any, Protocol
 from urllib.parse import urlsplit
-from typing import Any, Mapping, Protocol
 
 from ..models import DecisionResult, ModelCapabilities
 
@@ -80,7 +81,7 @@ class MicrosoftDecisionAdapter:
     def from_environment(cls, *, environ: Mapping[str, str] | None = None, transport=None, deployment: str | None = None,
                          revision: str | None = None, timeout_seconds: float = 60.0,
                          rubric_placement: str = "criteria", rubric_label: str | None = None
-                         ) -> "MicrosoftDecisionAdapter":
+                         ) -> MicrosoftDecisionAdapter:
         environ = os.environ if environ is None else environ
         needed = _ENVIRONMENT[:2] if deployment else _ENVIRONMENT
         for name in needed:
@@ -131,7 +132,7 @@ class MicrosoftDecisionAdapter:
     async def classify_many(self, configurations, target, training, *, now=None, event_sink=None,
                             max_request_bytes=32000, share_supporting_questions=False):
         """One request; each classifier keeps its own context and answer group."""
-        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
+        from ..batched_classification import BatchedAnswers, answer_groups, batch_request, question_bindings
         request, identities = batch_request(configurations, target, training, now=now,
                                             max_request_bytes=max_request_bytes,
                                             share_questions=share_supporting_questions)

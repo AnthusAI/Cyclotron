@@ -6,7 +6,6 @@ import pytest
 from .models import DecisionTask, Item, LabeledItem
 from .optimizer_agent import DisabledOptimizer, FeedbackBriefing, OptimizerAgent, OptimizerReply
 
-
 TASK = DecisionTask("include", ("include", "exclude"), "Should this item be included?")
 
 
@@ -200,6 +199,7 @@ def test_a_failed_async_call_is_recorded_like_a_failed_sync_call():
 
 def test_optimizers_without_async_methods_are_called_synchronously():
     import asyncio
+
     from .optimizer_agent import ask_optimizer
 
     class Legacy:

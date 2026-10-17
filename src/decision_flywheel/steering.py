@@ -3,26 +3,26 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from numbers import Real
-from typing import Callable, Mapping, Protocol, Sequence
+from typing import Protocol
 
 from .context import ContextPolicy
-from .dynamic_elements import (CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE,
-                               optimizer_dynamic_element_instruction)
-from .feedback import Element, Cyclotron
+from .dynamic_elements import CURRENT_DATETIME_ELEMENT, CURRENT_DATETIME_QUESTION_TYPE, optimizer_dynamic_element_instruction
+from .feedback import Cyclotron, Element
 from .head import LearnedHead
 from .run_ledger import FeatureActivity, FeatureDefinition
 
 
 class Analyst(Protocol):
-    def __call__(self, briefing: "AnalystBriefing") -> Mapping[str, object]: ...
+    def __call__(self, briefing: AnalystBriefing) -> Mapping[str, object]: ...
 
 
 class AnalystFactory(Protocol):
     """Build an analyst only after it has received the installed fake client."""
 
-    def __call__(self, manager: "ScriptedMockManager") -> Analyst: ...
+    def __call__(self, manager: ScriptedMockManager) -> Analyst: ...
 
 
 class ScriptedMockManager:

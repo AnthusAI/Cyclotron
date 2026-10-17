@@ -2,9 +2,8 @@ import asyncio
 
 import pytest
 
-from .kev import KevAdapter, KevConfiguration
 from ..models import DecisionTask, Item, LabeledItem
-
+from .kev import KevAdapter, KevConfiguration
 
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only the target.")
 TARGET = Item("target", {"text": "target text"})

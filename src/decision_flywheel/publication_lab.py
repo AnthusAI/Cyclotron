@@ -4,10 +4,10 @@ This module owns no physical storage adapter, credentials, cloud configuration o
 lifecycle. Hosts verify actors and supply account-scoped engines and bindings.
 Local HTTP tests are not an authorization to host the SQLite engine remotely.
 """
-from dataclasses import dataclass, replace
 import hashlib
 import inspect
 import json
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from urllib.parse import quote
 
@@ -354,9 +354,10 @@ def create_publication_app(lab, *, authorize):
 
 def _create_publication_http(*, lab=None, authorize=None, resolve_access=None, require_execution_guard=False):
     import inspect
+    from urllib.parse import urlsplit
+
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
-    from urllib.parse import urlsplit
     app = FastAPI()
 
     @app.post('/publications/{publication:path}/operations')

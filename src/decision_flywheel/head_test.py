@@ -6,7 +6,6 @@ from .feedback import LABEL_SOURCE_FINAL, LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED,
 from .head import HeadRow, OutOfFoldPredictions, calibrate, fit_learned_head
 from .models import DecisionTask
 
-
 TASK = DecisionTask("review", ("approve", "reject"), "Choose one.")
 HASH = "a" * 64
 

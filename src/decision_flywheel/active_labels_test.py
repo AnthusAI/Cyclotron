@@ -8,7 +8,7 @@ from .active_labels import ACTIVE_LABELS_STATE_KEY
 from .classifier_config import ClassifierConfig
 from .feedback import FeedbackItem
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, agent
+from .flywheel_test import TASK, FakeModel, agent
 from .learning_loop import feedback_partitions, feedback_propensities, labeled_partitions
 from .s3_journal_test import journal
 from .s3_runtime_storage import S3RuntimeStores

@@ -1,13 +1,13 @@
 """Separately scheduled controls with persistent discovery and measurement."""
 import json
 from dataclasses import asdict
-from datetime import datetime,timezone
+from datetime import datetime, timezone
 
+from .candidate_fitting import fit_candidate
+from .control_scheduler import ControlScheduler
 from .flywheel import _hash, _json, track_answer_dependencies
 from .optimizer_agent import FeedbackBriefing, ask_optimizer
 from .question_measurement import measure_questions
-from .candidate_fitting import fit_candidate
-from .control_scheduler import ControlScheduler
 
 
 def provisional_primary_allowance(policy, allowance):
@@ -148,9 +148,9 @@ async def optimize_stage(wheel, stage, training, development, *, protected, prop
     screen_lineage = (json.loads(saved[1]).get("screen_lineage") if saved and saved[1] and proposal is not None
                       and use_screening else None)
     if proposal is None and use_screening:
+        from .hypothesis_ledger import HypothesisLedger
         from .idea_screening import optimizer_context, reserve_member
         from .proposal_operators import ask_round
-        from .hypothesis_ledger import HypothesisLedger
         config = wheel.idea_screening
         own = [idea for idea in ControlScheduler(wheel).ideas() if idea["control"] == "rubric"]
         salt = f"{wheel.initial.task.fingerprint}:idea-screening"

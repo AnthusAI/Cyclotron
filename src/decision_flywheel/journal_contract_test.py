@@ -1,8 +1,10 @@
 """Journal behaviour that every back end must share, plus the S3 read cost."""
 import pytest
+
 from .batch_storage import StorageScope
 from .journal import Journal, JournalConflict, JournalLimit, JournalUnavailable
-from .s3_journal_test import ConditionalS3, journal as s3_journal
+from .s3_journal_test import ConditionalS3
+from .s3_journal_test import journal as s3_journal
 from .storage_contract_backends import local_file_journal
 
 

@@ -5,8 +5,10 @@ provider call or caller callback runs inside the CAS primitive. The journal
 logic itself lives in journal.py; this module supplies the S3 conditional
 reads and writes.
 """
-from .journal import (CanonicalJournal,JournalConflict,JournalUnavailable,JournalUncertain,encode,decode,uuid as uuid)
+from .journal import CanonicalJournal, JournalConflict, JournalUnavailable, JournalUncertain, decode, encode
+from .journal import uuid as uuid
 from .storage_payloads import S3Payloads
+
 
 class S3Journal(CanonicalJournal):
     def __init__(self,payloads,domain,name,*,max_bytes,max_commits,create_only_initialization=False):

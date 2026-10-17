@@ -2,8 +2,10 @@
 import argparse
 import asyncio
 import json
-from pathlib import Path
 import sqlite3
+from pathlib import Path
+
+from measure_arxiv_questions import backup
 
 from decision_flywheel import ClassifierConfig, DecisionFlywheel, OptimizerAgent
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
@@ -11,7 +13,6 @@ from decision_flywheel.classifier_training import train_classifier
 from decision_flywheel.reviewer_core import reviewer_task
 from decision_flywheel.reviewer_flywheel import ReviewerFlywheel
 from decision_flywheel.reviewer_store import ReviewStore
-from measure_arxiv_questions import backup
 
 
 def forbidden(_):

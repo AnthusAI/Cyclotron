@@ -5,8 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from .embedding_retrieval import (EmbeddingRetriever, HashingEmbedder, InMemoryVectorStore, OpenAIEmbedder,
-                                  VectorCache, text_sha256)
+from .embedding_retrieval import (
+    EmbeddingRetriever,
+    HashingEmbedder,
+    InMemoryVectorStore,
+    OpenAIEmbedder,
+    VectorCache,
+    text_sha256,
+)
 from .models import DecisionTask, Item, LabeledItem
 from .retrieval import PerLabelRetrieval, VectorRow
 

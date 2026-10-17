@@ -9,7 +9,6 @@ from numbers import Real
 
 from .models import DecisionTask, normalize_label
 
-
 # Primus-compatible provenance names.  Only explicit reviewed sources may teach
 # a future learned head; imported model output is never silently promoted.
 LABEL_SOURCE_VETTED = "vetted_feedback"

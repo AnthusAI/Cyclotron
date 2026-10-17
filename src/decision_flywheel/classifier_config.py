@@ -1,11 +1,11 @@
 """Versioned decision request structure; optimizer edits never contain weights."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 
 from .context import _normalized_text
 from .models import DecisionResult, DecisionTask, Item, LabeledItem

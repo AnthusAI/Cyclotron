@@ -82,7 +82,8 @@ def test_default_reviewer_guidance_excludes_protected_comments_as_well_as_protec
 
 def test_default_live_reviewer_prompt_contains_training_metadata_errors_and_explanations_only(tmp_path):
     import json
-    from .optimizer_agent import OptimizerAgent,OptimizerReply
+
+    from .optimizer_agent import OptimizerAgent, OptimizerReply
     store=ReviewStore(tmp_path/'reviews.sqlite',study_seed='fixture')
     articles=tuple(Article(str(i),f'Paper {i}',f'Unique abstract {i}','2026-10-06',('cs.AI',),
         authors=f'Author {i}',journal_ref=f'Journal {i}') for i in range(40))
@@ -119,6 +120,7 @@ def test_default_live_reviewer_prompt_contains_training_metadata_errors_and_expl
 
 def test_explicit_protected_guidance_is_visible_and_invalidates_independent_evaluation(tmp_path):
     import json
+
     from .optimizer_agent import OptimizerAgent, OptimizerReply
     store = ReviewStore(tmp_path / "reviews.sqlite", study_seed="fixture")
     articles = tuple(Article(str(i), f"Paper {i}", f"Unique text {i}", "2026-10-05", ("cs.AI",)) for i in range(40))

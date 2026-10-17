@@ -7,14 +7,15 @@ per-classifier wheels, and asynchronous decision providers.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from .application_runtime import ApplicationSession, RuntimeCommand
+from .decision_provider_settings import normalize_decision_settings
 from .selection_policy import SelectionPolicy
 from .workspace_session import WorkspaceSession, freeze_configuration
-from .decision_provider_settings import normalize_decision_settings
 
 
 @dataclass

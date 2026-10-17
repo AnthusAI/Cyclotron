@@ -6,13 +6,13 @@ reasoning. Payloads contain private human feedback: persist locally, not in git.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import nullcontext
-from dataclasses import dataclass, field
 import asyncio
 import hashlib
 import inspect
 import json
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
+from dataclasses import dataclass, field
 from time import perf_counter
 
 from .context import _normalized_text

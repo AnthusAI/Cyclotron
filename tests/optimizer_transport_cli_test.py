@@ -9,8 +9,8 @@ import pytest
 @pytest.mark.parametrize('name',['replay_arxiv_feedback','verify_arxiv_flywheel','experiment_arxiv_controls',
                                 'measure_arxiv_questions','trace_arxiv_optimizer','reviewer'])
 def test_live_entry_point_help_exposes_optimizer_transport_without_constructing_a_client(name, monkeypatch, capsys):
-    from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
     from decision_flywheel.adapters.litellm_optimizer import LiteLLMOptimizer
+    from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
     def forbidden(**kwargs):
         raise AssertionError('help must not construct a live client')
     monkeypatch.setattr(OpenAIOptimizer,'from_environment',forbidden)
@@ -33,10 +33,10 @@ def test_live_entry_point_help_exposes_optimizer_transport_without_constructing_
 
 
 def test_replay_preflight_freezes_the_transport_without_mutating_labels_or_constructing_providers(tmp_path, monkeypatch):
-    from decision_flywheel.reviewer_store import Article, ReviewStore
     from decision_flywheel.adapters.jev import JevAdapter
     from decision_flywheel.adapters.litellm_optimizer import LiteLLMOptimizer
     from decision_flywheel.adapters.openai_optimizer import OpenAIOptimizer
+    from decision_flywheel.reviewer_store import Article, ReviewStore
     def forbidden(**kwargs):raise AssertionError('preflight must not construct a provider')
     for cls in (JevAdapter,LiteLLMOptimizer,OpenAIOptimizer):
         monkeypatch.setattr(cls,'from_environment',forbidden)

@@ -1,8 +1,8 @@
 """Catalog storage parity, transaction composition and lossless migration."""
-from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
 import copy
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -140,8 +140,8 @@ def test_export_is_one_read_snapshot_while_items_and_feedback_change(tmp_path,mo
 
 
 def test_restore_rolls_back_prior_rows_if_native_insertion_fails(tmp_path,monkeypatch):
-    from contextlib import contextmanager
     import sqlite3
+    from contextlib import contextmanager
     snapshot=populated(tmp_path/'source.sqlite').catalog_storage.export()
     destination=WebStore(tmp_path/'destination.sqlite')
     connect=destination.connect
@@ -180,7 +180,9 @@ def test_prediction_history_remains_immutable_and_keeps_existing_run_names(tmp_p
 
 
 def test_default_catalog_can_save_and_restart_without_aws_or_network(tmp_path):
-    import os,subprocess,sys
+    import os
+    import subprocess
+    import sys
     script='''
 import builtins, socket, sys
 original=builtins.__import__

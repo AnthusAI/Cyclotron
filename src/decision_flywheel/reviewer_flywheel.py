@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import asyncio
 
+from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel, development_assignment
 from .reviewer_core import reviewer_item, reviewer_labeled_items
 from .reviewer_predictor import ReviewerPrediction
 from .reviewer_store import ReviewStore
-from .feedback import FeedbackItem, LABEL_SOURCE_VETTED
 
 
 class ReviewerFlywheel:

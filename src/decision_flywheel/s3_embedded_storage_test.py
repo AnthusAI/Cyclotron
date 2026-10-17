@@ -1,16 +1,18 @@
 """Embedded SDK can compose S3 root/shared/runtime stores without local files."""
 import asyncio
 from uuid import uuid4
+
 import pytest
+
+from .embedded_cyclotron_test import DEFINITION, Model, item
 from .s3_journal_test import journal
-from .embedded_cyclotron_test import DEFINITION,Model,item
 
 
 def test_actual_embedded_decide_review_reopen_and_priming_use_no_sqlite_or_files(tmp_path,monkeypatch):
-    from .s3_embedded_storage import S3CyclotronStores
-    from .s3_journal_test import ConditionalS3
     from .embedded_cyclotron import Cyclotron
     from .priming_context_test import seed
+    from .s3_embedded_storage import S3CyclotronStores
+    from .s3_journal_test import ConditionalS3
     client=ConditionalS3()
     def stores():return S3CyclotronStores(journal(client,name='embedded-root'),max_records=10000,
         journal_for=lambda domain,name:journal(client,name=domain+'-'+name))
@@ -50,9 +52,9 @@ def test_root_transaction_keeps_cursor_and_derived_evidence_atomic_on_size_failu
 
 
 def test_cloud_guard_denial_precedes_all_operation_s3_access_and_budget_is_absolute(monkeypatch):
+    from .embedded_cyclotron import Cyclotron
     from .s3_embedded_storage import S3CyclotronStores
     from .s3_journal_test import ConditionalS3
-    from .embedded_cyclotron import Cyclotron
     client=ConditionalS3()
     def stores():return S3CyclotronStores(journal(client,name='root'),max_records=10000,
         journal_for=lambda domain,name:journal(client,name=domain+'-'+name))
@@ -93,10 +95,11 @@ def test_uncertain_root_commit_prevents_duplicate_derivation_until_a_fresh_owner
 
 def test_owned_snapshot_refresh_detects_operator_fence_change_before_operation_state_or_provider():
     from copy import deepcopy
+
+    from .embedded_cyclotron import Cyclotron
     from .s3_embedded_storage import S3CyclotronStores
     from .s3_journal_test import ConditionalS3
     from .s3_runtime_storage import RuntimeOwnershipError
-    from .embedded_cyclotron import Cyclotron
     client=ConditionalS3();composition=S3CyclotronStores(journal(client,name='root'),max_records=1000,
         journal_for=lambda domain,name:journal(client,name=domain+'-'+name))
     model=Model();engine=Cyclotron.open(None,DEFINITION,model,storage=composition)

@@ -23,9 +23,10 @@ from __future__ import annotations
 import hashlib
 import json
 import warnings
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Protocol
 
 from .budget import ContextBudget, build_context_plan
 from .context import FixedExampleList, input_hash

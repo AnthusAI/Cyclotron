@@ -1,6 +1,6 @@
 import pytest
 
-from .trace_server import viewer_response, bind_address
+from .trace_server import bind_address, viewer_response
 
 
 def test_the_viewer_defaults_to_loopback_and_allows_an_explicit_local_network_address():

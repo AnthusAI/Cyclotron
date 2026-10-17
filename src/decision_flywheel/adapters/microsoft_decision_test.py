@@ -3,9 +3,9 @@ import json
 
 import pytest
 
-from .microsoft_decision import MicrosoftDecisionAdapter, MicrosoftDecisionConfiguration
 from ..classifier_config import ClassifierConfig
 from ..models import DecisionTask, Item, LabeledItem
+from .microsoft_decision import MicrosoftDecisionAdapter, MicrosoftDecisionConfiguration
 
 TASK = DecisionTask("topic", ("yes", "no"), "Classify only the target.")
 TARGET = Item("target", {"text": "target text"})

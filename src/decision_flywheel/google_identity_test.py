@@ -2,9 +2,9 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
-from botocore.credentials import Credentials
 import httpx
 import pytest
+from botocore.credentials import Credentials
 
 from .google_identity import GoogleIdentityClient
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, SigV4Transport

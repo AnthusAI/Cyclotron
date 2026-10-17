@@ -24,8 +24,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Mapping, Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from .context import PolicyMetadata, _normalized_text, _validated_candidate_pools, input_hash
 from .models import DecisionTask, Item, LabeledItem

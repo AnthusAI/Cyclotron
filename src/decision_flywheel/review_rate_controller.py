@@ -7,16 +7,29 @@ to it and keeps the public methods.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import replace
-from typing import Any, Callable, Mapping
+from datetime import datetime, timedelta
+from typing import Any
 
 from .cyclotron_status import FULL_REVIEW, ReviewRate, ReviewRateOverride, status_from_flywheel
 from .embedded_records import ClassifierSpec, CyclotronDefinition, Review, ReviewSelection, _json
-from .review_program import (Override, ProgramState, ReviewProgram, check_window, combine_evidence, current_rate,
-                             expected_item_reviews, next_step, raise_for_version, raise_for_versions, select,
-                             state_name, window_evidence)
+from .review_program import (
+    Override,
+    ProgramState,
+    ReviewProgram,
+    check_window,
+    combine_evidence,
+    current_rate,
+    expected_item_reviews,
+    next_step,
+    raise_for_version,
+    raise_for_versions,
+    select,
+    state_name,
+    window_evidence,
+)
 
 FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
 PROGRAM_STATE_KEY = "review_program_state"

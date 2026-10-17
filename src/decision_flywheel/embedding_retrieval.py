@@ -17,9 +17,10 @@ import json
 import math
 import re
 import unicodedata
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from .context import _text, input_hash
 from .models import DecisionTask, Item, LabeledItem
@@ -86,7 +87,7 @@ class OpenAIEmbedder:
         return f"openai:{self.model}:{self.dimensions}"
 
     @classmethod
-    def from_environment(cls, *, model: str = "text-embedding-3-small", dimensions: int = 512) -> "OpenAIEmbedder":
+    def from_environment(cls, *, model: str = "text-embedding-3-small", dimensions: int = 512) -> OpenAIEmbedder:
         try:
             from openai import OpenAI
         except ImportError as error:  # pragma: no cover - optional dependency
@@ -197,7 +198,7 @@ class EmbeddingRetriever:
             raise ValueError("batch_size must be a positive integer")
 
     @classmethod
-    def from_embedder(cls, embedder: Any, **options: Any) -> "EmbeddingRetriever":
+    def from_embedder(cls, embedder: Any, **options: Any) -> EmbeddingRetriever:
         """Use an embedder object with an ``identity`` (``HashingEmbedder``, ``OpenAIEmbedder``)."""
         return cls(embed=embedder, embedder_identity=embedder.identity, **options)
 
@@ -237,7 +238,7 @@ class EmbeddingRetriever:
         """Embed targets in batches up front (otherwise each target is embedded on first use)."""
         self.vectors([_text(item, task) for item in items])
 
-    def index(self, task: DecisionTask, pool: Sequence[LabeledItem]) -> "EmbeddingIndex":
+    def index(self, task: DecisionTask, pool: Sequence[LabeledItem]) -> EmbeddingIndex:
         rows = validated_pool(task, pool)
         vectors = self.vectors([_text(row.item, task) for row in rows])
         dimensions = {len(vector) for vector in vectors}

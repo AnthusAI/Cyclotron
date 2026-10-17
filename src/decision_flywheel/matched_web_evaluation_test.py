@@ -1,12 +1,14 @@
 """Comparison jobs are API-owned, approved, and independent of learning runs."""
 from types import SimpleNamespace
+
 import pytest
+
+from .classifier_config import ClassifierConfig
+from .flywheel import FittedClassifier
+from .matched_run_evaluation_test import Model
+from .models import DecisionTask
 from .web_store import WebStore
 from .web_worker import WebWorker
-from .matched_run_evaluation_test import Model
-from .flywheel import FittedClassifier
-from .classifier_config import ClassifierConfig
-from .models import DecisionTask
 
 
 def runs(store):
@@ -44,6 +46,7 @@ def test_creation_retry_recovers_the_same_frozen_job_after_restart_and_source_ch
 
 def test_duplicate_graphql_approval_returns_one_comparison_and_one_pending_job(tmp_path):
     from fastapi.testclient import TestClient
+
     from .web_api import create_app
     store=WebStore(tmp_path/'db');before,after=runs(store)
     plan=store.matched_run_preflight(before['id'],after['id'])
@@ -84,8 +87,9 @@ def test_comparison_job_freezes_sources_and_records_results_without_opening_lear
         model=Model();models.append(model);return model,None
     def sink(run_id):
         from fastapi.testclient import TestClient
-        from .web_api import create_app
+
         from .api_event_sink import GraphQLTraceSink
+        from .web_api import create_app
         client=TestClient(create_app(store))
         return GraphQLTraceSink('offline',run_id,transport=lambda body:client.post('/graphql',json=body).json())
     worker=WebWorker(store,tmp_path/'cache',allow_live=True,model_factory=factory,sink_factory=sink)
@@ -103,6 +107,7 @@ def test_comparison_job_freezes_sources_and_records_results_without_opening_lear
     assert store.all_events(evaluation['id'])[-1]['payload']['kind']=='matched-evaluation-completed'
     assert store.run(evaluation['id'])['mode']=='recorded'
     from fastapi.testclient import TestClient
+
     from .web_api import create_app
     client=TestClient(create_app(store))
     record=job['result']['records'][0]
@@ -163,8 +168,9 @@ def test_failed_comparison_resume_is_explicit_idempotent_and_keeps_frozen_source
 
 def test_graphql_resume_after_worker_restart_reuses_complete_calls_and_requires_failed_retry_authority(tmp_path):
     from fastapi.testclient import TestClient
-    from .web_api import create_app
+
     from .api_event_sink import GraphQLTraceSink
+    from .web_api import create_app
     store=WebStore(tmp_path/'db');before,after=runs(store)
     original_sources={row['id']:store.all_events(row['id']) for row in (before,after)}
     class FailsSecond(Model):

@@ -1,8 +1,10 @@
 import asyncio
+
 import pytest
-from .flywheel_test import FakeModel, TASK, agent
-from .flywheel import DecisionFlywheel
+
 from .classifier_config import ClassifierConfig
+from .flywheel import DecisionFlywheel
+from .flywheel_test import TASK, FakeModel, agent
 from .models import Item
 
 
@@ -79,7 +81,7 @@ def test_a_waiting_review_survives_a_later_completed_optimization_cycle(tmp_path
 
 
 def test_events_name_the_fit_proof_that_only_the_fit_records_in_full(tmp_path):
-    from .flywheel_test import TRAIN, DEV
+    from .flywheel_test import DEV, TRAIN
     wheel=DecisionFlywheel(tmp_path/'runtime.sqlite3', ClassifierConfig(TASK), FakeModel(), agent([]), max_requests=30)
     asyncio.run(wheel.improve(TRAIN, DEV, protected=(), propensities={r.item.id: 1.0 for r in TRAIN}))
     asyncio.run(wheel.step('classifier', TRAIN, DEV, protected=(), propensities={r.item.id: 1.0 for r in TRAIN}))

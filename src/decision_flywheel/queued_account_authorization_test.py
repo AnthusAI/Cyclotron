@@ -1,9 +1,11 @@
 """Queued work retains its actor/account and reauthorizes at every boundary."""
+import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
-import asyncio
+
 import pytest
+
 from .account_sessions import SessionRejected
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
 from .s3_sessions_test import sessions
@@ -64,9 +66,9 @@ def test_queued_snapshot_contains_no_credentials_and_cannot_be_retargeted_to_ano
 @pytest.mark.parametrize('change',['logout','revocation','person','outage','binding'])
 def test_actual_s3_sdk_rechecks_after_waiting_for_execution_ownership_before_state_or_provider(change,monkeypatch):
     from .embedded_cyclotron import Cyclotron
-    from .embedded_cyclotron_test import DEFINITION,Model,item
+    from .embedded_cyclotron_test import DEFINITION, Model, item
     from .s3_embedded_storage import S3CyclotronStores
-    from .s3_journal_test import ConditionalS3,journal
+    from .s3_journal_test import ConditionalS3, journal
     boundary,sessions,cookie,actor,state=fixture()
     client=ConditionalS3();model=Model()
     composition=S3CyclotronStores(journal(client,name='guard-root'),max_records=1000,

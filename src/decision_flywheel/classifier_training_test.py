@@ -2,11 +2,12 @@
 import asyncio
 
 from .classifier_config import ClassifierConfig
-from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV
-from .optimizer_agent import OptimizerAgent
 from .classifier_training import train_classifier
+from .flywheel import DecisionFlywheel
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel
+from .optimizer_agent import OptimizerAgent
 from .selection_policy import SelectionPolicy as _SP
+
 _BRIER = _SP('balanced_brier')
 
 
@@ -15,9 +16,9 @@ def forbidden(_):
 
 
 def test_a_winning_group_is_served_with_both_confidence_features_and_restored_after_restart(tmp_path):
+    from .classifier_config import ClassifiedAnswers
     from .feature_bank import FeatureBank
     from .models import DecisionResult, Item, LabeledItem
-    from .classifier_config import ClassifiedAnswers
     from .selection_policy import SelectionPolicy
 
     class TwoFactorModel(FakeModel):
@@ -71,6 +72,7 @@ def test_a_winning_group_is_served_with_both_confidence_features_and_restored_af
 
 def test_group_trials_pause_at_the_request_ceiling_and_require_explicit_restart_authorization(tmp_path):
     import pytest
+
     from .feature_bank import FeatureBank
     from .observability import RequestBudgetExhausted
     model = FakeModel()
@@ -143,6 +145,7 @@ def test_explicit_groups_and_their_ablations_freeze_context_and_resume_without_r
 
 def test_an_over_budget_group_plan_is_rejected_before_any_provider_or_optimizer_call(tmp_path):
     import pytest
+
     from .feature_bank import FeatureBank
     model = FakeModel()
     wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', ClassifierConfig(TASK), model, OptimizerAgent(forbidden))
@@ -161,8 +164,9 @@ def test_an_over_budget_group_plan_is_rejected_before_any_provider_or_optimizer_
 
 def test_a_retained_wording_revision_is_evaluated_deployed_and_restored_with_new_features(tmp_path):
     from dataclasses import replace
+
     from .feature_bank import FeatureBank
-    from .models import DecisionTask, DecisionResult
+    from .models import DecisionResult, DecisionTask
     class RevisionModel(FakeModel):
         async def classify(self, config, target, training, **kwargs):
             batch = await super().classify(config, target, training, **kwargs)
@@ -197,8 +201,8 @@ def test_a_retained_wording_revision_is_evaluated_deployed_and_restored_with_new
 
 
 def test_training_can_evaluate_removing_one_question_without_discarding_the_retained_idea(tmp_path):
-    from .models import DecisionTask
     from .feature_bank import FeatureBank
+    from .models import DecisionTask
     question = DecisionTask('practical', ('yes','no'), 'Practical?')
     config = ClassifierConfig(TASK, tasks=(question,))
     wheel = DecisionFlywheel(tmp_path/'wheel.sqlite', config, FakeModel(), OptimizerAgent(forbidden))
@@ -214,7 +218,8 @@ def test_training_can_evaluate_removing_one_question_without_discarding_the_reta
 
 def test_a_winning_question_removal_rebuilds_the_head_and_changes_the_next_request(tmp_path):
     from dataclasses import replace
-    from .models import DecisionTask, DecisionResult
+
+    from .models import DecisionResult, DecisionTask
     requests = []
     class HarmfulFeatureModel(FakeModel):
         async def classify(self, config, target, training, **kwargs):

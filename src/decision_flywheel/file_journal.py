@@ -5,12 +5,14 @@ file, so cooperating processes on one machine get the same conditional-write
 semantics the S3 journal gets from the service.
 """
 import fcntl
-from hashlib import sha256
 import os
-from pathlib import Path
 import tempfile
-from .journal import CanonicalJournal,JournalConflict,JournalUnavailable,JournalUncertain,encode,decode
+from hashlib import sha256
+from pathlib import Path
+
+from .journal import CanonicalJournal, JournalConflict, JournalUnavailable, JournalUncertain, decode, encode
 from .storage_payloads import FilePayloads
+
 
 class LocalFileJournal(CanonicalJournal):
     def __init__(self,payloads,domain,name,*,max_bytes,max_commits,create_only_initialization=False):

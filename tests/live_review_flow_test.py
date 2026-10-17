@@ -1,6 +1,6 @@
 """Complete article UI -> optimizer -> Jev -> fitted head, using only fake SDKs."""
-from io import StringIO
 import json
+from io import StringIO
 from types import SimpleNamespace
 
 from rich.console import Console

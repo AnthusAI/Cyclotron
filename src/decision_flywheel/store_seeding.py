@@ -8,7 +8,8 @@ are recorded as additions and applied to each output's example list once.
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from .classifier_config import ClassifierConfig
 from .embedded_records import ClassifierSpec, CyclotronDefinition, _json

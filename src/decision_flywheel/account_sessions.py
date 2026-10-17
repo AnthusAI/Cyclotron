@@ -1,12 +1,12 @@
 """Pinned Cognito verification and bounded, opaque server-side OAuth sessions."""
 import base64
-from dataclasses import dataclass, field
-from hashlib import sha256
 import hmac
 import re
 import secrets
-from threading import RLock
 import time
+from dataclasses import dataclass, field
+from hashlib import sha256
+from threading import RLock
 from urllib.parse import urlsplit
 
 import jwt

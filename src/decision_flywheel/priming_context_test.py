@@ -1,12 +1,14 @@
 """Curated examples prime context without pretending to be operational decisions."""
 import asyncio
+
 import pytest
-from .embedded_cyclotron import Cyclotron
-from .embedded_cyclotron_test import DEFINITION,Model,item
-from .models import Item,LabeledItem
-from .flywheel_test import agent
+
 from .cyclotron_status import load_schema
 from .cyclotron_status_test import validate
+from .embedded_cyclotron import Cyclotron
+from .embedded_cyclotron_test import DEFINITION, Model, item
+from .flywheel_test import agent
+from .models import Item, LabeledItem
 
 
 def seed():return {'relevant':[LabeledItem(Item('synthetic-prime',{'text':'Synthetic reviewed reference'}),'include','trusted',{'human_feedback':'Synthetic explicit reason'})]}
@@ -52,10 +54,12 @@ def test_priming_accepts_no_rationale_but_requires_known_label_and_keeps_global_
 
 
 def test_workspace_run_pins_accepted_examples_separately_and_refuses_operational_overlap(tmp_path):
-    import base64,json
-    from .web_store import WebStore
-    from .priming import PrimingService
+    import base64
+    import json
+
     from .cyclotron_runtime import CyclotronRuntime
+    from .priming import PrimingService
+    from .web_store import WebStore
     from .workspace_session import WorkspaceSession
     store=WebStore(tmp_path/'web.db')
     store.save_classifier('relevant','Relevance',{'question':'Include?','classes':[{'label':'include'},{'label':'exclude'}]})
@@ -133,6 +137,7 @@ def test_adding_primed_examples_is_idempotent_and_refuses_changed_content_or_dec
 
 def test_reopening_with_the_original_priming_keeps_added_examples_and_does_not_reapply_a_swapped_one(tmp_path):
     from dataclasses import replace
+
     from .flywheel import FittedClassifier
     with Cyclotron.open(tmp_path/'engine',DEFINITION,Model(),agent([]),priming_examples=seed()) as engine:
         asyncio.run(engine.add_priming_examples(accepted('added','Added','exclude','Reason'),added_by='editor-1'))

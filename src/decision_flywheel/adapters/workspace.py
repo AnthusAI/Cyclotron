@@ -6,13 +6,13 @@ def decision_adapter(config):
     settings=normalize_decision_settings(config)
     provider,model=settings['decisions_provider'],settings['decisions_model']
     if provider=='jev':
-        from .jev import JevAdapter,JevConfiguration
+        from .jev import JevAdapter, JevConfiguration
         return JevAdapter.from_environment(configuration=JevConfiguration(model=model))
     if provider=='kev':
-        from .kev import KevAdapter,KevConfiguration
+        from .kev import KevAdapter, KevConfiguration
         return KevAdapter(configuration=KevConfiguration(model=model))
     if provider=='laya':
-        from .laya import LayaAdapter,LayaConfiguration
+        from .laya import LayaAdapter, LayaConfiguration
         return LayaAdapter.from_default(configuration=LayaConfiguration(model_id=model,
             revision=config.get('decisions_revision')))
     raise ValueError('unsupported decision provider; inject an application model factory for custom providers')

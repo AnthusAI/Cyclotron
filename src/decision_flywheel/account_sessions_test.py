@@ -1,15 +1,14 @@
 """RSA-signed synthetic OAuth specifications; no provider or credential access."""
 import base64
-from hashlib import sha256
 import json
 import time
+from hashlib import sha256
 
-from cryptography.hazmat.primitives.asymmetric import rsa
 import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .account_sessions import CognitoTokenVerifier, OAuthConfig, OAuthSessions, SessionRejected
-
 
 ISSUER = 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_synthetic'
 CLIENT = 'synthetic-console-client'

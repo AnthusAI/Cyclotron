@@ -3,8 +3,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from .review_program import (Override, ProgramState, ReviewProgram, check_window, current_rate, next_step,
-                             raise_for_version, select, state_name, window_evidence)
+from .review_program import (
+    Override,
+    ProgramState,
+    ReviewProgram,
+    check_window,
+    current_rate,
+    next_step,
+    raise_for_version,
+    select,
+    state_name,
+    window_evidence,
+)
 
 PROGRAM = ReviewProgram(window=100, min_window_labels=20)
 NOW = datetime(2026, 10, 9, tzinfo=timezone.utc)

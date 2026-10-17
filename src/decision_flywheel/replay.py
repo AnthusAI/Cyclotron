@@ -1,7 +1,7 @@
 """Replay fixed historical feedback through the reusable flywheel, not another learner."""
-from dataclasses import dataclass
 import hashlib
 import math
+from dataclasses import dataclass
 
 from .classification_metrics import classification_metrics
 from .context import _normalized_text

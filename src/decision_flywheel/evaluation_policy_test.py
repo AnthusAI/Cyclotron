@@ -9,8 +9,9 @@ def test_recent_rubric_preference_decays_with_the_scarcest_class_not_the_majorit
 
 
 def test_evaluation_caps_samples_and_reserves_slots_for_scarce_classes():
-    from .flywheel_test import DEV, TASK
     from dataclasses import replace
+
+    from .flywheel_test import DEV, TASK
     rows = tuple(replace(DEV[i % len(DEV)], item=replace(DEV[i % len(DEV)].item, id=str(i))) for i in range(500))
     selected = EvaluationPolicy().select(rows, TASK.labels)
     assert len(selected) == 200
@@ -22,9 +23,10 @@ def test_scoring_never_sends_more_than_the_configured_sample_limit(tmp_path):
     import asyncio
     from dataclasses import replace
     from datetime import datetime, timezone
-    from .flywheel_test import DEV, TASK, FakeModel
-    from .flywheel import DecisionFlywheel
+
     from .classifier_config import ClassifierConfig
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import DEV, TASK, FakeModel
     from .optimizer_agent import OptimizerAgent
     rows = tuple(replace(DEV[i % len(DEV)], item=replace(DEV[i % len(DEV)].item, id=str(i))) for i in range(500))
     wheel = DecisionFlywheel(tmp_path / 'wheel.sqlite', ClassifierConfig(TASK), FakeModel(),

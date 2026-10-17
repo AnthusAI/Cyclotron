@@ -1,12 +1,13 @@
 """Context and numeric head are built together without external services."""
 import asyncio
 from dataclasses import replace
+
 import pytest
 
+from .candidate_fitting import fit_candidate
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV, agent
-from .candidate_fitting import fit_candidate
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel, agent
 
 
 def test_a_changed_model_context_invalidates_only_the_head_and_preserves_the_rubric(tmp_path):

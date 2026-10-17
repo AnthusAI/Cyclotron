@@ -1,11 +1,12 @@
 """A cyclotron application runtime owns the shared-request session details."""
 import asyncio
+
 import pytest
 
 from .batched_classification import BatchedAnswers
+from .cyclotron_runtime import CyclotronRuntime
 from .flywheel_test import agent
 from .models import DecisionResult
-from .cyclotron_runtime import CyclotronRuntime
 from .web_store import WebStore
 from .web_worker import WebWorker
 from .workspace_session import freeze_configuration
@@ -116,8 +117,9 @@ def test_objective_replays_freeze_the_same_votes_and_comments_but_different_effe
 
 def test_worker_applies_cyclotron_corrections_without_another_model_request(tmp_path):
     from fastapi.testclient import TestClient
-    from .web_api import create_app
+
     from .api_event_sink import GraphQLTraceSink
+    from .web_api import create_app
     store = WebStore(tmp_path / 'workspace.sqlite3')
     store.save_classifier('topic', 'Topic', {'question': 'Choose', 'classes': [{'label': 'yes'}, {'label': 'no'}]})
     store.save_item_list('papers', 'Papers')

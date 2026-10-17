@@ -1,7 +1,8 @@
 """Paired raw-decision and final-head metrics from recorded, labeled outputs."""
 from collections import OrderedDict
-from .rolling_metrics import recent_reviewed_metrics
+
 from .calibration_metrics import reliability_curve
+from .rolling_metrics import recent_reviewed_metrics
 
 
 def compare_outputs(classes, records, *, limit=200, scope='reviewed-pre-vote'):

@@ -1,9 +1,9 @@
 """Versioned catalog records for migration, not a mutable cloud authority."""
+import json
 from datetime import datetime
 from hashlib import sha256
-import json
-from .models import DecisionTask
 
+from .models import DecisionTask
 
 SCHEMA = 'cyclotron-catalog/v2'
 COLUMNS = {

@@ -1,7 +1,9 @@
 """S3 frozen evaluation retains clock, trace and exclusive whole-plan execution."""
 import asyncio
 from uuid import uuid4
+
 import pytest
+
 from .s3_journal_test import journal
 
 
@@ -12,8 +14,9 @@ def storage(j=None):
 
 
 def test_evaluation_native_snapshot_import_preserves_first_trace_and_deleted_watermark(tmp_path,monkeypatch):
-    from .evaluation_storage import SQLiteEvaluationStorage
     import sqlite3
+
+    from .evaluation_storage import SQLiteEvaluationStorage
     native=SQLiteEvaluationStorage(tmp_path/'native.sqlite')
     native.bind_clock('plan','2026-01-01T00:00:00+00:00');first=native.append_trace('first','{ "raw":"雪" }')
     native.append_trace('deleted','{}')
@@ -42,13 +45,14 @@ def test_another_evaluator_cannot_claim_the_same_plan_by_timeout_or_restarting()
 
 def test_real_frozen_evaluator_uses_s3_clock_trace_and_endpoint_ledgers_without_local_files(monkeypatch):
     from dataclasses import asdict
-    from .matched_run_plan_test import source
-    from .matched_run_plan import plan_matched_runs
+
+    from .classifier_config import ClassifierConfig
+    from .flywheel import FittedClassifier
     from .matched_run_evaluation import evaluate_matched_runs
     from .matched_run_evaluation_test import Model
-    from .classifier_config import ClassifierConfig
+    from .matched_run_plan import plan_matched_runs
+    from .matched_run_plan_test import source
     from .models import DecisionTask
-    from .flywheel import FittedClassifier
     from .s3_batch_storage import S3BatchStorage
     endpoints={side:source(side) for side in ('before','after')}
     for endpoint in endpoints.values():endpoint['checkpoint']['payload']['classifiers']={'topic':{'state':asdict(FittedClassifier(ClassifierConfig(DecisionTask('topic',('yes','no'),'Choose'))))}}

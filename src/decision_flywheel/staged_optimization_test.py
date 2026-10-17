@@ -1,14 +1,16 @@
 """Example, rubric and question stages never silently run each other."""
 import asyncio
 import json
+
 import pytest
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel
 from .optimizer_agent import OptimizerAgent, OptimizerReply
-from .staged_optimization import optimize_stage
 from .selection_policy import SelectionPolicy as _SP
+from .staged_optimization import optimize_stage
+
 _BRIER = _SP('balanced_brier')
 
 
@@ -50,6 +52,7 @@ def test_other_stages_cannot_silently_run_feature_group_experiments(tmp_path, st
 def test_question_discovery_can_test_datetime_alone_and_send_it_in_actual_requests(tmp_path):
     from dataclasses import replace
     from datetime import datetime
+
     from .models import DecisionResult
     from .staged_optimization import stage_briefing
     requests = []
@@ -173,8 +176,8 @@ def test_changed_original_prediction_evidence_does_not_reuse_a_completed_optimiz
 
 
 def test_provisional_rubric_recency_cannot_override_a_secondary_accuracy_guard(tmp_path):
-    from .selection_policy import SelectionPolicy
     from .flywheel import FittedClassifier
+    from .selection_policy import SelectionPolicy
     optimizer = OptimizerAgent(lambda _: OptimizerReply('{"rubric":"Newer criteria"}', 'fake'))
     wheel = DecisionFlywheel(tmp_path / 'wheel.sqlite', ClassifierConfig(TASK, rubric='Working criteria'),
         FakeModel(), optimizer, selection_policy=SelectionPolicy('recall', 'accuracy', positive_class='include'))
@@ -231,8 +234,8 @@ def test_example_stage_measures_individual_swaps_even_before_development_is_larg
 
 
 def test_reused_development_experiments_are_visible_to_the_optimizer_and_are_not_claimed_as_independent(tmp_path):
-    from .example_attribution_test import SignalModel
     from .example_attribution import measure_example_swaps
+    from .example_attribution_test import SignalModel
     from .staged_optimization import stage_briefing
     config=ClassifierConfig(TASK,example_ids=('t0','t1'))
     requests=[]

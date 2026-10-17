@@ -8,11 +8,12 @@ or policy-selected sample of decisions.
 """
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from .rolling_metrics import recent_reviewed_metrics
 
@@ -322,6 +323,7 @@ def status_from_flywheel(wheel, *, cyclotron_id: str, positive_label: str | None
 def initial_snapshot(wheel) -> dict:
     """The classifier snapshot before any activation: the configuration it was created with."""
     from dataclasses import asdict
+
     from .flywheel import FittedClassifier
     return asdict(FittedClassifier(getattr(wheel, "version_baseline", wheel.initial)))
 

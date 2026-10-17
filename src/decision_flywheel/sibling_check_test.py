@@ -1,7 +1,7 @@
 import asyncio
-from dataclasses import asdict
 import hashlib
 import json
+from dataclasses import asdict
 
 import pytest
 

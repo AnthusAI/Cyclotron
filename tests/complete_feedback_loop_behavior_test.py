@@ -8,7 +8,6 @@ from decision_flywheel.classifier_config import ClassifiedAnswers
 from decision_flywheel.models import DecisionResult, DecisionTask, Item, LabeledItem
 from decision_flywheel.optimizer_agent import OptimizerAgent, OptimizerReply
 
-
 scenarios("features/complete_feedback_loop.feature")
 
 

@@ -4,10 +4,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping, Sequence
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, field, replace
 from numbers import Real
-from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 PROBABILITY_SUM_TOLERANCE = 0.01 + 1e-12
 
@@ -109,7 +110,7 @@ class DecisionTask:
         if not isinstance(value, str):
             raise ValueError(f"target lacks string {self.input_field!r}")
 
-    def validate_result(self, result: "DecisionResult") -> "DecisionResult":
+    def validate_result(self, result: DecisionResult) -> DecisionResult:
         """Validate and canonicalize a provider result for this task."""
         label = self.validate_label(result.label)
         if result.probabilities is None:

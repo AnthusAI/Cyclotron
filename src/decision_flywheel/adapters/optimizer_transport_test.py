@@ -6,8 +6,8 @@ from .optimizer_transport import optimizer_transport
 
 @pytest.mark.parametrize("setting,expected", [(None,"openai"),("openai","openai"),("litellm","litellm")])
 def test_transport_selection_uses_the_frozen_setting_without_constructing_other_providers(monkeypatch, setting, expected):
-    from .openai_optimizer import OpenAIOptimizer
     from .litellm_optimizer import LiteLLMOptimizer
+    from .openai_optimizer import OpenAIOptimizer
     calls=[]
     for name,cls in [("openai",OpenAIOptimizer),("litellm",LiteLLMOptimizer)]:
         monkeypatch.setattr(cls,"from_environment",lambda name=name,**kwargs:calls.append((name,kwargs)) or name)

@@ -10,7 +10,6 @@ from .batch_storage import StorageScope
 from .catalog_snapshot import COLUMNS, SCHEMA, budgets, decode, encode, validate
 from .storage_payloads import PayloadRef
 
-
 MANIFEST_SCHEMA='cyclotron-catalog-manifest/v1'
 
 

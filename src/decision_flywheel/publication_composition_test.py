@@ -4,10 +4,18 @@ from contextlib import asynccontextmanager
 
 import httpx
 import pytest
+
 from .embedded_cyclotron import Cyclotron
-from .publication_lab import PublicationLab,PublicationBinding,EmbeddedPublicationClient,HTTPPublicationClient,create_publication_app,PublicationError
+from .publication_lab import (
+    EmbeddedPublicationClient,
+    HTTPPublicationClient,
+    PublicationBinding,
+    PublicationError,
+    PublicationLab,
+    create_publication_app,
+)
+from .publication_lab_test import ACTORS, BINDINGS, DEFINITION, ITEM, OfflineModel, review_payload
 from .publication_records import PublicationRecords
-from .publication_lab_test import DEFINITION,BINDINGS,ACTORS,ITEM,OfflineModel,review_payload
 from .web_store import WebStore
 
 
@@ -115,10 +123,11 @@ def test_outputs_with_historical_publication_feedback_cannot_be_silently_reassig
 @pytest.mark.parametrize('mode',['embedded','remote'])
 def test_output_scoped_steering_runs_native_evaluation_without_changing_sibling_classifier(tmp_path,mode):
     import json
+
     from .batched_classification import BatchedAnswers
-    from .models import Item,DecisionResult,LabeledItem
+    from .models import DecisionResult, Item, LabeledItem
     from .publication_lab import PublicationActor
-    from .publication_steering import PublicationSteering,NativeOutputEvaluator
+    from .publication_steering import NativeOutputEvaluator, PublicationSteering
     class NativeModel(OfflineModel):
         model_identity='offline-native-publication-steering-v1'
         async def classify_many(self,configs,target,training,**kwargs):

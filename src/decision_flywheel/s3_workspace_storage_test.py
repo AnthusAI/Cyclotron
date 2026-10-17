@@ -1,12 +1,14 @@
 """Existing console workspace commands can reopen with S3 and frozen priming."""
 import asyncio
+
 import pytest
-from .s3_console_storage_test import store,seed
-from .s3_journal_test import journal
+
 from .batched_classification import BatchedAnswers
 from .models import DecisionResult
 from .optimizer_agent import DisabledOptimizer
-from .workspace_session import WorkspaceSession,freeze_configuration
+from .s3_console_storage_test import seed, store
+from .s3_journal_test import journal
+from .workspace_session import WorkspaceSession, freeze_configuration
 
 
 class Model:
@@ -62,7 +64,9 @@ def test_missing_cloud_storage_cannot_fall_back_and_reopened_budget_is_absolute(
     {'label':'science','rationale':'Exact original rationale 雪'},
 ])
 def test_s3_workspace_uses_frozen_accepted_priming_without_retrofit_or_partition_leak(monkeypatch,vote):
-    import base64,json
+    import base64
+    import json
+
     from .priming import PrimingService
     from .s3_workspace_storage import S3WorkspaceStores
     s,run=fixture();s.save_item_list('examples','Accepted examples')

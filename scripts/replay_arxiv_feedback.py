@@ -4,24 +4,24 @@ import argparse
 import asyncio
 import json
 import os
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 from decision_flywheel.adapters.jev import JevAdapter, JevConfiguration
 from decision_flywheel.adapters.openai_decision import OpenAIDecisionAdapter, OpenAIDecisionConfiguration
 from decision_flywheel.adapters.optimizer_transport import optimizer_transport
-from decision_flywheel.credential_redaction import credential_values
+from decision_flywheel.api_event_sink import GraphQLTraceSink
 from decision_flywheel.classifier_config import ClassifierConfig
+from decision_flywheel.credential_redaction import credential_values
+from decision_flywheel.cycle_replay import run_cycle_replay
 from decision_flywheel.flywheel import DecisionFlywheel
 from decision_flywheel.optimizer_agent import OptimizerAgent
 from decision_flywheel.replay import plan_replay, run_replay
-from decision_flywheel.cycle_replay import run_cycle_replay
-from decision_flywheel.trace_artifact import read_trace, render_trace
+from decision_flywheel.replay_feedback_policy import ReplayFeedbackPolicy
 from decision_flywheel.reviewer_core import reviewer_labeled_items, reviewer_task
 from decision_flywheel.reviewer_store import ReviewStore
 from decision_flywheel.selection_policy import add_selection_arguments, selection_from_arguments
-from decision_flywheel.api_event_sink import GraphQLTraceSink
-from decision_flywheel.replay_feedback_policy import ReplayFeedbackPolicy
+from decision_flywheel.trace_artifact import read_trace, render_trace
 
 
 def main(argv=None):
@@ -55,6 +55,7 @@ def main(argv=None):
     if args.operational and args.feedback_policy != 'all' and not args.negative_label:
         parser.error('--negative-label is required for a selective feedback policy')
     from dataclasses import asdict
+
     from decision_flywheel import EvaluationPolicy
     try:
         selection_policy=selection_from_arguments(args)

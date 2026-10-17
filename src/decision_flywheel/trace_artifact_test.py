@@ -1,7 +1,7 @@
-import sqlite3
 import json
+import sqlite3
 
-from .trace_artifact import read_trace, render_trace, recover_configurations, exchanges_at
+from .trace_artifact import exchanges_at, read_trace, recover_configurations, render_trace
 
 
 def test_exported_playback_exposes_the_same_device_safe_areas_as_the_app():

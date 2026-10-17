@@ -9,11 +9,12 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import sqlite3
 import tarfile
 import tempfile
-from typing import Any, Mapping
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
 from .embedded_records import CyclotronDefinition, FileLease, _now
 

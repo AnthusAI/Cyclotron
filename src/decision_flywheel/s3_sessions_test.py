@@ -1,9 +1,12 @@
 """Durable encrypted sessions retain one-use OAuth and revocation across workers."""
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os
+
 import pytest
-from .s3_journal_test import ConditionalS3,journal
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from .account_sessions import SessionRejected
+from .s3_journal_test import ConditionalS3, journal
+
 
 class Cipher:
     def __init__(self):self.key=AESGCM.generate_key(256)
@@ -81,6 +84,7 @@ def test_session_updates_cannot_replace_person_or_original_token_and_old_selecti
 
 def test_kms_envelope_binds_exact_key_application_kind_and_session_reference():
     import base64
+
     from .s3_sessions import KMSSessionCipher
     key_arn='arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111'
     class KMS:

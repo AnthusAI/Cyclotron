@@ -7,10 +7,10 @@ All learning still happens inside ``DecisionFlywheel``.
 """
 from __future__ import annotations
 
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_calibration_metrics
-from .feedback_trigger import LabelTransitionTrigger, PROTECTED_ASSIGNMENTS, learning_feedback
+from .feedback_trigger import PROTECTED_ASSIGNMENTS, LabelTransitionTrigger, learning_feedback
 from .flywheel import development_assignment
 from .models import Item, LabeledItem
 

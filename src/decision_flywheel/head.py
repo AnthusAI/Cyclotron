@@ -4,9 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from numbers import Real
-from typing import Mapping, Sequence
 
 from .feedback import Feature, FeedbackItem
 from .models import DecisionTask

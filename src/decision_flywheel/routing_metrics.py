@@ -16,9 +16,9 @@ window of rows:
 """
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Iterable, Sequence
 
 LEAST_CONFIDENT_PERCENTS = (10, 15, 20, 25, 30)
 THRESHOLDS = ("0.75", "0.80", "0.85", "0.90", "0.95")

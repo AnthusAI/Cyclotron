@@ -3,18 +3,18 @@ import asyncio
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, TRAIN, DEV, agent
-from .question_measurement import measure_questions, rank_question
+from .flywheel_test import DEV, TASK, TRAIN, FakeModel, agent
 from .models import Item, LabeledItem
-
+from .question_measurement import measure_questions, rank_question
 
 QUESTION = {"name": "practical", "instructions": "Is this practical?", "labels": ["yes", "no"]}
 
 
 def test_question_measurements_are_not_reused_after_a_sibling_changes_the_shared_context(tmp_path):
     from dataclasses import replace
-    from .shared_decisions import SharedDecisions
+
     from .batched_classification import BatchedAnswers
+    from .shared_decisions import SharedDecisions
     class Model(FakeModel):
         async def classify_many(self, configs, target, training, **kwargs):
             answers = {}

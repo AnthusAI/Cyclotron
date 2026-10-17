@@ -1,6 +1,8 @@
 """Forward-evaluation storage keeps ownership/evidence distinct from policy."""
 import sqlite3
+
 import pytest
+
 from .shadow_storage import SQLiteShadowStorage
 
 

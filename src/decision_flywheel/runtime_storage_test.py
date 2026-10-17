@@ -1,11 +1,12 @@
 """Runtime state/evidence boundary remains local and provider neutral."""
 import json
+
 import pytest
 
-from .runtime_storage import SQLiteRuntimeStateStorage
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import TASK,FakeModel,agent
+from .flywheel_test import TASK, FakeModel, agent
+from .runtime_storage import SQLiteRuntimeStateStorage
 
 
 def test_contract_state_and_evidence_survive_restart_with_stable_trace_cursors(tmp_path):

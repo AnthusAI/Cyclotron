@@ -1,6 +1,7 @@
 """Specs for explicit ordered class roles and positive-class measurements."""
 import pytest
-from .trace_classification import class_configuration, positive_metrics, running_metric_series, comparison_metrics
+
+from .trace_classification import class_configuration, comparison_metrics, positive_metrics, running_metric_series
 
 
 def test_declared_classes_are_preserved_before_each_class_has_appeared_in_history():

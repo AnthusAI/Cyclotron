@@ -2,13 +2,11 @@
 import json
 from datetime import datetime, timezone
 
-from .flywheel import _hash, _json
-from .optimizer_agent import FeedbackBriefing
 from .feature_bank import FeatureBank
+from .flywheel import _hash, _json
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import (SCREENED_CONTROLS, candidate_set, optimizer_context, reserve_member,
-                             screen_round)
-
+from .idea_screening import SCREENED_CONTROLS, candidate_set, optimizer_context, reserve_member, screen_round
+from .optimizer_agent import FeedbackBriefing
 
 CONTROLS = ("rubric", "example_ids", "tasks")
 

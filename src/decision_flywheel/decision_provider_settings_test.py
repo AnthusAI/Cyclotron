@@ -1,4 +1,5 @@
 import pytest
+
 from .decision_provider_settings import normalize_decision_settings
 
 

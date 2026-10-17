@@ -1,9 +1,11 @@
 """The BFF persists original actor provenance before sending queue references."""
 import asyncio
 from uuid import uuid4
+
 import pytest
+
 from .hosted_command_worker_test import setup
-from .prospectus_accounts import VerifiedAccountSession,AccountAccessDenied,ProspectusUnavailable
+from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
 
 
 def test_same_origin_bff_enqueues_original_session_and_queue_retry_keeps_one_job():
@@ -35,8 +37,8 @@ def test_bff_never_trusts_a_foreign_account_person_or_session_reference():
 
 
 def test_live_worker_and_bff_are_disabled_without_separate_operator_authority():
-    from .hosted_console_service import HostedConsoleService
     from .hosted_command_worker import HostedCommandWorker
+    from .hosted_console_service import HostedConsoleService
     store,run,auth,sessions,cookie,actor,state,model,worker=setup()
     service=HostedConsoleService(actor.account_id,store,auth,lambda message:None)
     current=sessions.get(cookie)

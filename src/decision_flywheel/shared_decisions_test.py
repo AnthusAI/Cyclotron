@@ -1,16 +1,20 @@
 import asyncio
+
 import pytest
-from .shared_decisions import SharedDecisions
-from .classifier_config import ClassifierConfig
-from .models import DecisionTask,Item,DecisionResult
+
 from .batched_classification import BatchedAnswers
+from .classifier_config import ClassifierConfig
 from .decision_cache import CacheOptions
+from .models import DecisionResult, DecisionTask, Item
 from .selection_policy import SelectionPolicy as _SP
+from .shared_decisions import SharedDecisions
+
 _BRIER = _SP('balanced_brier')
 
 
 def test_shared_requests_use_injected_storage_without_opening_another_database(tmp_path, monkeypatch):
     import sqlite3
+
     from .batch_storage import SQLiteBatchStorage
     backing = SQLiteBatchStorage(tmp_path/'backing.sqlite')
     class Storage:
@@ -39,7 +43,7 @@ def test_shared_requests_use_injected_storage_without_opening_another_database(t
 
 @pytest.mark.parametrize('example_ids', [(), ('target',)])
 def test_shared_no_context_models_allow_zero_effective_examples_with_a_training_pool(tmp_path, example_ids):
-    from .models import ModelCapabilities, LabeledItem
+    from .models import LabeledItem, ModelCapabilities
     class Model:
         model_identity = 'fake'
         capabilities = ModelCapabilities(supports_labeled_context=False)
@@ -60,7 +64,7 @@ def test_shared_no_context_models_allow_zero_effective_examples_with_a_training_
 
 
 def test_shared_requests_reject_unsupported_sibling_examples_before_reserving_an_attempt(tmp_path):
-    from .models import ModelCapabilities, LabeledItem
+    from .models import LabeledItem, ModelCapabilities
     class Model:
         model_identity = 'fake-no-context'
         capabilities = ModelCapabilities(supports_labeled_context=False)
@@ -84,7 +88,7 @@ def test_shared_requests_reject_unsupported_sibling_examples_before_reserving_an
 
 
 def test_a_prepared_batch_does_not_bypass_a_changed_declared_context_capability(tmp_path):
-    from .models import ModelCapabilities, LabeledItem
+    from .models import LabeledItem, ModelCapabilities
     class Model:
         model_identity = 'fake'
         capabilities = ModelCapabilities()
@@ -111,9 +115,10 @@ def test_a_prepared_batch_does_not_bypass_a_changed_declared_context_capability(
 @pytest.mark.parametrize('restart', [False, True])
 def test_refreshing_a_used_training_answer_invalidates_the_head_and_preserves_the_rubric(tmp_path, restart):
     from datetime import datetime, timezone
+
     from .candidate_fitting import fit_candidate
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    from .flywheel_test import DEV, TASK, TRAIN, FakeModel
     class Model(FakeModel):
         async def classify_many(self, configs, target, training, **kwargs):
             answers = {}
@@ -151,9 +156,10 @@ def test_refreshing_a_used_training_answer_invalidates_the_head_and_preserves_th
 
 def test_collecting_an_unrelated_answer_does_not_invalidate_a_fitted_head(tmp_path):
     from datetime import datetime, timezone
+
     from .candidate_fitting import fit_candidate
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    from .flywheel_test import DEV, TASK, TRAIN, FakeModel
     class Model(FakeModel):
         async def classify_many(self, configs, target, training, **kwargs):
             answers = {cid: (await self.classify(config, target, training[cid], **kwargs)).answers
@@ -177,8 +183,9 @@ def test_collecting_an_unrelated_answer_does_not_invalidate_a_fitted_head(tmp_pa
 
 def test_a_measured_head_cannot_be_promoted_after_a_sibling_changes_the_joint_request(tmp_path):
     from dataclasses import replace
+
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    from .flywheel_test import DEV, TASK, TRAIN, FakeModel
     from .optimizer_agent import OptimizerAgent
     class Model(FakeModel):
         async def classify_many(self, configs, target, training, **kwargs):
@@ -211,8 +218,9 @@ def test_a_measured_head_cannot_be_promoted_after_a_sibling_changes_the_joint_re
 
 def test_a_refreshed_trial_is_refitted_under_a_new_identity_without_erasing_the_old_trial(tmp_path):
     from datetime import datetime, timezone
+
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    from .flywheel_test import DEV, TASK, TRAIN, FakeModel
     class Model(FakeModel):
         async def classify_many(self, configs, target, training, **kwargs):
             answers = {cid: (await self.classify(config, target, training[cid], **kwargs)).answers
@@ -247,9 +255,9 @@ def test_a_refreshed_trial_is_refitted_under_a_new_identity_without_erasing_the_
 @pytest.mark.parametrize('operation', ['questions', 'examples'])
 def test_refreshing_a_measurement_response_recomputes_only_the_derived_measurement(tmp_path, operation):
     from .example_attribution import measure_example_swaps
-    from .question_measurement import measure_questions
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import FakeModel, TASK, TRAIN, DEV
+    from .flywheel_test import DEV, TASK, TRAIN, FakeModel
+    from .question_measurement import measure_questions
     class Model(FakeModel):
         async def classify_many(self, configs, target, training, **kwargs):
             answers = {cid: (await self.classify(config, target, training[cid], **kwargs)).answers
@@ -282,7 +290,8 @@ def test_refreshing_a_measurement_response_recomputes_only_the_derived_measureme
 
 
 def test_explicit_refresh_recollects_the_joint_request_and_updates_all_child_caches(tmp_path):
-    from datetime import datetime,timezone
+    from datetime import datetime, timezone
+
     from .flywheel import DecisionFlywheel
     from .optimizer_agent import OptimizerAgent
     class Model:
@@ -316,7 +325,8 @@ def test_explicit_refresh_recollects_the_joint_request_and_updates_all_child_cac
 
 
 def test_a_failed_shared_refresh_requires_explicit_retry_and_keeps_the_old_answer(tmp_path):
-    from datetime import datetime,timezone
+    from datetime import datetime, timezone
+
     from .flywheel import DecisionFlywheel
     from .optimizer_agent import OptimizerAgent
     class Model:
@@ -411,7 +421,8 @@ def test_an_answer_cache_identity_names_the_complete_request_before_and_after_ex
 
 
 def test_the_flywheel_caches_joint_and_solo_answers_under_their_actual_context(tmp_path):
-    from datetime import datetime,timezone
+    from datetime import datetime, timezone
+
     from .flywheel import DecisionFlywheel
     from .optimizer_agent import OptimizerAgent
     class Model:

@@ -5,10 +5,10 @@ import json
 
 import pytest
 
+from .events import FlywheelEvent
 from .reviewer import _article_panel, _core_flywheel_status, load_articles_jsonl, load_flywheel_report
 from .reviewer_predictor import ReviewerPrediction
 from .reviewer_store import Article
-from .events import FlywheelEvent
 from .run_ledger import FlywheelRound, FlywheelStatus
 
 
@@ -110,7 +110,9 @@ def test_a_failed_prediction_is_not_replaced_by_an_unlabeled_local_classifier():
 
 def test_voting_runs_the_core_and_inspection_does_not_create_extra_votes(tmp_path, monkeypatch):
     from io import StringIO
+
     from rich.console import Console
+
     from .reviewer import run_review_session
     from .reviewer_predictor import ReviewerPrediction
     from .reviewer_store import ReviewStore
@@ -171,9 +173,9 @@ def test_live_flywheel_requires_confirmation_before_constructing_clients(monkeyp
 
 @pytest.mark.parametrize('model,expected',[(None,'kev-latest'),('kev-pinned','kev-pinned')])
 def test_integrated_reviewer_selects_kev_and_its_own_model_without_constructing_jev(tmp_path,monkeypatch,model,expected):
+    from .adapters.kev import KevAdapter
     from .reviewer import main
     from .reviewer_store import ReviewStore
-    from .adapters.kev import KevAdapter
     path=tmp_path/'reviews.sqlite3'
     with ReviewStore(path,study_seed='arxiv-review-v1') as store:
         store.import_articles([Article('paper','Title','Abstract','2026-10-07',('cs.AI',))])
@@ -202,9 +204,9 @@ def test_legacy_jev_artifact_mode_rejects_another_provider_before_reading_a_data
 def test_integrated_kev_review_prediction_reaches_the_fake_wire_and_records_its_model(tmp_path,monkeypatch):
     from . import reviewer
     from .adapters.kev import KevAdapter
-    from .adapters.kev_test import FakeTransport,Response
-    from .reviewer_store import ReviewStore
+    from .adapters.kev_test import FakeTransport, Response
     from .optimizer_agent import DisabledOptimizer
+    from .reviewer_store import ReviewStore
     article=Article('paper','Title','Abstract','2026-10-07',('cs.AI',))
     path=tmp_path/'reviews.sqlite3';runtime=tmp_path/'runtime.sqlite3'
     with ReviewStore(path,study_seed='arxiv-review-v1') as store:store.import_articles([article])
@@ -235,10 +237,10 @@ def test_integrated_kev_review_prediction_reaches_the_fake_wire_and_records_its_
 
 
 def test_live_reviewer_routes_the_selected_optimizer_model_and_ceiling_without_using_openai(tmp_path, monkeypatch):
-    from .reviewer import main
-    from .reviewer_store import ReviewStore
     from .adapters.litellm_optimizer import LiteLLMOptimizer
     from .adapters.openai_optimizer import OpenAIOptimizer
+    from .reviewer import main
+    from .reviewer_store import ReviewStore
     path=tmp_path/'reviews.sqlite3'
     with ReviewStore(path,study_seed='arxiv-review-v1') as store:
         store.import_articles([Article('paper','Title','Abstract','2026-10-07',('cs.AI',))])

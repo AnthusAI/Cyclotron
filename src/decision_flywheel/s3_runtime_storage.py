@@ -4,12 +4,21 @@ An explicit owner holds this classifier until release. There is no timeout-based
 steal: an uncertain/crashed holder needs reconciliation. Every read and CAS
 mutation checks the same owner/fence stored with its data, never a DDB lease.
 """
-from copy import deepcopy
 import json
-from .journal import Journal,commit_with_contract,uuid,decode
-from .storage_errors import StorageConflict,StorageLimit
-from .learning_storage import ARTIFACTS,artifact_table
-from .active_labels import ACTIVE_LABELS_STATE_KEY,FEEDBACK_EVENT_KIND,dump_active_labels,load_active_labels,rebuild_active_labels,record_feedback_event
+from copy import deepcopy
+
+from .active_labels import (
+    ACTIVE_LABELS_STATE_KEY,
+    FEEDBACK_EVENT_KIND,
+    dump_active_labels,
+    load_active_labels,
+    rebuild_active_labels,
+    record_feedback_event,
+)
+from .journal import Journal, commit_with_contract, decode, uuid
+from .learning_storage import ARTIFACTS, artifact_table
+from .storage_errors import StorageConflict, StorageLimit
+
 
 class RuntimeOwnershipError(RuntimeError):pass
 

@@ -1,7 +1,7 @@
 """Optional central Google enrollment client, separate from membership storage."""
-from dataclasses import dataclass, field
 import re
 import time
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from .prospectus_accounts import ProspectusUnavailable

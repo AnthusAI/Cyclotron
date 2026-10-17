@@ -4,7 +4,6 @@ import pytest
 from .classifier_config import ClassifierConfig
 from .models import DecisionTask, Item, LabeledItem
 
-
 TASK = DecisionTask("inclusion", ("include", "exclude"), "Should this item be included?")
 POOL = (LabeledItem(Item("yes", {"text": "Practical paper"}), "include"),
         LabeledItem(Item("no", {"text": "Other paper"}), "exclude"))

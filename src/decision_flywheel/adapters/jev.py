@@ -3,15 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 from numbers import Real
-import time
-from typing import Any, Callable, Sequence
+from typing import Any
 
-from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from ..classifier_config import ClassifiedAnswers, ClassifierConfig
+from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
 _RUBRIC_HINT = " Use state.rubric as the human's decision criteria."
 
@@ -64,7 +65,7 @@ class JevAdapter:
         return self.configuration.model_identity
 
     @classmethod
-    def from_environment(cls, *, configuration: JevConfiguration = JevConfiguration()) -> "JevAdapter":
+    def from_environment(cls, *, configuration: JevConfiguration = JevConfiguration()) -> JevAdapter:
         """Load a gitignored dotenv file, if installed, without exposing its values."""
         try:
             from dotenv import load_dotenv
@@ -161,7 +162,7 @@ class JevAdapter:
     async def classify_many(self, configurations, target, training, *, now=None, event_sink=None,
                             max_request_bytes=32000, share_supporting_questions=False):
         """One transport request; each classifier keeps its own context and answer group."""
-        from ..batched_classification import batch_request, BatchedAnswers, answer_groups, question_bindings
+        from ..batched_classification import BatchedAnswers, answer_groups, batch_request, question_bindings
         request, identities = batch_request(configurations,target,training,now=now,max_request_bytes=max_request_bytes,
                                             share_questions=share_supporting_questions)
         state = {'target':request['state']['target'],'classifiers':{

@@ -3,21 +3,23 @@
 Fixed portable record fields are shared with native migration. Named domain
 operations, not a SQL parser, own revisions, pins, feedback and command claims.
 """
+import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from datetime import datetime,timezone
-from dataclasses import asdict,replace
+from dataclasses import asdict, replace
+from datetime import datetime, timezone
 from hashlib import sha256
-import json
 from uuid import uuid4
-from .journal import Journal,commit_with_contract,uuid
-from .storage_errors import StorageConflict
-from .console_snapshot import TABLES,SEQUENCES,SCHEMA,validate as validate_console
-from .catalog_storage import encoded,timestamp
+
+from .catalog_storage import encoded, timestamp
+from .console_snapshot import SCHEMA, SEQUENCES, TABLES
+from .console_snapshot import validate as validate_console
 from .cyclotrons import load_config
+from .journal import Journal, commit_with_contract, uuid
 from .models import DecisionTask
 from .run_storage import _UNSET
+from .storage_errors import StorageConflict
 
 
 def now():return datetime.now(timezone.utc).isoformat()
@@ -123,7 +125,9 @@ class S3ConsoleStorage:
             value['snapshot']=snapshot
         self._mutate(apply)
     def export(self,**limits):
-        from .catalog_snapshot import SCHEMA as catalog_schema,validate as catalog_validate,COLUMNS
+        from .catalog_snapshot import COLUMNS
+        from .catalog_snapshot import SCHEMA as catalog_schema
+        from .catalog_snapshot import validate as catalog_validate
         snapshot=self.export_storage(**limits)
         return catalog_validate({'schema':catalog_schema,'tables':{t:[clean(r) for r in snapshot['tables'][t]] for t in COLUMNS},
             'feedback_sequence':snapshot['sequences']['item_feedback']},**limits)

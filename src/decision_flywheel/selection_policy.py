@@ -1,6 +1,6 @@
 """One explicit development-selection rule shared by optimization stages."""
-from dataclasses import asdict, dataclass
 import math
+from dataclasses import asdict, dataclass
 
 METRICS = ('accuracy', 'precision', 'recall', 'f1', 'balanced_accuracy', 'brier', 'balanced_brier')
 

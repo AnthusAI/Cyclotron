@@ -10,7 +10,7 @@ from decision_flywheel.adapters.kev import KevAdapter
 from decision_flywheel.adapters.laya import LayaAdapter
 from decision_flywheel.candidate_fitting import fit_candidate
 from decision_flywheel.decision_cache import CacheOptions
-from decision_flywheel.flywheel_test import TRAIN, DEV, agent
+from decision_flywheel.flywheel_test import DEV, TRAIN, agent
 from decision_flywheel.models import DecisionTask, Item, LabeledItem
 from decision_flywheel.web_store import WebStore
 from decision_flywheel.workspace_session import WorkspaceSession, freeze_configuration
@@ -91,6 +91,7 @@ def test_shared_provider_features_refit_before_prediction_and_restart_without_re
         else:
             import json
             from dataclasses import asdict
+
             from decision_flywheel.flywheel import _restore
             saved = asdict(a.active)
             saved.pop('answer_dependencies')

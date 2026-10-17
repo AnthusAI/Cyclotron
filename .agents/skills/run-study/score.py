@@ -2,7 +2,10 @@
 usage: score.py RUN_DIR/MODE CORPUS.jsonl [--window 100]
 Needs no keys and makes no calls. Prints per-window accuracy of Cyclotron, the decision model alone as the
 running classifier saw it, and the most-common-label baseline, plus the cycles where a rubric became active."""
-import json, sqlite3, sys
+import json
+import sqlite3
+import sys
+
 path, corpus = sys.argv[1], sys.argv[2]
 size = int(sys.argv[sys.argv.index('--window') + 1]) if '--window' in sys.argv else 100
 label = {r['id']: r['simulated_label'] for r in map(json.loads, open(corpus))}

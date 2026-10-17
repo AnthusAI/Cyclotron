@@ -5,14 +5,21 @@ import hashlib
 import json
 import math
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 from .budget import ContextBudget, ContextPlan, build_context_plan
-from .context import (POLICY_VERSION, FixedExampleList, PerLabelLexicalRetrieval, PolicyMetadata,
-                      PrototypeBalanced, RandomBalanced, input_hash)
+from .context import (
+    POLICY_VERSION,
+    FixedExampleList,
+    PerLabelLexicalRetrieval,
+    PolicyMetadata,
+    PrototypeBalanced,
+    RandomBalanced,
+    input_hash,
+)
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem
-
 
 ARTIFACT_VERSION = 1
 _TOP_KEYS = {"artifact_version", "artifact_hash", "task_fingerprint", "policy", "pool", "budget",

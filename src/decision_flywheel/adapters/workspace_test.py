@@ -3,8 +3,8 @@ import pytest
 
 
 def test_workspace_factory_dispatches_kev_without_constructing_jev_or_opening_a_connection(monkeypatch):
-    from .workspace import decision_adapter
     from .jev import JevAdapter
+    from .workspace import decision_adapter
     monkeypatch.setattr(JevAdapter,'from_environment',lambda **_:pytest.fail('wrong provider'))
     adapter=decision_adapter({'decisions_provider':'kev','decisions_model':'kev-4b'})
     assert adapter.name=='kev'
@@ -13,8 +13,8 @@ def test_workspace_factory_dispatches_kev_without_constructing_jev_or_opening_a_
 
 
 def test_old_workspace_runs_default_to_jev_and_do_not_change_their_pinned_model(monkeypatch):
-    from .workspace import decision_adapter
     from .jev import JevAdapter
+    from .workspace import decision_adapter
     observed=[]
     monkeypatch.setattr(JevAdapter,'from_environment',lambda **kwargs:observed.append(kwargs['configuration']) or 'fake')
     assert decision_adapter({'decisions_model':'jev-pinned'})=='fake'
@@ -23,17 +23,17 @@ def test_old_workspace_runs_default_to_jev_and_do_not_change_their_pinned_model(
 
 @pytest.mark.parametrize('provider',['unknown'])
 def test_unsupported_workspace_providers_never_silently_fall_back_to_jev(provider,monkeypatch):
-    from .workspace import decision_adapter
     from .jev import JevAdapter
+    from .workspace import decision_adapter
     monkeypatch.setattr(JevAdapter,'from_environment',lambda **_:pytest.fail('silent fallback'))
     with pytest.raises(ValueError,match='provider|Laya'):
         decision_adapter({'decisions_provider':provider,'decisions_model':'chosen'})
 
 
 def test_workspace_factory_loads_the_selected_laya_revision_without_a_jev_fallback(monkeypatch):
-    from .workspace import decision_adapter
-    from .laya import LayaAdapter
     from .jev import JevAdapter
+    from .laya import LayaAdapter
+    from .workspace import decision_adapter
     observed=[]
     monkeypatch.setattr(JevAdapter,'from_environment',lambda **_:pytest.fail('wrong provider'))
     monkeypatch.setattr(LayaAdapter,'from_default',lambda **kwargs:observed.append(kwargs['configuration']) or 'laya')
@@ -44,13 +44,14 @@ def test_workspace_factory_loads_the_selected_laya_revision_without_a_jev_fallba
 @pytest.mark.parametrize('provider',['kev','laya'])
 def test_cyclotron_worker_records_one_joint_wire_request_through_the_graphql_api(tmp_path,provider):
     from fastapi.testclient import TestClient
-    from ..web_store import WebStore
-    from ..web_api import create_app
-    from ..web_worker import WebWorker
+
     from ..api_event_sink import GraphQLTraceSink
     from ..flywheel_test import agent
-    from .kev import KevAdapter,KevConfiguration
-    from .kev_test import FakeTransport,Response
+    from ..web_api import create_app
+    from ..web_store import WebStore
+    from ..web_worker import WebWorker
+    from .kev import KevAdapter, KevConfiguration
+    from .kev_test import FakeTransport, Response
     from .laya import LayaAdapter
     store=WebStore(tmp_path/'db')
     for cid in ('first','second'):

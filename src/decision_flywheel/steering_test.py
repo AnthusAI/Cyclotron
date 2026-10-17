@@ -3,11 +3,10 @@ import json
 import pytest
 
 from .context import RandomBalanced
-from .feedback import Element, Feature, FeedbackItem, LABEL_SOURCE_FINAL, Cyclotron
+from .feedback import LABEL_SOURCE_FINAL, Cyclotron, Element, Feature, FeedbackItem
 from .head import HeadRow, fit_learned_head
 from .models import DecisionTask
 from .steering import ScriptedMockManager, run_steering_round, steering_observations
-
 
 HASH = "a" * 64
 

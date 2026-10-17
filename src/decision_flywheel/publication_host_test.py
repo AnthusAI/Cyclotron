@@ -3,10 +3,17 @@ import asyncio
 
 import httpx
 import pytest
+
 from .embedded_cyclotron import Cyclotron
-from .publication_lab import (PublicationLab,PublicationActor,PublicationAccess,PublicationError,
-                              HTTPPublicationClient,create_publication_host)
-from .publication_lab_test import DEFINITION,BINDINGS,ITEM,OfflineModel,review_payload
+from .publication_lab import (
+    HTTPPublicationClient,
+    PublicationAccess,
+    PublicationActor,
+    PublicationError,
+    PublicationLab,
+    create_publication_host,
+)
+from .publication_lab_test import BINDINGS, DEFINITION, ITEM, OfflineModel, review_payload
 
 
 def test_request_scoped_account_switching_revocation_and_unavailability_fail_closed(tmp_path):

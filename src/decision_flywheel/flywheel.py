@@ -6,20 +6,20 @@ and durable restart state. Private SQLite records must not be published.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
-from contextvars import ContextVar
-from types import MappingProxyType
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
-from pathlib import Path
+from collections.abc import Callable, Mapping, Sequence
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from functools import wraps
+from pathlib import Path
+from types import MappingProxyType
 from typing import Protocol
 
-from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .classification_metrics import classification_metrics
+from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .context import _normalized_text
 from .feedback import FeedbackItem
 from .head import Calibration, HeadProvenance, LearnedHead, OutOfFoldPredictions
@@ -171,8 +171,8 @@ class DecisionFlywheel:
             self.pending_storage = SQLitePendingStorage(self.db)
             from .runtime_cache_storage import SQLiteRuntimeCacheStorage
             self.runtime_cache = SQLiteRuntimeCacheStorage(self.db)
-            from .learning_storage import SQLiteLearningStorage, SQLiteFeatureStorage, SQLiteControlStorage
             from .hypothesis_storage import SQLiteHypothesisStorage
+            from .learning_storage import SQLiteControlStorage, SQLiteFeatureStorage, SQLiteLearningStorage
             self.learning_storage = SQLiteLearningStorage(self.db)
             self.feature_storage = SQLiteFeatureStorage(self.db)
             self.control_storage = SQLiteControlStorage(self.db)
@@ -572,7 +572,7 @@ class DecisionFlywheel:
                         "reason": "training or development feedback was removed or corrected"})
 
     async def _answers(self, config, target, training, now, cache_options=None):
-        from .decision_cache import CacheOptions, CacheMiss
+        from .decision_cache import CacheMiss, CacheOptions
         options = cache_options if cache_options is not None else self.cache_options
         if not isinstance(options, CacheOptions):
             raise ValueError("cache_options must be CacheOptions")

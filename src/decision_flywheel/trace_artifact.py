@@ -1,12 +1,13 @@
 """Offline, self-contained playback of private recorded flywheel events."""
 import argparse
 import json
-from pathlib import Path
 import sqlite3
-from .trace_timeline import timeline_data
+from pathlib import Path
+
+from .trace_classification import class_configuration, positive_metrics, running_metric_series
 from .trace_rounds import round_details
 from .trace_step_projection import step_projection
-from .trace_classification import class_configuration, positive_metrics, running_metric_series
+from .trace_timeline import timeline_data
 
 
 def read_trace(database):

@@ -1,10 +1,12 @@
 """Independent classifiers share transport but not rubric or feature identities."""
 import asyncio
 from types import SimpleNamespace
+
+import pytest
+
+from .adapters.jev import JevAdapter
 from .classifier_config import ClassifierConfig
 from .models import DecisionTask, Item, LabeledItem
-from .adapters.jev import JevAdapter
-import pytest
 
 
 def test_two_classifiers_and_their_features_use_one_request_with_scoped_context():

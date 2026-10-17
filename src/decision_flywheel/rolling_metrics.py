@@ -1,7 +1,8 @@
 """Descriptive live agreement over the latest human-reviewed items."""
 from collections import OrderedDict
-from .classification_metrics import classification_metrics
+
 from .calibration_metrics import reliability_curve
+from .classification_metrics import classification_metrics
 
 
 def recent_reviewed_metrics(classes, records, *, limit=200):

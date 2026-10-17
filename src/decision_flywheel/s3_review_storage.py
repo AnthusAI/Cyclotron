@@ -1,10 +1,11 @@
 """Canonical S3 reviewer source, retaining native portable records and firewalls."""
+import json
+import math
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-import json
-import math
-from .journal import Journal,commit_with_contract,encode
+
+from .journal import Journal, commit_with_contract, encode
 from .storage_errors import StorageLimit
 
 COLUMNS={

@@ -23,38 +23,70 @@ open (or call) catches up.
 from __future__ import annotations
 
 import asyncio
-from copy import copy, deepcopy
+import hashlib
+import inspect
+import json
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-import inspect
+from copy import copy, deepcopy
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
-import hashlib
-import json
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 from uuid import uuid4
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
-from .cyclotron_status import (CyclotronOverview, CyclotronStatus, VersionTracker,
-                              initial_snapshot, status_from_flywheel, worst_output)
-from .embedded_records import (ClassifierDecision, ClassifierSpec, CyclotronDefinition, Decision, ExecutionGuard, FileLease, Review,
-                               ReviewSelection, StoreLocked, _json, _now, _selection)
-from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
+from .cyclotron_status import (
+    CyclotronOverview,
+    CyclotronStatus,
+    VersionTracker,
+    initial_snapshot,
+    status_from_flywheel,
+    worst_output,
+)
 from .deferred_learning import DeferredLearning
+from .embedded_records import (
+    ClassifierDecision,
+    ClassifierSpec,
+    CyclotronDefinition,
+    Decision,
+    ExecutionGuard,
+    FileLease,
+    Review,
+    ReviewSelection,
+    StoreLocked,
+    _json,
+    _now,
+    _selection,
+)
+from .feedback import LABEL_SOURCE_VETTED, FeedbackItem
 from .flywheel import DecisionFlywheel
 from .held_out_evaluation import HeldOutEvaluation
-from .learning_loop import (REVIEWER_SELECTED, decide_with_shared_context, feedback_partitions, labeled_partitions,
-                            learn_from_review, record_cycle_metrics, review_role)
+from .learning_loop import (
+    REVIEWER_SELECTED,
+    decide_with_shared_context,
+    feedback_partitions,
+    labeled_partitions,
+    learn_from_review,
+    record_cycle_metrics,
+    review_role,
+)
 from .models import DecisionTask, Item, LabeledItem
 from .review_program import REASONS, ProgramState, ReviewProgram
-from .run_usage import _usage as _usage_counts, stored_usage_by_window
-from .shared_decisions import SharedDecisions
 from .review_rate_controller import ReviewRateController
+from .run_usage import _usage as _usage_counts
+from .run_usage import stored_usage_by_window
+from .shared_decisions import SharedDecisions
 from .sibling_check import install_sibling_checks
-from .store_seeding import (StoreSeeds, apply_priming_additions, normalize_supporting_questions, priming_includes,
-                            stored_priming_additions)
+from .store_seeding import (
+    StoreSeeds,
+    apply_priming_additions,
+    normalize_supporting_questions,
+    priming_includes,
+    stored_priming_additions,
+)
 from .store_snapshot import classifier_store_name, restore_store_snapshot, store_paths, write_store_snapshot
 
 __all__ = ["ClassifierDecision", "ClassifierSpec", "Cyclotron", "CyclotronDefinition", "Decision", "ExecutionGuard",
@@ -201,7 +233,7 @@ class Cyclotron:
         self._sync()
 
     @classmethod
-    def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> "Cyclotron":
+    def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> Cyclotron:
         """Open or create the cyclotron store at ``directory``. No model call is made."""
         return cls(directory, definition, model, optimizer, **options)
 

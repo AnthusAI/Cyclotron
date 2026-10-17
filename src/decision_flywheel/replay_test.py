@@ -4,9 +4,9 @@ import json
 
 from .classifier_config import ClassifierConfig
 from .flywheel import DecisionFlywheel
-from .flywheel_test import FakeModel, TASK, agent
+from .flywheel_test import TASK, FakeModel, agent
 from .models import Item, LabeledItem
-from .replay import plan_replay, run_replay, recent_balanced
+from .replay import plan_replay, recent_balanced, run_replay
 
 
 def rows():

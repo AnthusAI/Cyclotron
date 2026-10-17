@@ -1,14 +1,16 @@
 """Priming composes named transactions and complete migrations without SQL fallback."""
 import base64
+import json
 from contextlib import contextmanager
 from copy import deepcopy
-import json
+
 import pytest
-from .priming import PrimingService
-from .priming_test import ITEM,LABELS,refs
-from .web_store import WebStore
+
 from .catalog_snapshot import validate as catalog_validate
 from .console_snapshot import validate as console_validate
+from .priming import PrimingService
+from .priming_test import ITEM, LABELS, refs
+from .web_store import WebStore
 
 
 def catalog(tmp_path):
@@ -105,9 +107,9 @@ def test_known_legacy_catalog_and_console_snapshots_upgrade_without_inventing_dr
 @pytest.mark.parametrize('domain',['catalog','console'])
 def test_explicit_legacy_manifest_reader_upgrades_known_v1_bytes(tmp_path,domain):
     from .batch_storage import StorageScope
+    from .catalog_archive import CatalogArchive, LegacyCatalogArchive
+    from .console_snapshot import ConsoleArchive, LegacyConsoleArchive
     from .storage_payloads import FilePayloads
-    from .catalog_archive import CatalogArchive,LegacyCatalogArchive
-    from .console_snapshot import ConsoleArchive,LegacyConsoleArchive
     source=catalog(tmp_path)
     new=source.catalog_storage.export() if domain=='catalog' else source.export_storage()
     old=deepcopy(new);old['schema']=f'cyclotron-{domain}/v1';old['tables'].pop('priming_drafts')

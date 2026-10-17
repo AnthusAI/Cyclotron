@@ -3,9 +3,9 @@
 The host must verify its session access JWT before passing it here. Prospectus
 independently verifies that JWT and the SigV4 runtime identity on every call.
 """
-from dataclasses import dataclass, field, replace
 import json
 import re
+from dataclasses import dataclass, field, replace
 from urllib.parse import quote, urlsplit
 from uuid import UUID
 
@@ -26,8 +26,8 @@ class SigV4Transport:
     """
 
     def __init__(self, endpoint, region, *, session=None, client=None):
-        from botocore.session import get_session
         import httpx
+        from botocore.session import get_session
         parsed = urlsplit(endpoint)
         if (parsed.scheme != 'https' or not parsed.hostname or parsed.query or parsed.fragment or parsed.username
                 or not re.fullmatch(r'(?:/[A-Za-z0-9_-]+)*/?', parsed.path)):

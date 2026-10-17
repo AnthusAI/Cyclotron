@@ -1,6 +1,6 @@
 """Bounded development comparisons and an explicit cold-start recency prior."""
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

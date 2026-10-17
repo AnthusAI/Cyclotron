@@ -2,9 +2,12 @@
 from hashlib import sha256
 from io import BytesIO
 from threading import RLock
+
 import pytest
+
 from .batch_storage import StorageScope
 from .storage_payloads import S3Payloads
+
 
 class S3Error(Exception):
     def __init__(self,code):self.response={'Error':{'Code':code}}
@@ -56,7 +59,7 @@ def test_create_commit_and_restart_read_canonical_s3_without_an_index():
 
 
 def test_stale_head_cannot_replace_successor_and_missing_head_cannot_reset_namespace():
-    from .s3_journal import JournalConflict,JournalUnavailable
+    from .s3_journal import JournalConflict, JournalUnavailable
     j=journal();first=j.initialize({'budget':1});j.commit(first,{'budget':2})
     with pytest.raises(JournalConflict):j.commit(first,{'budget':0})
     del j.payloads.client.objects[j.head_key]
@@ -73,7 +76,7 @@ def test_lost_head_response_is_uncertain_even_if_written_and_never_regrants_a_cl
 
 
 def test_lost_creation_receipt_leaves_namespace_fail_closed():
-    from .s3_journal import JournalUncertain,JournalUnavailable
+    from .s3_journal import JournalUnavailable, JournalUncertain
     j=journal();j.payloads.client.lose=lambda key:key==j.anchor_key
     with pytest.raises(JournalUncertain):j.initialize({'budget':0})
     with pytest.raises(JournalUnavailable):journal(j.payloads.client).initialize({'budget':0})
@@ -98,8 +101,9 @@ def test_scope_and_explicit_limits_fail_before_any_canonical_mutation():
 
 
 def test_commit_limit_and_unknown_sdk_retry_configuration_fail_before_head_mutation():
-    from .journal import JournalLimit
     from types import SimpleNamespace
+
+    from .journal import JournalLimit
     j=journal();head=j.initialize({'x':1});j.max_commits=1
     with pytest.raises(JournalLimit):j.commit(head,{'x':2})
     assert j.read().value=={'x':1}
@@ -120,7 +124,8 @@ def test_deleted_anchor_is_not_silently_recreated_over_an_existing_head():
 def test_real_botocore_request_model_accepts_conditional_heads_with_single_attempt_configuration():
     import botocore.session
     from botocore.config import Config
-    from botocore.stub import Stubber,ANY
+    from botocore.stub import ANY, Stubber
+
     from .s3_journal import S3Journal
     client=botocore.session.get_session().create_client('s3',region_name='us-east-1',
         aws_access_key_id='synthetic-only',aws_secret_access_key='synthetic-only',
@@ -140,7 +145,7 @@ def test_real_botocore_request_model_accepts_conditional_heads_with_single_attem
 
 
 def test_explicit_create_only_initialization_needs_no_list_permission_and_never_resets_hidden_heads():
-    from .s3_journal import S3Journal,JournalUnavailable,JournalUncertain
+    from .s3_journal import JournalUnavailable, JournalUncertain, S3Journal
     class NoListing(ConditionalS3):
         def get_object(self,**request):
             try:return super().get_object(**request)
@@ -171,7 +176,7 @@ def test_explicit_create_only_initialization_needs_no_list_permission_and_never_
 
 
 def test_ambiguous_creation_probe_still_cannot_overwrite_an_existing_unreadable_head():
-    from .s3_journal import S3Journal,JournalConflict
+    from .s3_journal import JournalConflict, S3Journal
     client=ConditionalS3();old=journal(client);old.initialize({'paid':1})
     original=client.objects[old.head_key]
     del client.objects[old.anchor_key]

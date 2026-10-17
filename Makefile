@@ -32,8 +32,12 @@ test:
 test-all:
 	$(PYTHON) -m pytest -q
 
-.PHONY: check
-check: test-all
+.PHONY: check lint
+lint:
+	$(PYTHON) -m ruff check .
+	$(PYTHON) -m ruff format --check .
+
+check: lint test-all
 	cd trace-ui && npm ci && npm test && npm run build
 	git diff --exit-code -- src/decision_flywheel/vendor/trace-ui
 

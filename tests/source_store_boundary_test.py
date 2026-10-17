@@ -1,14 +1,15 @@
 """Source-store consumers reuse injected repositories without native fallbacks."""
 import asyncio
 from dataclasses import asdict
-from decision_flywheel.classifier_config import ClassifierConfig
-from decision_flywheel.models import DecisionTask
-from decision_flywheel.flywheel import FittedClassifier
+
 from decision_flywheel.batch_storage import SQLiteBatchStorage
-from decision_flywheel.matched_run_plan_test import source
-from decision_flywheel.matched_run_plan import plan_matched_runs
+from decision_flywheel.classifier_config import ClassifierConfig
+from decision_flywheel.flywheel import FittedClassifier
 from decision_flywheel.matched_run_evaluation import evaluate_matched_runs
 from decision_flywheel.matched_run_evaluation_test import Model
+from decision_flywheel.matched_run_plan import plan_matched_runs
+from decision_flywheel.matched_run_plan_test import source
+from decision_flywheel.models import DecisionTask
 
 
 def test_frozen_evaluator_uses_injected_clock_trace_and_existing_batch_contract(tmp_path):

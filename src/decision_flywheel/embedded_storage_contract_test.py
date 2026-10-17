@@ -127,7 +127,7 @@ def test_metadata_and_records_survive_reopening_the_same_store(embedded_backend)
 
 
 def test_events_get_increasing_identifiers_and_page_after_a_cursor(storage):
-    assert [storage.append_event('{"n":%d}' % number) for number in (1, 2, 3)] == [1, 2, 3]
+    assert [storage.append_event(f'{{"n":{number}}}') for number in (1, 2, 3)] == [1, 2, 3]
     assert storage.events(0, 2) == [(1, '{"n":1}'), (2, '{"n":2}')]
     assert storage.events(2, 10) == [(3, '{"n":3}')]
     assert storage.events(3, 10) == []

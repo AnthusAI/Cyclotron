@@ -1,16 +1,17 @@
 """Deterministic context policies that never inspect a target label."""
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import random
 import re
 import unicodedata
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
-import hashlib
-import json
-from typing import Mapping, Protocol, Sequence
+from functools import cache
+from typing import Protocol
 
 from .models import DecisionTask, Item, LabeledItem
 
@@ -18,7 +19,7 @@ TOKEN = re.compile(r"[a-z]+")
 POLICY_VERSION = "1"
 
 
-@lru_cache(maxsize=None)
+@cache
 def _tokens(value: str) -> frozenset[str]:
     return frozenset(TOKEN.findall(value.lower()))
 
@@ -127,7 +128,7 @@ def validate_selected_context(
 
 class ContextPolicy(Protocol):
     name: str
-    metadata: "PolicyMetadata"
+    metadata: PolicyMetadata
     fingerprint: str
 
     def select(self, task: DecisionTask, target: Item,
@@ -321,7 +322,7 @@ class FixedExampleList:
 
     @classmethod
     def from_items(cls, task: DecisionTask, examples: Sequence[LabeledItem],
-                   reserves: Sequence[LabeledItem]) -> "FixedExampleList":
+                   reserves: Sequence[LabeledItem]) -> FixedExampleList:
         def ref(row: LabeledItem) -> ExampleRef:
             if row.source != "trusted":
                 raise ValueError("fixed list examples must have trusted label sources")
@@ -333,7 +334,7 @@ class FixedExampleList:
         return cls(tuple(ref(row) for row in examples), tuple(ref(row) for row in reserves))
 
     @classmethod
-    def from_configuration(cls, configuration: Mapping[str, object]) -> "FixedExampleList":
+    def from_configuration(cls, configuration: Mapping[str, object]) -> FixedExampleList:
         def refs(key: str) -> tuple[ExampleRef, ...]:
             rows = configuration[key]
             if not isinstance(rows, (list, tuple)):

@@ -1,6 +1,6 @@
 """Executable Gherkin contract for the headless public library."""
-import asyncio
 import ast
+import asyncio
 from pathlib import Path
 
 from pytest_bdd import given, scenarios, then, when
@@ -8,7 +8,6 @@ from pytest_bdd import given, scenarios, then, when
 from decision_flywheel import ClassifierConfig, DecisionFlywheel
 from decision_flywheel.classifier_config import ClassifiedAnswers
 from decision_flywheel.models import DecisionResult, DecisionTask, Item
-
 
 scenarios("features/headless_core.feature")
 

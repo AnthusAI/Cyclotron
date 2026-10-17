@@ -9,10 +9,11 @@ meanwhile is superseded and stays queued. The cyclotron delegates to it.
 from __future__ import annotations
 
 import asyncio
+import time
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-import time
-from typing import Any, Mapping
+from typing import Any
 
 from .embedded_records import ExecutionGuard, _now
 from .optimizer_agent import OptimizationSuperseded

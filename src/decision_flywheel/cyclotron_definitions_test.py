@@ -1,4 +1,5 @@
 import pytest
+
 from .web_store import WebStore
 
 
@@ -165,7 +166,8 @@ def test_run_edition_numbers_cannot_overwrite_independent_definition_revisions(t
 
 
 def test_legacy_scorecard_workspace_opens_with_its_cyclotron_and_pinned_definition(tmp_path):
-    import json, sqlite3
+    import json
+    import sqlite3
     path = tmp_path/'db'
     store = WebStore(path); classifier(store, 'a')
     store.save_cyclotron_definition('card', 'Card', [{'id':'a','revision':1}], {})

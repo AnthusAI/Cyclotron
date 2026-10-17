@@ -4,10 +4,10 @@ No SQL, files, cloud client or alternative storage adapter lives here. Logical
 item identities and evaluation partitions are unchanged. Content addresses name
 only immutable context/receipt envelopes, not new operational item identities.
 """
-from dataclasses import dataclass, asdict
-from datetime import datetime,timezone
 import hashlib
 import json
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 
 
 def canonical(value):

@@ -1,8 +1,8 @@
 """Run the local GraphQL app or import an existing recording through its API."""
 import argparse
-from dataclasses import asdict
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 from .api_event_sink import GraphQLTraceSink
@@ -65,13 +65,14 @@ def main(argv=None):
         parser.error(str(error))
     if host != '127.0.0.1' and not token and not args.allow_unauthenticated_lan:
         parser.error('LAN access requires FLYWHEEL_WEB_TOKEN in the environment')
-    from .adapters.workspace import decision_adapter
+    import uvicorn
+
     from .adapters.optimizer_transport import optimizer_transport
+    from .adapters.workspace import decision_adapter
     from .optimizer_agent import OptimizerAgent
     from .reviewer import load_articles_jsonl
     from .web_api import create_app
     from .web_worker import WebWorker
-    import uvicorn
     store = WebStore(args.database)
     articles = tuple(asdict(article) for article in load_articles_jsonl(args.articles)) if args.articles else ()
     from .credential_redaction import credential_values
