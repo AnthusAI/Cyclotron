@@ -38,7 +38,7 @@ class HostedConfig:
     auth_bucket:str
     session_key_arn:str
     queue_url:str
-    central_endpoint:str='https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api'
+    central_endpoint:str
     allow_live:bool=False
     allow_insecure_loopback:bool=False
     max_bytes:int=4194304
@@ -51,11 +51,12 @@ class HostedConfig:
         if (self.books_bucket==self.auth_bucket or any(not re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]',bucket) for bucket in (self.books_bucket,self.auth_bucket))):raise ValueError('distinct fixed books and auth buckets required')
         if not re.fullmatch(r'arn:aws:kms:'+re.escape(self.region)+':'+self.account+r':key/[a-f0-9-]{36}',self.session_key_arn):raise ValueError('exact regional session key ARN required')
         if not re.fullmatch(r'https://sqs\.'+re.escape(self.region)+r'\.amazonaws\.com/'+self.account+r'/[A-Za-z0-9_-]+',self.queue_url):raise ValueError('fixed account queue URL required')
+        if not self.central_endpoint.startswith('https://'):raise ValueError('https central endpoint required')
         if type(self.allow_live) is not bool or any(type(v) is not int or v<1 for v in (self.max_bytes,self.max_records,self.max_commits)):raise ValueError('explicit bounded host configuration required')
 
     @classmethod
     def from_environment(cls,environment):
-        names=('issuer','client_id','authorization_origin','public_origin','account','region','books_bucket','auth_bucket','session_key_arn','queue_url')
+        names=('issuer','client_id','authorization_origin','public_origin','account','region','books_bucket','auth_bucket','session_key_arn','queue_url','central_endpoint')
         try:values={name:environment['CYCLOTRON_'+name.upper()] for name in names}
         except KeyError:raise ValueError('reviewed cloud configuration is incomplete') from None
         # First cloud slice deliberately has no environment switch for paid work.
@@ -68,7 +69,7 @@ class HostedRuntime:
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
-        self.central=central or SigV4Transport(config.central_endpoint,'us-east-1')
+        self.central=central or SigV4Transport(config.central_endpoint,config.region)
         self.accounts=AccountsClient(self.central);self.identities=GoogleIdentityClient(self.central)
         self.verifier=verifier or CognitoTokenVerifier(config.issuer,config.client_id)
         self.sessions=S3OAuthSessions(self.verifier,journal_for=self._auth_journal,

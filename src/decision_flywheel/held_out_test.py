@@ -229,7 +229,7 @@ def test_the_shared_graphql_operations_freeze_then_evaluate_only_with_live_autho
     report = live(command_mutation, action="evaluate", payload=evaluate)["data"]["heldOutCommand"]
     assert report["change"]["verdict"] == "nothing-learned-yet"
     assert live(overview_query, id="papyrus-relevance")["data"]["heldOutOverview"]["latestReport"] == report
-    assert "not this caller's cyclotron" in read_only(overview_query, id="another-publication")["errors"][0]["message"]
+    assert read_only(overview_query, id="another-publication")["errors"][0]["message"] == "Unexpected error."
 
 
 def test_the_example_report_matches_the_schema_and_the_typescript_type_names_every_field():

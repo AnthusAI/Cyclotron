@@ -22,6 +22,10 @@ from __future__ import annotations
 from typing import Any, Callable, ContextManager, Mapping
 
 COMMANDS = ("freeze", "evaluate")
+COMMAND_PAYLOAD_KEYS = {
+    "freeze": {"classifier", "cyclotronId"},
+    "evaluate": {"classifier", "setId", "cyclotronId", "confirmedRequestBound", "minimumPerLabel"},
+}
 
 
 class HeldOutService:
@@ -45,6 +49,8 @@ class HeldOutService:
     async def command(self, action: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         if action not in COMMANDS or not isinstance(payload, Mapping):
             raise ValueError("unknown held-out command")
+        if set(payload) - COMMAND_PAYLOAD_KEYS[action]:
+            raise ValueError("held-out command payload has an unknown field")
         if action == "evaluate" and not self.allow_live:
             raise ValueError("held-out evaluation calls the decision model and requires explicit live authority")
         classifier, set_id = payload.get("classifier"), payload.get("setId")
