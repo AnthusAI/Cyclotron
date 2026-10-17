@@ -1,10 +1,10 @@
 {
   "id": "decision-flywheel-0dafa816-04ce-421f-902e-3a8d7d309aab",
   "title": "Export the embeddable components and types as a versioned package release",
-  "description": "package.json is private, version 0.1.1, ships raw TSX, and MultiLabelCard imports through an @/ path alias that a consumer cannot resolve. Papyrus (Next 15, React 19, Tailwind 4) and Cyclotron-web pin a GitHub tarball. Export review-control, cyclotron-status, the cyclotron-status/v1 types and schema, and keep labeling-review, classifier-metrics, cycle-timeline and lab-metrics. Ordering: after the review control and status widget.\n\nAcceptance criteria:\n- No exported file uses a path alias; a fresh Next 15 app with transpilePackages ['cyclotron'] builds and renders both widgets.\n- Semantic Release tags a version that applications pin; CHANGELOG lists the new exports.\n- A smoke test imports every export path listed in package.json.,",
+  "description": "package.json is private, version 0.1.1, ships raw TSX, and MultiLabelCard imports through an @/ path alias that a consumer cannot resolve. Papyrus (Next 15, React 19, Tailwind 4) and Cyclotron-web pin a GitHub tarball. Export review-control, cyclotron-status, the cyclotron-status/v1 types and schema, and keep labeling-review, classifier-metrics, cycle-timeline and lab-metrics. Ordering: after the review control and status widget.\n\nAcceptance criteria:\n- No exported file uses a path alias; a fresh Next 15 app with transpilePackages ['cyclotron'] builds and renders both widgets.\n- Semantic Release tags a version that applications pin; CHANGELOG lists the new exports.\n- A smoke test imports every export path listed in package.json.,\n\n## Current next-step plan — 2026-10-17\n\nVerified 2026-10-17: Cyclotron PR25 https://github.com/AnthusAI/Cyclotron/pull/25 merged into develop at323d0b587d9057e0e93b99df2383bde70b2edc91, head61323ae0840fb3a787439c09d7a08674ff677aed. Test and diagrams checks SUCCESS; release SKIPPED. Source prepares UI0.2.2, but remote UI tags stop atui-v0.2.1 (peeledb2234be79d83231a4ed69f17a928b5049ab364a4); no ui-v0.2.2 tag. Latest published engine releasev0.20.1 (c09f70b33b2b96a4e4cc2acca360af47d26620a8, published2026-10-12). PR25 is not an ancestor of current main. Merged develop source is not a published dependency or production proof.\n\nPreserve prior export/package work. Next release must include PrimingPanel/createPrimingClient, optional explanations and priming count/status exports with the merged SDK/storage source. Verify tag commit, package contents and every export in a fresh consumer, update CHANGELOG through the normal release, then record consumer lockfile pins. Sourcepackage0.2.2 is prepared but unpublished; do not close until actual publication. Dependencies: release story1019e003 and Papyrus repinPPY-70d9fd.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
   "type": "task",
   "status": "in_progress",
-  "priority": 2,
+  "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
@@ -26,10 +26,25 @@
       "text": "Landed on feat/package-release: web package 0.2.0 with exports review-control, cyclotron-status (component and type), sdk-types (Decision, Review, subscribe events; a Python spec checks every SDK key is typed) and styles/components.css (component rules only; specs forbid :root, html/body/universal selectors and unfallbacked tokens; shared.css imports it). A spec runs npm pack --dry-run and checks every export target is packed and every packed import resolves inside the tarball with no @/ alias; it found CalibrationBins and CalibrationProvenance missing, now shipped. Removed the dead lib/utils export. make pack-ui builds dist/cyclotron-0.2.0.tgz for a GitHub release ui-v0.2.0 (not created: needs a release by the owner). A consumer project typechecked against the tarball. Also filed decision-flywheel-d9f23e3f (windows count labels) under the epic.",
       "created_at": "2026-10-09T16:07:35.919092Z",
       "comment_type": "default"
+    },
+    {
+      "id": "7ee5a994-eaca-4f3b-ad78-2398346a5e47",
+      "author": "home",
+      "text": "2026-10-17 next-step plan recorded in the description. Verified 2026-10-17: Cyclotron PR25 https://github.com/AnthusAI/Cyclotron/pull/25 merged into develop at323d0b587d9057e0e93b99df2383bde70b2edc91, head61323ae0840fb3a787439c09d7a08674ff677aed. Test and diagrams checks SUCCESS; release SKIPPED. Source prepares UI0.2.2, but remote UI tags stop atui-v0.2.1 (peeledb2234be79d83231a4ed69f17a928b5049ab364a4); no ui-v0.2.2 tag. Latest published engine releasev0.20.1 (c09f70b33b2b96a4e4cc2acca360af47d26620a8, published2026-10-12). PR25 is not an ancestor of current main. Merged develop source is not a published dependency or production proof.\n\nPreserve prior export/package work. Next release must include PrimingPanel/createPrimingClient, optional explanations and priming count/status exports with the merged SDK/storage source. Verify tag commit, package contents and every export in a fresh consumer, update CHANGELOG through the normal release, then record consumer lockfile pins. Sourcepackage0.2.2 is prepared but unpublished; do not close until actual publication. Dependencies: release story1019e003 and Papyrus repinPPY-70d9fd.",
+      "created_at": "2026-10-17T06:22:40.141468Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "next-step-plan-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-09T14:51:30.293723Z",
-  "updated_at": "2026-10-09T16:07:35.919114Z",
+  "updated_at": "2026-10-17T06:22:40.141490Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

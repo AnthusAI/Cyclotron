@@ -1,10 +1,10 @@
 {
   "id": "decision-flywheel-b5f1a414-eaba-4362-b1e0-d9a0da0e94ca",
   "title": "Persist locally or in serverless canonical cloud storage",
-  "description": "As a deployer, I want storage selected explicitly for each deployment.\n\nFeature: Persist locally or in serverless canonical cloud storage\n  Scenario: Observable acceptance\n    Given local SQLite or serverless S3 canonical text with a DynamoDB catalog is selected\n    When the application restarts and reads or mutates its authorized classifier output\n    Then canonical state is preserved and cloud operation requires no always-on SQLite server\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.",
+  "description": "As a deployer, I want storage selected explicitly for each deployment.\n\nFeature: Persist locally or in serverless canonical cloud storage\n  Scenario: Observable acceptance\n    Given local SQLite or serverless S3 canonical text with a DynamoDB catalog is selected\n    When the application restarts and reads or mutates its authorized classifier output\n    Then canonical state is preserved and cloud operation requires no always-on SQLite server\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.\n\n## Current next-step plan — 2026-10-17\n\nPR25 provides shared storage-port source; cloud activation and real authorized hosted acceptance remain unfinished. Canonical source text/content and labels live in S3; DynamoDB is only the scoped/rebuildable catalog. Local SQLite is supported; no always-on cloud SQLite service.\n\nFeature: Canonical priming durability\n  Scenario: Reload or rebuild catalog\n    Given an approved scoped fixture with canonical content and labels\n    When the process restarts or the catalog is rebuilt\n    Then accepted example IDs labels and content remain unchanged\n    And missing/revoked authorization or stale revision denies writes\n    And a repeated operation does not duplicate an example after an uncertain response\n\nResource/access owner must approve any remaining persistent scope before hosted verification. Dependencies: Prospectus account authorization and reviewed shared version pins; no infrastructure or fixture mutation in this task.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
   "type": "story",
   "status": "blocked",
-  "priority": 2,
+  "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
@@ -25,10 +25,25 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "89961e24-b349-46f4-8f50-85c6bed5d561",
+      "author": "home",
+      "text": "2026-10-17 next-step plan recorded in the description. PR25 provides shared storage-port source; cloud activation and real authorized hosted acceptance remain unfinished. Canonical source text/content and labels live in S3; DynamoDB is only the scoped/rebuildable catalog. Local SQLite is supported; no always-on cloud SQLite service.\n\nFeature: Canonical priming durability\n  Scenario: Reload or rebuild catalog\n    Given an approved scoped fixture with canonical content and labels\n    When the process restarts or the catalog is rebuilt\n    Then accepted example IDs labels and content remain unchanged\n    And missing/revoked authorization or stale revision denies writes\n    And a repeated operation does not duplicate an example after an uncertain response\n\nResource/access owner must approve any remaining persistent scope before hosted verification. Dependencies: Prospectus account authorization and reviewed shared version pins; no infrastructure or fixture mutation in this task.",
+      "created_at": "2026-10-17T06:22:40.055175Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "gpt-6.1-sol",
+        "name": "next-step-plan-reconciliation",
+        "settings": {
+          "reasoning_effort": "medium"
+        }
+      }
     }
   ],
   "created_at": "2026-10-16T20:46:53.071342Z",
-  "updated_at": "2026-10-16T20:46:53.130709Z",
+  "updated_at": "2026-10-17T06:22:40.055198Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
