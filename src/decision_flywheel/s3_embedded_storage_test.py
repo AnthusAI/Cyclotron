@@ -29,6 +29,11 @@ def test_actual_embedded_decide_review_reopen_and_priming_use_no_sqlite_or_files
         assert reopened.subscribe()==before and model.calls==calls
         assert reopened._partitions('relevant')[0][0].item.id=='synthetic-prime'
         with pytest.raises(ValueError,match='priming'):asyncio.run(reopened.decide(item('synthetic-prime')))
+        from .priming_context_test import accepted
+        asyncio.run(reopened.add_priming_examples(accepted('added-in-cloud','Added','exclude','Reason'),added_by='editor-1'))
+    with Cyclotron.open(None,DEFINITION,model,storage=stores(),priming_examples=seed()) as primed_again:
+        assert primed_again.wheels['relevant'].active.config.example_ids==('synthetic-prime','added-in-cloud')
+        assert primed_again.priming_additions()[0]['examples']=={'relevant':['added-in-cloud']}
 
 
 def test_root_transaction_keeps_cursor_and_derived_evidence_atomic_on_size_failure():

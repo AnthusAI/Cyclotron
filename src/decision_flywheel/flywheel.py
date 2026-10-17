@@ -190,6 +190,7 @@ class DecisionFlywheel:
             from .optimizer_agent import DisabledOptimizer
             optimizer = DisabledOptimizer()
         self.initial, self.model, self.optimizer = initial, model, optimizer
+        self.version_baseline = initial
         self._step_context = ContextVar("flywheel_step", default={})
         self._answer_scopes = ContextVar('answer_dependencies', default=())
         # A multi-output cyclotron installs a sibling check; one output has none.
@@ -395,7 +396,7 @@ class DecisionFlywheel:
         return await ControlScheduler(self).run(training, development, protected=protected,
             propensities=propensities, retry_interrupted=retry_interrupted, max_feature_trials=max_feature_trials)
 
-    def _activate(self, classifier):
+    def _activate(self, classifier, *, change_summary=None):
         if classifier.head and classifier.head.provenance.context_artifact_fingerprint != classifier.config.fingerprint:
             raise ValueError('learned head does not match the classifier context')
         if classifier.head and (not classifier.answer_dependencies or
@@ -406,7 +407,28 @@ class DecisionFlywheel:
         self.active = classifier
         from .classifier_snapshot import compact_snapshot
         self._emit({"kind": "classifier-activated", "classifier_version": classifier.fingerprint,
-                    "classifier_snapshot": compact_snapshot(classifier)})
+                    "classifier_snapshot": compact_snapshot(classifier),
+                    **({"change_summary": change_summary} if change_summary else {})})
+
+    def extend_example_list(self, example_ids, *, change_summary):
+        """Append human-accepted examples to the fixed example list as a new version.
+
+        The decision context changes, so a learned head fitted to the previous
+        context no longer applies: the new version starts unfitted and the next
+        learning pass refits it. A later invalidation resets to an initial
+        configuration that keeps these examples; versions still count from the
+        configuration the store was created with.
+        """
+        from dataclasses import replace
+        additional_example_ids = tuple(example_ids)
+        active_config = self.active.config
+        if not additional_example_ids or any(key in active_config.example_ids for key in additional_example_ids):
+            raise ValueError("added examples must be new to the active example list")
+        self.initial = replace(self.initial, example_ids=self.initial.example_ids + tuple(
+            key for key in additional_example_ids if key not in self.initial.example_ids))
+        extended_config = replace(active_config, example_ids=active_config.example_ids + additional_example_ids,
+                                  parent_fingerprint=active_config.fingerprint)
+        self._activate(FittedClassifier(extended_config), change_summary=change_summary)
 
     SHARED_QUESTIONS_NOTE = ("Other classifiers in this cyclotron ask these supporting questions. A question with the "
                              "same name, instructions and labels is asked once and its answer feeds every classifier "

@@ -324,6 +324,11 @@ def _supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, l
     return normalized
 
 
+def _priming_includes(saved_priming: Mapping[str, Any], requested_priming: Mapping[str, Any]) -> bool:
+    """A reopen may pass the examples a store was created with after more were added."""
+    return all(row in saved_priming.get(cid, ()) for cid, rows in requested_priming.items() for row in rows)
+
+
 def _store_paths(directory: Path, definition: CyclotronDefinition) -> dict[str, Path]:
     paths = {name: directory / name for name in STORE_FILES}
     for spec in definition.classifiers:
@@ -356,6 +361,7 @@ class Cyclotron:
             raise ValueError("seed_rubrics maps classifier ids to rubric text")
         self.seed_rubrics = seed_rubrics
         from .priming_context import encode_priming
+        self.priming_redaction = tuple(redact)
         self.requested_priming = None if priming_examples is None else encode_priming(
             dict(priming_examples), {spec.id:spec.task for spec in definition.classifiers}, redact=redact)
         self.seed_supporting_questions = _supporting_questions(definition, seed_supporting_questions)
@@ -416,11 +422,11 @@ class Cyclotron:
         from .priming_context import decode_priming
         stored_priming = self.root_storage.meta('priming_examples')
         saved_priming = json.loads(stored_priming[0]) if stored_priming else {}
-        if stored_priming and self.requested_priming is not None and self.requested_priming != saved_priming:
-            raise ValueError("this store has different accepted priming; create a new store")
+        if stored_priming and self.requested_priming is not None and not _priming_includes(saved_priming, self.requested_priming):
+            raise ValueError("this store has different accepted priming; add new examples with add_priming_examples")
         if not stored_priming and self.requested_priming:
             if saved:
-                raise ValueError("priming must be supplied when the store is first created")
+                raise ValueError("this store already exists; add priming examples with add_priming_examples")
             saved_priming = self.requested_priming
         with self.root_storage.transaction():
             self.root_storage.insert_meta('priming_examples',_json(saved_priming),ignore=True)
@@ -439,10 +445,14 @@ class Cyclotron:
         self._seen: dict[str, int] = {}
         if self.directory is not None:(self.directory / "classifiers").mkdir(exist_ok=True)
         paths = _store_paths(self.directory, definition) if self.directory is not None else {}
+        additions = self._priming_additions()
         for spec in definition.classifiers:
             path = paths["classifiers/" + hashlib.sha256(spec.id.encode()).hexdigest() + ".sqlite3"] if self.directory is not None else None
+            primed_example_ids = tuple(row.item.id for row in self.priming_examples.get(spec.id, ()))
+            added_example_ids = {key for addition in additions for key in addition['examples'].get(spec.id, ())}
+            # The store's creation configuration stays version 1; later additions apply as new versions.
             wheel = DecisionFlywheel(
-                path, ClassifierConfig(spec.task, example_ids=tuple(row.item.id for row in self.priming_examples.get(spec.id,())), rubric=self._seed(spec.id),
+                path, ClassifierConfig(spec.task, example_ids=tuple(key for key in primed_example_ids if key not in added_example_ids), rubric=self._seed(spec.id),
                                        tasks=self._seed_questions(spec, created=saved is None)),
                 # Each output gets its own copy so its optimizer events reach only its own
                 # trace; the copies share the transport, so the call limit stays cyclotron-wide.
@@ -450,10 +460,12 @@ class Cyclotron:
                 max_requests=max_requests, redact=redact, selection_policy=spec.selection_policy,
                 min_evaluation_per_class=2,
                 storage=self.storage.runtime_for_classifier(spec.id) if self.storage is not None else None)
+            wheel.initial = replace(wheel.initial, example_ids=primed_example_ids)
             self.wheels[spec.id] = wheel
             self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
             self._seen[spec.id] = 0
         install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
+        self._apply_priming_additions()
         self._sync()
 
     def _seed(self, classifier: str) -> str:
@@ -560,6 +572,84 @@ class Cyclotron:
                 result = await result
             if result is not None:
                 raise TypeError('execution_guard must return None or raise to deny')
+
+    # Priming --------------------------------------------------------------
+
+    async def add_priming_examples(self, examples: Mapping[str, Sequence[LabeledItem]], *, added_by: str,
+                                   execution_guard: ExecutionGuard | None = None) -> dict[str, Any]:
+        """Add accepted, human-labeled examples to an existing store. No model call.
+
+        Each output that gains examples appends them to its fixed example list
+        as a new version, so its next decision sees them. Reviewed decisions
+        keep their labels; an unreviewed decision is decided again by the new
+        version. Adding the same examples again changes nothing. A known
+        identity with different content, or an item already decided, is refused.
+        """
+        if not isinstance(added_by, str) or not added_by.strip():
+            raise ValueError("added_by names who accepted the examples")
+        from .priming_context import decode_priming, encode_priming
+        tasks = {cid: spec.task for cid, spec in self.specs.items()}
+        requested = encode_priming(dict(examples), tasks, redact=self.priming_redaction)
+        async with self._learn_lock, self.execution(execution_guard=execution_guard):
+            stored = self.root_storage.meta('priming_examples')
+            saved = json.loads(stored[0]) if stored else {}
+            operational_item_ids = set(self._item_values())
+            merged = {cid: list(rows) for cid, rows in saved.items()}
+            added_example_ids: dict[str, list[str]] = {}
+            for cid, rows in requested.items():
+                known = {row['item']['id']: row for row in merged.get(cid, ())}
+                for row in rows:
+                    identity = row['item']['id']
+                    if identity in known:
+                        if known[identity] != row:
+                            raise ValueError(f"primed example {identity!r} already exists with different content")
+                        continue
+                    if identity in operational_item_ids:
+                        raise ValueError("priming and operational items must be disjoint")
+                    merged.setdefault(cid, []).append(row)
+                    added_example_ids.setdefault(cid, []).append(identity)
+            if added_example_ids:
+                merged = encode_priming(decode_priming(merged), tasks, redact=self.priming_redaction)
+                additions = self._priming_additions()
+                additions.append({'added_by': added_by.strip(), 'at': _now(), 'examples': added_example_ids, 'applied': {}})
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta('priming_examples', _json(merged))
+                    self.root_storage.put_meta('priming_additions', _json(additions))
+                self.priming_examples = decode_priming(merged)
+                self._apply_priming_additions()
+                self._sync()
+            return {'added': added_example_ids,
+                    'primed_examples': {cid: len(self.priming_examples.get(cid, ())) for cid in self.specs},
+                    'versions': {cid: self.versions[cid].version for cid in self.specs}}
+
+    def priming_additions(self) -> list[dict[str, Any]]:
+        """Who added primed examples to this store after it was created, and when."""
+        return [{key: value for key, value in addition.items() if key != 'applied'} for addition in self._priming_additions()]
+
+    def _priming_additions(self) -> list[dict[str, Any]]:
+        stored = self.root_storage.meta('priming_additions')
+        return json.loads(stored[0]) if stored else []
+
+    def _apply_priming_additions(self) -> None:
+        """Bring each output's example list up to its recorded additions, once each.
+
+        An addition is marked applied per output, so an example the optimizer
+        later swaps out of the list is not put back on reopen.
+        """
+        additions = self._priming_additions()
+        for addition in additions:
+            for cid, example_ids in addition['examples'].items():
+                if cid in addition['applied']:
+                    continue
+                wheel = self.wheels[cid]
+                missing_example_ids = [key for key in example_ids if key not in wheel.active.config.example_ids]
+                if missing_example_ids:
+                    count = len(missing_example_ids)
+                    wheel.extend_example_list(missing_example_ids, change_summary=(
+                        f"Added {count} primed example{'' if count == 1 else 's'} to the example list."))
+                addition['applied'][cid] = wheel.active.fingerprint
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta('priming_additions', _json(additions))
 
     # Decide ---------------------------------------------------------------
 
