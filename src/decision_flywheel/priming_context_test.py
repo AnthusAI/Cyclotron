@@ -219,3 +219,131 @@ def test_an_addition_interrupted_before_its_example_list_changed_completes_on_re
     with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([])) as reopened:
         assert reopened.wheels["relevant"].active.config.example_ids == ("pending",)
         assert reopened.status().to_json()["cyclotron"]["version"] == 2
+
+
+def test_a_retracted_primed_example_stops_reaching_the_prompt_as_training_and_the_retraction_is_recorded(tmp_path):
+    model = RecordsContext()
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, model, agent([])) as engine:
+        asyncio.run(
+            engine.add_priming_examples(accepted("withdrawn-review", "Reviewed", "include", "Reason"), added_by="editor-1")
+        )
+        asyncio.run(engine.add_priming_examples(accepted("kept-review", "Kept", "exclude", "Other reason"), added_by="editor-1"))
+        asyncio.run(engine.decide(item("before")))
+        assert model.training_ids[-1] == ["withdrawn-review", "kept-review"]
+        result = asyncio.run(engine.retract_priming_examples({"relevant": ["withdrawn-review"]}, retracted_by="editor-2"))
+        assert result == {
+            "retracted": {"relevant": ["withdrawn-review"]},
+            "absent": {},
+            "primed_examples": {"relevant": 1},
+            "versions": {"relevant": 4},
+        }
+        assert engine.status().to_json()["lastChange"]["summary"] == "Retracted 1 primed example from the example list."
+        validate(engine.status().to_json(), load_schema())
+        asyncio.run(engine.decide(item("after", "a different source")))
+        assert model.example_lists[-1] == ("kept-review",)
+        assert model.training_ids[-1] == ["kept-review"]
+        assert [row.item.id for row in engine._partitions("relevant")[0]] == ["kept-review"]
+        assert [row.item.id for row in engine._labeled_partitions("relevant")[0]] == ["kept-review"]
+        assert engine.wheels["relevant"].initial.example_ids == ("kept-review",)
+        retraction = engine.priming_retractions()[0]
+        assert (
+            retraction["retracted_by"] == "editor-2"
+            and retraction["at"]
+            and retraction["examples"] == {"relevant": ["withdrawn-review"]}
+        )
+        first_addition = engine.priming_additions()[0]
+        assert first_addition["examples"] == {"relevant": ["withdrawn-review"]}
+        assert first_addition["retractions"][0]["retracted_by"] == "editor-2"
+        assert engine.priming_additions()[1]["retractions"] == []
+
+
+def test_retracting_an_absent_or_already_retracted_example_changes_nothing_and_says_so(tmp_path):
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([]), priming_examples=seed()) as engine:
+        first = asyncio.run(
+            engine.retract_priming_examples({"relevant": ["synthetic-prime", "never-primed"]}, retracted_by="editor-1")
+        )
+        assert first["retracted"] == {"relevant": ["synthetic-prime"]} and first["absent"] == {"relevant": ["never-primed"]}
+        version = engine.status().to_json()["cyclotron"]["version"]
+        again = asyncio.run(engine.retract_priming_examples({"relevant": ["synthetic-prime"]}, retracted_by="editor-2"))
+        assert again["retracted"] == {} and again["absent"] == {"relevant": ["synthetic-prime"]}
+        assert engine.status().to_json()["cyclotron"]["version"] == version
+        assert len(engine.priming_retractions()) == 1
+        assert engine.wheels["relevant"].active.config.example_ids == ()
+        with pytest.raises(ValueError, match="retracted_by"):
+            asyncio.run(engine.retract_priming_examples({"relevant": ["x"]}, retracted_by=" "))
+        with pytest.raises(ValueError, match="example identities"):
+            asyncio.run(engine.retract_priming_examples({"relevant": [""]}, retracted_by="editor-1"))
+        with pytest.raises(ValueError, match="list of example identities"):
+            asyncio.run(engine.retract_priming_examples({"relevant": "synthetic-prime"}, retracted_by="editor-1"))
+
+
+def test_a_retraction_survives_reopening_even_when_the_original_priming_is_passed_again(tmp_path):
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([]), priming_examples=seed()) as engine:
+        asyncio.run(engine.add_priming_examples(accepted("added", "Added", "exclude", "Reason"), added_by="editor-1"))
+        asyncio.run(engine.retract_priming_examples({"relevant": ["synthetic-prime", "added"]}, retracted_by="editor-2"))
+        version = engine.status().to_json()["cyclotron"]["version"]
+    for requested in (None, seed()):
+        with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([]), priming_examples=requested) as reopened:
+            assert reopened.wheels["relevant"].active.config.example_ids == ()
+            assert reopened._partitions("relevant")[0] == ()
+            assert reopened.status().primed_examples == 0
+            assert reopened.status().to_json()["cyclotron"]["version"] == version
+            assert reopened.priming_retractions()[0]["retracted_by"] == "editor-2"
+            assert reopened.priming_additions()[0]["retractions"][0]["examples"] == {"relevant": ["added"]}
+            asyncio.run(reopened.decide(item("synthetic-prime")))
+
+
+def test_a_retraction_interrupted_before_its_example_list_changed_completes_on_reopen(tmp_path):
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([])) as engine:
+        asyncio.run(engine.add_priming_examples(accepted("pending", "Pending", "include", "Reason"), added_by="editor-1"))
+        engine._apply_priming_retractions = lambda: None
+        asyncio.run(engine.retract_priming_examples({"relevant": ["pending"]}, retracted_by="editor-1"))
+        assert engine.wheels["relevant"].active.config.example_ids == ("pending",)
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([])) as reopened:
+        assert reopened.wheels["relevant"].active.config.example_ids == ()
+        assert reopened.status().to_json()["cyclotron"]["version"] == 3
+
+
+def test_a_retracted_example_can_be_added_again_only_as_a_new_addition(tmp_path):
+    model = RecordsContext()
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, model, agent([])) as engine:
+        asyncio.run(engine.add_priming_examples(accepted("review", "First review", "include", "Reason"), added_by="editor-1"))
+        asyncio.run(engine.retract_priming_examples({"relevant": ["review"]}, retracted_by="editor-2"))
+        result = asyncio.run(
+            engine.add_priming_examples(accepted("review", "Second review", "exclude", "New reason"), added_by="editor-3")
+        )
+        assert result["added"] == {"relevant": ["review"]} and result["primed_examples"] == {"relevant": 1}
+        assert [addition["added_by"] for addition in engine.priming_additions()] == ["editor-1", "editor-3"]
+        assert engine.priming_additions()[0]["retractions"][0]["retracted_by"] == "editor-2"
+        assert engine.priming_additions()[1]["retractions"] == []
+        asyncio.run(engine.decide(item("after")))
+        assert model.example_lists[-1] == ("review",)
+        assert engine._partitions("relevant")[0][0].label == "exclude"
+        assert (
+            asyncio.run(engine.add_priming_examples(accepted("review", "Second review", "exclude", "New reason"), added_by="x"))[
+                "added"
+            ]
+            == {}
+        )
+        with pytest.raises(ValueError, match="different content"):
+            asyncio.run(engine.add_priming_examples(accepted("review", "Third", "include", "R"), added_by="editor-1"))
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([])) as reopened:
+        assert reopened.wheels["relevant"].active.config.example_ids == ("review",)
+        assert len(reopened.priming_retractions()) == 1
+
+
+def test_a_retracted_identity_that_was_decided_meanwhile_cannot_be_added_again(tmp_path):
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([]), priming_examples=seed()) as engine:
+        asyncio.run(engine.retract_priming_examples({"relevant": ["synthetic-prime"]}, retracted_by="editor-1"))
+        asyncio.run(engine.decide(item("synthetic-prime")))
+        with pytest.raises(ValueError, match="disjoint"):
+            asyncio.run(engine.add_priming_examples(seed(), added_by="editor-2"))
+
+
+def test_retracting_for_an_unknown_classifier_is_refused_and_records_nothing(tmp_path):
+    with Cyclotron.open(tmp_path / "engine", DEFINITION, Model(), agent([]), priming_examples=seed()) as engine:
+        with pytest.raises(ValueError, match="known classifier"):
+            asyncio.run(
+                engine.retract_priming_examples({"relevant": ["synthetic-prime"], "unknown": ["x"]}, retracted_by="editor-1")
+            )
+        assert engine.priming_retractions() == [] and engine.status().primed_examples == 1
