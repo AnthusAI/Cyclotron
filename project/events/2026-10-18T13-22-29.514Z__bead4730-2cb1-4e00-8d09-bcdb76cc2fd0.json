@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bead4730-2cb1-4e00-8d09-bcdb76cc2fd0",
+  "issue_id": "decision-flywheel-514063e8-fc6b-4b2a-94f0-649f66c7fe0c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-18T13:22:29.514Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Authenticate sites to the central lab with Prospectus-issued credentials re-verified by the lab",
+    "description": "Decision (no earlier Cyclotron card existed; Papyrus PPY-58f107 only fixes lab-to-Prospectus auth): a site calls the lab with a short-lived Prospectus-issued credential for the selected account and role. The lab never trusts the pin or the token alone: it re-verifies the credential with the account service through an injected verifier on every operation, requires the verified account to equal the X-Cyclotron-Account pin, and derives grants through an injected function with no default role mapping. No shared lab API key, no long-lived key, no Prospectus client inside Cyclotron.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
