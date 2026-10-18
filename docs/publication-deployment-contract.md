@@ -267,6 +267,11 @@ There is no shared lab key, long-lived key, account-service client or issuer in
 Cyclotron; the deployment's verifier calls the account service with the lab's own
 approved runtime role.
 
+`prospectus_site_credentials.prospectus_site_credential_verifier(accounts)` is the Prospectus
+implementation of `verify_credential`: it resolves the forwarded person token to a person,
+authorizes `console:read` on the pinned account with the lab's runtime role, and returns the
+verified role. A refusal is `None`; an unavailable account service answers `503`.
+
 The Papyrus BFF must obtain its verified selection from its trusted account host,
 resolve fresh publication capabilities and forward the pin. No console role is
 implicitly mapped to `review` or `steer`. Browser state/cache/component identity
