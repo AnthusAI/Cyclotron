@@ -254,6 +254,19 @@ Account/actor fields in operation JSON remain forbidden. The legacy single-lab
 `create_publication_app(lab, authorize=...)` retains its authentication-first
 behavior and accepts the optional account constraint.
 
+### Site authentication to the central lab
+
+A site calls the central lab with a short-lived bearer credential that the account
+service issued for the selected account and role. `site_credential_access(verify_credential,
+lab_for_account, grants_for)` builds the `create_publication_host` resolver. On every
+operation it requires the bearer token (`401` otherwise), asks the injected verifier
+to re-verify it with the account service (`None` means unknown, expired or revoked,
+`403`), requires the verified account to equal the `X-Cyclotron-Account` pin, and
+derives grants only through the injected `grants_for` (no default role mapping).
+There is no shared lab key, long-lived key, account-service client or issuer in
+Cyclotron; the deployment's verifier calls the account service with the lab's own
+approved runtime role.
+
 The Papyrus BFF must obtain its verified selection from its trusted account host,
 resolve fresh publication capabilities and forward the pin. No console role is
 implicitly mapped to `review` or `steer`. Browser state/cache/component identity
