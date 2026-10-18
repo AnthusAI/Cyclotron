@@ -690,3 +690,11 @@ def test_a_temporary_sibling_context_is_restored_exactly_after_use(tmp_path):
             raise RuntimeError("evaluation failed")
     assert shared.context_configs == configs and shared.context_training == pools
     shared.close()
+
+
+def test_a_shared_decision_forgets_pinned_siblings_when_the_classifier_set_changes(tmp_path):
+    shared = SharedDecisions(tmp_path / "shared.sqlite", None, max_requests=0, observer=lambda event: None)
+    shared.bind_context({"a": object()}, {"a": ()})
+    shared.unbind_context()
+    assert shared.context_configs == {} and shared.context_training == {} and shared.prepared == {}
+    shared.close()

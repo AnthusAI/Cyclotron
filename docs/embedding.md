@@ -121,6 +121,38 @@ an unknown classifier is refused. A retracted identity may be added again with
 given then. The rule that primed items and operational items are disjoint still
 applies.
 
+## Changing the classifier set
+
+A store keeps its learned state when its classifiers change, so one shared
+cyclotron can follow a set that grows and shrinks over time (for example one
+binary classifier per newsroom section).
+
+`add_classifiers([ClassifierSpec, ...], added_by=..., seed_rubrics={id: text})`
+adds classifiers to an open store. No model call is made. A new classifier
+starts unfitted with its seed rubric and no labels, and learns only from
+reviews of decisions made after it was added. The other classifiers keep their
+labels, rubrics and versions; the shared decision request now carries the new
+classifier, so unreviewed decisions are decided again with it and the other
+classifiers' ML models refit on the next decision.
+
+`retire_classifiers([classifier_id, ...], retired_by=...)` stops classifiers
+deciding and learning. Their history, labels and reviews stay in the store
+(`labels(include_retired=True)`, `decision_log()`, snapshots), decisions already
+made keep their results for them, and reviewing for one is refused. A retired
+classifier can be added again with the same specification and returns with the
+history it had; a different specification is refused. `retired_classifiers()`
+lists them and `classifier_set_changes()` records who changed the set and when.
+
+Both calls are idempotent (a repeated call changes nothing and reports the ids
+under `already_active` or `already_retired`), refuse unknown or duplicate ids
+and a blank `added_by` or `retired_by`, and take the same lock and
+`execution_guard` as `add_priming_examples`. The saved definition describes the
+current active set, so reopen with the current definition; a definition that
+lacks a recorded addition or still lists a recorded retirement is refused with
+an error naming the classifier and who changed it. Once the set has changed,
+the order classifiers are listed in no longer matters. Cloud (S3) stores take
+the same calls and replay the set on reopen.
+
 ```python
 primed = Cyclotron.open("var/cyclotrons/primed-relevance", definition, ScriptedModel(), optimizer=None)
 pasted = {"relevant": [LabeledItem(Item("pasted-url-1", {"text": "A vendor's product announcement."}),
