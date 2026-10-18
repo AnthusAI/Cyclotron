@@ -49,6 +49,11 @@ def test_actual_embedded_decide_review_reopen_and_priming_use_no_sqlite_or_files
     with Cyclotron.open(None, DEFINITION, model, storage=stores(), priming_examples=seed()) as primed_again:
         assert primed_again.wheels["relevant"].active.config.example_ids == ("synthetic-prime", "added-in-cloud")
         assert primed_again.priming_additions()[0]["examples"] == {"relevant": ["added-in-cloud"]}
+        asyncio.run(primed_again.retract_priming_examples({"relevant": ["added-in-cloud"]}, retracted_by="editor-2"))
+    with Cyclotron.open(None, DEFINITION, model, storage=stores(), priming_examples=seed()) as retracted_again:
+        assert retracted_again.wheels["relevant"].active.config.example_ids == ("synthetic-prime",)
+        assert "added-in-cloud" not in [row.item.id for row in retracted_again._partitions("relevant")[0]]
+        assert retracted_again.priming_additions()[0]["retractions"][0]["retracted_by"] == "editor-2"
 
 
 def test_root_transaction_keeps_cursor_and_derived_evidence_atomic_on_size_failure():

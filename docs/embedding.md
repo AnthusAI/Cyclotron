@@ -108,6 +108,19 @@ same examples again changes nothing; an identity that was already decided, or
 that was primed with different content, is refused. `priming_additions()`
 records who added which examples and when.
 
+`retract_priming_examples({classifier_id: [item_id, ...]}, retracted_by=...)`
+withdraws examples again, for instance when a person withdraws the review an
+example came from. Each affected output takes them off its example list as a
+new version, so the next decision no longer carries them as training and the
+next learning pass refits without them. The retraction (who, when, which
+identities) is stored and shown by `priming_retractions()` and under
+`retractions` in `priming_additions()`. Retracting an identity that is not
+primed, or already retracted, changes nothing and is reported under `absent`;
+an unknown classifier is refused. A retracted identity may be added again with
+`add_priming_examples`; that is a new addition and takes the content it is
+given then. The rule that primed items and operational items are disjoint still
+applies.
+
 ```python
 primed = Cyclotron.open("var/cyclotrons/primed-relevance", definition, ScriptedModel(), optimizer=None)
 pasted = {"relevant": [LabeledItem(Item("pasted-url-1", {"text": "A vendor's product announcement."}),

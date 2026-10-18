@@ -84,9 +84,12 @@ from .sibling_check import install_sibling_checks
 from .store_seeding import (
     StoreSeeds,
     apply_priming_additions,
+    apply_priming_retractions,
     normalize_supporting_questions,
     priming_includes,
+    retracted_example_ids,
     stored_priming_additions,
+    stored_priming_retractions,
 )
 from .store_snapshot import classifier_store_name, restore_store_snapshot, store_paths, write_store_snapshot
 
@@ -211,7 +214,11 @@ class Cyclotron:
 
         stored_priming = self.root_storage.meta("priming_examples")
         saved_priming = json.loads(stored_priming[0]) if stored_priming else {}
-        if stored_priming and self.requested_priming is not None and not priming_includes(saved_priming, self.requested_priming):
+        if (
+            stored_priming
+            and self.requested_priming is not None
+            and not priming_includes(saved_priming, self.requested_priming, retracted_example_ids(self.root_storage))
+        ):
             raise ValueError("this store has different accepted priming; add new examples with add_priming_examples")
         if not stored_priming and self.requested_priming:
             if saved:
@@ -287,6 +294,7 @@ class Cyclotron:
             observer=self.observer,
             clock=lambda: datetime.now(timezone.utc),
         )
+        self._apply_priming_retractions()
         self._apply_priming_additions()
         self._sync()
 
@@ -363,6 +371,8 @@ class Cyclotron:
         keep their labels; an unreviewed decision is decided again by the new
         version. Adding the same examples again changes nothing. A known
         identity with different content, or an item already decided, is refused.
+        An identity that was retracted may be added again; that is a new
+        addition, with the content it is given now.
         """
         if not isinstance(added_by, str) or not added_by.strip():
             raise ValueError("added_by names who accepted the examples")
@@ -396,6 +406,7 @@ class Cyclotron:
                     self.root_storage.put_meta("priming_examples", _json(merged))
                     self.root_storage.put_meta("priming_additions", _json(additions))
                 self.priming_examples = decode_priming(merged)
+                self._apply_priming_retractions()
                 self._apply_priming_additions()
                 self._sync()
             return {
@@ -404,12 +415,101 @@ class Cyclotron:
                 "versions": {cid: self.versions[cid].version for cid in self.specs},
             }
 
+    async def retract_priming_examples(
+        self,
+        example_ids: Mapping[str, Sequence[str]],
+        *,
+        retracted_by: str,
+        execution_guard: ExecutionGuard | None = None,
+    ) -> dict[str, Any]:
+        """Withdraw primed examples from a store. No model call.
+
+        Each output that loses examples takes them off its example list as a
+        new version, so its next decision no longer carries them as training,
+        and the ML model is refitted without them by the next learning pass.
+        Who retracted them and when is recorded and stays in the store.
+        Retracting an identity that is not primed, or was already retracted,
+        changes nothing and is reported as absent. An output that is not in
+        this store is refused.
+        """
+        if not isinstance(retracted_by, str) or not retracted_by.strip():
+            raise ValueError("retracted_by names who withdrew the examples")
+        if not isinstance(example_ids, Mapping) or set(example_ids) - set(self.specs):
+            raise ValueError("retraction maps known classifier ids to example identities")
+        requested: dict[str, list[str]] = {}
+        for cid, keys in example_ids.items():
+            if isinstance(keys, (str, bytes)) or not isinstance(keys, Sequence):
+                raise ValueError("retraction needs a list of example identities per classifier")
+            if any(not isinstance(key, str) or not key.strip() for key in keys):
+                raise ValueError("retraction needs example identities")
+            requested[cid] = list(dict.fromkeys(keys))
+        from .priming_context import decode_priming
+
+        async with self._learn_lock, self.execution(execution_guard=execution_guard):
+            stored = self.root_storage.meta("priming_examples")
+            saved = json.loads(stored[0]) if stored else {}
+            remaining = {cid: list(rows) for cid, rows in saved.items()}
+            retracted: dict[str, list[str]] = {}
+            absent: dict[str, list[str]] = {}
+            for cid, keys in requested.items():
+                primed = {row["item"]["id"] for row in remaining.get(cid, ())}
+                for key in keys:
+                    (retracted if key in primed else absent).setdefault(cid, []).append(key)
+                remaining[cid] = [row for row in remaining.get(cid, ()) if row["item"]["id"] not in retracted.get(cid, ())]
+            if retracted:
+                retractions = stored_priming_retractions(self.root_storage)
+                retractions.append({"retracted_by": retracted_by.strip(), "at": _now(), "examples": retracted, "applied": {}})
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta("priming_examples", _json(remaining))
+                    self.root_storage.put_meta("priming_retractions", _json(retractions))
+                self.priming_examples = decode_priming(remaining)
+                self._apply_priming_retractions()
+                self._apply_priming_additions()
+                self._sync()
+            return {
+                "retracted": retracted,
+                "absent": absent,
+                "primed_examples": {cid: len(self.priming_examples.get(cid, ())) for cid in self.specs},
+                "versions": {cid: self.versions[cid].version for cid in self.specs},
+            }
+
     def priming_additions(self) -> list[dict[str, Any]]:
-        """Who added primed examples to this store after it was created, and when."""
-        return [{key: value for key, value in addition.items() if key != "applied"} for addition in self._priming_additions()]
+        """Who added primed examples to this store after it was created, and when.
+
+        Each addition lists the retractions of the examples it added, so an
+        audit sees that a primed example was withdrawn, by whom and when.
+        """
+        retractions = self.priming_retractions()
+        rows = []
+        for addition in self._priming_additions():
+            row = {key: value for key, value in addition.items() if key != "applied"}
+            row["retractions"] = [
+                {"retracted_by": retraction["retracted_by"], "at": retraction["at"], "examples": withdrawn}
+                for retraction in retractions
+                if retraction["at"] >= addition["at"]
+                and (
+                    withdrawn := {
+                        cid: [key for key in keys if key in addition["examples"].get(cid, ())]
+                        for cid, keys in retraction["examples"].items()
+                    }
+                )
+                and any(withdrawn.values())
+            ]
+            rows.append(row)
+        return rows
+
+    def priming_retractions(self) -> list[dict[str, Any]]:
+        """Every retraction of primed examples, including examples the store was created with."""
+        return [
+            {key: value for key, value in row.items() if key != "applied"}
+            for row in stored_priming_retractions(self.root_storage)
+        ]
 
     def _priming_additions(self) -> list[dict[str, Any]]:
         return stored_priming_additions(self.root_storage)
+
+    def _apply_priming_retractions(self) -> None:
+        apply_priming_retractions(self.root_storage, self.wheels)
 
     def _apply_priming_additions(self) -> None:
         apply_priming_additions(self.root_storage, self.wheels)
