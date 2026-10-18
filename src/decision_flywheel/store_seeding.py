@@ -157,7 +157,7 @@ def apply_priming_additions(root_storage, wheels: Mapping[str, Any]) -> None:
     additions = stored_priming_additions(root_storage)
     for addition in additions:
         for cid, example_ids in addition["examples"].items():
-            if cid in addition["applied"]:
+            if cid in addition["applied"] or cid not in wheels:
                 continue
             wheel = wheels[cid]
             primed_ids = _currently_primed_ids(root_storage, cid)
@@ -182,7 +182,7 @@ def apply_priming_retractions(root_storage, wheels: Mapping[str, Any]) -> None:
     retractions = stored_priming_retractions(root_storage)
     for retraction in retractions:
         for cid, example_ids in retraction["examples"].items():
-            if cid in retraction["applied"]:
+            if cid in retraction["applied"] or cid not in wheels:
                 continue
             wheel = wheels[cid]
             primed_ids = _currently_primed_ids(root_storage, cid)
