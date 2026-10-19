@@ -71,4 +71,4 @@ evidence behind the recording.
 
 ## Kanbus in cloud sessions
 
-`.claude/settings.json` runs `scripts/dev/ensure_kanbus.sh` at session start. It installs the `kanbus` version pinned in the `tools` extra of `pyproject.toml` when `kbs` is missing, and links the `kbs` name to the `kanbus` executable. Use `kbs` commands for the board; never edit `project/issues` or `project/events` by hand.
+`.claude/settings.json` runs `scripts/dev/ensure_kanbus.sh` at session start. When `kbs` is missing it installs the `kanbus` version pinned in the `tools` extra of `pyproject.toml` into a dedicated venv (`~/.cache/cyclotron/kanbus-venv`, override with `KANBUS_VENV`) and symlinks `kbs` into `~/.local/bin` (override with `KANBUS_BIN_DIR`); a venv avoids pip failing on distro-owned packages such as Debian's PyYAML. An existing `kbs` is left alone, with a warning if its version differs from the pin. The hook discards stdout but keeps stderr, so failures and PATH hints are visible. Use `kbs` commands for the board; never edit `project/issues` or `project/events` by hand.
