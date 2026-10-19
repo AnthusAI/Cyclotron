@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "b822642e-1f60-4fa4-89d8-4b4ca6232c47",
+  "issue_id": "decision-flywheel-a3f01a3b-e383-4882-aa89-6a0371ed1394",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-19T16:44:03.359Z",
+  "actor_id": "unknown",
+  "payload": {
+    "title": "Finish hosted priming in production: promote, first sweep, verify",
+    "description": "Remaining steps after Papyrus PR #223 merged to develop (see 705e4a9e). Needs Ryan's explicit 'promote develop to main' in the Hosted priming demo thread, then Remote Control on his Mac for the first production sweep (AWS never from cloud), then paste an arXiv URL in References and confirm the classifier version changes and exposes the accepted example id. Implementer: Sonnet agent via Remote Control.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "handoff-status"
+    }
+  }
+}
