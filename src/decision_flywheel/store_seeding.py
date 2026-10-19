@@ -17,6 +17,7 @@ from .embedded_records import ClassifierSpec, CyclotronDefinition, _json
 from .models import DecisionTask
 
 PRIMING_ADDITIONS_KEY = "priming_additions"
+PRIMING_RETRACTIONS_KEY = "priming_retractions"
 
 
 def normalize_supporting_questions(definition: CyclotronDefinition, seeds) -> dict[str, list[dict]]:
@@ -46,9 +47,16 @@ def normalize_supporting_questions(definition: CyclotronDefinition, seeds) -> di
     return normalized
 
 
-def priming_includes(saved_priming: Mapping[str, Any], requested_priming: Mapping[str, Any]) -> bool:
-    """A reopen may pass the examples a store was created with after more were added."""
-    return all(row in saved_priming.get(cid, ()) for cid, rows in requested_priming.items() for row in rows)
+def priming_includes(
+    saved_priming: Mapping[str, Any], requested_priming: Mapping[str, Any], retracted: Mapping[str, Sequence[str]] | None = None
+) -> bool:
+    """A reopen may pass the examples a store was created with after more were added or withdrawn."""
+    retracted = retracted or {}
+    return all(
+        row in saved_priming.get(cid, ()) or row["item"]["id"] in retracted.get(cid, ())
+        for cid, rows in requested_priming.items()
+        for row in rows
+    )
 
 
 class StoreSeeds:
@@ -120,6 +128,26 @@ def stored_priming_additions(root_storage) -> list[dict[str, Any]]:
     return json.loads(stored[0]) if stored else []
 
 
+def stored_priming_retractions(root_storage) -> list[dict[str, Any]]:
+    stored = root_storage.meta(PRIMING_RETRACTIONS_KEY)
+    return json.loads(stored[0]) if stored else []
+
+
+def retracted_example_ids(root_storage) -> dict[str, list[str]]:
+    """Every identity ever retracted, per output, whether or not it was later added again."""
+    retracted: dict[str, list[str]] = {}
+    for retraction in stored_priming_retractions(root_storage):
+        for cid, example_ids in retraction["examples"].items():
+            retracted.setdefault(cid, []).extend(key for key in example_ids if key not in retracted.get(cid, ()))
+    return retracted
+
+
+def _currently_primed_ids(root_storage, cid: str) -> set[str]:
+    stored = root_storage.meta("priming_examples")
+    rows = json.loads(stored[0]) if stored else {}
+    return {row["item"]["id"] for row in rows.get(cid, ())}
+
+
 def apply_priming_additions(root_storage, wheels: Mapping[str, Any]) -> None:
     """Bring each output's example list up to its recorded additions, once each.
 
@@ -129,10 +157,11 @@ def apply_priming_additions(root_storage, wheels: Mapping[str, Any]) -> None:
     additions = stored_priming_additions(root_storage)
     for addition in additions:
         for cid, example_ids in addition["examples"].items():
-            if cid in addition["applied"]:
+            if cid in addition["applied"] or cid not in wheels:
                 continue
             wheel = wheels[cid]
-            missing_example_ids = [key for key in example_ids if key not in wheel.active.config.example_ids]
+            primed_ids = _currently_primed_ids(root_storage, cid)
+            missing_example_ids = [key for key in example_ids if key in primed_ids and key not in wheel.active.config.example_ids]
             if missing_example_ids:
                 count = len(missing_example_ids)
                 wheel.extend_example_list(
@@ -142,3 +171,28 @@ def apply_priming_additions(root_storage, wheels: Mapping[str, Any]) -> None:
             addition["applied"][cid] = wheel.active.fingerprint
             with root_storage.transaction():
                 root_storage.put_meta(PRIMING_ADDITIONS_KEY, _json(additions))
+
+
+def apply_priming_retractions(root_storage, wheels: Mapping[str, Any]) -> None:
+    """Take each output's retracted examples off its example list, once each.
+
+    A retraction is marked applied per output, like an addition. An identity
+    that has been added again since is primed once more and stays on the list.
+    """
+    retractions = stored_priming_retractions(root_storage)
+    for retraction in retractions:
+        for cid, example_ids in retraction["examples"].items():
+            if cid in retraction["applied"] or cid not in wheels:
+                continue
+            wheel = wheels[cid]
+            primed_ids = _currently_primed_ids(root_storage, cid)
+            listed_example_ids = [key for key in example_ids if key not in primed_ids and key in wheel.active.config.example_ids]
+            if listed_example_ids:
+                count = len(listed_example_ids)
+                wheel.shrink_example_list(
+                    listed_example_ids,
+                    change_summary=(f"Retracted {count} primed example{'' if count == 1 else 's'} from the example list."),
+                )
+            retraction["applied"][cid] = wheel.active.fingerprint
+            with root_storage.transaction():
+                root_storage.put_meta(PRIMING_RETRACTIONS_KEY, _json(retractions))

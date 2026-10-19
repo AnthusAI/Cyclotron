@@ -10,18 +10,24 @@
   "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "5c7857bb-826e-45b2-9515-13f603a42707",
+      "author": "home",
+      "text": "Status 2026-10-19: Papyrus #223 is already in Papyrus main (merge commit 045551a is in origin/main; Papyrus releases #347-#360 today, green), so the promotion step is done. This runs directly on BlackbookM1 (no Remote Control thread needed) once Ryan re-authenticates AWS. Remaining: first production sweep, then paste an arXiv URL in production References and confirm a new classifier version exposing the accepted example id.",
+      "created_at": "2026-10-19T19:03:34.625650Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-19T16:44:03.359311Z",
-  "updated_at": "2026-10-19T16:44:03.359458Z",
+  "updated_at": "2026-10-19T19:03:34.625679Z",
   "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {},
   "agent": {
     "platform": "claude-code",
     "model": "claude-sonnet-5-5",
-    "name": "handoff-status",
-    "settings": {}
+    "name": "handoff-status"
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
 }
