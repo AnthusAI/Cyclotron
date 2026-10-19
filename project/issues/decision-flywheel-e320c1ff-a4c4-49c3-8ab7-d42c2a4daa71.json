@@ -3,20 +3,33 @@
   "title": "Review follow-ups: scale, consolidate, gate, front door (2026-10-17)",
   "description": "Work items from the full review of Cyclotron and Cyclotron-web delivered 2026-10-17. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17). Each child issue is one PR-sized change with its own definition of done; the review doc has the file:line evidence. Priority 0 items carry the headline metric and the scaling ceiling; priority 1 items are the gate and the front door; priority 2 items are consolidation. The two open bugs from the 1,200-cycle study (reader lock fails the writer after five seconds; replay resume re-records a cycle) are already filed and belong with this epic's scaling work. Standing rule: CI for private repos runs locally (no GitHub Actions minutes). Run the full gate locally before merging.",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "652ee49e-1a86-43dd-a225-544bc49db038",
+      "author": "unknown",
+      "text": "All 17 children closed; shipped in PRs #30-#46 and Cyclotron-web #129/#131, released in v0.23.0.",
+      "created_at": "2026-10-19T16:44:17.952117Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
   "created_at": "2026-10-17T16:36:48.906631Z",
-  "updated_at": "2026-10-17T16:36:48.906851Z",
-  "closed_at": null,
+  "updated_at": "2026-10-19T16:44:18.052617Z",
+  "closed_at": "2026-10-19T16:44:18.052490Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }
