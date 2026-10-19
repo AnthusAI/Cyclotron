@@ -3,25 +3,31 @@
   "title": "scripts/dev/ensure_kanbus.sh fails in cloud containers with a Debian-managed PyYAML",
   "description": "pip install kanbus==0.33.0 fails with 'Cannot uninstall PyYAML 6.0.1, RECORD file not found' because PyYAML is Debian-installed, so the SessionStart hook silently leaves kbs missing. Workaround that works: python3 -m venv, install the pinned kanbus there, symlink kbs. Fix: have the script create and use a venv (or pip install --ignore-installed). Also: kbs prompts about agent provenance; pass --agent-platform/--agent-model/--agent-name.",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "e1f97620-e6e0-4281-b16a-8eedf68dcff6",
+      "author": "home",
+      "text": "Fixed 2026-10-19 in PR #52 (merged): ensure_kanbus.sh installs the pinned kanbus into a dedicated venv, symlinks kbs into ~/.local/bin, exports that dir through CLAUDE_ENV_FILE when off PATH, and the hook keeps stderr. Hermetic specs in tests/ensure_kanbus_script_test.py; real PyPI run printed kanbus 0.33.0; make check green. Still to observe: one real cloud session picking up kbs via CLAUDE_ENV_FILE.",
+      "created_at": "2026-10-19T19:05:28.072100Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-19T16:44:03.779697Z",
-  "updated_at": "2026-10-19T16:44:03.779831Z",
-  "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {},
+  "updated_at": "2026-10-19T19:05:28.115866Z",
+  "closed_at": "2026-10-19T19:05:28.115829Z",
   "agent": {
     "platform": "claude-code",
     "model": "claude-sonnet-5-5",
-    "name": "handoff-status",
-    "settings": {}
+    "name": "handoff-status"
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
 }
