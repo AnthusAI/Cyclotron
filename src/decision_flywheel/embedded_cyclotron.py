@@ -27,6 +27,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -39,6 +40,18 @@ from uuid import uuid4
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
+from .classifier_set import (
+    ADDED,
+    CLASSIFIER_SET_CHANGES_KEY,
+    RETIRED,
+    change_record,
+    definition_matches_store,
+    last_known_specs,
+    recorded_definition,
+    retired_classifier_ids,
+    stale_definition_error,
+    stored_classifier_set_changes,
+)
 from .cyclotron_status import (
     CyclotronOverview,
     CyclotronStatus,
@@ -84,9 +97,12 @@ from .sibling_check import install_sibling_checks
 from .store_seeding import (
     StoreSeeds,
     apply_priming_additions,
+    apply_priming_retractions,
     normalize_supporting_questions,
     priming_includes,
+    retracted_example_ids,
     stored_priming_additions,
+    stored_priming_retractions,
 )
 from .store_snapshot import classifier_store_name, restore_store_snapshot, store_paths, write_store_snapshot
 
@@ -201,17 +217,22 @@ class Cyclotron:
             self.root_storage = self.storage.root_storage
         self.db = getattr(self.root_storage, "db", None)  # Native snapshot compatibility only.
         saved = self.root_storage.meta("definition")
-        if saved and json.loads(saved[0])["fingerprint"] != definition.fingerprint:
-            raise ValueError("this store belongs to a different cyclotron definition")
+        if saved:
+            saved_definition = json.loads(saved[0])
+            changes = stored_classifier_set_changes(self.root_storage)
+            if not definition_matches_store(saved_definition, definition, changes):
+                raise stale_definition_error(saved_definition, definition, changes)
         with self.root_storage.transaction():
-            self.root_storage.insert_meta(
-                "definition", _json({"fingerprint": definition.fingerprint, "definition": asdict(definition)}), ignore=True
-            )
+            self.root_storage.insert_meta("definition", recorded_definition(definition), ignore=True)
         from .priming_context import decode_priming
 
         stored_priming = self.root_storage.meta("priming_examples")
         saved_priming = json.loads(stored_priming[0]) if stored_priming else {}
-        if stored_priming and self.requested_priming is not None and not priming_includes(saved_priming, self.requested_priming):
+        if (
+            stored_priming
+            and self.requested_priming is not None
+            and not priming_includes(saved_priming, self.requested_priming, retracted_example_ids(self.root_storage))
+        ):
             raise ValueError("this store has different accepted priming; add new examples with add_priming_examples")
         if not stored_priming and self.requested_priming:
             if saved:
@@ -242,37 +263,12 @@ class Cyclotron:
         self.specs = {spec.id: spec for spec in definition.classifiers}
         self.versions: dict[str, VersionTracker] = {}
         self._seen: dict[str, int] = {}
+        self._seeds, self._optimizer, self._max_requests, self._redact = seeds, optimizer, max_requests, redact
+        self._created = saved is None
         if self.directory is not None:
             (self.directory / "classifiers").mkdir(exist_ok=True)
-        paths = store_paths(self.directory, definition) if self.directory is not None else {}
-        additions = self._priming_additions()
         for spec in definition.classifiers:
-            path = paths[classifier_store_name(spec.id)] if self.directory is not None else None
-            primed_example_ids = tuple(row.item.id for row in self.priming_examples.get(spec.id, ()))
-            added_example_ids = {key for addition in additions for key in addition["examples"].get(spec.id, ())}
-            # The store's creation configuration stays version 1; later additions apply as new versions.
-            wheel = DecisionFlywheel(
-                path,
-                ClassifierConfig(
-                    spec.task,
-                    example_ids=tuple(key for key in primed_example_ids if key not in added_example_ids),
-                    rubric=seeds.rubric(spec.id),
-                    tasks=seeds.supporting_questions(spec, created=saved is None),
-                ),
-                # Each output gets its own copy so its optimizer events reach only its own
-                # trace; the copies share the transport, so the call limit stays cyclotron-wide.
-                self.shared.adapter(spec.id),
-                self._optimizer_for(optimizer, spec.id),
-                max_requests=max_requests,
-                redact=redact,
-                selection_policy=spec.selection_policy,
-                min_evaluation_per_class=2,
-                storage=self.storage.runtime_for_classifier(spec.id) if self.storage is not None else None,
-            )
-            wheel.initial = replace(wheel.initial, example_ids=primed_example_ids)
-            self.wheels[spec.id] = wheel
-            self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
-            self._seen[spec.id] = 0
+            self._open_classifier(spec)
         install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
         self.held_out = HeldOutEvaluation(self)
         self.review_rate = ReviewRateController(
@@ -287,8 +283,216 @@ class Cyclotron:
             observer=self.observer,
             clock=lambda: datetime.now(timezone.utc),
         )
+        self._apply_priming_retractions()
         self._apply_priming_additions()
         self._sync()
+
+    def _open_classifier(self, spec: ClassifierSpec, *, created: bool | None = None) -> None:
+        """Open one classifier's store and register it as active. Nothing is decided."""
+        created = self._created if created is None else created
+        path = None
+        if self.directory is not None:
+            path = store_paths(self.directory, replace(self.definition, classifiers=(spec,)))[classifier_store_name(spec.id)]
+        primed_example_ids = tuple(row.item.id for row in self.priming_examples.get(spec.id, ()))
+        added_example_ids = {key for addition in self._priming_additions() for key in addition["examples"].get(spec.id, ())}
+        # A classifier's stored contract names the decision model before any shared request was made.
+        request_identity, self.shared.identity = self.shared.identity, "unprepared"
+        try:
+            wheel = DecisionFlywheel(
+                path,
+                ClassifierConfig(
+                    spec.task,
+                    example_ids=tuple(key for key in primed_example_ids if key not in added_example_ids),
+                    rubric=self._seeds.rubric(spec.id),
+                    tasks=self._seeds.supporting_questions(spec, created=created),
+                ),
+                # Each output gets its own copy so its optimizer events reach only its own
+                # trace; the copies share the transport, so the call limit stays cyclotron-wide.
+                self.shared.adapter(spec.id),
+                self._optimizer_for(self._optimizer, spec.id),
+                max_requests=self._max_requests,
+                redact=self._redact,
+                selection_policy=spec.selection_policy,
+                min_evaluation_per_class=2,
+                storage=self.storage.runtime_for_classifier(spec.id) if self.storage is not None else None,
+            )
+        finally:
+            self.shared.identity = request_identity
+        wheel.initial = replace(wheel.initial, example_ids=primed_example_ids)
+        self.specs[spec.id] = spec
+        self.wheels[spec.id] = wheel
+        self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
+        self._seen[spec.id] = 0
+
+    def _close_classifier(self, classifier: str) -> None:
+        self.wheels.pop(classifier).close()
+        if self.storage is not None:
+            self.storage.release_classifier_runtime(classifier)
+        del self.specs[classifier], self.versions[classifier], self._seen[classifier]
+
+    def _adopt_classifier_set(self, classifiers: Sequence[ClassifierSpec]) -> None:
+        """Make the engine's shared parts describe the classifiers that are now active."""
+        self.definition = replace(self.definition, classifiers=tuple(classifiers))
+        self.review_rate.definition = self.definition
+        self.shared.unbind_context()
+        install_sibling_checks(self.wheels, self.shared, self._partitions, self.definition.sibling_policy)
+
+    # Classifier set -------------------------------------------------------
+
+    async def add_classifiers(
+        self,
+        classifiers: Sequence[ClassifierSpec],
+        *,
+        added_by: str,
+        seed_rubrics: Mapping[str, str] | None = None,
+        execution_guard: ExecutionGuard | None = None,
+    ) -> dict[str, Any]:
+        """Add classifiers to an existing store. No model call.
+
+        A new classifier starts unfitted, with its seed rubric and no labels;
+        it learns only from reviews made after it was added, and the other
+        classifiers keep their labels, rubrics and versions. The shared
+        decision request now carries the new classifier, so an unreviewed
+        decision is decided again with it. A retired classifier that is added
+        again with the same specification is reactivated with the history and
+        labels it had. Adding an active classifier again with the same
+        specification changes nothing; a different specification is refused.
+        """
+        if not isinstance(added_by, str) or not added_by.strip():
+            raise ValueError("added_by names who added the classifiers")
+        if isinstance(classifiers, (str, bytes)) or not isinstance(classifiers, Sequence) or not classifiers:
+            raise ValueError("add_classifiers needs a list of ClassifierSpec")
+        if any(not isinstance(spec, ClassifierSpec) for spec in classifiers):
+            raise ValueError("add_classifiers needs a list of ClassifierSpec")
+        identifiers = [spec.id for spec in classifiers]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("classifiers to add must have distinct ids")
+        seed_rubrics = dict(seed_rubrics or {})
+        if set(seed_rubrics) - set(identifiers) or any(not isinstance(text, str) for text in seed_rubrics.values()):
+            raise ValueError("seed_rubrics maps the ids of the added classifiers to rubric text")
+        async with self._learn_lock, self.execution(execution_guard=execution_guard):
+            changes = stored_classifier_set_changes(self.root_storage)
+            previous = last_known_specs(changes)
+            already_active, to_add, reactivated = [], [], []
+            for spec in classifiers:
+                if spec.id in self.specs:
+                    if self.specs[spec.id] != spec:
+                        raise ValueError(f"classifier {spec.id!r} is already active with a different specification")
+                    already_active.append(spec.id)
+                    continue
+                if spec.id in previous and previous[spec.id] != spec:
+                    raise ValueError(
+                        f"classifier {spec.id!r} was retired with a different specification; "
+                        "a retired classifier keeps its labels and is added again with the specification it had"
+                    )
+                if spec.id in previous:
+                    reactivated.append(spec.id)
+                to_add.append(spec)
+            if to_add:
+                for spec in to_add:
+                    if spec.id in seed_rubrics:
+                        self._seeds.seed_rubrics[spec.id] = seed_rubrics[spec.id]
+                opened = []
+                try:
+                    for spec in to_add:
+                        self._open_classifier(spec, created=True)
+                        opened.append(spec.id)
+                    changes.append(
+                        change_record(
+                            ADDED, [spec.id for spec in to_add], to_add, added_by.strip(), _now(), reactivated=reactivated
+                        )
+                    )
+                    definition = replace(self.definition, classifiers=(*self.definition.classifiers, *to_add))
+                    with self.root_storage.transaction():
+                        self.root_storage.put_meta("definition", recorded_definition(definition))
+                        self.root_storage.put_meta(CLASSIFIER_SET_CHANGES_KEY, _json(changes))
+                except BaseException:
+                    for identifier in opened:
+                        self._close_classifier(identifier)
+                    raise
+                self._adopt_classifier_set(definition.classifiers)
+                self._apply_priming_retractions()
+                self._apply_priming_additions()
+                self._sync()
+            return {
+                "added": [spec.id for spec in to_add if spec.id not in reactivated],
+                "reactivated": reactivated,
+                "already_active": already_active,
+                "classifiers": list(self.specs),
+                "versions": {cid: self.versions[cid].version for cid in self.specs},
+            }
+
+    async def retire_classifiers(
+        self, classifier_ids: Sequence[str], *, retired_by: str, execution_guard: ExecutionGuard | None = None
+    ) -> dict[str, Any]:
+        """Retire classifiers from an existing store. No model call.
+
+        A retired classifier stops deciding and stops learning. Its history,
+        labels and reviews stay in the store, and decisions already made keep
+        their results for it. It can be added again with ``add_classifiers``.
+        Retiring a classifier that is already retired changes nothing. An id
+        the store never had is refused, and so is retiring every classifier.
+        """
+        if not isinstance(retired_by, str) or not retired_by.strip():
+            raise ValueError("retired_by names who retired the classifiers")
+        if isinstance(classifier_ids, (str, bytes)) or not isinstance(classifier_ids, Sequence) or not classifier_ids:
+            raise ValueError("retire_classifiers needs a list of classifier ids")
+        if any(not isinstance(identifier, str) or not identifier.strip() for identifier in classifier_ids):
+            raise ValueError("retire_classifiers needs classifier ids")
+        if len(set(classifier_ids)) != len(classifier_ids):
+            raise ValueError("classifiers to retire must have distinct ids")
+        async with self._learn_lock, self.execution(execution_guard=execution_guard):
+            changes = stored_classifier_set_changes(self.root_storage)
+            retired = retired_classifier_ids(changes, list(self.specs))
+            unknown = [identifier for identifier in classifier_ids if identifier not in self.specs and identifier not in retired]
+            if unknown:
+                raise ValueError(f"classifier not in this cyclotron: {', '.join(unknown)}")
+            already_retired = [identifier for identifier in classifier_ids if identifier in retired]
+            to_retire = [identifier for identifier in classifier_ids if identifier in self.specs]
+            if to_retire and len(to_retire) == len(self.specs):
+                raise ValueError("a cyclotron needs at least one active classifier")
+            if to_retire:
+                self._sync()
+                specs = [self.specs[identifier] for identifier in to_retire]
+                changes.append(change_record(RETIRED, to_retire, specs, retired_by.strip(), _now()))
+                definition = replace(
+                    self.definition, classifiers=tuple(spec for spec in self.definition.classifiers if spec.id not in to_retire)
+                )
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta("definition", recorded_definition(definition))
+                    self.root_storage.put_meta(CLASSIFIER_SET_CHANGES_KEY, _json(changes))
+                    for seq, classifier, _, _ in self.root_storage.learning_rows():
+                        if classifier in to_retire:
+                            self.root_storage.delete_learning(seq)
+                for identifier in to_retire:
+                    self._close_classifier(identifier)
+                self._adopt_classifier_set(definition.classifiers)
+            return {
+                "retired": to_retire,
+                "already_retired": already_retired,
+                "classifiers": list(self.specs),
+                "versions": {cid: self.versions[cid].version for cid in self.specs},
+            }
+
+    def classifier_set_changes(self) -> list[dict[str, Any]]:
+        """Who added or retired which classifiers, and when, oldest first."""
+        return [
+            {key: value for key, value in change.items() if key != "specs"}
+            for change in stored_classifier_set_changes(self.root_storage)
+        ]
+
+    def retired_classifiers(self) -> list[str]:
+        """Classifiers retired from this store and not added again; their history and labels stay in it."""
+        return retired_classifier_ids(stored_classifier_set_changes(self.root_storage), list(self.specs))
+
+    def _known_classifiers(self) -> list[str]:
+        return [*self.specs, *self.retired_classifiers()]
+
+    def _require_active(self, classifier: str) -> None:
+        if classifier not in self.specs:
+            if classifier in self.retired_classifiers():
+                raise ValueError(f"classifier {classifier!r} was retired; add it again to review for it")
+            raise ValueError("classifier not in this cyclotron")
 
     @classmethod
     def open(cls, directory, definition: CyclotronDefinition, model, optimizer=None, **options) -> Cyclotron:
@@ -363,6 +567,8 @@ class Cyclotron:
         keep their labels; an unreviewed decision is decided again by the new
         version. Adding the same examples again changes nothing. A known
         identity with different content, or an item already decided, is refused.
+        An identity that was retracted may be added again; that is a new
+        addition, with the content it is given now.
         """
         if not isinstance(added_by, str) or not added_by.strip():
             raise ValueError("added_by names who accepted the examples")
@@ -396,6 +602,7 @@ class Cyclotron:
                     self.root_storage.put_meta("priming_examples", _json(merged))
                     self.root_storage.put_meta("priming_additions", _json(additions))
                 self.priming_examples = decode_priming(merged)
+                self._apply_priming_retractions()
                 self._apply_priming_additions()
                 self._sync()
             return {
@@ -404,12 +611,101 @@ class Cyclotron:
                 "versions": {cid: self.versions[cid].version for cid in self.specs},
             }
 
+    async def retract_priming_examples(
+        self,
+        example_ids: Mapping[str, Sequence[str]],
+        *,
+        retracted_by: str,
+        execution_guard: ExecutionGuard | None = None,
+    ) -> dict[str, Any]:
+        """Withdraw primed examples from a store. No model call.
+
+        Each output that loses examples takes them off its example list as a
+        new version, so its next decision no longer carries them as training,
+        and the ML model is refitted without them by the next learning pass.
+        Who retracted them and when is recorded and stays in the store.
+        Retracting an identity that is not primed, or was already retracted,
+        changes nothing and is reported as absent. An output that is not in
+        this store is refused.
+        """
+        if not isinstance(retracted_by, str) or not retracted_by.strip():
+            raise ValueError("retracted_by names who withdrew the examples")
+        if not isinstance(example_ids, Mapping) or set(example_ids) - set(self.specs):
+            raise ValueError("retraction maps known classifier ids to example identities")
+        requested: dict[str, list[str]] = {}
+        for cid, keys in example_ids.items():
+            if isinstance(keys, (str, bytes)) or not isinstance(keys, Sequence):
+                raise ValueError("retraction needs a list of example identities per classifier")
+            if any(not isinstance(key, str) or not key.strip() for key in keys):
+                raise ValueError("retraction needs example identities")
+            requested[cid] = list(dict.fromkeys(keys))
+        from .priming_context import decode_priming
+
+        async with self._learn_lock, self.execution(execution_guard=execution_guard):
+            stored = self.root_storage.meta("priming_examples")
+            saved = json.loads(stored[0]) if stored else {}
+            remaining = {cid: list(rows) for cid, rows in saved.items()}
+            retracted: dict[str, list[str]] = {}
+            absent: dict[str, list[str]] = {}
+            for cid, keys in requested.items():
+                primed = {row["item"]["id"] for row in remaining.get(cid, ())}
+                for key in keys:
+                    (retracted if key in primed else absent).setdefault(cid, []).append(key)
+                remaining[cid] = [row for row in remaining.get(cid, ()) if row["item"]["id"] not in retracted.get(cid, ())]
+            if retracted:
+                retractions = stored_priming_retractions(self.root_storage)
+                retractions.append({"retracted_by": retracted_by.strip(), "at": _now(), "examples": retracted, "applied": {}})
+                with self.root_storage.transaction():
+                    self.root_storage.put_meta("priming_examples", _json(remaining))
+                    self.root_storage.put_meta("priming_retractions", _json(retractions))
+                self.priming_examples = decode_priming(remaining)
+                self._apply_priming_retractions()
+                self._apply_priming_additions()
+                self._sync()
+            return {
+                "retracted": retracted,
+                "absent": absent,
+                "primed_examples": {cid: len(self.priming_examples.get(cid, ())) for cid in self.specs},
+                "versions": {cid: self.versions[cid].version for cid in self.specs},
+            }
+
     def priming_additions(self) -> list[dict[str, Any]]:
-        """Who added primed examples to this store after it was created, and when."""
-        return [{key: value for key, value in addition.items() if key != "applied"} for addition in self._priming_additions()]
+        """Who added primed examples to this store after it was created, and when.
+
+        Each addition lists the retractions of the examples it added, so an
+        audit sees that a primed example was withdrawn, by whom and when.
+        """
+        retractions = self.priming_retractions()
+        rows = []
+        for addition in self._priming_additions():
+            row = {key: value for key, value in addition.items() if key != "applied"}
+            row["retractions"] = [
+                {"retracted_by": retraction["retracted_by"], "at": retraction["at"], "examples": withdrawn}
+                for retraction in retractions
+                if retraction["at"] >= addition["at"]
+                and (
+                    withdrawn := {
+                        cid: [key for key in keys if key in addition["examples"].get(cid, ())]
+                        for cid, keys in retraction["examples"].items()
+                    }
+                )
+                and any(withdrawn.values())
+            ]
+            rows.append(row)
+        return rows
+
+    def priming_retractions(self) -> list[dict[str, Any]]:
+        """Every retraction of primed examples, including examples the store was created with."""
+        return [
+            {key: value for key, value in row.items() if key != "applied"}
+            for row in stored_priming_retractions(self.root_storage)
+        ]
 
     def _priming_additions(self) -> list[dict[str, Any]]:
         return stored_priming_additions(self.root_storage)
+
+    def _apply_priming_retractions(self) -> None:
+        apply_priming_retractions(self.root_storage, self.wheels)
 
     def _apply_priming_additions(self) -> None:
         apply_priming_additions(self.root_storage, self.wheels)
@@ -437,7 +733,9 @@ class Cyclotron:
             if latest is not None:
                 state, decision = latest
                 unchanged = self._item_fingerprint(decision.decision_id) == fingerprint
-                same_version = all(decision.results[cid].version == self.versions[cid].version for cid in self.wheels)
+                same_version = all(
+                    cid in decision.results and decision.results[cid].version == self.versions[cid].version for cid in self.wheels
+                )
                 if unchanged and (state == "reviewed" or same_version):
                     return decision
                 if state == "open":
@@ -561,7 +859,7 @@ class Cyclotron:
         request made while reviewing or learning counts toward the decision it
         served. The shape matches ``run_usage.usage_by_window``.
         """
-        return stored_usage_by_window(self.root_storage, list(self.specs), prices, window=window)
+        return stored_usage_by_window(self.root_storage, self._known_classifiers(), prices, window=window)
 
     def decision_log(self) -> list[dict[str, Any]]:
         """Every decision in the order it was made, with its item values, state and active reviews (for recordings)."""
@@ -569,7 +867,7 @@ class Cyclotron:
         values = self._item_values()
         for number, (decision_id, state, payload) in enumerate(self.root_storage.decision_rows(), start=1):
             reviews = {}
-            for cid in self.specs:
+            for cid in self._known_classifiers():
                 review = self._active_review(decision_id, cid)
                 last = self._last_review_kind(decision_id, cid)
                 if review is not None:
@@ -647,8 +945,10 @@ class Cyclotron:
                 entries = {self._classifier(decision, classifier): label}
                 ids = {cid: review_id or str(uuid4()) for cid in entries}
             else:
+                for cid in labels:
+                    self._require_active(cid)
                 if any(cid not in decision.results for cid in labels):
-                    raise ValueError("classifier not in this cyclotron")
+                    raise ValueError("this decision was made before that classifier was added; review a newer decision")
                 base = review_id or str(uuid4())
                 entries = {cid: labels[cid] for cid in self.specs if cid in labels}
                 ids = {cid: f"{base}:{cid}" for cid in entries}
@@ -884,12 +1184,16 @@ class Cyclotron:
             "cursor": rows[-1][0] if rows else after,
         }
 
-    def labels(self) -> list[dict[str, Any]]:
-        """Every active label with its item: what an application can replay into a new store."""
+    def labels(self, *, include_retired: bool = False) -> list[dict[str, Any]]:
+        """Every active label with its item: what an application can replay into a new store.
+
+        Labels of retired classifiers stay in the store; ``include_retired`` lists them too.
+        """
         values = self._item_values()
         rows = []
+        classifiers = self._known_classifiers() if include_retired else list(self.specs)
         for decision_id, item_id in self.root_storage.decision_items():
-            for cid in self.specs:
+            for cid in classifiers:
                 review = self._active_review(decision_id, cid)
                 if review is not None:
                     rows.append(
@@ -989,7 +1293,15 @@ class Cyclotron:
         connections = {"cyclotron.sqlite3": self.db, "shared.sqlite3": self.shared.db}
         for spec in self.definition.classifiers:
             connections[classifier_store_name(spec.id)] = self.wheels[spec.id].db
-        return write_store_snapshot(path, self.definition, connections)
+        retired = {}
+        try:
+            for classifier in self.retired_classifiers():
+                name = classifier_store_name(classifier)
+                retired[name] = sqlite3.connect(self.directory / name)
+            return write_store_snapshot(path, self.definition, {**connections, **retired})
+        finally:
+            for connection in retired.values():
+                connection.close()
 
     @staticmethod
     def restore(archive_path, directory, *, lease=None) -> dict[str, Any]:
@@ -1125,8 +1437,12 @@ class Cyclotron:
     def _requested_outputs(self, decision_id: str) -> tuple[str, ...]:
         """The outputs a decision is waiting on: those sent to review, or every output."""
         row = self.root_storage.decision(decision_id)
-        requested = _selection(json.loads(row[0])["review"]).requested if row else None
-        return tuple(requested) if requested else tuple(self.specs)
+        if row is None:
+            return tuple(self.specs)
+        payload = json.loads(row[0])
+        requested = _selection(payload["review"]).requested
+        names = requested if requested else tuple(payload["classifiers"])
+        return tuple(cid for cid in names if cid in self.specs)
 
     def _redacted(self, classifier: str, text: str | None) -> str | None:
         if text is None:
@@ -1165,11 +1481,12 @@ class Cyclotron:
 
     def _classifier(self, decision: Decision, classifier: str | None) -> str:
         if classifier is None:
-            if len(decision.results) != 1:
+            if len(self.specs) != 1:
                 raise ValueError("name the classifier; this cyclotron has several")
-            return next(iter(decision.results))
+            return self._classifier(decision, next(iter(self.specs)))
+        self._require_active(classifier)
         if classifier not in decision.results:
-            raise ValueError("classifier not in this cyclotron")
+            raise ValueError("this decision was made before that classifier was added; review a newer decision")
         return classifier
 
     @staticmethod

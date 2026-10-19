@@ -52,6 +52,12 @@ class SharedDecisions:
         self.context_training = {name: tuple(rows) for name, rows in training.items()}
         self.prepared = {}
 
+    def unbind_context(self):
+        """Forget the pinned siblings, as when the classifier set changes."""
+        self.context_configs = {}
+        self.context_training = {}
+        self.prepared = {}
+
     MUTABLE = ("context_configs", "context_training", "prepared", "prepared_scope", "identity")
 
     def snapshot(self):

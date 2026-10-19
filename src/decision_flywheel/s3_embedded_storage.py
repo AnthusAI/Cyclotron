@@ -363,6 +363,11 @@ class S3CyclotronStores:
         self.runtimes[identifier] = runtime
         return runtime
 
+    def release_classifier_runtime(self, identifier):
+        runtime = self.runtimes.pop(identifier, None)
+        if runtime is not None:
+            runtime.close()
+
     def execution_boundary(self):
         # Called only after the public per-call human/tenant guard succeeds.
         # Native ownership excludes other writers; CAS still fences every write.

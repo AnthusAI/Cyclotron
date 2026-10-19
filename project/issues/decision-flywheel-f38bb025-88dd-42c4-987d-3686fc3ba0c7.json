@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-f38bb025-88dd-42c4-987d-3686fc3ba0c7",
+  "title": "Retract a priming example",
+  "description": "As an application, I want to withdraw a priming example I added, so that a withdrawn human review stops reaching prompts and learning while the retraction stays auditable.\n\nFeature: Retract a priming example\n  Scenario: Retracting removes the example from prompts\n    Given a store with an added priming example\n    When the application retracts it\n    Then the next decision request carries no such example and the retraction records who and when",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "01c90149-c068-4ce1-8fc1-f05a2eed7377",
+      "author": "unknown",
+      "text": "Implemented Cyclotron.retract_priming_examples with specs in priming_context_test.py and s3_embedded_storage_test.py; PR opened against main.",
+      "created_at": "2026-10-18T19:04:10.939675Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
+  "created_at": "2026-10-18T18:58:05.576995Z",
+  "updated_at": "2026-10-18T19:04:10.939801Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
+  "agent": null,
+  "agent_assignment": null
+}

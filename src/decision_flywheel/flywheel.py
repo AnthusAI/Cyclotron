@@ -581,6 +581,32 @@ class DecisionFlywheel:
         )
         self._activate(FittedClassifier(extended_config), change_summary=change_summary)
 
+    def shrink_example_list(self, example_ids, *, change_summary):
+        """Withdraw examples from the fixed example list as a new version.
+
+        The decision context changes, so a learned head fitted to the previous
+        context no longer applies: the new version starts unfitted and the next
+        learning pass refits it without the withdrawn examples. A later
+        invalidation resets to an initial configuration that no longer holds
+        them.
+        """
+        from dataclasses import replace
+
+        withdrawn_example_ids = frozenset(example_ids)
+        active_config = self.active.config
+        if not withdrawn_example_ids or not withdrawn_example_ids <= set(active_config.example_ids):
+            raise ValueError("withdrawn examples must be on the active example list")
+        self.initial = replace(
+            self.initial,
+            example_ids=tuple(key for key in self.initial.example_ids if key not in withdrawn_example_ids),
+        )
+        shrunk_config = replace(
+            active_config,
+            example_ids=tuple(key for key in active_config.example_ids if key not in withdrawn_example_ids),
+            parent_fingerprint=active_config.fingerprint,
+        )
+        self._activate(FittedClassifier(shrunk_config), change_summary=change_summary)
+
     SHARED_QUESTIONS_NOTE = (
         "Other classifiers in this cyclotron ask these supporting questions. A question with the "
         "same name, instructions and labels is asked once and its answer feeds every classifier "
