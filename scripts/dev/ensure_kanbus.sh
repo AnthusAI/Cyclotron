@@ -6,7 +6,8 @@
 # ("Cannot uninstall PyYAML ... RECORD file not found"). An existing `kbs` is never replaced.
 #
 # Environment overrides: KANBUS_VENV (default ~/.cache/cyclotron/kanbus-venv),
-# KANBUS_BIN_DIR (default ~/.local/bin).
+# KANBUS_BIN_DIR (default ~/.local/bin). When the bin dir is not on PATH and CLAUDE_ENV_FILE is set
+# (Claude Code SessionStart hooks), a PATH export is appended there once so later commands find kbs.
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -53,7 +54,17 @@ ln -sf "${kanbus_executable}" "${bin_dir}/kbs"
 
 case ":${PATH}:" in
   *":${bin_dir}:"*) ;;
-  *) echo "ensure_kanbus: ${bin_dir} is not on PATH; add it (export PATH=\"${bin_dir}:\$PATH\") to use kbs" >&2 ;;
+  *)
+    # Claude Code sources $CLAUDE_ENV_FILE before every later Bash command in the session.
+    path_line="export PATH=\"${bin_dir}:\$PATH\""
+    if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+      if ! grep -qxF -- "${path_line}" "${CLAUDE_ENV_FILE}" 2>/dev/null; then
+        echo "${path_line}" >> "${CLAUDE_ENV_FILE}"
+      fi
+    else
+      echo "ensure_kanbus: ${bin_dir} is not on PATH; add it (${path_line}) to use kbs" >&2
+    fi
+    ;;
 esac
 
 "${bin_dir}/kbs" --version

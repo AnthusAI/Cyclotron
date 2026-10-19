@@ -70,6 +70,17 @@ def test_a_bin_dir_missing_from_path_is_reported_on_stderr(tmp_path):
     assert "is not on PATH" in result.stderr
 
 
+def test_an_off_path_bin_dir_is_exported_once_through_claude_env_file(tmp_path):
+    home, env = _sandbox(tmp_path)
+    env["PATH"] = f"{tmp_path / 'shims'}:/usr/bin:/bin"
+    env_file = tmp_path / "claude-env"
+    env["CLAUDE_ENV_FILE"] = str(env_file)
+    first, second = _run(env), _run(env)
+    assert first.returncode == 0 and second.returncode == 0
+    assert env_file.read_text() == f'export PATH="{home}/.local/bin:$PATH"\n'
+    assert "not on PATH" not in first.stderr + second.stderr
+
+
 def test_an_existing_kbs_is_left_alone_and_a_version_mismatch_warns(tmp_path):
     home, env = _sandbox(tmp_path)
     _executable(tmp_path / "mine" / "kbs", 'echo "Kanbus 0.0.1"\n')
