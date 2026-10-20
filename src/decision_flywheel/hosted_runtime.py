@@ -109,7 +109,8 @@ class HostedRuntime:
         # Pure file priming is supported. No transformer/provider is inferred.
         priming=PrimingService(store,storage=store,client=_NoTransformerClient())
         service=HostedConsoleService(account_id,store,self.authorization,self.send,allow_live=self.config.allow_live,
-            command_policy=lambda run_id,kind:self._publication_command_policy(account_id,run_id,kind))
+            command_policy=lambda run_id,kind:self._publication_command_policy(account_id,run_id,kind),
+            data_command=self._data_command if self.publication_targets is not None else None)
         held_out=None
         if self.open_cyclotron is not None:
             from .held_out_service import HeldOutService
@@ -147,6 +148,10 @@ class HostedRuntime:
             return AuthorizedModel(provider,guarded),optimizer
         return CyclotronRuntime(view,None,model_factory=model,sink_factory=lambda rid:CommandEventSink(view,rid,check_owned),
             storage_factory=storage,execution_guard=guarded)
+    def _data_command(self, kind, payload):
+        from .hosted_publications import is_priming_command
+        return is_priming_command(kind, payload)
+
     def _publication_command_policy(self, account_id, run_id, kind):
         if self.publication_targets is None:
             return
@@ -166,7 +171,8 @@ class HostedRuntime:
                 return await HostedCommandWorker(self.console,self.authorization,
                     lambda view,guard,check:self._runtime(message['accountId'],view,guard,check),allow_live=self.config.allow_live,
                     publication_runtime_for_command=publication if self.publication_targets is not None else None,
-                    command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind)).process(message)
+                    command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind),
+                    data_command=self._data_command if self.publication_targets is not None else None).process(message)
         return Worker()
 
 

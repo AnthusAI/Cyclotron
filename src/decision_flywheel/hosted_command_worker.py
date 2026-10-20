@@ -85,11 +85,21 @@ class _Effects:
 
 
 class HostedCommandWorker:
-    def __init__(self, store_for_account, authorization, runtime_for_command, *, allow_live=False,
-                 publication_runtime_for_command=None, command_policy=None):
+    def __init__(
+        self,
+        store_for_account,
+        authorization,
+        runtime_for_command,
+        *,
+        allow_live=False,
+        publication_runtime_for_command=None,
+        command_policy=None,
+        data_command=None,
+    ):
         self.allow_live = allow_live
         self.publication_runtime_for_command = publication_runtime_for_command
         self.command_policy = command_policy
+        self.data_command = data_command
         self.store_for_account, self.authorization, self.runtime_for_command = (
             store_for_account,
             authorization,
@@ -97,7 +107,7 @@ class HostedCommandWorker:
         )
 
     async def process(self, message):
-        if not self.allow_live:
+        if not self.allow_live and self.data_command is None:
             raise ValueError("live worker requires separate operator authority")
         if not isinstance(message, dict) or set(message) != {"accountId", "runId", "jobId"}:
             raise ValueError("delivery contains references only")
@@ -107,10 +117,12 @@ class HostedCommandWorker:
         job, actor = await asyncio.to_thread(store.command_envelope, message["jobId"])
         if actor.account_id != message["accountId"] or actor.run_id != message["runId"] or job["run_id"] != actor.run_id:
             raise AccountAccessDenied("delivery target does not match canonical actor")
+        if not self.allow_live and not self.data_command(job["kind"], job["payload"]):
+            raise ValueError("live worker requires separate operator authority")
         guard = self.authorization.guard(actor)
         await guard()
         if self.command_policy is not None:
-            self.command_policy(actor, job['kind'])
+            self.command_policy(actor, job["kind"])
         if job["status"] in ("completed", "failed", "interrupted"):
             return {"status": job["status"], "jobId": job["id"]}
         if job["status"] != "pending":
@@ -127,7 +139,7 @@ class HostedCommandWorker:
         def check():
             self.authorization.check(actor)
             if self.command_policy is not None:
-                self.command_policy(actor, job['kind'])
+                self.command_policy(actor, job["kind"])
             view.run(actor.run_id)  # Fresh execution fence as well as human permission.
 
         async def owned_guard():
@@ -135,9 +147,9 @@ class HostedCommandWorker:
 
         await owned_guard()  # After confirmed execution ownership, before opening operation state.
         effects = _Effects(view, check)
-        if job['kind'] == 'publication':
+        if job["kind"] == "publication":
             if self.publication_runtime_for_command is None:
-                raise ValueError('publication worker composition is unavailable')
+                raise ValueError("publication worker composition is unavailable")
             runtime = self.publication_runtime_for_command(effects, owned_guard, check, actor)
         else:
             runtime = self.runtime_for_command(effects, owned_guard, check)
