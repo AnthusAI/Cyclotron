@@ -58,6 +58,21 @@ def verify(path):
 
 
 if __name__ == "__main__":
-    print(
-        json.dumps({"reviewedPayloadComparison": "PASS", **verify(Path(sys.argv[1]))})
-    )
+    path = Path(sys.argv[1])
+    try:
+        result = verify(path)
+    except ValueError:
+        # CI supplies a freshly built PUBLIC source/PyPI artifact, never the
+        # private deployed zip. Emit hashes only, so differing build metadata
+        # can be compared locally without uploading a deployed file or body.
+        with zipfile.ZipFile(path) as archive:
+            for name in sorted(archive.namelist()):
+                if not name.startswith("decision_flywheel/"):
+                    print(
+                        "public-build-file "
+                        + json.dumps(
+                            [name, hashlib.sha256(archive.read(name)).hexdigest()]
+                        )
+                    )
+        raise
+    print(json.dumps({"reviewedPayloadComparison": "PASS", **result}))
