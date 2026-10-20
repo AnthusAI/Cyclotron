@@ -46,10 +46,22 @@
         "model": "GPT-6",
         "name": "cross-account-sharing"
       }
+    },
+    {
+      "id": "6d9b111c-f5cd-4c1b-b276-10125a6c48f4",
+      "author": "home",
+      "text": "Draft PR https://github.com/AnthusAI/Cyclotron/pull/60 publishes reviewed source commit 6a58605. Companion inactive consumer/handoff preparation: https://github.com/AnthusAI/Papyrus/pull/388. Hosted integration remains open under decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174. No production sharing or security change is part of these drafts.",
+      "created_at": "2026-10-20T14:58:05.010657Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
     }
   ],
   "created_at": "2026-10-20T14:25:14.855413Z",
-  "updated_at": "2026-10-20T14:54:38.769891Z",
+  "updated_at": "2026-10-20T14:58:05.010675Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
