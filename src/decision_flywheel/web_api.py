@@ -526,6 +526,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
             configured_priming.close()
 
     app = FastAPI(lifespan=lifespan)
+    # Private per-request proof of successful preflight, never a cached grant.
+    preflight_sentinel = object()
 
     @app.middleware('http')
     async def protect(request, next_handler):
@@ -540,6 +542,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
                     headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Vary':'Cookie'})
             if not authenticated:
                 return JSONResponse({'error':'authentication required'}, status_code=401)
+            if account_access:
+                request.state._cyclotron_preflight = preflight_sentinel
         response = await next_handler(request)
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -550,7 +554,8 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     async def context(request: Request = None, websocket: WebSocket = None):
         connection = request or websocket
-        authenticated = await account_access.authenticated(connection) if account_access else authorized(connection)
+        checked_http = request is not None and getattr(request.state, '_cyclotron_preflight', None) is preflight_sentinel
+        authenticated = checked_http or (await account_access.authenticated(connection) if account_access else authorized(connection))
         if not authenticated or not same_origin(connection):
             raise HTTPException(403, 'access refused')
         return {'store':None if account_access else store,'service':service,'redact':redact,
