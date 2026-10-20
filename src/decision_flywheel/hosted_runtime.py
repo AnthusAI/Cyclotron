@@ -123,6 +123,8 @@ class HostedRuntime:
         self.gateway=HostedAccounts(oauth,self.accounts,self.workspace,verifier=self.verifier,sessions=self.sessions,google_identity=self.identities)
         app=create_app(None,account_access=self.gateway.access,public_origin=self.config.public_origin,event_transport="poll")
         self.gateway.install(app)
+        from .hosted_publication_bootstrap import install_bootstrap_route
+        install_bootstrap_route(app, self)
         if self.publication_targets is not None:
             from .hosted_publications import install_publication_routes, configured_targets
             configured_targets(self)
