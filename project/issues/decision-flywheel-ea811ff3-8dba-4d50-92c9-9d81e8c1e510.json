@@ -58,10 +58,22 @@
         "model": "GPT-6",
         "name": "cross-account-sharing"
       }
+    },
+    {
+      "id": "454f317b-c49b-46eb-963f-dbdb13ba3941",
+      "author": "home",
+      "text": "Hosted integration preparation remains isolated from the main owner's merged PR58/bootstrap paths. This task owns new publication_sharing_storage.py and adjacent specifications; new publication_sharing_authorization.py and adjacent specifications; cross-module tests/publication_sharing_integration_test.py; and updates to docs/publication-sharing.md. No runtime, worker, console, account-route, bootstrap, infrastructure or credential files are claimed.\n\nUse the existing canonical Journal/S3Journal, not a new persistence system. One explicitly initialized, bounded owner-and-engine ledger commits grants, quotas, requests, source pins and audit atomically through one conditional head write. Never retry transaction bodies or turn uncertain commit acknowledgements into dispatch authority. Every transaction reads current canonical state. Missing/corrupt state, mismatched ownership, exhausted limits or storage outages fail closed.\n\nRequest-local host authentication must re-resolve the verified session and central account authority at every effect boundary. Issue/revoke requires exact owner role plus a separate exact engine/grant-management approval callback; admin/member/console:write alone is insufficient. Consumer membership requires an additional explicit publication-and-operation authorization callback. No new grants, authentication authority, endpoints or production credentials are deployed by this source preparation.\n\nFeature: Durable and freshly authorized publication sharing\nScenario: Concurrent last allowance\nGiven two processes reading one remaining grant allowance in the canonical journal\nWhen both reserve different requests\nThen only one conditional transaction commits\nAnd only its confirmed reservation may dispatch provider work\nScenario: Lost commit acknowledgement\nGiven a reservation or disclosure commit whose outcome becomes uncertain\nWhen the worker restarts or retries the same request\nThen no additional paid call is authorized\nAnd the original reservation and audit remain available for explicit reconciliation\nScenario: Current owner authority\nGiven a valid session with owner, admin, member or viewer role\nWhen it requests grant management\nThen only the current owner with explicit exact-scope grant authority succeeds\nAnd role, session, publication or operation changes fail closed\nScenario: Durable addressed delivery\nGiven one existing central decision and a current consumer-authorized delivery grant\nWhen its scoped receipt is delivered, the service restarts, and the receipt is requested again\nThen source and decision provenance survive\nAnd no repeated classification occurs\nAnd revocation prevents subsequent disclosure\n\nAll acceptance tests use synthetic identities, fake account transport, local or synthetic conditional journal storage and an offline native model. npm/pip install, download and cache operations remain held for cleanup. Source reviews and remote CI continue; real identity mapping does not block these tests.\n",
+      "created_at": "2026-10-20T15:05:41.847390Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
     }
   ],
   "created_at": "2026-10-20T14:25:14.855413Z",
-  "updated_at": "2026-10-20T14:58:05.010675Z",
+  "updated_at": "2026-10-20T15:05:41.847408Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

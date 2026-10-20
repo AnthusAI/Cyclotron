@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "791fa813-9c46-4d82-8be4-aaec3e2e050b",
+  "issue_id": "tests/publication_sharing_integration_test.py",
+  "event_type": "coordination.claim",
+  "occurred_at": "2026-10-20T15:07:57.632Z",
+  "actor_id": "cross-account-sharing",
+  "payload": {
+    "owner": "cross-account-sharing",
+    "claim_id": "sharing-integration-20261020",
+    "lease_expires_at": "2026-10-20T15:12:57.632Z",
+    "contention_window_s": 5,
+    "ttl_s": 300,
+    "revision": 1,
+    "operation_sequence": 1
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "d469eb26-961b-45d2-97d6-4974579eca96",
+  "issue_id": "decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-20T15:18:35.100Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "0e7abb2c-b8da-435f-82c8-b3bb3059d923",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "cross-account-sharing"
+    }
+  }
+}
