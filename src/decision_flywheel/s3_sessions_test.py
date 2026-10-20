@@ -112,3 +112,17 @@ def test_missing_session_is_signed_out_but_corrupt_or_unavailable_canonical_stat
     key=s._journal('session',current.session_ref).head_key
     client.objects.pop(key)
     with pytest.raises(SessionStoreUnavailable):s.get(cookie)
+
+
+def test_signed_challenge_survives_only_in_encrypted_single_use_pending_state():
+    from .google_identity import GoogleChallenge
+
+    opaque = "v1.synthetic.c3ludGhldGlj.bWFj"
+    store, client, cipher = sessions()
+    pending = store.begin(GoogleChallenge("synthetic-challenge", "synthetic-nonce", 1100, opaque))
+    assert opaque not in repr(pending)
+    assert opaque.encode() not in repr(client.objects).encode()
+    fresh, _, _ = sessions(client, cipher)
+    assert fresh.consume(pending.state, pending.browser_cookie).challenge_token == opaque
+    with pytest.raises(SessionRejected):
+        fresh.consume(pending.state, pending.browser_cookie)

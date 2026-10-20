@@ -206,7 +206,8 @@ class HostedAccounts:
                         raise SessionRejected('identity challenge required')
                     claims = await asyncio.to_thread(self.verifier.token_pair, access_token, id_token,
                         pending.nonce, require_session_binding=True)
-                    person = await asyncio.to_thread(self.google_identity.resolve, access_token, id_token, pending.challenge_id)
+                    person = await asyncio.to_thread(self.google_identity.resolve, access_token, id_token, pending.challenge_id,
+                        challenge_token=pending.challenge_token)
                 else:
                     claims = await asyncio.to_thread(self.verifier.token_pair, access_token, id_token, pending.nonce)
                 identifier, session = await asyncio.to_thread(self.sessions.create, access_token, claims)

@@ -573,3 +573,23 @@ def test_context_without_its_private_marker_performs_full_authentication(hosted,
         result = client.post('/graphql', params={'account': account_id}, json={'query': '{runs{name}}'})
         assert result.json()['data']['runs'][0]['name'] == 'Private account run'
         assert len(lookups) == 3
+
+
+def test_signed_challenge_preserves_deployed_callback_and_never_exposes_evidence(hosted):
+    client, gateway, state, _ = hosted
+    calls, person, _ = google_mode(gateway, state)
+    original = gateway.google_identity.transport
+    opaque = 'v1.synthetic.c3ludGhldGlj.bWFj'
+    def signed(method, path, access=None, body=None, **kwargs):
+        if path.endswith('/resolve'):
+            assert body == {'challengeToken': opaque}
+        result = original(method, path, access, body, **kwargs)
+        return {**result, 'challengeToken': opaque} if path.endswith('/challenge') else result
+    gateway.google_identity.transport = signed
+    with client:
+        query, callback = sign_in(client, state)
+        assert callback.status_code == 303
+        assert calls[1][3] == {'challengeToken': opaque}
+        assert opaque not in str(query) + str(callback.headers) + callback.text
+        session = gateway.sessions.get(client.cookies.get(gateway.config.cookie_name))
+        assert session.person_id == person['id'] and not hasattr(session, 'challenge_token')
