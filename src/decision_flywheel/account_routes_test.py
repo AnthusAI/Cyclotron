@@ -255,7 +255,7 @@ def test_another_tabs_selection_cannot_redirect_an_older_workspaces_writes(hoste
         assert [run["name"] for run in beta.runs()] == ["Beta only"]
 
 
-def google_mode(gateway, state):
+def google_mode(gateway, state, *, signed=False):
     import time
 
     from .google_identity import GoogleIdentityClient
@@ -267,13 +267,32 @@ def google_mode(gateway, state):
     def transport(method, path, access=None, body=None, *, identity_token=None):
         calls.append((method, path, access, body, identity_token))
         if path.endswith("/challenge"):
-            return {"challengeId": challenge_id, "nonce": "central-nonce-" + "n" * 32, "expiresAt": int(time.time()) + 300}
+            return {
+                "challengeId": challenge_id,
+                "nonce": "central-nonce-" + "n" * 32,
+                "expiresAt": int(time.time()) + 300,
+                **({"challengeToken": "v1.synthetic.c3ludGhldGlj.bWFj"} if signed else {}),
+            }
         if path.endswith("/resolve"):
+            if signed:
+                assert body == {"challengeToken": "v1.synthetic.c3ludGhldGlj.bWFj"}
             state["person"] = person
         return {"person": person}
 
     gateway.google_identity = GoogleIdentityClient(transport)
     return calls, person, challenge_id
+
+
+def test_signed_central_challenge_completes_existing_callback_without_exposing_opaque_evidence(hosted):
+    client, gateway, state, _ = hosted
+    calls, person, _ = google_mode(gateway, state, signed=True)
+    with client:
+        query, callback = sign_in(client, state)
+        assert callback.status_code == 303
+        assert calls[1][3] == {"challengeToken": "v1.synthetic.c3ludGhldGlj.bWFj"}
+        assert "v1.synthetic.c3ludGhldGlj.bWFj" not in str(query) + str(callback.headers) + callback.text
+        session = gateway.sessions.get(client.cookies.get(gateway.config.cookie_name))
+        assert session.person_id == person["id"] and not hasattr(session, "challenge_token")
 
 
 def test_google_challenge_precedes_redirect_and_callback_forwards_both_proofs_only_server_side(hosted):

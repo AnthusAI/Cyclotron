@@ -5,12 +5,15 @@ lifecycle. Hosts verify actors and supply account-scoped engines and bindings.
 Local HTTP tests are not an authorization to host the SQLite engine remotely.
 """
 
+import asyncio
 import hashlib
 import inspect
 import json
+import time
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 from urllib.parse import quote
+from uuid import UUID
 
 from .models import Item
 
@@ -448,9 +451,12 @@ class EmbeddedPublicationClient:
 class HTTPPublicationClient:
     """Host owns endpoint, verified credentials and httpx transport. No auto retry."""
 
-    def __init__(self, client, *, account_id=None):
+    def __init__(self, client, *, account_id=None, poll_timeout=30.0, poll_interval=0.25):
         self.client = client
         self.account_id = text(account_id, "account identity") if account_id is not None else None
+        if isinstance(poll_timeout, bool) or isinstance(poll_interval, bool) or not 0 < poll_interval <= poll_timeout <= 120:
+            raise ValueError("bounded positive publication polling limits required")
+        self.poll_timeout, self.poll_interval = poll_timeout, poll_interval
 
     async def command(self, publication, operation, payload):
         response = await self.client.post(
@@ -459,6 +465,39 @@ class HTTPPublicationClient:
             headers={"X-Cyclotron-Account": self.account_id} if self.account_id is not None else {},
             follow_redirects=False,
         )
+        deadline, job_id = time.monotonic() + self.poll_timeout, None
+        while True:
+            value = self._response(response, publication)
+            if response.status_code != 202:
+                return value
+            try:
+                identifier = value["jobId"]
+                if (
+                    operation != "decide"
+                    or str(UUID(identifier)) != identifier
+                    or UUID(identifier).version != 4
+                    or value.get("status") not in ("pending", "running", "completed")
+                    or value.get("bindingRevision") != payload.get("bindingRevision")
+                    or job_id not in (None, identifier)
+                ):
+                    raise ValueError()
+            except (ValueError, KeyError, TypeError):
+                raise PublicationError("invalid pending publication receipt", 502) from None
+            job_id = identifier
+            if time.monotonic() >= deadline:
+                raise PublicationError(
+                    "publication command remains pending; reconcile before retrying", 504, code="reconciliation_required"
+                )
+            await asyncio.sleep(min(self.poll_interval, max(0, deadline - time.monotonic())))
+            # Poll only the locally derived same-origin read path. Never repeat
+            # the POST, follow a server-supplied URL, or replay a paid request.
+            response = await self.client.get(
+                "/publications/" + quote(publication, safe="") + "/commands/" + job_id,
+                headers={"X-Cyclotron-Account": self.account_id} if self.account_id is not None else {},
+                follow_redirects=False,
+            )
+
+    def _response(self, response, publication):
         if response.status_code >= 300:
             code = "publication_error"
             if len(response.content) <= MAX_BYTES:
@@ -478,7 +517,10 @@ class HTTPPublicationClient:
             raise PublicationError(message, response.status_code, code=code)
         if len(response.content) > MAX_BYTES:
             raise PublicationError("remote response exceeds size limit", 502)
-        value = response.json()
+        try:
+            value = response.json()
+        except ValueError:
+            raise PublicationError("remote publication response is not JSON", 502) from None
         if not isinstance(value, dict) or value.get("contractVersion") != CONTRACT or value.get("publicationId") != publication:
             raise PublicationError("remote publication contract mismatch", 502)
         if self.account_id is not None and value.get("accountId") != self.account_id:

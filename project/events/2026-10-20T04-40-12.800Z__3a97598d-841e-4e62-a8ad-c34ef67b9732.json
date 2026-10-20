@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "3a97598d-841e-4e62-a8ad-c34ef67b9732",
+  "issue_id": "decision-flywheel-ef7af5fa-f2a4-4b50-bcc7-85a8ca900020",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:40:12.800Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Compose hosted publication predictions over the guarded queue worker",
+    "description": "Implement the central application slice authorized by Ryan on2026-10-20 for Papyrus Monitoring: one shared remote multi-output engine, existing Prospectus account/role authorization, existing queue/worker and native S3 SDK storage. Bind account/publication/output/run revisions explicitly; use the same source revision for all publication projections. Papyrus consumer PR382 is green at603767e2. Reuse existing components and keep secrets out of config/records. No deployment, new infrastructure, credential creation or permission grants. Live models remain off by default; no labels, seeding or training. Normal sign-in with the explicitly selected ryan@anth.us reached a failed callback, so current account/role remains unverified. Keep that blocker visible; do not infer membership or weaken verification.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "monitoring-central"
+    }
+  }
+}
