@@ -31,8 +31,8 @@ it('shows the bootstrap intervals beside the headline and omits them for older r
 it('shows both endpoints side by side for every measure',()=>{
   render(<HeldOutReportView report={report} />)
   const table=screen.getByRole('table')
-  expect(within(table).getByRole('columnheader',{name:'Before · version 1'})).toBeVisible()
-  expect(within(table).getByRole('columnheader',{name:'After · version 4 (2 refits)'})).toBeVisible()
+  expect(within(table).getByRole('columnheader',{name:'Before'})).toBeVisible()
+  expect(within(table).getByRole('columnheader',{name:'After'})).toBeVisible()
   const recall=within(table).getByRole('row',{name:/Recall \(include\)/})
   expect(recall).toHaveTextContent(/Recall \(include\)\s*24%\s*81%/)
   expect(within(table).getByRole('row',{name:/Agrees on exclude/})).toBeVisible()

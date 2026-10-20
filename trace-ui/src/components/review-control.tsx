@@ -74,7 +74,7 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
   const needsReason=thumbs&&choice===negative&&reasons.length>0
   const ready=choice!==null&&(!needsReason||Boolean(reason))&&(!requireExplanation||Boolean(explanation.trim()))
   const label=reason?.noLabel?null:choice
-  const sure=decision.confidence==null?'confidence unknown':`${percent(decision.confidence)} sure`
+  const sure=decision.confidence==null?'':` (${percent(decision.confidence)} sure)`
   const submit=()=>{
     if(!ready||disabled)return
     onReview?.({itemId,decisionId:decision.decisionId,label,reasonCode:reason?.code??null,explanation:explanation.trim()||null})
@@ -84,7 +84,7 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
     const recordedReason=reasons.find(row=>row.code===value.reasonCode)
     return <section className="cyclotron-review" data-compact={compact} data-recorded="true" aria-label={question??'Review'}>
       {question?<h3 className="cyclotron-review-question">{question}</h3>:null}
-      <p className="cyclotron-review-decision">Decision: <strong>{decision.label}</strong> · {sure}</p>
+      <p className="cyclotron-review-decision">Suggested: <strong>{decision.label}</strong>{sure}</p>
       <p className="cyclotron-review-recorded">
         <span aria-hidden="true">{value.label==null?'○':value.label===decision.label?'✓':'✗'} </span>
         {value.label==null?'Reviewed without a label':value.label===decision.label?`Agreed: ${value.label}`:`Correction: ${value.label}`}
@@ -101,7 +101,7 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
     :decision.classes.map(label=>({label,text:label,icon:null}))
   return <section className="cyclotron-review" data-compact={compact} data-mode={thumbs?'thumbs':'labels'} aria-label={question??'Review'}>
     {question?<h3 className="cyclotron-review-question">{question}</h3>:null}
-    <p className="cyclotron-review-decision">Decision: <strong>{decision.label}</strong> · {sure}{decision.version!=null?` · version ${decision.version}`:''}</p>
+    <p className="cyclotron-review-decision">Suggested: <strong>{decision.label}</strong>{sure}</p>
     {reviewReason?<p className="cyclotron-review-why">Why you are seeing this: {reviewReason}</p>:null}
     <div role="group" aria-label="Your label" className="cyclotron-review-choices">
       {choices.map(row=>{
@@ -126,7 +126,7 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
     <label className="cyclotron-review-field" htmlFor={`${id}-explanation`}>
       <span>Explanation ({requireExplanation?'required':'optional'})</span>
       <textarea id={`${id}-explanation`} rows={compact?1:2} value={explanation} disabled={disabled} required={requireExplanation}
-        placeholder="Why? The cyclotron learns from this." onChange={event=>setExplanation(event.target.value)} />
+        placeholder="Why?" onChange={event=>setExplanation(event.target.value)} />
     </label>
     <div className="cyclotron-review-actions">
       <button type="button" className="cyclotron-review-submit" disabled={disabled||!ready} onClick={submit}>Submit review</button>
