@@ -64,3 +64,27 @@ def test_proof_headers_are_restricted_to_the_resolution_endpoint():
         transport('POST', '/v1/identities/google/resolve', 'access')
     with pytest.raises(AccountAccessDenied):
         transport('POST', '/v1/identities/google/resolve', 'access', identity_token='id\r\ninjected')
+
+
+def test_signed_challenge_is_forwarded_opaque_without_downgrading_to_an_unstored_id():
+    challenge_id = str(uuid4())
+    opaque = "v1.synthetic.c3ludGhldGlj.bWFj"
+    calls = []
+
+    def transport(method, path, token, body, **kwargs):
+        calls.append(body)
+        if path.endswith("/challenge"):
+            return {"challengeId": challenge_id, "nonce": "n" * 43, "expiresAt": 1300, "challengeToken": opaque}
+        assert body == {"challengeToken": opaque}
+        return {"person": {"id": str(uuid4()), "createdAt": "synthetic"}}
+
+    client = GoogleIdentityClient(transport, clock=lambda: 1000)
+    challenge = client.challenge()
+    assert challenge.challenge_token == opaque and opaque not in repr(challenge)
+    client.resolve("synthetic-access", "synthetic-id", challenge.challenge_id, challenge_token=challenge.challenge_token)
+
+@pytest.mark.parametrize("token", ["", None, 7, "v2.key.payload.mac", "v1.key.bad payload.mac", "v1.key." + "x" * 2049 + ".mac"])
+def test_malformed_present_signed_challenges_are_not_silently_downgraded(token):
+    result = {"challengeId": str(uuid4()), "nonce": "n" * 43, "expiresAt": 1300, "challengeToken": token}
+    with pytest.raises(ProspectusUnavailable):
+        GoogleIdentityClient(lambda *args: result, clock=lambda: 1000).challenge()

@@ -76,9 +76,10 @@ def test_budget_stops_cleanly_with_partial_result():
 
 
 def test_ledger_rows_and_verdicts_written():
-    ledger = HypothesisLedger(sqlite3.connect(":memory:"))
+    ledger_connection = sqlite3.connect(":memory:")
+    ledger = HypothesisLedger(ledger_connection)
     r = run(FakeScorer(base=0.6, good=0.95), seed=1, ledger=ledger)
-    assert ledger.db.execute("SELECT COUNT(*) FROM idea_evaluations").fetchone()[0] == r.calls
+    assert ledger_connection.execute("SELECT COUNT(*) FROM idea_evaluations").fetchone()[0] == r.calls
     assert {e["verdict"] for i in IDEAS for e in ledger.verdicts(i)} >= {"screened_out", "advanced", "promoted"}
     assert ledger.verdicts("good")[-1]["verdict"] == "promoted"
     assert "Holm" in ledger.verdicts("good")[-1]["reason"]

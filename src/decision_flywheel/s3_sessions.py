@@ -115,7 +115,8 @@ class S3OAuthSessions:
             expiry = min(self.clock()+300, challenge.expires_at) if challenge else self.clock()+300
             if expiry <= self.clock(): raise SessionRejected('identity challenge expired')
             pending = PendingLogin(secrets.token_urlsafe(32), challenge.nonce if challenge else secrets.token_urlsafe(32),
-                secrets.token_urlsafe(64), secrets.token_urlsafe(32), expiry, challenge.challenge_id if challenge else None)
+                secrets.token_urlsafe(64), secrets.token_urlsafe(32), expiry, challenge.challenge_id if challenge else None,
+                challenge.challenge_token if challenge else None)
             self._new('pending', self.reference(pending.state), expiry, asdict(pending))
             return pending
         except (SessionRejected, SessionStoreUnavailable): raise
