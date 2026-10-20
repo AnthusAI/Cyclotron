@@ -2,7 +2,8 @@
 
 This additive application boundary does not install routes, issue credentials,
 open an engine, or confer console/account administration. Its trusted ports must
-be supplied by a host; no production persistence or identity adapter is provided.
+be supplied by a host. Canonical storage and account adapters are separate,
+explicit dependencies; importing them does not activate a hosted service.
 
 ``SharingStore.transaction`` must be serializable across all writers, durably
 commit on successful exit, and atomically roll back every mutation on failure.

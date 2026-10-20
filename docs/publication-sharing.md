@@ -6,9 +6,10 @@ of the owner's account. The existing same-account publication API remains
 unchanged.
 
 This change supplies a transport-independent grant lifecycle and guarded
-inference boundary, with synthetic specifications. It does not install a
+inference boundary, canonical journal storage and request-local account
+authorization adapters, with synthetic specifications. It does not install a
 production grant authority, expose a hosted endpoint, configure credentials,
-or activate sharing. Hosted integration is tracked separately and must preserve
+or activate sharing. Hosted composition is tracked separately and must preserve
 the existing queue, account verification and native storage boundaries.
 
 ## Two routing stages
@@ -115,8 +116,37 @@ Billing attribution and request audit contain identifiers and outcomes, not
 source text, policy bodies, credentials or free-form provider errors.
 
 Durable storage, fresh identity callbacks, owner authority and inference
-callbacks are mandatory host dependencies. The test store demonstrates these
-requirements with synthetic tenants; it is not a production storage adapter.
+callbacks are mandatory host dependencies. `JournalSharingStore` implements the
+storage contract using the existing canonical `Journal` interface. Hosted use
+requires `S3Journal`; the local file journal exists for tests and single-machine
+use. DynamoDB is not an authorization fallback.
+
+Each ledger is pinned to its owning SaaS account, workspace and central engine.
+An explicitly authorized initialization creates it; normal use opens existing
+state and never silently recreates missing authority. Every transaction reads
+canonical state, stages an isolated copy and conditionally commits grant, quota,
+source pins, request and audit together. A conflicting transaction is rejected
+without replaying its body. An uncertain write invalidates that store handle;
+opening a fresh handle does not grant permission to repeat an uncertain request.
+
+The ledger has explicit byte, record and commit limits. It retains headroom for
+revoking active grants, and stops ordinary admission before that headroom is
+consumed. It never prunes audit history or resets quota to regain capacity.
+Operators still need a reviewed retention/migration and storage-outage procedure
+before activation.
+
+`ProspectusSharingAuthorization` binds each operation to one verified hosted
+session. It rereads that session and uses the existing `AccountsClient` for
+current account authority. Issuing or revoking a grant requires the exact
+`owner` role and a mandatory callback authorizing that engine and grant scope.
+An administrator or ordinary write permission is insufficient.
+
+Consumer checks use the consumer's own account and `console:read` as a membership
+ceiling, plus a mandatory publication-and-operation permission callback. The
+consumer is not authenticated as the owner and needs no membership in the
+owner's account. The callback alone cannot waive current account authorization.
+These adapters do not enroll identities, issue credentials or make new role
+powers available in a deployed service.
 
 ## Publication handoff
 
@@ -141,6 +171,11 @@ A JSON flag such as `verified: true` cannot establish trust. The internal
 router uses the consumer's own policies, section taxonomy, labels and storage.
 Its feedback does not automatically become central training data. Changes to
 either learning scope need distinct authority.
+
+The receipt supplies provenance, not source-body access. Internal section
+classification needs its own current permission to resolve the exact source
+revision, or an independently authorized copy verified against that provenance.
+Receipt possession must not unlock the owner's source catalog.
 
 ## Integration and activation gates
 
