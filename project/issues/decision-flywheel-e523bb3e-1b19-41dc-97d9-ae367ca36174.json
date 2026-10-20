@@ -3,9 +3,9 @@
   "title": "Compose durable owner-grant authority and host worker enforcement",
   "description": "Owner: cross-account-sharing; integration partner monitoring-central (PR58 owner). Depends on delegation contract and separately coordinated hosted integration. Durable conditional grant/revocation/audit/request reservations, fresh owner/consumer authority, guarded execution, immutable billing attribution and caller-specific receipt access. Never convert sharing into owner membership or console:write. Test concurrency, revocation during execution/disclosure, uncertain provider reconciliation and private history exclusion. Production target approval and credentials remain pending. Does not block original four-output priming.",
   "type": "task",
-  "status": "in_progress",
+  "status": "open",
   "priority": 1,
-  "assignee": "cross-account-sharing",
+  "assignee": "claude-continuation",
   "creator": null,
   "parent": "decision-flywheel-e5dcca5a-6438-41ef-b7a9-4f8e8dd56016",
   "labels": [],
@@ -39,10 +39,22 @@
         "model": "GPT-6",
         "name": "cross-account-sharing"
       }
+    },
+    {
+      "id": "0eea5235-c105-4c86-b9ef-7e13b6abdb8d",
+      "author": "home",
+      "text": "Claude continuation checkpoint — implementation paused at the user's usage-limit request. Do not expand work or poll CI until continuation is requested.\n\n- Repository/worktree: AnthusAI/Cyclotron, `/Users/home/Documents/Codex/2026-10-20/task-4/cyclotron-sharing`.\n- Branch: `feature/ea811f-publication-sharing`; draft https://github.com/AnthusAI/Cyclotron/pull/60.\n- Confirmed pushed source checkpoint: `eeed6f27d7bbb321d7c62de697fd5c8a714ca0b4`; implementation commit `36205f952163be68e8510468caecd144fb09bb8e`. Subsequent handoff commits change Kanbus only.\n- Source is complete for grant contract, canonical Journal/S3Journal storage and fresh request-account adapters. Runtime/worker/console/bootstrap/infra files are untouched. Main release/priming owner remains task `01a15715-535d-777d-95d6-a183095000c8`; coordinate new file claims before wiring.\n- Already passed: 312 focused tests, Ruff/format, whitespace, Kanbus validation and independent review. Cross-repository synthetic smoke performs one central and one separate internal classification; no duplicate central call, owner-account impersonation or implicit source-body access. No critical defect identified.\n- Last observed final-source CI: run `39447274810`, https://github.com/AnthusAI/Cyclotron/actions/runs/39447274810, test/diagrams queued. Not polled since pause. Older head `4b50f88d774e1617606041a70fcc89dd84f27156` passed run `39444088412`. A tracker-only push may start newer checks; verify the exact SHA once when resuming.\n\nNo uncommitted source patches exist; worktree was clean before this bookkeeping. Preserve both isolated checkouts and local operator artifacts in their parent directory: `delivery-receipt.json`, private `identity-mapping.md` and `tenant-identity-readback.json`, and `verification/cyclotron_papyrus_hosted_smoke.py`. Keep private evidence out of public issues. Do not reset, clean or delete these directories; a fresh clone can recover the published source but not local evidence.\n\nNext commands after authorization to resume:\n```sh\ncd /Users/home/Documents/Codex/2026-10-20/task-4/cyclotron-sharing\ngit status --short\ngit log -4 --oneline\nkbs show decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174\ngh pr view 60 --repo AnthusAI/Cyclotron --json headRefOid,statusCheckRollup\ngh run view 39447274810 --repo AnthusAI/Cyclotron\n```\nThen compose reviewed runtime/transport, exact-scope entitlement and canonical source adapters. Real named-account/perspective/publication mapping is unresolved; parent has already requested the account-picker URL. Do not use personal/test tenants or create duplicate accounts. Companion Papyrus draft388 and activation task PPY-90711b3b-4684-4782-bb7e-9d788794a373 hold the site requirements.\n\nApprovals already relayed by parent: ordinary Papyrus/Cyclotron merge/main/deploy is approved; user added the pending PyPI publisher. LeftBlock's specific tested-integration push → PR5 develop merge → main promotion/publication is approved for its owner. Two-cache deletion is approved but still needs a fresh installer-safe window; the earlier cache hold was released and cleanup did not run. Do not ask these approvals again or perform their work during this handoff.\n\nStill required: exact Data Parade site/infrastructure targets, live owner grant/output/source/billing/retention scope and any new authentication authority or persistent credentials. General deployment approval does not authorize those security changes. No live grant, credential or infrastructure mutation occurred; all previous Git pushes/PR edits were confirmed and no external mutation has an uncertain outcome.\n",
+      "created_at": "2026-10-20T15:22:58.844751Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
     }
   ],
   "created_at": "2026-10-20T14:25:30.022156Z",
-  "updated_at": "2026-10-20T15:18:35.100362Z",
+  "updated_at": "2026-10-20T15:22:58.844772Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
