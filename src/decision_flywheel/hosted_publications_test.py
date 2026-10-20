@@ -37,7 +37,7 @@ class OfflineModel:
         )
 
 
-def setup(identity, monkeypatch):
+def setup(identity, monkeypatch, *, create_run=True):
     verifier, token = identity
     person, account = str(uuid4()), str(uuid4())
     state, sent, targets = {"role": "owner", "denied": False}, [], []
@@ -87,10 +87,11 @@ def setup(identity, monkeypatch):
     store.save_cyclotron_definition("shared", "Synthetic shared router", [{"id": p, "revision": 1} for p in PUBS], {})
     store.save_item_list("sources", "Synthetic sources")
     store.upsert_list_items("sources", [{"id": ITEM["id"], "occurred_at": "2026-01-01", "values": ITEM["values"]}])
-    run = bff.workspace(account).service.create_run(
-        "Synthetic remote baseline", {"cyclotron_id": "shared", "item_list_id": "sources", "max_requests": 2}
-    )
-    targets.append(PublicationTarget(account, run["id"], tuple(PublicationBinding(p, (p,), "binding-one") for p in PUBS)))
+    if create_run:
+        run = bff.workspace(account).service.create_run(
+            "Synthetic remote baseline", {"cyclotron_id": "shared", "item_list_id": "sources", "max_requests": 2}
+        )
+        targets.append(PublicationTarget(account, run["id"], tuple(PublicationBinding(p, (p,), "binding-one") for p in PUBS)))
     access = token()
     cookie, session = bff.sessions.create(access, verifier.access(access))
     session.person_id = person

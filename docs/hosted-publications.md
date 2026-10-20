@@ -89,3 +89,33 @@ The BFF freezes a fingerprint of the selected publication outputs' accepted cata
 ## Outputs awaiting criteria
 
 A target may declare `pendingOutputs` as a distinct subset of its declared binding outputs. Such an output must not yet have a runnable classifier. Status reports `pending_criteria` with no invented question or prediction; decide and prime refuse it. Active bindings still share the original engine and request. These declarations do not grant cross-account access or create publication/section routing identities. Owner-authorized sharing and a publication's internal section router are separate integration responsibilities.
+
+## Data-only frozen-run bootstrap
+
+An authenticated writer can POST `/publication-runs/bootstrap` before target
+configuration exists, with the usual account header, session and same-origin
+CSRF protection. The strict payload is:
+
+```json
+{"contractVersion":"cyclotron-publication/v1","requestId":"<new UUIDv4>","name":"<run name>","config":{"cyclotron_id":"<existing definition>","cyclotron_definition_revision":1,"item_list_id":"<existing source list>"}}
+```
+
+The server requires the current canonical definition and classifier revisions,
+then reuses native run normalization inside one catalog transaction. It freezes
+item revisions and fingerprints, records the original authenticated person, and
+checks fresh original-session authority again at the S3 commit. No client-authored
+frozen classifier, provider setting, priming list or account override is accepted.
+The response contains the run UUID and frozen configuration fingerprint, without
+private classifier text. The run uses the existing `live` data schema required
+by command storage; that value grants no dispatch authority. Bootstrap does not
+change host `allow_live`, enqueue work, open the native engine or construct a
+provider/optimizer. Its structural request ceilings are fixed at one and are not
+an authorization to execute.
+
+A request UUID is scoped to the account and bound to the original person and
+exact input fingerprint. Identical retries return the same frozen run, including
+after catalog advancement or an uncertain successful write. Changed input/person
+is refused. CAS conflicts and unknown outcomes require retrying that same request
+identity; no second run or automatic provider work is created. Operators must
+still verify the intended production owner and configure the resulting reviewed
+run/output/model bindings before native priming.
