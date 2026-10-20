@@ -1,0 +1,65 @@
+{
+  "id": "decision-flywheel-ea811ff3-8dba-4d50-92c9-9d81e8c1e510",
+  "title": "Authorize narrowly scoped cross-account publication inference",
+  "description": "Feature: Owner-authorized cross-account inference\nScenario: Explicit owner delegation\nGiven distinct synthetic owner and consumer SaaS accounts and an owner-approved grant for one bound publication output\nWhen a freshly authenticated consumer requests inference\nThen the same owner engine executes under its exact execution binding\nAnd only allowed results and content-free attribution are disclosed\nAnd owner policies, labels, sources, feedback and administration remain inaccessible\nScenario: Authority changes\nGiven queued or completed inference\nWhen the grant expires, is revoked, changes revision or fresh authorization fails\nThen execution or disclosure is refused without retrying uncertain provider work\nScenario: Separate internal router\nGiven an allowed central publication match\nWhen handed to a consumer-owned internal section router\nThen tenant, source revision, central decision and publication provenance are retained\nAnd no section label or feedback is invented.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "cross-account-sharing",
+  "creator": null,
+  "parent": "decision-flywheel-e5dcca5a-6438-41ef-b7a9-4f8e8dd56016",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "32f81187-8207-4101-876b-c62f9e63f127",
+      "author": "home",
+      "text": "Claim: separate clone cyclotron-sharing at origin/develop 38ea51d. Only new publication_sharing.py and adjacent specs plus docs/publication-sharing.md. Central monitoring owner notified with exact files; existing PR58/runtime/auth/queue/publication_lab paths remain unmodified. Claude route requested from owner. Synthetic contract enforcement is independent of four-output priming; hosted integration tracked separately. Domain and criteria expected later today; no repeated request. Current core computes all central outputs, so execution scope must be distinct from visible scope; display usage estimates are not billing authority.",
+      "created_at": "2026-10-20T14:26:37.814694Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
+    },
+    {
+      "id": "782ada8a-697b-4a8f-93a6-46baea2943b8",
+      "author": "home",
+      "text": "Acceptance refinement from independent review: besides delegated inference, central publication fan-out must deliver an already-computed decision to an explicitly addressed consumer/publication with the original source account/revision and central decision identity. Delivery performs no provider call and exposes only the granted output. A guessed owner receipt ID cannot confer access to arbitrary owner sources/history. Revalidate recipient authority, grant revision, execution binding and exact addressed delivery before disclosure. Synthetic tests must prove one central decision can reach the separate internal section router without a duplicate classification or copied feedback. Runtime activation remains separate.",
+      "created_at": "2026-10-20T14:33:54.570051Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
+    },
+    {
+      "id": "7bd682c1-9aea-4179-9d0b-d78830c274f2",
+      "author": "home",
+      "text": "Implemented an additive, transport-independent owner-grant contract in publication_sharing.py and adjacent synthetic specifications. Explicit operation scope separates delegated inference from addressed delivery of an existing central decision. Delivery does not call the model again; consumers receive only approved outputs. Native account/list/item/integer revision/hash provenance, nullable origin publication, owner billing attribution, revocation, expiry, caller-bound retries, atomic store/audit ports and source-validation boundaries are preserved.\n\nFinal root verification: 118 sharing specifications pass. The author also passed 50 existing account/publication regressions (168 total); root independently passed 57 neighboring regressions earlier. Ruff, formatting and whitespace checks pass. Independent review found no remaining blocking findings in this source-only scope. An actual native offline Cyclotron decision passed through the generated sharing receipt into the Papyrus handoff: two outputs computed, one disclosed, one original model call, zero extra delivery/section calls; stable retry and revocation checked.\n\nThis is source groundwork, not a deployed sharing service. Durable production store/current authority/catalog/native adapters and authenticated receipt transport remain tracked by decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174. No grants, credentials, security expansion, production model calls or runtime/worker edits occurred. Original four-output priming remains independent.\n",
+      "created_at": "2026-10-20T14:54:38.769872Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
+    }
+  ],
+  "created_at": "2026-10-20T14:25:14.855413Z",
+  "updated_at": "2026-10-20T14:54:38.769891Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "cross-account-sharing"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
