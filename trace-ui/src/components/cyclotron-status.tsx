@@ -20,26 +20,21 @@ const day=(value:string|null|undefined)=>{
 /** Every state has a mark and a word; colour only repeats them. */
 const STATES:Record<ReviewRateState,{mark:string;word:string}>={
   full:{mark:'●',word:'Full review'},
-  onboarding:{mark:'○',word:'Onboarding'},
+  onboarding:{mark:'○',word:'Getting started'},
   tapering:{mark:'▼',word:'Tapering'},
   steady:{mark:'■',word:'Steady'},
   raised:{mark:'▲',word:'Raised to full review'},
   manual:{mark:'✎',word:'Manual rate'},
 }
 
-function versionText(status:CyclotronStatus){
-  const {version,refits}=status.cyclotron
-  return `Version ${version}${refits?` (${refits} refit${refits===1?'':'s'})`:''}`
-}
-
 function primedText(status:CyclotronStatus){
   const primed=status.cyclotron.primedExamples
-  return primed?`Primed with ${primed} example${primed===1?'':'s'}`:null
+  return primed?`Started with ${primed} reference${primed===1?'':'s'}`:null
 }
 
 function calibrationText(status:CyclotronStatus){
   const says=percent(status.calibration.saysSure),right=percent(status.calibration.isRight)
-  return says&&right?`Says ${says}, right ${right}`:'Calibration not measured yet'
+  return says&&right?`Says ${says}, right ${right}`:'Confidence not measured yet'
 }
 
 function rateText(status:CyclotronStatus){
@@ -52,10 +47,10 @@ function changeText(status:CyclotronStatus){
   if(!change)return null
   const when=day(change.at)
   const suffix=when?` · ${when}`:''
-  if(change.kind==='promoted')return `${change.fromVersion!=null?`Version ${change.fromVersion} → ${change.toVersion}`:`Version ${change.toVersion}`}: ${change.summary}${suffix}`
-  if(change.kind==='refit')return `Refit on ${change.labels??'new'} labels, still version ${change.toVersion} (minor)${suffix}`
-  if(change.kind==='dropped')return `Candidate dropped, still version ${change.toVersion}: ${change.summary}${suffix}`
-  return `Definition changed to version ${change.toVersion}: ${change.summary}${suffix}`
+  if(change.kind==='promoted')return `Improved: ${change.summary}${suffix}`
+  if(change.kind==='refit')return `Learned from ${change.labels??'new'} reviews${suffix}`
+  if(change.kind==='dropped')return `Tried a change and kept the current approach: ${change.summary}${suffix}`
+  return `Changed: ${change.summary}${suffix}`
 }
 
 function Metric({name,value,definition,testId}:{name:string;value:number|null;definition:string;testId:string}){
@@ -79,10 +74,8 @@ export function CyclotronStatusView({status,variant='strip',onOverride,classifie
   const override=rate.override
   const primed=primedText(status)
   if(variant==='strip')return <section className="cyclotron-status" data-variant="strip" aria-label={`${status.cyclotron.id} status`}>
-    <span>{versionText(status)}</span>
     {primed?<span data-testid="cyclotron-status-primed">{primed}</span>:null}
     <span>{agrees?`Agrees ${agrees}`:'Agreement not measured yet'}</span>
-    <span>{calibrationText(status)}</span>
     <span data-review-state={rate.state} title={rateText(status)}><span aria-hidden="true">{state.mark} </span>{state.word} · {percent(rate.rate)} reviewed</span>
     {status.pending.decisionsAwaitingReview?<span>{status.pending.decisionsAwaitingReview} awaiting review</span>:null}
   </section>
@@ -92,7 +85,7 @@ export function CyclotronStatusView({status,variant='strip',onOverride,classifie
   return <section className="cyclotron-status" data-variant="card" aria-label={`${status.cyclotron.id} status`}>
     <header className="cyclotron-status-header">
       <h3>{classifierName?.trim()||status.cyclotron.classifier}</h3>
-      <p>{versionText(status)} · as of {day(status.asOf)}</p>
+      <p>As of {day(status.asOf)}</p>
     </header>
     <dl className="cyclotron-status-metrics">
       <Metric testId="metric-recall" name="Recall" value={status.alignment.recall}
@@ -105,8 +98,8 @@ export function CyclotronStatusView({status,variant='strip',onOverride,classifie
         definition="Of all items, how many it got right." />
     </dl>
     <p className="cyclotron-status-note">{status.alignment.labels} reviews in the last {status.alignment.window}, {status.alignment.measuredOn}.</p>
-    {primed?<p className="cyclotron-status-note" data-testid="cyclotron-status-primed">{primed} before its first decision. They train it but never count in these measurements.</p>:null}
-    <section className="cyclotron-status-section" aria-label="Calibration">
+    {primed?<p className="cyclotron-status-note" data-testid="cyclotron-status-primed">{primed} before its first suggestion. They guide suggestions but never count in these measurements.</p>:null}
+    <section className="cyclotron-status-section" aria-label="Confidence">
       <h4>Confidence</h4>
       <p>{calibrationText(status)}{status.calibration.gapPoints!=null?` · off by ${status.calibration.gapPoints} point${status.calibration.gapPoints===1?'':'s'}`:''}</p>
     </section>

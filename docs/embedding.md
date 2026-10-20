@@ -97,7 +97,7 @@ primed.close()
 The first decision request already carries them as training context. They
 are never decisions, reviews or measured alignment, and an item used to prime
 cannot also be decided. `status().to_json()["cyclotron"]["primedExamples"]`
-says how many there are, and the status widget shows "Primed with N examples".
+says how many there are, and the status widget shows "Started with N references" (the embedded components use plain editor-facing wording: references and suggestions, with no versions, calibration or onboarding).
 
 A running store takes more examples with `add_priming_examples`. Each output
 that gains examples appends them to its fixed example list as a new version,
@@ -543,7 +543,7 @@ export function PendingItem({itemId,decision,onReview}:{itemId:string;decision:C
 export function CyclotronHeader({status,onOverride}:{status:CyclotronStatus;onOverride:()=>void}){
   return <>
     <CyclotronStatusView status={status} />
-    <details><summary>What the cyclotron is doing</summary>
+    <details><summary>How suggestions are doing</summary>
       <CyclotronStatusView status={status} variant="card" onOverride={onOverride} />
     </details>
   </>

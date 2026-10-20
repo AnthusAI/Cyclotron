@@ -67,7 +67,7 @@ export type HeldOutReportViewProps={
  * Data only unless onFreeze or onEvaluate is given. Styles: styles/components.css.
  */
 export function HeldOutReportView({report,sets=[],classifierName,onFreeze,onEvaluate,requestBound,busy=false}:HeldOutReportViewProps){
-  const title=classifierName?.trim()||report?.cyclotron.classifier||'Classifier'
+  const title=classifierName?.trim()||report?.cyclotron.classifier||'Suggestions'
   const latestSet=sets.at(-1)
   const actions=onFreeze||onEvaluate?<div className="cyclotron-held-out-actions">
     {onFreeze?<button type="button" className="cyclotron-review-secondary" disabled={busy} onClick={onFreeze}>Freeze held-out set</button>:null}
@@ -107,8 +107,8 @@ export function HeldOutReportView({report,sets=[],classifierName,onFreeze,onEval
     <table className="cyclotron-held-out-table">
       <thead><tr>
         <th scope="col">Measure</th>
-        <th scope="col">Before · version {report.before.version}</th>
-        <th scope="col">After · version {report.after.version}{report.after.refits?` (${plural(report.after.refits,'refit')})`:''}</th>
+        <th scope="col">Before</th>
+        <th scope="col">After</th>
       </tr></thead>
       <tbody>{metricRows(report).map(row=><tr key={row.name}>
         <th scope="row">{row.name}</th>

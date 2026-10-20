@@ -12,9 +12,9 @@ const status=example as CyclotronStatus
 it('renders the strip from a snapshot in words',()=>{
   render(<CyclotronStatusView status={status} />)
   const strip=screen.getByRole('region',{name:'papyrus-relevance status'})
-  expect(strip).toHaveTextContent('Version 13')
+  expect(strip).not.toHaveTextContent(/version|calibration|onboarding|refit/i)
   expect(strip).toHaveTextContent('Agrees 86%')
-  expect(strip).toHaveTextContent('Says 84%, right 86%')
+  expect(strip).not.toHaveTextContent('Says 84%')
   expect(strip).toHaveTextContent('▼ Tapering · 25% reviewed')
   expect(strip).toHaveTextContent('7 awaiting review')
 })
@@ -31,7 +31,7 @@ it('explains each alignment number under its name in the card',()=>{
   expect(screen.getByText('Says 84%, right 86% · off by 2 points')).toBeVisible()
   expect(screen.getByText(status.reviewRate.reason)).toBeVisible()
   expect(screen.getByText(`Next: ${status.reviewRate.nextStep}`)).toBeVisible()
-  expect(screen.getByText(/Version 12 → 13: Added question: is this vendor marketing\?/)).toBeVisible()
+  expect(screen.getByText(/Improved: Added question: is this vendor marketing\?/)).toBeVisible()
 })
 
 it('says what is not measured yet instead of showing empty numbers',()=>{
@@ -43,17 +43,19 @@ it('says what is not measured yet instead of showing empty numbers',()=>{
   render(<CyclotronStatusView status={empty} variant="card" />)
   expect(screen.getByRole('heading',{name:'relevant'})).toBeVisible()
   expect(screen.getAllByText('Not measured yet')).toHaveLength(3)
-  expect(screen.getByText('Calibration not measured yet')).toBeVisible()
-  expect(screen.getByRole('heading',{name:'Onboarding: reviewing every decision'})).toHaveTextContent('○ Onboarding')
+  expect(screen.getByText('Confidence not measured yet')).toBeVisible()
+  expect(screen.getByRole('heading',{name:'Getting started: reviewing every decision'})).toHaveTextContent('○ Getting started')
+  expect(screen.queryByText(/version|onboarding/i)).toBeNull()
   expect(screen.queryByRole('region',{name:'Last change'})).toBeNull()
 })
 
-it('reports a refit as minor and keeps the version',()=>{
+it('reports a refit as learning from reviews, without versions',()=>{
   const refit:CyclotronStatus={...status,cyclotron:{...status.cyclotron,refits:2},
     lastChange:{kind:'refit',fromVersion:13,toVersion:13,at:null,summary:'Refit the ML model on 140 labels.',labels:140}}
   render(<CyclotronStatusView status={refit} variant="card" />)
-  expect(screen.getByText('Version 13 (2 refits) · as of',{exact:false})).toBeVisible()
-  expect(screen.getByText('Refit on 140 labels, still version 13 (minor)')).toBeVisible()
+  expect(screen.getByText('As of',{exact:false})).toBeVisible()
+  expect(screen.getByText('Learned from 140 reviews')).toBeVisible()
+  expect(screen.getByRole('region',{name:'papyrus-relevance status'})).not.toHaveTextContent(/version|refit/i)
 })
 
 it('shows an override with who set it and when it ends, and offers a change',()=>{
@@ -82,13 +84,13 @@ it('ships its styles in components.css',()=>{
   expect(css).toContain('.cyclotron-status-metric')
 })
 
-it('says how many examples primed the cyclotron, and nothing when none did',()=>{
+it('says how many references the suggestions started with, and nothing when none',()=>{
   const primed:CyclotronStatus={...status,cyclotron:{...status.cyclotron,primedExamples:19}}
   render(<CyclotronStatusView status={primed} />)
-  expect(screen.getByTestId('cyclotron-status-primed')).toHaveTextContent('Primed with 19 examples')
+  expect(screen.getByTestId('cyclotron-status-primed')).toHaveTextContent('Started with 19 references')
   cleanup()
   render(<CyclotronStatusView status={{...status,cyclotron:{...status.cyclotron,primedExamples:1}}} variant="card" />)
-  expect(screen.getByTestId('cyclotron-status-primed')).toHaveTextContent('Primed with 1 example before its first decision. They train it but never count in these measurements.')
+  expect(screen.getByTestId('cyclotron-status-primed')).toHaveTextContent('Started with 1 reference before its first suggestion. They guide suggestions but never count in these measurements.')
   cleanup()
   render(<CyclotronStatusView status={status} />)
   expect(screen.queryByTestId('cyclotron-status-primed')).toBeNull()
