@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-038e2ca5-833c-453e-a4ea-5070709391da",
+  "title": "Audit cleanup (low priority): Cyclotron",
+  "description": "**Problem**\nLow-priority findings from the 2026-10-20 audit of the Cyclotron repo.\n\n- [ ] docs/design-journal.md:941 says \"as requested by the user\"; rewrite neutrally.\n- [ ] docs/publication-deployment-contract.md:117 says \"Ryan authorized local...\" and contains ticket IDs; rewrite as a neutral statement.\n- [ ] docs/diagrams/*.json tool receipts contain local /Users/home/Projects/Decision-Flywheel paths; strip or regenerate with relative paths.\n- [ ] .agents/skills/run-study references paths to the private Biased-Decisions repo; make generic or document the dependency.\n- [ ] README title is 'Cyclotron — Decision Flywheel' with no install command; pyproject.toml package name is decision-flywheel. Align name and add an install command.\n- [ ] CHANGELOG.md:107 \"feat(study): land Ryan's uncommitted study and calibration work\"; reword.\n\n**Evidence**\n- docs/design-journal.md:941 \"explanations attached to development and audit items, as requested by the user.\"\n- docs/publication-deployment-contract.md:117 \"... Ryan authorized local\".\n- docs/diagrams/classifier.browser-check.json, classifier.delivery.json, classifier.finalize-summary.json (and others) contain Decision-Flywheel local paths.\n- .agents/skills/run-study/SKILL.md references Biased-Decisions paths.\n- README.md:1 \"# Cyclotron — Decision Flywheel\"; pyproject.toml `name = \"decision-flywheel\"`.\n- CHANGELOG.md:107.\n\n**Fix**\nFix each checklist item; tick them off as they land.\n\n**How to verify**\n`git grep -n -e 'Ryan' -e 'as requested by the user' -e '/Users/home' -- docs .agents CHANGELOG.md README.md` returns nothing, and the README has an install command that matches the package name.\n\nSource: Anthus repo audit, 2026-10-20.",
+  "type": "bug",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-20T04:28:44.212106Z",
+  "updated_at": "2026-10-20T04:28:44.212143Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude-code",
+    "model": "claude-sonnet-5-5",
+    "name": "audit-filer"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
