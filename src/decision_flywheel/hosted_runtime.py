@@ -59,16 +59,23 @@ class HostedConfig:
         names=('issuer','client_id','authorization_origin','public_origin','account','region','books_bucket','auth_bucket','session_key_arn','queue_url','central_endpoint')
         try:values={name:environment['CYCLOTRON_'+name.upper()] for name in names}
         except KeyError:raise ValueError('reviewed cloud configuration is incomplete') from None
-        # First cloud slice deliberately has no environment switch for paid work.
+        enabled = environment.get('CYCLOTRON_ALLOW_LIVE', 'false')
+        if enabled not in ('true', 'false'):
+            raise ValueError('CYCLOTRON_ALLOW_LIVE must be explicitly true or false')
+        values['allow_live'] = enabled == 'true'
         return cls(**values)
 
 
 class HostedRuntime:
-    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None):
+    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None):
         self.config,self.s3=config,s3
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
+        self.publication_targets = publication_targets
+        if publication_targets is not None:
+            from .hosted_publications import configured_targets
+            configured_targets(self)
         self.central=central or SigV4Transport(config.central_endpoint,config.region)
         self.accounts=AccountsClient(self.central);self.identities=GoogleIdentityClient(self.central)
         self.verifier=verifier or CognitoTokenVerifier(config.issuer,config.client_id)
@@ -101,7 +108,8 @@ class HostedRuntime:
         store=self.console(account_id,initialize=True)
         # Pure file priming is supported. No transformer/provider is inferred.
         priming=PrimingService(store,storage=store,client=_NoTransformerClient())
-        service=HostedConsoleService(account_id,store,self.authorization,self.send,allow_live=self.config.allow_live)
+        service=HostedConsoleService(account_id,store,self.authorization,self.send,allow_live=self.config.allow_live,
+            command_policy=lambda run_id,kind:self._publication_command_policy(account_id,run_id,kind))
         held_out=None
         if self.open_cyclotron is not None:
             from .held_out_service import HeldOutService
@@ -114,6 +122,10 @@ class HostedRuntime:
         self.gateway=HostedAccounts(oauth,self.accounts,self.workspace,verifier=self.verifier,sessions=self.sessions,google_identity=self.identities)
         app=create_app(None,account_access=self.gateway.access,public_origin=self.config.public_origin,event_transport="poll")
         self.gateway.install(app)
+        if self.publication_targets is not None:
+            from .hosted_publications import install_publication_routes, configured_targets
+            configured_targets(self)
+            install_publication_routes(app, self)
         return app
     def _runtime(self,account_id,view,guard,check):
         owned={}
@@ -135,13 +147,26 @@ class HostedRuntime:
             return AuthorizedModel(provider,guarded),optimizer
         return CyclotronRuntime(view,None,model_factory=model,sink_factory=lambda rid:CommandEventSink(view,rid,check_owned),
             storage_factory=storage,execution_guard=guarded)
+    def _publication_command_policy(self, account_id, run_id, kind):
+        if self.publication_targets is None:
+            return
+        from .hosted_publications import configured_targets
+        reserved = any(t.account_id == account_id and t.run_id == run_id for t in configured_targets(self))
+        if (reserved and kind != 'publication') or (kind == 'publication' and not reserved):
+            raise ValueError('configured publication runs require their scoped prediction path; feedback is not activated')
+
     def worker(self):
         # The worker's own runtime credentials/central transport must be the
         # reviewed execution principal; the central pair is never caller input.
         class Worker:
             async def process(inner,message):
+                def publication(view, guard, check, actor):
+                    from .hosted_publications import PublicationCommandRuntime
+                    return PublicationCommandRuntime(self, view, guard, check, actor)
                 return await HostedCommandWorker(self.console,self.authorization,
-                    lambda view,guard,check:self._runtime(message['accountId'],view,guard,check),allow_live=self.config.allow_live).process(message)
+                    lambda view,guard,check:self._runtime(message['accountId'],view,guard,check),allow_live=self.config.allow_live,
+                    publication_runtime_for_command=publication if self.publication_targets is not None else None,
+                    command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind)).process(message)
         return Worker()
 
 

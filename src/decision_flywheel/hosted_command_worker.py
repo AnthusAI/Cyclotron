@@ -85,8 +85,11 @@ class _Effects:
 
 
 class HostedCommandWorker:
-    def __init__(self, store_for_account, authorization, runtime_for_command, *, allow_live=False):
+    def __init__(self, store_for_account, authorization, runtime_for_command, *, allow_live=False,
+                 publication_runtime_for_command=None, command_policy=None):
         self.allow_live = allow_live
+        self.publication_runtime_for_command = publication_runtime_for_command
+        self.command_policy = command_policy
         self.store_for_account, self.authorization, self.runtime_for_command = (
             store_for_account,
             authorization,
@@ -106,6 +109,8 @@ class HostedCommandWorker:
             raise AccountAccessDenied("delivery target does not match canonical actor")
         guard = self.authorization.guard(actor)
         await guard()
+        if self.command_policy is not None:
+            self.command_policy(actor, job['kind'])
         if job["status"] in ("completed", "failed", "interrupted"):
             return {"status": job["status"], "jobId": job["id"]}
         if job["status"] != "pending":
@@ -121,6 +126,8 @@ class HostedCommandWorker:
 
         def check():
             self.authorization.check(actor)
+            if self.command_policy is not None:
+                self.command_policy(actor, job['kind'])
             view.run(actor.run_id)  # Fresh execution fence as well as human permission.
 
         async def owned_guard():
@@ -128,7 +135,12 @@ class HostedCommandWorker:
 
         await owned_guard()  # After confirmed execution ownership, before opening operation state.
         effects = _Effects(view, check)
-        runtime = self.runtime_for_command(effects, owned_guard, check)
+        if job['kind'] == 'publication':
+            if self.publication_runtime_for_command is None:
+                raise ValueError('publication worker composition is unavailable')
+            runtime = self.publication_runtime_for_command(effects, owned_guard, check, actor)
+        else:
+            runtime = self.runtime_for_command(effects, owned_guard, check)
         run = await asyncio.to_thread(effects.run, actor.run_id)
         items = await asyncio.to_thread(effects.items, actor.run_id)
         shown = await asyncio.to_thread(effects.current_item, actor.run_id)

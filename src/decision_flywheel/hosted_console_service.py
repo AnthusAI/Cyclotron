@@ -10,10 +10,11 @@ from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, Ver
 class HostedConsoleService:
     articles = ()
 
-    def __init__(self, account_id, store, authorization, send, *, allow_live=False, redact=()):
+    def __init__(self, account_id, store, authorization, send, *, allow_live=False, redact=(), command_policy=None):
         uuid(account_id)
         self.account_id, self.store, self.authorization, self.send = account_id, store, authorization, send
         self.allow_live, self.redact = allow_live, tuple(redact)
+        self.command_policy = command_policy
 
     async def submit_command(self, verified, run_id, request_id, kind, payload):
         if not self.allow_live:
@@ -37,6 +38,8 @@ class HostedConsoleService:
         ):
             raise ValueError("bounded credential-free command required")
         binding = await asyncio.to_thread(self.authorization.binding_for_run, self.account_id, run_id)
+        if self.command_policy is not None:
+            self.command_policy(run_id, kind)
         actor = await self.authorization.capture(session, self.account_id, run_id, binding)
         await self.authorization.guard(actor)()
         job = await asyncio.to_thread(self.store.enqueue_authorized_command, run_id, request_id, kind, payload, actor)
