@@ -39,6 +39,17 @@ pass afterwards. The cached official Lambda Python 3.13 image is unavailable on
 this host; an actual-artifact Python 3.13 smoke check remains a release gate.
 No image pull or dependency installation was performed.
 
+An additional existing-runner CI job builds only public repository source with
+the same hashed Linux CPython 3.13 wheel lock. It restores the three public vendor
+assets from `d59eb5c3`, then compares all 3,808 file payloads against a reviewed
+aggregate hash (`1bddd15ad0972044a0196856be25e94c2086afb044e9c66ccbfffa2d0f0f5d38`).
+This allows equivalent candidate testing without uploading the private deployed
+archive. The verified source-built zip runs the existing packaged Gateway/S3/
+worker smoke plus a synthetic signed Google callback in the documented official
+Lambda Python 3.13 image. The container has no network, writable code, or cloud
+credentials. Nothing is deployed or uploaded; the candidate and rollback zip stay
+local. The CI result must pass before treating this runtime gate as satisfied.
+
 ## Exact artifact and release scope
 
 Prepare an offline overlay of the hash-pinned deployed archive, replacing only

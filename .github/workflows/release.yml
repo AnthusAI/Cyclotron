@@ -28,8 +28,47 @@ jobs:
           node-version: "22"
       - run: make check-diagrams
 
+  lambda-login-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Restore only the public deployed BFF vendor assets
+        run: |
+          git fetch --no-tags --depth=1 https://github.com/AnthusAI/Cyclotron.git d59eb5c3cc3ec4d55ae1c4972b060cd1ebc28e7d
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          for name in ('viewer.css', 'web.css', 'web.js'):
+              path = 'src/decision_flywheel/vendor/trace-ui/' + name
+              Path(path).write_bytes(subprocess.check_output(['git', 'show', 'd59eb5c3cc3ec4d55ae1c4972b060cd1ebc28e7d:' + path]))
+          PY
+      - name: Build from public source and the existing hashed wheel lock
+        run: python scripts/build_console_backend.py
+      - name: Verify every source-built application and dependency payload
+        run: python scripts/verify_login_artifact.py deployment/console-backend.zip
+      - name: Extract only the verified source-built zip
+        run: python -m zipfile -e deployment/console-backend.zip deployment/.smoke
+      - name: Run official Lambda Python 3.13 offline with no credentials
+        run: |
+          image=public.ecr.aws/lambda/python:3.13@sha256:d5d5c74e3639a01fac254c9334a60604aa50327aa122b3ec26151e055a06a6a0
+          docker pull --platform linux/amd64 "$image"
+          docker run --rm --platform linux/amd64 --network none --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -e AWS_EC2_METADATA_DISABLED=true -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/var/task \
+            -v "$PWD/deployment/.smoke:/var/task:ro" \
+            -v "$PWD/scripts/smoke_lambda_artifact.py:/smoke_base.py:ro" \
+            -v "$PWD/scripts/smoke_signed_login_artifact.py:/smoke_signed.py:ro" \
+            --entrypoint python "$image" -B /smoke_signed.py /smoke_base.py
+
   release:
-    needs: [test, diagrams]
+    needs: [test, diagrams, lambda-login-smoke]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
