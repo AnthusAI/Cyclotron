@@ -22,10 +22,22 @@
         "model": "GPT-6",
         "name": "monitoring-central"
       }
+    },
+    {
+      "id": "7812487b-9a47-4e68-8531-a59ca1521a18",
+      "author": "home",
+      "text": "Source-only draft PR https://github.com/AnthusAI/Cyclotron/pull/58 is pushed; implementation source commit 3bfcae39a5997957c80594b4f05abd400bda1680. Final local verification: 67 focused passed; broad fast suite 2054 passed, with five sparse-file failures subsequently repaired and affected group 37 passed/1 skipped; remaining four failures need unavailable local mangum/openpyxl packages. CI uses declared dev extras. New/modified focused lint and diff checks pass, Kanbus hierarchy validates. Existing lab login was restarted once from a fresh initiation and approved ryan@anth.us selected promptly; callback still said Sign-in could not complete / The login expired or could not be verified. Account role, cross-app credential resolution, publication bindings and existing artifact publisher remain gates. No merge/deploy/grant/credentials/prediction/feedback applied. Companion Papyrus draft https://github.com/AnthusAI/Papyrus/pull/382 remains separate.",
+      "created_at": "2026-10-20T04:54:24.126141Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "monitoring-central"
+      }
     }
   ],
   "created_at": "2026-10-20T04:40:12.800499Z",
-  "updated_at": "2026-10-20T04:52:43.194537Z",
+  "updated_at": "2026-10-20T04:54:24.126164Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
