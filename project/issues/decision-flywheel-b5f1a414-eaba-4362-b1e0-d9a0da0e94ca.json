@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-b5f1a414-eaba-4362-b1e0-d9a0da0e94ca",
   "title": "Persist locally or in serverless canonical cloud storage",
-  "description": "As a deployer, I want storage selected explicitly for each deployment.\n\nFeature: Persist locally or in serverless canonical cloud storage\n  Scenario: Observable acceptance\n    Given local SQLite or serverless S3 canonical text with a DynamoDB catalog is selected\n    When the application restarts and reads or mutates its authorized classifier output\n    Then canonical state is preserved and cloud operation requires no always-on SQLite server\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.\n\n## Current next-step plan \u2014 2026-10-17\n\nPR25 provides shared storage-port source; cloud activation and real authorized hosted acceptance remain unfinished. Canonical source text/content and labels live in S3; DynamoDB is only the scoped/rebuildable catalog. Local SQLite is supported; no always-on cloud SQLite service.\n\nFeature: Canonical priming durability\n  Scenario: Reload or rebuild catalog\n    Given an approved scoped fixture with canonical content and labels\n    When the process restarts or the catalog is rebuilt\n    Then accepted example IDs labels and content remain unchanged\n    And missing/revoked authorization or stale revision denies writes\n    And a repeated operation does not duplicate an example after an uncertain response\n\nResource/access owner must approve any remaining persistent scope before hosted verification. Dependencies: Prospectus account authorization and reviewed shared version pins; no infrastructure or fixture mutation in this task.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
+  "description": "As a deployer, I want storage selected explicitly for each deployment.\n\nFeature: Persist locally or in serverless canonical cloud storage\n  Scenario: Observable acceptance\n    Given local SQLite or serverless S3 canonical text with a DynamoDB catalog is selected\n    When the application restarts and reads or mutates its authorized classifier output\n    Then canonical state is preserved and cloud operation requires no always-on SQLite server\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.\n\n## Current next-step plan — 2026-10-17\n\nPR25 provides shared storage-port source; cloud activation and real authorized hosted acceptance remain unfinished. Canonical source text/content and labels live in S3; DynamoDB is only the scoped/rebuildable catalog. Local SQLite is supported; no always-on cloud SQLite service.\n\nFeature: Canonical priming durability\n  Scenario: Reload or rebuild catalog\n    Given an approved scoped fixture with canonical content and labels\n    When the process restarts or the catalog is rebuilt\n    Then accepted example IDs labels and content remain unchanged\n    And missing/revoked authorization or stale revision denies writes\n    And a repeated operation does not duplicate an example after an uncertain response\n\nResource/access owner must approve any remaining persistent scope before hosted verification. Dependencies: Prospectus account authorization and reviewed shared version pins; no infrastructure or fixture mutation in this task.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
   "type": "story",
   "status": "blocked",
   "priority": 1,
@@ -17,7 +17,6 @@
       "text": "2026-10-16 reconciliation: Status describes remaining acceptance, not implementation authorization.",
       "created_at": "2026-10-16T20:46:53.130681Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "codex",
         "model": "gpt-6.1-sol",
@@ -33,7 +32,6 @@
       "text": "2026-10-17 next-step plan recorded in the description. PR25 provides shared storage-port source; cloud activation and real authorized hosted acceptance remain unfinished. Canonical source text/content and labels live in S3; DynamoDB is only the scoped/rebuildable catalog. Local SQLite is supported; no always-on cloud SQLite service.\n\nFeature: Canonical priming durability\n  Scenario: Reload or rebuild catalog\n    Given an approved scoped fixture with canonical content and labels\n    When the process restarts or the catalog is rebuilt\n    Then accepted example IDs labels and content remain unchanged\n    And missing/revoked authorization or stale revision denies writes\n    And a repeated operation does not duplicate an example after an uncertain response\n\nResource/access owner must approve any remaining persistent scope before hosted verification. Dependencies: Prospectus account authorization and reviewed shared version pins; no infrastructure or fixture mutation in this task.",
       "created_at": "2026-10-17T06:22:40.055175Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "codex",
         "model": "gpt-6.1-sol",
@@ -48,9 +46,7 @@
       "author": "unknown",
       "text": "Status 2026-10-19: storage contract tests shared by SQLite and S3 adapters (#42) and the Journal protocol (#44) merged. Still blocked on the hosted account-scoped storage/auth decision (Prospectus). Keep both adapters working; do not block on the platform decision.",
       "created_at": "2026-10-19T16:43:48.455425Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "1b45cdea-d91e-47dc-88a4-899e6de35257",
@@ -58,24 +54,23 @@
       "text": "Status 2026-10-19: storage contract tests shared by SQLite and S3 adapters (#42) and the Journal protocol (#44) merged. Still blocked on the hosted account-scoped storage/auth decision (Prospectus). Keep both adapters working; do not block on the platform decision.",
       "created_at": "2026-10-19T16:44:02.635305Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "claude-code",
         "model": "claude-sonnet-5-5",
-        "name": "handoff-status",
-        "settings": {}
+        "name": "handoff-status"
       }
+    },
+    {
+      "id": "a3844dd6-1d74-409e-8fb0-d61df17bd7be",
+      "author": "home",
+      "text": "2026-10-20 status check, stays blocked: the 2026-10-19 note (530638) waits on the hosted account-scoped storage decision from Prospectus. Since then Prospectus site auth landed (Cyclotron PR #47 v0.24.0, PR #48 v0.25.0; Papyrus #268/#273/#277/#280), and the hosted priming proof on p.apyr.us (PR #57, 9dec0e6) ran against an S3 snapshot (cyclotrons/papyrus-relevance/state.tar.gz in the Papyrus private media bucket). That proves auth and one S3-backed run, but not this story's acceptance (S3 canonical text with a DynamoDB catalog, restart/rebuild preserving example ids, stale-revision denial). I could not tell from the repos whether the storage-scope decision itself was made, so the blocked status is unchanged. Needs Ryan or the Prospectus owner to confirm: if the S3 media-bucket layout is the accepted scope, unblock and plan the DynamoDB catalog work; if not, restate what is awaited.",
+      "created_at": "2026-10-20T13:17:50.504234Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-16T20:46:53.071342Z",
-  "updated_at": "2026-10-19T16:44:02.635402Z",
+  "updated_at": "2026-10-20T13:17:50.504265Z",
   "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {
-    "project_label": "decision-flywheel",
-    "source": "shared"
-  },
   "agent": {
     "platform": "codex",
     "model": "gpt-6.1-sol",
@@ -83,6 +78,12 @@
     "settings": {
       "reasoning_effort": "medium"
     }
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
   },
   "agent_assignment": null
 }

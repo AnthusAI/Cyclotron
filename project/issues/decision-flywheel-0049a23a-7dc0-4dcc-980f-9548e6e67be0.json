@@ -3,7 +3,7 @@
   "title": "Make full-viewport labeling and timeline the permanent app layouts",
   "description": "Replace regular versus fullscreen branches with one viewport-sized single-page shell. Remove fullscreen entry/exit buttons and redundant page layouts. Keep compact persistent app navigation and bounded content panels, no document-level scrolling; only intended panels scroll. Labeling retains large readable item text, horizontal classifier cards when needed, per-card metrics below labeling controls, confidence visualization, optional explanations, persistent bottom-left status and bottom-right Skip/Submit. Timeline fills available pane with its inspector closable; pinch zoom only, horizontal pan and ordinary vertical scrolling remain distinct; mouse zoom buttons and Fit remain reachable. Responsive desktop/iPad portrait/landscape, safe-area and on-screen keyboard behavior. Acceptance: no clipped actions, unintended page scroll or hidden item content; label draft retained across drawers; timeline zoom/pan/play/click cursor still work. Reuse successful existing fullscreen CSS rather than redesign from scratch.",
   "type": "task",
-  "status": "in_progress",
+  "status": "open",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,45 +16,35 @@
       "author": "home",
       "text": "Removed both labeling and timeline fullscreen controls and the separate native/fallback fullscreen state. Focused labeling CSS is now the normal viewport layout. History is a left Radix dialog drawer; optimizer activity a right dialog drawer, with accessible titles, focus trap, Escape/backdrop/close. Browser verified 1280x720 and tablet 768x1024: no document overflow; Skip/Submit remain within viewport. Existing item restored without provider calls or human labels. Still needs narrower/keyboard checks and full timeline/browser regression acceptance.",
       "created_at": "2026-10-07T15:49:01.642676Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "c1ed8c51-4feb-4824-ba5d-3e143ec0b81f",
       "author": "home",
       "text": "Narrow/short viewport verification exposed ~24px drawer close targets. Close and shared drawer footer buttons now have explicit 44px minimum targets, wrapping footer actions and safe-area top/bottom padding. Browser measured ~43.994px rounding for Close/Save, both inside a 1025x625 CSS viewport (820x500 browser override at existing zoom), no document scroll. Full-screen narrow menu checked at 487px CSS width with no document overflow and modal focus wrapping. Screenshots var/web/mobile-navigation-focus-proof.jpg and short-viewport-drawer-proof.jpg. No labels or model calls. Physical-iPad keyboard/safe-area and full timeline gesture acceptance remain unverified; issue remains open.",
       "created_at": "2026-10-07T23:10:41.269933Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "7bdb29a3-0077-4881-8a80-c3d50a822667",
       "author": "home",
       "text": "Playback acceptance slice: fixed Reset zoom restoring only a four-cycle window. Fit all cycles now restores the complete recorded range after deep zoom. Regression specs failed before the fix; 23 trace specs and all 153 UI tests pass, and UI builds. Live-disabled synthetic workspace browser check confirms zoom buttons, Fit, Next, paired exact decision request/response, and Play advancing the visible pointer through cycle 3. No human votes or paid calls. Physical iPad pinch/scroll and broad workspace acceptance remain open.",
       "created_at": "2026-10-07T23:17:31.197670Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "882f02e3-71b9-4479-b6e7-d59436d34328",
       "author": "home",
       "text": "Deployed the latest core datetime and question revision/removal fixes after confirming the production worker was idle and making a SQLite backup (var/web/before-question-selection-20261007.sqlite3). Verified stored 85-cycle history loads and GraphQL stream reconnects. Browser acceptance exposed repeated classification-count text in every unchanged cycle; projection now prints only count changes while retaining actual-count hover and inspectable cells. Spec failed before fix; browser click opens Active Configuration with the real count. Verified unchanged 255 human labels, zero retractions, 39405 events, and job totals 348 completed / 2 failed; no provider calls or jobs created. Broad physical-iPad gesture/keyboard acceptance remains open.",
       "created_at": "2026-10-07T23:59:15.323590Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "16ada33c-65cd-4fe5-9b32-04d14de203db",
       "author": "home",
       "text": "Completed native keyboard access for the bounded classifier feedback strip: named fieldset group plus tabindex=0, no custom global key handlers or mutable scroll state. Regression failed first; 166 UI specs pass, production build and focused lint pass. Browser fake-only workspace verified PageDown focus on Classifier feedback and internal scrollTop 156.25 while documentTop remained 0; PageUp reversed to 2.5 during native scrolling. Reading retained 216px and footer bottom 882 stayed inside 900px viewport. Browser console and server errors absent; no submitted labels or paid calls. Proof var/web/keyboard-classifier-scroll-proof.png. Provider selector audit confirmed Jev/Kev/Laya and model-reset behavior already exist, no duplicate implementation. Remaining broader dark/safe-area/timeline acceptance stays open.",
       "created_at": "2026-10-08T00:48:05.755578Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "0a292ef6-aac2-4ebd-8cac-2071d54b1db5",
@@ -62,12 +52,10 @@
       "text": "Safe-area audit found only drawers reserved device insets; main shell did not. Added border-box shell inset padding and viewport-fit=cover consistently in FastAPI, static playback and development HTML, without disabling native zoom. Three new specs failed before implementation; 176 UI tests/build pass. Browser isolated fake workspace at CSS487x800 confirms no document overflow and reachable 44px save footer, actual environment reports zero safe-area insets so nonzero physical inset behavior is not claimed. Full Python suite running. Real labels and provider calls untouched; broader timeline/device acceptance remains open.",
       "created_at": "2026-10-08T01:37:11.021912Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "codex",
         "model": "GPT-5",
-        "name": "App acceptance",
-        "settings": {}
+        "name": "App acceptance"
       }
     },
     {
@@ -75,65 +63,59 @@
       "author": "home",
       "text": "Additional actual-browser short-tablet acceptance on isolated fake SQLite/API workspace: selected label and explanation survive opening/closing the history drawer; CSS viewport 960x687 has document scrollHeight=clientHeight=687 and 48px review actions ending at669.5. Timeline inspector closes and Fit restores all recorded cycles; selecting the matching prediction opens exact joint state/questions and response tabs. Found vis default cursor tooltip exposed a fake 1969 timestamp despite cycle axis. Failing-first interaction spec added; cursor title now suppressed through documented vis setCustomTimeTitle, verified on the refreshed browser with no warnings/errors. Screenshot var/web/cycle-cursor-acceptance-proof.png. No labels submitted or paid calls; physical-device gestures and dark rendering still unverified.",
       "created_at": "2026-10-08T02:16:05.512675Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "50ec30fe-d15b-4444-a406-6fde4019578f",
       "author": "home",
       "text": "Documented an explicit physical-device acceptance checklist in docs/scorecard-versioning.md: portrait/landscape, software keyboard, nonzero safe areas, drawer draft retention, touch pan/pinch, playback and exchange inspection. These remain unverified on a physical iPad. macOS system dark mode was confirmed and restored after an authorized temporary appearance toggle, but the only connected in-app browser reported prefers-color-scheme dark=false even after reload. No alternative normal browser is connected. This is an observability blocker, not proof the app dark styling fails or passes. No production labels/model calls changed. Task remains in progress.",
       "created_at": "2026-10-08T02:33:23.785931Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "023ce9a2-566b-4f19-b39a-f47b80a66b52",
       "author": "home",
       "text": "User physical-iPad review confirms light and dark mode work, but reports excessive gutters/header space. Compacted app header, combined run controls, merged embedded timeline toolbars, removed nested gutter/width cap, reduced panel gap/inspector/footer padding and made iframe explicitly fill its bounded pane. Two specs failed before implementation;182 UI specs/build pass. Actual browser frame at CSS1600x900 is x6.99 y124.01 w1586.02 h768.99, ending6.99px from bottom; tablet override CSS1025x1475 also ends6.99px from bottom, inner panels fill frame. Zoom button changes cycle range; browser warnings/errors empty. No model calls or labels changed. User needs to review compact layout on iPad; other device checks remain open.",
       "created_at": "2026-10-08T11:24:59.647321Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "4dc9a29f-c2a6-47ab-b6b3-f49ab30306fb",
       "author": "home",
       "text": "Further user-requested density pass: timeline counts now share the Run statistics disclosure summary rather than a duplicate metadata row; run title/status/actions are inline, and completed replay controls become a compact status without disabled buttons or pause instructions. Playback details share the footer row and expand to full width when opened. New specs failed before implementation;184 UI specs and build pass. Browser at1180x820 confirms iframe top101.18 bottom813 (7px bottom gutter), summary expansion/collapse and no console warnings/errors. Screenshot var/web/compact-summary-layout-proof.png. Found prior server no longer listening, confirmed348 completed2 failed0 active jobs and restarted same authorized LAN server without optimization. User tab refreshed; no votes or model calls.",
       "created_at": "2026-10-08T15:58:57.303266Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "ba7ab9f9-8b12-4a38-a6d4-ece04af2ce69",
       "author": "home",
       "text": "Removed redundant expanded counts. Run statistics now lead with same-item raw decision model versus final classifier recall, precision, accuracy, ECE and Brier deltas, calibration support and optional curve details. Recorded first/latest review-window trend is secondary and explicitly not causal or matched optimization evidence (first snapshot in this run has only one label). Counts alone no longer enable an empty expander. Added failing-first specs, 191 UI specs pass; browser verification in progress. No optimization calls or feedback changes.",
       "created_at": "2026-10-08T16:17:12.172593Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "520df6eb-df59-49ab-9397-6a8f7790bafa",
       "author": "home",
       "text": "Final browser verification: expanded disclosure shows same 85 reviewed items, raw/final recall62.5%, precision27.8%, accuracy81.2%, ECE9.8%/9.5%, Brier0.219/0.221 with signed deltas and support. The first-label historical trend is secondary and collapsed, not a headline optimization claim. Calibration curves/details remain available. Screenshot var/web/run-outcome-statistics-proof.png, browser warnings/errors empty. 191 UI specs and production build pass after integrating latest develop changes; generated CSS rebuilt to resolve asset-only merge conflicts. No model calls or feedback changes; user tab remains collapsed to preserve timeline space.",
       "created_at": "2026-10-08T16:18:29.029552Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
+    },
+    {
+      "id": "24bb3e22-b3ef-4bef-b6be-66524a801d0d",
+      "author": "home",
+      "text": "2026-10-20 status check, moved back to open (idle since 2026-10-08, no commits reference it). The layout work is on origin/develop (safe-area reserve 5793dc0, compact timeline workspace and viewport panels 356677f; browser-verified at 1280x720, 768x1024, 960x687 per comments efb76a to 4dc9a2). Remaining, as last recorded in 023ce9 and 4dc9a2: Ryan's review of the compact layout on the physical iPad, and the nonzero safe-area, software-keyboard and touch pinch/pan checks listed in docs/scorecard-versioning.md. Close once those are confirmed or waived.",
+      "created_at": "2026-10-20T13:18:14.433287Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-07T14:54:02.930667Z",
-  "updated_at": "2026-10-08T16:18:29.029641Z",
+  "updated_at": "2026-10-20T13:18:14.433324Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "decision-flywheel"
+    "project_label": "decision-flywheel",
+    "source": "shared"
   },
-  "agent": null,
   "agent_assignment": null
 }
