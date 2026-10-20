@@ -1,6 +1,8 @@
 """Public source builds are compared by file payload, independent of zip encoding."""
 
 import zipfile
+import base64
+import hashlib
 import pytest
 
 from scripts.verify_login_artifact import fingerprints, verify
@@ -45,3 +47,39 @@ def test_unreviewed_payload_and_duplicate_members_cannot_pass_verification(tmp_p
         path = archive(tmp_path / "duplicate.zip", [("one", b"a"), ("one", b"b")])
     with pytest.raises(ValueError, match="duplicate"):
         fingerprints(path)
+
+
+def test_only_validated_installer_bookkeeping_is_normalized(tmp_path):
+    record_name = "synthetic-1.dist-info/RECORD"
+    requested_name = "synthetic-1.dist-info/REQUESTED"
+
+    def records(requested=False, corrupt=False):
+        body = b"synthetic dependency"
+        digest = (
+            base64.urlsafe_b64encode(hashlib.sha256(body).digest()).decode().rstrip("=")
+        )
+        record = f"dependency.py,sha256={digest},{len(body)}\n{record_name},,\n"
+        rows = [("dependency.py", body)]
+        if requested:
+            empty_digest = (
+                base64.urlsafe_b64encode(hashlib.sha256(b"").digest())
+                .decode()
+                .rstrip("=")
+            )
+            record += f"{requested_name},sha256={empty_digest},0\n"
+            rows.append((requested_name, b""))
+        if corrupt:
+            record = record.replace(digest, "wrong")
+        return rows + [(record_name, record.encode())]
+
+    first = fingerprints(archive(tmp_path / "original.zip", records()))
+    second = fingerprints(
+        archive(tmp_path / "reinstalled.zip", records(requested=True))
+    )
+    assert first["stable"] == second["stable"] and first["full"] != second["full"]
+    changed = records(requested=True)
+    changed[1] = (requested_name, b"unexpected payload")
+    with pytest.raises(ValueError, match="REQUESTED"):
+        fingerprints(archive(tmp_path / "nonempty.zip", changed))
+    with pytest.raises(ValueError, match="RECORD"):
+        fingerprints(archive(tmp_path / "bad-record.zip", records(corrupt=True)))

@@ -41,8 +41,14 @@ No image pull or dependency installation was performed.
 
 An additional existing-runner CI job builds only public repository source with
 the same hashed Linux CPython 3.13 wheel lock. It restores the three public vendor
-assets from `d59eb5c3`, then compares all 3,808 file payloads against a reviewed
-aggregate hash (`1bddd15ad0972044a0196856be25e94c2086afb044e9c66ccbfffa2d0f0f5d38`).
+assets from `d59eb5c3`, then compares 3,763 stable file payloads, including all
+161 application files, against the reviewed aggregate hash
+`c27e669929782a97ab1d83f300d759f02c195ad9d2ca75154362b2e0758a5edf`.
+The source build adds 29 empty pip `REQUESTED` markers and changes installer
+`RECORD` files; these are the only differences found by local comparison of
+public build hashes. Empty markers and every packaged file's RECORD hash/size
+are validated before normalizing that installer bookkeeping. Application code,
+native libraries, wheel metadata, and all other dependency payloads remain exact.
 This allows equivalent candidate testing without uploading the private deployed
 archive. The verified source-built zip runs the existing packaged Gateway/S3/
 worker smoke plus a synthetic signed Google callback in the documented official
