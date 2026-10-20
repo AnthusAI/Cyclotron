@@ -80,7 +80,8 @@ private=rsa.generate_private_key(public_exponent=65537,key_size=2048)
 jwk=json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private.public_key()))|{'kid':'synthetic','alg':'RS256','use':'sig'}
 verifier=CognitoTokenVerifier(config.issuer,config.client_id,jwks={'keys':[jwk]})
 now=int(time.time());person,account=str(uuid4()),str(uuid4())
-access=jwt.encode({'iss':config.issuer,'client_id':config.client_id,'sub':'synthetic-person','token_use':'access','iat':now,'exp':now+1800},private,algorithm='RS256',headers={'kid':'synthetic'})
+access=jwt.encode({'iss':config.issuer,'client_id':config.client_id,'sub':'synthetic-person','token_use':'access','iat':now,'exp':now+1800,
+    'auth_time':now,'origin_jti':'packaged-synthetic-lineage'},private,algorithm='RS256',headers={'kid':'synthetic'})
 summary={'id':account,'name':'Packaged synthetic account','role':'owner','entitlement':{'accountId':account,'product':'cyclotron','status':'active','capabilities':['console:read','console:write']}}
 central_calls=[]
 def central(role):
