@@ -154,6 +154,7 @@ class PendingLogin:
     browser_cookie: str
     expires_at: float
     challenge_id: str | None = None
+    challenge_token: str | None = field(default=None, repr=False)
 
     @property
     def code_challenge(self):
@@ -208,6 +209,7 @@ class OAuthSessions:
                 secrets.token_urlsafe(32),
                 expiry,
                 challenge.challenge_id if challenge else None,
+                challenge.challenge_token if challenge else None,
             )
             self.pending[digest(pending.state)] = pending
             return pending

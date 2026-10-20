@@ -55,9 +55,22 @@ grants account access, or submits real feedback.
 
 The currently deployed lab artifact lacks these routes and has live providers
 disabled. Its existing artifact publisher and a separately authorized deployment
-must be confirmed. The observed Google login callback failed verification even
-after selecting the authorized existing identity; account/role verification is
-therefore still blocked. Do not weaken session verification to bypass that result.
+must be confirmed. The observed fresh Google login reached central identity
+resolution, which returned 401 about 34 seconds after a successful challenge.
+Deployed central source enables signed challenges, returns `challengeToken`, and
+does not persist those challenge IDs. The old Cyclotron client dropped that token
+and sent only the unpersisted ID. This PR fixes that protocol mismatch by retaining
+the opaque token in the existing encrypted single-use pending record and forwarding
+exactly the signed token on resolution. The central service still verifies its MAC,
+expiry, nonce, binding and replay rules. Legacy stored-ID challenges remain supported;
+malformed signed tokens fail closed instead of silently falling back to an ID.
+
+The fix is tested in memory and with the existing S3 session composition, but is
+not deployed. Account/role verification therefore remains blocked. A fresh normal
+login after an authorized release is the next verification, not another retry of
+the unchanged deployment. The deployed artifact also contains session/telemetry
+changes absent from current `main`; its owner must reconcile those changes before
+building a release so the source update preserves existing security behavior.
 
 This composition uses the lab's existing cookie/CSRF authorization. Papyrus's
 server-to-server Prospectus credential resolver and product registrations must be

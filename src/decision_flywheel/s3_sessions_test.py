@@ -49,6 +49,20 @@ def sessions(client=None, cipher=None, clock=None):
     )
 
 
+def test_signed_challenge_survives_only_in_encrypted_single_use_pending_state():
+    from .google_identity import GoogleChallenge
+
+    opaque = "v1.synthetic.c3ludGhldGlj.bWFj"
+    store, client, cipher = sessions()
+    pending = store.begin(GoogleChallenge("synthetic-challenge", "synthetic-nonce", 1100, opaque))
+    assert opaque not in repr(pending)
+    assert opaque.encode() not in repr(client.objects).encode()
+    fresh, _, _ = sessions(client, cipher)
+    assert fresh.consume(pending.state, pending.browser_cookie).challenge_token == opaque
+    with pytest.raises(SessionRejected):
+        fresh.consume(pending.state, pending.browser_cookie)
+
+
 def test_oauth_pending_is_encrypted_and_consumed_once_across_processes():
     s, client, cipher = sessions()
     pending = s.begin()
