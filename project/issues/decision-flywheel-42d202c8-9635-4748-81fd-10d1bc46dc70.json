@@ -3,7 +3,7 @@
   "title": "Visualize calibration evolution in labeling and timeline playback",
   "description": "Each classifier card exposes a space-efficient confidence reliability graph alongside Recall, Precision, Accuracy (always that order). Show predicted confidence on x-axis, observed correctness on y-axis, perfect diagonal, bin support and calibration error with uncertainty caveats; distinguish calibrated head from raw decision passthrough. Timeline current position/Next/Previous/Play selects the latest recorded per-classifier snapshot at or before that point, never future snapshots. Curve updates visually as labels and optimizations progress; allow inspection of snapshot/window/head provenance and matched before/after calibration where available. Older history lacking snapshots says unavailable, no synthetic backfill presented as recorded evidence. Use light/dark system styling and accessible graph summary/tooltips. Acceptance: fixture playback crosses multiple cycles and proves curves change at correct events, reverse seeking restores prior curve, classifier filter works and no model calls occur during playback; iPad graph does not steal labeling space.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -25,101 +25,87 @@
       "author": "home",
       "text": "Playback curve listens to current position snapshots at or before selected event; frontend spec proves forward/back seeking clears future curves. Live cards show source counts, Brier/log loss, matched calibration comparison and optional provenance. Remaining: rendered multiple-cycle browser verification and classifier-filter snapshot scope tests.",
       "created_at": "2026-10-07T15:57:50.222461Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "0eac5638-b1e4-46a6-979c-f88ded351324",
       "author": "home",
       "text": "Added matched raw decision-model versus final-classifier recall, precision, accuracy and overlaid calibration in labeling cards and playback. Cycle snapshots pin class roles; playback replaces snapshots on reverse seek and reports unavailable older history. Offline UI regression covers clearing future comparison on reverse seek. Remaining: deployed multicycle browser acceptance, classifier filtering, and tablet graph layout.",
       "created_at": "2026-10-07T17:03:07.582510Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "28dd9265-868a-4d90-9daf-07a3bb72ac2b",
       "author": "home",
       "text": "Added reproducible seed_calibration_playback.py with a separate empty-workspace guard, three real API/worker cycles, two independent classifiers and fake synchronous Jev transport. Two no-network specs verify shared call count, immutable per-cycle calibration counts/ECE/provenance, independent labels and refusal to touch an existing workspace. Browser verified Play updates curves, cycle-three prediction retains two reviewed samples until its metrics event, reverse seeking restores one sample and then unavailable, and Inspect classifier selects the independent Practicality history (final ECE 36.7% vs Relevance 63.3%). No current-page console errors; screenshot var/web/calibration-playback-browser-proof.png. Verification skill guided API/SQLite-to-browser checks. This fixture is UI evidence, not optimization improvement evidence. Actual iPad/dark graph-space acceptance remains open; no real labels or paid model calls changed.",
       "created_at": "2026-10-07T18:29:30.505788Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "461b7f7c-5a09-440a-9091-f2e5978db51f",
       "author": "home",
       "text": "Fixed two calibration display failures: unavailable matched-head ECE now remains unavailable instead of showing 0.0%, and raw/final reliability graphs now show supported single-bin points with counts/confidence/correctness tooltips and an observed-correctness axis label. Specs were written first and failed before implementation; all 109 UI tests, production build, focused lint, and diff checks pass. Verified the three-cycle synthetic API workspace at an 820x1180 browser viewport: both coincident output points remain visible; no browser errors. No production votes or paid requests changed. Actual physical-iPad and dark-mode labeling-space acceptance remains open. Also observed the outer compact cycle summary saying no recorded cycles despite the embedded timeline showing three; investigate that event projection separately rather than fabricate missing history. Experiment reports remain out of scope.",
       "created_at": "2026-10-07T21:52:50.494051Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "4eb5782a-78c5-4c94-8b01-547fc2bf3b97",
       "author": "home",
       "text": "Replaced raw JSON calibration provenance with a reusable structured disclosure. Each recorded sample shows item, output source, model version, prediction/feedback event IDs, calibration method, OOF fit origin, temperature and expandable trusted training IDs. Missing legacy provenance stays unavailable; malformed records are disclosed, not guessed. The bounded sample list is keyboard-scrollable without nested training-list scrolling. Specs first: observed three failures before implementation; 113 UI tests pass, production build and focused lint pass. Browser verified the separate synthetic SQLite/API run raw passthrough and the existing read-only Knowledge Bases diagnostic history calibrated head at 820x1180: prediction event 1331, temperature 1.020, out_of_fold and 32 training IDs match SQLite. No browser warnings/errors, no model calls or votes. Screenshot var/web/calibration-provenance-tablet-proof.jpg. React and verification skills guided accessibility and stored-snapshot-to-browser acceptance. Physical-iPad/dark labeling-space acceptance remains open; no experiment report.",
       "created_at": "2026-10-07T22:21:55.703367Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "4869d89c-0ed3-4a12-a25b-bcd965e6f5ed",
       "author": "home",
       "text": "Added a shared Calibration bins disclosure to individual and paired raw/final curves: recorded mean confidence, observed correctness and support are readable without hover. Native collapsed details preserve default labeling space; the bounded table region supports keyboard focus and horizontal overflow on narrow inspectors. Specs first reproduced two missing-disclosure failures; all 163 UI specs, production build and focused lint pass. Browser at 820x1180 verified Enter opens the disclosure after playback to cycle three, with 60/70/80 percent confidence and 100/0/0 percent correctness, one sample each, matching SQLite and ECE 63.3 percent. No browser warnings/errors, no votes or paid calls. Proof: var/web/calibration-bins-tablet-proof.png. React and verification skills guided accessible disclosure and API/snapshot-to-browser checks. Physical-iPad and dark-mode labeling-space acceptance remain open; this is technology evidence, not an experiment report.",
       "created_at": "2026-10-08T00:24:09.869363Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "98efca47-eeb7-425e-9ebc-306c49085c19",
       "author": "home",
       "text": "Labeling-space browser acceptance found an actual defect: expanding a recorded calibration curve collapsed the article panel to 0px and moved review actions below the viewport. Added bounded classifier strip (max half available card height, shrinkable, vertical internal scroll) with a failing-first CSS regression and actual browser geometry verification. Added pending-item synthetic fixture mode: 3 real API-owned calibration snapshots, 4th item predicted/unlabeled; fake confidence remains valid after many calls. Portrait viewport retained 504px reading area, landscape 279px; review footer stayed inside both viewports. Browser warnings/errors empty; no labels submitted or provider calls. 851 Python and 164 UI specs pass; build passes. Screenshot var/web/calibration-labeling-landscape-proof.png. Dark-mode/keyboard/safe-area acceptance remains open; no experiment report.",
       "created_at": "2026-10-08T00:42:06.347570Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "19827fd7-6e5b-48b4-9c7d-ef3a34906865",
       "author": "home",
       "text": "Replaced hardcoded bright calibration colors with shared system-theme tokens: darker green/blue in light mode, brighter green/blue under prefers-color-scheme dark. Three specs failed before implementation; all 180 UI specs, production build and focused lint pass. Actual isolated GraphQL/SQLite labeling browser resolves curve and point to rgb(21,128,61), preserves recorded count 3 / ECE 63.3%, and has no warnings/errors. Screenshot var/web/calibration-theme-ink-proof.png. React review found no new state/effects or fetching. The iframe color-scheme QA wrapper did NOT alter the child matchMedia preference; explicitly not dark-render evidence. Actual dark rendering remains unverified; no OS appearance change, paid calls or production labels. Verification skill guided saved-data-to-browser checks.",
       "created_at": "2026-10-08T01:50:24.527948Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "d6b92d2b-d5c7-4fb7-a5f3-0ccff84c79ec",
       "author": "home",
       "text": "System appearance acceptance is unresolved: macOS reports dark=true, but the connected in-app browser reports dark=false and renders the light palette even after an authorized appearance toggle and reload. Original appearance restored. No other normal browser is connected. Do not count this as actual dark calibration rendering proof; existing light/API/playback evidence remains valid. Device acceptance checklist is now documented; no production data or calls changed.",
       "created_at": "2026-10-08T02:33:24.286600Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "70e1d7dd-a2c7-4bf9-9acf-b07f6c43e75d",
       "author": "home",
       "text": "User confirms actual iPad light and dark mode both work on2026-10-08. That supersedes the connected in-app browser appearance blocker; physical dark support is no longer unverified. Current feedback identifies inefficient timeline/inspector gutters and header density, addressed in layout0049. Calibration playback/bin/provenance evidence remains unchanged; no data/model calls altered.",
       "created_at": "2026-10-08T11:25:00.169889Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
+    },
+    {
+      "id": "fd400810-9378-4fef-9eec-c3feaffd3f0b",
+      "author": "home",
+      "text": "2026-10-20 closing: acceptance is met by work now on origin/develop. Recorded evidence in this issue: playback seeks to the latest snapshot at or before the position and reverse seek clears future curves (7d4aa0, 0eac56); scripts/seed_calibration_playback.py plus no-network specs prove three-cycle playback, two independent classifiers and the classifier filter (28dd92); no model calls during playback; bounded classifier strip keeps the review actions inside the viewport (98efca); Ryan confirmed on a physical iPad on 2026-10-08 that light and dark both work (70e1d7). Components (CalibrationBins.tsx, ModelComparison) ship in the UI package (c70ae30 changelog 0.2.2, d65c131). Idle since 2026-10-08; later layout density feedback moved to 0049a2.",
+      "created_at": "2026-10-20T13:18:14.363935Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-07T14:54:09.411751Z",
-  "updated_at": "2026-10-08T11:25:00.169978Z",
-  "closed_at": null,
+  "updated_at": "2026-10-20T13:18:14.379931Z",
+  "closed_at": "2026-10-20T13:18:14.379894Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "decision-flywheel"
+    "project_label": "decision-flywheel",
+    "source": "shared"
   },
-  "agent": null,
   "agent_assignment": null
 }
