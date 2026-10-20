@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "fe5b1a07-3bfc-4e0e-88b3-fc0441ba0ebb",
+  "issue_id": "decision-flywheel-ef7af5fa-f2a4-4b50-bcc7-85a8ca900020",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-20T05:01:55.755Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "cd8c2c25-44b8-4297-b1ad-6576aa0f5c53",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "monitoring-central"
+    }
+  }
+}

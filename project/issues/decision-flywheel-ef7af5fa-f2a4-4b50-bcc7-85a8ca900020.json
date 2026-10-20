@@ -34,10 +34,22 @@
         "model": "GPT-6",
         "name": "monitoring-central"
       }
+    },
+    {
+      "id": "cd8c2c25-44b8-4297-b1ad-6576aa0f5c53",
+      "author": "home",
+      "text": "Login root-cause evidence: bounded BFF structured logs show fresh challenge HTTP200 then central /v1/identities/google/resolve HTTP401 about34 seconds later, proving state/token exchange/local pair verification completed. Selected deployed central handler source issues signed challengeToken without persisting challengeId; the deployed/current Cyclotron client drops challengeToken and sends only that unpersisted ID. Central signer-setting presence verified as boolean only; no secret/SSM reads. Added red-then-green compatibility specs and minimal source fix preserving opaque signed evidence in existing encrypted one-use pending state, forwarding signed token alone to central verification, keeping legacy stored IDs and rejecting malformed signed evidence. 77 sign-in/session tests passed. Previous draft head7cbd587 is fully green in CI. Fix remains undeployed; account verification remains blocked. Deployed artifact has other owner session/telemetry changes absent from main, so its owner must reconcile release source before deployment; do not overwrite or weaken existing security behavior.",
+      "created_at": "2026-10-20T05:01:55.755062Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "monitoring-central"
+      }
     }
   ],
   "created_at": "2026-10-20T04:40:12.800499Z",
-  "updated_at": "2026-10-20T04:54:24.126164Z",
+  "updated_at": "2026-10-20T05:01:55.755094Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
