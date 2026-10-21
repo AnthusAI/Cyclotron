@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "13f37d4f-f862-4e7c-9889-8b16b3fd0587",
+  "issue_id": "decision-flywheel-46ca1778-71c7-4d84-9ee3-9b3b3ee0668d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:23.121Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "C3 Curation publication endpoint",
+    "description": "POST /api/newsroom/curation/publication {operation,payload} -> cyclotron-publication/v1; status/decide delegate to hosted_publications rules; other operations refused with a stable code; contractVersion and scope match the pins.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

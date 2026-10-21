@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "151201d9-74ed-49fa-af12-9b8ef295a4d1",
+  "issue_id": "decision-flywheel-bdfc574f-2187-4107-b6da-1b4878270cba",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:23.391Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "C4 Scoped file-only priming endpoint with auto-prime",
+    "description": "POST /api/newsroom/curation/priming {query,variables}->{data}, reusing web_api priming types on a publication-scoped PrimingService over S3ConsoleStorage; refuse other publications' list/classifiers/draft ids before any read; transform -> 'no hosted transformer'; idempotent accept; slice-1 size cap ~1 MB with clean failure; after accept the lab applies the examples (auto-prime) so suggestions use them.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}
