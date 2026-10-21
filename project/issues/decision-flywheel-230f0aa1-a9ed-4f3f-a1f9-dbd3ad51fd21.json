@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-230f0aa1-a9ed-4f3f-a1f9-dbd3ad51fd21",
+  "title": "I4 Reproducible lab Lambda package build",
+  "description": "## Problem\nThe central lab stack cyclotron-console (infra/lab/template.yaml, PR #75) runs BffFunction and WorkerFunction (python3.13, x86_64) from one 28,939,467-byte zip at S3 key cyclotron-console/backend/<hash> (no .zip suffix) in the CDK bootstrap assets bucket of account 682849160744. Nothing in any repo records how that zip was built. A reproducible build is needed before any code deploy (which needs Ryan's separate approval).\n\n## Scope\nRead-only inventory of the deployed zip (no uploads or writes to AWS); scripts/dev/build_lab_package.sh with pinned deps; parity comparison; README recipe + deploy steps; optional LabCodeKey parameter if check_lab_template.sh still proves equivalence.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "601bc9c3-74ed-406a-bc98-c37071fbe4c9",
+      "author": "home",
+      "text": "PR https://github.com/AnthusAI/Cyclotron/pull/77. Deployed zip (sha256 b2a3bb38...793b6e, matches CodeSha256) = decision_flywheel 0.30.0 copied source matching commit 002e6f2, plus 42 pinned dists (accounts-cloud+jev closure, no boto3/uvicorn/dotenv), cp313/manylinux_2_34. Build from 002e6f2 via scripts/dev/build_lab_package.sh: same dist-info versions, byte-identical except trace-ui vendor bundles (deployed matches no commit), 2 held-out schema files only in build, REQUESTED markers, modes. Deterministic (2 builds, same sha256). make check exit 0 (2291 passed, trace-ui 269 passed). LabCodeKey not parameterized (snapshot check is literal). No AWS writes.",
+      "created_at": "2026-10-21T03:39:09.740144Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-21T03:19:13.223693Z",
+  "updated_at": "2026-10-21T03:39:09.740171Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
