@@ -432,6 +432,15 @@ class PublicationCommandRuntime:
                         actor, publication, "decide", {"bindingRevision": binding.revision, "item": item}, execution_guard=fresh
                     )
                 except RuntimeError as exc:
+                    if "explicit retry required" in str(exc):
+                        # Raised while reserving the shared request, before any dispatch: an earlier attempt at
+                        # this exact decision failed and only an operator may retry it. A terminal receipt keeps
+                        # the run free; leaving the job running would block every other item.
+                        raise CommandRefused(
+                            "source_refused",
+                            "an earlier attempt at this exact decision failed and needs an operator retry; "
+                            "no provider call was made",
+                        ) from None
                     if "request ceiling reached" not in str(exc):
                         raise
                     raise CommandRefused(
