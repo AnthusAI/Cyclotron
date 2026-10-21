@@ -995,6 +995,74 @@ class S3ConsoleStorage:
 
         self._mutate(apply)
 
+    @staticmethod
+    def _paid_outcome_evidence(value, job):
+        """What the catalog records that points at a completed provider call for this job (empty means none)."""
+        found = []
+        if job["result"] is not None:
+            found.append("the job has a recorded result")
+        item_id = (json.loads(job["payload"]).get("item") or {}).get("id")
+        if item_id is not None:
+            if any(r["prediction"] is not None for r in rows(value, "web_items", run_id=job["run_id"], id=item_id)):
+                found.append("the job's item has a displayed prediction")
+            if rows(value, "item_predictions", run_id=job["run_id"], item_id=item_id):
+                found.append("the job's item has a retained prediction")
+        needles = (job["id"], job["request_id"])
+        if any(n in r["payload"] or n == r["source_id"] for r in rows(value, "web_events", run_id=job["run_id"]) for n in needles):
+            found.append("a run event names the job or its request id")
+        return found
+
+    def reconcile_command(self, job_id, *, owner, fence, status, reason, operator, apply=False):
+        """Operator-only: end a claimed, never-finished command as failed or interrupted.
+
+        Requires the recorded owner and fence to match exactly, and refuses when the job has a result or any
+        recorded evidence of a completed provider call. The audit record (who, when, why, claim, prior status)
+        becomes the job's result, committed in the same transaction as the status change. With ``apply=False``
+        every check runs and nothing is written. Returns the audit record.
+        """
+        uuid(owner)
+        if type(fence) is not int or fence < 1 or status not in ("failed", "interrupted"):
+            raise ValueError("owner, positive fence and a failed or interrupted target are required")
+        if not isinstance(reason, str) or not 8 <= len(reason.strip()) <= 500 or not isinstance(operator, str) or not operator:
+            raise ValueError("a reason (8 to 500 characters) and an operator identity are required")
+        audit = {
+            "reconciliation": {
+                "jobId": job_id,
+                "from": "running",
+                "to": status,
+                "owner": owner,
+                "fence": fence,
+                "reason": reason.strip(),
+                "operator": operator,
+                "at": now(),
+            }
+        }
+
+        def plan(value):
+            job = one(value, "web_jobs", id=job_id)
+            if job is None:
+                raise ValueError("unknown command")
+            if job["status"] != "running":
+                raise ValueError("only a running command can be reconciled")
+            if value["claims"].get(job_id) != {"owner": owner, "fence": fence}:
+                raise ValueError("recorded owner and fence do not match")
+            found = self._paid_outcome_evidence(value, job)
+            if found:
+                raise ValueError("refused, a provider outcome may exist: " + "; ".join(found))
+            return job
+
+        if not apply:
+            plan(self._read())
+            return audit
+
+        def write(value):
+            job = plan(value)
+            job["status"] = status
+            job["result"] = encoded(audit)
+
+        self._mutate(write)
+        return audit
+
     def recover_interrupted(self):
         raise ValueError(
             "cloud command recovery requires explicit scoped owner/provider reconciliation; no global timeout takeover"

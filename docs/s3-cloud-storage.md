@@ -294,6 +294,37 @@ no invented actors and existing jobs cannot be adopted through idempotency retry
 Claim receipt fencing protects actor retrieval. `command_recovery` is read-only
 scoped diagnostic evidence, not an automatic claim/paid-request reset.
 
+### Reconciling a wedged command (operator)
+
+A worker that claims a command and then fails without a terminal receipt leaves the job `running`. The
+worker never takes it over, every redelivery fails closed and ends in the dead-letter queue, and the run
+refuses new commands with `run_busy` (409) because it "has work in progress". The operator command ends
+that one job, deliberately and with an audit trail:
+
+```
+python -m decision_flywheel.command_recovery diagnose --profile P --expect-aws-account ACCT \
+    --books-bucket BUCKET --cyclotron-account UUID --job JOB
+python -m decision_flywheel.command_recovery reconcile --profile P --expect-aws-account ACCT \
+    --books-bucket BUCKET --cyclotron-account UUID --job JOB --owner OWNER --fence N \
+    --as failed --reason "why" [--dlq-url URL] [--apply]
+```
+
+* `diagnose` is the read-only `command_recovery` evidence: status, claim owner and fence.
+* `reconcile` is a **dry run unless `--apply` is given**. It asserts the AWS account first.
+* The recorded owner and fence must match exactly (copy them from `diagnose`).
+* It refuses when the job has a recorded result, when the job's item has a displayed or retained
+  prediction, or when a run event names the job or its request id. These are the catalog's only traces of a
+  completed provider call; a job that left none can only have died before a prediction was recorded. The
+  provider's own ledger is not consulted, so the `--reason` should say why no paid call completed.
+* On `--apply` the job becomes `failed` (or `interrupted`) and its result is the audit record: job id,
+  owner, fence, prior and new status, the reason, the operator (the caller's IAM ARN) and the time. The status
+  change and the audit record are one catalog commit. The run accepts commands again.
+* With `--dlq-url`, only the dead-letter message naming that job is deleted (other messages are released
+  untouched; a dry run deletes nothing). A terminal job needs no redrive: redelivery would just return its
+  status.
+
+It never claims a job, never resets a fence and never runs a provider call.
+
 These seams are not yet a hosted worker composition. The actual S3 SDK tests show
 that a guard denied after lock waiting touches no engine S3 state or provider.
 Central cross-role policy is a separate pending owner change, not proven by these
