@@ -3,17 +3,25 @@
   "title": "C7 Curation docs",
   "description": "Update publication-deployment-contract.md, s3-cloud-storage.md, the stale 'fails closed' wording, and add a curation section to docs/embedding.md.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "774d51e1-5822-4cd3-a7a8-63265fe5d17d",
+      "author": "home",
+      "text": "Updated publication-deployment-contract.md (bearer curation routes), s3-cloud-storage.md (Hosted priming, removed stale fails-closed wording), source-store-handoff.md and hosted-publications.md stale wording, and added Hosted curation routes to embedding.md.",
+      "created_at": "2026-10-21T03:33:31.386298Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-21T03:08:23.946162Z",
-  "updated_at": "2026-10-21T03:08:23.946222Z",
-  "closed_at": null,
+  "updated_at": "2026-10-21T03:33:31.406590Z",
+  "closed_at": "2026-10-21T03:33:31.406555Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {}

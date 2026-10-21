@@ -3,17 +3,25 @@
   "title": "C2 Curation context endpoint and priming target config",
   "description": "GET /api/newsroom/curation/context returning CurationBootstrap; optional per-binding priming.listId in the trusted target config (strict parsing); a binding without a list returns priming:null; zero transformers listed.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6ede1300-b026-4364-be20-ee6f51f19718",
+      "author": "home",
+      "text": "GET /api/newsroom/curation/context returns CurationBootstrap (mode remote, priming {listId, classifiers, transformers: []} or null, capabilities read[+review], bindingRef null). Per-binding priming.listId parsed strictly in targets_from_environment (PublicationBinding.priming_list_id). Specs: context_lists_the_configured_priming_contract_and_no_transformers, priming_list_configuration_is_parsed_strictly_and_optionally.",
+      "created_at": "2026-10-21T03:33:31.141312Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-21T03:08:22.848518Z",
-  "updated_at": "2026-10-21T03:08:22.848586Z",
-  "closed_at": null,
+  "updated_at": "2026-10-21T03:33:31.169949Z",
+  "closed_at": "2026-10-21T03:33:31.169919Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {}

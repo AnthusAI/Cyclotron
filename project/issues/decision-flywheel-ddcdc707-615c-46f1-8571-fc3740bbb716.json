@@ -3,17 +3,25 @@
   "title": "C1 Bearer curation auth and scope",
   "description": "hosted_curation_routes.py + test; HostedRuntime.app(). Re-verify the bearer with Prospectus (AccountsClient resolve_identity/authorize); require authorized account == X-Cyclotron-Account pin and the target_for(account,publication) binding; capability map: context/priming queries/status=console:read, priming mutations/decide=console:write, review/steer unavailable; re-authorize after work; echo scope headers; 4 MB body cap.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "63f111ed-b6dc-452d-867d-26b97243f1a5",
+      "author": "home",
+      "text": "Done in hosted_curation_routes.py (+ prospectus_bearer_authority). Specs in hosted_curation_routes_test.py: missing/invalid bearer 401 with zero S3 calls, account mismatch and unknown publication identical 403, revoked 403, authority down 503, viewer cannot mutate, scope headers echoed, 4 MB cap incl. chunked, binding pin 409, authority lost mid-request withholds the answer. Injected runtime.curation_authority; no issuer hard-coded (default delegates to Prospectus). make check green.",
+      "created_at": "2026-10-21T03:33:31.091196Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-21T03:08:01.997507Z",
-  "updated_at": "2026-10-21T03:08:22.579893Z",
-  "closed_at": null,
+  "updated_at": "2026-10-21T03:33:31.118555Z",
+  "closed_at": "2026-10-21T03:33:31.118523Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {}
