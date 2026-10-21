@@ -101,28 +101,46 @@ change.
 
 ## How the Lambda package is built
 
-Not recorded anywhere in this repo (no build script, `samconfig`, Dockerfile or CI
-job references it), and the live package could not be inspected with the read-only
-permissions used here. Known facts: one 28,939,467-byte zip serves both functions
-(same `CodeSha256`), runtime python3.13 on x86_64, no layers, uploaded to the CDK
-assets bucket under `cyclotron-console/backend/<hash>` and last modified
-2026-10-21. `decision_flywheel.cloud_entry` imports the hosted modules lazily and
-needs the `accounts-cloud` extra (`accounts`, `web`, `priming`, `mangum`), plus
-`typesafe-sdk` (`jev` extra) for the live Jev provider, which is consistent with a
-size of about 29 MB.
+Build with `scripts/dev/build_lab_package.sh [COMMIT] [OUTPUT_DIR]` (default `HEAD`,
+`build/lab`). It makes no AWS calls and prints the zip path and sha256. Do not
+commit the zip.
 
-The likely recipe, which is an inference and not yet verified byte-for-byte:
+What it does:
 
-```bash
-rm -rf build/lab && mkdir -p build/lab
-python3.13 -m pip install --platform manylinux2014_x86_64 --only-binary=:all: \
-  --python-version 3.13 --target build/lab ".[accounts-cloud,jev]"
-(cd build/lab && zip -qr ../lab.zip .)
-```
+1. `pip install --no-deps --only-binary=:all: --no-compile --python-version 3.13 --implementation cp --platform manylinux_2_34_x86_64 --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 --target stage -r infra/lab/requirements.lock`. The lock is the exact 42-distribution closure of the deployed package (see below). Lambda python3.13 is Amazon Linux 2023 (glibc 2.34), so the 2_34 wheels are preferred, as in the deployed package (cryptography ships a `manylinux_2_34` wheel).
+2. Copies `src/decision_flywheel` from COMMIT with `git archive` (no `dist-info`, no `*_test.py`, no `conftest.py`, no `__pycache__`) and the repo `LICENSE` as `LICENSE.decision-flywheel`, as the deployed zip has them.
+3. Zips deterministically (sorted entries, fixed 2026-01-01 timestamps, mode 0644, deflate level 6). Two builds of the same commit and lock give the same sha256.
 
-Before relying on it, build it, check `unzip -l` for
-`decision_flywheel/cloud_entry.py`, and compare size and import behaviour with the
-deployed package. Record the verified recipe here (follow-up).
+### The deployed package (verified read-only, 2026-10-21)
+
+`cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9` (the key is the sha256
+prefix of the zip; the zip's sha256 base64 equals the functions' `CodeSha256`).
+3,979 entries, 60.2 MB uncompressed, no `.pyc`, no layers, no `.env`, credentials or
+private keys (the only `.pem` files are the `certifi` and `botocore` CA bundles).
+`decision_flywheel` is **copied source, not pip-installed**: `__version__ = "0.30.0"`
+and it matches commit `002e6f2` (`0.30.0`, the head of `main`), except as listed
+under differences. `boto3` is not included (the Lambda runtime provides it; the code
+uses `botocore`), nor are `uvicorn` or `python-dotenv`.
+
+Directly requested distributions (the ones carrying a `REQUESTED` marker):
+`botocore`, `fastapi`, `httpcore2`, `httpx`, `httpx2`, `jsonschema`, `mangum`,
+`openpyxl`, `pyjwt`, `strawberry-graphql`, `tenacity`, `truststore`, `typesafe-sdk`.
+All wheels are cp313 or pure Python; the compiled ones are `cffi`, `cryptography`
+(`cp311-abi3-manylinux_2_34`), `pydantic-core` and `rpds-py`.
+
+### Known differences between the build and the deployed package
+
+Built from `002e6f2` with `infra/lab/requirements.lock`: same top-level set, same
+version for every `dist-info`, every file byte-identical except:
+
+- `decision_flywheel/vendor/trace-ui/{web.js,web.css,viewer.css}`: the deployed bundles are a different (minifier-renamed, slightly larger) build of `trace-ui` that matches no commit. The build ships the committed bundles from COMMIT.
+- `decision_flywheel/schemas/cyclotron-held-out-report.v1.{schema,example}.json` are in the commit and the build, but not in the deployed zip.
+- The build marks all 42 distributions `REQUESTED` (pip `-r`), the deployed zip only the 13 above; metadata only, so 29 `RECORD` files differ by one row (and the 13 requested ones match).
+- 28 files in the deployed zip have mode 0600; the build uses 0644.
+- Zip bytes differ (28,938,384 versus 28,939,467 bytes), so `CodeSha256` will differ.
+
+A deploy of the build changes behaviour only through those vendor bundles and the two
+additional schema files. The package has not been run on Lambda from this build.
 
 ## Deploy runbook
 
@@ -131,7 +149,7 @@ change-set review before execution. No one deploys from a branch without that
 approval. Agents do not run these commands.**
 
 1. Make the change in `template.yaml` and update `deployed-template.snapshot.json` only after a deploy has been executed and re-captured. Run `scripts/dev/check_lab_template.sh` (offline).
-2. Build the package (above) and obtain approval to upload it to the assets bucket under a new key. Update `S3Key` for both functions together.
+2. Build the package (above) from the reviewed commit and record its sha256 on the ticket. With Ryan's approval, upload it to the CDK assets bucket (`cdk-hnb659fds-assets-<account>-us-east-1`) under a new key (for example `cyclotron-console/backend/<sha256>`); never overwrite the live key. Edit `S3Key` in both `BffFunction` and `WorkerFunction` together (they must point at the same object; `LabCodeKey` is not parameterized because `check_lab_template.sh` compares the template to the deployed snapshot literally). Then run the offline check, which will show the intended `S3Key` difference to review, and update the snapshot only after the deploy.
 3. Prepare parameters from a private copy of `parameters.example.json` (never committed).
 4. Create the change set without executing it:
 

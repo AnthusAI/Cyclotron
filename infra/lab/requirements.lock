@@ -1,0 +1,50 @@
+# Pinned third-party set of the deployed cyclotron-console Lambda package.
+# Recovered from the dist-info of the live package (cyclotron-console/backend/b2a3bb38...,
+# 28,939,467 bytes): the closure of the accounts-cloud + jev extras, minus uvicorn,
+# python-dotenv and boto3, which the live package does not contain (the Lambda
+# runtime supplies boto3; this code imports botocore). decision_flywheel itself is
+# not listed: scripts/dev/build_lab_package.sh copies it from the requested commit.
+# Installed with --no-deps, so this file IS the dependency closure; update it
+# deliberately and re-run the build to review the change.
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+botocore==1.43.114
+certifi==2026.7.22
+cffi==2.1.1
+cross-web==0.7.0
+cryptography==50.0.2
+et-xmlfile==2.0.0
+fastapi==0.143.2
+graphql-core==3.3.0
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.13.1
+httpx==0.28.1
+httpx2==2.13.1
+idna==3.20
+jmespath==1.1.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+mangum==0.19.0
+openpyxl==3.1.5
+opentelemetry-api==1.45.1
+packaging==26.3
+pycparser==3.11
+pydantic==2.14.1
+pydantic-core==2.50.1
+pyjwt==2.15.1
+python-dateutil==2.9.0.post0
+python-multipart==0.0.32
+referencing==0.37.0
+rpds-py==2026.9.1
+six==1.17.0
+starlette==1.8.0
+strawberry-graphql==0.335.0
+tenacity==9.1.4
+truststore==0.10.4
+typesafe-sdk==0.7.2
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+urllib3==2.8.0
