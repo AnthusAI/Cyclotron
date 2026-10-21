@@ -1,8 +1,14 @@
-"""Compare infra/lab/template.yaml with the committed deployed-template snapshot.
+"""Prove infra/lab/template.yaml == deployed snapshot + the reviewed pending changes.
 
-Offline by default. With --live it also compares the snapshot with the deployed
-stack via read-only `aws cloudformation get-template` (Original stage); it never
-calls any write API. Formatting and key order are ignored.
+Offline by default: the template must equal infra/lab/deployed-template.snapshot.json
+with infra/lab/pending-changes.json applied. The pending set is a list of
+add-only operations (a JSON Pointer path and the value added) that a reviewer reads
+beside infra/lab/pending-changes.md, so the next deploy changes exactly those
+paths and nothing else. An empty set means template == snapshot.
+
+With --live the snapshot is also compared with the deployed stack via read-only
+`aws cloudformation get-template` (Original stage); it never calls any write API.
+Formatting and key order are ignored.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "infra/lab/template.yaml"
 SNAPSHOT = ROOT / "infra/lab/deployed-template.snapshot.json"
+PENDING = ROOT / "infra/lab/pending-changes.json"
 
 
 def canonical(document: object) -> str:
@@ -48,6 +55,41 @@ def load_snapshot() -> object:
     return json.loads(SNAPSHOT.read_text())
 
 
+def load_pending() -> list[dict]:
+    return json.loads(PENDING.read_text())["operations"]
+
+
+def _pointer(path: str) -> list[str]:
+    if not path.startswith("/"):
+        raise ValueError(f"pending path must be a JSON Pointer: {path!r}")
+    return [part.replace("~1", "/").replace("~0", "~") for part in path[1:].split("/")]
+
+
+def apply_pending(snapshot: object, operations: list[dict]) -> object:
+    """Apply add-only operations to a copy of snapshot; replace, remove and overwrite are refused."""
+    document = json.loads(json.dumps(snapshot))
+    for operation in operations:
+        if set(operation) != {"op", "path", "value"} or operation["op"] != "add":
+            raise ValueError(f"pending operations must be add-only with op, path and value: {operation!r}")
+        *parents, leaf = _pointer(operation["path"])
+        target = document
+        for part in parents:
+            target = target[int(part)] if isinstance(target, list) else target[part]
+        if isinstance(target, list):
+            if leaf != "-":
+                raise ValueError(f"lists are appended with '-': {operation['path']}")
+            target.append(operation["value"])
+        elif leaf in target:
+            raise ValueError(f"pending add would overwrite an existing value: {operation['path']}")
+        else:
+            target[leaf] = operation["value"]
+    return document
+
+
+def expected_template(snapshot: object, operations: list[dict]) -> object:
+    return apply_pending(snapshot, operations)
+
+
 def fetch_live(stack: str, region: str) -> object:
     result = subprocess.run(
         [
@@ -70,20 +112,22 @@ def fetch_live(stack: str, region: str) -> object:
     return json.loads(result.stdout)["TemplateBody"]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--live", action="store_true", help="also compare against the deployed stack (read-only)")
+    parser.add_argument("--live", action="store_true", help="also compare the snapshot with the deployed stack (read-only)")
     parser.add_argument("--stack", default="cyclotron-console")
     parser.add_argument("--region", default="us-east-1")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    template, snapshot = load_template(), load_snapshot()
-    problems = diff_paths(template, snapshot)
-    print(f"template.yaml vs snapshot: {'MATCH' if not problems else 'DIFFERENT'}")
+    template, snapshot, pending = load_template(), load_snapshot(), load_pending()
+    problems = diff_paths(template, expected_template(snapshot, pending))
+    print(f"template.yaml vs snapshot + {len(pending)} pending change(s): {'MATCH' if not problems else 'DIFFERENT'}")
+    for operation in pending:
+        print(f"  pending add {operation['path']}")
     if args.live:
         live = fetch_live(args.stack, args.region)
-        live_problems = diff_paths(template, live)
-        print(f"template.yaml vs deployed {args.stack} (Original): {'MATCH' if not live_problems else 'DIFFERENT'}")
+        live_problems = diff_paths(snapshot, live)
+        print(f"snapshot vs deployed {args.stack} (Original): {'MATCH' if not live_problems else 'DIFFERENT'}")
         problems += [f"live {p}" for p in live_problems]
     for problem in problems:
         print("  " + problem)

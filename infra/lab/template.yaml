@@ -3,7 +3,7 @@
 # get-template --template-stage Original). The deployed Original template is
 # already SAM-expanded plain CloudFormation (no Transform), so this file is that
 # same document in YAML; `sam deploy` accepts it unchanged.
-# scripts/dev/check_lab_template.sh proves equivalence. Edit both together.
+# scripts/dev/check_lab_template.sh proves template == snapshot + infra/lab/pending-changes.json.
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Reviewed Cyclotron console S3 backend; separate BFF and worker roles; live providers disabled
 Parameters:
@@ -51,6 +51,13 @@ Parameters:
     Type: String
     Default: '100'
     AllowedPattern: '[0-9]{1,3}'
+  LabVerifierEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Description: When true the BFF receives CYCLOTRON_LAB_VERIFIER_ROLE_ARN and CYCLOTRON_ACCOUNTS_API_URL and curation routes verify editor tokens through the verifier role; false leaves both unset and the curation routes fail closed
 Outputs:
   BackendOrigin:
     Value:
@@ -239,6 +246,10 @@ Resources:
             - logs:PutLogEvents
             Resource:
               Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cyclotron-console-bff:*
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier
   BffLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -323,6 +334,31 @@ Resources:
     Properties:
       LogGroupName: /aws/lambda/cyclotron-console-worker
       RetentionInDays: 14
+  LabVerifierRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cyclotron-lab-verifier
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Fn::GetAtt:
+              - BffRole
+              - Arn
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: cyclotron-lab-verify
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: execute-api:Invoke
+            Resource:
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize
   BooksBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -473,6 +509,16 @@ Resources:
             Ref: PredictionModel
           CYCLOTRON_PREDICTION_MAX_REQUESTS:
             Ref: PredictionMaxRequests
+          CYCLOTRON_LAB_VERIFIER_ROLE_ARN:
+            Fn::If:
+            - HasLabVerifier
+            - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier
+            - Ref: AWS::NoValue
+          CYCLOTRON_ACCOUNTS_API_URL:
+            Fn::If:
+            - HasLabVerifier
+            - https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api/
+            - Ref: AWS::NoValue
       Tags:
       - Key: lambda:createdBy
         Value: SAM
@@ -688,3 +734,7 @@ Conditions:
     - Fn::Equals:
       - Ref: PublicationTargets
       - ''
+  HasLabVerifier:
+    Fn::Equals:
+    - Ref: LabVerifierEnabled
+    - 'true'

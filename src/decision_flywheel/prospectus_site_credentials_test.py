@@ -26,6 +26,10 @@ class FakeAccounts:
             raise AccountAccessDenied("unknown token")
         return {"person": {"id": person}}
 
+    def current_person(self, token):
+        self.calls.append(("me", token))
+        return self.resolve_identity(token)
+
     def authorize(self, token, account_id, person_id, operation):
         self.calls.append(("authorize", account_id, operation))
         role = self.members.get((person_id, account_id))
@@ -64,7 +68,7 @@ def test_bearer_authority_tells_an_unknown_token_from_a_refused_role_and_passes_
     async def scenario():
         credential = await authorize("token-1", "account-a", "console:write")
         assert credential == VerifiedSiteCredential("account-a", "person-1", "editor")
-        assert accounts.calls == [("resolve", "token-1"), ("authorize", "account-a", "console:write")]
+        assert accounts.calls == [("me", "token-1"), ("resolve", "token-1"), ("authorize", "account-a", "console:write")]
         assert await refusal("unknown", "account-a") == (401, "bearer_invalid")
         assert await refusal("token-1", "account-b") == (403, "access_refused")
         accounts.available = False
