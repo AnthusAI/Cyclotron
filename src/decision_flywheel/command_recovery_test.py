@@ -138,14 +138,38 @@ class Session:
 
     def client(self, name, **kw):
         if name == "sts":
-            return type("Sts", (), {"get_caller_identity": lambda _: {"Account": self.account, "Arn": "arn:aws:iam::1:user/op"}})()
+            return type(
+                "Sts", (), {"get_caller_identity": lambda _: {"Account": self.account, "Arn": "arn:aws:iam::1:user/op"}}
+            )()
         return {"s3": self.client_, "sqs": self.queue}[name]
 
 
 def cli(job, owner, fence, session, *extra):
-    return main(["reconcile", "--expect-aws-account", "111111111111", "--books-bucket", "synthetic-bucket",
-                 "--cyclotron-account", "account-a", "--job", job["id"], "--owner", owner, "--fence", str(fence),
-                 "--as", "failed", "--reason", REASON, "--dlq-url", "q", *extra], session=session)
+    return main(
+        [
+            "reconcile",
+            "--expect-aws-account",
+            "111111111111",
+            "--books-bucket",
+            "synthetic-bucket",
+            "--cyclotron-account",
+            "account-a",
+            "--job",
+            job["id"],
+            "--owner",
+            owner,
+            "--fence",
+            str(fence),
+            "--as",
+            "failed",
+            "--reason",
+            REASON,
+            "--dlq-url",
+            "q",
+            *extra,
+        ],
+        session=session,
+    )
 
 
 def test_cli_defaults_to_dry_run_then_applies_and_purges(capsys):
