@@ -10,14 +10,8 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = [
-    "/Parameters/LabVerifierEnabled",
-    "/Conditions/HasLabVerifier",
-    "/Resources/LabVerifierRole",
-    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
-    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_LAB_VERIFIER_ROLE_ARN",
-    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_ACCOUNTS_API_URL",
-]
+# Empty after the 2026-10-21 deploy (change set curation-routes-v0-31-0) refreshed the snapshot.
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -32,7 +26,7 @@ def test_lab_template_equals_the_deployed_snapshot_plus_the_reviewed_pending_cha
 def test_pending_changes_are_exactly_the_reviewed_add_only_set():
     pending = check.load_pending()
     assert [operation["path"] for operation in pending] == REVIEWED_PENDING_PATHS
-    assert {operation["op"] for operation in pending} == {"add"}
+    assert {operation["op"] for operation in pending} <= {"add"}
 
 
 def test_pending_changes_are_each_described_in_the_reviewer_note():
@@ -41,9 +35,8 @@ def test_pending_changes_are_each_described_in_the_reviewer_note():
         assert path in note
 
 
-def test_the_snapshot_alone_no_longer_equals_the_template_so_an_unlisted_change_cannot_hide():
+def test_an_unlisted_change_to_the_template_cannot_hide():
     template = check.load_template()
-    assert check.diff_paths(template, check.load_snapshot()) != []
     template["Resources"]["BffFunction"]["Properties"]["Timeout"] = 29
     assert any("Timeout" in problem for problem in check.diff_paths(template, expected()))
     template = check.load_template()

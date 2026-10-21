@@ -109,7 +109,9 @@ def fetch_live(stack: str, region: str) -> object:
         capture_output=True,
         text=True,
     )
-    return json.loads(result.stdout)["TemplateBody"]
+    body = json.loads(result.stdout)["TemplateBody"]
+    # A template deployed as YAML comes back as a string; one deployed as JSON comes back parsed.
+    return yaml.safe_load(body) if isinstance(body, str) else body
 
 
 def main(argv: list[str] | None = None) -> int:
