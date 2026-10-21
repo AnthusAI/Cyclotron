@@ -74,13 +74,22 @@ def run(args, *, session):
         return 0
     try:
         audit = store.reconcile_command(
-            args.job, owner=args.owner, fence=args.fence, status=args.as_status, reason=args.reason,
-            operator=identity["Arn"], apply=args.apply,
+            args.job,
+            owner=args.owner,
+            fence=args.fence,
+            status=args.as_status,
+            reason=args.reason,
+            operator=identity["Arn"],
+            apply=args.apply,
         )
     except ValueError as error:
         print(f"Refused: {error}", file=sys.stderr)
         return 1
-    print(("APPLIED" if args.apply else "DRY RUN (nothing written; pass --apply)") + ": " + json.dumps(audit["reconciliation"], indent=1))
+    print(
+        ("APPLIED" if args.apply else "DRY RUN (nothing written; pass --apply)")
+        + ": "
+        + json.dumps(audit["reconciliation"], indent=1)
+    )
     if args.dlq_url:
         count = purge_matching(session.client("sqs"), args.dlq_url, args.job, apply=args.apply)
         print(f"dead-letter messages for this job: {count} " + ("deleted" if args.apply else "would be deleted"))

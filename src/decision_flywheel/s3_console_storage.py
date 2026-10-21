@@ -1008,7 +1008,9 @@ class S3ConsoleStorage:
             if rows(value, "item_predictions", run_id=job["run_id"], item_id=item_id):
                 found.append("the job's item has a retained prediction")
         needles = (job["id"], job["request_id"])
-        if any(n in r["payload"] or n == r["source_id"] for r in rows(value, "web_events", run_id=job["run_id"]) for n in needles):
+        if any(
+            n in r["payload"] or n == r["source_id"] for r in rows(value, "web_events", run_id=job["run_id"]) for n in needles
+        ):
             found.append("a run event names the job or its request id")
         return found
 
