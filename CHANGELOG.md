@@ -38,7 +38,9 @@ The epic `flywheel1f`. A cyclotron can now run several reviewed outputs (classif
 - New export `cyclotron/components/cycle-mark` (`CycleMark`): the logo's cycle mark with one animation. At rest it is exactly `RefreshCwWide`. A cycle moves both arrows half the racetrack (a dash offset and arrowheads on one closed path, never a rotate transform, because the wide mark matches itself only at 180 degrees) and lands on the logo pose. `cycleKey` or a `cycle()` handle plays one cycle; reduced motion keeps it still; no new dependencies.
 - `CyclotronBrand` takes an optional `animate` prop (off by default). `animate` cycles the mark 3 s after the logo first becomes visible, then every 10 s (`{firstDelayMs, intervalMs}` to change). The clock runs only while the logo is on screen and the tab is showing.
 
-## Web package (unreleased)
+## Web package 0.2.3 (2026-10-20)
+
+- Plain editor-facing wording in the embedded components (#55): the decision line reads "Suggested: include (82% sure)"; the status strip no longer shows versions, calibration or onboarding ("Getting started"); `PrimingPanel` says "Add references". Props, types and exports are unchanged.
 
 - New exports: `cyclotron/components/priming-panel` with `cyclotron/priming-client`, and `cyclotron/components/held-out-report` with `cyclotron/held-out-report` (the cyclotron-held-out-report/v1 type).
 - Two styling tiers, documented in the README: the plain-CSS exports need only `components.css`; `priming-panel` and the other Tailwind-tier exports need Tailwind v4 in the host.
