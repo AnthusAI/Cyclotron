@@ -2,20 +2,28 @@
 
 ## Published pin
 
-The review candidate below shipped as one commit,
-**a565dafb1f6953e1eb4d2efb1069396303afe0c6** on `main`. Both halves of the
-integration come from that commit, and a host pins the commit, never a tag or a
-branch.
+The current pin is one commit,
+**002e6f2b933aa528980338230bb4a4003afc2938** on `main` (engine v0.30.0, web
+package 0.2.3). Both halves come from that commit, and a host pins the commit,
+never a tag or a branch.
 
 | Half | Release | Pin |
 |---|---|---|
-| Python engine | [v0.21.0](https://github.com/AnthusAI/Cyclotron/releases/tag/v0.21.0) | `decision-flywheel[web,priming] @ git+https://github.com/AnthusAI/Cyclotron.git@a565dafb1f6953e1eb4d2efb1069396303afe0c6` |
-| UI package | [ui-v0.2.2](https://github.com/AnthusAI/Cyclotron/releases/tag/ui-v0.2.2) | `https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.2/cyclotron-0.2.2.tgz` with lock integrity `sha512-Ot4SdcoBRveNugFh3fhggp/JlK02JKPrfnFIIgkojVy08whfQ5TQ1XQ04Tx6V/IIaW13xHk0l248zFPM99tvVQ==` (SHA-256 `fa96b15afb0c3c89a9cc89dcb40b5f327360f0fb703710a44188ed080b00636f`) |
+| Python engine | [v0.30.0](https://github.com/AnthusAI/Cyclotron/releases/tag/v0.30.0) | `decision-flywheel[web,priming] @ git+https://github.com/AnthusAI/Cyclotron.git@002e6f2b933aa528980338230bb4a4003afc2938` |
+| UI package | [ui-v0.2.3](https://github.com/AnthusAI/Cyclotron/releases/tag/ui-v0.2.3) | `https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.3/cyclotron-0.2.3.tgz` with lock integrity `sha512-5WTojm9teGKHIs+p7YdBFP/EgTJrcP0PdPcU67VNjEYRLgeuQ2gq9UvL40Lv5bty7gf9DtnlLMWyjdbdMRr+RA==` (SHA-256 `60ec1d3dcb40626008e36f96d147427a9c173a4fdfeebf93cd61864405723a76`) |
 
 A host that also reads repository files outside the package, such as
 `docs/diagrams`, pins the source archive of the same commit instead:
-`https://github.com/AnthusAI/Cyclotron/archive/a565dafb1f6953e1eb4d2efb1069396303afe0c6.tar.gz`.
+`https://github.com/AnthusAI/Cyclotron/archive/002e6f2b933aa528980338230bb4a4003afc2938.tar.gz`.
 Cyclotron-web does this.
+
+Verified 2026-10-20: `ui-v0.2.3` points at the pinned commit, and
+`scripts/dev/release_ui.sh` ran the web tests and build there, checked the
+vendored bundle, and packed the uploaded tarball (39 files). The fresh-consumer
+checks below were run for the earlier 0.2.2 pin and not repeated for 0.2.3.
+
+Earlier pin (2026-10-17): commit a565dafb1f6953e1eb4d2efb1069396303afe0c6,
+engine v0.21.0, `ui-v0.2.2`.
 
 Verified 2026-10-17:
 
