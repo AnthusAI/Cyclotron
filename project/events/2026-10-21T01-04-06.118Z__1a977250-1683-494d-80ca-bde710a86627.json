@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1a977250-1683-494d-80ca-bde710a86627",
+  "issue_id": "decision-flywheel-7efc21c3-fbfb-4025-8be4-2a868a68ff54",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T01:04:06.118Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Plain editor-facing copy in the embedded status card",
+    "description": "Engine-generated reviewRate.reason, nextStep and lastChange.summary use jargon (calibration gap, versions, refits). Add plainReason, plainNextStep and plainSummary beside them (no renames), derived from structured state; trace-ui embedded status card prefers them. Lab/operator surfaces keep technical text.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+    "labels": []
+  }
+}

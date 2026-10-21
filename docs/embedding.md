@@ -315,6 +315,14 @@ print(status["reviewRate"]["state"], status["reviewRate"]["reason"])
 print(status["reviewRate"]["nextStep"])
 ```
 
+`reason`, `nextStep` and `lastChange.summary` are engine text: they name
+calibration gaps, versions and refits, and belong in operator and audit
+views. Editor-facing views show the plain companions instead,
+`reviewRate.plainReason`, `reviewRate.plainNextStep` and
+`lastChange.plainSummary`, which never use engine vocabulary. The embedded
+status card prefers them and falls back to the engine text only for a
+snapshot from an older engine.
+
 `status()` returns the `cyclotron-status/v1` snapshot
 ([schema](../src/decision_flywheel/schemas/cyclotron-status.v1.schema.json)).
 It makes no model call; store it where the application's interface can read

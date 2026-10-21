@@ -29,9 +29,18 @@ it('explains each alignment number under its name in the card',()=>{
   expect(within(screen.getByTestId('metric-precision')).getByText('Of the yeses it gave (include), how many were right.')).toBeVisible()
   expect(within(screen.getByTestId('metric-accuracy')).getByText('Of all items, how many it got right.')).toBeVisible()
   expect(screen.getByText('Says 84%, right 86% · off by 2 points')).toBeVisible()
+  expect(screen.getByText(status.reviewRate.plainReason!)).toBeVisible()
+  expect(screen.getByText(`Next: ${status.reviewRate.plainNextStep}`)).toBeVisible()
+  expect(screen.getByText(/Improved: Suggestions were updated\./)).toBeVisible()
+  expect(screen.getByRole('region',{name:'papyrus-relevance status'})).not.toHaveTextContent(/calibration|window|refit|version/i)
+})
+
+it('falls back to the engine wording when an older engine sends no plain fields',()=>{
+  const {plainReason,plainNextStep,...rate}=status.reviewRate
+  const {plainSummary,...change}=status.lastChange!
+  render(<CyclotronStatusView status={{...status,reviewRate:rate,lastChange:change}} variant="card" />)
   expect(screen.getByText(status.reviewRate.reason)).toBeVisible()
   expect(screen.getByText(`Next: ${status.reviewRate.nextStep}`)).toBeVisible()
-  expect(screen.getByText(/Improved: Added question: is this vendor marketing\?/)).toBeVisible()
 })
 
 it('says what is not measured yet instead of showing empty numbers',()=>{

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .plain_status import plain_change_summary, plain_next_step, plain_reason
 from .rolling_metrics import recent_reviewed_metrics
 
 SCHEMA = "cyclotron-status/v1"
@@ -155,6 +156,7 @@ class CyclotronStatus:
                 "state": r.state,
                 "rate": r.rate,
                 "reason": r.reason,
+                "plainReason": plain_reason(r.state, r.rate, None if r.override is None else r.override.set_by),
                 "auditFloor": r.audit_floor,
                 "confidenceThreshold": r.confidence_threshold,
                 "override": None
@@ -167,6 +169,7 @@ class CyclotronStatus:
                 },
                 "nextCheckAfterDecisions": r.next_check_after_decisions,
                 "nextStep": r.next_step,
+                "plainNextStep": None if r.next_step is None else plain_next_step(r.state, r.rate),
                 "expectedReviewsPerWeek": r.expected_reviews_per_week,
             },
             "lastChange": None
@@ -177,6 +180,7 @@ class CyclotronStatus:
                 "toVersion": self.last_change.to_version,
                 "at": self.last_change.at,
                 "summary": self.last_change.summary,
+                "plainSummary": plain_change_summary(self.last_change.kind, self.last_change.labels),
                 "labels": self.last_change.labels,
             },
             "pending": {"decisionsAwaitingReview": p.decisions_awaiting_review, "staleSince": p.stale_since},

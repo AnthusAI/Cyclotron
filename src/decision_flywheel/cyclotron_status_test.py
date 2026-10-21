@@ -302,3 +302,29 @@ def test_the_typescript_type_names_every_schema_field():
 
     missing = sorted({name for name in names(load_schema()) if f"{name}:" not in source and f"{name}?:" not in source})
     assert not missing, f"trace-ui/src/cyclotronStatus.ts lacks {missing}"
+
+
+def test_a_status_carries_plain_wording_beside_the_engine_text():
+    status = build(
+        [
+            prediction("a", "include", 0.9),
+            {"kind": "candidate-rejected", "version": "v-one", "reason": "development brier did not improve"},
+        ]
+    )
+    snapshot = status.to_json()
+    validate(snapshot, load_schema())
+    assert snapshot["reviewRate"]["plainReason"] != snapshot["reviewRate"]["reason"]
+    assert snapshot["lastChange"]["summary"] == "development brier did not improve"
+    assert snapshot["lastChange"]["plainSummary"] == "Tried an update and kept the current approach."
+
+
+def test_a_manual_override_is_explained_plainly_with_who_set_it():
+    rate = ReviewRate(
+        "manual",
+        0.5,
+        "Manual rate of 50% set by editor.",
+        override=ReviewRateOverride(0.5, None, "editor", "2026-10-09T00:00:00+00:00"),
+    )
+    plain = build([], review_rate=rate).to_json()["reviewRate"]
+    assert plain["plainReason"] == "The review rate was set to 50% by editor."
+    assert plain["plainNextStep"] is None
