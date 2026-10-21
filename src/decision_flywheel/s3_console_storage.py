@@ -110,15 +110,20 @@ class S3ConsoleStorage:
             if job is None or set(claim) != {"owner", "fence"} or type(claim["fence"]) is not int or claim["fence"] < 1:
                 raise ValueError("invalid command claim")
             uuid(claim["owner"])
-        from .queued_account_authorization import QueuedActor
-
         for job_id, actor in value["actors"].items():
             job = one(value, "web_jobs", id=job_id)
             if not isinstance(actor, dict):
                 raise ValueError("invalid queued actor")
-            parsed = QueuedActor(**actor)
+            parsed = self._parse_actor(actor)
             if job is None or parsed.run_id != job["run_id"] or parsed.operation != "console:write":
                 raise ValueError("queued actor run boundary refused")
+
+    @staticmethod
+    def _parse_actor(actor):
+        from .machine_access import MachineActor
+        from .queued_account_authorization import QueuedActor
+
+        return MachineActor(**actor) if actor.get("kind") == "machine" else QueuedActor(**actor)
 
     @staticmethod
     def _upgrade(value):
@@ -873,9 +878,10 @@ class S3ConsoleStorage:
         return self._mutate(apply)
 
     def enqueue_authorized_command(self, run_id, request_id, kind, payload, actor):
+        from .machine_access import MachineActor
         from .queued_account_authorization import QueuedActor
 
-        if not isinstance(actor, QueuedActor) or actor.run_id != run_id or actor.operation != "console:write":
+        if not isinstance(actor, (QueuedActor, MachineActor)) or actor.run_id != run_id or actor.operation != "console:write":
             raise ValueError("trusted run-bound queued actor required")
         # Host captures/proves the actor before this transaction. Worker must
         # verify it again; neither a queue delivery nor this record is a lease.
@@ -893,8 +899,6 @@ class S3ConsoleStorage:
         return job
 
     def command_envelope(self, job_id):
-        from .queued_account_authorization import QueuedActor
-
         value = self._read()
         job = one(value, "web_jobs", id=job_id)
         if job is None:
@@ -902,16 +906,14 @@ class S3ConsoleStorage:
         actor = value["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
-        return decoded(job, "payload", "result"), QueuedActor(**actor)
+        return decoded(job, "payload", "result"), self._parse_actor(actor)
 
     def command_actor(self, job_id, owner, fence):
-        from .queued_account_authorization import QueuedActor
-
         self.for_command(job_id, owner, fence)
         actor = self._read()["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
-        return QueuedActor(**actor)
+        return self._parse_actor(actor)
 
     def command_recovery(self, job_id):
         # Operator diagnostic only: never a grant, claim reset or takeover.
@@ -1030,6 +1032,89 @@ class S3ConsoleStorage:
         value = self._read()
         self._run(value, run_id)
         return [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
+
+    def register_standing_item(self, run_id, item_id, values, *, max_items):
+        """Atomically register a never-before-seen source (or a new immutable revision) for a standing run.
+
+        Only a fenced worker command may call this. The source joins the run's own operational list and
+        the run's item table in the same transaction. An id that exists in any other list (priming or
+        evaluation) is refused; identical values return the existing revision without a write.
+        """
+        if self._claim.get() is None:
+            raise ValueError("standing registration requires a command-bound worker")
+        if type(max_items) is not int or max_items < 1 or not isinstance(item_id, str) or not isinstance(values, dict):
+            raise ValueError("bounded standing item required")
+        created = now()
+
+        def apply(value):
+            self._worker_write(value, run_id)
+            list_id = load_config(self._run(value, run_id)["config"]).get("item_list_id")
+            if not list_id or not one(value, "item_lists", id=list_id):
+                raise ValueError("standing run has no operational item list")
+            if any(r["list_id"] != list_id for r in rows(value, "list_item_revisions", id=item_id)):
+                raise ValueError("source id belongs to a priming or evaluation list; operational items must be disjoint")
+            latest = max(
+                rows(value, "list_item_revisions", list_id=list_id, id=item_id), key=lambda r: r["revision"], default=None
+            )
+            if latest and json.loads(latest["payload"]).get("values") == values:
+                revision = latest
+            else:
+                payload = encoded({"id": item_id, "values": values, "occurred_at": timestamp(created)})
+                revision = insert(
+                    value,
+                    "list_item_revisions",
+                    dict(
+                        list_id=list_id,
+                        id=item_id,
+                        revision=latest["revision"] + 1 if latest else 1,
+                        occurred_at=timestamp(created),
+                        fingerprint=sha256(payload.encode()).hexdigest(),
+                        payload=payload,
+                        imported_at=created,
+                    ),
+                )
+            held = rows(value, "web_items", run_id=run_id)
+            row = one(value, "web_items", run_id=run_id, id=item_id)
+            if row is None and len(held) >= max_items:
+                raise StandingCapacity(max_items)
+            frozen = encoded(
+                {**json.loads(revision["payload"]), "revision": revision["revision"], "fingerprint": revision["fingerprint"]}
+            )
+            if row is None:
+                insert(value, "web_items", dict(run_id=run_id, id=item_id, payload=frozen, prediction=None, reviewed=0))
+            elif row["payload"] != frozen:
+                row["payload"] = frozen
+            return {"id": item_id, "revision": revision["revision"], "fingerprint": revision["fingerprint"]}
+
+        return self._mutate(apply)
+
+    def record_machine_feedback(
+        self, run_id, classifier_id, classifier_revision, item_id, item_revision, label, comment, request_id, event
+    ):
+        """One human label plus its machine/editor provenance event, atomically and idempotently.
+
+        Writes only a catalog label and a run event. It never touches predictions, optimizer or provider state.
+        """
+        if not isinstance(event, dict) or not event.get("kind") or not request_id:
+            raise ValueError("feedback provenance and identity required")
+        for _ in range(self.max_conflicts):
+            try:
+                with self.transaction():
+                    value = self._tx.get()
+                    run = self._run(value, run_id)
+                    list_id = load_config(run["config"]).get("item_list_id")
+                    if one(value, "web_items", run_id=run_id, id=item_id) is None:
+                        raise ValueError("source was never submitted to this run")
+                    vote = self.label_item(
+                        classifier_id, classifier_revision, list_id, item_id, item_revision, label, comment, request_id
+                    )
+                    self._event_insert(
+                        value, run_id, "machine-feedback:" + request_id, {**event, "feedbackRequestId": request_id}
+                    )
+                return vote
+            except StorageConflict:
+                continue
+        raise ValueError("console contention limit reached; retry with same operation identity")
 
     def unreviewed_items(self, run_id):
         value = self._read()
@@ -1333,6 +1418,12 @@ class S3ConsoleStorage:
     matched_run_sources = _NativeAlgorithms.matched_run_sources
 
 
+class StandingCapacity(ValueError):
+    def __init__(self, limit):
+        super().__init__(f"standing run item capacity of {limit} reached")
+        self.limit = limit
+
+
 class _CommandView:
     """Trusted per-call worker capability; no mutable global owner binding."""
 
@@ -1357,6 +1448,7 @@ class _CommandView:
         "cyclotron_checkpoints",
         "matched_evaluation_inputs",
         "matched_evaluation_target",
+        "register_standing_item",
     }
 
     def __init__(self, store, claim, run_id):

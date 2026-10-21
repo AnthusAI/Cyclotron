@@ -7,6 +7,7 @@ never steals a running claim or repeats a paid request after uncertain delivery.
 import asyncio
 from uuid import uuid4
 
+from .command_refusal import CommandRefused
 from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
 
@@ -65,6 +66,7 @@ class _Effects:
         "label_item",
         "retract_item_label",
         "finish_command",
+        "register_standing_item",
     }
 
     def __init__(self, view, check):
@@ -159,9 +161,20 @@ class HostedCommandWorker:
         session = None
         try:
             session = await asyncio.to_thread(runtime.open_session, actor.run_id, run["config"], items, shown)
-            result = await runtime.execute(
-                session, job["kind"], job["payload"], shown, run["config"], request_id=job["request_id"]
-            )
+            try:
+                result = await runtime.execute(
+                    session, job["kind"], job["payload"], shown, run["config"], request_id=job["request_id"]
+                )
+            except CommandRefused as refusal:
+                # Refused before any provider dispatch: record a terminal, non-secret receipt.
+                await owned_guard()
+                await asyncio.to_thread(
+                    effects.finish_command,
+                    job["id"],
+                    "failed",
+                    {"refusal": {"code": refusal.code, "message": refusal.public_message}},
+                )
+                return {"status": "failed", "jobId": job["id"], "code": refusal.code}
             await owned_guard()
         finally:
             if session is not None:

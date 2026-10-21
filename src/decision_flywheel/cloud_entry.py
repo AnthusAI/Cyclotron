@@ -20,21 +20,41 @@ def runtime():
         from .hosted_publications import targets_from_environment
 
         targets = targets_from_environment(os.environ)
+        from .machine_access import principals_from_environment
+
+        principals = principals_from_environment(os.environ)
+        if config.allow_live and targets is None:
+            raise ValueError("live cloud execution requires reviewed publication targets")
+        session = get_session()
         model_factory = None
         if config.allow_live:
-            if targets is None:
-                raise ValueError("live cloud execution requires reviewed publication targets")
             from .adapters.hosted_jev import HostedJevFactory
+            from .provider_credentials import SecretsManagerKeySource
 
-            model_factory = HostedJevFactory.from_environment(os.environ)
-        session = get_session()
+            # The client is built, and the secret read, only inside the first authorized provider use.
+            key_source = SecretsManagerKeySource(
+                lambda: session.create_client(
+                    "secretsmanager",
+                    region_name=config.region,
+                    config=Config(retries={"total_max_attempts": 2}, connect_timeout=5, read_timeout=10),
+                )
+            )
+            model_factory = HostedJevFactory.from_environment(os.environ, key_source)
         settings = Config(signature_version="s3v4", retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)
         s3 = session.create_client("s3", region_name=config.region, config=settings)
         kms = session.create_client(
             "kms", region_name=config.region, config=Config(retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)
         )
         sqs = session.create_client("sqs", region_name=config.region)
-        _cached_runtime = HostedRuntime(config, s3=s3, kms=kms, sqs=sqs, model_factory=model_factory, publication_targets=targets)
+        _cached_runtime = HostedRuntime(
+            config,
+            s3=s3,
+            kms=kms,
+            sqs=sqs,
+            model_factory=model_factory,
+            publication_targets=targets,
+            machine_principals=principals,
+        )
     return _cached_runtime
 
 

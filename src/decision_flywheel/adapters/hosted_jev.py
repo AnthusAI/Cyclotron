@@ -1,6 +1,7 @@
 """Explicit bounded Jev-only baseline factory; construction makes no model call."""
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from ..optimizer_agent import DisabledOptimizer
 from .jev import JevAdapter, JevConfiguration
@@ -10,6 +11,8 @@ from .jev import JevAdapter, JevConfiguration
 class HostedJevFactory:
     model: str
     maximum_requests: int
+    # Resolves the provider credential lazily, inside the authorized worker, per decision.
+    key_source: Callable[[], str] | None = field(default=None, compare=False, repr=False)
 
     def __post_init__(self):
         if not isinstance(self.model, str) or not self.model.strip():
@@ -18,12 +21,12 @@ class HostedJevFactory:
             raise ValueError("an explicit baseline request ceiling between1 and100 is required")
 
     @classmethod
-    def from_environment(cls, environment):
+    def from_environment(cls, environment, key_source=None):
         try:
             raw = environment["CYCLOTRON_PREDICTION_MAX_REQUESTS"]
             if not isinstance(raw, str) or not raw.isdecimal():
                 raise ValueError()
-            return cls(environment["CYCLOTRON_PREDICTION_MODEL"], int(raw))
+            return cls(environment["CYCLOTRON_PREDICTION_MODEL"], int(raw), key_source)
         except (ValueError, KeyError, TypeError):
             raise ValueError("reviewed prediction model and request ceiling are required") from None
 
@@ -39,4 +42,9 @@ class HostedJevFactory:
             raise ValueError("run exceeds or differs from the reviewed baseline provider configuration")
         # Optional provider dependencies and credentials are resolved only in
         # the authorized worker. Never infer a provider or run an optimizer.
-        return JevAdapter.from_environment(configuration=JevConfiguration(model=self.model)), DisabledOptimizer()
+        # A missing credential refuses here, before any state registration or request reservation.
+        api_key = self.key_source() if self.key_source is not None else None
+        return (
+            JevAdapter.from_environment(configuration=JevConfiguration(model=self.model), api_key=api_key),
+            DisabledOptimizer(),
+        )
