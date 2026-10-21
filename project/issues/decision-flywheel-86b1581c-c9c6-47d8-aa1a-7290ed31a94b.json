@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-86b1581c-c9c6-47d8-aa1a-7290ed31a94b",
+  "title": "Move the lab's OpenAI provider secret from Secrets Manager to SSM SecureString",
+  "description": "Ryan's standing rule (2026-10-21, relayed by the Prospectus session): use SSM Parameter Store standard SecureString parameters (free) for secrets and config; Secrets Manager only where a service requires it. cyclotron-production (682849160744) has one secret, cyclotron/providers/openai, granted to WorkerRole (GetSecretValue on cyclotron/providers/openai-??????) in infra/lab/template.yaml. Move it to a SecureString read with GetParameter WithDecryption (cached), IAM scoped to the exact parameter ARN, referenced from IaC (nothing configured by hand; Ryan enters the value). Cut over via a reviewed change set; delete the old secret only after cutover with Ryan's approval.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-21T18:45:34.582869Z",
+  "updated_at": "2026-10-21T18:45:34.582968Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
