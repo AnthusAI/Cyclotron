@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5b1d0c37-9e6b-4f6b-a4aa-2c242308fd5d",
+  "issue_id": "decision-flywheel-e9cc553c-19f9-4eeb-810d-49884bc7209d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:24.518Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "I2 Prospectus lab verifier role for Papyrus site tokens",
+    "description": "Prospectus (account 712236451410): a lab verifier registration limited to identities/me and accounts/*/authorize that accepts registered Papyrus site issuers/clients; non-Papyrus tokens still refused. Owned by the Prospectus session; PR only, deploy needs Ryan.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

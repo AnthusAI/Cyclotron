@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9f6d17f6-b351-4d09-98ef-5e4c9f5766ea",
+  "issue_id": "decision-flywheel-2f1a6457-9a82-42af-9397-b58d0dc6fad0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:24.803Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "I3 Deploy curation routes to the lab",
+    "description": "Change set for the cyclotron-console Lambda package and PublicationTargets priming.listId; a probe without credentials returns 401/403. Needs Ryan's explicit approval.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

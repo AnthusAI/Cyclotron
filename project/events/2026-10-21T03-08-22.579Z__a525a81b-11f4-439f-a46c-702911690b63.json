@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "a525a81b-11f4-439f-a46c-702911690b63",
+  "issue_id": "decision-flywheel-ddcdc707-615c-46f1-8571-fc3740bbb716",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-21T03:08:22.579Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "test",
+        "to": "hosted_curation_routes.py + test; HostedRuntime.app(). Re-verify the bearer with Prospectus (AccountsClient resolve_identity/authorize); require authorized account == X-Cyclotron-Account pin and the target_for(account,publication) binding; capability map: context/priming queries/status=console:read, priming mutations/decide=console:write, review/steer unavailable; re-authorize after work; echo scope headers; 4 MB body cap."
+      }
+    }
+  }
+}

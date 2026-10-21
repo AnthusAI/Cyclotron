@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e59dd920-0f3a-47dc-8c6b-b05ca0257d91",
+  "issue_id": "decision-flywheel-adc4ddf3-848c-4cb8-a7db-e55e0a9c5c11",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:22.848Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "C2 Curation context endpoint and priming target config",
+    "description": "GET /api/newsroom/curation/context returning CurationBootstrap; optional per-binding priming.listId in the trusted target config (strict parsing); a binding without a list returns priming:null; zero transformers listed.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

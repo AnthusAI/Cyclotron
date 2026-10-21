@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-bdfc574f-2187-4107-b6da-1b4878270cba",
+  "title": "C4 Scoped file-only priming endpoint with auto-prime",
+  "description": "POST /api/newsroom/curation/priming {query,variables}->{data}, reusing web_api priming types on a publication-scoped PrimingService over S3ConsoleStorage; refuse other publications' list/classifiers/draft ids before any read; transform -> 'no hosted transformer'; idempotent accept; slice-1 size cap ~1 MB with clean failure; after accept the lab applies the examples (auto-prime) so suggestions use them.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-21T03:08:23.391922Z",
+  "updated_at": "2026-10-21T03:08:23.391979Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
