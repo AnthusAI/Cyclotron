@@ -1,0 +1,1132 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Conditions": {
+    "HasMachineCaller": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "MachineCallerRoleArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasTargets": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "PublicationTargets"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Description": "Reviewed Cyclotron console S3 backend; separate BFF and worker roles; live providers disabled",
+  "Outputs": {
+    "AuthBucketName": {
+      "Value": {
+        "Ref": "AuthBucket"
+      }
+    },
+    "BackendOrigin": {
+      "Value": {
+        "Fn::Sub": "https://${ConsoleApi}.execute-api.${AWS::Region}.amazonaws.com"
+      }
+    },
+    "BffRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "BffRole",
+          "Arn"
+        ]
+      }
+    },
+    "BooksBucketName": {
+      "Value": {
+        "Ref": "BooksBucket"
+      }
+    },
+    "CommandQueueUrl": {
+      "Value": {
+        "Ref": "CommandQueue"
+      }
+    },
+    "MachineInvokerRoleArn": {
+      "Condition": "HasMachineCaller",
+      "Value": {
+        "Fn::GetAtt": [
+          "MachineInvokerRole",
+          "Arn"
+        ]
+      }
+    },
+    "SessionKeyArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "SessionEncryptionKey",
+          "Arn"
+        ]
+      }
+    },
+    "WorkerRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "WorkerRole",
+          "Arn"
+        ]
+      }
+    }
+  },
+  "Parameters": {
+    "AllowLive": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Default": "false",
+      "Description": "CYCLOTRON_ALLOW_LIVE",
+      "Type": "String"
+    },
+    "ConsoleAuthorizationOrigin": {
+      "AllowedPattern": "https://[a-z0-9.-]+",
+      "Description": "Existing central managed-login origin",
+      "Type": "String"
+    },
+    "ConsoleClientId": {
+      "AllowedPattern": "[a-z0-9]{1,128}",
+      "Description": "Dedicated reviewed console OAuth client; never directory/CRM client",
+      "Type": "String"
+    },
+    "ConsoleIssuer": {
+      "Default": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hlSyajw9S",
+      "Type": "String"
+    },
+    "ExecutionPairReviewId": {
+      "AllowedValues": [
+        "cyclotron-execution-pair-v1-20261015"
+      ],
+      "Type": "String"
+    },
+    "FederationReviewId": {
+      "AllowedValues": [
+        "cyclotron-google-only-unlinked-v1-20261015"
+      ],
+      "Type": "String"
+    },
+    "MachineCallerRoleArn": {
+      "AllowedPattern": "^$|arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]{1,64}",
+      "Default": "",
+      "Description": "Exact IAM role ARN allowed to assume the machine invoker role; empty creates no machine access",
+      "Type": "String"
+    },
+    "PredictionMaxRequests": {
+      "AllowedPattern": "[0-9]{1,3}",
+      "Default": "100",
+      "Type": "String"
+    },
+    "PredictionModel": {
+      "AllowedPattern": "[A-Za-z0-9._-]{1,64}",
+      "Default": "jev-1.13.0",
+      "Type": "String"
+    },
+    "PublicationTargets": {
+      "Default": "",
+      "Description": "Reviewed CYCLOTRON_PUBLICATION_TARGETS JSON; empty leaves the variable unset",
+      "MaxLength": 3000,
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "AuthBucket": {
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "BucketName": {
+          "Fn::Sub": "cyclotron-console-auth-${AWS::AccountId}-${AWS::Region}"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      },
+      "Type": "AWS::S3::Bucket",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "AuthBucketPolicy": {
+      "Properties": {
+        "Bucket": {
+          "Ref": "AuthBucket"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": "*",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/*"
+                }
+              ]
+            },
+            {
+              "Action": "s3:PutObject",
+              "Condition": {
+                "StringNotEquals": {
+                  "s3:if-none-match": "*"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": "*",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/*/payloads/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/*/coordination/*/*/anchor.json"
+                }
+              ]
+            },
+            {
+              "Action": "s3:PutObject",
+              "Condition": {
+                "Null": {
+                  "s3:if-match": "true",
+                  "s3:if-none-match": "true"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": "*",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/*/coordination/*/*/head.json"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Type": "AWS::S3::BucketPolicy"
+    },
+    "BffFunction": {
+      "DependsOn": "BffLogGroup",
+      "Properties": {
+        "Architectures": [
+          "x86_64"
+        ],
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
+          "S3Key": "cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9"
+        },
+        "Environment": {
+          "Variables": {
+            "CYCLOTRON_ACCOUNT": {
+              "Ref": "AWS::AccountId"
+            },
+            "CYCLOTRON_ALLOW_LIVE": {
+              "Ref": "AllowLive"
+            },
+            "CYCLOTRON_AUTHORIZATION_ORIGIN": {
+              "Ref": "ConsoleAuthorizationOrigin"
+            },
+            "CYCLOTRON_AUTH_BUCKET": {
+              "Ref": "AuthBucket"
+            },
+            "CYCLOTRON_BOOKS_BUCKET": {
+              "Ref": "BooksBucket"
+            },
+            "CYCLOTRON_CENTRAL_ENDPOINT": "https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api",
+            "CYCLOTRON_CLIENT_ID": {
+              "Ref": "ConsoleClientId"
+            },
+            "CYCLOTRON_ISSUER": {
+              "Ref": "ConsoleIssuer"
+            },
+            "CYCLOTRON_MACHINE_PRINCIPALS": {
+              "Fn::If": [
+                "HasMachineCaller",
+                {
+                  "Fn::Sub": "[\"arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-machine-invoker\"]"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            },
+            "CYCLOTRON_PREDICTION_MAX_REQUESTS": {
+              "Ref": "PredictionMaxRequests"
+            },
+            "CYCLOTRON_PREDICTION_MODEL": {
+              "Ref": "PredictionModel"
+            },
+            "CYCLOTRON_PUBLICATION_TARGETS": {
+              "Fn::If": [
+                "HasTargets",
+                {
+                  "Ref": "PublicationTargets"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            },
+            "CYCLOTRON_PUBLIC_ORIGIN": "https://lab.cyclotron.anth.us",
+            "CYCLOTRON_QUEUE_URL": {
+              "Ref": "CommandQueue"
+            },
+            "CYCLOTRON_REGION": {
+              "Ref": "AWS::Region"
+            },
+            "CYCLOTRON_SESSION_KEY_ARN": {
+              "Fn::GetAtt": [
+                "SessionEncryptionKey",
+                "Arn"
+              ]
+            }
+          }
+        },
+        "FunctionName": "cyclotron-console-bff",
+        "Handler": "decision_flywheel.cloud_entry.bff_handler",
+        "MemorySize": 1024,
+        "Role": {
+          "Fn::GetAtt": [
+            "BffRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "python3.13",
+        "Tags": [
+          {
+            "Key": "lambda:createdBy",
+            "Value": "SAM"
+          },
+          {
+            "Key": "Product",
+            "Value": "cyclotron"
+          },
+          {
+            "Key": "FederationReview",
+            "Value": {
+              "Ref": "FederationReviewId"
+            }
+          },
+          {
+            "Key": "ExecutionPairReview",
+            "Value": {
+              "Ref": "ExecutionPairReviewId"
+            }
+          }
+        ],
+        "Timeout": 28
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "BffFunctionMachinePermission": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "BffFunction"
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Sub": [
+            "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/*/machine/*",
+            {
+              "__ApiId__": {
+                "Ref": "ConsoleApi"
+              },
+              "__Stage__": "*"
+            }
+          ]
+        }
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "BffFunctionProxyPermission": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "BffFunction"
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Sub": [
+            "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/*/*",
+            {
+              "__ApiId__": {
+                "Ref": "ConsoleApi"
+              },
+              "__Stage__": "*"
+            }
+          ]
+        }
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "BffFunctionRootPermission": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "BffFunction"
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Sub": [
+            "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/*/",
+            {
+              "__ApiId__": {
+                "Ref": "ConsoleApi"
+              },
+              "__Stage__": "*"
+            }
+          ]
+        }
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "BffLogGroup": {
+      "Properties": {
+        "LogGroupName": "/aws/lambda/cyclotron-console-bff",
+        "RetentionInDays": 14
+      },
+      "Type": "AWS::Logs::LogGroup"
+    },
+    "BffRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*"
+                    }
+                  ]
+                },
+                {
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/payloads/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/coordination/oauth/*"
+                    }
+                  ]
+                },
+                {
+                  "Action": [
+                    "kms:Decrypt",
+                    "kms:GenerateDataKey"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "kms:EncryptionContext:application": "cyclotron-console",
+                      "kms:EncryptionContext:kind": [
+                        "pending",
+                        "session"
+                      ],
+                      "kms:EncryptionContext:purpose": "oauth-session"
+                    },
+                    "StringLike": {
+                      "kms:EncryptionContext:record": "????????????????????????????????????????????????????????????????"
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "SessionEncryptionKey",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Action": "execute-api:Invoke",
+                  "Effect": "Allow",
+                  "Resource": [
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/identities/google/challenge",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/identities/google/resolve",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/accounts",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/accounts/*",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize"
+                  ]
+                },
+                {
+                  "Action": [
+                    "sqs:SendMessage"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "CommandQueue",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cyclotron-console-bff:*"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "cyclotron-console-bff"
+          }
+        ],
+        "RoleName": "cyclotron-console-bff-runtime"
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "BooksBucket": {
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "BucketName": {
+          "Fn::Sub": "cyclotron-console-books-${AWS::AccountId}-${AWS::Region}"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      },
+      "Type": "AWS::S3::Bucket",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "BooksBucketPolicy": {
+      "Properties": {
+        "Bucket": {
+          "Ref": "BooksBucket"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": "*",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*"
+                }
+              ]
+            },
+            {
+              "Action": "s3:PutObject",
+              "Condition": {
+                "StringNotEquals": {
+                  "s3:if-none-match": "*"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": "*",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/payloads/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/coordination/*/*/anchor.json"
+                }
+              ]
+            },
+            {
+              "Action": "s3:PutObject",
+              "Condition": {
+                "Null": {
+                  "s3:if-match": "true",
+                  "s3:if-none-match": "true"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": "*",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/coordination/*/*/head.json"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Type": "AWS::S3::BucketPolicy"
+    },
+    "CommandDLQ": {
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "QueueName": "cyclotron-console-commands-dlq",
+        "SqsManagedSseEnabled": true
+      },
+      "Type": "AWS::SQS::Queue"
+    },
+    "CommandQueue": {
+      "Properties": {
+        "MessageRetentionPeriod": 345600,
+        "QueueName": "cyclotron-console-commands",
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "CommandDLQ",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 3
+        },
+        "SqsManagedSseEnabled": true,
+        "VisibilityTimeout": 1080
+      },
+      "Type": "AWS::SQS::Queue"
+    },
+    "ConsoleApi": {
+      "Properties": {
+        "Body": {
+          "components": {
+            "securitySchemes": {
+              "AWS_IAM": {
+                "in": "header",
+                "name": "Authorization",
+                "type": "apiKey",
+                "x-amazon-apigateway-authtype": "awsSigv4"
+              }
+            }
+          },
+          "info": {
+            "title": {
+              "Ref": "AWS::StackName"
+            },
+            "version": "1.0"
+          },
+          "openapi": "3.0.1",
+          "paths": {
+            "/": {
+              "x-amazon-apigateway-any-method": {
+                "responses": {},
+                "x-amazon-apigateway-integration": {
+                  "httpMethod": "POST",
+                  "payloadFormatVersion": "2.0",
+                  "type": "aws_proxy",
+                  "uri": {
+                    "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BffFunction.Arn}/invocations"
+                  }
+                }
+              }
+            },
+            "/machine/{proxy+}": {
+              "x-amazon-apigateway-any-method": {
+                "parameters": [
+                  {
+                    "in": "path",
+                    "name": "proxy+",
+                    "required": true
+                  }
+                ],
+                "responses": {},
+                "security": [
+                  {
+                    "AWS_IAM": []
+                  }
+                ],
+                "x-amazon-apigateway-integration": {
+                  "httpMethod": "POST",
+                  "payloadFormatVersion": "2.0",
+                  "type": "aws_proxy",
+                  "uri": {
+                    "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BffFunction.Arn}/invocations"
+                  }
+                }
+              }
+            },
+            "/{proxy+}": {
+              "x-amazon-apigateway-any-method": {
+                "parameters": [
+                  {
+                    "in": "path",
+                    "name": "proxy+",
+                    "required": true
+                  }
+                ],
+                "responses": {},
+                "x-amazon-apigateway-integration": {
+                  "httpMethod": "POST",
+                  "payloadFormatVersion": "2.0",
+                  "type": "aws_proxy",
+                  "uri": {
+                    "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BffFunction.Arn}/invocations"
+                  }
+                }
+              }
+            }
+          },
+          "tags": [
+            {
+              "name": "httpapi:createdBy",
+              "x-amazon-apigateway-tag-value": "SAM"
+            }
+          ]
+        }
+      },
+      "Type": "AWS::ApiGatewayV2::Api"
+    },
+    "ConsoleApiApiGatewayDefaultStage": {
+      "Properties": {
+        "ApiId": {
+          "Ref": "ConsoleApi"
+        },
+        "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 10,
+          "ThrottlingRateLimit": 5
+        },
+        "StageName": "$default",
+        "Tags": {
+          "httpapi:createdBy": "SAM"
+        }
+      },
+      "Type": "AWS::ApiGatewayV2::Stage"
+    },
+    "MachineInvokerRole": {
+      "Condition": "HasMachineCaller",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "MachineCallerRoleArn"
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "execute-api:Invoke",
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/publications/*/operations"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/publications/*/commands/*"
+                    }
+                  ]
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "cyclotron-machine-invoke"
+          }
+        ],
+        "RoleName": "cyclotron-machine-invoker"
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "SessionEncryptionAlias": {
+      "Properties": {
+        "AliasName": "alias/cyclotron-console-sessions",
+        "TargetKeyId": {
+          "Ref": "SessionEncryptionKey"
+        }
+      },
+      "Type": "AWS::KMS::Alias"
+    },
+    "SessionEncryptionKey": {
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Description": "Cyclotron console envelope encryption; context-scoped runtime access",
+        "EnableKeyRotation": true,
+        "KeyPolicy": {
+          "Statement": [
+            {
+              "Action": "kms:*",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Type": "AWS::KMS::Key",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "WorkerFunction": {
+      "DependsOn": "WorkerLogGroup",
+      "Properties": {
+        "Architectures": [
+          "x86_64"
+        ],
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
+          "S3Key": "cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9"
+        },
+        "Environment": {
+          "Variables": {
+            "CYCLOTRON_ACCOUNT": {
+              "Ref": "AWS::AccountId"
+            },
+            "CYCLOTRON_ALLOW_LIVE": {
+              "Ref": "AllowLive"
+            },
+            "CYCLOTRON_AUTHORIZATION_ORIGIN": {
+              "Ref": "ConsoleAuthorizationOrigin"
+            },
+            "CYCLOTRON_AUTH_BUCKET": {
+              "Ref": "AuthBucket"
+            },
+            "CYCLOTRON_BOOKS_BUCKET": {
+              "Ref": "BooksBucket"
+            },
+            "CYCLOTRON_CENTRAL_ENDPOINT": "https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api",
+            "CYCLOTRON_CLIENT_ID": {
+              "Ref": "ConsoleClientId"
+            },
+            "CYCLOTRON_ISSUER": {
+              "Ref": "ConsoleIssuer"
+            },
+            "CYCLOTRON_MACHINE_PRINCIPALS": {
+              "Fn::If": [
+                "HasMachineCaller",
+                {
+                  "Fn::Sub": "[\"arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-machine-invoker\"]"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            },
+            "CYCLOTRON_PREDICTION_MAX_REQUESTS": {
+              "Ref": "PredictionMaxRequests"
+            },
+            "CYCLOTRON_PREDICTION_MODEL": {
+              "Ref": "PredictionModel"
+            },
+            "CYCLOTRON_PUBLICATION_TARGETS": {
+              "Fn::If": [
+                "HasTargets",
+                {
+                  "Ref": "PublicationTargets"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            },
+            "CYCLOTRON_PUBLIC_ORIGIN": "https://lab.cyclotron.anth.us",
+            "CYCLOTRON_QUEUE_URL": {
+              "Ref": "CommandQueue"
+            },
+            "CYCLOTRON_REGION": {
+              "Ref": "AWS::Region"
+            },
+            "CYCLOTRON_SESSION_KEY_ARN": {
+              "Fn::GetAtt": [
+                "SessionEncryptionKey",
+                "Arn"
+              ]
+            }
+          }
+        },
+        "FunctionName": "cyclotron-console-worker",
+        "Handler": "decision_flywheel.cloud_entry.worker_handler",
+        "MemorySize": 1024,
+        "Role": {
+          "Fn::GetAtt": [
+            "WorkerRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "python3.13",
+        "Tags": [
+          {
+            "Key": "lambda:createdBy",
+            "Value": "SAM"
+          },
+          {
+            "Key": "Product",
+            "Value": "cyclotron"
+          },
+          {
+            "Key": "FederationReview",
+            "Value": {
+              "Ref": "FederationReviewId"
+            }
+          },
+          {
+            "Key": "ExecutionPairReview",
+            "Value": {
+              "Ref": "ExecutionPairReviewId"
+            }
+          }
+        ],
+        "Timeout": 180
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "WorkerFunctionCommands": {
+      "Properties": {
+        "BatchSize": 1,
+        "EventSourceArn": {
+          "Fn::GetAtt": [
+            "CommandQueue",
+            "Arn"
+          ]
+        },
+        "FunctionName": {
+          "Ref": "WorkerFunction"
+        },
+        "FunctionResponseTypes": [
+          "ReportBatchItemFailures"
+        ],
+        "ScalingConfig": {
+          "MaximumConcurrency": 2
+        }
+      },
+      "Type": "AWS::Lambda::EventSourceMapping"
+    },
+    "WorkerLogGroup": {
+      "Properties": {
+        "LogGroupName": "/aws/lambda/cyclotron-console-worker",
+        "RetentionInDays": 14
+      },
+      "Type": "AWS::Logs::LogGroup"
+    },
+    "WorkerRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/workspace/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/shared-batches/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/evaluation/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/reviewer/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*"
+                    }
+                  ]
+                },
+                {
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/payloads/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/coordination/oauth/session-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Action": [
+                    "kms:Decrypt"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "kms:EncryptionContext:application": "cyclotron-console",
+                      "kms:EncryptionContext:kind": "session",
+                      "kms:EncryptionContext:purpose": "oauth-session"
+                    },
+                    "StringLike": {
+                      "kms:EncryptionContext:record": "????????????????????????????????????????????????????????????????"
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "SessionEncryptionKey",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Action": "execute-api:Invoke",
+                  "Effect": "Allow",
+                  "Resource": [
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize"
+                  ]
+                },
+                {
+                  "Action": [
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage",
+                    "sqs:ChangeMessageVisibility",
+                    "sqs:GetQueueAttributes"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "CommandQueue",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cyclotron-console-worker:*"
+                  }
+                },
+                {
+                  "Action": "secretsmanager:GetSecretValue",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-??????"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "cyclotron-console-worker"
+          }
+        ],
+        "RoleName": "cyclotron-console-worker-runtime"
+      },
+      "Type": "AWS::IAM::Role"
+    }
+  }
+}
