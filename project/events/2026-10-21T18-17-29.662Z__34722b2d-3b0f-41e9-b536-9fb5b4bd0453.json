@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "34722b2d-3b0f-41e9-b536-9fb5b4bd0453",
+  "issue_id": "decision-flywheel-c1d861b3-fab6-419b-a519-50e7ea9808e2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T18:17:29.662Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Log exception class and location for failed worker deliveries",
+    "description": "worker_handler swallowed every failure silently, which left claimed jobs running with no clue why (two wedges, ten-second silent exits). Log one sanitized JSON line per failed delivery: exception classes of the cause chain, code locations, elapsed and remaining Lambda time. Never the message, arguments, payload or source.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet monitoring agent"
+    }
+  }
+}

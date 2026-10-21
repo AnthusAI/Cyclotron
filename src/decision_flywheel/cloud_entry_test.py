@@ -155,3 +155,25 @@ def test_wildcard_machine_principals_fail_before_creating_cloud_clients(monkeypa
     monkeypatch.setattr(botocore.session, "get_session", forbidden)
     with pytest.raises(ValueError):
         cloud_entry.runtime()
+
+
+def test_failed_delivery_logs_classes_and_locations_but_never_messages_or_payloads(monkeypatch, capsys):
+    from . import cloud_entry
+
+    class Worker:
+        async def process(self, message):
+            try:
+                raise OSError("sk-secret-token and a private prompt")
+            except OSError as inner:
+                raise ValueError("provider said: sk-secret-token") from inner
+
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", SimpleNamespace(worker=lambda: Worker()))
+    body = json.dumps({"accountId": str(uuid4()), "runId": str(uuid4()), "jobId": str(uuid4())})
+    event = {"Records": [{"messageId": "m1", "body": body}]}
+    context = SimpleNamespace(get_remaining_time_in_millis=lambda: 170000)
+    assert cloud_entry.worker_handler(event, context) == {"batchItemFailures": [{"itemIdentifier": "m1"}]}
+    out = capsys.readouterr().out
+    line = json.loads(out.strip().splitlines()[-1])
+    assert line["event"] == "delivery_failed" and line["errors"][:2] == ["builtins.ValueError", "builtins.OSError"]
+    assert line["remainingMs"] == 170000 and any("cloud_entry_test.py" in frame for frame in line["frames"])
+    assert "secret" not in out and "private prompt" not in out and "provider said" not in out and body not in out

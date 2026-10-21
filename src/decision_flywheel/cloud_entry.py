@@ -3,6 +3,8 @@
 import asyncio
 import json
 import os
+import time
+import traceback
 
 _cached_runtime = None
 _cached_adapter = None
@@ -80,9 +82,41 @@ def bff_handler(event, context):
         account_request_id.reset(correlation)
 
 
+def describe_failure(error, started, context=None):
+    """One log line about a failed delivery: exception classes and code locations only.
+
+    Never the message, arguments, payload, locals or source text: exception messages can carry provider or
+    credential detail. Classes cover the cause chain; frames are `file:line function` for this package
+    (relative path) and `package/file:line` for libraries, innermost last (at most eight).
+    """
+    classes, seen, current = [], set(), error
+    while current is not None and id(current) not in seen and len(classes) < 6:
+        seen.add(id(current))
+        classes.append(f"{type(current).__module__}.{type(current).__qualname__}")
+        current = current.__cause__ or current.__context__
+    frames = []
+    for frame in traceback.extract_tb(error.__traceback__)[-8:]:
+        path = frame.filename.replace("\\", "/")
+        short = path.split("decision_flywheel/", 1)[1] if "decision_flywheel/" in path else "/".join(path.split("/")[-2:])
+        frames.append(f"{short}:{frame.lineno} {frame.name}")
+    remaining = getattr(context, "get_remaining_time_in_millis", None)
+    return json.dumps(
+        {
+            "event": "delivery_failed",
+            "errors": classes,
+            "frames": frames,
+            "elapsedMs": round((time.monotonic() - started) * 1000),
+            "remainingMs": remaining() if callable(remaining) else None,
+        },
+        separators=(",", ":"),
+    )
+
+
 def worker_handler(event, context):
     if not isinstance(event, dict) or not isinstance(event.get("Records"), list) or len(event["Records"]) > 10:
         raise ValueError("bounded SQS batch required")
+
+    started = time.monotonic()
 
     async def process():
         failures = []
@@ -95,10 +129,11 @@ def worker_handler(event, context):
                 if not isinstance(body, str) or len(body.encode()) > 4096:
                     raise ValueError("bounded queue references required")
                 await runtime().worker().process(json.loads(body))
-            except Exception:
-                # No token, raw payload, private model error or stack is logged.
-                # Uncertain/running claims retry only into fail-closed diagnosis
-                # and eventually the DLQ; they never grant another paid dispatch.
+            except Exception as error:
+                # No token, raw payload, private model error, message or source is logged: only exception
+                # classes and code locations (describe_failure). Uncertain/running claims retry only into
+                # fail-closed diagnosis and eventually the DLQ; they never grant another paid dispatch.
+                print(describe_failure(error, started, context))
                 failures.append({"itemIdentifier": identifier})
         return {"batchItemFailures": failures}
 
