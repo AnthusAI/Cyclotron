@@ -16,7 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PAPYRUS_REQUIREMENT: "papyrus-newsroom[markus] @ git+https://github.com/AnthusAI/Papyrus.git@develop"
+  PAPYRUS_REQUIREMENT: "papyrus-newsroom[markus]==5.1.0"
+  MARKUS_REQUIREMENT: "anthus-markus>=0.13.0,<0.14"
 
 jobs:
   build:
@@ -32,7 +33,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install the Papyrus documentation builder
-        run: python -m pip install "$PAPYRUS_REQUIREMENT" "anthus-markus>=0.7.0,<1.0.0"
+        run: python -m pip install "$PAPYRUS_REQUIREMENT" "$MARKUS_REQUIREMENT"
 
       - name: Build site
         run: >-
@@ -40,6 +41,7 @@ jobs:
           --docs docs --out _site --name "Cyclotron"
           --tagline "Editorial intelligence for publications."
           --source-url "https://github.com/AnthusAI/Cyclotron"
+          --site-url "https://anthusai.github.io/Cyclotron/"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
