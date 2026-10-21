@@ -52,6 +52,30 @@ class HostedConsoleService:
             raise ProspectusUnavailable("queue outcome unavailable; retry the same request identity") from None
         return job
 
+    async def submit_machine_command(self, actor, request_id, kind, payload):
+        """Queue a publication command for a configured service principal; no human session is involved."""
+        from .machine_access import MachineActor
+
+        if not isinstance(actor, MachineActor) or actor.account_id != self.account_id:
+            raise AccountAccessDenied("verified machine actor required")
+        if not self.allow_live and not (self.data_command and self.data_command(kind, payload)):
+            raise ValueError("live commands require separate operator authority")
+        content = encode(payload)
+        if len(content) > 65536 or not isinstance(request_id, str) or not 1 <= len(request_id) <= 256:
+            raise ValueError("bounded credential-free command required")
+        binding = await asyncio.to_thread(self.authorization.binding_for_run, self.account_id, actor.run_id)
+        if binding != actor.binding:
+            raise AccountAccessDenied("machine workspace binding changed")
+        if self.command_policy is not None:
+            self.command_policy(actor.run_id, kind)
+        await self.authorization.guard(actor)()
+        job = await asyncio.to_thread(self.store.enqueue_authorized_command, actor.run_id, request_id, kind, payload, actor)
+        try:
+            await asyncio.to_thread(self.send, {"accountId": self.account_id, "runId": actor.run_id, "jobId": job["id"]})
+        except Exception:
+            raise ProspectusUnavailable("queue outcome unavailable; retry the same request identity") from None
+        return job
+
     def _runtime(self):
         from .cyclotron_runtime import CyclotronRuntime
 

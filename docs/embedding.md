@@ -504,7 +504,7 @@ the framework compile it:
 
 ```json
 "dependencies": {
-  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.2/cyclotron-0.2.2.tgz"
+  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.3/cyclotron-0.2.3.tgz"
 }
 ```
 
