@@ -10,9 +10,17 @@
   "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "d98bc16a-bb0b-4694-a19e-bf3bf103bd6d",
+      "author": "home",
+      "text": "Evidence: infra/lab/template.yaml reconstructed from get-template (Original). Original and Processed deployed templates are identical and have no Transform (already SAM-expanded plain CloudFormation), so template.yaml is that document in YAML. scripts/dev/check_lab_template.sh --live: 'template.yaml vs snapshot: MATCH; template.yaml vs deployed cyclotron-console (Original): MATCH; 21 resources, 10 parameters'. tests/test_lab_template.py runs offline in make test. make check exit 0 (2291 passed, 1 skipped; trace-ui 269 passed). Package build recipe is not recorded in the repo; README documents the unverified inference. AWS access was read-only. Branch infra/lab-stack-source.",
+      "created_at": "2026-10-21T03:17:23.886670Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-21T03:08:24.228355Z",
-  "updated_at": "2026-10-21T03:08:24.228403Z",
+  "updated_at": "2026-10-21T03:17:23.886706Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
