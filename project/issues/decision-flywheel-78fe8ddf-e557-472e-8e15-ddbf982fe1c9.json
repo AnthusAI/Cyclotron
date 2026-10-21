@@ -10,9 +10,22 @@
   "parent": "decision-flywheel-ef7af5fa-f2a4-4b50-bcc7-85a8ca900020",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "717d3fde-b62f-4340-9200-e8063bdf1251",
+      "author": "home",
+      "text": "Machine-access and standing-run slice delivered (2026-10-21). Releases v0.30.0.\n\nAcceptance status against the scenarios here: the shared-decision, queue-boundary and bounded-receipt scenarios remain covered by the existing synthetic specs. New synthetic specs cover a never-before-seen streaming source (registered once, decided once, shared across outputs), an identical re-request making no second model call, a changed source becoming a new immutable revision, priming-list ids refused, the request ceiling failing closed, a missing provider key failing closed without consuming the ceiling, unlisted or unsigned callers refused, and revocation stopping queued work.\n\nNot yet demonstrated: any real prediction. That needs the standing run, the reviewed target configuration, the machine caller role, the provider secret and the live switch, each still pending.\n\nOpen authority question for review: machine feedback records a human label asserted by a trusted site service for a named editor; Cyclotron verifies the calling role, not the editor.\n",
+      "created_at": "2026-10-21T01:42:59.164896Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "Sonnet 5.5",
+        "name": "Standing Run Delivery"
+      }
+    }
+  ],
   "created_at": "2026-10-20T04:40:13.340725Z",
-  "updated_at": "2026-10-20T04:40:13.340755Z",
+  "updated_at": "2026-10-21T01:42:59.164948Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
@@ -21,5 +34,8 @@
   },
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

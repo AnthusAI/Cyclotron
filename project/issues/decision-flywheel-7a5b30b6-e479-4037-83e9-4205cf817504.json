@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-7a5b30b6-e479-4037-83e9-4205cf817504",
+  "title": "C5 Shared priming storage contract test",
+  "description": "priming_storage_contract_test.py across memory, SQLite and S3 (fake client): atomic accept, rollback, latest-vote/retraction, draft size limit, stale revision.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a321d682-5860-4a9f-8df3-b35ba15c04fa",
+      "author": "home",
+      "text": "priming_storage_contract_test.py runs 9 behaviours on memory, SQLite and S3 fake (27 passed): atomic accept, rollback, new-draft rollback, idempotent accept, latest-vote and retraction, draft size limit, stale version and classifier revision, existing item identity, reopen.",
+      "created_at": "2026-10-21T03:33:31.303159Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-21T03:08:23.667268Z",
+  "updated_at": "2026-10-21T03:33:31.352325Z",
+  "closed_at": "2026-10-21T03:33:31.352294Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

@@ -1,0 +1,740 @@
+# Reconstruction of the deployed cyclotron-console stack (account/region: see README).
+# Source of truth is infra/lab/deployed-template.snapshot.json (CloudFormation
+# get-template --template-stage Original). The deployed Original template is
+# already SAM-expanded plain CloudFormation (no Transform), so this file is that
+# same document in YAML; `sam deploy` accepts it unchanged.
+# scripts/dev/check_lab_template.sh proves template == snapshot + infra/lab/pending-changes.json.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Reviewed Cyclotron console S3 backend; separate BFF and worker roles; live providers disabled
+Parameters:
+  ConsoleIssuer:
+    Type: String
+    Default: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hlSyajw9S
+  ConsoleClientId:
+    Type: String
+    AllowedPattern: '[a-z0-9]{1,128}'
+    Description: Dedicated reviewed console OAuth client; never directory/CRM client
+  ConsoleAuthorizationOrigin:
+    Type: String
+    AllowedPattern: https://[a-z0-9.-]+
+    Description: Existing central managed-login origin
+  FederationReviewId:
+    Type: String
+    AllowedValues:
+    - cyclotron-google-only-unlinked-v1-20261015
+  ExecutionPairReviewId:
+    Type: String
+    AllowedValues:
+    - cyclotron-execution-pair-v1-20261015
+  MachineCallerRoleArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]{1,64}
+    Description: Exact IAM role ARN allowed to assume the machine invoker role; empty creates no machine access
+  PublicationTargets:
+    Type: String
+    Default: ''
+    MaxLength: 3000
+    Description: Reviewed CYCLOTRON_PUBLICATION_TARGETS JSON; empty leaves the variable unset
+  AllowLive:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Description: CYCLOTRON_ALLOW_LIVE
+  PredictionModel:
+    Type: String
+    Default: jev-1.13.0
+    AllowedPattern: '[A-Za-z0-9._-]{1,64}'
+  PredictionMaxRequests:
+    Type: String
+    Default: '100'
+    AllowedPattern: '[0-9]{1,3}'
+  LabVerifierEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Description: When true the BFF receives CYCLOTRON_LAB_VERIFIER_ROLE_ARN and CYCLOTRON_ACCOUNTS_API_URL and curation routes verify editor tokens through the verifier role; false leaves both unset and the curation routes fail closed
+Outputs:
+  BackendOrigin:
+    Value:
+      Fn::Sub: https://${ConsoleApi}.execute-api.${AWS::Region}.amazonaws.com
+  BffRoleArn:
+    Value:
+      Fn::GetAtt:
+      - BffRole
+      - Arn
+  WorkerRoleArn:
+    Value:
+      Fn::GetAtt:
+      - WorkerRole
+      - Arn
+  SessionKeyArn:
+    Value:
+      Fn::GetAtt:
+      - SessionEncryptionKey
+      - Arn
+  BooksBucketName:
+    Value:
+      Ref: BooksBucket
+  AuthBucketName:
+    Value:
+      Ref: AuthBucket
+  CommandQueueUrl:
+    Value:
+      Ref: CommandQueue
+  MachineInvokerRoleArn:
+    Condition: HasMachineCaller
+    Value:
+      Fn::GetAtt:
+      - MachineInvokerRole
+      - Arn
+Resources:
+  BooksBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub: cyclotron-console-books-${AWS::AccountId}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  AuthBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub: cyclotron-console-auth-${AWS::AccountId}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  SessionEncryptionKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: Cyclotron console envelope encryption; context-scoped runtime access
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+          Action: kms:*
+          Resource: '*'
+  SessionEncryptionAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/cyclotron-console-sessions
+      TargetKeyId:
+        Ref: SessionEncryptionKey
+  CommandDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cyclotron-console-commands-dlq
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+  CommandQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cyclotron-console-commands
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 1080
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+          - CommandDLQ
+          - Arn
+        maxReceiveCount: 3
+  BffRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cyclotron-console-bff-runtime
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: cyclotron-console-bff
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/payloads/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/coordination/oauth/*
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::GetAtt:
+              - SessionEncryptionKey
+              - Arn
+            Condition:
+              StringEquals:
+                kms:EncryptionContext:application: cyclotron-console
+                kms:EncryptionContext:purpose: oauth-session
+                kms:EncryptionContext:kind:
+                - pending
+                - session
+              StringLike:
+                kms:EncryptionContext:record: ????????????????????????????????????????????????????????????????
+          - Effect: Allow
+            Action: execute-api:Invoke
+            Resource:
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/identities/google/challenge
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/identities/google/resolve
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/accounts
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/accounts/*
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize
+          - Effect: Allow
+            Action:
+            - sqs:SendMessage
+            Resource:
+              Fn::GetAtt:
+              - CommandQueue
+              - Arn
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cyclotron-console-bff:*
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier
+  BffLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cyclotron-console-bff
+      RetentionInDays: 14
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cyclotron-console-worker-runtime
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: cyclotron-console-worker
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/workspace/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/shared-batches/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/evaluation/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/reviewer/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/payloads/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/console-auth/sessions/coordination/oauth/session-*/*
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            Resource:
+              Fn::GetAtt:
+              - SessionEncryptionKey
+              - Arn
+            Condition:
+              StringEquals:
+                kms:EncryptionContext:application: cyclotron-console
+                kms:EncryptionContext:purpose: oauth-session
+                kms:EncryptionContext:kind: session
+              StringLike:
+                kms:EncryptionContext:record: ????????????????????????????????????????????????????????????????
+          - Effect: Allow
+            Action: execute-api:Invoke
+            Resource:
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize
+          - Effect: Allow
+            Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:ChangeMessageVisibility
+            - sqs:GetQueueAttributes
+            Resource:
+              Fn::GetAtt:
+              - CommandQueue
+              - Arn
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cyclotron-console-worker:*
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-??????
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cyclotron-console-worker
+      RetentionInDays: 14
+  LabVerifierRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cyclotron-lab-verifier
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Fn::GetAtt:
+              - BffRole
+              - Arn
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: cyclotron-lab-verify
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: execute-api:Invoke
+            Resource:
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me
+            - arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize
+  BooksBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: BooksBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*
+          Condition:
+            Bool:
+              aws:SecureTransport: 'false'
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:PutObject
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/payloads/*
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/coordination/*/*/anchor.json
+          Condition:
+            StringNotEquals:
+              s3:if-none-match: '*'
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:PutObject
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/coordination/*/*/head.json
+          Condition:
+            'Null':
+              s3:if-match: 'true'
+              s3:if-none-match: 'true'
+  AuthBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: AuthBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/*
+          Condition:
+            Bool:
+              aws:SecureTransport: 'false'
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:PutObject
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/*/payloads/*
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/*/coordination/*/*/anchor.json
+          Condition:
+            StringNotEquals:
+              s3:if-none-match: '*'
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:PutObject
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/*/coordination/*/*/head.json
+          Condition:
+            'Null':
+              s3:if-match: 'true'
+              s3:if-none-match: 'true'
+  MachineInvokerRole:
+    Type: AWS::IAM::Role
+    Condition: HasMachineCaller
+    Properties:
+      RoleName: cyclotron-machine-invoker
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Ref: MachineCallerRoleArn
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: cyclotron-machine-invoke
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: execute-api:Invoke
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/publications/*/operations
+            - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/publications/*/commands/*
+  BffFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: BffLogGroup
+    Properties:
+      Code:
+        S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
+        S3Key: cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9
+      FunctionName: cyclotron-console-bff
+      Handler: decision_flywheel.cloud_entry.bff_handler
+      MemorySize: 1024
+      Role:
+        Fn::GetAtt:
+        - BffRole
+        - Arn
+      Runtime: python3.13
+      Timeout: 28
+      Environment:
+        Variables:
+          CYCLOTRON_ISSUER:
+            Ref: ConsoleIssuer
+          CYCLOTRON_CLIENT_ID:
+            Ref: ConsoleClientId
+          CYCLOTRON_AUTHORIZATION_ORIGIN:
+            Ref: ConsoleAuthorizationOrigin
+          CYCLOTRON_PUBLIC_ORIGIN: https://lab.cyclotron.anth.us
+          CYCLOTRON_ACCOUNT:
+            Ref: AWS::AccountId
+          CYCLOTRON_REGION:
+            Ref: AWS::Region
+          CYCLOTRON_BOOKS_BUCKET:
+            Ref: BooksBucket
+          CYCLOTRON_AUTH_BUCKET:
+            Ref: AuthBucket
+          CYCLOTRON_SESSION_KEY_ARN:
+            Fn::GetAtt:
+            - SessionEncryptionKey
+            - Arn
+          CYCLOTRON_QUEUE_URL:
+            Ref: CommandQueue
+          CYCLOTRON_CENTRAL_ENDPOINT: https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api
+          CYCLOTRON_ALLOW_LIVE:
+            Ref: AllowLive
+          CYCLOTRON_PUBLICATION_TARGETS:
+            Fn::If:
+            - HasTargets
+            - Ref: PublicationTargets
+            - Ref: AWS::NoValue
+          CYCLOTRON_MACHINE_PRINCIPALS:
+            Fn::If:
+            - HasMachineCaller
+            - Fn::Sub: '["arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-machine-invoker"]'
+            - Ref: AWS::NoValue
+          CYCLOTRON_PREDICTION_MODEL:
+            Ref: PredictionModel
+          CYCLOTRON_PREDICTION_MAX_REQUESTS:
+            Ref: PredictionMaxRequests
+          CYCLOTRON_LAB_VERIFIER_ROLE_ARN:
+            Fn::If:
+            - HasLabVerifier
+            - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier
+            - Ref: AWS::NoValue
+          CYCLOTRON_ACCOUNTS_API_URL:
+            Fn::If:
+            - HasLabVerifier
+            - https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api/
+            - Ref: AWS::NoValue
+      Tags:
+      - Key: lambda:createdBy
+        Value: SAM
+      - Key: Product
+        Value: cyclotron
+      - Key: FederationReview
+        Value:
+          Ref: FederationReviewId
+      - Key: ExecutionPairReview
+        Value:
+          Ref: ExecutionPairReviewId
+      Architectures:
+      - x86_64
+  BffFunctionRootPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: BffFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub:
+        - arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/*/
+        - __ApiId__:
+            Ref: ConsoleApi
+          __Stage__: '*'
+  BffFunctionMachinePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: BffFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub:
+        - arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/*/machine/*
+        - __ApiId__:
+            Ref: ConsoleApi
+          __Stage__: '*'
+  BffFunctionProxyPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: BffFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub:
+        - arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/*/*
+        - __ApiId__:
+            Ref: ConsoleApi
+          __Stage__: '*'
+  WorkerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: WorkerLogGroup
+    Properties:
+      Code:
+        S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
+        S3Key: cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9
+      FunctionName: cyclotron-console-worker
+      Handler: decision_flywheel.cloud_entry.worker_handler
+      MemorySize: 1024
+      Role:
+        Fn::GetAtt:
+        - WorkerRole
+        - Arn
+      Runtime: python3.13
+      Timeout: 180
+      Environment:
+        Variables:
+          CYCLOTRON_ISSUER:
+            Ref: ConsoleIssuer
+          CYCLOTRON_CLIENT_ID:
+            Ref: ConsoleClientId
+          CYCLOTRON_AUTHORIZATION_ORIGIN:
+            Ref: ConsoleAuthorizationOrigin
+          CYCLOTRON_PUBLIC_ORIGIN: https://lab.cyclotron.anth.us
+          CYCLOTRON_ACCOUNT:
+            Ref: AWS::AccountId
+          CYCLOTRON_REGION:
+            Ref: AWS::Region
+          CYCLOTRON_BOOKS_BUCKET:
+            Ref: BooksBucket
+          CYCLOTRON_AUTH_BUCKET:
+            Ref: AuthBucket
+          CYCLOTRON_SESSION_KEY_ARN:
+            Fn::GetAtt:
+            - SessionEncryptionKey
+            - Arn
+          CYCLOTRON_QUEUE_URL:
+            Ref: CommandQueue
+          CYCLOTRON_CENTRAL_ENDPOINT: https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api
+          CYCLOTRON_ALLOW_LIVE:
+            Ref: AllowLive
+          CYCLOTRON_PUBLICATION_TARGETS:
+            Fn::If:
+            - HasTargets
+            - Ref: PublicationTargets
+            - Ref: AWS::NoValue
+          CYCLOTRON_MACHINE_PRINCIPALS:
+            Fn::If:
+            - HasMachineCaller
+            - Fn::Sub: '["arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-machine-invoker"]'
+            - Ref: AWS::NoValue
+          CYCLOTRON_PREDICTION_MODEL:
+            Ref: PredictionModel
+          CYCLOTRON_PREDICTION_MAX_REQUESTS:
+            Ref: PredictionMaxRequests
+      Tags:
+      - Key: lambda:createdBy
+        Value: SAM
+      - Key: Product
+        Value: cyclotron
+      - Key: FederationReview
+        Value:
+          Ref: FederationReviewId
+      - Key: ExecutionPairReview
+        Value:
+          Ref: ExecutionPairReviewId
+      Architectures:
+      - x86_64
+  WorkerFunctionCommands:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      EventSourceArn:
+        Fn::GetAtt:
+        - CommandQueue
+        - Arn
+      FunctionName:
+        Ref: WorkerFunction
+      FunctionResponseTypes:
+      - ReportBatchItemFailures
+      ScalingConfig:
+        MaximumConcurrency: 2
+  ConsoleApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Body:
+        info:
+          version: '1.0'
+          title:
+            Ref: AWS::StackName
+        paths:
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BffFunction.Arn}/invocations
+                payloadFormatVersion: '2.0'
+              responses: {}
+              parameters:
+              - required: true
+                name: proxy+
+                in: path
+          /machine/{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BffFunction.Arn}/invocations
+                payloadFormatVersion: '2.0'
+              security:
+              - AWS_IAM: []
+              parameters:
+              - required: true
+                name: proxy+
+                in: path
+              responses: {}
+          /:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BffFunction.Arn}/invocations
+                payloadFormatVersion: '2.0'
+              responses: {}
+        openapi: 3.0.1
+        components:
+          securitySchemes:
+            AWS_IAM:
+              type: apiKey
+              name: Authorization
+              in: header
+              x-amazon-apigateway-authtype: awsSigv4
+        tags:
+        - name: httpapi:createdBy
+          x-amazon-apigateway-tag-value: SAM
+  ConsoleApiApiGatewayDefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+      ApiId:
+        Ref: ConsoleApi
+      StageName: $default
+      Tags:
+        httpapi:createdBy: SAM
+      AutoDeploy: true
+Conditions:
+  HasMachineCaller:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: MachineCallerRoleArn
+      - ''
+  HasTargets:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PublicationTargets
+      - ''
+  HasLabVerifier:
+    Fn::Equals:
+    - Ref: LabVerifierEnabled
+    - 'true'

@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-bdfc574f-2187-4107-b6da-1b4878270cba",
+  "title": "C4 Scoped file-only priming endpoint with auto-prime",
+  "description": "POST /api/newsroom/curation/priming {query,variables}->{data}, reusing web_api priming types on a publication-scoped PrimingService over S3ConsoleStorage; refuse other publications' list/classifiers/draft ids before any read; transform -> 'no hosted transformer'; idempotent accept; slice-1 size cap ~1 MB with clean failure; after accept the lab applies the examples (auto-prime) so suggestions use them.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "06b3f5d7-d9b6-43d7-be6b-11c1bb6302a5",
+      "author": "home",
+      "text": "POST /api/newsroom/curation/priming (GraphQL subset of the priming surface, introspection off, one operation). Publication-scoped PrimingService over S3ConsoleStorage: namespaced draft ids, one list and classifier set, foreign list/classifiers/draft id refused before storage reads, transform -> 400 no_hosted_transformer, ~1 MB import cap and journal budget -> 413 with nothing saved, accept idempotent. Auto-prime: accept then applies the examples via PublicationCommandRuntime priming branch (BearerActor, no model); spec accepting_applies_the_examples_so_the_next_decision_carries_them proves the next decision's model request carries the example. firewall_overlap refused before accept; auto_prime_failed retry heals.",
+      "created_at": "2026-10-21T03:33:31.252758Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-21T03:08:23.391922Z",
+  "updated_at": "2026-10-21T03:33:31.270564Z",
+  "closed_at": "2026-10-21T03:33:31.270538Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

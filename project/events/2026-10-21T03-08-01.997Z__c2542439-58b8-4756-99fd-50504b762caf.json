@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c2542439-58b8-4756-99fd-50504b762caf",
+  "issue_id": "decision-flywheel-ddcdc707-615c-46f1-8571-fc3740bbb716",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:01.997Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "C1 Bearer curation auth and scope",
+    "description": "test",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

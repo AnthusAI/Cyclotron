@@ -46,10 +46,22 @@
         "model": "GPT-6",
         "name": "monitoring-central"
       }
+    },
+    {
+      "id": "07ae74c2-019a-469e-9b3f-830292d4ed37",
+      "author": "home",
+      "text": "Standing publication runs, machine access and provider key wiring shipped (2026-10-21).\n\nSource: PR 69 merged to develop, PR 70 promoted to main, release v0.30.0 (main 002e6f2). CI green on both PRs.\n\nDeployed to the Cyclotron console stack (change set reviewed before execution; it contained only the two function code references, the new IAM-authorized machine route and its Lambda permission, the Secrets Manager read statement on the worker role, and two optional empty-by-default environment parameters). Both functions run the same artifact, which preserves every existing dependency and UI member and adds the pure-Python Jev SDK dependencies the deployed artifact lacked. Live prediction is still off. No target, run, principal or secret has been configured yet. Signed-out sign-in initiation and session health verified after the update; an unsigned machine request is rejected with 403 at the gateway.\n\nWhat exists: a standing target flag (operator configuration only) that registers streaming sources inside the fenced worker transaction, a trusted cumulative request ceiling with optional accruing daily allowance, SigV4 machine routes for decide, status and feedback bound to an exact allow-listed role, and a lazily read provider secret that fails closed before any state or request. Details in docs/hosted-publications.md.\n\nStill gated: creating the standing run, configuring the target and machine caller role, creating the provider secret, and enabling live prediction. No labels, training or provider calls were made.\n",
+      "created_at": "2026-10-21T01:42:59.126625Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "Sonnet 5.5",
+        "name": "Standing Run Delivery"
+      }
     }
   ],
   "created_at": "2026-10-20T04:40:12.800499Z",
-  "updated_at": "2026-10-20T05:01:55.755094Z",
+  "updated_at": "2026-10-21T01:42:59.126656Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

@@ -128,12 +128,12 @@ fallback that silently omits draft evidence.
 
 The original local GraphQL priming API is ported without changing auth/origin
 controls. Its local default service is lazy to avoid making unrelated console
-routes depend on optional file-format libraries. Hosted account mode rejects a
-global priming service and fails closed before constructing one or touching its
-catalog/transformer. An account-scoped priming host composition remains required
-before hosted priming activation. This is distinct from the shared repository
-conversion; no hosted priming, provider, publication UI or cloud storage authority
-has been activated. Owner worktrees and publication host/UI files are untouched.
+routes depend on optional file-format libraries. Hosted account mode still rejects a
+global priming service. Account-scoped hosted priming is now composed instead: the
+account's S3 console store is the priming storage, and the bearer curation routes add a
+publication-scoped view (see `s3-cloud-storage.md`, "Hosted priming"). This is distinct
+from the shared repository conversion. Owner worktrees and publication host/UI files are
+untouched.
 
 ## Focused verification
 

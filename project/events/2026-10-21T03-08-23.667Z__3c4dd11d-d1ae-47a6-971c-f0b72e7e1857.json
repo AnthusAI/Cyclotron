@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3c4dd11d-d1ae-47a6-971c-f0b72e7e1857",
+  "issue_id": "decision-flywheel-7a5b30b6-e479-4037-83e9-4205cf817504",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:23.667Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "C5 Shared priming storage contract test",
+    "description": "priming_storage_contract_test.py across memory, SQLite and S3 (fake client): atomic accept, rollback, latest-vote/retraction, draft size limit, stale revision.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "8e4bc11e-e126-41c2-98fb-73d4b5280e05",
+  "issue_id": "decision-flywheel-78fe8ddf-e557-472e-8e15-ddbf982fe1c9",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-21T01:42:59.164Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "717d3fde-b62f-4340-9200-e8063bdf1251",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude_code",
+      "model": "Sonnet 5.5",
+      "name": "Standing Run Delivery"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c5cc47c9-8727-4ca8-8940-742b9e759de6",
+  "issue_id": "decision-flywheel-bfaba2bd-0b37-4c48-a5e5-b0f5db856f59",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:41:58.142Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "I5 Lab verifier role for curation auth",
+    "description": "Create cyclotron-lab-verifier IAM role in infra/lab/template.yaml (trust: BFF role only; invoke only GET /v1/identities/me and POST /v1/accounts/*/authorize on central accounts API), BFF sts:AssumeRole, disabled-by-default env config, pending-change check for template vs snapshot, and route curation auth (prospectus_bearer_authority) through an AccountsClient signing with assumed verifier credentials. Contract: AnthusAI/Prospectus#72. Fails closed with 503 authority_unavailable when unset. No AWS writes.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

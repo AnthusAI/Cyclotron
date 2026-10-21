@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5e8bc839-1d20-453a-8c2f-1df89a2e38fe",
+  "issue_id": "decision-flywheel-0b15db23-e59f-43e6-9d90-cdfbaba029f4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:24.228Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "I1 Commit the deployed lab stack template as source",
+    "description": "The cyclotron-console stack (SAM) has no template in any repo. Reconstruct it from the deployed template (read-only get-template) into infra/ with a deploy runbook; no AWS writes; must match the deployed template.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

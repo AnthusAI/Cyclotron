@@ -1,0 +1,31 @@
+{
+  "id": "decision-flywheel-bfaba2bd-0b37-4c48-a5e5-b0f5db856f59",
+  "title": "I5 Lab verifier role for curation auth",
+  "description": "Create cyclotron-lab-verifier IAM role in infra/lab/template.yaml (trust: BFF role only; invoke only GET /v1/identities/me and POST /v1/accounts/*/authorize on central accounts API), BFF sts:AssumeRole, disabled-by-default env config, pending-change check for template vs snapshot, and route curation auth (prospectus_bearer_authority) through an AccountsClient signing with assumed verifier credentials. Contract: AnthusAI/Prospectus#72. Fails closed with 503 authority_unavailable when unset. No AWS writes.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "538b8912-56aa-47d0-b77b-01c19aa3b517",
+      "author": "home",
+      "text": "Evidence: make check PYTHON=$PWD/.venv/bin/python exit 0 (      Tests  269 passed (269)). Template == snapshot + 6 reviewed pending add-ops (check_lab_template.sh MATCH). New specs: src/decision_flywheel/lab_verifier_test.py (fake STS + fake HTTP: assumed-credential signing, human token header, 401/403/503 mapping, cache/renewal, fail-closed on unset config), hosted_curation_routes_test.py (503 when unset, end-to-end via verifier), tests/test_lab_template.py (pending-change set, role/trust/policy). No AWS writes; read-only iam get-role confirmed BFF role ARN and that cyclotron-lab-verifier does not exist yet.",
+      "created_at": "2026-10-21T03:52:33.380240Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-21T03:41:58.142840Z",
+  "updated_at": "2026-10-21T03:52:33.380259Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

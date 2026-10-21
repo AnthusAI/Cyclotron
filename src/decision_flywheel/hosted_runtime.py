@@ -44,6 +44,8 @@ class HostedConfig:
     max_bytes:int=4194304
     max_records:int=10000
     max_commits:int=1000000
+    lab_verifier_role_arn:str=''
+    accounts_api_url:str=''
 
     def __post_init__(self):
         OAuthConfig(self.issuer,self.client_id,self.authorization_origin,self.public_origin,allow_insecure_loopback=self.allow_insecure_loopback)
@@ -63,16 +65,25 @@ class HostedConfig:
         if enabled not in ('true', 'false'):
             raise ValueError('CYCLOTRON_ALLOW_LIVE must be explicitly true or false')
         values['allow_live'] = enabled == 'true'
+        # Optional: both empty leaves the curation routes failing closed (503 authority_unavailable).
+        values['lab_verifier_role_arn'] = environment.get('CYCLOTRON_LAB_VERIFIER_ROLE_ARN', '')
+        values['accounts_api_url'] = environment.get('CYCLOTRON_ACCOUNTS_API_URL', '')
         return cls(**values)
 
 
 class HostedRuntime:
-    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=()):
+    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=(),curation_authority=None,sts=None,verifier_client=None):
         self.config,self.s3=config,s3
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
         self.publication_targets = publication_targets
+        # (token, account, console operation) authority for the curation routes. An injected one wins; otherwise the
+        # lab verifier role (assumed, cached, SigV4-signed) when its ARN and the accounts URL are set; otherwise
+        # fail closed. sts and verifier_client are fakes for specs.
+        from .lab_verifier import lab_verifier_authority
+        self.curation_authority = curation_authority or lab_verifier_authority(
+            config.lab_verifier_role_arn, config.accounts_api_url, config.region, sts=sts, client=verifier_client)
         from .machine_access import ROLE_ARN
         self.machine_principals = tuple(machine_principals)
         if any(not isinstance(p, str) or not ROLE_ARN.fullmatch(p) for p in self.machine_principals) or len(set(self.machine_principals)) != len(self.machine_principals):
@@ -137,6 +148,8 @@ class HostedRuntime:
             install_publication_routes(app, self)
             from .hosted_machine_publications import install_machine_routes
             install_machine_routes(app, self)
+            from .hosted_curation_routes import install_curation_routes
+            install_curation_routes(app, self)
         return app
     def _runtime(self,account_id,view,guard,check):
         owned={}

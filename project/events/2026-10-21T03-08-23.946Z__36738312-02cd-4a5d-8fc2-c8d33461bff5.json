@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "36738312-02cd-4a5d-8fc2-c8d33461bff5",
+  "issue_id": "decision-flywheel-d57661cf-19f4-4c82-a7b2-416bf5c26fb8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-21T03:08:23.946Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "C7 Curation docs",
+    "description": "Update publication-deployment-contract.md, s3-cloud-storage.md, the stale 'fails closed' wording, and add a curation section to docs/embedding.md.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

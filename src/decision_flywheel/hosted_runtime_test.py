@@ -47,6 +47,15 @@ def test_cloud_config_fails_closed_without_region_or_central_endpoint():
     with pytest.raises(ValueError):HostedConfig.from_environment(insecure)
 
 
+def test_verifier_configuration_is_optional_and_read_from_the_environment():
+    from .hosted_runtime import HostedConfig
+    unset=HostedConfig.from_environment(complete_environment())
+    assert (unset.lab_verifier_role_arn,unset.accounts_api_url)==('','')
+    environment=complete_environment()|{'CYCLOTRON_LAB_VERIFIER_ROLE_ARN':'arn:aws:iam::111111111111:role/cyclotron-lab-verifier','CYCLOTRON_ACCOUNTS_API_URL':'https://central.example.test/api/'}
+    configured=HostedConfig.from_environment(environment)
+    assert configured.lab_verifier_role_arn.endswith(':role/cyclotron-lab-verifier') and configured.accounts_api_url=='https://central.example.test/api/'
+
+
 def test_central_transport_is_signed_for_the_configured_region(identity,monkeypatch):
     from .hosted_runtime import HostedConfig,HostedRuntime
     verifier,token=identity
