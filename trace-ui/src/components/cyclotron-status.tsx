@@ -47,10 +47,11 @@ function changeText(status:CyclotronStatus){
   if(!change)return null
   const when=day(change.at)
   const suffix=when?` · ${when}`:''
-  if(change.kind==='promoted')return `Improved: ${change.summary}${suffix}`
+  const summary=change.plainSummary??change.summary
+  if(change.kind==='promoted')return `Improved: ${summary}${suffix}`
   if(change.kind==='refit')return `Learned from ${change.labels??'new'} reviews${suffix}`
-  if(change.kind==='dropped')return `Tried a change and kept the current approach: ${change.summary}${suffix}`
-  return `Changed: ${change.summary}${suffix}`
+  if(change.kind==='dropped')return `Tried a change and kept the current approach: ${summary}${suffix}`
+  return `Changed: ${summary}${suffix}`
 }
 
 function Metric({name,value,definition,testId}:{name:string;value:number|null;definition:string;testId:string}){
@@ -105,9 +106,9 @@ export function CyclotronStatusView({status,variant='strip',onOverride,classifie
     </section>
     <section className="cyclotron-status-section" aria-label="Review rate" data-review-state={rate.state}>
       <h4><span aria-hidden="true">{state.mark} </span>{state.word}: {rateText(status).toLowerCase()}</h4>
-      <p>{rate.reason}</p>
+      <p>{rate.plainReason??rate.reason}</p>
       {override?<p className="cyclotron-status-override">Manual rate {percent(override.rate)} set by {override.setBy}{override.expiresAt?` until ${day(override.expiresAt)}`:', no expiry'}.</p>:null}
-      {rate.nextStep?<p className="cyclotron-status-note">Next: {rate.nextStep}</p>:null}
+      {(rate.plainNextStep??rate.nextStep)?<p className="cyclotron-status-note">Next: {rate.plainNextStep??rate.nextStep}</p>:null}
       {rate.expectedReviewsPerWeek!=null?<p className="cyclotron-status-note">About {Math.round(rate.expectedReviewsPerWeek)} reviews a week at this rate.</p>:null}
       {onOverride?<button type="button" className="cyclotron-review-secondary" onClick={onOverride}>Change review rate</button>:null}
     </section>
