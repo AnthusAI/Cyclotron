@@ -831,7 +831,16 @@ class S3ConsoleStorage:
     def command(self, run_id, request_id, kind, payload):
         identifier = str(uuid4())
         raw = encoded(payload)
-        if not request_id or kind not in ("prepare", "label", "correct", "skip", "undo", "optimize", "replay-next"):
+        if not request_id or kind not in (
+            "prepare",
+            "label",
+            "correct",
+            "skip",
+            "undo",
+            "optimize",
+            "replay-next",
+            "publication",
+        ):
             raise ValueError("only live runs accept supported labeling commands")
 
         def apply(value):

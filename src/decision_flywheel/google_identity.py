@@ -13,6 +13,15 @@ class GoogleChallenge:
     challenge_id: str
     nonce: str = field(repr=False)
     expires_at: int
+    challenge_token: str | None = field(default=None, repr=False)
+
+
+def valid_challenge_token(value):
+    # Opaque central evidence: validate only the bounded transport shape here.
+    # The existing central signer remains the sole MAC/payload authority.
+    return isinstance(value, str) and bool(
+        re.fullmatch(r"v1\.[a-z0-9]{1,16}\.[A-Za-z0-9_-]{1,1500}\.[A-Za-z0-9_-]{1,100}", value)
+    )
 
 
 def uuid4_string(value):
@@ -45,7 +54,10 @@ class GoogleIdentityClient:
             or not self.clock() < expiry <= self.clock() + 300
         ):
             raise ProspectusUnavailable("invalid identity challenge")
-        return GoogleChallenge(result["challengeId"], nonce, expiry)
+        signed = result.get("challengeToken")
+        if "challengeToken" in result and not valid_challenge_token(signed):
+            raise ProspectusUnavailable("invalid signed identity challenge")
+        return GoogleChallenge(result["challengeId"], nonce, expiry, signed)
 
     @staticmethod
     def _person(result, *, optional=False):
@@ -61,12 +73,13 @@ class GoogleIdentityClient:
             raise ProspectusUnavailable("invalid identity service response")
         return {"id": person["id"], "createdAt": person["createdAt"]}
 
-    def resolve(self, access_token, id_token, challenge_id):
+    def resolve(self, access_token, id_token, challenge_id, *, challenge_token=None):
         if not uuid4_string(challenge_id):
             raise ValueError("identity resolution requires a challenge UUIDv4")
-        result = self.transport(
-            "POST", "/v1/identities/google/resolve", access_token, {"challengeId": challenge_id}, identity_token=id_token
-        )
+        if challenge_token is not None and not valid_challenge_token(challenge_token):
+            raise ValueError("invalid signed identity challenge")
+        body = {"challengeToken": challenge_token} if challenge_token is not None else {"challengeId": challenge_id}
+        result = self.transport("POST", "/v1/identities/google/resolve", access_token, body, identity_token=id_token)
         return self._person(result)
 
     def me(self, access_token):
