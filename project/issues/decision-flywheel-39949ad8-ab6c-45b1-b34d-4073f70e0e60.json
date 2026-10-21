@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-39949ad8-ab6c-45b1-b34d-4073f70e0e60",
+  "title": "A failed shared request must end the job with a receipt, not wedge the run",
+  "description": "Found via the worker diagnostic line: reserve raised RuntimeError(explicit retry required) for an item whose earlier attempt left a failed shared batch, which escaped as an unrecorded exception and left the claimed job running (run_busy for everything after). Map it to a recorded source_refused refusal (pre-dispatch, safe). Post-dispatch failures stay fail-closed.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-21T18:46:09.441112Z",
+  "updated_at": "2026-10-21T18:46:09.486767Z",
+  "closed_at": "2026-10-21T18:46:09.486729Z",
+  "agent": {
+    "platform": "claude-code",
+    "model": "claude-sonnet-5-5",
+    "name": "Sonnet monitoring agent"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

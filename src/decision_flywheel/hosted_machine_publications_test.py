@@ -421,3 +421,50 @@ def test_standing_targets_require_explicit_trusted_ceilings_and_others_forbid_th
 
 def test_refusals_are_public_codes_only():
     assert CommandRefused("x", "y").code == "x"
+
+
+def test_an_item_whose_earlier_attempt_failed_is_refused_with_a_receipt_instead_of_wedging_the_run(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    run_id = targets[0].run_id
+    real = model.classify_many
+    state = {"fail": True}
+
+    async def flaky(*args, **kwargs):
+        if state["fail"]:
+            raise RuntimeError("synthetic provider failure after dispatch")
+        return await real(*args, **kwargs)
+
+    model.classify_many = flaky
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            first = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "binding-one", "item": new_item("hn-1")}, "req-first-0001"),
+            )
+            assert first.status_code == 202
+            # A failure after dispatch stays fail-closed: the claimed job is left running for an operator.
+            with pytest.raises(RuntimeError):
+                await worker.worker().process(sent.pop(0))
+            state["fail"] = False
+            stuck = next(j for j in store.jobs(run_id) if j["status"] == "running")
+            claim = store.command_recovery(stuck["id"])
+            store.reconcile_command(
+                stuck["id"],
+                owner=claim["owner"],
+                fence=claim["fence"],
+                status="failed",
+                reason="synthetic failure, no prediction",
+                operator="test",
+                apply=True,
+            )
+            # The same item again hits the failed shared request: a recorded refusal, not a running job.
+            job, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 409 and receipt.json()["code"] == "source_refused"
+            assert "operator retry" in receipt.json()["message"]
+            assert not any(j["status"] == "running" for j in store.jobs(run_id))
+            # The run is free: another item is decided normally.
+            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
+            assert receipt.status_code == 200
+
+    asyncio.run(go())
