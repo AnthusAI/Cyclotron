@@ -255,7 +255,7 @@ def test_another_tabs_selection_cannot_redirect_an_older_workspaces_writes(hoste
         assert [run["name"] for run in beta.runs()] == ["Beta only"]
 
 
-def google_mode(gateway, state):
+def google_mode(gateway, state, *, signed=False):
     import time
 
     from .google_identity import GoogleIdentityClient
@@ -267,13 +267,32 @@ def google_mode(gateway, state):
     def transport(method, path, access=None, body=None, *, identity_token=None):
         calls.append((method, path, access, body, identity_token))
         if path.endswith("/challenge"):
-            return {"challengeId": challenge_id, "nonce": "central-nonce-" + "n" * 32, "expiresAt": int(time.time()) + 300}
+            return {
+                "challengeId": challenge_id,
+                "nonce": "central-nonce-" + "n" * 32,
+                "expiresAt": int(time.time()) + 300,
+                **({"challengeToken": "v1.synthetic.c3ludGhldGlj.bWFj"} if signed else {}),
+            }
         if path.endswith("/resolve"):
+            if signed:
+                assert body == {"challengeToken": "v1.synthetic.c3ludGhldGlj.bWFj"}
             state["person"] = person
         return {"person": person}
 
     gateway.google_identity = GoogleIdentityClient(transport)
     return calls, person, challenge_id
+
+
+def test_signed_central_challenge_completes_existing_callback_without_exposing_opaque_evidence(hosted):
+    client, gateway, state, _ = hosted
+    calls, person, _ = google_mode(gateway, state, signed=True)
+    with client:
+        query, callback = sign_in(client, state)
+        assert callback.status_code == 303
+        assert calls[1][3] == {"challengeToken": "v1.synthetic.c3ludGhldGlj.bWFj"}
+        assert "v1.synthetic.c3ludGhldGlj.bWFj" not in str(query) + str(callback.headers) + callback.text
+        session = gateway.sessions.get(client.cookies.get(gateway.config.cookie_name))
+        assert session.person_id == person["id"] and not hasattr(session, "challenge_token")
 
 
 def test_google_challenge_precedes_redirect_and_callback_forwards_both_proofs_only_server_side(hosted):
@@ -290,7 +309,7 @@ def test_google_challenge_precedes_redirect_and_callback_forwards_both_proofs_on
         assert gateway.verifier._verify(calls[1][4], "id")["nonce"] == query["nonce"][0]
         result = client.get("/api/session")
         assert result.json()["personId"] == person["id"]
-        assert calls[-1][1] == "/v1/identities/me" and calls[-1][4] is None
+        assert not any(call[1] == "/v1/identities/me" for call in calls)
         assert calls[1][2] not in result.text + str(callback.headers)
         assert calls[1][4] not in result.text + str(callback.headers)
         session = gateway.sessions.get(client.cookies.get(gateway.config.cookie_name))
@@ -314,12 +333,14 @@ def test_google_callback_rejects_bad_independent_id_evidence_before_central_enro
         assert not client.cookies.get(gateway.config.cookie_name)
 
 
-def test_google_me_cannot_silently_change_person_or_enroll_a_missing_alias(hosted):
+def test_account_listing_checks_person_without_me_and_workspace_still_checks_me(hosted):
     client, gateway, state, _ = hosted
     calls, person, _ = google_mode(gateway, state)
     with client:
         sign_in(client, state)
         gateway.google_identity.me = lambda _: {"id": str(uuid4()), "createdAt": person["createdAt"]}
+        assert client.get("/api/session").json()["authenticated"] is True
+        assert client.get("/api/runs/unknown/events").status_code == 401
         assert client.get("/api/session").json()["authenticated"] is False
         assert sum(call[1].endswith("/resolve") for call in calls) == 1
 
@@ -350,7 +371,7 @@ def test_identity_outage_never_falls_back_to_existing_local_session_or_workspace
     with client:
         sign_in(client, state)
         gateway.google_identity.me = unavailable
-        assert client.get("/api/session").status_code == 503
+        assert client.get("/api/session").status_code == 200
         response = client.post("/graphql", params={"account": account_id}, json={"query": "{runs{name}}"})
         assert response.status_code == 503
         assert "Private account run" not in response.text
@@ -436,3 +457,308 @@ def test_http_event_page_outage_returns_no_private_events_and_enforces_response_
         gateway.accounts.authorize = outage
         result = client.get(url, params={"account": account_id})
         assert result.status_code == 503 and "events" not in result.json()
+
+
+def test_selected_session_lists_and_checks_both_permissions_concurrently(hosted):
+    from threading import Barrier
+
+    client, gateway, state, account_id = hosted
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": str(client.base_url).rstrip("/"),
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Parallel account"}, headers=headers).status_code == 201
+        barrier = Barrier(3, timeout=2)
+        listing, authorize = gateway.accounts.accounts, gateway.accounts.authorize
+
+        def list_together(token):
+            barrier.wait()
+            return listing(token)
+
+        def authorize_together(*args):
+            barrier.wait()
+            return authorize(*args)
+
+        gateway.accounts.accounts = list_together
+        gateway.accounts.authorize = authorize_together
+        result = client.get("/api/session")
+        assert result.status_code == 200
+        assert result.json()["selectedAccountId"] == account_id
+        assert result.json()["canWrite"] is True
+
+
+def test_select_returns_fresh_session_state_without_requiring_another_listing_request(hosted):
+    client, _, state, account_id = hosted
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": str(client.base_url).rstrip("/"),
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Selected account"}, headers=headers).status_code == 201
+        result = client.post("/api/accounts/select", json={"accountId": account_id}, headers=headers)
+        assert result.status_code == 200
+        assert result.json()["authenticated"] is True
+        assert result.json()["selectedAccountId"] == account_id
+        assert result.json()["canWrite"] is True
+        assert result.json()["accounts"][0]["id"] == account_id
+
+
+@pytest.mark.parametrize("person_response", [None, {"id": "different-enrolled-person"}])
+def test_fresh_listing_null_or_changed_person_revokes_the_original_session(hosted, person_response):
+    client, gateway, state, _ = hosted
+    google_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        cookie = client.cookies.get(gateway.config.cookie_name)
+        state["person"] = person_response
+        result = client.get("/api/session")
+        assert result.status_code == 200 and result.json()["authenticated"] is False
+        assert gateway.sessions.get(cookie) is None
+
+
+def test_listing_outage_never_reuses_a_previous_success_or_calls_me_as_fallback(hosted):
+    client, gateway, state, _ = hosted
+    calls, _, _ = google_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        assert client.get("/api/session").json()["authenticated"] is True
+
+        def unavailable(*_):
+            raise ProspectusUnavailable("listing unavailable")
+
+        gateway.accounts.accounts = unavailable
+        assert client.get("/api/session").status_code == 503
+        assert not any(call[1] == "/v1/identities/me" for call in calls)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        dict(auth_time=float("inf")),
+        dict(auth_time=True),
+        dict(auth_time=9999999999),
+        dict(origin_jti=""),
+        dict(origin_jti=None),
+        dict(origin_jti="x" * 257),
+    ],
+)
+def test_listing_optimization_rejects_malformed_or_future_session_binding_locally(hosted, identity, changes):
+    client, gateway, state, _ = hosted
+    _, person, _ = google_mode(gateway, state)
+    verifier, token = identity
+    with client:
+        encoded = token(**changes)
+        claims = verifier.access(encoded)
+        cookie, session = gateway.sessions.create(encoded, claims)
+        session.person_id = person["id"]
+        gateway.sessions.save(session)
+        client.cookies.set(gateway.config.cookie_name, cookie)
+        result = client.get("/api/session")
+        assert result.status_code == 200 and result.json()["authenticated"] is False
+        assert gateway.sessions.get(cookie) is None
+        assert not state["calls"]
+
+
+def test_select_revokes_changed_person_before_persisting_any_requested_account(hosted):
+    client, gateway, state, _ = hosted
+    google_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        cookie = client.cookies.get(gateway.config.cookie_name)
+        session = client.get("/api/session").json()
+        state["person"] = None
+        headers = {"Origin": "https://console.example.test", "X-CSRF-Token": session["csrfToken"]}
+        response = client.post("/api/accounts/select", json={"accountId": str(uuid4())}, headers=headers)
+        assert response.status_code == 401
+        assert gateway.sessions.get(cookie) is None
+        assert not any(call[0] == "POST" and call[1] == "/v1/accounts" for call in state["calls"])
+
+
+def test_account_phase_timings_never_include_session_proofs(hosted, capsys):
+    import json
+
+    client, gateway, state, _ = hosted
+    with client:
+        sign_in(client, state)
+        cookie = client.cookies.get(gateway.config.cookie_name)
+        token = gateway.sessions.get(cookie).access_token
+        capsys.readouterr()
+        response = client.get("/api/session")
+        assert response.status_code == 200
+        output = capsys.readouterr().out
+        entries = [json.loads(line) for line in output.splitlines()]
+        phases = {entry["phase"] for entry in entries if entry.get("event") == "console_phase"}
+        assert {"session_read", "token_verify"} <= phases
+        assert cookie not in output and token not in output and response.json()["csrfToken"] not in output
+
+
+def google_account_mode(gateway, state):
+    """Use one synthetic PersonDirectory for identity and membership fixtures."""
+    result = google_mode(gateway, state)
+    person = result[1]
+    transport = gateway.accounts.transport
+
+    def aligned(*args, **kwargs):
+        response = transport(*args, **kwargs)
+        state["person"] = person
+        if "person" in response:
+            response["person"] = person
+        if response.get("allowed"):
+            response["personId"] = person["id"]
+        return response
+
+    gateway.accounts.transport = aligned
+    return result
+
+
+def test_http_preflight_is_not_repeated_in_context_but_execution_rechecks_every_request(hosted):
+    client, gateway, state, account_id = hosted
+    _, person, _ = google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Boundary fixture"}, headers=headers).status_code == 201
+        lookups = []
+
+        def me(_):
+            lookups.append("fresh")
+            return person
+
+        gateway.google_identity.me = me
+        for expected in (2, 4):
+            result = client.post(
+                "/graphql",
+                params={"account": account_id},
+                json={"query": "{runs{name}}"},
+                headers={"x-cyclotron-preflight": "forged"},
+            )
+            assert result.json()["data"]["runs"][0]["name"] == "Private account run"
+            assert len(lookups) == expected
+
+
+@pytest.mark.parametrize("change", ["revoked", "outage", "membership"])
+def test_revocation_or_outage_between_http_preflight_and_execution_denies_before_store(hosted, change):
+    client, gateway, state, account_id = hosted
+    _, person, _ = google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Boundary fixture"}, headers=headers).status_code == 201
+        lookups = []
+
+        def me(_):
+            lookups.append("fresh")
+            if len(lookups) == 2:
+                if change == "revoked":
+                    return None
+                if change == "outage":
+                    raise ProspectusUnavailable("authority unavailable")
+                state["accounts"] = []
+            return person
+
+        gateway.google_identity.me = me
+        gateway.access.workspace_for_account = lambda _: pytest.fail("denied operation reached workspace state")
+        response = client.post("/graphql", params={"account": account_id}, json={"query": "{runs{name}}"})
+        assert response.status_code == 200 and response.json().get("errors")
+        assert response.json().get("data") is None
+        assert len(lookups) == 2
+
+
+def test_cross_origin_or_initial_preflight_failure_never_reaches_execution(hosted):
+    client, gateway, state, account_id = hosted
+    google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        gateway.google_identity.me = lambda _: pytest.fail("cross-origin request reached identity lookup")
+        result = client.post(
+            "/graphql",
+            params={"account": account_id},
+            json={"query": "{runs{name}}"},
+            headers={"Origin": "https://evil.example.test", "x-cyclotron-preflight": "forged"},
+        )
+        assert result.status_code == 403
+        gateway.access.workspace_for_account = lambda _: pytest.fail("failed preflight reached workspace")
+        gateway.google_identity.me = lambda _: None
+        assert (
+            client.post(
+                "/graphql",
+                params={"account": account_id},
+                json={"query": "{runs{name}}"},
+                headers={"x-cyclotron-preflight": "forged"},
+            ).status_code
+            == 401
+        )
+
+
+def test_websocket_context_authenticates_without_an_http_preflight_marker(hosted):
+    client, gateway, state, account_id = hosted
+    _, person, _ = google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Websocket fixture"}, headers=headers).status_code == 201
+        lookups = []
+        gateway.google_identity.me = lambda _: lookups.append("fresh") or person
+        with client.websocket_connect(
+            "wss://console.example.test/graphql?account=" + account_id, subprotocols=["graphql-transport-ws"]
+        ) as socket:
+            socket.send_json({"type": "connection_init"})
+            assert socket.receive_json()["type"] == "connection_ack"
+            socket.send_json({"id": "read", "type": "subscribe", "payload": {"query": "{runs{name}}"}})
+            message = socket.receive_json()
+            assert message["type"] == "next"
+            assert message["payload"]["data"]["runs"][0]["name"] == "Private account run"
+            assert len(lookups) == 2
+
+
+@pytest.mark.parametrize("marker", ["absent", "invalid"])
+def test_context_without_its_private_marker_performs_full_authentication(hosted, marker):
+    client, gateway, state, account_id = hosted
+    _, person, _ = google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Marker fixture"}, headers=headers).status_code == 201
+        original = client.app.router.middleware_stack
+
+        async def change_marker(scope, receive, send):
+            if scope.get("type") == "http" and scope.get("path") == "/graphql":
+                if marker == "absent":
+                    scope["state"].pop("_cyclotron_preflight", None)
+                else:
+                    scope["state"]["_cyclotron_preflight"] = object()
+            await original(scope, receive, send)
+
+        client.app.router.middleware_stack = change_marker
+        lookups = []
+        gateway.google_identity.me = lambda _: lookups.append("fresh") or person
+        result = client.post("/graphql", params={"account": account_id}, json={"query": "{runs{name}}"})
+        assert result.json()["data"]["runs"][0]["name"] == "Private account run"
+        assert len(lookups) == 3

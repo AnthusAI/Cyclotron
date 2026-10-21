@@ -17,6 +17,16 @@ def runtime():
         from .hosted_runtime import HostedConfig, HostedRuntime
 
         config = HostedConfig.from_environment(os.environ)
+        from .hosted_publications import targets_from_environment
+
+        targets = targets_from_environment(os.environ)
+        model_factory = None
+        if config.allow_live:
+            if targets is None:
+                raise ValueError("live cloud execution requires reviewed publication targets")
+            from .adapters.hosted_jev import HostedJevFactory
+
+            model_factory = HostedJevFactory.from_environment(os.environ)
         session = get_session()
         settings = Config(signature_version="s3v4", retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)
         s3 = session.create_client("s3", region_name=config.region, config=settings)
@@ -24,11 +34,13 @@ def runtime():
             "kms", region_name=config.region, config=Config(retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)
         )
         sqs = session.create_client("sqs", region_name=config.region)
-        _cached_runtime = HostedRuntime(config, s3=s3, kms=kms, sqs=sqs)
+        _cached_runtime = HostedRuntime(config, s3=s3, kms=kms, sqs=sqs, model_factory=model_factory, publication_targets=targets)
     return _cached_runtime
 
 
 def bff_handler(event, context):
+    from .prospectus_accounts import account_request_id
+
     global _cached_adapter
     if _cached_adapter is None:
         from mangum import Mangum
@@ -41,7 +53,11 @@ def bff_handler(event, context):
         loop = None
     if loop is None or loop.is_closed():
         asyncio.set_event_loop(asyncio.new_event_loop())
-    return _cached_adapter(event, context)
+    correlation = account_request_id.set(getattr(context, "aws_request_id", None))
+    try:
+        return _cached_adapter(event, context)
+    finally:
+        account_request_id.reset(correlation)
 
 
 def worker_handler(event, context):

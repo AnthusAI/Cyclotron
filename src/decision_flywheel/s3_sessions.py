@@ -147,6 +147,7 @@ class S3OAuthSessions:
                 secrets.token_urlsafe(32),
                 expiry,
                 challenge.challenge_id if challenge else None,
+                challenge.challenge_token if challenge else None,
             )
             self._new("pending", self.reference(pending.state), expiry, asdict(pending))
             return pending

@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 
 
@@ -66,3 +67,29 @@ def test_sqs_partial_failure_never_treats_delivery_body_as_authority(monkeypatch
     response = cloud_entry.worker_handler(event, SimpleNamespace())
     assert response == {"batchItemFailures": [{"itemIdentifier": "two"}, {"itemIdentifier": "three"}]}
     assert calls[0] == good
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"CYCLOTRON_ALLOW_LIVE": "yes"},
+        {"CYCLOTRON_ALLOW_LIVE": "true"},
+        {"CYCLOTRON_PUBLICATION_TARGETS": "[{}]"},
+    ],
+)
+def test_invalid_live_activation_fails_before_creating_cloud_clients(monkeypatch, extra):
+    import botocore.session
+
+    from . import cloud_entry
+    from .hosted_runtime_test import complete_environment
+
+    for key, value in (complete_environment() | extra).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", None)
+
+    def forbidden():
+        raise AssertionError("invalid activation created a cloud client")
+
+    monkeypatch.setattr(botocore.session, "get_session", forbidden)
+    with pytest.raises(ValueError):
+        cloud_entry.runtime()

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "3dd7da6e-8df0-4d99-9a1a-85a7033484fe",
+  "issue_id": "decision-flywheel-78fe8ddf-e557-472e-8e15-ddbf982fe1c9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:40:13.340Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Receive real publication predictions through the durable central command path",
+    "description": "As a publication operator, I want the central lab to classify shared discoveries through its guarded worker, so that publications reuse one multi-output request without bypassing original human authority.\n\nFeature: Hosted publication predictions\n  Scenario: Share one engine across publication outputs\n    Given a verified account session and configured run with four distinct publication outputs\n    And live execution and a bounded provider factory are explicitly configured\n    When the same frozen source revision is requested for each publication\n    Then durable authorized jobs execute the existing SDK over canonical S3 storage\n    And all publication projections share one native decision and one provider request\n    And no label seed or training operation occurs\n  Scenario: Preserve queue and scope boundaries\n    Given a queued publication request with original-session provenance\n    When membership identity run binding or publication binding changes before worker execution\n    Then no provider dispatch occurs\n    And an uncertain running claim is not automatically replayed\n  Scenario: Wait for a real prediction receipt\n    Given the host accepted a pending command\n    When the client waits for completion\n    Then it polls only a bounded same-origin receipt path\n    And pending timeout or failed delivery is not reported as a prediction\n  Scenario: Keep activation explicit\n    Given provider or publication deployment configuration is missing\n    When the service starts or an unauthorized publication is requested\n    Then it fails closed without new grants infrastructure or a local fallback\n",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-ef7af5fa-f2a4-4b50-bcc7-85a8ca900020",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "monitoring-central"
+    }
+  }
+}
