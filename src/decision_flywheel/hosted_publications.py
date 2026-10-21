@@ -6,7 +6,7 @@ configuration, not membership grants. The BFF never opens a model or engine.
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 from types import SimpleNamespace
 
@@ -105,9 +105,30 @@ def targets_from_environment(environment):
                 raise ValueError()
             bindings = []
             for row in target["bindings"]:
-                if set(row) != {"publicationId", "outputs", "revision"} or not isinstance(row["outputs"], list):
+                if (
+                    not isinstance(row, dict)
+                    or not {"publicationId", "outputs", "revision"} <= set(row)
+                    or set(row) - {"publicationId", "outputs", "revision", "priming"}
+                    or not isinstance(row["outputs"], list)
+                ):
                     raise ValueError()
-                bindings.append(PublicationBinding(row["publicationId"], tuple(row["outputs"]), row["revision"]))
+                priming = row.get("priming")
+                if "priming" in row and (
+                    not isinstance(priming, dict)
+                    or set(priming) != {"listId"}
+                    or not isinstance(priming["listId"], str)
+                    or not priming["listId"].strip()
+                    or len(priming["listId"]) > 200
+                ):
+                    raise ValueError()
+                bindings.append(
+                    PublicationBinding(
+                        row["publicationId"],
+                        tuple(row["outputs"]),
+                        row["revision"],
+                        priming["listId"] if priming else None,
+                    )
+                )
             result.append(
                 PublicationTarget(
                     target["accountId"],
@@ -206,6 +227,19 @@ def priming_snapshot(store, target, binding, config, list_id):
     return examples, fingerprint
 
 
+@dataclass(frozen=True)
+class BearerActor:
+    """A caller whose authority is a bearer credential re-verified on every check.
+
+    reauthorize is an async callable that raises when the account service no longer
+    allows console:write for this person. The credential itself is never stored here.
+    """
+
+    account_id: str
+    person_id: str
+    reauthorize: object = field(repr=False, compare=False)
+
+
 class _PrimingModel:
     def __init__(self, identity):
         self.model_identity = identity
@@ -294,6 +328,9 @@ class PublicationCommandRuntime:
             if machine:
                 # Authority is the trusted target configuration re-checked in check_scope; there is no
                 # human session or Prospectus membership behind a service principal.
+                return
+            if isinstance(self.actor, BearerActor):
+                await self.actor.reauthorize()
                 return
             original = await asyncio.to_thread(self.host.sessions.get_ref, self.actor.session_ref)
             if original is None:

@@ -48,10 +48,16 @@ class PublicationBinding:
     publication_id: str
     outputs: tuple[str, ...]
     revision: str
+    # Trusted configuration only: the accepted-example list this publication may prime from.
+    priming_list_id: str | None = None
 
     def __post_init__(self):
         text(self.publication_id, "publication identity")
         text(self.revision, "binding revision")
+        if self.priming_list_id is not None:
+            text(self.priming_list_id, "priming list identity")
+            if len(self.priming_list_id) > 200:
+                raise ValueError("priming list identity must be bounded")
         object.__setattr__(self, "outputs", tuple(self.outputs))
         if not self.outputs or len(set(self.outputs)) != len(self.outputs):
             raise ValueError("publication needs distinct output identities")

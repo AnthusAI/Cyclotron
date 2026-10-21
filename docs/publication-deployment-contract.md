@@ -271,6 +271,62 @@ approved runtime role.
 implementation of `verify_credential`: it resolves the forwarded person token to a person,
 authorizes `console:read` on the pinned account with the lab's runtime role, and returns the
 verified role. A refusal is `None`; an unavailable account service answers `503`.
+`prospectus_bearer_authority(accounts)` is the variant the curation routes use: it takes the
+needed console operation and distinguishes an unknown token (`401`) from a refused role (`403`).
+
+### Bearer curation routes (slice 1: file import)
+
+The deployed lab serves three routes for a calling site's reference import. They are the
+production upstream for Papyrus "Import a file"; the site's server forwards the signed-in
+editor's access token and three pins, and verifies that the lab echoes the same pins.
+
+| Route | Needs | Answers |
+| --- | --- | --- |
+| `GET /api/newsroom/curation/context` | `console:read` | `CurationBootstrap`: `scope`, `mode: "remote"`, `priming` (`{listId, classifiers, transformers: []}` or `null`), `capabilities`, `bindingRef: null` |
+| `POST /api/newsroom/curation/publication` | `status`: `console:read`; `decide`: `console:write` | `cyclotron-publication/v1` envelope for the pinned scope |
+| `POST /api/newsroom/curation/priming` | queries: `console:read`; mutations: `console:write` | GraphQL `{"data": ...}` for the priming fields only |
+
+Request headers: `Authorization: Bearer <token>`, `X-Cyclotron-Account`, `X-Papyrus-Publication`,
+and (POST) `X-Papyrus-Binding`. Every success echoes the three pins (binding is the configured
+binding revision) with `Cache-Control: no-store`. Errors are `{"error", "code"}`.
+
+Per request, in this order and failing closed: bearer present (`401 bearer_required`); pins
+present and the account a UUID (`400 pins_required`); JSON body at most 4 MB (`413`, `415`, `400`);
+the account service re-verifies the token for the needed operation through the injected
+`runtime.curation_authority(token, account, operation)` (unknown token `401 bearer_invalid`,
+no role, revoked or viewer write `403 access_refused`, service down `503 authority_unavailable`);
+the authorized account must equal the pinned account; `target_for(account, publication)` resolves
+the trusted binding (an unconfigured publication is the same `403 access_refused`, so nothing says
+whether it exists); a stale binding pin is `409 account_changed`. After the work the lab
+re-authorizes and withholds the answer if authority was lost. The default authority is
+`prospectus_site_credentials.prospectus_bearer_authority(accounts)`; the lab hard-codes no issuer.
+The account service must register the calling site's token issuer for the lab's runtime role
+before these routes can accept that site's tokens.
+
+`status` and `decide` follow the cookie-session publication rules: `status` returns the newest
+verified worker snapshot (or the pending-criteria metadata) and is `503 status_unavailable` before
+one exists; `decide` is `503 live_disabled` while live execution is off and `409` for a stale binding
+or pending criteria. A bearer caller has no stored original session for the queue worker, so an
+otherwise valid `decide` is refused `409 operation_unavailable` in slice 1. `review`, `steer`,
+`history`, `events` and `replay` are refused `409 operation_unavailable`; an unknown operation is
+`400`. `context` lists `read`, and `review` (the site's name for priming mutations) only when the
+caller holds `console:write` and the binding has priming.
+
+Priming is configured per binding in the trusted `CYCLOTRON_PUBLICATION_TARGETS`:
+`"priming": {"listId": "<accepted-example list>"}` (exactly that key; a binding without it, or a
+target without `modelIdentity`, has `priming: null`). Priming runs on the account's
+`S3ConsoleStorage` through a publication-scoped view (`s3-cloud-storage.md`, "Hosted priming").
+There is no hosted transformer: a `transform` command is `400 no_hosted_transformer`.
+A different list, classifier set or draft identity is `403 outside_publication`, refused before
+storage is read; a file over about 1 MB (or the catalog journal budget) is `413` with nothing saved.
+
+Accepting is also applying. After `accept` commits the human-labelled examples, the same request
+opens the shared cyclotron's priming context with no model and no optimizer (the existing
+`PublicationCommandRuntime` priming branch, fenced by a fresh `console:write` check) and adds the
+accepted examples, so the next decision for the publication uses them; no separate client call is
+needed. An example whose id is also an item the publication decides is refused before anything is
+accepted (`409 firewall_overlap`). If applying fails after acceptance, the answer is
+`409 auto_prime_failed`; repeating the same `accept` is idempotent and completes it.
 
 The Papyrus BFF must obtain its verified selection from its trusted account host,
 resolve fresh publication capabilities and forward the pin. No console role is

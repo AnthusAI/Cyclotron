@@ -565,6 +565,46 @@ mode, thumbs up is `positiveLabel`. `CyclotronStatusView` renders a status
 snapshot as a header strip or a card; `onOverride` adds a "Change review
 rate" button that opens the application's own form.
 
+## Hosted curation routes
+
+An application whose server calls the central lab, rather than embedding the engine, imports
+accepted examples through three bearer-authenticated routes. The application's server forwards
+the signed-in person's access token and the pins `X-Cyclotron-Account`, `X-Papyrus-Publication`
+and `X-Papyrus-Binding`; it must check that the lab echoes the same pins.
+
+```
+GET /api/newsroom/curation/context
+-> {"scope": {"accountId": "...", "publicationId": "alpha", "bindingRevision": "r1"},
+    "mode": "remote",
+    "priming": {"listId": "accepted", "classifiers": [{"id": "alpha", "revision": 1}], "transformers": []},
+    "capabilities": ["read", "review"], "bindingRef": null}
+
+POST /api/newsroom/curation/priming
+{"query": "mutation($action:String!,$payload:JSON!){primingCommand(action:$action,payload:$payload)}",
+ "variables": {"action": "file", "payload": {"identifier": "d1", "list_id": "accepted",
+   "refs": [{"id": "alpha", "revision": 1}], "kind": "json", "content": "<base64 rows>"}}}
+-> {"data": {"primingCommand": {"id": "d1", "status": "preview", "version": 1, "rows": [...], ...}}}
+
+POST /api/newsroom/curation/priming   (action "accept", payload {"identifier", "version", "labels"})
+-> {"data": {"primingCommand": {"id": "d1", "status": "accepted",
+     "autoPrime": {"added": {"alpha": ["row-1"]}, "primedExamples": {"alpha": 1}, ...}}}}
+
+POST /api/newsroom/curation/publication   {"operation": "status", "payload": {}}
+-> the cyclotron-publication/v1 status snapshot for the pinned scope
+```
+
+Reading the context, the priming queries (`primingContract`, `primingTemplate`, `primingDraft`)
+and `status` need the `console:read` role; accepting or importing needs `console:write`.
+The lab re-verifies the token with the account service on every request and again after the
+work. The `priming` object is `null` when the binding has no configured list. Slice 1 is file
+import only: there is no hosted transformer, so `transform` answers `400 no_hosted_transformer`.
+Draft names are private to the publication, an import is limited to about 1 MB, and accepting
+is idempotent and applies the examples to the publication's cyclotron so the next decision
+uses them. Refusals use stable codes (`bearer_required`, `bearer_invalid`, `access_refused`,
+`authority_unavailable`, `account_changed`, `outside_publication`, `import_too_large`,
+`storage_limit`, `firewall_overlap`, `auto_prime_failed`, `operation_unavailable`).
+See `publication-deployment-contract.md` for the full contract.
+
 ## Operational notes
 
 - **Batched decision model.** The model needs `classify_many`.

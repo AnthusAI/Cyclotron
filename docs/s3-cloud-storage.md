@@ -101,8 +101,8 @@ reconciliation; no unsupported multi-object transaction is claimed. Provider
 exactly-once execution is not claimed. Optimizer transport paid-call reservation,
 cloud console catalog/definition/run/command repositories, reviewer/evaluation
 compositions, durable OAuth sessions, worker lifecycle/queue binding, portable
-cross-backend migration and account-scoped priming composition remain release
-work. An S3-only SDK proof does not make the hosted console cloud-ready.
+cross-backend migration remain release work. Account-scoped priming is composed
+(see "Hosted priming" below). An S3-only SDK proof does not make the hosted console cloud-ready.
 
 No cloud resources, policies, OAuth clients, provider calls, public push or
 hosting deployment were changed by these synthetic checks.
@@ -159,10 +159,36 @@ SQLite and directory creation blocked. An actual hosted-mode GraphQL app with
 synthetic verified sessions and central authorization switches two scoped S3
 workspaces; logged-out, revoked, unknown-account and viewer-write requests are
 denied before any S3 data access. This is not real Google/Cognito/IAM/browser or
-deployment proof. Hosted priming still fails closed pending scoped composition.
+deployment proof. Hosted priming was composed afterwards (see "Hosted priming").
 Comparison command lifecycle, optimizer reservation, remaining auxiliary stores,
 reviewed recovery, durable sessions, deployment and actual cloud verification
 remain. No persistent IAM/S3 policy changes or hosted SQLite fallback occurred.
+
+## Hosted priming
+
+Priming runs on the account's `S3ConsoleStorage`, which is both the catalog and the
+`PrimingStorage`: `transaction()` yields the store itself, so a draft write, the imported
+item revisions and their human votes commit in one conditional write of the catalog journal.
+`HostedRuntime.workspace()` composes `PrimingService(store, storage=store)` with a client
+that refuses any transformer call, so hosted priming is file import only. There is no SQLite
+fallback.
+
+The bearer curation routes (`/api/newsroom/curation/priming`, see
+`publication-deployment-contract.md`) wrap that storage in a publication-scoped view:
+
+- draft identities are stored under `pub-<32 hex>:`, a digest of account and publication, so
+  two publications never share or collide on a draft name; an identity that already looks
+  namespaced is refused before storage is opened;
+- the view exposes one configured list (`priming.listId` in the trusted publication target)
+  and only the binding's classifier revisions; any other list, classifier or draft id is
+  refused before a storage read;
+- slice 1 caps one import at about 1 MB. Drafts, accepted items and votes share the account's
+  single catalog journal (4 MiB by default, `max_records` 10000), so a large import can also be
+  refused by the journal budget. Both refusals leave the catalog unchanged (`413`).
+
+`accept` is idempotent: repeating the same acceptance returns the accepted draft and inserts
+nothing; a different acceptance of the same draft is refused. The same behaviours run on
+memory, SQLite and S3 in `priming_storage_contract_test.py`.
 
 ## Evaluation, reviewer and optimizer adapters
 

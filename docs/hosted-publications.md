@@ -72,7 +72,7 @@ remains Papyrus's responsibility.
 
 ## Accepted human priming without provider execution
 
-The existing account-scoped GraphQL `primingCommand(file)` and `primingCommand(accept)` intake validates explicit human labels and optional reasons against selected classifier revisions. Both are pure data operations; acceptance alone does not apply examples to an engine. Unspecified labels stay outside that output's priming import. No prior prediction, synthetic decision or retrospective review is fabricated.
+The existing account-scoped GraphQL `primingCommand(file)` and `primingCommand(accept)` intake validates explicit human labels and optional reasons against selected classifier revisions. Both are pure data operations; on the console session path acceptance alone does not apply examples to an engine (the `prime` operation does). The bearer curation routes accept and then apply in one request (see `publication-deployment-contract.md`, "Bearer curation routes"). Unspecified labels stay outside that output's priming import. No prior prediction, synthetic decision or retrospective review is fabricated.
 
 After acceptance, an authenticated same-origin request may submit:
 

@@ -67,12 +67,14 @@ class HostedConfig:
 
 
 class HostedRuntime:
-    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=()):
+    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=(),curation_authority=None):
         self.config,self.s3=config,s3
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
         self.publication_targets = publication_targets
+        # Optional injected (token, account, console operation) authority for the curation routes; default is Prospectus.
+        self.curation_authority = curation_authority
         from .machine_access import ROLE_ARN
         self.machine_principals = tuple(machine_principals)
         if any(not isinstance(p, str) or not ROLE_ARN.fullmatch(p) for p in self.machine_principals) or len(set(self.machine_principals)) != len(self.machine_principals):
@@ -137,6 +139,8 @@ class HostedRuntime:
             install_publication_routes(app, self)
             from .hosted_machine_publications import install_machine_routes
             install_machine_routes(app, self)
+            from .hosted_curation_routes import install_curation_routes
+            install_curation_routes(app, self)
         return app
     def _runtime(self,account_id,view,guard,check):
         owned={}
