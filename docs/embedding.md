@@ -97,7 +97,7 @@ primed.close()
 The first decision request already carries them as training context. They
 are never decisions, reviews or measured alignment, and an item used to prime
 cannot also be decided. `status().to_json()["cyclotron"]["primedExamples"]`
-says how many there are, and the status widget shows "Primed with N examples".
+says how many there are, and the status widget shows "Started with N references" (the embedded components use plain editor-facing wording: references and suggestions, with no versions, calibration or onboarding).
 
 A running store takes more examples with `add_priming_examples`. Each output
 that gains examples appends them to its fixed example list as a new version,
@@ -315,6 +315,14 @@ print(status["reviewRate"]["state"], status["reviewRate"]["reason"])
 print(status["reviewRate"]["nextStep"])
 ```
 
+`reason`, `nextStep` and `lastChange.summary` are engine text: they name
+calibration gaps, versions and refits, and belong in operator and audit
+views. Editor-facing views show the plain companions instead,
+`reviewRate.plainReason`, `reviewRate.plainNextStep` and
+`lastChange.plainSummary`, which never use engine vocabulary. The embedded
+status card prefers them and falls back to the engine text only for a
+snapshot from an older engine.
+
 `status()` returns the `cyclotron-status/v1` snapshot
 ([schema](../src/decision_flywheel/schemas/cyclotron-status.v1.schema.json)).
 It makes no model call; store it where the application's interface can read
@@ -496,7 +504,7 @@ the framework compile it:
 
 ```json
 "dependencies": {
-  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.2/cyclotron-0.2.2.tgz"
+  "cyclotron": "https://github.com/AnthusAI/Cyclotron/releases/download/ui-v0.2.3/cyclotron-0.2.3.tgz"
 }
 ```
 
@@ -543,7 +551,7 @@ export function PendingItem({itemId,decision,onReview}:{itemId:string;decision:C
 export function CyclotronHeader({status,onOverride}:{status:CyclotronStatus;onOverride:()=>void}){
   return <>
     <CyclotronStatusView status={status} />
-    <details><summary>What the cyclotron is doing</summary>
+    <details><summary>How suggestions are doing</summary>
       <CyclotronStatusView status={status} variant="card" onOverride={onOverride} />
     </details>
   </>

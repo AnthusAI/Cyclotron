@@ -67,12 +67,16 @@ class HostedConfig:
 
 
 class HostedRuntime:
-    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None):
+    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=()):
         self.config,self.s3=config,s3
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
         self.publication_targets = publication_targets
+        from .machine_access import ROLE_ARN
+        self.machine_principals = tuple(machine_principals)
+        if any(not isinstance(p, str) or not ROLE_ARN.fullmatch(p) for p in self.machine_principals) or len(set(self.machine_principals)) != len(self.machine_principals):
+            raise ValueError('machine principals must be distinct exact IAM role ARNs')
         if publication_targets is not None:
             from .hosted_publications import configured_targets
             configured_targets(self)
@@ -81,7 +85,9 @@ class HostedRuntime:
         self.verifier=verifier or CognitoTokenVerifier(config.issuer,config.client_id)
         self.sessions=S3OAuthSessions(self.verifier,journal_for=self._auth_journal,
             cipher=cipher or KMSSessionCipher(kms,config.session_key_arn,application='cyclotron-console'))
-        self.authorization=QueuedAccountAuthorization(self.sessions,self.verifier,self.identities,self.accounts,self.binding)
+        from .machine_access import MachineAwareAuthorization
+        self.authorization=MachineAwareAuthorization(
+            QueuedAccountAuthorization(self.sessions,self.verifier,self.identities,self.accounts,self.binding),self._machine_check)
         if send is None:
             if sqs is None:raise ValueError('explicit queue client required')
             def send(message):return sqs.send_message(QueueUrl=config.queue_url,MessageBody=json.dumps(message,separators=(',',':')))
@@ -129,6 +135,8 @@ class HostedRuntime:
             from .hosted_publications import install_publication_routes, configured_targets
             configured_targets(self)
             install_publication_routes(app, self)
+            from .hosted_machine_publications import install_machine_routes
+            install_machine_routes(app, self)
         return app
     def _runtime(self,account_id,view,guard,check):
         owned={}
@@ -150,6 +158,17 @@ class HostedRuntime:
             return AuthorizedModel(provider,guarded),optimizer
         return CyclotronRuntime(view,None,model_factory=model,sink_factory=lambda rid:CommandEventSink(view,rid,check_owned),
             storage_factory=storage,execution_guard=guarded)
+    def _machine_check(self, actor):
+        """Blocking re-check of a queued machine actor against trusted configuration and the frozen run."""
+        from .machine_access import MachineDenied
+        from .hosted_publications import configured_targets
+        if self.publication_targets is None or actor.principal not in self.machine_principals:
+            raise MachineDenied('machine principal is not configured')
+        if not any(t.standing and t.account_id == actor.account_id and t.run_id == actor.run_id for t in configured_targets(self)):
+            raise MachineDenied('machine target is not a configured standing run')
+        if self.binding(actor.account_id, actor.run_id) != actor.binding:
+            raise MachineDenied('machine workspace binding changed')
+
     def _data_command(self, kind, payload):
         from .hosted_publications import is_priming_command
         return is_priming_command(kind, payload)

@@ -3,20 +3,33 @@
   "title": "Cyclotron-web: fixtures off the client bundle, preview routes guarded, per-page metadata",
   "description": "Repository: AnthusAI/Cyclotron-web. (1) components/recordings/registry.ts imports every recording's fixture.json (9.3 MB total) into the client bundle, so /how-it-works, /learn, /recordings and /story-preview each load over 1.2 MB of first-load JavaScript (a 9.6 MB chunk) against 249 kB for the home page. Derive chart series in server components and pass arrays to client components, or load one fixture per /recordings/[id] page. (2) 13 preview routes (app/*-preview/page.tsx, for example carousel-preview and widgets-preview) are in the production export with no robots.txt or sitemap, so they are reachable and indexable. Guard them to development (notFound() unless NODE_ENV is development) or add noindex metadata plus app/robots.ts and app/sitemap.ts. (3) app/how-it-works/page.tsx, app/services/page.tsx and app/editorial-evaluation/page.tsx export no metadata and inherit the root title; add per-page metadata. (4) components/SiteChrome.tsx:21 has no skip-to-content link; add a visually hidden one before the header targeting main. (5) Messaging: define 'a cyclotron' as a countable noun once in the hero (it is used in pricing without definition) and say what the monitor measures; the held-out before-and-after card is the evidence the site should eventually show, so leave a place for it on the how-it-works page.\nDone when: first-load JavaScript for the four routes is under 400 kB, preview routes are not in the production export or carry noindex, every page has its own title, npm run check passes. Review doc: https://claude.ai/code/artifact/dcd5a089-28f1-4a3f-9f2f-a293789709c0 (Cyclotron review, 2026-10-17).",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-e320c1ff-a4c4-49c3-8ab7-d42c2a4daa71",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "c982b358-1f4d-408a-9870-7113623b8cf2",
+      "author": "unknown",
+      "text": "Shipped in Cyclotron-web PR #131 (merged).",
+      "created_at": "2026-10-19T16:43:47.108051Z",
+      "comment_type": "default",
+      "data": {},
+      "agent": null
+    }
+  ],
   "created_at": "2026-10-17T16:37:27.986530Z",
-  "updated_at": "2026-10-17T16:37:27.986639Z",
-  "closed_at": null,
+  "updated_at": "2026-10-19T16:43:47.222982Z",
+  "closed_at": "2026-10-19T16:43:47.222860Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
-  "custom": {},
+  "custom": {
+    "source": "shared",
+    "project_label": "decision-flywheel"
+  },
   "agent": null,
   "agent_assignment": null
 }

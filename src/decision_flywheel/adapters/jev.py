@@ -66,19 +66,26 @@ class JevAdapter:
         return self.configuration.model_identity
 
     @classmethod
-    def from_environment(cls, *, configuration: JevConfiguration = JevConfiguration()) -> JevAdapter:
-        """Load a gitignored dotenv file, if installed, without exposing its values."""
-        try:
-            from dotenv import load_dotenv
-        except ImportError as error:  # pragma: no cover - optional dependency
-            raise ImportError("Install decision-flywheel[jev] to construct a Jev SDK client.") from error
+    def from_environment(cls, *, configuration: JevConfiguration = JevConfiguration(), api_key: str | None = None) -> JevAdapter:
+        """Build the SDK client from an explicit credential, else a gitignored dotenv file or the environment.
+
+        An explicit ``api_key`` is handed straight to the client: no dotenv load and no environment mutation.
+        """
         try:
             from typesafe_sdk import TypeSafeClient
             from typesafe_sdk._core.retry import RetryPolicy
         except ImportError as error:  # pragma: no cover - optional dependency
             raise ImportError("Install decision-flywheel[jev] to construct a Jev SDK client.") from error
-        load_dotenv(override=False)
+        if api_key is None:
+            try:
+                from dotenv import load_dotenv
+            except ImportError as error:  # pragma: no cover - optional dependency
+                raise ImportError("Install decision-flywheel[jev] to construct a Jev SDK client.") from error
+            load_dotenv(override=False)
+        elif not isinstance(api_key, str) or not api_key.strip():
+            raise ValueError("an explicit Jev credential must be non-empty text")
         client = TypeSafeClient(
+            api_key=api_key,
             model=configuration.model,
             base_url=configuration.base_url,
             timeout=configuration.timeout_seconds,

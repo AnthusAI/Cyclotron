@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "d8092ce6-f615-46d4-ae44-622377822b12",
+  "issue_id": "decision-flywheel-705e4a9e-3895-4f20-957f-6da4afb5c5b3",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-19T16:44:01.842Z",
+  "actor_id": "unknown",
+  "payload": {
+    "comment_id": "daa50953-bd3b-46c9-99d1-9eaba31a1f30",
+    "comment_author": "unknown",
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "handoff-status"
+    }
+  }
+}

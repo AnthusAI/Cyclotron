@@ -93,3 +93,65 @@ def test_invalid_live_activation_fails_before_creating_cloud_clients(monkeypatch
     monkeypatch.setattr(botocore.session, "get_session", forbidden)
     with pytest.raises(ValueError):
         cloud_entry.runtime()
+
+
+def test_live_runtime_wires_a_lazy_secret_reader_and_exact_machine_principals(monkeypatch):
+    import botocore.session
+
+    from . import cloud_entry
+    from .hosted_runtime_test import complete_environment
+
+    created = []
+
+    class Session:
+        def create_client(self, name, **kwargs):
+            created.append(name)
+            return SimpleNamespace(
+                get_secret_value=lambda **kw: created.append(kw) or {"SecretString": "synthetic-key-value-0001"}
+            )
+
+    role = "arn:aws:iam::222222222222:role/synthetic-invoker"
+    targets = [
+        {
+            "accountId": str(uuid4()),
+            "runId": str(uuid4()),
+            "standing": True,
+            "requestCeiling": {"total": 3},
+            "bindings": [{"publicationId": "alpha", "outputs": ["alpha"], "revision": "1"}],
+        }
+    ]
+    environment = complete_environment() | {
+        "CYCLOTRON_ALLOW_LIVE": "true",
+        "CYCLOTRON_PUBLICATION_TARGETS": json.dumps(targets),
+        "CYCLOTRON_PREDICTION_MODEL": "jev-1.13.0",
+        "CYCLOTRON_PREDICTION_MAX_REQUESTS": "100",
+        "CYCLOTRON_MACHINE_PRINCIPALS": json.dumps([role]),
+    }
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", None)
+    monkeypatch.setattr(botocore.session, "get_session", lambda: Session())
+    built = cloud_entry.runtime()
+    assert built.machine_principals == (role,) and built.publication_targets[0].standing
+    assert "secretsmanager" not in created, "the secret client must be built only at first provider use"
+    assert built.model_factory.key_source() == "synthetic-key-value-0001"
+    assert created[-2:] == ["secretsmanager", {"SecretId": "cyclotron/providers/openai"}]
+    assert "synthetic-key-value-0001" not in repr(built.model_factory)
+
+
+def test_wildcard_machine_principals_fail_before_creating_cloud_clients(monkeypatch):
+    import botocore.session
+
+    from . import cloud_entry
+    from .hosted_runtime_test import complete_environment
+
+    for key, value in (complete_environment() | {"CYCLOTRON_MACHINE_PRINCIPALS": '["arn:aws:iam::*:role/x"]'}).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", None)
+
+    def forbidden():
+        raise AssertionError("invalid principals created a cloud client")
+
+    monkeypatch.setattr(botocore.session, "get_session", forbidden)
+    with pytest.raises(ValueError):
+        cloud_entry.runtime()

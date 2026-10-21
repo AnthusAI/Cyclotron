@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-7efc21c3-fbfb-4025-8be4-2a868a68ff54",
+  "title": "Plain editor-facing copy in the embedded status card",
+  "description": "Engine-generated reviewRate.reason, nextStep and lastChange.summary use jargon (calibration gap, versions, refits). Add plainReason, plainNextStep and plainSummary beside them (no renames), derived from structured state; trace-ui embedded status card prefers them. Lab/operator surfaces keep technical text.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a20b14d1-c426-43ee-80b1-be233a557d94",
+      "author": "home",
+      "text": "Shipped in PR 67",
+      "created_at": "2026-10-21T01:10:56.609233Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-21T01:04:06.118762Z",
+  "updated_at": "2026-10-21T01:10:56.622763Z",
+  "closed_at": "2026-10-21T01:10:56.622733Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

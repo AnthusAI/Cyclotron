@@ -33,6 +33,8 @@ export type CyclotronStatus = {
     state: ReviewRateState
     rate: number
     reason: string
+    /** Editor-facing reason with no engine vocabulary; absent from older engines. */
+    plainReason?: string
     auditFloor: number | null
     confidenceThreshold: number | null
     override: {rate: number; expiresAt: string | null; setBy: string; setAt: string} | null
@@ -40,6 +42,8 @@ export type CyclotronStatus = {
     nextCheckAfterDecisions: number | null
     /** The next step's conditions, in words a reviewer can read. */
     nextStep: string | null
+    /** Editor-facing next step with no engine vocabulary; absent from older engines. */
+    plainNextStep?: string | null
     expectedReviewsPerWeek: number | null
   }
   lastChange: {
@@ -48,6 +52,8 @@ export type CyclotronStatus = {
     toVersion: number
     at: string | null
     summary: string
+    /** Editor-facing summary with no engine vocabulary; absent from older engines. */
+    plainSummary?: string
     /** Labels the ML model was refit on, for a refit. */
     labels: number | null
   } | null

@@ -1,0 +1,31 @@
+{
+  "id": "decision-flywheel-69e1e477-f42b-470f-a438-047de108e1e8",
+  "title": "Signed login challenges and hosted publication predictions (draft PRs #58 and #59)",
+  "description": "Tracks the nine code commits on two open draft PRs that had no issue (found by the 2026-10-20 stand-up).\n\nPR #58 (feature/monitoring-publication-host, head a0a7d94): 3bfcae3 compose hosted publication predictions through the guarded worker; a0a7d94 retain signed central challenges through the existing login callback; plus 3878c22, 7cbd587, eb23539.\nPR #59 (fix/hosted-signed-login-only): 6fbc834 preserve signed login challenges on the deployed console source line; test hardening 4f3e931 (install declared cloud extras for console regressions), 4062df5 (smoke the public source candidate in the official Lambda runtime), f757e03 (repair inherited ledger spec, diagnose public build metadata), 34789ba (validate installer records against exact runtime payloads), 1e2c22a (bind the legacy packaged smoke session to its synthetic login), f20c87b (scope the pinned login artifact smoke to its candidate branch).\n\nStatus 2026-10-20: both PRs are open drafts. The stand-up suggested #59 may be a subset of #58, but the two branches carry different commits (6fbc834 vs a0a7d94), so overlap is unverified; how to merge or close them is Ryan's decision. Done when the chosen PR is merged to develop and the signed login challenge survives the deployed console callback.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3163835f-a3c4-4207-a343-dabdfb8f360e",
+      "author": "home",
+      "text": "2026-10-20 Data Parade relevance output (see PPY-3212f1 for detail): shared Cyclotron definitions are catalog data; production has the deployed bootstrap route but no catalog for the Anthus AI Solutions or Data Parade accounts yet, so the shared Cyclotron does not exist. Data Parade fits the existing pendingOutputs target mechanism (pending_criteria, no predictions); no engine code change. Pending: Data Parade criteria from Ryan, the four outputs' questions, live test budget. Live stays disabled.",
+      "created_at": "2026-10-20T22:11:30.970254Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-20T13:18:14.958573Z",
+  "updated_at": "2026-10-20T22:11:30.970274Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

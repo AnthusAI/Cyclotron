@@ -14,14 +14,18 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .application_runtime import RuntimeCommand
+from .command_refusal import CommandRefused
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .hosted_command_worker import AuthorizedModel
 from .journal import encode, uuid
+from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
 from .priming_context import catalog_priming, decode_priming
 from .prospectus_accounts import AccountAccessDenied, VerifiedAccountSession
 from .publication_lab import CONTRACT, MAX_BYTES, PublicationActor, PublicationBinding, PublicationLab
+from .s3_console_storage import StandingCapacity
 from .s3_embedded_storage import S3CyclotronStores
+from .standing_publications import DEFAULT_MAX_ITEMS, RequestCeiling, today, validate_item
 
 
 @dataclass(frozen=True)
@@ -31,6 +35,11 @@ class PublicationTarget:
     bindings: tuple[PublicationBinding, ...]
     pending_outputs: tuple[str, ...] = ()
     model_identity: str | None = None
+    # Standing runs accept streaming sources and a trusted cumulative request allowance.
+    # Only operator configuration can set these; no request field can.
+    standing: bool = False
+    request_ceiling: RequestCeiling | None = None
+    max_items: int | None = None
 
     def __post_init__(self):
         uuid(self.account_id)
@@ -52,6 +61,17 @@ class PublicationTarget:
             raise ValueError("publication feedback outputs must be distinct")
         if len(set(self.pending_outputs)) != len(self.pending_outputs) or not set(self.pending_outputs) <= set(outputs):
             raise ValueError("pending outputs must name distinct declared publication outputs")
+        if type(self.standing) is not bool:
+            raise ValueError("standing must be a boolean")
+        if self.standing:
+            if not isinstance(self.request_ceiling, RequestCeiling):
+                raise ValueError("a standing target requires an explicit request ceiling")
+            if self.max_items is None:
+                object.__setattr__(self, "max_items", DEFAULT_MAX_ITEMS)
+            if type(self.max_items) is not int or not 1 <= self.max_items <= 100000:
+                raise ValueError("standing item capacity must be a bounded positive integer")
+        elif self.request_ceiling is not None or self.max_items is not None:
+            raise ValueError("request ceiling and item capacity belong only to standing targets")
 
 
 def targets_from_environment(environment):
@@ -70,8 +90,16 @@ def targets_from_environment(environment):
                 "bindings",
                 "pendingOutputs",
                 "modelIdentity",
+                "standing",
+                "requestCeiling",
+                "maxItems",
             }:
                 raise ValueError()
+            ceiling = target.get("requestCeiling")
+            if ceiling is not None:
+                if not isinstance(ceiling, dict) or "total" not in ceiling or set(ceiling) - {"total", "perDay", "since"}:
+                    raise ValueError()
+                ceiling = RequestCeiling(ceiling["total"], ceiling.get("perDay"), ceiling.get("since"))
             pending = target.get("pendingOutputs", [])
             if not isinstance(pending, list) or any(not isinstance(output, str) for output in pending):
                 raise ValueError()
@@ -82,7 +110,14 @@ def targets_from_environment(environment):
                 bindings.append(PublicationBinding(row["publicationId"], tuple(row["outputs"]), row["revision"]))
             result.append(
                 PublicationTarget(
-                    target["accountId"], target["runId"], tuple(bindings), tuple(pending), target.get("modelIdentity")
+                    target["accountId"],
+                    target["runId"],
+                    tuple(bindings),
+                    tuple(pending),
+                    target.get("modelIdentity"),
+                    target.get("standing", False),
+                    ceiling,
+                    target.get("maxItems"),
                 )
             )
         return tuple(result)
@@ -214,10 +249,13 @@ class PublicationCommandRuntime:
 
     async def execute(self, session, kind, payload, shown, config, *, request_id=None):
         priming = is_priming_command(kind, payload)
+        machine = isinstance(self.actor, MachineActor)
         if not priming and (kind != "publication" or set(payload) != {"publication", "bindingRevision", "item"}):
             raise ValueError("supported publication prediction command required")
         publication = payload["publication"]
         target, binding = target_for(self.host, self.actor.account_id, publication)
+        if machine and (priming or not target.standing):
+            raise AccountAccessDenied("machine callers may only decide on standing targets")
         if target.run_id != session.run_id or binding.revision != payload["bindingRevision"]:
             raise AccountAccessDenied("publication run or binding changed")
         if set(binding.outputs) & set(target.pending_outputs):
@@ -232,9 +270,10 @@ class PublicationCommandRuntime:
             item = payload["item"]
             if not isinstance(item, dict) or set(item) != {"id", "values"}:
                 raise ValueError("a frozen structured source revision is required")
-            frozen = next((row for row in self.view.items(session.run_id) if row["id"] == item["id"]), None)
-            if frozen is None or frozen["values"] != item["values"]:
-                raise ValueError("source does not match the canonical run input")
+            if not target.standing:
+                frozen = next((row for row in self.view.items(session.run_id) if row["id"] == item["id"]), None)
+                if frozen is None or frozen["values"] != item["values"]:
+                    raise ValueError("source does not match the canonical run input")
         if config.get("priming_examples") or config.get("priming_list_id"):
             raise ValueError("baseline prediction cannot apply priming examples")
         if not config.get("cyclotron_id"):
@@ -252,6 +291,10 @@ class PublicationCommandRuntime:
         async def fresh():
             await self.guard()
             await asyncio.to_thread(check_scope)
+            if machine:
+                # Authority is the trusted target configuration re-checked in check_scope; there is no
+                # human session or Prospectus membership behind a service principal.
+                return
             original = await asyncio.to_thread(self.host.sessions.get_ref, self.actor.session_ref)
             if original is None:
                 raise AccountAccessDenied("original session unavailable")
@@ -277,6 +320,7 @@ class PublicationCommandRuntime:
             )
             rubrics[row["id"]] = definition.get("seed_rubric", "")
         envelope(target, binding, config)  # Validate all configured outputs before opening state.
+        # The provider credential is resolved here, before any state is registered or any request is reserved.
         model, optimizer = (
             (_PrimingModel(target.model_identity), DisabledOptimizer()) if priming else self.host.model_factory(config)
         )
@@ -284,6 +328,22 @@ class PublicationCommandRuntime:
             raise ValueError("provider differs from reviewed publication model identity")
         if getattr(optimizer, "enabled", False):
             raise ValueError("baseline prediction requires optimizer disabled")
+        registration, max_requests = None, 1 if priming else config["max_requests"]
+        if target.standing and not priming:
+            max_requests = target.request_ceiling.allowed(today())
+            if max_requests < 1:
+                raise CommandRefused("request_ceiling_reached", "the standing request allowance has not started or is exhausted")
+            try:
+                item_id, values = validate_item(item, [spec.input_field for spec in specs])
+                registration = await asyncio.to_thread(
+                    self.view.register_standing_item, session.run_id, item_id, values, max_items=target.max_items
+                )
+            except StandingCapacity as exc:
+                raise CommandRefused("standing_capacity_reached", str(exc)) from None
+            except ValueError as exc:
+                # Includes priming/evaluation overlap. Nothing was registered and no request was reserved.
+                raise CommandRefused("source_refused", str(exc)) from None
+            item = {"id": item_id, "values": values}
         name = "publication-" + sha256(config["cyclotron_id"].encode()).hexdigest()
 
         def journal(domain, key):
@@ -294,7 +354,9 @@ class PublicationCommandRuntime:
 
         stores = S3CyclotronStores(journal("workspace", name), journal_for=journal, max_records=self.host.config.max_records)
         actor = PublicationActor(
-            self.actor.account_id, self.actor.person_id, frozenset((publication, cap) for cap in ("decide", "read"))
+            self.actor.account_id,
+            self.actor.service_id if machine else self.actor.person_id,
+            frozenset((publication, cap) for cap in ("decide", "read")),
         )
         definition = CyclotronDefinition(config["cyclotron_id"], tuple(specs), seed=config["seed"])
         with Cyclotron.open(
@@ -304,7 +366,7 @@ class PublicationCommandRuntime:
             optimizer,
             storage=stores,
             seed_rubrics=rubrics,
-            max_requests=1 if priming else config["max_requests"],
+            max_requests=max_requests,
         ) as engine:
             active_bindings = tuple(b for b in target.bindings if not set(b.outputs) & set(target.pending_outputs))
             lab = PublicationLab(engine, account_id=self.actor.account_id, bindings=active_bindings)
@@ -328,12 +390,57 @@ class PublicationCommandRuntime:
                     ],
                 }
             else:
-                result = await lab.command(
-                    actor, publication, "decide", {"bindingRevision": binding.revision, "item": item}, execution_guard=fresh
-                )
+                try:
+                    result = await lab.command(
+                        actor, publication, "decide", {"bindingRevision": binding.revision, "item": item}, execution_guard=fresh
+                    )
+                except RuntimeError as exc:
+                    if "request ceiling reached" not in str(exc):
+                        raise
+                    raise CommandRefused(
+                        "request_ceiling_reached", "the request ceiling was reached; no provider call was made"
+                    ) from None
+                if registration is not None:
+                    result = {**result, "source": registration}
             status = await lab.command(actor, publication, "status", {}, execution_guard=fresh)
         await fresh()
         return RuntimeCommand({"response": result, "statusSnapshot": status})
+
+
+REFUSAL_STATUS = {
+    "provider_key_unavailable": 503,
+    "request_ceiling_reached": 429,
+    "standing_capacity_reached": 507,
+    "source_refused": 409,
+}
+
+
+def status_snapshot(store, target, binding, publication):
+    """Newest verified completed worker snapshot for this binding, or None."""
+    for job in reversed(store.jobs(target.run_id)):
+        if (
+            job["kind"] == "publication"
+            and job["status"] == "completed"
+            and job["payload"].get("publication") == publication
+            and job["payload"].get("bindingRevision") == binding.revision
+        ):
+            return job["result"]["statusSnapshot"]
+    return None
+
+
+def receipt_response(job, meta):
+    """Durable job state as a publication receipt; refusals carry their public code, never details."""
+    if job["status"] == "completed":
+        return job["result"]["response"]
+    if job["status"] in ("pending", "running"):
+        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
+    refusal = (job.get("result") or {}).get("refusal") if job["status"] == "failed" else None
+    if isinstance(refusal, dict) and isinstance(refusal.get("code"), str):
+        return JSONResponse(
+            {**meta, "jobId": job["id"], "status": "failed", "code": refusal["code"], "message": refusal.get("message")},
+            status_code=REFUSAL_STATUS.get(refusal["code"], 409),
+        )
+    return JSONResponse({**meta, "code": "reconciliation_required"}, status_code=409)
 
 
 def install_publication_routes(app, runtime):
@@ -371,15 +478,10 @@ def install_publication_routes(app, runtime):
                 raise HTTPException(400, "status takes an empty payload")
             if meta.get("pendingOutputs"):
                 return meta
-            for job in reversed(await asyncio.to_thread(store.jobs, target.run_id)):
-                if (
-                    job["kind"] == "publication"
-                    and job["status"] == "completed"
-                    and job["payload"].get("publication") == publication
-                    and job["payload"].get("bindingRevision") == binding.revision
-                ):
-                    return job["result"]["statusSnapshot"]
-            raise HTTPException(503, "no verified publication status snapshot yet")
+            snapshot = await asyncio.to_thread(status_snapshot, store, target, binding, publication)
+            if snapshot is None:
+                raise HTTPException(503, "no verified publication status snapshot yet")
+            return snapshot
         priming = body["operation"] == "prime"
         if body["operation"] not in ("decide", "prime"):
             raise HTTPException(503, "only publication prediction is activated; feedback is not applied")
@@ -434,8 +536,4 @@ def install_publication_routes(app, runtime):
             or job["payload"].get("bindingRevision") != binding.revision
         ):
             raise HTTPException(404, "unknown publication command")
-        if job["status"] == "completed":
-            return job["result"]["response"]
-        if job["status"] not in ("pending", "running"):
-            return JSONResponse({**meta, "code": "reconciliation_required"}, status_code=409)
-        return JSONResponse({**meta, "jobId": job_id, "status": job["status"]}, status_code=202)
+        return receipt_response(job, meta)

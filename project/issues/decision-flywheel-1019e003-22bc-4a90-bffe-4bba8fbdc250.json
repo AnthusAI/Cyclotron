@@ -1,9 +1,9 @@
 {
   "id": "decision-flywheel-1019e003-22bc-4a90-bffe-4bba8fbdc250",
   "title": "Release and pin the shared integration before hosted activation",
-  "description": "As an application owner, I want a reviewed immutable integration release.\n\nFeature: Release and pin the shared integration before hosted activation\n  Scenario: Observable acceptance\n    Given shared UI and adapter source have local verification\n    When an application prepares hosted activation\n    Then it pins the reviewed Cyclotron release and proves real authentication authorization and storage before calling the integration production\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.\n\n## Current next-step plan \u2014 2026-10-17\n\nVerified 2026-10-17: Cyclotron PR25 https://github.com/AnthusAI/Cyclotron/pull/25 merged into develop at323d0b587d9057e0e93b99df2383bde70b2edc91, head61323ae0840fb3a787439c09d7a08674ff677aed. Test and diagrams checks SUCCESS; release SKIPPED. Source prepares UI0.2.2, but remote UI tags stop atui-v0.2.1 (peeledb2234be79d83231a4ed69f17a928b5049ab364a4); no ui-v0.2.2 tag. Latest published engine releasev0.20.1 (c09f70b33b2b96a4e4cc2acca360af47d26620a8, published2026-10-12). PR25 is not an ancestor of current main. Merged develop source is not a published dependency or production proof.\n\nAcceptance sequence: owner-reviewed main promotion; successful normal engine/UI release jobs; immutable tag and downloadable package verified; Papyrus/Cyclotron consumers and locks pinned; fresh installs/shared exports/SSR verified; real hosted both-mode save/reload/classifier-consumption demonstrated. Only then mark production-ready. PR25 exact-head source checks do not replace this release sequence. Dependencies: existing package task decision-flywheel-0dafa816 and Papyrus PPY-70d9fd. Existing Kanbus/Virtuus releases remain complete.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
+  "description": "As an application owner, I want a reviewed immutable integration release.\n\nFeature: Release and pin the shared integration before hosted activation\n  Scenario: Observable acceptance\n    Given shared UI and adapter source have local verification\n    When an application prepares hosted activation\n    Then it pins the reviewed Cyclotron release and proves real authentication authorization and storage before calling the integration production\n\nPlanning only. No new implementation, deployment, paid call or permission is authorized by this record.\n\n## Current next-step plan — 2026-10-17\n\nVerified 2026-10-17: Cyclotron PR25 https://github.com/AnthusAI/Cyclotron/pull/25 merged into develop at323d0b587d9057e0e93b99df2383bde70b2edc91, head61323ae0840fb3a787439c09d7a08674ff677aed. Test and diagrams checks SUCCESS; release SKIPPED. Source prepares UI0.2.2, but remote UI tags stop atui-v0.2.1 (peeledb2234be79d83231a4ed69f17a928b5049ab364a4); no ui-v0.2.2 tag. Latest published engine releasev0.20.1 (c09f70b33b2b96a4e4cc2acca360af47d26620a8, published2026-10-12). PR25 is not an ancestor of current main. Merged develop source is not a published dependency or production proof.\n\nAcceptance sequence: owner-reviewed main promotion; successful normal engine/UI release jobs; immutable tag and downloadable package verified; Papyrus/Cyclotron consumers and locks pinned; fresh installs/shared exports/SSR verified; real hosted both-mode save/reload/classifier-consumption demonstrated. Only then mark production-ready. PR25 exact-head source checks do not replace this release sequence. Dependencies: existing package task decision-flywheel-0dafa816 and Papyrus PPY-70d9fd. Existing Kanbus/Virtuus releases remain complete.\n\nAuthority: Ryan requested this plan as the permanent Kanbus record. This action updates documentation only. The desired product outcomes are requested priorities, not claims of implementation or hosted acceptance. Existing implementation owners retain their approvals; recommendations needing further scope, release, permission or migration direction stay explicitly gated. No feature code, deployment, paid call, permission change or unrelated merge is performed here.",
   "type": "story",
-  "status": "blocked",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,7 +22,6 @@
       "text": "2026-10-16 reconciliation: Status describes remaining acceptance, not implementation authorization.",
       "created_at": "2026-10-16T20:46:53.217592Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "codex",
         "model": "gpt-6.1-sol",
@@ -38,7 +37,6 @@
       "text": "2026-10-17 next-step plan recorded in the description. Verified 2026-10-17: Cyclotron PR25 https://github.com/AnthusAI/Cyclotron/pull/25 merged into develop at323d0b587d9057e0e93b99df2383bde70b2edc91, head61323ae0840fb3a787439c09d7a08674ff677aed. Test and diagrams checks SUCCESS; release SKIPPED. Source prepares UI0.2.2, but remote UI tags stop atui-v0.2.1 (peeledb2234be79d83231a4ed69f17a928b5049ab364a4); no ui-v0.2.2 tag. Latest published engine releasev0.20.1 (c09f70b33b2b96a4e4cc2acca360af47d26620a8, published2026-10-12). PR25 is not an ancestor of current main. Merged develop source is not a published dependency or production proof.\n\nAcceptance sequence: owner-reviewed main promotion; successful normal engine/UI release jobs; immutable tag and downloadable package verified; Papyrus/Cyclotron consumers and locks pinned; fresh installs/shared exports/SSR verified; real hosted both-mode save/reload/classifier-consumption demonstrated. Only then mark production-ready. PR25 exact-head source checks do not replace this release sequence. Dependencies: existing package task decision-flywheel-0dafa816 and Papyrus PPY-70d9fd. Existing Kanbus/Virtuus releases remain complete.",
       "created_at": "2026-10-17T06:22:40.097448Z",
       "comment_type": "default",
-      "data": {},
       "agent": {
         "platform": "codex",
         "model": "gpt-6.1-sol",
@@ -53,20 +51,45 @@
       "author": "unknown",
       "text": "2026-10-17 pin recorded in docs/shared-priming-release.md. Engine v0.21.0 and UI ui-v0.2.2 both come from a565dafb1f6953e1eb4d2efb1069396303afe0c6; release run 39011967316 passed. The ui-v0.2.2 asset matches npm pack at that commit, a fresh pip install at v0.21.0 resolves to it, and a fresh Next 15 consumer builds from the asset. Cyclotron-web is repinned to the commit. Remaining: Papyrus repin (PPY-70d9fd) and the real hosted auth/storage proof, which waits on Prospectus account authorization.",
       "created_at": "2026-10-17T12:19:36.572380Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "f0916e7f-3e0b-4bd3-94e2-5f66792ff74c",
+      "author": "unknown",
+      "text": "Status 2026-10-19: release and pin are done (v0.21.0/ui-v0.2.2 pinned in PRs #28/#126; v0.22.0 and v0.23.0 since published). Still blocked only on Prospectus auth for hosted activation; nothing for Cyclotron to build until that lands.",
+      "created_at": "2026-10-19T16:43:48.067551Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "c5dc739a-1b97-4b94-8c56-81ea891e76f3",
+      "author": "unknown",
+      "text": "Status 2026-10-19: release and pin are done (v0.21.0/ui-v0.2.2 pinned in PRs #28/#126; v0.22.0 and v0.23.0 since published). Still blocked only on Prospectus auth for hosted activation; nothing for Cyclotron to build until that lands.",
+      "created_at": "2026-10-19T16:44:02.241672Z",
       "comment_type": "default",
-      "data": {},
-      "agent": null
+      "agent": {
+        "platform": "claude-code",
+        "model": "claude-sonnet-5-5",
+        "name": "handoff-status"
+      }
+    },
+    {
+      "id": "7593e3c5-c2bb-4dc0-90f3-4933d4b12e40",
+      "author": "home",
+      "text": "Unblocked 2026-10-19: Prospectus site auth landed (PR #47 v0.24.0, PR #48 v0.25.0; Papyrus #268/#273/#277/#280 merged, #280 pins v0.25.0). Release and pin done. Remaining: the real hosted save/reload/classifier-consumption proof, tracked by a3f01a3b.",
+      "created_at": "2026-10-19T19:03:34.589388Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b008666f-c846-4c64-94b5-63de0db0b76a",
+      "author": "home",
+      "text": "2026-10-20 closing: acceptance sequence is complete. Release and pin: engine v0.21.0 and ui-v0.2.2 from a565dafb (release run 39011967316), pinned in Cyclotron-web and consumers (comment b1a8d3, PRs #28/#126). Papyrus repin and the real hosted auth/storage proof: Prospectus site auth landed 2026-10-19 (Cyclotron PR #47 v0.24.0, PR #48 v0.25.0; Papyrus #280 pins v0.25.0), and the hosted proof passed on p.apyr.us on 2026-10-20 (task a3f01a, closed by PR #57, 9dec0e6): version 1 -> 2, accepted example priming:29a0882390ee7063. Blocker 0dafa816 is closed. Storage durability stays tracked separately in b5f1a4.",
+      "created_at": "2026-10-20T13:17:50.434934Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-16T20:46:53.160804Z",
-  "updated_at": "2026-10-17T12:19:36.572505Z",
-  "closed_at": null,
-  "right_now_summary": null,
-  "right_now_updated_at": null,
-  "custom": {
-    "project_label": "decision-flywheel",
-    "source": "shared"
-  },
+  "updated_at": "2026-10-20T13:17:50.452428Z",
+  "closed_at": "2026-10-20T13:17:50.452389Z",
   "agent": {
     "platform": "codex",
     "model": "gpt-6.1-sol",
@@ -75,5 +98,10 @@
       "reasoning_effort": "medium"
     }
   },
-  "agent_assignment": null
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

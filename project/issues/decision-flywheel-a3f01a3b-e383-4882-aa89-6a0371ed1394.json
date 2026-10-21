@@ -1,0 +1,40 @@
+{
+  "id": "decision-flywheel-a3f01a3b-e383-4882-aa89-6a0371ed1394",
+  "title": "Finish hosted priming in production: promote, first sweep, verify",
+  "description": "Remaining steps after Papyrus PR #223 merged to develop (see 705e4a9e). Needs Ryan's explicit 'promote develop to main' in the Hosted priming demo thread, then Remote Control on his Mac for the first production sweep (AWS never from cloud), then paste an arXiv URL in References and confirm the classifier version changes and exposes the accepted example id. Implementer: Sonnet agent via Remote Control.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5c7857bb-826e-45b2-9515-13f603a42707",
+      "author": "home",
+      "text": "Status 2026-10-19: Papyrus #223 is already in Papyrus main (merge commit 045551a is in origin/main; Papyrus releases #347-#360 today, green), so the promotion step is done. This runs directly on BlackbookM1 (no Remote Control thread needed) once Ryan re-authenticates AWS. Remaining: first production sweep, then paste an arXiv URL in production References and confirm a new classifier version exposing the accepted example id.",
+      "created_at": "2026-10-19T19:03:34.625650Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "22c103c6-8dd4-4e0f-9228-5fc2c302b8be",
+      "author": "home",
+      "text": "Done 2026-10-20 on p.apyr.us (Amplify ds6yswxui41yi, the current production Papyrus; legacy dbsyytcm9drqa has failed every build since Oct 17 and was not used). Config: p.apyr.us PR #47 (relevanceCyclotron, store in its private media bucket). Fixes needed on the way: Papyrus #372 (transient GROBID failures stay pending), #374 (priming_attempts allowed by the upload Lambda), released as @anthusai/papyrus 2.0.2 and deployed (p.apyr.us #50, Amplify job 49); GROBID grobid/grobid:0.9.1-crf on 127.0.0.1:8070; Biblicus develop (#85, citation consolidation off; not yet released). Ryan saved https://arxiv.org/abs/2303.08774 (include) in References; the first failed attempt was reset with Ryan's OK. Sweep from Papyrus main a1019e76: primed 1, failed 0. Evidence: outcome state=applied, version=2, itemId=priming:29a0882390ee7063 (= sha256(url)[:16]); status cyclotron version 1 -> 2, primedExamples 1, lastChange promoted 'Added 1 primed example to the example list.'; snapshot s3://amplify-ds6yswxui41yi-mai-papyrusmediabucket0dab24-uuzzq2kfc5vq/cyclotrons/papyrus-relevance/state.tar.gz. Known issue: GROBID extracted a wrong title (contributor line); abstract correct; reported to Papyrus.",
+      "created_at": "2026-10-20T02:22:42.821753Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-19T16:44:03.359311Z",
+  "updated_at": "2026-10-20T02:22:42.842452Z",
+  "closed_at": "2026-10-20T02:22:42.842413Z",
+  "agent": {
+    "platform": "claude-code",
+    "model": "claude-sonnet-5-5",
+    "name": "handoff-status"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

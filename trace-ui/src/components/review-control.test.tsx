@@ -28,7 +28,8 @@ it('requires an explicit explanation when the host requests one',()=>{
 it('shows the decision, its confidence and why it was sent to review',()=>{
   render(<ReviewControl itemId="ref-1" decision={decision} question="Is this relevant to the publication?" reviewReason="Random audit sample." />)
   expect(screen.getByRole('heading',{name:'Is this relevant to the publication?'})).toBeVisible()
-  expect(screen.getByText(/82% sure · version 3/)).toBeVisible()
+  expect(screen.getByText(/Suggested:/)).toHaveTextContent('Suggested: include (82% sure)')
+  expect(screen.getByText(/Suggested:/)).not.toHaveTextContent(/version/i)
   expect(screen.getByText('Why you are seeing this: Random audit sample.')).toBeVisible()
   expect(screen.getByRole('button',{name:'Submit review'})).toBeDisabled()
 })
@@ -73,7 +74,7 @@ it('maps thumbs to a chosen positive class and offers one button per class in la
   expect(screen.getByRole('button',{name:'Yes: exclude'})).toBeVisible()
   const three={decisionId:'d-2',label:'later',confidence:null,classes:['now','later','never']}
   rerender(<ReviewControl itemId="ref-2" decision={three} onReview={onReview} />)
-  expect(screen.getByText(/confidence unknown/)).toBeVisible()
+  expect(screen.getByText(/Suggested:/)).toHaveTextContent(/^Suggested: later$/)
   fireEvent.click(screen.getByRole('button',{name:'never'}))
   fireEvent.click(screen.getByRole('button',{name:'Submit review'}))
   expect(onReview).toHaveBeenCalledWith(expect.objectContaining({itemId:'ref-2',decisionId:'d-2',label:'never'}))

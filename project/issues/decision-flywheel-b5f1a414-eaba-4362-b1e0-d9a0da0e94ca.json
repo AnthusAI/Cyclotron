@@ -40,10 +40,36 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "53063880-8661-48a4-97a9-f34dd961459d",
+      "author": "unknown",
+      "text": "Status 2026-10-19: storage contract tests shared by SQLite and S3 adapters (#42) and the Journal protocol (#44) merged. Still blocked on the hosted account-scoped storage/auth decision (Prospectus). Keep both adapters working; do not block on the platform decision.",
+      "created_at": "2026-10-19T16:43:48.455425Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "1b45cdea-d91e-47dc-88a4-899e6de35257",
+      "author": "unknown",
+      "text": "Status 2026-10-19: storage contract tests shared by SQLite and S3 adapters (#42) and the Journal protocol (#44) merged. Still blocked on the hosted account-scoped storage/auth decision (Prospectus). Keep both adapters working; do not block on the platform decision.",
+      "created_at": "2026-10-19T16:44:02.635305Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude-code",
+        "model": "claude-sonnet-5-5",
+        "name": "handoff-status"
+      }
+    },
+    {
+      "id": "a3844dd6-1d74-409e-8fb0-d61df17bd7be",
+      "author": "home",
+      "text": "2026-10-20 status check, stays blocked: the 2026-10-19 note (530638) waits on the hosted account-scoped storage decision from Prospectus. Since then Prospectus site auth landed (Cyclotron PR #47 v0.24.0, PR #48 v0.25.0; Papyrus #268/#273/#277/#280), and the hosted priming proof on p.apyr.us (PR #57, 9dec0e6) ran against an S3 snapshot (cyclotrons/papyrus-relevance/state.tar.gz in the Papyrus private media bucket). That proves auth and one S3-backed run, but not this story's acceptance (S3 canonical text with a DynamoDB catalog, restart/rebuild preserving example ids, stale-revision denial). I could not tell from the repos whether the storage-scope decision itself was made, so the blocked status is unchanged. Needs Ryan or the Prospectus owner to confirm: if the S3 media-bucket layout is the accepted scope, unblock and plan the DynamoDB catalog work; if not, restate what is awaited.",
+      "created_at": "2026-10-20T13:17:50.504234Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-16T20:46:53.071342Z",
-  "updated_at": "2026-10-17T06:22:40.055198Z",
+  "updated_at": "2026-10-20T13:17:50.504265Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
@@ -58,5 +84,6 @@
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent_assignment": null
 }

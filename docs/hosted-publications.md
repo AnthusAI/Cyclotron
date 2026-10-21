@@ -119,3 +119,54 @@ is refused. CAS conflicts and unknown outcomes require retrying that same reques
 identity; no second run or automatic provider work is created. Operators must
 still verify the intended production owner and configure the resulting reviewed
 run/output/model bindings before native priming.
+
+## Standing runs (continuous sources)
+
+A target may declare `"standing": true`. This flag, its `requestCeiling` and optional `maxItems` exist only in the trusted `CYCLOTRON_PUBLICATION_TARGETS` configuration; no request field can set or change them. The run id stays fixed. The frozen run is created once with the existing bootstrap (or `freeze_run`) from an operational item list that must hold at least one item; nothing in the run configuration is rewritten afterwards, so queued-actor workspace bindings stay valid.
+
+When the worker handles `decide` for a standing target it first resolves the provider credential, then registers the source and only then reserves a provider request:
+
+* A never-before-seen `{id, values}` is appended to the run's own operational list (as revision 1) and to the run's item table in one console CAS transaction that is fenced by the command claim. Identical values return the existing revision without a write. The same id with different values creates a new immutable revision (revision + 1) and moves the run's item pointer to it. Earlier revisions stay readable by `itemRevision`.
+* The id, size and shape are bounded: id 1-200 printable characters without edge whitespace; 1-32 value keys; encoded values at most 32 KiB; every classifier input field (default `text`) a non-empty string of at most 20,000 characters. The classifier set comes from the frozen run, never from the caller.
+* An id that already exists in any other item list of the account (priming or evaluation lists) is refused with `source_refused`, so operational and priming items stay disjoint. Item count is capped by `maxItems` (default 500, refusal `standing_capacity_reached`). Console catalog size, not this cap, is the practical limit (see Capacity).
+* The shared decision, cache and fingerprint pinning are the existing engine behavior. An identical re-request (same content, any request id) is served from the persisted shared decision and makes no second model call. Successful responses for standing targets add `"source": {"id", "revision", "fingerprint"}`; use `source.revision` as `itemRevision` for feedback.
+* Registration happens before the request reservation, so a ceiling refusal can leave a registered but undecided source. Re-sending it later is idempotent.
+
+### Request ceilings (what is enforced, and where)
+
+Non-standing targets are unchanged: the run's frozen `max_requests` (bootstrap fixes 1) is the lifetime cap of the run's shared-batch ledger, and `CYCLOTRON_PREDICTION_MAX_REQUESTS` bounds a frozen run's configuration at provider construction.
+
+Standing targets enforce a **cumulative lifetime cap on paid provider requests**, taken from `requestCeiling.total` (1-100000), and optionally an accruing daily allowance: `requestCeiling.perDay` with `requestCeiling.since` (UTC date). The cap in force on a UTC day is `min(total, perDay * days elapsed since `since`, counting that day)`; before `since` it is 0. Unused allowance carries forward; it is not a hard per-day cap. The cap is applied as the engine's `max_requests` for that command and checked atomically against the persisted attempts ledger (`shared-batches`, S3 CAS) at reservation. Cached results do not consume it. When reached, the job fails closed without a provider call and the receipt carries `code: request_ceiling_reached` (HTTP 429). Raising the cap is an operator configuration change; the host-level `CYCLOTRON_PREDICTION_MAX_REQUESTS` does not cap standing totals.
+
+### Capacity
+
+The console catalog and the shared-batch ledger are each a single S3 journal object limited by `max_records` and `max_bytes` (defaults 10000 records, 4 MiB). Every registered source, completed job (with its decision snapshot) and event consumes that budget, so a standing run supports on the order of hundreds of decisions before the store reports its record or byte budget and fails closed. Plan a successor run (new bootstrap and target `runId`) or raise the host limits before that.
+
+## Machine access (service principals)
+
+`POST /machine/publications/{publication}/operations` and `GET /machine/publications/{publication}/commands/{jobId}` exist alongside the unchanged human routes. They are meant for an API Gateway route with `AWS_IAM` authorization. The handler never trusts headers for identity: it reads `requestContext.authorizer.iam.userArn` from the gateway event, requires an assumed-role ARN, converts it to its role ARN and requires an exact match in `CYCLOTRON_MACHINE_PRINCIPALS` (a JSON list of at most 20 exact `arn:aws:iam::<12 digits>:role/<name>` values; wildcards, paths, users and patterns are rejected at startup). Without that context every call returns 403.
+
+Account and run come only from the matched target: `X-Cyclotron-Account` must equal a configured target's account and the publication must be a `standing` binding of it, otherwise 403. Callers cannot name a run. A machine can only `decide`, `status` and `feedback` for that target. It cannot prime, bootstrap, open or change settings, grant, read other targets or use human routes.
+
+Request body (all operations): `{"contractVersion":"cyclotron-publication/v1","operation":"decide|status|feedback","requestId":"<8-128 chars [A-Za-z0-9._:-]>","payload":{...}}`. `requestId` is required for `decide` and `feedback` and forbidden for `status`.
+
+* `decide`: payload `{"bindingRevision","item":{"id","values"}}`. Returns 202 with the publication envelope plus `jobId` and `status`. The same `requestId` with the same content returns the same durable job; with different content 409 `request_conflict`. Another job already pending for the run returns 409 `run_busy`; retry later. Use a new `requestId` to retry after a terminal refusal. Live prediction disabled returns 503.
+* Poll `GET .../commands/{jobId}`: 202 while pending or running; 200 with the native publication response when completed; refusals are 503 `provider_key_unavailable`, 429 `request_ceiling_reached`, 507 `standing_capacity_reached`, 409 `source_refused`, each with `code` and a non-secret `message`; any other terminal failure is 409 `reconciliation_required`.
+* `status`: payload `{}`; returns the newest verified snapshot (200) or 503 before the first completed decision.
+* `feedback`: payload `{"bindingRevision","itemId","itemRevision","output","label","comment"?,"editor":{"site","subject"}}`. Handled synchronously (no queue, provider or optimizer). It stores one catalog human label for that classifier revision and item revision, and a `publication-machine-feedback` run event holding the machine role, session name and asserted editor, in one transaction. Idempotent by `requestId`; reusing it with a different label or output is 409. `output` must belong to the binding (403), the item must have been submitted to this run (409) and the label must be one of the classifier's labels (409). Returns 200 `{status:"recorded", recordedAs:"human-label", asserted:{machine,editor}, ...}`.
+
+**Authority claim.** A machine caller asserts, on behalf of its trusted Papyrus site service, that a named editor made this decision. Cyclotron verifies the caller's role but not the editor. The label is recorded like any human label, with the assertion stored as provenance, and is latest-wins per classifier revision and item revision like a console vote. It does not train or optimize anything by itself.
+
+The queued authority is a `MachineActor` (kind `machine`) bound to the target's account and run and to the workspace binding. The worker re-checks, before opening state and before each side effect, that the principal is still configured, that the target is still a configured standing run and that the binding is unchanged. Revocation stops queued work.
+
+### Which side holds which statement
+
+HTTP APIs cannot carry a resource policy, so a principal in another AWS account cannot be authorized by this API alone. The caller therefore assumes a role in the Cyclotron account:
+
+* Cyclotron account: `MachineInvokerRole` (trust: the single caller role ARN, parameter `MachineCallerRoleArn`; permission: `execute-api:Invoke` on `.../POST/machine/publications/*` and `.../GET/machine/publications/*` of this API only). `CYCLOTRON_MACHINE_PRINCIPALS` lists this invoker role ARN.
+* Caller account: the caller role's identity policy allows `sts:AssumeRole` on that invoker role ARN only, then signs requests (service `execute-api`, region `us-east-1`) with the returned credentials and a fixed role session name that identifies the service.
+* API Gateway: route `ANY /machine/{proxy+}` with `AWS_IAM`; the default proxy route is unchanged.
+
+## Provider credential
+
+The worker reads the provider key lazily at first provider use from AWS Secrets Manager secret `cyclotron/providers/openai` in the deployment account and region, as a plaintext string or `{"api_key": "..."}`. The value is cached for the warm container, handed to the Jev adapter as an explicit constructor argument (`JevAdapter.from_environment(api_key=...)`, no environment mutation, no dotenv), and never logged or placed in configuration. A missing, empty or unreadable secret fails the command before any state registration or request reservation with `provider_key_unavailable` (HTTP 503), and nothing is consumed. The worker role holds `secretsmanager:GetSecretValue` on only `arn:aws:secretsmanager:<region>:<account>:secret:cyclotron/providers/openai-??????`; the BFF role has no grant. Create the secret with the default Secrets Manager key (a customer-managed key would additionally need `kms:Decrypt` for the worker). Rotation takes effect on the next cold start.

@@ -1,0 +1,35 @@
+{
+  "id": "decision-flywheel-69ec3dda-5b64-482b-a5cb-4cebb28b3c7e",
+  "title": "Plain editor-facing copy in the embedded status strip and decision line",
+  "description": "Requirement from Ryan (product owner): editors using an embedding app (Papyrus References) should not see engine concepts. They add references and review suggestions; learning stays implicit. In the embedded components (PrimingPanel, CyclotronStatusView strip and card, ReviewControl decision line, HeldOutReportView) replace editor-facing jargon: no versions, calibration, onboarding, priming, cyclotron, classifier or sweep in user-visible strings. Status strip must not show 'Version N', 'Calibration not measured yet' or 'Onboarding'. Decision line becomes 'Suggested: include (82% sure)' with no version. 'Add a reference' is the editor's mental model for a labeled example. Constraints: change only user-visible strings plus minimal logic to hide version/calibration; do not rename props, types, exports, API fields or GraphQL/Python names; embedding apps need only a version bump. The lab/operator UI (ClassifierMetrics, MultiLabelCard, lab LabelingReview, cycle-timeline, lab-metrics, brand) keeps technical terms.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a73f05cc-8279-40f7-a077-9529ebf041c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7f028a5a-78cd-457a-afdf-09257cc0181f",
+      "author": "home",
+      "text": "Implemented in feat/plain-editor-copy: plain wording in CyclotronStatusView, ReviewControl, PrimingPanel, HeldOutReportView; specs and docs/embedding.md updated. PR opened against develop.",
+      "created_at": "2026-10-20T00:10:10.368815Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "4b2ef3b2-f5f3-4451-a09b-d8fd32f37106",
+      "author": "home",
+      "text": "Merged in PR #55 (make check green: 2103 passed, 268 UI tests). Ships to Papyrus with the next Cyclotron UI release, which needs Ryan's go-ahead. Follow-up: engine-generated status text (reviewRate.reason, nextStep, lastChange.summary) is still technical.",
+      "created_at": "2026-10-20T00:11:11.683519Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-19T23:51:40.459156Z",
+  "updated_at": "2026-10-20T00:11:11.707156Z",
+  "closed_at": "2026-10-20T00:11:11.707096Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

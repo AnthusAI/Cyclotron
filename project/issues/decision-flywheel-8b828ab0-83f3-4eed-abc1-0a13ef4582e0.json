@@ -3,7 +3,7 @@
   "title": "Document embedding a cyclotron in an application, with Papyrus as the worked example",
   "description": "Add a README section and a docs page: the four SDK calls, the store and lease, the review-rate program, the two widgets, and the status shape, using the Papyrus relevance cyclotron as the example (see project/wiki/papyrus-integration.md). Use the glossary vocabulary (item, cyclotron, classifier, decision model, ML model, LLM optimizer, decision, confidence, reviewer, review, label, correction, explanation, feedback, cycle, version). Ordering: last.\n\nAcceptance criteria:\n- The quickstart runs offline with a scripted decision model and is covered by the existing README snippet check.\n- The page states what the application owns (items, reviewers, its system of record) and what the engine owns (labels, partitions, propensities, versions).\n- No retired glossary words appear in the new text.,",
   "type": "task",
-  "status": "in_progress",
+  "status": "open",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -45,10 +45,17 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "94410829-91ec-4f37-a4a7-131ddad6041d",
+      "author": "home",
+      "text": "2026-10-20 status check, moved back to open (idle since 2026-10-16). The original acceptance landed: docs/embedding.md and tests/embedding_docs_test.py came in via feat/embedding-docs, which is merged into develop (comment a18e2c). Remaining is only the 2026-10-16 extension (be214e): document the central multi-publication and embedded deployment-local modes. The hosted Papyrus worked example is now proven in production (task a3f01a, PR #57 9dec0e6), so the docs can cite it. No one is working on it today.",
+      "created_at": "2026-10-20T13:18:14.534498Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:51:30.386515Z",
-  "updated_at": "2026-10-16T20:46:53.246379Z",
+  "updated_at": "2026-10-20T13:18:14.534524Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

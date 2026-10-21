@@ -3,7 +3,7 @@
   "title": "Extend and retire a cyclotron's classifier set without losing learned state",
   "description": "As a Papyrus site operator, I want one shared cyclotron whose classifier set follows the site's newsroom sections as they are created, renamed and disabled, so that a section change never costs the other classifiers' learned labels, rubrics and ML models. Out of scope: automatic Papyrus section sync (the application calls add_classifiers and retire_classifiers).",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,29 +16,30 @@
       "author": "unknown",
       "text": "Feature: Change the classifier set of an existing store\n  Scenario: Add a classifier\n    Given an open store with learned classifiers\n    When add_classifiers adds a classifier with a seed rubric\n    Then the new classifier decides unfitted and the others keep labels and rubrics\n  Scenario: Retire a classifier\n    Given a store with several classifiers\n    When retire_classifiers retires one\n    Then it stops deciding and learning but its history and labels stay in the store\n  Scenario: Reopen\n    Given a changed classifier set\n    When the store is reopened with the current definition\n    Then it opens; a definition missing a recorded retirement or addition is refused\n  Scenario: Re-add and idempotence\n    Given a retired classifier\n    When it is added again with the same spec\n    Then it is reactivated with its prior history; repeating either call changes nothing",
       "created_at": "2026-10-18T20:17:46.760754Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
     },
     {
       "id": "18d51f7f-d0af-4ca4-b443-a96b6cd265da",
       "author": "unknown",
       "text": "Implemented add_classifiers and retire_classifiers with specs; make test green (2049 passed).",
       "created_at": "2026-10-18T20:25:20.499754Z",
-      "comment_type": "default",
-      "data": {},
-      "agent": null
+      "comment_type": "default"
+    },
+    {
+      "id": "a48898e9-997f-4391-b1e5-0f4cc6bd7e5e",
+      "author": "home",
+      "text": "Closed 2026-10-19: PR #51 (classifier_set.py) merged to main, released in v0.27.0.",
+      "created_at": "2026-10-19T19:03:34.402297Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-18T20:17:40.263265Z",
-  "updated_at": "2026-10-18T20:25:20.499958Z",
-  "closed_at": null,
+  "updated_at": "2026-10-19T19:03:34.402327Z",
+  "closed_at": "2026-10-19T17:46:43.150385Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "decision-flywheel"
-  },
-  "agent": null,
-  "agent_assignment": null
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
 }

@@ -49,10 +49,36 @@
           "reasoning_effort": "medium"
         }
       }
+    },
+    {
+      "id": "7d902bef-5bde-4758-9ead-7719af101b22",
+      "author": "unknown",
+      "text": "Status 2026-10-19: Papyrus PR #223 (Prime with a URL + relevance sweep step, upload-Lambda allow-list fix) is merged into Papyrus develop with CI green, NOT in production. Remaining, in order: (1) Ryan says 'promote develop to main' in the Hosted priming demo thread (Papyrus #222 is a separate open promotion, leave alone); (2) first production sweep run from Ryan's Mac via Remote Control (AWS only there); (3) paste an arXiv URL in production References and confirm the classifier moves to a new version and exposes the accepted example id. Blocker: the Mac Remote Control session is asleep and only wakes on a message written in the Hosted priming demo thread.",
+      "created_at": "2026-10-19T16:43:47.660164Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "daa50953-bd3b-46c9-99d1-9eaba31a1f30",
+      "author": "unknown",
+      "text": "Status 2026-10-19: Papyrus PR #223 (Prime with a URL + relevance sweep step, upload-Lambda allow-list fix) is merged into Papyrus develop with CI green, NOT in production. Remaining, in order: (1) Ryan says 'promote develop to main' in the Hosted priming demo thread (Papyrus #222 is a separate open promotion, leave alone); (2) first production sweep run from Ryan's Mac via Remote Control (AWS only there); (3) paste an arXiv URL in production References and confirm the classifier moves to a new version and exposes the accepted example id. Blocker: the Mac Remote Control session is asleep and only wakes on a message written in the Hosted priming demo thread.",
+      "created_at": "2026-10-19T16:44:01.841982Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude-code",
+        "model": "claude-sonnet-5-5",
+        "name": "handoff-status"
+      }
+    },
+    {
+      "id": "78fde62a-32fa-4a7b-b543-6cd62557b55d",
+      "author": "home",
+      "text": "Hosted proof done 2026-10-20 (see a3f01a3b): a URL saved in p.apyr.us production References primed the running cyclotron to version 2 with accepted example id priming:29a0882390ee7063. Still open here: CSV/JSON/JSONL/spreadsheet structured import.",
+      "created_at": "2026-10-20T02:22:42.861462Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-16T20:46:53.012198Z",
-  "updated_at": "2026-10-17T06:24:14.189608Z",
+  "updated_at": "2026-10-20T02:22:42.861496Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
@@ -67,5 +93,6 @@
   "custom": {
     "project_label": "decision-flywheel",
     "source": "shared"
-  }
+  },
+  "agent_assignment": null
 }

@@ -1,6 +1,6 @@
 {
   "name": "cyclotron",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Cyclotron's embeddable web components (review control, status widget, held-out before-and-after card), their styles, and the TypeScript types for the application SDK, cyclotron-status/v1 and cyclotron-held-out-report/v1.",
   "files": [

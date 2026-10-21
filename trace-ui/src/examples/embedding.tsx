@@ -31,7 +31,7 @@ export function PendingItem({itemId,decision,onReview}:{itemId:string;decision:C
 export function CyclotronHeader({status,onOverride}:{status:CyclotronStatus;onOverride:()=>void}){
   return <>
     <CyclotronStatusView status={status} />
-    <details><summary>What the cyclotron is doing</summary>
+    <details><summary>How suggestions are doing</summary>
       <CyclotronStatusView status={status} variant="card" onOverride={onOverride} />
     </details>
   </>

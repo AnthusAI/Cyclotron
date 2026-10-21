@@ -207,7 +207,9 @@
         "override",
         "nextCheckAfterDecisions",
         "expectedReviewsPerWeek",
-        "nextStep"
+        "nextStep",
+        "plainReason",
+        "plainNextStep"
       ],
       "properties": {
         "state": {
@@ -305,6 +307,17 @@
             "null"
           ],
           "minimum": 0
+        },
+        "plainReason": {
+          "type": "string",
+          "description": "The reason in editor-facing words, with no engine vocabulary."
+        },
+        "plainNextStep": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The next step in editor-facing words, with no engine vocabulary."
         }
       }
     },
@@ -322,7 +335,8 @@
             "toVersion",
             "at",
             "summary",
-            "labels"
+            "labels",
+            "plainSummary"
           ],
           "properties": {
             "kind": {
@@ -361,6 +375,10 @@
               ],
               "minimum": 0,
               "description": "Labels the ML model was refit on, for a refit."
+            },
+            "plainSummary": {
+              "type": "string",
+              "description": "The change in editor-facing words, with no engine vocabulary."
             }
           }
         }
