@@ -1,6 +1,14 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Conditions": {
+    "HasLabVerifier": {
+      "Fn::Equals": [
+        {
+          "Ref": "LabVerifierEnabled"
+        },
+        "true"
+      ]
+    },
     "HasMachineCaller": {
       "Fn::Not": [
         {
@@ -116,6 +124,15 @@
       "AllowedValues": [
         "cyclotron-google-only-unlinked-v1-20261015"
       ],
+      "Type": "String"
+    },
+    "LabVerifierEnabled": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Default": "false",
+      "Description": "When true the BFF receives CYCLOTRON_LAB_VERIFIER_ROLE_ARN and CYCLOTRON_ACCOUNTS_API_URL and curation routes verify editor tokens through the verifier role; false leaves both unset and the curation routes fail closed",
       "Type": "String"
     },
     "MachineCallerRoleArn": {
@@ -248,12 +265,21 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9"
+          "S3Key": "cyclotron-console/backend/9225ea1516105dff49c51d43866d4d6ae6c0613df26fce92aff6a3cb1335a204"
         },
         "Environment": {
           "Variables": {
             "CYCLOTRON_ACCOUNT": {
               "Ref": "AWS::AccountId"
+            },
+            "CYCLOTRON_ACCOUNTS_API_URL": {
+              "Fn::If": [
+                "HasLabVerifier",
+                "https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api/",
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
             },
             "CYCLOTRON_ALLOW_LIVE": {
               "Ref": "AllowLive"
@@ -273,6 +299,17 @@
             },
             "CYCLOTRON_ISSUER": {
               "Ref": "ConsoleIssuer"
+            },
+            "CYCLOTRON_LAB_VERIFIER_ROLE_ARN": {
+              "Fn::If": [
+                "HasLabVerifier",
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
             },
             "CYCLOTRON_MACHINE_PRINCIPALS": {
               "Fn::If": [
@@ -531,6 +568,13 @@
                   "Resource": {
                     "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cyclotron-console-bff:*"
                   }
+                },
+                {
+                  "Action": "sts:AssumeRole",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"
+                  }
                 }
               ],
               "Version": "2012-10-17"
@@ -773,6 +817,48 @@
       },
       "Type": "AWS::ApiGatewayV2::Stage"
     },
+    "LabVerifierRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::GetAtt": [
+                    "BffRole",
+                    "Arn"
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "execute-api:Invoke",
+                  "Effect": "Allow",
+                  "Resource": [
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/GET/v1/identities/me",
+                    "arn:aws:execute-api:us-east-1:712236451410:bnh9mctvo9/api/POST/v1/accounts/*/authorize"
+                  ]
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "cyclotron-lab-verify"
+          }
+        ],
+        "RoleName": "cyclotron-lab-verifier"
+      },
+      "Type": "AWS::IAM::Role"
+    },
     "MachineInvokerRole": {
       "Condition": "HasMachineCaller",
       "Properties": {
@@ -858,7 +944,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/b2a3bb38c2454b9adeac76a8e08a6bc9"
+          "S3Key": "cyclotron-console/backend/9225ea1516105dff49c51d43866d4d6ae6c0613df26fce92aff6a3cb1335a204"
         },
         "Environment": {
           "Variables": {
