@@ -43,9 +43,9 @@ from .hosted_publications import (
     target_for,
 )
 from .journal import uuid
+from .lab_verifier import unavailable_authority
 from .priming import PrimingService
 from .prospectus_accounts import AccountAccessDenied
-from .prospectus_site_credentials import prospectus_bearer_authority
 from .publication_lab import CAPABILITIES, CONTRACT, PublicationError
 from .site_credentials import VerifiedSiteCredential, bearer_token
 from .storage_errors import StorageLimit
@@ -513,7 +513,7 @@ def install_curation_routes(app: FastAPI, runtime):
 
     def authority():
         configured = getattr(runtime, "curation_authority", None)
-        return configured or prospectus_bearer_authority(runtime.accounts)
+        return configured or unavailable_authority()
 
     async def admit(request, operation, pin_values):
         """Verify the bearer, then the pinned account and configured publication; nothing else is read first."""

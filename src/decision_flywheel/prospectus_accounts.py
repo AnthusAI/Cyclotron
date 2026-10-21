@@ -149,6 +149,10 @@ class AccountsClient:
     def accounts(self, human_token):
         return self.transport("GET", "/v1/accounts", human_token)
 
+    def current_person(self, human_token):
+        """GET /v1/identities/me: the token holder's own Person or {"person": null}; accepts no selector."""
+        return self.transport("GET", "/v1/identities/me", human_token)
+
     def resolve_identity(self, human_token):
         return self.transport("POST", "/v1/identities/resolve", human_token, {})
 

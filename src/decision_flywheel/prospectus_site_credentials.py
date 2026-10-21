@@ -38,6 +38,9 @@ def prospectus_site_credential_verifier(accounts):
 def prospectus_bearer_authority(accounts):
     """Authority for the curation routes: distinguishes an unknown token from a refused role.
 
+    accounts is an AccountsClient signing as the lab verifier role (see lab_verifier.py);
+    the identity step is GET /v1/identities/me, one of the verifier's two routes.
+
     Returns async authorize(token, pinned_account, operation) where operation is
     console:read or console:write. An unrecognized token raises a 401 PublicationError;
     a recognized person without that role on the pinned account raises 403. An
@@ -46,7 +49,7 @@ def prospectus_bearer_authority(accounts):
 
     def authorize_blocking(token, pinned_account, operation):
         try:
-            person = accounts.resolve_identity(token).get("person")
+            person = accounts.current_person(token).get("person")
         except AccountAccessDenied:
             raise PublicationError("bearer credential refused", 401, code="bearer_invalid") from None
         if not isinstance(person, dict) or not isinstance(person.get("id"), str):

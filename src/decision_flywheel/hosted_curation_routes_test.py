@@ -196,6 +196,74 @@ def test_a_revoked_membership_is_forbidden_and_an_unavailable_account_service_is
     run(scenario())
 
 
+def test_without_verifier_configuration_every_curation_route_fails_closed_with_503_and_reads_nothing(identity, monkeypatch):
+    host = build(identity, monkeypatch)
+    for runtime in (host.bff, host.worker):
+        runtime.curation_authority = None  # no injected authority and no verifier role or accounts URL configured
+    assert host.bff.config.lab_verifier_role_arn == "" and host.bff.config.accounts_api_url == ""
+    reads = len(host.bff.s3.calls)
+
+    async def scenario():
+        async with host.client() as http:
+            for response in (
+                await http.get(f"{ROUTES}/context"),
+                await http.post(f"{ROUTES}/publication", json={"operation": "status", "payload": {}}),
+                await http.post(f"{ROUTES}/priming", json={"query": GRAPHQL_DRAFT, "variables": {"id": "x"}}),
+            ):
+                assert response.status_code == 503 and response.json()["code"] == "authority_unavailable"
+
+    run(scenario())
+    assert len(host.bff.s3.calls) == reads
+
+
+def test_curation_routes_authorize_through_the_assumed_verifier_role_end_to_end(identity, monkeypatch):
+    from .lab_verifier import lab_verifier_authority
+    from .lab_verifier_test import ROLE, URL, Clock, FakeSTS
+
+    host = build(identity, monkeypatch)
+    seen = []
+
+    def central(request):
+        seen.append(request)
+        token = request.headers["x-prospectus-human-token"]
+        if token != "editor-token":
+            return httpx.Response(401, json={"error": "invalid_human"})
+        if request.method == "GET":
+            return httpx.Response(200, json={"person": {"id": host.session.person_id}})
+        body = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "allowed": True,
+                "accountId": request.url.path.split("/")[4],
+                "personId": host.session.person_id,
+                "product": "cyclotron",
+                "role": "member",
+                "operation": body["operation"],
+                "revision": 1,
+            },
+        )
+
+    clock = Clock()
+    sts = FakeSTS(clock)
+    authority = lab_verifier_authority(
+        ROLE, URL, "us-east-1", sts=sts, client=httpx.Client(transport=httpx.MockTransport(central)), now=clock
+    )
+    host.bff.curation_authority = host.worker.curation_authority = authority
+
+    async def scenario():
+        async with host.client() as http:
+            assert (await http.get(f"{ROUTES}/context")).status_code == 200
+        async with host.client(token="unknown-token") as http:
+            response = await http.get(f"{ROUTES}/context")
+            assert response.status_code == 401 and response.json()["code"] == "bearer_invalid"
+
+    run(scenario())
+    assert len(sts.calls) == 1
+    assert all(r.headers["x-amz-security-token"] == "fake-session-token-1" for r in seen)
+    assert [(r.method, r.url.path.rsplit("/", 1)[-1]) for r in seen[:2]] == [("GET", "me"), ("POST", "authorize")]
+
+
 def test_every_success_echoes_the_scope_pins_and_is_not_cacheable(identity, monkeypatch):
     host = build(identity, monkeypatch)
 
