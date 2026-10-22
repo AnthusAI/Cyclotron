@@ -108,7 +108,7 @@ No cloud resources, policies, OAuth clients, provider calls, public push or
 hosting deployment were changed by these synthetic checks.
 
 
-## Record lake: history as write-once files (primitive; not yet used by callers)
+## Record lake: history as write-once files (primitive; job results use it)
 
 **In plain language.** Today each journal is a binder that is photocopied in full for every
 change: to add one log line we copy the whole binder, file the old copy away, and move a sticky
@@ -163,10 +163,28 @@ link) and `S3RecordLake` (create-only `PutObject`, one retry for transient GETs 
 and the same one-attempt SDK requirement as `S3Journal`). One contract suite
 (`record_lake_contract_test.py`) runs against all three.
 
-**Not changed yet.** No existing journal, adapter or caller reads or writes the lake. Data stays in the
-embedded form; the S2 steps will move events, raw replies and job results out and keep reading the old
-embedded form as a fallback during migration. Deploying the lake needs the `records/` prefix in the lab
-stack (`infra/lab/pending-changes.md`).
+**First caller: catalog job results (S2c).** `S3ConsoleStorage(journal, results=lake)` writes each finished
+job's result (completed, failed or interrupted) to the `console/job-results` lake and keeps in the catalog row
+only a small reference (`cyclotron-job-result-ref/v1` with domain, kind, sequence, digest and length) in
+place of the embedded JSON. The row, the claim `{owner, fence}` and the lake coverage (`records` in the
+catalog value) stay in the catalog. `finish_command` checks the claim and fence, writes the record, then
+flips the job to its terminal status with the reference in ONE `commit_with_records` commit. A worker that
+loses its claim, or whose commit fails or is uncertain, leaves only an uncovered page that no read can see;
+repeating the identical completion adopts that page. Claim, fence, one-worker-at-a-time and idempotent
+re-finish behave exactly as before. Reads (`jobs`, `command_envelope`, `job_result`, the publication receipt
+route) fetch the record by reference, check the job id and the digest, and refuse a reference the catalog
+does not cover. `jobs(run, results=False)` lists without fetching, and `status_snapshot` uses it to fetch
+only the one result it returns. A portable export embeds results again so a snapshot stays self-contained.
+With no lake configured, or for results already embedded in an existing catalog, behaviour is unchanged
+and embedded results keep reading; a later conversion step moves them. Measured on the synthetic job
+(about 4 KB result), the catalog grows about 6.1 KB per completed job when embedded and about 0.57 KB
+with the lake (the rest is the command payload and the reference), flat as jobs accumulate. Priming drafts,
+items, lists and classifiers stay in the catalog. The hosted runtime and the operator recovery tool both
+open the store with the lake. The existing `*/console/records/*` grants cover its objects, so no further
+IAM or bucket-policy change is needed.
+
+**Still to come.** Events and raw model replies move out in S2a and S2b, and S3 converts existing data.
+Deploying the lake needs the `records/` prefix in the lab stack (`infra/lab/pending-changes.md`).
 
 ## Verification at the initial S3 SDK checkpoint
 

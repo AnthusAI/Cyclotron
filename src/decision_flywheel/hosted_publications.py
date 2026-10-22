@@ -463,14 +463,16 @@ REFUSAL_STATUS = {
 
 def status_snapshot(store, target, binding, publication):
     """Newest verified completed worker snapshot for this binding, or None."""
-    for job in reversed(store.jobs(target.run_id)):
+    # A lake-backed store lists jobs without fetching results and fetches only the one that matches.
+    fetch = getattr(store, "job_result", None)
+    for job in reversed(store.jobs(target.run_id, results=False) if fetch else store.jobs(target.run_id)):
         if (
             job["kind"] == "publication"
             and job["status"] == "completed"
             and job["payload"].get("publication") == publication
             and job["payload"].get("bindingRevision") == binding.revision
         ):
-            return job["result"]["statusSnapshot"]
+            return (fetch(job["id"]) if fetch else job["result"])["statusSnapshot"]
     return None
 
 
