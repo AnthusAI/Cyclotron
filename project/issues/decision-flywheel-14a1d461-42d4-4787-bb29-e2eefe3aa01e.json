@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-14a1d461-42d4-4787-bb29-e2eefe3aa01e",
+  "title": "M3b Optimizer item operations with validated citations",
+  "description": "After M3a's accuracy gate passes: the optimizer proposes add/change/retire per item, citing training item and note ids; citations not in the briefing window are rejected. Editor-written items may only receive candidate proposals an editor promotes. Record which items applied to each decision, honesty first. Per-item ablation on held-out labels on demand for clause measures. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-6bfa31b3-a00f-41cd-a75f-444fd2f44c04",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-22T01:01:18.929713Z",
+  "updated_at": "2026-10-22T01:01:18.929761Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

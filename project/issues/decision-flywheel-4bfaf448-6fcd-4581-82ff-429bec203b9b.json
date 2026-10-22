@@ -1,7 +1,7 @@
 {
   "id": "decision-flywheel-4bfaf448-6fcd-4581-82ff-429bec203b9b",
-  "title": "M3 Structured rubric items with cited evidence",
-  "description": "Rubric as items with stable ids and kinds (include, exclude, guidance; supporting questions are items too) rendered so the decision prompt stays equivalent (accuracy must not move; measure it). Optimizer proposes add/change/retire per item citing training item ids; reject citations not in the briefing window. Carry item history across versions. Record which items applied to each decision, honesty first. Weeks; may split into M3a (structure with prompt equivalence) and M3b (optimizer item operations with validated citations). Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
+  "title": "M3a Structured rubric items with decision-prompt equivalence",
+  "description": "Rubric as items with stable ids and kinds (include, exclude, guidance; supporting questions are items too), with history carried across versions, rendered so the decision prompt stays equivalent. Gate: an accuracy measurement on held-out labels shows no regression before M3b starts. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
   "type": "story",
   "status": "open",
   "priority": 1,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-10-22T00:56:03.280756Z",
-  "updated_at": "2026-10-22T00:56:03.280808Z",
+  "updated_at": "2026-10-22T01:01:18.533640Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

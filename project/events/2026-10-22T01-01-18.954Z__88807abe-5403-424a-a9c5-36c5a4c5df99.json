@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "88807abe-5403-424a-a9c5-36c5a4c5df99",
+  "issue_id": "decision-flywheel-2b9747b3-838b-4ff1-95cb-74fe22b5ff1b",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-22T01:01:18.954Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Edit, retire or add an item -> candidate version -> held-out evaluation -> result for an editor to promote (PublicationSteering exists as a library); report steering:true only once it works end to end. Make undo of a trained-on label stop resetting all learned structure (flywheel.py:763-780), or at minimum warn first. Weeks. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
+        "to": "Edit, retire or add an item -> candidate version -> held-out evaluation -> result for an editor to promote (PublicationSteering exists as a library); report steering:true only once it works end to end. Safe undo moved to its own story, scheduled first. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE"
+      }
+    }
+  }
+}
