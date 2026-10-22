@@ -151,6 +151,26 @@ def test_undo_reopens_the_decision_for_review(tmp_path):
             run(cyclotron.undo_review(run(cyclotron.decide(item("ref-2"))).decision_id))
 
 
+def test_undoing_a_trained_on_review_keeps_the_learned_rubric_and_questions(tmp_path):
+    from dataclasses import replace
+
+    from .flywheel import FittedClassifier
+
+    trained = items_with_role("training", 1)[0]
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model()) as cyclotron:
+        decision = run(cyclotron.decide(item(trained)))
+        run(cyclotron.review(decision.decision_id, "exclude"))
+        wheel = cyclotron.wheels["relevant"]
+        training, _, _ = cyclotron._partitions("relevant")
+        learned = replace(wheel.active.config, rubric="A learned rubric", example_ids=(trained,))
+        wheel._activate(FittedClassifier(learned, training_evidence=wheel._evidence(training)))
+        run(cyclotron.undo_review(decision.decision_id))
+        assert wheel.active.config.rubric == "A learned rubric"
+        assert wheel.active.config.tasks == learned.tasks
+        assert trained not in wheel.active.config.example_ids
+        assert wheel.active.head is None and not wheel.active.training_evidence
+
+
 def test_a_review_without_a_label_closes_the_decision_without_teaching(tmp_path):
     with Cyclotron.open(tmp_path / "c", DEFINITION, Model()) as cyclotron:
         decision = run(cyclotron.decide(item("ref-1")))
