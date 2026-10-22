@@ -1,6 +1,6 @@
 """Decision Flywheel's model-neutral decision-context toolkit."""
 
-__version__ = "0.33.2"
+__version__ = "0.34.0"
 
 from .models import DecisionModel, DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 from .artifacts import DeployableArtifact, create_artifact, load_artifact
