@@ -215,7 +215,8 @@ def test_cyclotron_undo_reopens_the_last_item_and_reuses_its_displayed_predictio
     assert store.item_labels("items", item_id, 1) == []
     assert store.item_results("items", item_id, 1)[0]["payload"] == shown["prediction"]
     assert asyncio.run(session.prepare())["prediction"] == shown["prediction"]
-    assert all(not w.active.config.rubric for w in session.wheels.values())
+    # Undo removes the label's influence (the fit) but keeps the learned guidance.
+    assert all(w.active.config.rubric == "Old learned guidance" and w.active.head is None for w in session.wheels.values())
     session.close()
     session = WorkspaceSession(store, run, tmp_path / "run", model, agent([]), events.append)
     try:
@@ -333,7 +334,7 @@ def test_corrected_cyclotron_feedback_invalidates_learning_and_survives_restart_
     )
     result = session.correct_feedback(payload, "correction")
     assert result["corrected"] == item_id
-    assert wheel.active.config.rubric == "" and wheel.active.fingerprint != previous
+    assert wheel.active.config.rubric == "Learned from old explanation" and wheel.active.fingerprint != previous
     assert session.partitions("a")[0][0].label == "no"
     assert session.partitions("a")[0][0].context["human_feedback"] == "Correct explanation"
     assert session.partitions("a")[0][0].initial_answer_value == "yes"
@@ -389,7 +390,7 @@ def test_corrected_cyclotron_feedback_invalidates_learning_and_survives_restart_
             },
             "comment-edit",
         )
-        assert wheel.active.config.rubric == ""
+        assert wheel.active.config.rubric == "Inferred guidance"
         assert wheel.optimizer_context["human_explanations"] == ["A more precise explanation"]
         # An API acknowledgement loss after durable feedback must not leave
         # the old inferred rubric current after explicit command recovery.
@@ -424,7 +425,7 @@ def test_corrected_cyclotron_feedback_invalidates_learning_and_survives_restart_
         session.close()
         session = WorkspaceSession(store, run, tmp_path / "run", model, agent([]), events.append)
         session.correct_feedback(interrupted, "interrupted")
-        assert session.wheels["a"].active.config.rubric == ""
+        assert session.wheels["a"].active.config.rubric == "Old inferred guidance"
         assert (
             len(
                 [

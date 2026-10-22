@@ -768,14 +768,44 @@ class DecisionFlywheel:
             self._evidence(development).get(key) != value for key, value in (self.active.development_evidence or {}).items()
         )
         if any(current.get(key) != value for key, value in original.items()) or development_changed:
+            from dataclasses import replace
+
             before = self.active.fingerprint
-            # Rubric and tasks were inferred from invalidated feedback too.
-            self._activate(FittedClassifier(self.initial))
+            current_development = self._evidence(development) if development is not None else {}
+            changed = sorted(
+                {key for key, value in original.items() if current.get(key) != value}
+                | {
+                    key
+                    for key, value in (self.active.development_evidence or {}).items()
+                    if development is not None and current_development.get(key) != value
+                }
+            )
+            # Remove the label's influence, not the learned structure: the numerical head and the evidence
+            # fingerprints that vouched for it go, and a retracted or corrected item stops being a
+            # demonstration. The rubric, supporting questions and remaining examples stay, and the next
+            # learning pass refits and re-measures against the same development partition.
+            config = self.active.config
+            kept = tuple(key for key in config.example_ids if key not in changed)
+            if kept != config.example_ids:
+                config = replace(config, example_ids=kept, parent_fingerprint=config.fingerprint)
+            self._activate(FittedClassifier(config))
             self._emit(
                 {
                     "kind": "classifier-invalidated",
                     "previous_version": before,
                     "reason": "training or development feedback was removed or corrected",
+                    "reset_to_initial": False,
+                    "changed_item_ids": changed,
+                    "retained": {
+                        "rubric": True,
+                        "supporting_questions": [task.name for task in config.tasks],
+                        "example_ids": list(config.example_ids),
+                    },
+                    "warning": (
+                        "The learned head was discarded and will be refit without this feedback. The rubric and "
+                        "supporting questions were written by the optimizer from feedback that may have included "
+                        "this label, so their wording can still reflect it until the next learning pass revises them."
+                    ),
                 }
             )
 

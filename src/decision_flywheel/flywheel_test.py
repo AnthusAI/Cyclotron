@@ -415,6 +415,72 @@ def test_a_corrected_training_label_invalidates_the_dependent_head(tmp_path):
     wheel.close()
 
 
+# Enough rows per class that the labels left after one undo still meet the training floor.
+ROOMY = TRAIN + tuple(
+    LabeledItem(
+        Item(f"t{i}", {"text": f"{'yes' if i % 2 else 'no'} train {i}"}),
+        "include" if i % 2 else "exclude",
+        context={"human_feedback": "practical work"},
+    )
+    for i in range(6, 10)
+)
+
+
+def _fitted_wheel(tmp_path, training=TRAIN):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]), max_requests=60)
+    asyncio.run(wheel.improve(training, DEV, protected=(), propensities={r.item.id: 1.0 for r in training}))
+    assert wheel.active.head is not None
+    assert wheel.active.config.example_ids == ("t0", "t1")
+    return wheel
+
+
+def test_undoing_one_trained_on_label_keeps_the_learned_rubric_questions_and_other_examples(tmp_path):
+    wheel = _fitted_wheel(tmp_path)
+    learned = wheel.active.config
+    wheel.reconcile_feedback(TRAIN[1:], development=DEV)
+    assert wheel.active.head is None
+    assert wheel.active.config.rubric == learned.rubric == "Practical research"
+    assert wheel.active.config.tasks == learned.tasks
+    assert wheel.active.config.example_ids == ("t1",)
+    event = next(e for e in reversed(wheel.history()) if e["kind"] == "classifier-invalidated")
+    assert event["reset_to_initial"] is False
+    assert event["changed_item_ids"] == ["t0"]
+    assert event["retained"]["example_ids"] == ["t1"]
+    assert "rubric" in event["warning"]
+    wheel.close()
+
+
+def test_undoing_a_label_that_is_not_an_example_leaves_the_example_list_untouched(tmp_path):
+    wheel = _fitted_wheel(tmp_path)
+    wheel.reconcile_feedback((*TRAIN[:5],), development=DEV)
+    assert wheel.active.config.example_ids == ("t0", "t1")
+    assert wheel.active.config.rubric == "Practical research"
+    wheel.close()
+
+
+def test_the_refit_after_undo_and_its_evaluation_never_see_the_undone_label(tmp_path):
+    wheel = _fitted_wheel(tmp_path, ROOMY)
+    remaining = ROOMY[1:]
+    wheel.reconcile_feedback(remaining, development=DEV)
+    wheel.optimizer = OptimizerAgent(
+        lambda _: OptimizerReply(
+            '{"rationale":"Look for practical work","rubric":"Practical research",'
+            '"example_ids":["t1","t2"],"tasks":[{"name":"practical",'
+            '"instructions":"Is this practical?","labels":["yes","no"]}]}',
+            "fake-optimizer",
+        )
+    )
+    asyncio.run(wheel.improve(remaining, DEV, protected=(), propensities={r.item.id: 1.0 for r in remaining}))
+    head = wheel.active.head
+    assert head is not None
+    seen = set(head.provenance.training_ids) | set(head.provenance.development_ids) | set(head.provenance.scoreboard_ids)
+    assert "t0" not in seen
+    assert "t0" not in wheel.active.config.example_ids
+    assert "t0" not in (wheel.active.training_evidence or {})
+    assert not set(head.provenance.training_ids) & set(head.provenance.development_ids)
+    wheel.close()
+
+
 def test_the_same_feedback_round_is_not_paid_for_again_after_restart(tmp_path):
     model = FakeModel()
     path = tmp_path / "wheel.sqlite"
