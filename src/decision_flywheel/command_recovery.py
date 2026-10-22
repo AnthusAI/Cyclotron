@@ -19,7 +19,8 @@ import os
 import sys
 
 from .batch_storage import StorageScope
-from .s3_console_storage import S3ConsoleStorage
+from .record_lake import S3RecordLake
+from .s3_console_storage import RESULTS_DOMAIN, RESULTS_KIND, S3ConsoleStorage
 from .s3_journal import S3Journal
 from .storage_payloads import S3Payloads
 
@@ -27,7 +28,8 @@ from .storage_payloads import S3Payloads
 def open_store(s3, books_bucket, aws_account, cyclotron_account, *, max_bytes=4194304):
     payloads = S3Payloads(s3, books_bucket, aws_account, StorageScope(cyclotron_account, "console"), max_bytes=max_bytes)
     journal = S3Journal(payloads, "console", "catalog", max_bytes=max_bytes, max_commits=1000000)
-    return S3ConsoleStorage(journal, max_records=10000)
+    results = S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=max_bytes)
+    return S3ConsoleStorage(journal, max_records=10000, results=results)
 
 
 def matching_dlq_messages(sqs, url, job_id, *, limit=100):

@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-3fb66773-f993-4221-903c-98fdf1ce031e",
+  "title": "status_snapshot picks the oldest matching job instead of the newest",
+  "description": "hosted_publications.status_snapshot iterates reversed(store.jobs(...)), but the S3 console store already returns jobs newest first, so within its 20-job window it selects the OLDEST matching job's result. Found during record-lake S2c (PR #105), behaviour deliberately left unchanged there. Fix: select the newest matching job explicitly (by timestamp) with a spec covering both store orderings.",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-22T04:28:42.727244Z",
+  "updated_at": "2026-10-22T04:28:42.727304Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
