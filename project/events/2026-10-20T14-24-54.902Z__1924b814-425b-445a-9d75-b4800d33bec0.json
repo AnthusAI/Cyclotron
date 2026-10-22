@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "1924b814-425b-445a-9d75-b4800d33bec0",
+  "issue_id": "decision-flywheel-e5dcca5a-6438-41ef-b7a9-4f8e8dd56016",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T14:24:54.902Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Owner-authorized shared publication inference across SaaS accounts",
+    "description": "As an engine owner, I want to explicitly permit another SaaS account to use narrowly scoped publication inference so that multiple publications can use one central Cyclotron without shared tenancy or private-data disclosure. Owner: cross-account-sharing. Central priming and PR58 are independent and must not wait for this feature. Two layers: shared central publication router, separately owned publication-internal section router. Definition of done: distinct identities, explicit grant/output/execution scope, revocation, audit, billing attribution, synthetic isolation tests and reviewed hosted integration. No live grant, credentials, DNS or production infrastructure is authorized.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": "cross-account-sharing",
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "cross-account-sharing"
+    }
+  }
+}
