@@ -6,9 +6,17 @@ import pytest
 
 from .batch_storage import BatchConflict, BatchInProgress
 from .decision_cache import CacheMiss
+from .storage_contract_backends import BATCH_BACKEND_NAMES, BatchBackend
 
 FIRST_REQUEST = "a" * 64
 SECOND_REQUEST = "b" * 64
+
+
+@pytest.fixture(params=BATCH_BACKEND_NAMES)
+def batch_backend(request, tmp_path):
+    backend = BatchBackend(request.param, tmp_path)
+    yield backend
+    backend.release_everything()
 
 
 @pytest.fixture
