@@ -7,6 +7,9 @@ import {consoleAccounts,SignInExpired,type ConsoleAccountsClient,type ConsoleSes
 import {WebApp} from './WebApp'
 import {WorkspaceTransportProvider} from './WorkspaceTransport'
 
+/** People without an account request access on the Anthus engagement page; `cta` attributes the visit to this sign-in screen. */
+export const REQUEST_ACCESS_URL='https://anth.us/engage/?solution=Cyclotron&cta=lab-sign-in'
+
 export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccountsClient}){
   const [session,setSession]=useState<ConsoleSession|null>(null)
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
@@ -87,7 +90,7 @@ export function AccountConsole({client=consoleAccounts}:{client?:ConsoleAccounts
     </header>
     {error?<div role="alert" className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">{error}</div>:null}
     {!session?<main className="grid flex-1 place-items-center p-6"><div className="space-y-4 text-center">{error?<Button onClick={()=>{void refresh()}}>Try again</Button>:<p role="status">Loading your accounts…</p>}</div></main>:null}
-    {session&&!session.authenticated?<main className="grid flex-1 place-items-center p-6"><Card className="w-full max-w-lg"><CardHeader><CardTitle><h1>Welcome to Cyclotron</h1></CardTitle></CardHeader><CardContent className="space-y-5"><p className="text-sm text-muted-foreground">Sign in to choose your account and open its workspace.</p><a className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2" href="/auth/login">Continue with Google</a></CardContent></Card></main>:null}
+    {session&&!session.authenticated?<main className="grid flex-1 place-items-center p-6"><Card className="w-full max-w-lg"><CardHeader><CardTitle><h1>Welcome to Cyclotron</h1></CardTitle></CardHeader><CardContent className="space-y-5"><p className="text-sm text-muted-foreground">Sign in to choose your account and open its workspace.</p><a className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2" href="/auth/login">Continue with Google</a><p className="text-sm text-muted-foreground">No account yet? <a className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" href={REQUEST_ACCESS_URL}>Request access</a></p></CardContent></Card></main>:null}
     {session?.authenticated&&transition?<main className="grid flex-1 place-items-center p-6" aria-busy="true"><p role="status" className="text-center text-sm text-muted-foreground">{transition}</p></main>:null}
     {session?.authenticated&&!selected&&!transition?<main className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto p-4 sm:p-6"><Card className="my-auto w-full max-w-xl shrink-0"><CardHeader><CardTitle><h1>{session.accounts.length?'Choose an account':'No accounts available'}</h1></CardTitle></CardHeader><CardContent className="space-y-5">
       {session.accounts.length?<>
