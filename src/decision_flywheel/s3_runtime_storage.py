@@ -59,7 +59,7 @@ def json_text(value):
 class S3RuntimeStores:
     requires_durable_optimizer = True
 
-    def __init__(self, journal, *, max_records, max_conflicts=8, cache_owned=False):
+    def __init__(self, journal, *, max_records, max_conflicts=8, cache_owned=False, coalesce_events=None):
         if (
             not isinstance(journal, Journal)
             or type(max_records) is not int
@@ -74,7 +74,13 @@ class S3RuntimeStores:
         self.authority = None
         self.poisoned = False
         self.cache_owned = cache_owned
+        # Every commit rewrites the whole runtime snapshot, and a trace event is not a decision. An owning
+        # handle may therefore hold appended events in memory and publish them with the next durable change
+        # (an answer reservation or completion, a state write) or at release, in the same atomic commit.
+        # Nothing that grants or records a paid action is ever deferred. Off unless the handle owns a cache.
+        self.coalesce_events = cache_owned if coalesce_events is None else bool(coalesce_events) and cache_owned
         self._cached = None
+        self._working = None
         self.runtime_storage = _State(self)
         self.runtime_cache = _Cache(self)
         self.learning_storage = _Learning(self)
@@ -113,7 +119,13 @@ class S3RuntimeStores:
         if self.authority is None or (value["owner"], value["fence"]) != self.authority:
             raise RuntimeOwnershipError("runtime execution ownership unavailable; no timeout takeover")
 
+    def flush(self):
+        """Publish any held events now. A no-op when nothing is held."""
+        if self._working is not None:
+            self._change(lambda value: None)
+
     def refresh(self):
+        self.flush()
         self._cached = None
         if self.poisoned:
             raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
@@ -126,31 +138,44 @@ class S3RuntimeStores:
         if self.poisoned:
             raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
         current = self._cached if self.cache_owned and self._cached is not None else self.journal.read()
-        self._validate(current.value)
-        self._owned(current.value)
-        return current.value["data"]
+        value = self._working if self._working is not None else current.value
+        self._validate(value)
+        self._owned(value)
+        return value["data"]
 
-    def _change(self, fn, *, ownership=True, recovery=False):
+    def _change(self, fn, *, ownership=True, recovery=False, defer=False):
         if self.poisoned and not recovery:
             raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
         for _ in range(self.max_conflicts):
+            held = self._working is not None and self._cached is not None
             record = (
                 self._cached
-                if self.cache_owned and self._cached is not None and ownership and not recovery
+                if held or (self.cache_owned and self._cached is not None and ownership and not recovery)
                 else self.journal.read()
             )
-            self._validate(record.value)
+            base = self._working if held else record.value
+            self._validate(base)
             if ownership:
-                self._owned(record.value)
-            value = deepcopy(record.value)
+                self._owned(base)
+            value = deepcopy(base)
             result = fn(value)
             self._validate(value)
+            if defer and self.coalesce_events and ownership and not recovery:
+                if value != record.value:
+                    self._working = value
+                return result
             if value == record.value:
+                self._working = None
                 return result
             try:
                 self._cached = commit_with_contract(self.journal, record, value, invalidate=self._poison)
+                self._working = None
             except StorageConflict:
                 self._cached = None
+                if held:
+                    # Events held in memory cannot be replayed onto a head someone else moved.
+                    self._poison()
+                    raise RuntimeOwnershipError("runtime head moved while events were held; reopen/reconcile") from None
                 continue
             return result
         raise RuntimeOwnershipError("runtime contention limit reached")
@@ -158,9 +183,10 @@ class S3RuntimeStores:
     def _poison(self):
         self.poisoned = True
         self._cached = None
+        self._working = None
 
-    def change(self, fn):
-        return self._change(lambda value: fn(value["data"], value))
+    def change(self, fn, *, defer=False):
+        return self._change(lambda value: fn(value["data"], value), defer=defer)
 
     def acquire(self, owner):
         uuid(owner)
@@ -189,6 +215,7 @@ class S3RuntimeStores:
         finally:
             self.authority = None
             self._cached = None
+            self._working = None
 
     @staticmethod
     def ordinal(value):
@@ -208,8 +235,8 @@ class _View:
     def read(self):
         return self.store._read()
 
-    def change(self, fn):
-        return self.store.change(fn)
+    def change(self, fn, *, defer=False):
+        return self.store.change(fn, defer=defer)
 
     def ensure(self):
         self.read()
@@ -250,7 +277,7 @@ class _State(_View):
                 data["state"][ACTIVE_LABELS_STATE_KEY] = dump_active_labels(active_by_item)
             return identifier
 
-        return self.change(apply)
+        return self.change(apply, defer=True)
 
     def active_labels(self):
         def materialize(data, value):
