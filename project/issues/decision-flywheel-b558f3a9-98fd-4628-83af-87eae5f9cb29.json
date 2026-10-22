@@ -3,7 +3,7 @@
   "title": "S1 primitive: RecordLake, write-then-flip protocol, contract suite, docs",
   "description": "Build the record-lake primitive: create-only write-once records per scope/domain/kind, ordering by sequence covered by the small control state, the write-records-then-flip-head helper, memory/file/S3 implementations, docs and the bucket-policy template change. No behaviour change for callers.\nAcceptance: records never mutated; orphans invisible; one all-or-nothing commit; contract specs on memory, file and S3 fake; make check passes.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -29,11 +29,18 @@
       "text": "Implemented and verified: record_lake.py, contract suite on memory/file/S3 fake, docs, template pending changes. make check exit 0. PR https://github.com/AnthusAI/Cyclotron/pull/102 (not merged, not deployed).",
       "created_at": "2026-10-22T03:54:12.941635Z",
       "comment_type": "default"
+    },
+    {
+      "id": "692da4f0-4b85-4675-9cc2-ffb1ff5a86b6",
+      "author": "home",
+      "text": "Deployed to the lab 2026-10-22 in v0.34.0 (change set record-lake-v0-34-0, approved by Ryan).",
+      "created_at": "2026-10-22T10:53:10.231834Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-22T03:28:47.008758Z",
-  "updated_at": "2026-10-22T03:54:12.941732Z",
-  "closed_at": null,
+  "updated_at": "2026-10-22T10:53:10.254633Z",
+  "closed_at": "2026-10-22T10:53:10.254587Z",
   "agent": {
     "platform": "claude-code",
     "model": "claude-sonnet-5-5",
