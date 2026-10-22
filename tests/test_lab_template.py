@@ -10,8 +10,12 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# The journal byte budget bridge (pending-changes.md); empty again after the next deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = []
+# Record-lake prefix (S1): three list appends. Emptied again after the S3 deploy refreshes the snapshot.
+REVIEWED_PENDING_PATHS = [
+    "/Resources/BooksBucketPolicy/Properties/PolicyDocument/Statement/1/Resource/-",
+    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 

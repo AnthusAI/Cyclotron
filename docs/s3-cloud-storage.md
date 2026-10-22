@@ -108,6 +108,66 @@ No cloud resources, policies, OAuth clients, provider calls, public push or
 hosting deployment were changed by these synthetic checks.
 
 
+## Record lake: history as write-once files (primitive; not yet used by callers)
+
+**In plain language.** Today each journal is a binder that is photocopied in full for every
+change: to add one log line we copy the whole binder, file the old copy away, and move a sticky
+note to the new one. That is fine for a small binder and wasteful for a big one, which is why the
+4 MiB cap exists. The record lake is the alternative for anything that is only ever added to
+(events, raw model replies, job results): each record is its own small page in a folder, written
+once, never changed, numbered in order. Adding a line writes one page, not the binder.
+
+**Why only control state needs all-or-nothing commits.** The few facts that must change one at a
+time are who owns a job, how many paid calls were made, and which version is active. Those need the
+sticky-note mechanism (the existing journal, unchanged): a conditional write that only one worker can
+win. History pages do not compete: nobody edits page 993 while someone else edits page 994. So the
+journal stays, but shrinks to a small control state, and history leaves it.
+
+**Layout.** `<account>/<workspace>/records/<domain>/<kind>/<sequence, 12 digits>.json`, for example
+`.../records/runtime/events/000000000993.json`. The fixed `records` segment lets the bucket policy
+demand `If-None-Match: *` for the whole prefix, as it already does for `payloads/` and `anchor.json`.
+Each page is a JSON envelope (schema, namespace, sequence, value). It is size-bounded per record
+(`max_record_bytes`, explicit at construction), not per collection. A page whose envelope does not
+match its position is corrupt and is refused, so a copied page never passes as another.
+
+**Ordering: sequence numbers covered by the control state, not ULIDs.** The control state holds, per
+lake, `{"last": N, "skipped": [..]}`. The next record is `last + 1`, written create-only. A reader trusts
+exactly the sequences `1..last` minus `skipped`. ULIDs would need no allocation, but nothing small can
+say which ULIDs count: an abandoned write with an older ULID would fall inside any watermark, so the
+state would have to list every id and grow like the history it replaces. A sequence gives one small
+fact, a deterministic order that depends on no clock, and listing that is a plain sorted range. If a
+create finds a different record already at the sequence (an abandoned write, or a racing writer), the
+writer skips it, takes the next, and the commit records the skipped number. Identical bytes already
+there (a retry after a lost response) are adopted. Two racing writers are therefore safe even without
+the owner/fence rule: the head compare-and-set picks one, and the loser's pages become orphans.
+
+**Commit protocol: write the pages, then flip the head** (`commit_with_records`). Write the new records
+first. Then commit ONE small journal change that stores the new coverage and whatever else changed
+(counters, status, a digest of the last record). That commit is the only moment the records count.
+
+- Failure before the commit (crash, lost head race, uncertain outcome, journal size limit): the pages exist
+  but no control state covers them. Readers cannot see them. Nothing is rolled back and nothing is deleted.
+- A reader holds the control state it read. It reads records by sequence (GET only, no list permission), so
+  a head that moves meanwhile does not change what that reader sees.
+- A covered record that is missing is an error (fail closed), never skipped.
+
+**Orphans.** An orphan is a stored sequence the current coverage does not cover: a number above `last`
+or listed in `skipped`. They stay in the same prefix, are listable (`RecordLake.orphans(coverage)`), and are
+ignored by every reader. The application never deletes them (the bucket grants no delete). A later janitor
+may report them, and may remove old ones only after a reviewed step that holds the writer's ownership so
+a number above `last` is not simply an in-flight write. At most 64 skipped numbers are kept in one control
+state; beyond that appends stop with an error to be reconciled rather than growing the state.
+
+**Back ends.** `MemoryRecordLake` (tests), `FileRecordLake` (local directory, same layout, create-only via
+link) and `S3RecordLake` (create-only `PutObject`, one retry for transient GETs through `s3_transient`,
+and the same one-attempt SDK requirement as `S3Journal`). One contract suite
+(`record_lake_contract_test.py`) runs against all three.
+
+**Not changed yet.** No existing journal, adapter or caller reads or writes the lake. Data stays in the
+embedded form; the S2 steps will move events, raw replies and job results out and keep reading the old
+embedded form as a fallback during migration. Deploying the lake needs the `records/` prefix in the lab
+stack (`infra/lab/pending-changes.md`).
+
 ## Verification at the initial S3 SDK checkpoint
 
 107 focused cloud SDK/native SDK/guard/learning-window/priming tests pass. The

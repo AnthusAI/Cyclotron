@@ -7,4 +7,17 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.** The journal byte budget bridge (JournalMaxBytes, set to 16 MiB) and v0.33.2 (package sha256 `9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c`) were deployed on 2026-10-22 with change set `journal-budget-v0-33-2`, and the snapshot was refreshed from the deployed stack.
+## Record-lake prefix (S1, for the S3 deploy)
+
+Three add-only list appends open one new key prefix, `<account>/console/records/`, for write-once
+record-lake objects (docs/s3-cloud-storage.md, "Record lake"). Nothing is replaced or removed, and no
+Lambda code changes.
+
+- `/Resources/BooksBucketPolicy/Properties/PolicyDocument/Statement/1/Resource/-` adds `${BooksBucket}/*/records/*` to the existing deny-unless-`If-None-Match: *` statement, so records are create-only at the bucket, like `payloads/` and `anchor.json`. There is still no delete grant anywhere.
+- `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` lets the BFF `GetObject`/`PutObject` under `*/console/records/*`.
+- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` does the same for the worker.
+
+No `s3:ListBucket` is added. Reading covered records is a GET by sequence; listing (audit, orphan janitor) is
+not needed by S2 and would be a separate, reviewed grant.
+
+The journal byte budget bridge (JournalMaxBytes 16 MiB, v0.33.2, change set `journal-budget-v0-33-2`) was deployed on 2026-10-22 and is already in the snapshot.
