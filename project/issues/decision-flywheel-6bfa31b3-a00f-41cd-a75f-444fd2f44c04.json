@@ -10,9 +10,17 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "074f0ef7-9937-4ee9-b9e8-854eeff0b31a",
+      "author": "home",
+      "text": "Ryan's decisions 2026-10-21 (relayed by the Papyrus marketing redesign session, his words: 'Accept all three recommendations and pull safe undo forward'): (1) editor notes are cited evidence by default with an explicit 'make this an item' action, never auto-promoted; (2) the optimizer may propose changes to editor-written items only as candidates an editor promotes, never auto-applied; (3) clause measures come from per-item ablation on held-out labels, on demand, not every version; (4) safe undo is split out of M4 and scheduled first. M3 is split into M3a (structured items with decision-prompt equivalence, gated on an accuracy measurement) and M3b (optimizer item operations with validated citations). Papyrus counterpart epic: PPY-e3e6a5 (PPY-56237a data sync, PPY-0d0e66 version card, PPY-ad232f why this item, PPY-b87574 items list, PPY-c54ebf steer items).",
+      "created_at": "2026-10-22T01:01:17.409312Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-22T00:55:47.758069Z",
-  "updated_at": "2026-10-22T00:55:47.759002Z",
+  "updated_at": "2026-10-22T01:01:17.409382Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
