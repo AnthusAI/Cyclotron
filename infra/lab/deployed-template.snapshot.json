@@ -271,7 +271,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c"
+          "S3Key": "cyclotron-console/backend/63b054b87abc5050891ae14fe9c7b8a330d9d5d2a997de5fe5ab8edd78da3a9e"
         },
         "Environment": {
           "Variables": {
@@ -499,6 +499,9 @@
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*"
                     }
                   ]
                 },
@@ -670,6 +673,9 @@
                 },
                 {
                   "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/coordination/*/*/anchor.json"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/records/*"
                 }
               ]
             },
@@ -953,7 +959,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c"
+          "S3Key": "cyclotron-console/backend/63b054b87abc5050891ae14fe9c7b8a330d9d5d2a997de5fe5ab8edd78da3a9e"
         },
         "Environment": {
           "Variables": {
@@ -1137,6 +1143,9 @@
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*"
                     }
                   ]
                 },

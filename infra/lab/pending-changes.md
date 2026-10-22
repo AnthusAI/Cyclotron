@@ -7,24 +7,4 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-## Record-lake prefix (S1, for the S3 deploy)
-
-Three add-only list appends open one new key prefix, `<account>/console/records/`, for write-once
-record-lake objects (docs/s3-cloud-storage.md, "Record lake"). Nothing is replaced or removed, and no
-Lambda code changes.
-
-- `/Resources/BooksBucketPolicy/Properties/PolicyDocument/Statement/1/Resource/-` adds `${BooksBucket}/*/records/*` to the existing deny-unless-`If-None-Match: *` statement, so records are create-only at the bucket, like `payloads/` and `anchor.json`. There is still no delete grant anywhere.
-- `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` lets the BFF `GetObject`/`PutObject` under `*/console/records/*`.
-- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` does the same for the worker.
-
-Deploy order for S2b (raw model replies): these grants must be live before the worker code that writes
-replies to `*/console/records/shared-batches/`. No further IAM or bucket-policy change is needed: the hosted
-scope is `<account>/console`, already covered by `*/console/records/*`. Without the grants, replies fall back to
-the old embedded form (logged), so nothing is lost, only not yet moved.
-
-No `s3:ListBucket` is added. Reading covered records is a GET by sequence; listing (audit, orphan janitor) is
-not needed by S2 and would be a separate, reviewed grant.
-
-The order of the deploy, the conversion of live data and what rollback means are in `README.md`, "Record-lake cutover". The package key (`S3Key` of both functions) changes in the same change set.
-
-The journal byte budget bridge (JournalMaxBytes 16 MiB, v0.33.2, change set `journal-budget-v0-33-2`) was deployed on 2026-10-22 and is already in the snapshot.
+**No pending changes.** The record-lake cutover was deployed on 2026-10-22 with change set `record-lake-v0-34-0` (v0.34.0, package sha256 `63b054b87abc5050891ae14fe9c7b8a330d9d5d2a997de5fe5ab8edd78da3a9e`): `*/records/*` create-only in the bucket policy and Get/Put on `*/console/records/*` for the BFF and worker roles. All five journals were converted with scripts/dev/convert_to_record_lake.py (4,385 records; control state 18,955,946 -> about 1,199,000 bytes), and the snapshot was refreshed from the deployed stack.
