@@ -7,4 +7,16 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.** The six verifier changes (LabVerifierEnabled, HasLabVerifier, LabVerifierRole, the BFF AssumeRole statement and the two gated BFF environment variables) were deployed on 2026-10-21 with change set `curation-routes-v0-31-0` (v0.31.0, package sha256 `9225ea1516105dff49c51d43866d4d6ae6c0613df26fce92aff6a3cb1335a204`), and the snapshot was refreshed from the deployed stack. `LabVerifierEnabled` is `false` until Prospectus enables the verifier.
+## Journal byte budget bridge (2026-10-21, approved by Ryan)
+
+The next deploy of `cyclotron-console` changes exactly these paths:
+
+| Path | Change |
+|---|---|
+| `/Parameters/JournalMaxBytes` | New parameter, default `4194304` (4 MiB), 1 to 64 MiB. |
+| `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES` | `Ref: JournalMaxBytes`. |
+| `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES` | `Ref: JournalMaxBytes`. |
+
+A temporary bridge: raises how large each S3 journal document may grow while the
+record-lake redesign moves history out into write-once records.
+
