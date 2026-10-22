@@ -3,17 +3,25 @@
   "title": "Safe undo: undoing a trained-on label must not wipe learned structure",
   "description": "Today undo_review of a label that was in the fit invalidates the fit and resets the classifier to its initial config, discarding the learned rubric, supporting questions and example list (flywheel.py:763-780). Undo must instead remove that label's influence without wiping unrelated learned structure (e.g. refit from the current config without the label, or re-measure the incumbent), or at minimum warn and require confirmation before a reset. Specs prove a learned rubric/questions/examples survive undo of one trained-on label. Scheduled ahead of M1-M4 by Ryan 2026-10-21. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-6bfa31b3-a00f-41cd-a75f-444fd2f44c04",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6cc78e4a-52a5-4412-90e1-b87bef27bb0c",
+      "author": "home",
+      "text": "Implemented in https://github.com/AnthusAI/Cyclotron/pull/95. reconcile_feedback no longer resets to the initial config: it drops the head, its evidence fingerprints and the changed item from example_ids, keeps rubric/questions/other examples, and the next learning pass refits and re-measures without the label. classifier-invalidated event now carries reset_to_initial=false, changed_item_ids, retained and a warning that optimizer-written wording may still reflect the label. Specs: flywheel_test (3 new), embedded_cyclotron_test (1 new end-to-end undo_review), workspace_session_test (3 assertions updated from wipe to survive). make check PYTHON=.venv/bin/python exits 0 (2381 passed, trace-ui build, bundle drift clean).",
+      "created_at": "2026-10-22T01:29:42.131762Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-22T01:01:17.903016Z",
-  "updated_at": "2026-10-22T01:01:17.903075Z",
-  "closed_at": null,
+  "updated_at": "2026-10-22T01:29:42.164119Z",
+  "closed_at": "2026-10-22T01:29:42.164066Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {}
