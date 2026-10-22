@@ -11,11 +11,7 @@ _SPEC.loader.exec_module(check)
 
 
 # The journal byte budget bridge (pending-changes.md); empty again after the next deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = [
-    "/Parameters/JournalMaxBytes",
-    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES",
-    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
