@@ -8,7 +8,7 @@ import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from uuid import uuid4
@@ -19,9 +19,18 @@ from .console_snapshot import validate as validate_console
 from .cyclotrons import load_config
 from .journal import Journal, commit_with_contract, uuid
 from .models import DecisionTask
-from .record_lake import RECORDS_KEY, Coverage, commit_with_records, coverage_in, with_coverage
+from .record_lake import (
+    RECORDS_KEY,
+    Coverage,
+    FileRecordLake,
+    S3RecordLake,
+    commit_with_records,
+    coverage_in,
+    with_coverage,
+)
 from .run_storage import _UNSET
 from .storage_errors import StorageConflict
+from .storage_payloads import FilePayloads, S3Payloads
 
 # Completed job results live in the record lake; the catalog row keeps only this small reference.
 RESULTS_DOMAIN, RESULTS_KIND = "console", "job-results"
@@ -94,6 +103,24 @@ def insert(value, domain, fields):
         raise ValueError("complete known domain record required")
     records.append(record)
     return record
+
+
+def results_lake_for(journal, *, max_record_bytes=None):
+    """The job-results lake that sits beside a catalog journal, on the same store."""
+    payloads, budget = journal.payloads, max_record_bytes or journal.max_bytes
+    if isinstance(payloads, S3Payloads):
+        return S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=budget)
+    if isinstance(payloads, FilePayloads):
+        return FileRecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=budget)
+    raise ValueError("an S3 or file payload adapter is required for the job-results lake")
+
+
+@dataclass(frozen=True)
+class ResultsConverted:
+    originals: list  # (job id, run id, status, raw text) in the order the records were written
+    refs: list  # RecordRef of each result record written
+    before: object  # JournalRecord before the commit
+    after: object  # JournalRecord the commit produced
 
 
 class S3ConsoleStorage:
@@ -1112,6 +1139,83 @@ class S3ConsoleStorage:
                 continue
             return
         raise ValueError("console contention limit reached; retry with same operation identity")
+
+    TERMINAL = ("completed", "failed", "interrupted")
+
+    def _embedded_results(self, value):
+        """(job row, raw text) of finished jobs whose result is still inside the catalog row."""
+        return [
+            (r, r["result"])
+            for r in rows(value, "web_jobs")
+            if r["status"] in self.TERMINAL and r["result"] is not None and result_ref(r["result"]) is None
+        ]
+
+    def audit_results(self):
+        """Read-only: the head record, the movable embedded results ``(job id, run id, status, raw text)``, the
+        jobs left alone because their text is not canonical JSON, and the ids of jobs still running."""
+        record = self._record()
+        movable, unmovable = [], []
+        for job, raw in self._embedded_results(record.value):
+            try:
+                canonical = encoded(json.loads(raw)) == raw
+            except ValueError:
+                canonical = False
+            (movable if canonical else unmovable).append((job["id"], job["run_id"], job["status"], raw))
+        running = [r["id"] for r in rows(record.value, "web_jobs") if r["status"] == "running"]
+        return record, movable, unmovable, running
+
+    def preview_results_conversion(self, record, movable):
+        """(the catalog as it would stand after the conversion, bytes of the records it would write).
+
+        Writes nothing; exact unless a sequence turns out to be occupied when the records are created."""
+        state = deepcopy(record.value)
+        coverage = coverage_in(state, self.results)
+        size = 0
+        for n, (job_id, run, status, raw) in enumerate(movable, coverage.last + 1):
+            content = self.results._encode(n, {"jobId": job_id, "runId": run, "status": status, "result": json.loads(raw)})
+            ref = self.results._ref(n, content)
+            one(state, "web_jobs", id=job_id)["result"] = encoded({"schema": RESULT_REF, "ref": ref.to_json()})
+            size += len(content)
+        state[RECORDS_KEY] = {
+            **state.get(RECORDS_KEY, {}),
+            RESULTS_LAKE: Coverage(coverage.last + len(movable), coverage.skipped).to_json(),
+        }
+        return state, size
+
+    def convert_embedded_results(self, *, check=None):
+        """Move finished jobs' embedded results into the job-results lake, in one catalog commit.
+
+        Result records first (the shape ``finish_command`` writes), then ONE commit swaps each embedded text
+        for its reference and stores the coverage. Only terminal jobs are touched, and a result whose text
+        is not canonical JSON stays where it is. Refuses while any job is running. Returns ``ResultsConverted``
+        or None when nothing is embedded (idempotent).
+        """
+        if self.results is None:
+            raise ValueError("a job-results lake is required to convert embedded results")
+        for _ in range(self.max_conflicts):
+            record, movable, _unmovable, running = self.audit_results()
+            if running:
+                raise ValueError("jobs are running; convert when the catalog has none")
+            if not movable:
+                return None
+            ids = [job_id for job_id, *_ in movable]
+
+            def change(state, refs, ids=ids):
+                cited = iter(refs[RESULTS_LAKE])
+                for job_id in ids:
+                    one(state, "web_jobs", id=job_id)["result"] = encoded({"schema": RESULT_REF, "ref": next(cited).to_json()})
+                self._validate(state)
+
+            values = [
+                {"jobId": job_id, "runId": run, "status": status, "result": json.loads(raw)}
+                for job_id, run, status, raw in movable
+            ]
+            try:
+                committed, refs = commit_with_records(self.journal, record, [(self.results, values)], change, check=check)
+            except StorageConflict:
+                continue
+            return ResultsConverted(movable, refs[RESULTS_LAKE], record, committed)
+        raise ValueError("console contention limit reached; retry")
 
     @staticmethod
     def _paid_outcome_evidence(value, job):

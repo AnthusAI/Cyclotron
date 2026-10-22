@@ -215,8 +215,38 @@ items, lists and classifiers stay in the catalog. The hosted runtime and the ope
 open the store with the lake. The existing `*/console/records/*` grants cover its objects, so no further
 IAM or bucket-policy change is needed.
 
-**Still to come.** S3 converts existing data (embedded runtime events, job results and raw replies).
-Deploying the lake needs the `records/` prefix in the lab stack (`infra/lab/pending-changes.md`).
+Deploying the lake needs the `records/` prefix in the lab stack (`infra/lab/pending-changes.md`); the
+cutover order is the runbook in `infra/lab/README.md` ("Record-lake cutover").
+
+### Converting existing data (S3)
+
+**In plain language.** History written before the lake (embedded events, raw replies, finished job results)
+stays readable where it is. `scripts/dev/convert_to_record_lake.py` moves it into the lake for one account,
+with the same two steps the live code uses: write the small files first, then ONE small commit that removes
+the embedded copies and says which files now count. It is a dry run unless `--apply` is given, and then
+checks, journal by journal, that every moved record is byte for byte what it was.
+
+- **What moves.** Runtime events (each runtime journal), raw replies (each shared-batches ledger, current and
+  superseded rows) and finished job results (the catalog). Events keep their ids and order: the embedded events
+  (ids 1..n) become the lake's first records. Lake events written between the deploy and the conversion are
+  copied after them and their old sequences marked skipped, up to the 64-skip budget; beyond that the journal
+  is reported as a problem and left alone (convert before new events are written). A result whose stored text is
+  not canonical JSON stays embedded and is listed.
+- **Ownership, as the worker does it.** `--apply` takes the workspace root (which guards the ledger and runtimes
+  under it) and each runtime's owner and fence. Anything owned by someone else is skipped and reported `busy`;
+  the tool never takes a worker's ownership. A catalog with running jobs is busy. The tool's own owner id is fixed
+  per account, so a run that stopped without releasing is resumed by the next run (the fence moves), and only
+  its own id is ever resumed. Ledgers and runtimes are attributed to their workspace root by the names the live
+  code derives; a journal with no root is a problem unless `--allow-unattributed` (runtimes only).
+- **Verification.** Pages are read back before the commit (an unequal page abandons the commit, leaving only
+  orphans). After each journal, fresh handles read it through the live code and compare ids, order, SHA-256 of
+  every record against its embedded original, the coverage, and that nothing else in the control state changed. A
+  mismatch stops the whole run (exit code 3).
+- **Resumable, idempotent.** Records are deterministic, so a re-run adopts the pages an interrupted run created;
+  a journal with nothing embedded is left alone. `--apply` prints each journal's revision and state digest from
+  before the commit: that earlier transaction stays in `payloads/` for an operator who must restore it.
+- **Exit codes.** 0 done (or dry run), 1 some journal busy or a problem, 2 refused (wrong AWS account), 3
+  verification failed.
 
 ### Shared-batches: raw model replies (S2b)
 

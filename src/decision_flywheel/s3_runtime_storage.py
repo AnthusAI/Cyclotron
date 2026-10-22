@@ -8,6 +8,7 @@ mutation checks the same owner/fence stored with its data, never a DDB lease.
 import json
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from dataclasses import dataclass
 
 from .active_labels import (
     ACTIVE_LABELS_STATE_KEY,
@@ -20,6 +21,7 @@ from .active_labels import (
 from .journal import Journal, commit_with_contract, decode, uuid
 from .learning_storage import ARTIFACTS, artifact_table
 from .record_lake import (
+    MAX_SKIPPED,
     RECORDS_KEY,
     Coverage,
     FileRecordLake,
@@ -277,13 +279,16 @@ class S3RuntimeStores:
     def change(self, fn, *, defer=False):
         return self._change(lambda value: fn(value["data"], value), defer=defer)
 
-    def acquire(self, owner):
+    def acquire(self, owner, *, resume=False):
+        """Take ownership. ``resume=True`` also re-takes a runtime this very ``owner`` id was left holding by a
+        run that stopped without releasing (the fence still moves, so the older run is fenced out). It never
+        takes over a different owner."""
         uuid(owner)
         if self.authority is not None:
             raise RuntimeOwnershipError("handle already owns execution")
 
         def apply(value):
-            if value["owner"] is not None:
+            if value["owner"] is not None and not (resume and value["owner"] == owner):
                 raise RuntimeOwnershipError("runtime already owned; reconcile crashed owner explicitly")
             value["owner"] = owner
             value["fence"] += 1
@@ -332,10 +337,120 @@ class S3RuntimeStores:
     def _events(self, value, extra=None):
         return _Events(self, value, self._held if extra is None else extra)
 
+    def audit_events(self):
+        """Read-only: the head record and the whole event log as it stands, whoever owns the runtime.
+
+        Returns ``EventAudit``: ``embedded`` are the rows still inside the document, ``stored`` the rows
+        read from the lake (each ``(id, payload)``), and the lake coverage. For audit and conversion only.
+        """
+        record = self.journal.read()
+        self._validate(record.value)
+        view = _Events(self, record.value)
+        rows = list(view.rows())
+        embedded = len(view.legacy)
+        return EventAudit(record, rows[:embedded], rows[embedded:], view.coverage)
+
+    @staticmethod
+    def _check_rehoming(audit):
+        # Every sequence the lake used so far ends up skipped, covered or not, so ``last`` is what the budget counts.
+        if audit.embedded and audit.coverage.last > MAX_SKIPPED:
+            raise ValueError("too many records already in the lake to place the embedded events before them")
+
+    def preview_events_conversion(self, audit):
+        """(the document as it would stand after the conversion, bytes of the records it would write).
+
+        Nothing is written. Exact unless a sequence turns out to be occupied when the pages are created.
+        """
+        self._check_rehoming(audit)
+        rows = audit.embedded + audit.stored
+        mark = None if CYCLE_MARK_KEY in audit.record.value["data"]["state"] else json.dumps(_highest_cycle(rows))
+        state = deepcopy(audit.record.value)
+        state[RECORDS_KEY] = {
+            **state.get(RECORDS_KEY, {}),
+            self._lake_name: Coverage(audit.coverage.last + len(rows), audit.coverage.skipped).to_json(),
+        }
+        events_moved(state, self._lake_name, audit.coverage, Coverage.from_json(state[RECORDS_KEY][self._lake_name]), mark)
+        size = sum(self.events_lake.encoded_size(audit.coverage.last + n, p) for n, (_, p) in enumerate(rows, 1))
+        return state, size
+
+    def convert_embedded_events(self, *, check=None):
+        """Move the events embedded in the document into the lake, in one commit. Needs ownership.
+
+        The embedded events (ids 1..n) become the first lake records, followed by any lake records that were
+        written meanwhile (copied again after them, their old sequences marked skipped), so ids and order are
+        exactly what readers saw. The pages are written first; then ONE commit empties the embedded list and
+        stores the new coverage. Returns ``EventsConverted``, or None when nothing is embedded (idempotent).
+        Anything wrong refuses before a page is written.
+        """
+        if self.events_lake is None:
+            raise ValueError("a runtime events lake is required to convert embedded events")
+        for _ in range(self.max_conflicts):
+            if self.poisoned:
+                raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
+            audit = self.audit_events()
+            self._owned(audit.record.value)
+            if not audit.embedded:
+                return None
+            if [i for i, _ in audit.embedded] != list(range(1, len(audit.embedded) + 1)):
+                raise ValueError("embedded event ids are not 1..n; refusing to renumber them")
+            self._check_rehoming(audit)
+            rows = audit.embedded + audit.stored
+            history = [payload for _, payload in rows]
+            before = audit.record.value
+            mark = None if CYCLE_MARK_KEY in before["data"]["state"] else json.dumps(_highest_cycle(rows))
+
+            def settle(state, refs, before=audit.coverage, mark=mark):
+                grown = Coverage.from_json(state[RECORDS_KEY][self._lake_name])
+                events_moved(state, self._lake_name, before, grown, mark)
+                self._validate(state)
+
+            try:
+                committed, refs = commit_with_records(
+                    self.journal, audit.record, [(self.events_lake, history)], settle, invalidate=self._poison, check=check
+                )
+            except StorageConflict:
+                continue
+            return EventsConverted(
+                moved=len(audit.embedded),
+                rows=rows,
+                refs=refs[self._lake_name],
+                before=audit.record,
+                after=committed,
+                coverage=Coverage.from_json(committed.value[RECORDS_KEY][self._lake_name]),
+            )
+        raise RuntimeOwnershipError("runtime contention limit reached")
+
     @staticmethod
     def ordinal(value):
         value["ordinal"] += 1
         return value["ordinal"]
+
+
+def events_moved(state, lake_name, before, grown, mark):
+    """Edit ``state`` in place: no embedded events, the lake covering ``grown``, and the sequences that held the
+    lake's earlier records marked skipped (they were copied again, after the embedded events)."""
+    state["data"]["events"] = []
+    state[RECORDS_KEY][lake_name] = Coverage(grown.last, tuple(sorted(set(grown.skipped) | set(before.sequences())))).to_json()
+    if mark is not None:
+        state["data"]["state"][CYCLE_MARK_KEY] = mark
+
+
+@dataclass(frozen=True)
+class EventAudit:
+    record: object
+    embedded: list
+    stored: list
+    coverage: Coverage
+
+
+@dataclass(frozen=True)
+class EventsConverted:
+    moved: int  # embedded events that went into the lake
+    rows: list  # the whole log, (id, payload), as it was before and must be after
+    refs: list  # RecordRef of every page written
+    before: object  # JournalRecord before the commit
+    after: object  # JournalRecord the commit produced
+    coverage: Coverage
 
 
 class _Events:
