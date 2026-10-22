@@ -108,7 +108,7 @@ No cloud resources, policies, OAuth clients, provider calls, public push or
 hosting deployment were changed by these synthetic checks.
 
 
-## Record lake: history as write-once files (primitive; job results use it)
+## Record lake: history as write-once files (job results and raw model replies use it)
 
 **In plain language.** Today each journal is a binder that is photocopied in full for every
 change: to add one log line we copy the whole binder, file the old copy away, and move a sticky
@@ -183,8 +183,52 @@ items, lists and classifiers stay in the catalog. The hosted runtime and the ope
 open the store with the lake. The existing `*/console/records/*` grants cover its objects, so no further
 IAM or bucket-policy change is needed.
 
-**Still to come.** Events and raw model replies move out in S2a and S2b, and S3 converts existing data.
+**Still to come.** Events move out in S2a, and S3 converts existing data.
 Deploying the lake needs the `records/` prefix in the lab stack (`infra/lab/pending-changes.md`).
+
+### Shared-batches: raw model replies (S2b)
+
+**In plain language.** The paid-request ledger used to keep every raw model reply inside its one big
+file (99.5% of that file). Now each reply is its own write-once page in the lake, and the ledger keeps
+only a small note per request: who asked, whether it was paid, and "reply is page N". Reading a cached
+answer fetches that one page. The never-pay-twice rule is untouched: the paid-call counter, the
+ceiling check and the "dispatch claim" still change atomically in the small ledger, before any provider
+call.
+
+**Layout.** One lake per ledger, `<account>/<workspace>/records/shared-batches/replies-<ledger>/<seq>.json`
+(`S3BatchStorage(..., replies=lake)`, wired in `S3WorkspaceStores` through `reply_lake_for`). A record holds
+`{fingerprint, owner, generation, payload}` with the reply text byte for byte. The ledger row keeps
+`{seq, sha256, length}` in the payload slot instead of the text; every read checks the record against that
+note and that the ledger's coverage names the sequence (a missing or altered record is an error, never a
+cache miss, so it can never make a paid request look unpaid).
+
+**Settling a request:** write the reply record first, then ONE commit (`commit_with_records`) flips the
+request to complete and stores the new coverage. Crash points:
+
+| Process stops... | State left | Effect |
+|---|---|---|
+| after reserve, before claim | attempt charged, unclaimed | no second reservation of that request (`BatchInProgress`); ceiling counts it |
+| after claim, during the provider call | pending and claimed | never dispatched again; explicit reconciliation, as before |
+| provider answered, reply record not written | pending and claimed | reply lost, still never repaid (same as before the lake) |
+| reply record written, flip not committed | orphan record no state covers | invisible to readers; usage unchanged (usage is the attempt count, written only by reserve); the same owner repeating the settlement adopts the orphan's sequence |
+| flip committed, response lost | complete, reply at seq N | `BatchUncertain`; repeating returns the stored reply, no second record, no second charge |
+| after the flip | complete | cache hits read the record by reference |
+
+If the reply record cannot be written at all (no permission, over `max_record_bytes`), the reply is embedded
+in the ledger the old way rather than dropped, because the provider has already been paid; a warning is logged.
+**Deploy order:** the `records/` prefix grants (`infra/lab/pending-changes.md`) must be live before this code
+runs against the hosted lab, or every reply takes that embedded fallback.
+
+**Compatibility.** Rows with embedded reply text keep reading and settling as before, in the same ledger as
+lake-backed rows. A ledger that cites records cannot be opened by a storage configured without a lake
+(fails closed). `export()` always returns replies inline, so exports compare equal across SQLite, embedded and
+lake-backed ledgers, and `restore()` into a lake-backed ledger writes the replies to the lake. Converting
+the existing embedded replies in the live ledger is the later S3 ticket. `S3EmbeddedStorage`'s
+own batch ledger is not wired to a lake yet.
+
+**Measured (synthetic 23.6 KB replies, 25 requests):** ledger growth per paid request fell from about
+23,930 bytes (reply embedded) to about 343 bytes (reference, attempt row, coverage), and no longer depends
+on the reply size.
 
 ## Verification at the initial S3 SDK checkpoint
 

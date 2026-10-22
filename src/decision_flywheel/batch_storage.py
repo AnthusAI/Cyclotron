@@ -52,7 +52,7 @@ class BatchRecord:
 
 
 class BatchStorage(Protocol):
-    def get(self, fingerprint: str) -> BatchRecord | None: ...
+    def get(self, fingerprint: str, *, payload: bool = True) -> BatchRecord | None: ...
     def requests(self) -> int: ...
     def reserve(self, fingerprint: str, maximum: int, owner: str, *, policy="reuse", retry_failed=False) -> BatchRecord: ...
     def claim(self, fingerprint: str, owner: str) -> bool: ...
@@ -77,7 +77,25 @@ def validate_request(fingerprint, owner):
         raise ValueError("stable operation UUIDv4 required") from None
 
 
-def validate_snapshot(snapshot):
+REPLY_REFERENCE_KEYS = {"seq", "sha256", "length"}
+
+
+def is_reply_reference(value):
+    """True for the small control-state note that points at a raw reply stored in the record lake."""
+    return (
+        isinstance(value, dict)
+        and set(value) == REPLY_REFERENCE_KEYS
+        and type(value["seq"]) is int
+        and value["seq"] >= 1
+        and type(value["length"]) is int
+        and value["length"] >= 1
+        and isinstance(value["sha256"], str)
+        and re.fullmatch(r"[a-f0-9]{64}", value["sha256"]) is not None
+    )
+
+
+def validate_snapshot(snapshot, *, replies=False):
+    """Validate a ledger. ``replies=True`` also accepts a reply reference where payload text may stand."""
     if not isinstance(snapshot, dict) or snapshot.get("schema") != "cyclotron-shared-batches/v1":
         raise ValueError("unsupported shared batch snapshot")
     batches, attempts, history = (snapshot.get(name) for name in ("batches", "attempts", "history"))
@@ -99,7 +117,10 @@ def validate_snapshot(snapshot):
             or revision < 1
         ):
             raise ValueError("invalid batch state")
-        if payload is not None:
+        if replies and is_reply_reference(payload):
+            if status != "complete":
+                raise ValueError("only a complete batch may cite a reply record")
+        elif payload is not None:
             if not isinstance(payload, str):
                 raise ValueError("payload text required")
             json.loads(payload)
@@ -137,7 +158,12 @@ def validate_snapshot(snapshot):
             or row[3] not in ("pending", "complete", "failed", "interrupted")
         ):
             raise ValueError("invalid retained generation")
-        if row[4] is not None:
+        if replies and is_reply_reference(row[4]):
+            if row[3] != "complete":
+                raise ValueError("only a complete batch may cite a reply record")
+        elif row[4] is not None:
+            if not isinstance(row[4], str):
+                raise ValueError("payload text required")
             json.loads(row[4])
         if row[3] == "complete" and row[4] is None:
             raise ValueError("history payload required")
@@ -199,7 +225,8 @@ class SQLiteBatchStorage:
             return None
         return BatchRecord(fingerprint, row[0], row[1], max(1, row[4]), row[2], bool(row[3]))
 
-    def get(self, fingerprint):
+    def get(self, fingerprint, *, payload=True):
+        # SQLite keeps replies in the row, so there is nothing cheaper to skip.
         with self.lock:
             return self._get(fingerprint)
 

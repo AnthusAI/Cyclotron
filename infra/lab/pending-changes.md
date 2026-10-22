@@ -17,6 +17,11 @@ Lambda code changes.
 - `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` lets the BFF `GetObject`/`PutObject` under `*/console/records/*`.
 - `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` does the same for the worker.
 
+Deploy order for S2b (raw model replies): these grants must be live before the worker code that writes
+replies to `*/console/records/shared-batches/`. No further IAM or bucket-policy change is needed: the hosted
+scope is `<account>/console`, already covered by `*/console/records/*`. Without the grants, replies fall back to
+the old embedded form (logged), so nothing is lost, only not yet moved.
+
 No `s3:ListBucket` is added. Reading covered records is a GET by sequence; listing (audit, orphan janitor) is
 not needed by S2 and would be a separate, reviewed grant.
 

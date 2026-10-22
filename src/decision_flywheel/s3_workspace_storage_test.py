@@ -68,6 +68,8 @@ def test_existing_prepare_feedback_and_reopen_need_no_sqlite_or_files(monkeypatc
     shown = asyncio.run(session.prepare())
     session.close()
     assert shown["item"]["id"] == "one" and model.calls == 1
+    # The paid reply is a write-once record beside the ledger, in this ledger's own lake.
+    assert [k for k in client.objects if "/records/shared-batches/replies-" in k and k.endswith("000000000001.json")]
     reopened = WorkspaceSession(s, run, None, model, DisabledOptimizer(), lambda event: None, storage=stores())
     assert asyncio.run(reopened.prepare()) == shown and model.calls == 1
     result = asyncio.run(
