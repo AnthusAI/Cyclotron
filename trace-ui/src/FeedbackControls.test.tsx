@@ -74,7 +74,7 @@ test('correction sends the changed label and explanation with the exact current 
   const submit=vi.fn().mockResolvedValue(completed)
   render(<FeedbackControls classifiers={classifiers} events={events} busy={false} jobs={[]} onSubmit={submit} onResume={vi.fn()}/>)
   fireEvent.click(screen.getByRole('button',{name:'Edit recorded feedback'}))
-  fireEvent.change(screen.getByLabelText('Label for Relevance'),{target:{value:'no'}})
+  fireEvent.click(screen.getByRole('radio',{name:'no'}))
   fireEvent.change(screen.getByLabelText('Explanation for Relevance'),{target:{value:'Actually, no'}})
   fireEvent.click(screen.getByRole('button',{name:'Save correction'}))
   await waitFor(()=>expect(submit).toHaveBeenCalledWith('correct',{item_id:'paper',labels:[{classifier_id:'a',label:'no',comment:'Actually, no',expected_feedback_id:'vote:a'}]}))

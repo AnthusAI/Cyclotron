@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react'
-import {Button} from '@/components/ui/button'
+import {Button,buttonVariants} from '@/components/ui/button'
+import {RadioChoices} from '@/components/ui/radio-choices'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {Card,CardHeader,CardTitle,CardContent,CardFooter} from '@/components/ui/card'
@@ -27,8 +28,8 @@ function ClassifierLabel({classifier,item,listId,previous,onSaved}:{classifier:C
     }catch(e){setError((e as Error).message)}finally{setBusy(false)}
   }
   return <Card className="gap-2"><CardHeader><CardTitle className="text-base">{classifier.name}</CardTitle><p className="text-sm text-muted-foreground">{classifier.config.question}</p></CardHeader><CardContent className="space-y-3">
-    <Label htmlFor={`class-${classifier.id}`}>Classification</Label><NativeSelect id={`class-${classifier.id}`} value={label} onChange={e=>{setLabel(e.target.value);setSaved(false)}}><NativeSelectOption value="">Not labeled</NativeSelectOption>{classifier.config.classes.map(row=><NativeSelectOption key={row.label} value={row.label}>{row.label}</NativeSelectOption>)}</NativeSelect>
-    <Label htmlFor={`comment-${classifier.id}`}>Explanation (optional)</Label><textarea id={`comment-${classifier.id}`} className="min-h-20 w-full rounded-md border border-input bg-background p-3 text-sm" value={comment} onChange={e=>{setComment(e.target.value);setSaved(false)}} />
+    <Label id={`class-${classifier.id}-label`}>Classification</Label><RadioChoices labelledBy={`class-${classifier.id}-label`} className="flex flex-wrap gap-2" itemClassName={`${buttonVariants({variant:'outline'})} min-h-11 aria-checked:bg-accent aria-checked:font-semibold aria-checked:underline`} value={label} clearable onChange={value=>{setLabel(value);setSaved(false)}} choices={classifier.config.classes.map(row=>({value:row.label,content:row.label}))}/>
+    <Label htmlFor={`comment-${classifier.id}`} className="text-sm font-semibold">Why? A sentence or two helps it learn what you want.</Label><textarea id={`comment-${classifier.id}`} rows={4} placeholder="Explanations are what it learns from. Say what made this the right answer." className="block min-h-28 w-full resize-y rounded-md border border-input bg-background p-3 text-sm" value={comment} onChange={e=>{setComment(e.target.value);setSaved(false)}} />
     <div className="flex items-center gap-3"><Button disabled={busy||!label} onClick={save}>{previous?'Save correction':'Save label'}</Button>{saved?<span role="status" className="text-sm text-muted-foreground">Saved</span>:null}</div>{error?<p role="alert">{error}</p>:null}
   </CardContent></Card>
 }

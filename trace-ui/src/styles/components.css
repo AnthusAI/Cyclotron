@@ -32,13 +32,17 @@
 .cyclotron-review-why, .cyclotron-review-note, .cyclotron-review-explanation-text { color:var(--muted-foreground,#5d5361); font-size:.93em; }
 .cyclotron-review-choices { display:flex; gap:8px; flex-wrap:wrap; }
 .cyclotron-review-choice { display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:8px 14px; border-radius:var(--radius,0.45rem); background:var(--secondary,#ece8ee); color:var(--secondary-foreground,#1f1a21); font:inherit; font-weight:600; cursor:pointer; }
-.cyclotron-review-choice[aria-pressed="true"] { background:var(--accent,#d8cdf0); color:var(--accent-foreground,#1f1a21); text-decoration:underline; text-underline-offset:3px; }
+.cyclotron-review-choice[aria-checked="true"] { background:var(--accent,#d8cdf0); color:var(--accent-foreground,#1f1a21); text-decoration:underline; text-underline-offset:3px; }
 .cyclotron-review-choice[data-agreement="agreement"] { background:var(--success,#cdebd6); color:var(--success-foreground,#14301d); }
 .cyclotron-review-choice[data-agreement="correction"] { background:var(--danger-surface,#f6d6cf); color:var(--danger-foreground,#4a1a10); }
 .cyclotron-review-choice:disabled, .cyclotron-review-submit:disabled, .cyclotron-review-secondary:disabled { opacity:.55; cursor:not-allowed; }
 .cyclotron-review-icon { width:1.1em; height:1.1em; }
 .cyclotron-review-field { display:flex; flex-direction:column; gap:4px; font-size:.93em; color:var(--muted-foreground,#5d5361); }
-.cyclotron-review-field select, .cyclotron-review-field textarea { font:inherit; color:var(--foreground,#1f1a21); background:var(--input,#ebe7ec); border-radius:var(--radius,0.45rem); padding:6px 8px; min-height:36px; }
+.cyclotron-review-reason { display:inline-flex; align-items:center; min-height:44px; padding:8px 14px; border-radius:999px; background:var(--secondary,#ece8ee); color:var(--secondary-foreground,#1f1a21); font:inherit; cursor:pointer; }
+.cyclotron-review-reason[aria-checked="true"] { background:var(--accent,#d8cdf0); color:var(--accent-foreground,#1f1a21); font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+.cyclotron-review-reason:disabled { opacity:.55; cursor:not-allowed; }
+.cyclotron-review-field textarea { box-sizing:border-box; width:100%; font:inherit; color:var(--foreground,#1f1a21); background:var(--input,#ebe7ec); border-radius:var(--radius,0.45rem); padding:10px 12px; min-height:7em; resize:vertical; }
+.cyclotron-review-explain-prompt { font-size:1.05em; font-weight:600; color:var(--foreground,#1f1a21); }
 .cyclotron-review-actions { display:flex; justify-content:flex-end; }
 .cyclotron-review-submit { min-height:44px; padding:8px 18px; border-radius:var(--radius,0.45rem); background:var(--primary,#d9d0f2); color:var(--primary-foreground,#1f1a21); font:inherit; font-weight:600; cursor:pointer; }
 .cyclotron-review-secondary { align-self:flex-start; min-height:36px; padding:6px 12px; border-radius:var(--radius,0.45rem); background:var(--secondary,#ece8ee); color:var(--secondary-foreground,#1f1a21); font:inherit; cursor:pointer; }

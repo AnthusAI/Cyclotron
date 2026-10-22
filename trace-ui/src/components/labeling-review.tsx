@@ -1,5 +1,6 @@
 import {type ReactNode,type Ref} from 'react'
-import {Button} from './ui/button'
+import {buttonVariants} from './ui/button'
+import {RadioChoices} from './ui/radio-choices'
 import {Label} from './ui/label'
 
 export type LabelingReviewPrediction={
@@ -48,16 +49,18 @@ export function LabelingReview({targetId,classifierName,prediction,classes=[],re
   const locked=busy||readOnly
   return <section className="label-classifier space-y-2 rounded-lg border border-border p-3" data-testid={`labeling-review-${targetId}`} data-cyclotron-labeling-review="true" data-cyclotron-label-target={targetId} data-cyclotron-simulation={simulation?'true':'false'}>
     <h3 className="font-medium">{classifierName}</h3>
-    <div className="prediction-choices"><div role="group" aria-label={`${classifierName} classification`} className="prediction-buttons">{(prediction?.classes??classes).map((label,index)=>{
-      const predicted=label===prediction?.label
-      const isSelected=selected===label
-      return <Button key={label} variant="outline" disabled={locked} className="label-choice min-h-12 flex-1 flex-col gap-0.5 px-3 py-2" aria-label={`${classifierName}: ${label}${predicted?`, predicted ${Math.round(prediction!.confidence*100)}%`:''}`} aria-pressed={isSelected} data-cyclotron-label-option={label} data-predicted={predicted} data-agreement={isSelected?(prediction?(predicted?'correct':'incorrect'):'selected'):'unselected'} onClick={()=>onSelectedLabelChange?.(selectedLabel===label?'':label)}>
-        <span className="flex items-center gap-1.5 text-base font-semibold"><span aria-hidden="true" className="confidence-key" data-confidence-index={index%4} />{label}</span>{predicted?<span className="text-xs">Predicted · {Math.round(prediction!.confidence*100)}%</span>:<span className="text-xs">{isSelected?'Your label':'Choose'}</span>}
-      </Button>
-    })}</div>{prediction?<ConfidenceBar name={classifierName} prediction={prediction} />:null}</div>
+    <div className="prediction-choices"><RadioChoices ariaLabel={`${classifierName} classification`} className="prediction-buttons" itemClassName={`${buttonVariants({variant:'outline'})} label-choice min-h-12 flex-1 flex-col gap-0.5 px-3 py-2`} value={selected} disabled={locked} clearable onChange={value=>onSelectedLabelChange?.(value)}
+      choices={(prediction?.classes??classes).map((label,index)=>{
+        const predicted=label===prediction?.label
+        const isSelected=selected===label
+        return {value:label,ariaLabel:`${classifierName}: ${label}${predicted?`, predicted ${Math.round(prediction!.confidence*100)}%`:''}`,
+          attrs:{'data-cyclotron-label-option':label,'data-predicted':String(predicted),'data-agreement':isSelected?(prediction?(predicted?'correct':'incorrect'):'selected'):'unselected'},
+          content:<><span className="flex items-center gap-1.5 text-base font-semibold"><span aria-hidden="true" className="confidence-key" data-confidence-index={index%4} />{label}</span>{predicted?<span className="text-xs">Predicted · {Math.round(prediction!.confidence*100)}%</span>:<span className="text-xs">{isSelected?'Your label':'Choose'}</span>}</>}
+      })} />{prediction?<ConfidenceBar name={classifierName} prediction={prediction} />:null}</div>
     {recordedLabel?<p className="text-xs text-muted-foreground">Recorded label: {recordedLabel} · replayed after prediction</p>:null}
-    <Label htmlFor={`explanation-${targetId}`} className="text-xs text-muted-foreground">Explanation for {classifierName}</Label>
-    <textarea ref={explanationRef} id={`explanation-${targetId}`} readOnly={readOnly} disabled={busy} rows={2} required={requireExplanation} placeholder={requireExplanation?"Required explanation":"Optional explanation"} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={explanation} onChange={event=>onExplanationDraftChange?.(event.target.value)} data-cyclotron-explanation-target={targetId} />
+    <Label htmlFor={`explanation-${targetId}`} className="block text-sm font-semibold">Explanation for {classifierName}</Label>
+    <p id={`explanation-hint-${targetId}`} className="text-sm text-muted-foreground">Why? A sentence or two helps it learn what you want.{requireExplanation?' (required)':''}</p>
+    <textarea ref={explanationRef} aria-describedby={`explanation-hint-${targetId}`} id={`explanation-${targetId}`} readOnly={readOnly} disabled={busy} rows={4} required={requireExplanation} placeholder="Explanations are what it learns from. Say what made this the right answer." className="block min-h-28 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm" value={explanation} onChange={event=>onExplanationDraftChange?.(event.target.value)} data-cyclotron-explanation-target={targetId} />
     {children}
   </section>
 }

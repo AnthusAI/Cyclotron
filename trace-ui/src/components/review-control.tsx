@@ -1,5 +1,6 @@
 import {useState} from 'react'
 import {ThumbsDown,ThumbsUp} from 'lucide-react'
+import {RadioChoices} from './ui/radio-choices'
 
 /** The decision a reviewer is checking. */
 export type ReviewControlDecision={
@@ -103,30 +104,23 @@ export function ReviewControl({itemId,decision,question,reviewReason,mode,positi
     {question?<h3 className="cyclotron-review-question">{question}</h3>:null}
     <p className="cyclotron-review-decision">Suggested: <strong>{decision.label}</strong>{sure}</p>
     {reviewReason?<p className="cyclotron-review-why">Why you are seeing this: {reviewReason}</p>:null}
-    <div role="group" aria-label="Your label" className="cyclotron-review-choices">
-      {choices.map(row=>{
+    <RadioChoices ariaLabel="Your label" className="cyclotron-review-choices" itemClassName="cyclotron-review-choice" value={choice??''} disabled={disabled} clearable onChange={value=>setChoice(value||null)}
+      choices={choices.map(row=>{
         const pressed=choice===row.label
-        return <button key={row.label} type="button" className="cyclotron-review-choice" aria-pressed={pressed} disabled={disabled}
-          data-cyclotron-label-option={row.label} data-agreement={pressed?(row.label===decision.label?'agreement':'correction'):'none'}
-          aria-label={thumbs?`${row.text}: ${row.label}`:row.label}
-          onClick={()=>setChoice(pressed?null:row.label)}>
-          {row.icon}<span>{thumbs?`${row.text} · ${row.label}`:row.label}</span>
-          {pressed?<span className="cyclotron-review-mark" aria-hidden="true">{row.label===decision.label?' ✓':' ✗'}</span>:null}
-        </button>
-      })}
-    </div>
+        return {value:row.label,ariaLabel:thumbs?`${row.text}: ${row.label}`:row.label,
+          attrs:{'data-cyclotron-label-option':row.label,'data-agreement':pressed?(row.label===decision.label?'agreement':'correction'):'none'},
+          content:<>{row.icon}<span>{thumbs?`${row.text} · ${row.label}`:row.label}</span>{pressed?<span className="cyclotron-review-mark" aria-hidden="true">{row.label===decision.label?' ✓':' ✗'}</span>:null}</>}
+      })} />
     {choice!==null&&choice!==decision.label?<p className="cyclotron-review-note">This is a correction: the decision was {decision.label}.</p>:null}
-    {reasons.length&&(!thumbs||choice===negative)?<label className="cyclotron-review-field" htmlFor={`${id}-reason`}>
-      <span>Reason{needsReason?'':' (optional)'}</span>
-      <select id={`${id}-reason`} value={reasonCode} disabled={disabled} onChange={event=>setReasonCode(event.target.value)}>
-        <option value="">Choose a reason</option>
-        {reasons.map(row=><option key={row.code} value={row.code}>{row.text}{row.noLabel?' (no label)':''}</option>)}
-      </select>
-    </label>:null}
-    <label className="cyclotron-review-field" htmlFor={`${id}-explanation`}>
-      <span>Explanation ({requireExplanation?'required':'optional'})</span>
-      <textarea id={`${id}-explanation`} rows={compact?1:2} value={explanation} disabled={disabled} required={requireExplanation}
-        placeholder="Why?" onChange={event=>setExplanation(event.target.value)} />
+    {reasons.length&&(!thumbs||choice===negative)?<div className="cyclotron-review-field">
+      <span id={`${id}-reason-label`}>Reason{needsReason?'':' (optional)'}</span>
+      <RadioChoices labelledBy={`${id}-reason-label`} className="cyclotron-review-choices cyclotron-review-reasons" itemClassName="cyclotron-review-reason" value={reasonCode} disabled={disabled} clearable={!needsReason} onChange={setReasonCode}
+        choices={reasons.map(row=>({value:row.code,content:`${row.text}${row.noLabel?' (no label)':''}`,attrs:{'data-cyclotron-reason-option':row.code}}))} />
+    </div>:null}
+    <label className="cyclotron-review-field cyclotron-review-explain" htmlFor={`${id}-explanation`}>
+      <span className="cyclotron-review-explain-prompt">Why? A sentence or two helps it learn what you want.{requireExplanation?' (required)':''}</span>
+      <textarea id={`${id}-explanation`} rows={compact?3:4} value={explanation} disabled={disabled} required={requireExplanation}
+        placeholder="Explanations are what it learns from. Say what made this the right answer." onChange={event=>setExplanation(event.target.value)} />
     </label>
     <div className="cyclotron-review-actions">
       <button type="button" className="cyclotron-review-submit" disabled={disabled||!ready} onClick={submit}>Submit review</button>
