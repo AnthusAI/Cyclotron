@@ -199,6 +199,7 @@ Resources:
             Resource:
             - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*
             - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*
           - Effect: Allow
             Action:
             - s3:GetObject
@@ -284,6 +285,7 @@ Resources:
             - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/evaluation/*
             - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/reviewer/*
             - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*
           - Effect: Allow
             Action:
             - s3:GetObject
@@ -382,6 +384,7 @@ Resources:
           Resource:
           - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/payloads/*
           - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/coordination/*/*/anchor.json
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/records/*
           Condition:
             StringNotEquals:
               s3:if-none-match: '*'

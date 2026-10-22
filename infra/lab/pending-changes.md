@@ -7,4 +7,15 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.** The six verifier changes (LabVerifierEnabled, HasLabVerifier, LabVerifierRole, the BFF AssumeRole statement and the two gated BFF environment variables) were deployed on 2026-10-21 with change set `curation-routes-v0-31-0` (v0.31.0, package sha256 `9225ea1516105dff49c51d43866d4d6ae6c0613df26fce92aff6a3cb1335a204`), and the snapshot was refreshed from the deployed stack. `LabVerifierEnabled` is `false` until Prospectus enables the verifier.
+## Record-lake prefix (S1, for the S3 deploy)
+
+Three add-only list appends open one new key prefix, `<account>/console/records/`, for write-once
+record-lake objects (docs/s3-cloud-storage.md, "Record lake"). Nothing is replaced or removed, and no
+Lambda code changes.
+
+- `/Resources/BooksBucketPolicy/Properties/PolicyDocument/Statement/1/Resource/-` adds `${BooksBucket}/*/records/*` to the existing deny-unless-`If-None-Match: *` statement, so records are create-only at the bucket, like `payloads/` and `anchor.json`. There is still no delete grant anywhere.
+- `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` lets the BFF `GetObject`/`PutObject` under `*/console/records/*`.
+- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-` does the same for the worker.
+
+No `s3:ListBucket` is added. Reading covered records is a GET by sequence; listing (audit, orphan janitor) is
+not needed by S2 and would be a separate, reviewed grant.
