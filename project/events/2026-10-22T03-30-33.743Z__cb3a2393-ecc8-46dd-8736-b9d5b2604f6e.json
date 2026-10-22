@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "cb3a2393-ecc8-46dd-8736-b9d5b2604f6e",
+  "issue_id": "decision-flywheel-b558f3a9-98fd-4628-83af-87eae5f9cb29",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-22T03:30:33.743Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Create-only write-once records per scope/domain/kind, sequence ordering via control-state coverage, commit_with_records helper, memory/file/S3 implementations, contract tests, docs. No caller behaviour change. Branch feature/record-lake-storage.",
+        "to": "Build the record-lake primitive: create-only write-once records per scope/domain/kind, ordering by sequence covered by the small control state, the write-records-then-flip-head helper, memory/file/S3 implementations, docs and the bucket-policy template change. No behaviour change for callers.\nAcceptance: records never mutated; orphans invisible; one all-or-nothing commit; contract specs on memory, file and S3 fake; make check passes."
+      }
+    }
+  }
+}

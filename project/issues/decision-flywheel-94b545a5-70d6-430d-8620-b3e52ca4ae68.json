@@ -1,0 +1,33 @@
+{
+  "id": "decision-flywheel-94b545a5-70d6-430d-8620-b3e52ca4ae68",
+  "title": "S2a runtime events out of runtime journals",
+  "description": "Move the step-by-step runtime events out of the runtime journals into a record lake (98.7% of the per-publication files).\nAcceptance: one-worker-at-a-time (owner and fence) protections preserved in the small status note; never-pay-twice unaffected; reads fall back to the old embedded form during migration; contract specs on every backend. Depends on S1.",
+  "type": "task",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-b558f3a9-98fd-4628-83af-87eae5f9cb29",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-22T03:28:47.348363Z",
+  "updated_at": "2026-10-22T03:30:33.764568Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude-code",
+    "model": "claude-sonnet-5-5",
+    "name": "record-lake-s1"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

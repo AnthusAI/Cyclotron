@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8c537153-2b25-43d9-a594-672282196171",
+  "issue_id": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T03:28:25.203Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Record-lake storage: history as write-once records, small control state",
+    "description": "Move lab history (runtime events, raw provider replies, job results) out of whole-document journals into write-once records, keeping small control state in the existing compare-and-set journal. Approved by Ryan 2026-10-21. Research: lab-storage-research.md.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

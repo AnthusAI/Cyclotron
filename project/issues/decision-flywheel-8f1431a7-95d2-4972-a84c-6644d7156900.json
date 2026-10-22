@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+  "title": "Record-lake storage: history as write-once records, small control state",
+  "description": "Approved by Ryan 2026-10-21.\n\nPlain-language version. Today the lab keeps its records in a few big files. Every time anything changes, even one new log line, the program photocopies the whole binder, files the old copy away forever, and puts a sticky note on the new one. The files are now close to their size limit. Three kinds of record make up almost all the bulk: (1) the step-by-step log for each article, which is 98.7% of the per-publication files; (2) the model's raw replies, kept in the paid-request file so we never pay twice; (3) each article's result, kept in the catalog.\n\nThe new design gives each record its own small write-once file in a folder, named in order, never changed afterwards. A small 'current status' note is kept only for the few facts that must change one at a time: who owns a job, how many paid calls have been made, and which version is active. To make a group of changes count together, the program writes the new files first (harmless if abandoned) and then updates the status note in one step to say these now count.\n\nThe program changes; the records do not. A one-time script converts today's ~12 MB of data. Steps: S1 builds the primitive, S2a/S2b/S2c move each kind of record out, S3 converts live data and does the reviewed lab deploy.",
+  "type": "epic",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-22T03:28:25.203694Z",
+  "updated_at": "2026-10-22T03:30:22.338180Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude-code",
+    "model": "claude-sonnet-5-5",
+    "name": "record-lake-s1"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

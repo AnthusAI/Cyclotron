@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "76b593e4-d8ef-415a-908c-f8265c7ea2c1",
+  "issue_id": "decision-flywheel-b558f3a9-98fd-4628-83af-87eae5f9cb29",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T03:28:47.008Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "S1 primitive: RecordLake, write-then-flip protocol, contract suite, docs",
+    "description": "Create-only write-once records per scope/domain/kind, sequence ordering via control-state coverage, commit_with_records helper, memory/file/S3 implementations, contract tests, docs. No caller behaviour change. Branch feature/record-lake-storage.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "record-lake-s1"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "fc99dcb7-a7ca-43bc-99e1-c9dfc2b00363",
+  "issue_id": "decision-flywheel-7a6c114d-a996-4410-a09d-30be373a32d5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T03:28:48.056Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "S2c job results out of the catalog",
+    "description": "Move web_jobs payload/result out of the catalog journal into records. Depends on S1.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "record-lake-s1"
+    }
+  }
+}

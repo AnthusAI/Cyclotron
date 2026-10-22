@@ -1,0 +1,41 @@
+{
+  "id": "decision-flywheel-3294392d-58d1-4ff0-af3c-a8f7e6c21562",
+  "title": "S3 migration of live data and the lab deploy",
+  "description": "One-time script that converts today's ~12 MB of live data into records, verified by rebuilding the old value and comparing, plus the reviewed lab deploy including the S1 bucket-policy and IAM change.\nAcceptance: conversion is re-runnable and verified; cutover with workers paused; never-pay-twice and one-worker-at-a-time preserved; explicit approval from Ryan for the change set before deploy. Depends on S2a, S2b, S2c.",
+  "type": "task",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-94b545a5-70d6-430d-8620-b3e52ca4ae68",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-ebd8c05e-9e16-4497-9d21-0729da89761e",
+      "type": "blocked-by"
+    },
+    {
+      "target": "decision-flywheel-7a6c114d-a996-4410-a09d-30be373a32d5",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-10-22T03:28:48.406703Z",
+  "updated_at": "2026-10-22T03:30:33.829345Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude-code",
+    "model": "claude-sonnet-5-5",
+    "name": "record-lake-s1"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
