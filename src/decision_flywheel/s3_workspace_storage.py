@@ -10,7 +10,7 @@ from uuid import uuid4
 from .journal import encode
 from .s3_batch_storage import S3BatchStorage, reply_lake_for
 from .s3_embedded_storage import S3EmbeddedStorage
-from .s3_runtime_storage import S3RuntimeStores
+from .s3_runtime_storage import S3RuntimeStores, runtime_events_lake
 
 
 class S3WorkspaceStores:
@@ -57,7 +57,10 @@ class S3WorkspaceStores:
             raise ValueError("workspace ownership required")
         if identifier not in self.runtimes:
             name = sha256((self.name + "\0" + identifier).encode()).hexdigest()
-            runtime = S3RuntimeStores(self._journal("runtime", name), max_records=self.max_records, cache_owned=True)
+            journal = self._journal("runtime", name)
+            runtime = S3RuntimeStores(
+                journal, max_records=self.max_records, cache_owned=True, events_lake=runtime_events_lake(journal)
+            )
             runtime.initialize()
             self.runtimes[identifier] = runtime
             runtime.acquire(self.owner)

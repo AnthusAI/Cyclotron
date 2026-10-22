@@ -129,3 +129,35 @@ def test_active_labels_agree_after_a_reopen_without_replaying_every_event(runtim
     before = storage.active_labels()
     reopened = runtime_backend.reopen(storage)
     assert reopened.active_labels() == before
+
+
+def test_events_keep_their_order_and_ids_and_page_without_gaps(storage):
+    ids = [storage.append_event(json.dumps({"kind": "step", "n": n})) for n in range(1, 91)]
+    assert ids == list(range(1, 91))
+    seen, cursor = [], 0
+    while True:
+        page = storage.trace_events(after_event_id=cursor, limit=40)
+        if not page["events"]:
+            break
+        seen += [(e["event_id"], e["n"]) for e in page["events"]]
+        cursor = page["cursor"]
+    assert seen == [(n, n) for n in range(1, 91)]
+    assert [e["event_id"] for e in storage.history(3)] == [88, 89, 90]
+    assert [e["event_id"] for e in storage.history(-1)] == list(range(1, 91))
+    assert storage.history(0) == ()
+    assert storage.trace_events(after_event_id=90)["cursor"] == 90
+
+
+def test_events_of_and_payloads_filter_by_kind_in_order(storage):
+    for n in range(30):
+        storage.append_event(json.dumps({"kind": "even" if n % 2 == 0 else "odd", "n": n}))
+    assert [e["n"] for e in storage.events_of(("odd",))] == list(range(1, 30, 2))
+    assert [json.loads(p)["n"] for p in storage.event_payloads(("even",))] == list(range(0, 30, 2))
+
+
+def test_cycle_numbers_follow_the_highest_cycle_seen(storage):
+    assert storage.next_cycle_number() == 1
+    storage.append_event('{"kind":"cycle-started","cycle_number":1}')
+    storage.append_event('{"kind":"cycle-started","cycle_number":4}')
+    storage.append_event('{"kind":"cycle-completed","cycle_number":2}')
+    assert storage.next_cycle_number() == 5
