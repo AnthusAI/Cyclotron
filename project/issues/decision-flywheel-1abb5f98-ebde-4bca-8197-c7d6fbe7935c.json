@@ -24,10 +24,17 @@
       "text": "Implemented in worktree Cyclotron-c4 (branch fix/catalog-write-amplification): s3_transient.py (one retry on transient GET, class-name-only cause), PayloadUnavailable/JournalUnavailable.cause + warning log, S3RuntimeStores event coalescing for owning handles. Spec benchmark: 1 new item + 2 replays x 3 classifiers = 48 -> 24 runtime commits, 9.5 -> 4.8 MB. Remaining amplification (lease acquire/release per job, 4 MiB journal budget at 3.2 MB) recorded as follow-ups. make check running.",
       "created_at": "2026-10-22T02:08:02.628028Z",
       "comment_type": "default"
+    },
+    {
+      "id": "dbe13e3f-1c77-48a4-b725-f87522b92d7c",
+      "author": "home",
+      "text": "PR https://github.com/AnthusAI/Cyclotron/pull/97 opened to develop; make check exits 0. Not merged or deployed. Follow-ups: lease cycle per job, 4 MiB journal budget (runtimes at 3.2 MB), tag-based S3 lifecycle.",
+      "created_at": "2026-10-22T02:21:54.604320Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-22T02:01:58.963845Z",
-  "updated_at": "2026-10-22T02:08:02.628065Z",
+  "updated_at": "2026-10-22T02:21:54.604347Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
