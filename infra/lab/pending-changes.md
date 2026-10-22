@@ -7,16 +7,4 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-## Journal byte budget bridge (2026-10-21, approved by Ryan)
-
-The next deploy of `cyclotron-console` changes exactly these paths:
-
-| Path | Change |
-|---|---|
-| `/Parameters/JournalMaxBytes` | New parameter, default `4194304` (4 MiB), 1 to 64 MiB. |
-| `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES` | `Ref: JournalMaxBytes`. |
-| `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES` | `Ref: JournalMaxBytes`. |
-
-A temporary bridge: raises how large each S3 journal document may grow while the
-record-lake redesign moves history out into write-once records.
-
+**No pending changes.** The journal byte budget bridge (JournalMaxBytes, set to 16 MiB) and v0.33.2 (package sha256 `9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c`) were deployed on 2026-10-22 with change set `journal-budget-v0-33-2`, and the snapshot was refreshed from the deployed stack.
