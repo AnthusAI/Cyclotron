@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "84d83eeb-0a76-40dc-b095-a3fda1665bd9",
+  "issue_id": "decision-flywheel-94b545a5-70d6-430d-8620-b3e52ca4ae68",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T03:28:47.348Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "S2a runtime events out of runtime journals",
+    "description": "Move runtime data.events into a RecordLake; keep reading the old embedded form as a fallback during migration. Depends on S1.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "record-lake-s1"
+    }
+  }
+}

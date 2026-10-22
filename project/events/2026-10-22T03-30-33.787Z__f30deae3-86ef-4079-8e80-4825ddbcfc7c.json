@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "f30deae3-86ef-4079-8e80-4825ddbcfc7c",
+  "issue_id": "decision-flywheel-ebd8c05e-9e16-4497-9d21-0729da89761e",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-22T03:30:33.787Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Move raw provider reply payloads out of shared-batches rows into records referenced by the control state. Depends on S1.",
+        "to": "Move the model's raw replies (the paid-request cache in shared-batches) out into records referenced by the small status note.\nAcceptance: never-pay-twice protection preserved (reserve and claim stay in the small control state); reads fall back to the old embedded form during migration; contract specs on every backend. Depends on S1."
+      }
+    }
+  }
+}

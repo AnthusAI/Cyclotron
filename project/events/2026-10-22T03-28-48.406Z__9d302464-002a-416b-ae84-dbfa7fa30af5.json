@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "9d302464-002a-416b-ae84-dbfa7fa30af5",
+  "issue_id": "decision-flywheel-3294392d-58d1-4ff0-af3c-a8f7e6c21562",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T03:28:48.406Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "S3 migration of live data and the lab deploy",
+    "description": "Convert live data (~12 MB), verify by rebuilding the old value, cut over with workers paused, deploy the lab stack including the S1 template change. Needs Ryan approval for the change set.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "record-lake-s1"
+    }
+  }
+}

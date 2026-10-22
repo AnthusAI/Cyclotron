@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "764fbebb-735d-401e-bf53-efae318ed6c3",
+  "issue_id": "decision-flywheel-b558f3a9-98fd-4628-83af-87eae5f9cb29",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-22T03:28:52.616Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "a22e15ec-bc76-44b1-9fc5-4eed70d56749",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "record-lake-s1"
+    }
+  }
+}
