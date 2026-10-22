@@ -26,6 +26,9 @@ from .cyclotron_runtime import CyclotronRuntime
 from .web_api import create_app
 
 
+MAX_JOURNAL_BYTES = 67108864  # hard ceiling for CYCLOTRON_MAX_BYTES
+
+
 @dataclass(frozen=True)
 class HostedConfig:
     issuer:str
@@ -68,6 +71,13 @@ class HostedConfig:
         # Optional: both empty leaves the curation routes failing closed (503 authority_unavailable).
         values['lab_verifier_role_arn'] = environment.get('CYCLOTRON_LAB_VERIFIER_ROLE_ARN', '')
         values['accounts_api_url'] = environment.get('CYCLOTRON_ACCOUNTS_API_URL', '')
+        # Optional per-document byte budget for the S3 journals (default 4 MiB). A temporary bridge
+        # while history moves out into write-once records; bounded so a typo cannot remove the guard.
+        budget = environment.get('CYCLOTRON_MAX_BYTES', '')
+        if budget:
+            if not re.fullmatch(r'[1-9][0-9]{0,8}', budget) or not 1048576 <= int(budget) <= MAX_JOURNAL_BYTES:
+                raise ValueError('CYCLOTRON_MAX_BYTES must be a whole number of bytes between 1 MiB and 64 MiB')
+            values['max_bytes'] = int(budget)
         return cls(**values)
 
 

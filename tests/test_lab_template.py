@@ -10,8 +10,12 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# Empty after the 2026-10-21 deploy (change set curation-routes-v0-31-0) refreshed the snapshot.
-REVIEWED_PENDING_PATHS = []
+# The journal byte budget bridge (pending-changes.md); empty again after the next deploy refreshes the snapshot.
+REVIEWED_PENDING_PATHS = [
+    "/Parameters/JournalMaxBytes",
+    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
