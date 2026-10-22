@@ -319,6 +319,10 @@ class S3ConsoleStorage:
         ):
             raise ValueError("classifier requires a question and distinct ordered classes")
         DecisionTask(identifier, tuple(labels), config["question"])
+        if "criteria" in config:
+            from .classifier_criteria import validate_provenance
+
+            validate_provenance(config["criteria"])
         payload = encoded(config)
         created = now()
 

@@ -1,0 +1,47 @@
+{
+  "schema": "cyclotron-lab-criteria/v1",
+  "classifier": {
+    "id": "threat-intelligence-relevance",
+    "name": "Threat Intelligence relevance"
+  },
+  "labels": [
+    {
+      "label": "include",
+      "role": "positive"
+    },
+    {
+      "label": "exclude",
+      "role": "negative"
+    }
+  ],
+  "rubric": "",
+  "previous": {
+    "revision": 1,
+    "question": "Should this source become a reference for Anthus Threat Intelligence, which publishes practical AI/ML security analysis for teams defending systems, data and workflows? Include incidents, research findings, architectural mistakes and near misses that yield behavior-changing checks readers can run, preferring primary evidence (advisories, incident reports, research, official guidance); broader cybersecurity or privacy items qualify when their consequences are actionable. Exclude: plain vulnerability-feed items, novelty or drama, and vendor marketing or product announcements."
+  },
+  "question": "Should this source become a reference for Anthus Threat Intelligence, which publishes practical AI/ML security analysis for teams responsible for defending systems, data and operational workflows? Include incidents, research findings, architectural mistakes and near misses that show how risk is moving across the AI/ML security landscape and that leave readers something to inspect, verify or change: a failure mode, a defensive lesson and checks readers can run against their own environment. Prefer primary evidence (vendor documentation, incident reports, advisories, empirical research, official guidance). Exclude: vulnerability-feed items with no failure mode or defensive lesson, novelty or drama, vendor marketing and product announcements, and breathless breach reporting or speculative claims with no checkable evidence.",
+  "doctrine": {
+    "summary": "Threat Intelligence publication doctrine (mission, editorial policy) and its newsroom sections. The production doctrine records were not compared with the repo file.",
+    "sources": [
+      {
+        "kind": "repo",
+        "repo": "AnthusAI/Threat-Intelligence",
+        "ref": "origin/main@d7d2916",
+        "path": "corpora/papyrus-publication-doctrine.yml",
+        "commit": "79ca215f1fbdd1f45166ab1dac810243d0618382"
+      },
+      {
+        "kind": "repo",
+        "repo": "AnthusAI/Threat-Intelligence",
+        "ref": "origin/main@d7d2916",
+        "path": "corpora/papyrus-newsroom-sections.yml",
+        "commit": "79ca215f1fbdd1f45166ab1dac810243d0618382"
+      }
+    ]
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-22"
+  }
+}

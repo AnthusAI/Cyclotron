@@ -1,0 +1,50 @@
+{
+  "schema": "cyclotron-lab-criteria/v1",
+  "classifier": {
+    "id": "anth-us-relevance",
+    "name": "Anth.us relevance"
+  },
+  "labels": [
+    {
+      "label": "include",
+      "role": "positive"
+    },
+    {
+      "label": "exclude",
+      "role": "negative"
+    }
+  ],
+  "rubric": "",
+  "previous": {
+    "revision": 1,
+    "question": "Should this source become a reference for Anth.us, which explains how Anthus builds and operates AI systems for real editorial work? Include: software factories and how software is made and operated; sufficiently notable, substantive AI analysis; meaningful commentary on the future of AI and its impact on society; substantive work on open models and self-run generation (for example open text-to-speech); knowledge-base, ontology or taxonomy material that is practical and accessible. Exclude: product announcements, repetitive claims that a model made a discovery, and anything whose only merit is novelty, a famous vendor or an AI label."
+  },
+  "question": "Should this source become a reference for Anth.us, where Anthus shows its work: how we build, measure and run AI systems, and what the wider field's evidence means for people who put AI into production? Include a source that shows how an AI system is built, evaluated, run or kept aligned, or that measures what AI changes for work and society, and that leaves the reader something to reuse or check (a worked example, a measurement, a failure case or a primary source). Topics in scope: agent harnesses and software factories, decision models and evaluation loops, open-weight and self-run models (including open text-to-speech), knowledge bases, ontologies and taxonomies, and substantive commentary or analysis on AI and its effect on work and society. Prefer primary sources (papers, model cards, source code, official documentation, datasets). It must be traceable, with a stable link or identifier. Exclude: generic AI commentary, vendor comparisons without measurements, product announcements that ship nothing a reader can inspect or run (open weights, code, a published evaluation do count), pieces that restate a headline with no new example or result, claims of model discoveries without evidence, and anything whose only merit is novelty, a famous vendor or an AI label.",
+  "doctrine": {
+    "summary": "Approved Anth.us publication doctrine (mission line B). The question derives from it only. It is live as production doctrine records on the anth-us site.",
+    "sources": [
+      {
+        "kind": "production-records",
+        "note": "Approved doctrine records in the Papyrus production data for the anth-us site"
+      },
+      {
+        "kind": "reviewed-copy",
+        "path": "scratchpad/doctrine/anth-us-doctrine.yml",
+        "sha256": "afcb970bc317596ac984efe5cfd12ff6d3bd6e8f100b682f7ed3e7c580b61aba",
+        "note": "Ephemeral reviewed copy; not yet committed to AnthusAI/Anth.us-web corpora/papyrus-publication-doctrine.yml, so there is no commit"
+      },
+      {
+        "kind": "repo",
+        "repo": "AnthusAI/Anth.us-web",
+        "ref": "origin/main@87a379d",
+        "path": "corpora/anth-us-newsroom-sections.yml",
+        "commit": "cf4494eba58ef318dbbfc11bf2858eed722dd7cc"
+      }
+    ]
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-22"
+  }
+}

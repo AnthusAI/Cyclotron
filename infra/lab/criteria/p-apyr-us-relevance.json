@@ -1,0 +1,57 @@
+{
+  "schema": "cyclotron-lab-criteria/v1",
+  "classifier": {
+    "id": "p-apyr-us-relevance",
+    "name": "Papyrus relevance"
+  },
+  "labels": [
+    {
+      "label": "include",
+      "role": "positive"
+    },
+    {
+      "label": "exclude",
+      "role": "negative"
+    }
+  ],
+  "rubric": "",
+  "previous": {
+    "revision": 1,
+    "question": "Should this source become a reference for Papyrus, an academic-first publication on information-systems capabilities? Include substantive research with methods and evidence on AI-assisted publishing and content management, natural-sounding generated writing, knowledge bases, corpus-wide analysis (topic modeling, trends, entity extraction), knowledge graph generation and curation, ontology and taxonomy. Exclude: product announcements, link-only web coverage, and general AI or mathematics stories outside those areas; a paper format or an AI mention alone is not enough."
+  },
+  "question": "Should this source become a reference for Papyrus's newspaper, Information about information systems, which explains how information systems work, change and fail for readers who build or depend on them? Include a source that explains or evidences how a specific information system works, changes or fails, whether an AI or machine-learning system, publishing or newsroom technology, or the history of information systems, and that leaves the reader something specific to check (a documented behavior, a measurable change, a primary source). Prefer primary documentation and inspectable evidence (papers, specifications, source code, official documentation, datasets); research, journalism and history a reader could cite are in scope. It must be traceable, with a stable link or identifier and clear provenance. Exclude: material that restates hype without an inspectable claim, and marketing, listicles and announcements with no technical substance.",
+  "doctrine": {
+    "summary": "Approved p.apyr.us publication doctrine (mission 'Information about information systems', evidence policy). It is live in production as records and has no file in the p.apyr.us repo; the scratchpad copy below is the reviewed text.",
+    "sources": [
+      {
+        "kind": "production-records",
+        "note": "Approved doctrine records in the Papyrus production data for p.apyr.us"
+      },
+      {
+        "kind": "reviewed-copy",
+        "path": "scratchpad/doctrine/p-apyr-us-doctrine.yml",
+        "sha256": "c97342c630684beab19de786100fc29d6af64ccd189a558d60e32e21e9cbb093",
+        "note": "Ephemeral copy used for the 2026-10-21 review; commit it to AnthusAI/p.apyr.us corpora/ so it is versioned"
+      },
+      {
+        "kind": "repo",
+        "repo": "AnthusAI/p.apyr.us",
+        "ref": "origin/main@862f1d8",
+        "path": "corpora/papyrus-newsroom-sections.yml",
+        "commit": "186fe47"
+      },
+      {
+        "kind": "repo",
+        "repo": "AnthusAI/p.apyr.us",
+        "ref": "origin/main@862f1d8",
+        "path": "corpora/papyrus-public-topics.yml",
+        "commit": "186fe47"
+      }
+    ]
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-22"
+  }
+}

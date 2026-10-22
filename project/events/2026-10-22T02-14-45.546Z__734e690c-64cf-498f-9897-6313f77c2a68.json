@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "734e690c-64cf-498f-9897-6313f77c2a68",
+  "issue_id": "decision-flywheel-897e8d6d-d824-4ee7-a687-7cac42114bf8",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-22T02:14:45.546Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "9aeabf98-5b47-4474-b747-b864cd44b7f2",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude_code",
+      "model": "Claude Sonnet 5.5",
+      "name": "Claude"
+    }
+  }
+}
