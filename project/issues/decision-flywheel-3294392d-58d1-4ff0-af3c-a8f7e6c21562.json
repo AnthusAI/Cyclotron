@@ -23,9 +23,24 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "7424805f-3c5a-4840-b9ad-0d4c78dc6196",
+      "author": "home",
+      "text": "Starting S3: plan is Part A conversion library + CLI (runtime events, reply ledgers, job results) with write-first/commit-once protocol, dry run default, then Part B runbook and read-only production dry run.",
+      "created_at": "2026-10-22T04:52:21.981634Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b8262715-e0c2-422d-9e41-5c582e8f3a7a",
+      "author": "home",
+      "text": "Progress: Part A built and green locally (118 specs): record_lake_conversion.py + scripts/dev/convert_to_record_lake.py, library support (audit/convert/preview on S3RuntimeStores, S3BatchStorage, S3ConsoleStorage; check hook on commit_with_records; resume-own-owner acquire). Production dry run (read-only, get/list/head-only wrapper) succeeded: 5 journals (1 ledger, 3 runtimes, catalog), 3,817 records, control state 16,559,488 -> 1,069,869 bytes, lake +16,243,823 bytes. Next: runbook in infra/lab/README.md, docs, make check, PR.",
+      "created_at": "2026-10-22T05:01:48.178427Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-22T03:28:48.406703Z",
-  "updated_at": "2026-10-22T03:30:33.829345Z",
+  "updated_at": "2026-10-22T05:01:48.178452Z",
   "closed_at": null,
   "agent": {
     "platform": "claude-code",

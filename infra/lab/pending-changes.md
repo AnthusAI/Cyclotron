@@ -25,4 +25,6 @@ the old embedded form (logged), so nothing is lost, only not yet moved.
 No `s3:ListBucket` is added. Reading covered records is a GET by sequence; listing (audit, orphan janitor) is
 not needed by S2 and would be a separate, reviewed grant.
 
+The order of the deploy, the conversion of live data and what rollback means are in `README.md`, "Record-lake cutover". The package key (`S3Key` of both functions) changes in the same change set.
+
 The journal byte budget bridge (JournalMaxBytes 16 MiB, v0.33.2, change set `journal-budget-v0-33-2`) was deployed on 2026-10-22 and is already in the snapshot.

@@ -28,6 +28,7 @@ Replies embedded by earlier versions keep working; a later conversion moves them
 import json
 import logging
 from copy import deepcopy
+from dataclasses import dataclass
 from hashlib import sha256
 
 from .batch_storage import (
@@ -43,6 +44,7 @@ from .decision_cache import CacheMiss
 from .journal import Journal, JournalConflict, JournalUncertain
 from .record_lake import (
     RECORDS_KEY,
+    Coverage,
     FileRecordLake,
     RecordConflict,
     RecordCorrupt,
@@ -91,6 +93,14 @@ def same_payload(held, payload):
     if is_reply_reference(held):
         return payload is not None and reply_reference(held["seq"], payload) == held
     return held == payload
+
+
+@dataclass(frozen=True)
+class RepliesConverted:
+    originals: list  # (fingerprint, owner, generation, text) in the order they were written
+    refs: list  # RecordRef of each reply record written
+    before: object  # JournalRecord before the commit
+    after: object  # JournalRecord the commit produced
 
 
 class S3BatchStorage:
@@ -314,6 +324,73 @@ class S3BatchStorage:
                 raise BatchUncertain("S3 transaction uncertain; reconcile before provider dispatch") from None
             return result
         raise BatchConflict("S3 run contention limit reached; retry operation with its same owner")
+
+    @staticmethod
+    def _embedded_slots(state):
+        """Complete rows whose reply text is still inside the ledger, in conversion order: batches, then history."""
+        slots = [(r, 2, r[0], r[4], r[3]) for r in state["batches"] if r[1] == "complete" and isinstance(r[2], str)]
+        slots += [(r, 4, r[1], r[5], r[2]) for r in state["history"] if r[3] == "complete" and isinstance(r[4], str)]
+        return slots
+
+    def audit_replies(self):
+        """Read-only: the head record and the embedded replies as ``(fingerprint, owner, generation, text)``."""
+        record = self._read()
+        return record, [(f, o, g, row[index]) for row, index, f, o, g in self._embedded_slots(record.value)]
+
+    def preview_replies_conversion(self, record):
+        """(the ledger as it would stand after the conversion, bytes of the records it would write). Writes nothing."""
+        slots = self._embedded_slots(record.value)
+        state = deepcopy(record.value)
+        coverage = coverage_in(state, self.replies)
+        seqs = range(coverage.last + 1, coverage.last + 1 + len(slots))
+        for (row, index, *_), seq in zip(self._embedded_slots(state), seqs):
+            row[index] = reply_reference(seq, row[index])
+        state[RECORDS_KEY] = {
+            **state.get(RECORDS_KEY, {}),
+            self.replies.name: Coverage(coverage.last + len(slots), coverage.skipped).to_json(),
+        }
+        size = sum(
+            self.replies.encoded_size(seq, reply_value(f, o, g, row[index])) for (row, index, f, o, g), seq in zip(slots, seqs)
+        )
+        return state, size
+
+    def convert_embedded_replies(self, *, check=None):
+        """Move every reply still embedded in the ledger into the reply lake, in one commit.
+
+        Reply records are written first (same record shape ``settle`` writes), then ONE commit swaps each
+        embedded text for its ``{seq, sha256, length}`` note and stores the coverage. Reservation, claims,
+        attempts and ordering are untouched. Needs the workspace ownership the live worker holds. Returns
+        ``RepliesConverted`` or None when nothing is embedded (idempotent).
+        """
+        if self.replies is None:
+            raise ValueError("a reply record lake is required to convert embedded replies")
+        for _ in range(self.max_conflicts):
+            record = self._read()
+            slots = self._embedded_slots(record.value)
+            if not slots:
+                return None
+            originals = [(f, o, g, row[index]) for row, index, f, o, g in slots]
+
+            def apply(state, refs, originals=originals):
+                cited = iter(refs[self.replies.name])
+                for row, index, *_ in self._embedded_slots(state):
+                    row[index] = reply_reference(next(cited).seq, row[index])
+                self._check(state)
+
+            try:
+                committed, refs = commit_with_records(
+                    self.journal,
+                    record,
+                    [(self.replies, [reply_value(*original) for original in originals])],
+                    apply,
+                    check=check,
+                )
+            except JournalConflict:
+                continue
+            except JournalUncertain:
+                raise BatchUncertain("S3 transaction uncertain; reconcile before provider dispatch") from None
+            return RepliesConverted(originals, refs[self.replies.name], record, committed)
+        raise BatchConflict("S3 run contention limit reached; retry")
 
     def operation_mark(self):
         return len(self._read().value["attempts"])

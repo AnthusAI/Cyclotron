@@ -201,6 +201,17 @@ class RecordLake:
                 raise RecordConflict("a different record already holds this sequence")
         return self._ref(seq, content)
 
+    def encoded_size(self, seq, value):
+        """Bytes the record would occupy at ``seq``. Refuses what exceeds the byte budget."""
+        return len(self._encode(seq, value))
+
+    def stored_ref(self, seq):
+        """The reference of the bytes actually stored at ``seq`` (digest and length), for verification."""
+        content = self._fetch(seq)
+        if content is None:
+            raise RecordUnavailable("record missing; never use an index as fallback")
+        return self._ref(seq, content)
+
     def read(self, seq):
         content = self._fetch(seq)
         if content is None:
@@ -416,7 +427,7 @@ class S3RecordLake(RecordLake):
         return found if limit is None else found[:limit]
 
 
-def commit_with_records(journal, expected, writes, change=None, *, invalidate=None, invalidate_on_conflict=False):
+def commit_with_records(journal, expected, writes, change=None, *, invalidate=None, invalidate_on_conflict=False, check=None):
     """Write records first, then flip the head: one all-or-nothing logical change.
 
     ``writes`` is a sequence of ``(lake, values)``, at most one entry per lake. Each lake's new records are
@@ -425,6 +436,9 @@ def commit_with_records(journal, expected, writes, change=None, *, invalidate=No
     during that commit the records stay in the lake as orphans that no state covers, so nobody can read them.
     Returns ``(JournalRecord, refs)``. Conflict, uncertain and limit outcomes surface as the shared storage
     exceptions, exactly as ``commit_with_contract`` reports them; retrying a conflict stays the caller's call.
+
+    ``check(refs)``, when given, runs after every page is written and before the head moves. Raising from it
+    abandons the commit: the pages stay as orphans and the control state is untouched.
     """
     if not isinstance(expected.value, dict):
         raise ValueError("record coverage lives in a control state that is a JSON object")
@@ -437,6 +451,8 @@ def commit_with_records(journal, expected, writes, change=None, *, invalidate=No
             raise ValueError("one batch of records per lake in a commit")
         coverage, refs[lake.name] = lake.append(coverage_in(state, lake), values)
         state = with_coverage(state, lake, coverage)
+    if check is not None:
+        check(refs)
     if change is not None:
         change(state, refs)
     record = commit_with_contract(journal, expected, state, invalidate=invalidate, invalidate_on_conflict=invalidate_on_conflict)

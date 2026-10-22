@@ -69,11 +69,13 @@ class S3EmbeddedStorage:
         if self.authority is None or (value["owner"], value["fence"]) != self.authority:
             raise RuntimeOwnershipError("embedded execution ownership unavailable")
 
-    def acquire(self, owner):
+    def acquire(self, owner, *, resume=False):
+        """Take ownership. ``resume=True`` re-takes a root this same ``owner`` id left held (the fence moves)."""
         uuid(owner)
         record = self.journal.read()
         self._validate(record.value)
-        if self.authority is not None or record.value["owner"] is not None:
+        held = record.value["owner"]
+        if self.authority is not None or (held is not None and not (resume and held == owner)):
             raise RuntimeOwnershipError("embedded root already owned; no timeout takeover")
         value = deepcopy(record.value)
         value["owner"] = owner

@@ -211,3 +211,171 @@ approval. Agents do not run these commands.**
    (Check `sam deploy --help` for the parameter-file form your SAM CLI supports.)
 5. Review the change set (`aws cloudformation describe-change-set`). Reject anything that replaces or deletes a bucket, the KMS key, the API, a role or a queue; list and attach the review to the ticket. Buckets and the key are `Retain`.
 6. Get Ryan's explicit approval of that change set, then execute it. Afterwards re-run `scripts/dev/check_lab_template.sh --live`, probe the unauthenticated API (expect 401/403), and refresh the snapshot in a follow-up commit.
+
+## Record-lake cutover
+
+Moves the lab from "history embedded in each journal" to the record lake (docs/s3-cloud-storage.md, "Record
+lake"). **Agents prepare and rehearse; they run none of the steps that write.** Every step below marked
+`[Ryan]` needs his explicit go, as in the deploy runbook above. Run the numbered steps in order; do not
+skip ahead.
+
+Ground rules that shape the order:
+
+- The new code reads old (embedded) and new (lake) state, but **the old code cannot read lake-backed state** (it
+  fails closed on any journal that cites records). The first record written to an existing journal is therefore
+  one-way for the old package.
+- The conversion moves embedded history into the lake, so it must run **before new events are written to the
+  journals it converts** (a runtime that already received lake events is handled only up to 64 earlier lake
+  records; see the tool's docs). Hence workers stay paused from the deploy until the conversion is done, except for
+  the one fresh-run check in step 3, which only touches journals of a brand-new run.
+- The conversion tool runs under your operator credentials (`AWS_PROFILE=cyclotron-production`), not the Lambda roles.
+  It needs `s3:GetObject`, `PutObject` and `ListBucket` on the books bucket (admin has them), and `boto3`
+  (`pip install boto3`, not a repo dependency). If botocore says the SSO token expired while the AWS CLI still
+  works, run `aws sso login --profile cyclotron-production`.
+
+Names used below: `BUCKET=cyclotron-console-books-682849160744-us-east-1`,
+`ACCOUNT=<the lab account's Cyclotron account id (a UUID; the ticket and the console URL give it)>`, `ASSETS=cdk-hnb659fds-assets-682849160744-us-east-1`,
+`PREV=cyclotron-console/backend/9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c` (the
+currently deployed package, v0.33.2; re-confirm with `aws lambda get-function --function-name
+cyclotron-console-worker --query Configuration.CodeSha256` and the `S3Key` in `template.yaml`).
+
+### 0. Preflight (read only)
+
+1. `scripts/dev/check_lab_template.sh --live`: no drift. `scripts/dev/check_lab_template.sh`: template equals the snapshot plus
+   exactly the three pending record-lake operations.
+2. Confirm `PREV` exists in `$ASSETS` (`aws s3api head-object --bucket $ASSETS --key $PREV`). It is immutable and is never
+   overwritten or deleted; it is the only code rollback there is.
+3. Dry run the conversion and attach the output to the ticket. This is the "before" picture for step 5:
+
+   ```bash
+   AWS_PROFILE=cyclotron-production .venv/bin/python scripts/dev/convert_to_record_lake.py \
+     --expect-aws-account 682849160744 --books-bucket $BUCKET --cyclotron-account $ACCOUNT
+   ```
+
+   It reads only (its S3 client is a get/list/head-only wrapper in dry-run mode). On 2026-10-22 it reported 5 journals and
+   3,817 records to move: control state 16,559,488 to 1,069,869 bytes, lake +16,243,823 bytes. Expect `would-convert`
+   everywhere and no `busy`, `problem` or `note`.
+4. Queue and jobs quiet: `aws sqs get-queue-attributes --queue-url <CommandQueueUrl> --attribute-names All` shows
+   zero visible and zero in-flight messages, and the dry run does not report the catalog `busy`.
+
+Rollback: none needed; nothing has changed.
+
+### 1. Release and package
+
+1. Coordinator runs `scripts/dev/release_to_main.sh` (gate: `make check`, then push to `main`; semantic-release adds the
+   version commit; develop gets main back).
+2. `scripts/dev/build_lab_package.sh <released commit>`; record the zip path and its sha256 on the ticket.
+3. `[Ryan]` Upload to a NEW key, never overwriting (the create-only precondition makes S3 refuse an existing key):
+
+   ```bash
+   AWS_PROFILE=cyclotron-production aws s3api put-object --bucket $ASSETS \
+     --key cyclotron-console/backend/<sha256> --body build/lab/lab.zip --if-none-match '*'
+   ```
+
+Rollback: an unused object in the assets bucket affects nothing; the live key `PREV` is untouched. Leave it.
+
+### 2. Pause workers, then one change set: new code plus S1's pending IAM and bucket-policy changes
+
+1. `[Ryan]` Pause the worker's queue consumption (outside CloudFormation; it is reversible and is undone in step 6):
+
+   ```bash
+   UUID=$(AWS_PROFILE=cyclotron-production aws lambda list-event-source-mappings \
+     --function-name cyclotron-console-worker --query 'EventSourceMappings[0].UUID' --output text)
+   AWS_PROFILE=cyclotron-production aws lambda update-event-source-mapping --uuid $UUID --no-enabled
+   ```
+
+   Wait until the mapping is `Disabled` and the queue shows zero in-flight messages (a running job finishes first; the
+   conversion dry run reports the catalog `busy` while a job runs). Tell the machine caller of
+   `/machine/publications/*` to hold: that BFF route is the one other writer of runtime and ledger state.
+2. In `template.yaml` set `S3Key` of **both** `BffFunction` and `WorkerFunction` to the new key. `pending-changes.json`
+   already holds the three add-only operations (`*/records/*` create-only in `BooksBucketPolicy`; Get and Put on
+   `*/console/records/*` for `BffRole` and `WorkerRole`). Run `scripts/dev/check_lab_template.sh`: it must show only the intended
+   `S3Key` difference on the two functions (the deploy runbook's step 2) and nothing beyond the three pending operations.
+3. Create the change set without executing it (deploy runbook, step 4) and review it. Expected: Modify (never Replacement)
+   of `BffFunction`, `WorkerFunction` (code only), `BooksBucketPolicy`, `BffRole`, `WorkerRole`. Reject the change set
+   if it replaces or deletes anything, touches the buckets, the key, the API, the queue or `WorkerFunctionCommands`, or
+   changes any statement other than appending the three `*/records/*` resources.
+4. `[Ryan]` approves the change set, then it is executed. Afterwards: stack `UPDATE_COMPLETE`; both functions' `CodeSha256`
+   equal the new zip; `check_lab_template.sh --live`; unauthenticated API probe answers 401/403.
+
+Rollback:
+
+- Before execution: delete the change set. The mapping stays disabled until you re-enable it.
+- After execution, before any lake write: a second change set that sets `S3Key` back to `PREV` restores the old code. Leave the
+  three IAM and bucket-policy additions in place (add-only, harmless to the old code), or revert them in the same change set.
+  Re-enable the mapping afterwards (step 6 command with `--enabled`).
+- After any lake write to an existing journal the old package no longer works for that journal. See "What rollback means" below.
+
+### 3. Verify new writes land in `records/` (read only, on a fresh run)
+
+The point is to prove the IAM and bucket-policy grants work before anything is converted, without touching an existing run's
+journals: use a throwaway run, whose workspace, ledger and runtimes are brand new.
+
+1. `[Ryan]` Create the throwaway run in the console and enqueue exactly one job for it. Confirm it is the only message in the
+   queue, then enable the mapping (`update-event-source-mapping --uuid $UUID --enabled`), wait for the job to finish, and disable
+   the mapping again. Confirm the queue is empty.
+2. Read-only checks (the profile has `ListBucket`; the Lambda roles do not):
+
+   ```bash
+   aws s3 ls s3://$BUCKET/$ACCOUNT/console/records/ --recursive | tail
+   aws logs filter-log-events --log-group-name /aws/lambda/cyclotron-console-worker \
+     --filter-pattern '"reply record not written"' --start-time <epoch ms of step 2.4>
+   ```
+
+   Expect new objects under `.../records/runtime/events-<name>/`, `.../records/shared-batches/replies-<name>/` (if the run
+   made a provider call) and `.../records/console/job-results/`, and no "reply record not written" or "AccessDenied" warnings. Then
+   the dry run (step 4.1) shows the throwaway run's journals as `nothing-to-convert` and the catalog's new job with a
+   `cyclotron-job-result-ref/v1` result.
+3. If nothing landed in `records/`, or replies were embedded with a warning, **stop**: the grants are not effective. Nothing was
+   converted. Fix forward (grants), or use the step 2 rollback while only the throwaway run is lake-backed.
+
+### 4. Convert, journal by journal
+
+1. Dry run again and compare with step 0; nothing may be `busy` or `problem`:
+
+   ```bash
+   AWS_PROFILE=cyclotron-production .venv/bin/python scripts/dev/convert_to_record_lake.py \
+     --expect-aws-account 682849160744 --books-bucket $BUCKET --cyclotron-account $ACCOUNT
+   ```
+
+2. `[Ryan]` go, **one journal at a time**, adding `--apply --journal <domain/name prefix>`: start with one runtime
+   (`--journal runtime/a8fc`), then the ledger (`--journal shared-batches/d915`), the other two runtimes, and the catalog last
+   (`--journal console/catalog`). Each line prints the records moved, the state bytes before and after and, for `converted`, the
+   revision and state digest from before the commit. Paste each into the ticket. Stop at the first line that is not `converted`.
+   - `busy`: someone owns it (a worker or a crashed one). The tool skipped it; do not force. Find out why, then re-run.
+   - `problem`: nothing was changed for that journal; read the message.
+   - `STOPPED: verification failed` (exit code 3): a moved record did not match its original. Do not resume workers.
+     Nothing was deleted; the lake page is immutable and every read of it fails closed. Escalate; see below.
+   - An interrupted run (laptop sleep, SSO expiry) is safe: re-run the same command. It adopts the pages already written, does
+     not write them twice, and resumes or releases the tool's own ownership.
+
+Rollback per journal: before its commit, none is needed (pages written so far are orphans no state covers). After its commit,
+the journal is lake-backed and verified; the tool has no undo. See "What rollback means".
+
+### 5. Verify the sizes dropped
+
+1. Dry run again: every line is `nothing-to-convert` and shows the new `state` size (the 2026-10-22 projection: each runtime
+   about 46 KB, the ledger about 45 KB, the catalog about 0.9 MB, down from 3.6, 3.1 and 2.5 MB).
+2. Those `state` sizes are what each journal's next write rewrites. Each is far below `CYCLOTRON_MAX_BYTES` (16 MiB) and the
+   catalog's 0.9 MB is mostly rows that stay by design (items, lists, classifiers).
+
+### 6. Resume
+
+1. `[Ryan]` re-enable the mapping (`update-event-source-mapping --uuid $UUID --enabled`), release the machine caller, run one job.
+2. Watch `/aws/lambda/cyclotron-console-worker` for "reply record not written" (embedded fallback) and for any
+   `RecordCorrupt`/`RecordUnavailable`. Then refresh the snapshot (`aws cloudformation get-template --template-stage Original`), empty
+   `pending-changes.json` and `pending-changes.md`, and commit.
+
+### What rollback means
+
+| Point | What you can still do |
+|---|---|
+| Steps 0, 1, up to creating the change set | Nothing was changed; discard. |
+| After the change set, before any lake write | Redeploy `PREV` (code only). The additive IAM and policy changes can stay. |
+| After the step 3 throwaway run | Same, but that run's journals are lake-backed and the old code cannot read them. The run is disposable. |
+| After any `--apply` | **Forward fix only.** The old package fails closed on lake-backed journals, so redeploying it would stop the lab. Fix and redeploy the new code instead. Keep `PREV` in the assets bucket regardless. |
+| A journal needs its pre-conversion state back | A reviewed one-off by an operator: re-commit the transaction printed as "before: revision N, state digest D" (still in `payloads/`, never deleted) as a new revision. Valid only for a journal with no lake writes since; it is not part of the tool. |
+| Verification mismatch | Leave workers paused. The mismatching page is write-once and read-only to everyone; decide between the restore above and a fix to the tool, with the printed revision and digest in hand. |
+
+The honest summary: until the first `--apply`, everything is reversible by redeploying `PREV`. After it, the only road is forward, so
+keep the window between step 2 and step 6 short, keep the mapping disabled throughout, and do not skip the dry-run comparison.
