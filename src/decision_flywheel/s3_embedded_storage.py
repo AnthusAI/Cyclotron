@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from .journal import Journal, commit_with_contract, uuid
 from .s3_batch_storage import S3BatchStorage
-from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
+from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, runtime_events_lake
 from .storage_errors import StorageLimit, StorageMissing
 
 
@@ -357,7 +357,10 @@ class S3CyclotronStores:
     def runtime_for_classifier(self, identifier):
         if identifier in self.runtimes:
             raise ValueError("classifier runtime already opened")
-        runtime = S3RuntimeStores(self._journal("runtime", identifier), max_records=self.max_records, cache_owned=True)
+        journal = self._journal("runtime", identifier)
+        runtime = S3RuntimeStores(
+            journal, max_records=self.max_records, cache_owned=True, events_lake=runtime_events_lake(journal)
+        )
         runtime.initialize()
         runtime.acquire(self.owner)
         self.runtimes[identifier] = runtime

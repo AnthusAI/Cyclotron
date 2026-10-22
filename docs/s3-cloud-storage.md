@@ -108,7 +108,7 @@ No cloud resources, policies, OAuth clients, provider calls, public push or
 hosting deployment were changed by these synthetic checks.
 
 
-## Record lake: history as write-once files (primitive; not yet used by callers)
+## Record lake: history as write-once files
 
 **In plain language.** Today each journal is a binder that is photocopied in full for every
 change: to add one log line we copy the whole binder, file the old copy away, and move a sticky
@@ -163,10 +163,40 @@ link) and `S3RecordLake` (create-only `PutObject`, one retry for transient GETs 
 and the same one-attempt SDK requirement as `S3Journal`). One contract suite
 (`record_lake_contract_test.py`) runs against all three.
 
-**Not changed yet.** No existing journal, adapter or caller reads or writes the lake. Data stays in the
-embedded form; the S2 steps will move events, raw replies and job results out and keep reading the old
-embedded form as a fallback during migration. Deploying the lake needs the `records/` prefix in the lab
-stack (`infra/lab/pending-changes.md`).
+### Runtime events (S2a): the first caller
+
+**In plain language.** Each classifier's runtime journal used to carry every step of every decision
+(98.7% of its bytes). The steps now go to the lake, one small page each, and the journal keeps the
+owner, the fence, the paid-answer rows and a two-number coverage for the pages.
+
+- **Where.** `<account>/console/records/runtime/events-<journal name>/<seq>.json`. One scope holds a runtime
+  per classifier, so each journal has its own lake kind (`events_kind`); two classifiers never share a
+  sequence. `runtime_events_lake(journal)` builds the S3 or file lake on the journal's own payload adapter;
+  `S3CyclotronStores` and `S3WorkspaceStores` pass it to every runtime. A handle without a lake keeps the old embedded form.
+- **Writes.** An appended event joins the commit being built: `commit_with_records` creates the pages, then one
+  head compare-and-set stores the new coverage with whatever else changed. Ownership and the fence are checked
+  before anything is written, so a fenced-out handle writes no page. Pages written before a lost race or an
+  uncertain head write are orphans that no coverage names; nobody can read them.
+- **Coalescing (PR #97) is unchanged.** A handle that owns its cache still holds events in memory and publishes
+  them with the next durable change (an answer reservation or completion, a state write) or at release, now as
+  pages plus coverage in that one commit. Paid-action rows are never deferred. A head that moved while events were
+  held poisons the handle, as before.
+- **Reads.** `history`, `trace_events`, `events_of` and `event_payloads` walk the log in order: legacy rows, then
+  covered pages by GET, then held events. A trace page reads only its own pages (a page of 5 is 5 GETs);
+  `history(n)` reads the last n; scans fetch 100 pages at a time with 8 parallel GETs. Pages are immutable, so a
+  handle keeps what it read (32 MB cap). A covered page that is missing fails the read.
+- **Event ids.** An id is a position: the lake's n-th covered page is `base + n`, where `base` is the last embedded
+  id. Ids stay dense and ordered when a sequence was skipped, so the cursors callers hold keep working.
+- **Legacy.** Events already embedded in a runtime document stay exactly where they are and read first, before the
+  covered pages; new events never go back into the document. A later step converts the embedded prefix. A handle
+  without the lake refuses to read or write events of a document whose coverage is non-empty.
+- **Cycle numbers** keep a small high-water mark (`cycle-number-high-water`) in control state so numbering a cycle
+  does not scan history. It is computed from every event the first time the lake is written.
+- **Measured** (synthetic, 7 events of about 3 KB per item, 30 items): document growth per item 21,472 bytes to 50;
+  journal bytes written per item 860,069 to 3,692; document after 30 items 638,300 to 2,006 bytes.
+
+Shared-batch replies and job results move in the S2b and S2c steps. Deploying the lake needs the `records/` prefix in
+the lab stack (`infra/lab/pending-changes.md`, already listed by S1: GET and PUT only, no list).
 
 ## Verification at the initial S3 SDK checkpoint
 

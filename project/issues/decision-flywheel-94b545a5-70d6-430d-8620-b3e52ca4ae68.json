@@ -15,9 +15,17 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "2fe3c659-1c15-4441-ab53-3d9d717699e4",
+      "author": "home",
+      "text": "S2a in progress on feature/record-lake-runtime-events: runtime trace events now go to a per-runtime RecordLake (runtime/events-<journal>) via commit_with_records, legacy embedded events read as a prefix, coalescing/lease/fence kept. Synthetic measure: document growth per decided item 21,472 -> 50 bytes. Running make check, then PR.",
+      "created_at": "2026-10-22T04:26:31.384023Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-22T03:28:47.348363Z",
-  "updated_at": "2026-10-22T03:30:33.764568Z",
+  "updated_at": "2026-10-22T04:26:31.384054Z",
   "closed_at": null,
   "agent": {
     "platform": "claude-code",
