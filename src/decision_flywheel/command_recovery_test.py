@@ -190,3 +190,14 @@ def test_cli_refuses_in_the_wrong_aws_account_and_on_a_fence_mismatch(capsys):
     assert cli(job, owner, fence, Session(client, account="999999999999"), "--apply") == 2
     assert cli(job, owner, fence + 1, Session(client, queue=Queue([])), "--apply") == 1
     assert s.command_recovery(job["id"])["status"] == "running"
+
+
+def test_command_recovery_uses_the_same_journal_byte_budget_as_the_hosted_lab():
+    import pytest
+
+    from .command_recovery import journal_budget
+
+    assert journal_budget({}) == 4194304
+    assert journal_budget({"CYCLOTRON_MAX_BYTES": "16777216"}) == 16777216
+    with pytest.raises(ValueError):
+        journal_budget({"CYCLOTRON_MAX_BYTES": "99999999999"})

@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react'
 import {Pencil,Undo2} from 'lucide-react'
-import {Button} from '@/components/ui/button'
+import {Button,buttonVariants} from '@/components/ui/button'
+import {RadioChoices} from '@/components/ui/radio-choices'
 import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {AppDrawer} from './AppDrawer'
@@ -93,8 +94,8 @@ export function FeedbackControls({runId,classifiers,events,jobs,busy,replay=fals
         {stale?<p role="alert" className="text-sm text-destructive">Saved feedback changed since this draft began. Your draft is retained; review the saved feedback before submitting a new correction.</p>:null}
         {stale||changes.length?<Button variant="outline" disabled={locked} onClick={()=>choose(item,true)}>Discard draft and load saved feedback</Button>:null}
         {rows.map(v=>{const name=classifiers.find(c=>c.id===v.classifier)?.name??v.classifier;const classes=classifiers.find(c=>c.id===v.classifier)?.config?.classes??[{label:v.label}];return <fieldset key={v.classifier} disabled={locked||v.readonly} className="space-y-3 rounded-lg border border-border p-3"><legend className="px-1 text-sm font-semibold">{name}</legend>
-          <Label htmlFor={`correction-label-${v.classifier}`}>Label for {name}</Label><NativeSelect id={`correction-label-${v.classifier}`} value={draft[v.classifier]?.label??v.label} onChange={e=>setDraft(p=>({...p,[v.classifier]:{...p[v.classifier],label:e.target.value}}))}>{classes.map(c=><NativeSelectOption key={c.label} value={c.label}>{c.label}</NativeSelectOption>)}</NativeSelect>
-          <Label htmlFor={`correction-comment-${v.classifier}`}>Explanation for {name}</Label><textarea id={`correction-comment-${v.classifier}`} rows={4} className="w-full rounded-md border border-input bg-background p-3 text-sm" value={draft[v.classifier]?.comment??v.comment} onChange={e=>setDraft(p=>({...p,[v.classifier]:{...p[v.classifier],comment:e.target.value}}))}/>
+          <Label id={`correction-label-${v.classifier}-label`}>Label for {name}</Label><RadioChoices labelledBy={`correction-label-${v.classifier}-label`} disabled={locked||v.readonly} className="flex flex-wrap gap-2" itemClassName={`${buttonVariants({variant:'outline'})} min-h-11 aria-checked:bg-accent aria-checked:font-semibold aria-checked:underline`} value={draft[v.classifier]?.label??v.label} onChange={value=>setDraft(p=>({...p,[v.classifier]:{...p[v.classifier],label:value}}))} choices={classes.map(c=>({value:c.label,content:c.label}))}/>
+          <Label htmlFor={`correction-comment-${v.classifier}`} className="text-sm font-semibold">Explanation for {name}</Label><p id={`correction-hint-${v.classifier}`} className="text-sm text-muted-foreground">Why? A sentence or two helps it learn what you want.</p><textarea id={`correction-comment-${v.classifier}`} aria-describedby={`correction-hint-${v.classifier}`} rows={4} placeholder="Explanations are what it learns from. Say what made this the right answer." className="block min-h-28 w-full resize-y rounded-md border border-input bg-background p-3 text-sm" value={draft[v.classifier]?.comment??v.comment} onChange={e=>setDraft(p=>({...p,[v.classifier]:{...p[v.classifier],comment:e.target.value}}))}/>
           {v.readonly?<p className="text-xs text-muted-foreground">Inherited source feedback is read-only.</p>:null}
         </fieldset>})}
       </>}

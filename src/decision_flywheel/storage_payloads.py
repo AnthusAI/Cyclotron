@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .batch_storage import StorageScope
+from .s3_transient import cause_name, log, read_with_one_retry
 
 
 class PayloadCorrupt(RuntimeError):
@@ -20,7 +21,11 @@ class PayloadCorrupt(RuntimeError):
 
 
 class PayloadUnavailable(RuntimeError):
-    pass
+    """The payload could not be read. ``cause`` is the underlying exception class name only."""
+
+    def __init__(self, message, cause=None):
+        super().__init__(message + (f" (cause: {cause})" if cause else ""))
+        self.cause = cause
 
 
 class PayloadUncertain(RuntimeError):
@@ -112,8 +117,8 @@ class FilePayloads(_Payloads):
                 return self._verified(stream.read(reference.length + 1), reference)
         except PayloadCorrupt:
             raise
-        except OSError:
-            raise PayloadUnavailable("canonical payload unavailable") from None
+        except OSError as error:
+            raise PayloadUnavailable("canonical payload unavailable", cause_name(error)) from None
 
 
 class S3Payloads(_Payloads):
@@ -157,8 +162,7 @@ class S3Payloads(_Payloads):
                 raise PayloadUncertain("canonical publication uncertain; retry identical bytes") from None
         return reference
 
-    def get(self, reference):
-        self._check(reference)
+    def _fetch(self, reference):
         stream = None
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=self._key(reference.digest), ExpectedBucketOwner=self.owner)
@@ -166,10 +170,17 @@ class S3Payloads(_Payloads):
             if type(response.get("ContentLength")) is not int or response["ContentLength"] != reference.length:
                 raise PayloadCorrupt("canonical payload length mismatch")
             return self._verified(stream.read(reference.length + 1), reference)
-        except PayloadCorrupt:
-            raise
-        except Exception:
-            raise PayloadUnavailable("canonical payload unavailable") from None
         finally:
             if stream is not None:
                 stream.close()
+
+    def get(self, reference):
+        self._check(reference)
+        try:
+            # A GET is idempotent, so one transient failure is retried; corruption never is.
+            return read_with_one_retry(lambda: self._fetch(reference), "payload")
+        except PayloadCorrupt:
+            raise
+        except Exception as error:
+            log.warning("canonical payload unavailable: %s", cause_name(error))
+            raise PayloadUnavailable("canonical payload unavailable", cause_name(error)) from None

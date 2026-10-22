@@ -18,12 +18,16 @@ from .queued_account_authorization import QueuedAccountAuthorization
 from .s3_journal import S3Journal,encode,uuid
 from .storage_payloads import S3Payloads
 from .s3_sessions import S3OAuthSessions,KMSSessionCipher
-from .s3_console_storage import S3ConsoleStorage
+from .record_lake import S3RecordLake
+from .s3_console_storage import RESULTS_DOMAIN, RESULTS_KIND, S3ConsoleStorage
 from .s3_workspace_storage import S3WorkspaceStores
 from .hosted_console_service import HostedConsoleService
 from .hosted_command_worker import HostedCommandWorker,AuthorizedModel,CommandEventSink
 from .cyclotron_runtime import CyclotronRuntime
 from .web_api import create_app
+
+
+MAX_JOURNAL_BYTES = 67108864  # hard ceiling for CYCLOTRON_MAX_BYTES
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,13 @@ class HostedConfig:
         # Optional: both empty leaves the curation routes failing closed (503 authority_unavailable).
         values['lab_verifier_role_arn'] = environment.get('CYCLOTRON_LAB_VERIFIER_ROLE_ARN', '')
         values['accounts_api_url'] = environment.get('CYCLOTRON_ACCOUNTS_API_URL', '')
+        # Optional per-document byte budget for the S3 journals (default 4 MiB). A temporary bridge
+        # while history moves out into write-once records; bounded so a typo cannot remove the guard.
+        budget = environment.get('CYCLOTRON_MAX_BYTES', '')
+        if budget:
+            if not re.fullmatch(r'[1-9][0-9]{0,8}', budget) or not 1048576 <= int(budget) <= MAX_JOURNAL_BYTES:
+                raise ValueError('CYCLOTRON_MAX_BYTES must be a whole number of bytes between 1 MiB and 64 MiB')
+            values['max_bytes'] = int(budget)
         return cls(**values)
 
 
@@ -113,7 +124,10 @@ class HostedRuntime:
         uuid(account_id)
         return self._journal(self.config.books_bucket,StorageScope(account_id,'console'),domain,name)
     def console(self,account_id,*,initialize=False):
-        store=S3ConsoleStorage(self.journal(account_id,'console','catalog'),max_records=self.config.max_records)
+        journal=self.journal(account_id,'console','catalog')
+        # Completed job results are write-once records under <account>/console/records/, not catalog rows.
+        results=S3RecordLake(journal.payloads,RESULTS_DOMAIN,RESULTS_KIND,max_record_bytes=self.config.max_bytes)
+        store=S3ConsoleStorage(journal,max_records=self.config.max_records,results=results)
         if initialize:store.initialize()
         return store
     def binding(self,account_id,run_id):

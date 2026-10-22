@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "c39a3255-2a49-41ce-bd88-fce425256e0f",
+  "issue_id": "decision-flywheel-3294392d-58d1-4ff0-af3c-a8f7e6c21562",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-22T03:30:33.829Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Convert live data (~12 MB), verify by rebuilding the old value, cut over with workers paused, deploy the lab stack including the S1 template change. Needs Ryan approval for the change set.",
+        "to": "One-time script that converts today's ~12 MB of live data into records, verified by rebuilding the old value and comparing, plus the reviewed lab deploy including the S1 bucket-policy and IAM change.\nAcceptance: conversion is re-runnable and verified; cutover with workers paused; never-pay-twice and one-worker-at-a-time preserved; explicit approval from Ryan for the change set before deploy. Depends on S2a, S2b, S2c."
+      }
+    }
+  }
+}

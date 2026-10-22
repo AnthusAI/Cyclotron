@@ -8,7 +8,7 @@ import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from uuid import uuid4
@@ -19,8 +19,37 @@ from .console_snapshot import validate as validate_console
 from .cyclotrons import load_config
 from .journal import Journal, commit_with_contract, uuid
 from .models import DecisionTask
+from .record_lake import (
+    RECORDS_KEY,
+    Coverage,
+    FileRecordLake,
+    S3RecordLake,
+    commit_with_records,
+    coverage_in,
+    with_coverage,
+)
 from .run_storage import _UNSET
 from .storage_errors import StorageConflict
+from .storage_payloads import FilePayloads, S3Payloads
+
+# Completed job results live in the record lake; the catalog row keeps only this small reference.
+RESULTS_DOMAIN, RESULTS_KIND = "console", "job-results"
+RESULTS_LAKE = f"{RESULTS_DOMAIN}/{RESULTS_KIND}"
+RESULT_REF = "cyclotron-job-result-ref/v1"
+_REF_FIELDS = {"domain", "kind", "seq", "digest", "length"}
+
+
+def result_ref(raw):
+    """The record reference a job row's ``result`` text holds, or None for an embedded (legacy) result."""
+    if not isinstance(raw, str) or RESULT_REF not in raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return None
+    if isinstance(parsed, dict) and set(parsed) == {"schema", "ref"} and parsed["schema"] == RESULT_REF:
+        return parsed["ref"]
+    return None
 
 
 def now():
@@ -76,8 +105,28 @@ def insert(value, domain, fields):
     return record
 
 
+def results_lake_for(journal, *, max_record_bytes=None):
+    """The job-results lake that sits beside a catalog journal, on the same store."""
+    payloads, budget = journal.payloads, max_record_bytes or journal.max_bytes
+    if isinstance(payloads, S3Payloads):
+        return S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=budget)
+    if isinstance(payloads, FilePayloads):
+        return FileRecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=budget)
+    raise ValueError("an S3 or file payload adapter is required for the job-results lake")
+
+
+@dataclass(frozen=True)
+class ResultsConverted:
+    originals: list  # (job id, run id, status, raw text) in the order the records were written
+    refs: list  # RecordRef of each result record written
+    before: object  # JournalRecord before the commit
+    after: object  # JournalRecord the commit produced
+
+
 class S3ConsoleStorage:
-    def __init__(self, journal, *, max_records, max_conflicts=8):
+    def __init__(self, journal, *, max_records, max_conflicts=8, results=None):
+        if results is not None and (results.scope != getattr(journal, "boundary", (None,))[0] or results.name != RESULTS_LAKE):
+            raise ValueError("job result lake must match the catalog scope and be console/job-results")
         if (
             not isinstance(journal, Journal)
             or type(max_records) is not int
@@ -89,6 +138,9 @@ class S3ConsoleStorage:
         self.journal = journal
         self.max_records = max_records
         self.max_conflicts = max_conflicts
+        # Without a lake, results stay embedded exactly as before. With one, new results go to the lake
+        # and embedded ones keep reading.
+        self.results = results
         self._tx = ContextVar("s3_console_transaction", default=None)
         self._claim = ContextVar("s3_console_claim", default=None)
         self._granted = set()
@@ -96,13 +148,26 @@ class S3ConsoleStorage:
     def _validate(self, value):
         if (
             not isinstance(value, dict)
-            or set(value) != set(initial())
+            or set(value) - {RECORDS_KEY} != set(initial())
             or value["schema"] != "cyclotron-s3-console/v2"
             or not isinstance(value["claims"], dict)
             or not isinstance(value["actors"], dict)
         ):
             raise ValueError("invalid canonical console transaction")
         validate_console(value["snapshot"], max_records=self.max_records, max_bytes=self.journal.max_bytes)
+        held = value.get(RECORDS_KEY, {})
+        if not isinstance(held, dict) or set(held) - {RESULTS_LAKE}:
+            raise ValueError("invalid record coverage")
+        coverage = Coverage.from_json(held[RESULTS_LAKE]) if RESULTS_LAKE in held else Coverage()
+        for job in value["snapshot"]["tables"]["web_jobs"]:
+            ref = result_ref(job["result"])
+            if ref is not None and (
+                not isinstance(ref, dict)
+                or set(ref) != _REF_FIELDS
+                or (ref["domain"], ref["kind"]) != (RESULTS_DOMAIN, RESULTS_KIND)
+                or not coverage.covers(ref["seq"])
+            ):
+                raise ValueError("job result reference is not covered by the catalog")
         if sum(map(len, value["snapshot"]["tables"].values())) + len(value["claims"]) + len(value["actors"]) > self.max_records:
             raise ValueError("console record budget exceeded")
         for job_id, claim in value["claims"].items():
@@ -165,6 +230,35 @@ class S3ConsoleStorage:
         self._check_claim(value)
         return value
 
+    def _result_text(self, value, row):
+        """The job row's result as JSON text, fetched by reference when the row holds one."""
+        ref = result_ref(row["result"])
+        if ref is None:
+            return row["result"]
+        if self.results is None:
+            raise ValueError("job result lives in the record lake, but no lake is configured")
+        if not coverage_in(value, self.results).covers(ref["seq"]):
+            raise ValueError("job result record is not covered by the catalog")
+        record = self.results.read(ref["seq"])
+        if (
+            not isinstance(record, dict)
+            or record.get("jobId") != row["id"]
+            or sha256(self.results._encode(ref["seq"], record)).hexdigest() != ref["digest"]
+        ):
+            raise ValueError("job result record does not match its reference")
+        return encoded(record["result"])
+
+    def _job(self, value, row):
+        return decoded({**row, "result": self._result_text(value, row)}, "payload", "result")
+
+    def job_result(self, job_id):
+        """One job's decoded result (fetched by reference if needed), or None while it has none."""
+        value = self._read()
+        job = one(value, "web_jobs", id=job_id)
+        if job is None:
+            raise ValueError("unknown command")
+        return self._job(value, job)["result"]
+
     def for_command(self, job_id, owner, fence):
         uuid(owner)
         if type(fence) is not int or fence < 1:
@@ -218,8 +312,13 @@ class S3ConsoleStorage:
         value = self._read()
         if any(one(value, "web_jobs", id=key)["status"] == "running" for key in value["claims"]):
             raise ValueError("quiesce cloud command claims before portable export")
+        snapshot = value["snapshot"]
+        if any(result_ref(r["result"]) is not None for r in snapshot["tables"]["web_jobs"]):
+            # A portable snapshot is self-contained: results come back embedded.
+            jobs = [{**r, "result": self._result_text(value, r)} for r in snapshot["tables"]["web_jobs"]]
+            snapshot = {**snapshot, "tables": {**snapshot["tables"], "web_jobs": jobs}}
         return validate_console(
-            value["snapshot"], max_records=min(max_records, self.max_records), max_bytes=min(max_bytes, self.journal.max_bytes)
+            snapshot, max_records=min(max_records, self.max_records), max_bytes=min(max_bytes, self.journal.max_bytes)
         )
 
     def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
@@ -864,10 +963,11 @@ class S3ConsoleStorage:
             if old:
                 if (old["kind"], old["payload"]) != (kind, raw):
                     raise ValueError("command identity has different content")
-                return decoded(old, "payload", "result")
+                return self._job(value, old)
             if any(r["status"] in ("pending", "running") for r in rows(value, "web_jobs", run_id=run_id)):
                 raise ValueError("run already has work in progress")
-            return decoded(
+            return self._job(
+                value,
                 insert(
                     value,
                     "web_jobs",
@@ -875,8 +975,6 @@ class S3ConsoleStorage:
                         id=identifier, run_id=run_id, request_id=request_id, kind=kind, payload=raw, status="pending", result=None
                     ),
                 ),
-                "payload",
-                "result",
             )
 
         return self._mutate(apply)
@@ -910,7 +1008,7 @@ class S3ConsoleStorage:
         actor = value["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
-        return decoded(job, "payload", "result"), self._parse_actor(actor)
+        return self._job(value, job), self._parse_actor(actor)
 
     def command_actor(self, job_id, owner, fence):
         self.for_command(job_id, owner, fence)
@@ -936,10 +1034,15 @@ class S3ConsoleStorage:
             "automaticTakeover": False,
         }
 
-    def jobs(self, run_id):
+    def jobs(self, run_id, *, results=True):
+        """The run's 20 newest jobs. ``results=False`` skips the lake fetch: a lake-held result then shows as
+        its small reference, and ``job_result(job_id)`` fetches the one result a caller needs."""
         value = self._read()
         self._run(value, run_id)
-        return [decoded(r, "payload", "result") for r in reversed(rows(value, "web_jobs", run_id=run_id))][:20]
+        newest = list(reversed(rows(value, "web_jobs", run_id=run_id)))[:20]
+        if results:
+            return [self._job(value, r) for r in newest]
+        return [decoded(r, "payload", "result") for r in newest]
 
     def claim_command(self, *, owner=None, job_id=None):
         if owner is None:
@@ -958,7 +1061,7 @@ class S3ConsoleStorage:
             fence = previous["fence"] + 1 if previous else 1
             value["claims"][job["id"]] = {"owner": owner, "fence": fence}
             job["status"] = "running"
-            return {**decoded(job, "payload", "result"), "claim_owner": owner, "claim_fence": fence}
+            return {**self._job(value, job), "claim_owner": owner, "claim_fence": fence}
 
         result = self._mutate(apply)
         if result is not None:
@@ -973,19 +1076,24 @@ class S3ConsoleStorage:
         if (job_id, owner, fence) not in self._granted:
             raise ValueError("command claim receipt not confirmed in this worker")
 
-        def apply(value):
+        def check(value):
+            """The running job this completion may settle, or None when it already settled identically."""
             job = one(value, "web_jobs", id=job_id)
             claim = value["claims"].get(job_id)
             if job is None or claim != {"owner": owner, "fence": fence}:
                 raise ValueError("stale cloud command completion")
-            if job["status"] == status and job["result"] == raw:
-                return
+            if job["status"] == status and self._result_text(value, job) == raw:
+                return None
             if job["status"] != "running":
                 raise ValueError("command is not running")
             if status not in ("completed", "failed", "interrupted"):
                 raise ValueError("terminal command status required")
+            return job
+
+        def settle(value, stored):
+            job = one(value, "web_jobs", id=job_id)
             job["status"] = status
-            job["result"] = raw
+            job["result"] = stored
             latest = rows(value, "web_jobs", run_id=job["run_id"])[-1]
             run = self._run(value, job["run_id"])
             if (
@@ -997,7 +1105,121 @@ class S3ConsoleStorage:
             ):
                 run["status"] = "completed"
 
-        self._mutate(apply)
+        if self.results is None:
+            self._mutate(lambda value: check(value) and settle(value, raw))
+            return
+
+        # Result record first, then one catalog commit flips the job and covers the record. A claim lost
+        # before that commit leaves the record as an uncovered orphan that no reader can see.
+        def record(job):
+            return {"jobId": job_id, "runId": job["run_id"], "status": status, "result": result}
+
+        def reference(refs):
+            return encoded({"schema": RESULT_REF, "ref": refs[RESULTS_LAKE][0].to_json()})
+
+        if self._tx.get() is not None:
+            value = self._tx.get()
+            job = check(value)
+            if job is None:
+                return
+            coverage, refs = self.results.append(coverage_in(value, self.results), [record(job)])
+            value[RECORDS_KEY] = with_coverage(value, self.results, coverage)[RECORDS_KEY]
+            settle(value, reference({RESULTS_LAKE: refs}))
+            return
+        for _ in range(self.max_conflicts):
+            current = self._record()
+            self._check_claim(current.value)
+            job = check(current.value)
+            if job is None:
+                return
+
+            def change(state, refs):
+                settle(state, reference(refs))
+                self._validate(state)
+
+            try:
+                commit_with_records(self.journal, current, [(self.results, [record(job)])], change)
+            except StorageConflict:
+                continue
+            return
+        raise ValueError("console contention limit reached; retry with same operation identity")
+
+    TERMINAL = ("completed", "failed", "interrupted")
+
+    def _embedded_results(self, value):
+        """(job row, raw text) of finished jobs whose result is still inside the catalog row."""
+        return [
+            (r, r["result"])
+            for r in rows(value, "web_jobs")
+            if r["status"] in self.TERMINAL and r["result"] is not None and result_ref(r["result"]) is None
+        ]
+
+    def audit_results(self):
+        """Read-only: the head record, the movable embedded results ``(job id, run id, status, raw text)``, the
+        jobs left alone because their text is not canonical JSON, and the ids of jobs still running."""
+        record = self._record()
+        movable, unmovable = [], []
+        for job, raw in self._embedded_results(record.value):
+            try:
+                canonical = encoded(json.loads(raw)) == raw
+            except ValueError:
+                canonical = False
+            (movable if canonical else unmovable).append((job["id"], job["run_id"], job["status"], raw))
+        running = [r["id"] for r in rows(record.value, "web_jobs") if r["status"] == "running"]
+        return record, movable, unmovable, running
+
+    def preview_results_conversion(self, record, movable):
+        """(the catalog as it would stand after the conversion, bytes of the records it would write).
+
+        Writes nothing; exact unless a sequence turns out to be occupied when the records are created."""
+        state = deepcopy(record.value)
+        coverage = coverage_in(state, self.results)
+        size = 0
+        for n, (job_id, run, status, raw) in enumerate(movable, coverage.last + 1):
+            content = self.results._encode(n, {"jobId": job_id, "runId": run, "status": status, "result": json.loads(raw)})
+            ref = self.results._ref(n, content)
+            one(state, "web_jobs", id=job_id)["result"] = encoded({"schema": RESULT_REF, "ref": ref.to_json()})
+            size += len(content)
+        state[RECORDS_KEY] = {
+            **state.get(RECORDS_KEY, {}),
+            RESULTS_LAKE: Coverage(coverage.last + len(movable), coverage.skipped).to_json(),
+        }
+        return state, size
+
+    def convert_embedded_results(self, *, check=None):
+        """Move finished jobs' embedded results into the job-results lake, in one catalog commit.
+
+        Result records first (the shape ``finish_command`` writes), then ONE commit swaps each embedded text
+        for its reference and stores the coverage. Only terminal jobs are touched, and a result whose text
+        is not canonical JSON stays where it is. Refuses while any job is running. Returns ``ResultsConverted``
+        or None when nothing is embedded (idempotent).
+        """
+        if self.results is None:
+            raise ValueError("a job-results lake is required to convert embedded results")
+        for _ in range(self.max_conflicts):
+            record, movable, _unmovable, running = self.audit_results()
+            if running:
+                raise ValueError("jobs are running; convert when the catalog has none")
+            if not movable:
+                return None
+            ids = [job_id for job_id, *_ in movable]
+
+            def change(state, refs, ids=ids):
+                cited = iter(refs[RESULTS_LAKE])
+                for job_id in ids:
+                    one(state, "web_jobs", id=job_id)["result"] = encoded({"schema": RESULT_REF, "ref": next(cited).to_json()})
+                self._validate(state)
+
+            values = [
+                {"jobId": job_id, "runId": run, "status": status, "result": json.loads(raw)}
+                for job_id, run, status, raw in movable
+            ]
+            try:
+                committed, refs = commit_with_records(self.journal, record, [(self.results, values)], change, check=check)
+            except StorageConflict:
+                continue
+            return ResultsConverted(movable, refs[RESULTS_LAKE], record, committed)
+        raise ValueError("console contention limit reached; retry")
 
     @staticmethod
     def _paid_outcome_evidence(value, job):

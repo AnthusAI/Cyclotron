@@ -12,8 +12,8 @@ from hashlib import sha256
 from uuid import uuid4
 
 from .journal import Journal, commit_with_contract, uuid
-from .s3_batch_storage import S3BatchStorage
-from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
+from .s3_batch_storage import S3BatchStorage, reply_lake_for
+from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, runtime_events_lake
 from .storage_errors import StorageLimit, StorageMissing
 
 
@@ -69,11 +69,13 @@ class S3EmbeddedStorage:
         if self.authority is None or (value["owner"], value["fence"]) != self.authority:
             raise RuntimeOwnershipError("embedded execution ownership unavailable")
 
-    def acquire(self, owner):
+    def acquire(self, owner, *, resume=False):
+        """Take ownership. ``resume=True`` re-takes a root this same ``owner`` id left held (the fence moves)."""
         uuid(owner)
         record = self.journal.read()
         self._validate(record.value)
-        if self.authority is not None or record.value["owner"] is not None:
+        held = record.value["owner"]
+        if self.authority is not None or (held is not None and not (resume and held == owner)):
             raise RuntimeOwnershipError("embedded root already owned; no timeout takeover")
         value = deepcopy(record.value)
         value["owner"] = owner
@@ -348,7 +350,9 @@ class S3CyclotronStores:
         self.root_storage.initialize()
         self.root_storage.acquire(self.owner)
         try:
-            self.batch_storage = S3BatchStorage(self._journal("shared", "ledger"), max_records=self.max_records)
+            ledger = self._journal("shared", "ledger")
+            # Raw provider replies are write-once records beside the ledger, not rows inside it.
+            self.batch_storage = S3BatchStorage(ledger, max_records=self.max_records, replies=reply_lake_for(ledger, "ledger"))
             self.batch_storage.initialize()
         except BaseException:
             self.root_storage.release()
@@ -357,7 +361,10 @@ class S3CyclotronStores:
     def runtime_for_classifier(self, identifier):
         if identifier in self.runtimes:
             raise ValueError("classifier runtime already opened")
-        runtime = S3RuntimeStores(self._journal("runtime", identifier), max_records=self.max_records, cache_owned=True)
+        journal = self._journal("runtime", identifier)
+        runtime = S3RuntimeStores(
+            journal, max_records=self.max_records, cache_owned=True, events_lake=runtime_events_lake(journal)
+        )
         runtime.initialize()
         runtime.acquire(self.owner)
         self.runtimes[identifier] = runtime

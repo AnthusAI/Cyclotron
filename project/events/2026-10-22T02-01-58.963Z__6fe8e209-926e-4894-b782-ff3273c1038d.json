@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6fe8e209-926e-4894-b782-ff3273c1038d",
+  "issue_id": "decision-flywheel-1abb5f98-ebde-4bca-8197-c7d6fbe7935c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T02:01:58.963Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Catalog read robustness and write amplification (lab single-classifier C4)",
+    "description": "Typed cause for PayloadUnavailable/JournalUnavailable plus one transient S3 GET retry; find and stop the whole-snapshot rewrite storm (8,550 blobs / 11.19 GB since 2026-10-21T01Z, 1,000-2,172 commits/hour). Acceptance: transient-error retry spec; typed cause for permanent failure; measured commit-rate baseline before/after. Never retry writes or conditional puts.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+    "labels": []
+  }
+}

@@ -13,6 +13,8 @@ from .s3_journal_test import ConditionalS3, journal
 from .storage_payloads import FilePayloads
 
 BACKEND_NAMES = ("sqlite", "s3", "file-journal")
+# Runtime events kept in a record lake beside the control journal, on each lake back end.
+LAKE_BACKENDS = {"memory-lake": "s3", "s3-lake": "s3", "file-lake": "file-journal"}
 
 
 def local_file_journal(directory, name, scope=None):
@@ -26,11 +28,13 @@ class StorageBackend:
     def __init__(self, backend_name, directory):
         self.backend_name = backend_name
         self.directory = directory
-        self.fake_s3 = ConditionalS3() if backend_name == "s3" else None
+        self.journal_backend = LAKE_BACKENDS.get(backend_name, backend_name)
+        self.fake_s3 = ConditionalS3() if self.journal_backend == "s3" else None
+        self.memory_records = {}
         self.opened_handles = []
 
     def journal_named(self, name):
-        if self.backend_name == "s3":
+        if self.journal_backend == "s3":
             return journal(self.fake_s3, name=name)
         return local_file_journal(self.directory / "journals", name)
 
@@ -85,9 +89,18 @@ class RuntimeBackend(StorageBackend):
             from .runtime_storage import SQLiteRuntimeStateStorage
 
             return SQLiteRuntimeStateStorage(self.directory / "runtime.sqlite3")
-        from .s3_runtime_storage import S3RuntimeStores
+        from .record_lake import MemoryRecordLake
+        from .s3_runtime_storage import S3RuntimeStores, events_kind, runtime_events_lake
 
-        stores = S3RuntimeStores(self.journal_named("contract-runtime"), max_records=1000)
+        journal = self.journal_named("contract-runtime")
+        lake = None
+        if self.backend_name == "memory-lake":
+            lake = MemoryRecordLake(
+                journal.boundary[0], "runtime", events_kind(journal), max_record_bytes=1000000, store=self.memory_records
+            )
+        elif self.backend_name in LAKE_BACKENDS:
+            lake = runtime_events_lake(journal)
+        stores = S3RuntimeStores(journal, max_records=1000, events_lake=lake)
         stores.initialize()
         stores.acquire(str(uuid4()))
         return stores.runtime_storage
@@ -124,7 +137,30 @@ class EvaluationBackend(StorageBackend):
             handle.close()
 
 
+BATCH_BACKEND_NAMES = BACKEND_NAMES + ("s3+memory-lake", "s3+s3-lake", "file-journal+file-lake")
+
+
 class BatchBackend(StorageBackend):
+    """The ledger on every back end, and with raw replies in a record lake as well as embedded.
+
+    A ``<journal>+<lake>`` name keeps replies in a lake of that kind beside the journal.
+    """
+
+    def __init__(self, backend_name, directory):
+        journal_name, _, self.lake_name = backend_name.partition("+")
+        super().__init__(journal_name, directory)
+        self.memory_lake = {}
+
+    def lake_for(self, journal):
+        from .record_lake import FileRecordLake, MemoryRecordLake, S3RecordLake
+
+        kind = dict(domain="shared-batches", kind="replies", max_record_bytes=100000)
+        if self.lake_name == "memory-lake":
+            return MemoryRecordLake(journal.boundary[0], store=self.memory_lake, **kind)
+        if self.lake_name == "file-lake":
+            return FileRecordLake(journal.payloads, **kind)
+        return S3RecordLake(journal.payloads, **kind) if self.lake_name else None
+
     def _open_handle(self):
         if self.backend_name == "sqlite":
             from .batch_storage import SQLiteBatchStorage
@@ -132,6 +168,7 @@ class BatchBackend(StorageBackend):
             return SQLiteBatchStorage(self.directory / "batch.sqlite3")
         from .s3_batch_storage import S3BatchStorage
 
-        storage = S3BatchStorage(self.journal_named("contract-batch"), max_records=1000)
+        journal = self.journal_named("contract-batch")
+        storage = S3BatchStorage(journal, max_records=1000, replies=self.lake_for(journal))
         storage.initialize()
         return storage

@@ -192,3 +192,164 @@ def test_uncertain_runtime_commit_poisoning_prevents_followup_exception_cleanup_
     restarted = stores(journal(s.journal.payloads.client, name="classifier-a"))
     assert [e["kind"] for e in restarted.runtime_storage.history(10)] == ["committed-response-lost"]
     restarted.close()
+
+
+# --- Write amplification: every journal commit rewrites the whole runtime snapshot. ---
+
+
+def owned_stores(client=None, name="classifier-a", **options):
+    from .s3_runtime_storage import S3RuntimeStores
+
+    result = S3RuntimeStores(journal(client, name=name), max_records=10000, cache_owned=True, **options)
+    result.initialize()
+    result.acquire(str(uuid4()))
+    return result
+
+
+def heads(s):
+    return s.journal.read().revision
+
+
+def test_held_events_are_visible_to_the_owner_and_publish_with_the_next_durable_change():
+    s = owned_stores()
+    before = heads(s)
+    first = s.runtime_storage.append_event('{"kind":"a"}')
+    second = s.runtime_storage.append_event('{"kind":"b"}')
+    assert (first, second) == (1, 2) and heads(s) == before
+    assert [e["kind"] for e in s.runtime_storage.history()] == ["a", "b"]
+    s.runtime_cache.begin_answer("k", None)
+    assert heads(s) == before + 1
+    stored = s.journal.read().value["data"]
+    assert [e[0] for e in stored["events"]] == [1, 2] and stored["answers"]["k"][0] == "pending"
+    s.close()
+
+
+def test_release_publishes_held_events_in_the_same_commit_as_the_release():
+    s = owned_stores()
+    s.runtime_storage.append_event('{"kind":"a"}')
+    s.runtime_storage.append_event('{"kind":"b"}')
+    before = heads(s)
+    s.close()
+    final = journal(s.journal.payloads.client, name="classifier-a").read()
+    assert final.revision == before + 1 and final.value["owner"] is None
+    assert len(final.value["data"]["events"]) == 2
+
+
+def test_flush_and_refresh_publish_held_events():
+    s = owned_stores()
+    s.runtime_storage.append_event('{"kind":"a"}')
+    s.flush()
+    assert len(s.journal.read().value["data"]["events"]) == 1
+    s.runtime_storage.append_event('{"kind":"b"}')
+    s.refresh()
+    assert len(s.journal.read().value["data"]["events"]) == 2
+    s.flush()  # nothing held: no commit
+    revision = heads(s)
+    s.flush()
+    assert heads(s) == revision
+    s.close()
+
+
+def test_events_held_by_a_crashed_owner_are_not_durable_but_the_reservation_is():
+    s = owned_stores()
+    s.runtime_cache.begin_answer("k", None)  # the paid-action reservation is always durable at once
+    s.runtime_storage.append_event('{"kind":"after-dispatch"}')
+    stored = journal(s.journal.payloads.client, name="classifier-a").read().value["data"]
+    assert stored["answers"]["k"][0] == "pending" and stored["events"] == []
+
+
+def test_a_head_moved_while_events_are_held_poisons_the_handle_instead_of_dropping_them_silently():
+    from .s3_runtime_storage import RuntimeOwnershipError
+
+    s = owned_stores()
+    s.runtime_storage.append_event('{"kind":"a"}')
+    rival = journal(s.journal.payloads.client, name="classifier-a")
+    rival.commit(rival.read(), {**rival.read().value, "ordinal": 99})
+    with pytest.raises(RuntimeOwnershipError):
+        s.runtime_cache.begin_answer("k", None)
+    with pytest.raises(RuntimeOwnershipError):
+        s.runtime_storage.history()
+
+
+def test_handles_that_do_not_own_a_cache_keep_one_commit_per_event():
+    s = stores()
+    before = heads(s)
+    s.runtime_storage.append_event('{"kind":"a"}')
+    s.runtime_storage.append_event('{"kind":"b"}')
+    assert heads(s) == before + 2
+    s.close()
+
+
+def test_coalescing_can_be_switched_off_for_an_owning_handle():
+    s = owned_stores(coalesce_events=False)
+    before = heads(s)
+    s.runtime_storage.append_event('{"kind":"a"}')
+    assert heads(s) == before + 1
+    s.close()
+
+
+def journal_writes(client):
+    """(commits, bytes) of canonical transaction payloads written, counted at the S3 boundary."""
+    puts = [r for kind, r in client.calls if kind == "put" and "/payloads/" in r["Key"]]
+    return len(puts), sum(len(r["Body"]) for r in puts)
+
+
+def publication_jobs(coalesce):
+    """One new item decided across three classifiers, then two replays of the same item.
+
+    Mirrors what the hosted worker does per publication job: acquire each runtime, run the decision
+    (trace events around an answer reservation and completion), release. A replay finds the answer
+    cached, so it only takes and releases the lease. Each runtime starts with a realistic history.
+    """
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    names = ["classifier-a", "classifier-b", "classifier-c"]
+    for name in names:
+        seed = owned_stores(client, name, coalesce_events=coalesce)
+        for n in range(60):
+            seed.runtime_storage.append_event('{"kind":"history","note":"' + "x" * 3000 + str(n) + '"}')
+        seed.close()
+    client.calls.clear()
+    for job in range(3):
+        handles = [owned_stores_reopen(client, name, coalesce) for name in names]
+        if job == 0:
+            for handle in handles:
+                events = handle.runtime_storage.append_event
+                events('{"kind":"item","n":1}')
+                events('{"kind":"request"}')
+                handle.runtime_cache.begin_answer("answer-" + handle.journal.namespace, None)
+                events('{"kind":"dispatch"}')
+                events('{"kind":"response","text":"' + "y" * 20000 + '"}')
+                events('{"kind":"parsed"}')
+                handle.runtime_cache.complete_answer("answer-" + handle.journal.namespace, '{"label":"yes"}', previous=None)
+                events('{"kind":"decision"}')
+                events('{"kind":"explanation"}')
+                events('{"kind":"done"}')
+        for handle in handles:
+            handle.close()
+    return journal_writes(client)
+
+
+def owned_stores_reopen(client, name, coalesce):
+    from .s3_runtime_storage import S3RuntimeStores
+
+    result = S3RuntimeStores(journal(client, name=name), max_records=10000, cache_owned=True, coalesce_events=coalesce)
+    result.acquire(str(uuid4()))
+    return result
+
+
+def test_a_publication_job_sequence_writes_far_fewer_snapshots_when_events_are_coalesced(capsys):
+    before_commits, before_bytes = publication_jobs(coalesce=False)
+    after_commits, after_bytes = publication_jobs(coalesce=True)
+    with capsys.disabled():
+        print(
+            f"\nruntime journal writes for 1 new item + 2 replays x 3 classifiers: "
+            f"{before_commits} commits / {before_bytes / 1e6:.1f} MB -> {after_commits} commits / {after_bytes / 1e6:.1f} MB"
+        )
+    # New-item job, per runtime: acquire + 8 events + 2 answer changes + release = 12 commits, now acquire,
+    # reservation, completion and a release carrying the last events = 4. Each replay is acquire + release.
+    assert before_commits == 3 * 12 + 2 * 3 * 2
+    assert after_commits == 3 * 4 + 2 * 3 * 2
+    assert after_commits <= before_commits * 0.55
+    assert after_bytes <= before_bytes * 0.55

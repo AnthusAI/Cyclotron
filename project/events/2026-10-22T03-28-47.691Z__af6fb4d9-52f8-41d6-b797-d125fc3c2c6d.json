@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "af6fb4d9-52f8-41d6-b797-d125fc3c2c6d",
+  "issue_id": "decision-flywheel-ebd8c05e-9e16-4497-9d21-0729da89761e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T03:28:47.691Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "S2b raw provider replies out of shared-batches",
+    "description": "Move raw provider reply payloads out of shared-batches rows into records referenced by the control state. Depends on S1.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "decision-flywheel-8f1431a7-95d2-4972-a84c-6644d7156900",
+    "labels": [],
+    "agent": {
+      "platform": "claude-code",
+      "model": "claude-sonnet-5-5",
+      "name": "record-lake-s1"
+    }
+  }
+}

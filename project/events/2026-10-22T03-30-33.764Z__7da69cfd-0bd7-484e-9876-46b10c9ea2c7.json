@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "7da69cfd-0bd7-484e-9876-46b10c9ea2c7",
+  "issue_id": "decision-flywheel-94b545a5-70d6-430d-8620-b3e52ca4ae68",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-22T03:30:33.764Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Move runtime data.events into a RecordLake; keep reading the old embedded form as a fallback during migration. Depends on S1.",
+        "to": "Move the step-by-step runtime events out of the runtime journals into a record lake (98.7% of the per-publication files).\nAcceptance: one-worker-at-a-time (owner and fence) protections preserved in the small status note; never-pay-twice unaffected; reads fall back to the old embedded form during migration; contract specs on every backend. Depends on S1."
+      }
+    }
+  }
+}

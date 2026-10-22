@@ -15,10 +15,12 @@ worker's own rule is unchanged: it never takes over a running claim.
 
 import argparse
 import json
+import os
 import sys
 
 from .batch_storage import StorageScope
-from .s3_console_storage import S3ConsoleStorage
+from .record_lake import S3RecordLake
+from .s3_console_storage import RESULTS_DOMAIN, RESULTS_KIND, S3ConsoleStorage
 from .s3_journal import S3Journal
 from .storage_payloads import S3Payloads
 
@@ -26,7 +28,8 @@ from .storage_payloads import S3Payloads
 def open_store(s3, books_bucket, aws_account, cyclotron_account, *, max_bytes=4194304):
     payloads = S3Payloads(s3, books_bucket, aws_account, StorageScope(cyclotron_account, "console"), max_bytes=max_bytes)
     journal = S3Journal(payloads, "console", "catalog", max_bytes=max_bytes, max_commits=1000000)
-    return S3ConsoleStorage(journal, max_records=10000)
+    results = S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=max_bytes)
+    return S3ConsoleStorage(journal, max_records=10000, results=results)
 
 
 def matching_dlq_messages(sqs, url, job_id, *, limit=100):
@@ -61,6 +64,18 @@ def purge_matching(sqs, url, job_id, *, apply):
     return len(matched)
 
 
+def journal_budget(environment):
+    """The same per-document budget the hosted lab uses (CYCLOTRON_MAX_BYTES, default 4 MiB)."""
+    from .hosted_runtime import MAX_JOURNAL_BYTES, HostedConfig
+
+    budget = environment.get("CYCLOTRON_MAX_BYTES", "")
+    if not budget:
+        return HostedConfig.__dataclass_fields__["max_bytes"].default
+    if not budget.isdigit() or not 1048576 <= int(budget) <= MAX_JOURNAL_BYTES:
+        raise ValueError("CYCLOTRON_MAX_BYTES must be a whole number of bytes between 1 MiB and 64 MiB")
+    return int(budget)
+
+
 def run(args, *, session):
     sts = session.client("sts")
     identity = sts.get_caller_identity()
@@ -68,7 +83,7 @@ def run(args, *, session):
         print(f"Refusing: caller account is not {args.expect_aws_account}", file=sys.stderr)
         return 2
     s3 = session.client("s3")
-    store = open_store(s3, args.books_bucket, identity["Account"], args.cyclotron_account)
+    store = open_store(s3, args.books_bucket, identity["Account"], args.cyclotron_account, max_bytes=journal_budget(os.environ))
     if args.command == "diagnose":
         print(json.dumps(store.command_recovery(args.job), indent=1))
         return 0

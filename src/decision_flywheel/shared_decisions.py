@@ -89,7 +89,7 @@ class SharedDecisions:
         self.storage.close()
 
     def generation(self, fingerprint):
-        row = self.storage.get(fingerprint)
+        row = self.storage.get(fingerprint, payload=False)
         return row.generation if row else 1
 
     def validate_capabilities(self, request):
@@ -198,7 +198,7 @@ class SharedDecisions:
 
             def answer_dependency_current(self, dependency):
                 fingerprint = dependency["request_fingerprint"]
-                row = shared.storage.get(fingerprint)
+                row = shared.storage.get(fingerprint, payload=False)
                 return bool(row and row.status == "complete" and row.generation == dependency["generation"])
 
             def feature_context_identity(self, config, training):

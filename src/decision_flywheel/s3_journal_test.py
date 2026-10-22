@@ -271,3 +271,97 @@ def test_ambiguous_creation_probe_still_cannot_overwrite_an_existing_unreadable_
     with pytest.raises(JournalConflict):
         new.initialize({"paid": 0})
     assert client.objects[old.head_key] == original
+
+
+class FlakyReads(ConditionalS3):
+    """Raises ``error`` on the first ``failures`` GETs of keys matching ``only``."""
+
+    def __init__(self, error, failures, only=lambda key: True):
+        super().__init__()
+        self.error, self.failures, self.only = error, failures, only
+
+    def get_object(self, **request):
+        if self.failures and self.only(request["Key"]):
+            self.failures -= 1
+            self.calls.append(("get", request))
+            raise self.error
+        return super().get_object(**request)
+
+
+class ThrottleError(Exception):
+    def __init__(self):
+        super().__init__("https://bucket.s3.amazonaws.com/key?X-Amz-Signature=secret")
+        self.response = {"Error": {"Code": "SlowDown"}, "ResponseMetadata": {"HTTPStatusCode": 503}}
+
+
+def test_a_transient_head_read_failure_is_retried_once(monkeypatch):
+    monkeypatch.setattr("decision_flywheel.s3_transient.RETRY_PAUSE_SECONDS", 0)
+    seeded = journal()
+    seeded.initialize({"n": 1})
+    client = FlakyReads(ThrottleError(), 1, only=lambda key: key.endswith("head.json"))
+    client.objects, client.versions = seeded.payloads.client.objects, seeded.payloads.client.versions
+    assert journal(client).read().value == {"n": 1}
+    assert [r["Key"] for kind, r in client.calls if kind == "get"].count(seeded.head_key) == 2
+
+
+def test_a_transient_payload_read_failure_is_retried_once(monkeypatch):
+    monkeypatch.setattr("decision_flywheel.s3_transient.RETRY_PAUSE_SECONDS", 0)
+    seeded = journal()
+    seeded.initialize({"n": 1})
+    client = FlakyReads(ThrottleError(), 1, only=lambda key: "/payloads/" in key)
+    client.objects, client.versions = seeded.payloads.client.objects, seeded.payloads.client.versions
+    assert journal(client).read().value == {"n": 1}
+
+
+def test_a_persistent_read_failure_is_a_journal_unavailable_that_names_the_class_only(monkeypatch, caplog):
+    from .s3_journal import JournalUnavailable
+
+    monkeypatch.setattr("decision_flywheel.s3_transient.RETRY_PAUSE_SECONDS", 0)
+    seeded = journal()
+    seeded.initialize({"n": 1})
+    client = FlakyReads(ThrottleError(), 99, only=lambda key: "/payloads/" in key)
+    client.objects, client.versions = seeded.payloads.client.objects, seeded.payloads.client.versions
+    with pytest.raises(JournalUnavailable) as raised:
+        journal(client).read()
+    assert raised.value.cause == "ThrottleError" and "ThrottleError" in caplog.text
+    assert "amazonaws" not in str(raised.value) and "Signature" not in caplog.text
+    assert [kind for kind, r in client.calls if kind == "get" and "/payloads/" in r["Key"]] == ["get", "get"]
+
+
+def test_a_head_that_fails_permanently_is_not_retried(monkeypatch):
+    from .s3_journal import JournalUnavailable
+
+    monkeypatch.setattr("decision_flywheel.s3_transient.RETRY_PAUSE_SECONDS", 0)
+    seeded = journal()
+    seeded.initialize({"n": 1})
+    denied = ThrottleError()
+    denied.response = {"Error": {"Code": "AccessDenied"}, "ResponseMetadata": {"HTTPStatusCode": 403}}
+    client = FlakyReads(denied, 1, only=lambda key: key.endswith("head.json"))
+    client.objects, client.versions = seeded.payloads.client.objects, seeded.payloads.client.versions
+    with pytest.raises(JournalUnavailable) as raised:
+        journal(client).read()
+    assert raised.value.cause == "ThrottleError"
+    assert [r["Key"] for kind, r in client.calls if kind == "get"].count(seeded.head_key) == 1
+
+
+def test_writes_and_conditional_puts_are_never_retried():
+    from .s3_journal import JournalUncertain
+
+    j = journal()
+    first = j.initialize({"n": 1})
+
+    class Throttled(Exception):
+        response = {"Error": {"Code": "SlowDown"}, "ResponseMetadata": {"HTTPStatusCode": 503}}
+
+    real = j.payloads.client.put_object
+    attempts = []
+
+    def failing(**request):
+        attempts.append(request["Key"])
+        raise Throttled()
+
+    j.payloads.client.put_object = failing
+    with pytest.raises(JournalUncertain):
+        j.commit(first, {"n": 2})
+    assert len(attempts) == 1
+    j.payloads.client.put_object = real

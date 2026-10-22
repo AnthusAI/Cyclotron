@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
+from .s3_transient import cause_name, log
 from .storage_errors import StorageConflict, StorageLimit, StorageUncertain
 from .storage_payloads import PayloadRef
 
@@ -22,7 +23,11 @@ class JournalConflict(StorageConflict):
 
 
 class JournalUnavailable(RuntimeError):
-    pass
+    """The journal could not be read safely. ``cause`` is the underlying exception class name only."""
+
+    def __init__(self, message, cause=None):
+        super().__init__(message + (f" (cause: {cause})" if cause else ""))
+        self.cause = cause
 
 
 class JournalUncertain(StorageUncertain):
@@ -223,8 +228,10 @@ class CanonicalJournal:
                     raise ValueError()
                 PayloadRef(self.payloads.scope, parent["digest"], parent["length"])
             return JournalRecord(self.namespace, anchor, head["revision"], head["commit"], etag, ref, transaction["value"])
-        except Exception:
-            raise JournalUnavailable("invalid or missing canonical transaction; never use an index as fallback") from None
+        except Exception as error:
+            cause = getattr(error, "cause", None) or cause_name(error)
+            log.warning("canonical journal read refused: %s", cause)
+            raise JournalUnavailable("invalid or missing canonical transaction; never use an index as fallback", cause) from None
 
     def commit(self, expected, value):
         if (

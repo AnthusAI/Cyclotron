@@ -126,6 +126,12 @@
       ],
       "Type": "String"
     },
+    "JournalMaxBytes": {
+      "AllowedPattern": "[1-9][0-9]{6,7}",
+      "Default": "4194304",
+      "Description": "Per-document byte budget for the S3 journals (CYCLOTRON_MAX_BYTES), 1 to 64 MiB. Temporary bridge until history moves to write-once records.",
+      "Type": "String"
+    },
     "LabVerifierEnabled": {
       "AllowedValues": [
         "true",
@@ -265,7 +271,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/1e4608a1c784fc36c21fa1055b97ec6e66a11d223d8183bcc6ef1d90d014014b"
+          "S3Key": "cyclotron-console/backend/9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c"
         },
         "Environment": {
           "Variables": {
@@ -321,6 +327,9 @@
                   "Ref": "AWS::NoValue"
                 }
               ]
+            },
+            "CYCLOTRON_MAX_BYTES": {
+              "Ref": "JournalMaxBytes"
             },
             "CYCLOTRON_PREDICTION_MAX_REQUESTS": {
               "Ref": "PredictionMaxRequests"
@@ -944,7 +953,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/1e4608a1c784fc36c21fa1055b97ec6e66a11d223d8183bcc6ef1d90d014014b"
+          "S3Key": "cyclotron-console/backend/9891f3f5ad64c340b1d67b3768e98b18dd9e540266314f96669041510e6b138c"
         },
         "Environment": {
           "Variables": {
@@ -980,6 +989,9 @@
                   "Ref": "AWS::NoValue"
                 }
               ]
+            },
+            "CYCLOTRON_MAX_BYTES": {
+              "Ref": "JournalMaxBytes"
             },
             "CYCLOTRON_PREDICTION_MAX_REQUESTS": {
               "Ref": "PredictionMaxRequests"

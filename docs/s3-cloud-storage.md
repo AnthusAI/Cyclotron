@@ -108,6 +108,190 @@ No cloud resources, policies, OAuth clients, provider calls, public push or
 hosting deployment were changed by these synthetic checks.
 
 
+## Record lake: history as write-once files (job results and raw model replies use it)
+
+**In plain language.** Today each journal is a binder that is photocopied in full for every
+change: to add one log line we copy the whole binder, file the old copy away, and move a sticky
+note to the new one. That is fine for a small binder and wasteful for a big one, which is why the
+4 MiB cap exists. The record lake is the alternative for anything that is only ever added to
+(events, raw model replies, job results): each record is its own small page in a folder, written
+once, never changed, numbered in order. Adding a line writes one page, not the binder.
+
+**Why only control state needs all-or-nothing commits.** The few facts that must change one at a
+time are who owns a job, how many paid calls were made, and which version is active. Those need the
+sticky-note mechanism (the existing journal, unchanged): a conditional write that only one worker can
+win. History pages do not compete: nobody edits page 993 while someone else edits page 994. So the
+journal stays, but shrinks to a small control state, and history leaves it.
+
+**Layout.** `<account>/<workspace>/records/<domain>/<kind>/<sequence, 12 digits>.json`, for example
+`.../records/runtime/events/000000000993.json`. The fixed `records` segment lets the bucket policy
+demand `If-None-Match: *` for the whole prefix, as it already does for `payloads/` and `anchor.json`.
+Each page is a JSON envelope (schema, namespace, sequence, value). It is size-bounded per record
+(`max_record_bytes`, explicit at construction), not per collection. A page whose envelope does not
+match its position is corrupt and is refused, so a copied page never passes as another.
+
+**Ordering: sequence numbers covered by the control state, not ULIDs.** The control state holds, per
+lake, `{"last": N, "skipped": [..]}`. The next record is `last + 1`, written create-only. A reader trusts
+exactly the sequences `1..last` minus `skipped`. ULIDs would need no allocation, but nothing small can
+say which ULIDs count: an abandoned write with an older ULID would fall inside any watermark, so the
+state would have to list every id and grow like the history it replaces. A sequence gives one small
+fact, a deterministic order that depends on no clock, and listing that is a plain sorted range. If a
+create finds a different record already at the sequence (an abandoned write, or a racing writer), the
+writer skips it, takes the next, and the commit records the skipped number. Identical bytes already
+there (a retry after a lost response) are adopted. Two racing writers are therefore safe even without
+the owner/fence rule: the head compare-and-set picks one, and the loser's pages become orphans.
+
+**Commit protocol: write the pages, then flip the head** (`commit_with_records`). Write the new records
+first. Then commit ONE small journal change that stores the new coverage and whatever else changed
+(counters, status, a digest of the last record). That commit is the only moment the records count.
+
+- Failure before the commit (crash, lost head race, uncertain outcome, journal size limit): the pages exist
+  but no control state covers them. Readers cannot see them. Nothing is rolled back and nothing is deleted.
+- A reader holds the control state it read. It reads records by sequence (GET only, no list permission), so
+  a head that moves meanwhile does not change what that reader sees.
+- A covered record that is missing is an error (fail closed), never skipped.
+
+**Orphans.** An orphan is a stored sequence the current coverage does not cover: a number above `last`
+or listed in `skipped`. They stay in the same prefix, are listable (`RecordLake.orphans(coverage)`), and are
+ignored by every reader. The application never deletes them (the bucket grants no delete). A later janitor
+may report them, and may remove old ones only after a reviewed step that holds the writer's ownership so
+a number above `last` is not simply an in-flight write. At most 64 skipped numbers are kept in one control
+state; beyond that appends stop with an error to be reconciled rather than growing the state.
+
+**Back ends.** `MemoryRecordLake` (tests), `FileRecordLake` (local directory, same layout, create-only via
+link) and `S3RecordLake` (create-only `PutObject`, one retry for transient GETs through `s3_transient`,
+and the same one-attempt SDK requirement as `S3Journal`). One contract suite
+(`record_lake_contract_test.py`) runs against all three.
+
+### Runtime events (S2a): the first caller
+
+**In plain language.** Each classifier's runtime journal used to carry every step of every decision
+(98.7% of its bytes). The steps now go to the lake, one small page each, and the journal keeps the
+owner, the fence, the paid-answer rows and a two-number coverage for the pages.
+
+- **Where.** `<account>/console/records/runtime/events-<journal name>/<seq>.json`. One scope holds a runtime
+  per classifier, so each journal has its own lake kind (`events_kind`); two classifiers never share a
+  sequence. `runtime_events_lake(journal)` builds the S3 or file lake on the journal's own payload adapter;
+  `S3CyclotronStores` and `S3WorkspaceStores` pass it to every runtime. A handle without a lake keeps the old embedded form.
+- **Writes.** An appended event joins the commit being built: `commit_with_records` creates the pages, then one
+  head compare-and-set stores the new coverage with whatever else changed. Ownership and the fence are checked
+  before anything is written, so a fenced-out handle writes no page. Pages written before a lost race or an
+  uncertain head write are orphans that no coverage names; nobody can read them.
+- **Coalescing (PR #97) is unchanged.** A handle that owns its cache still holds events in memory and publishes
+  them with the next durable change (an answer reservation or completion, a state write) or at release, now as
+  pages plus coverage in that one commit. Paid-action rows are never deferred. A head that moved while events were
+  held poisons the handle, as before.
+- **Reads.** `history`, `trace_events`, `events_of` and `event_payloads` walk the log in order: legacy rows, then
+  covered pages by GET, then held events. A trace page reads only its own pages (a page of 5 is 5 GETs);
+  `history(n)` reads the last n; scans fetch 100 pages at a time with 8 parallel GETs. Pages are immutable, so a
+  handle keeps what it read (32 MB cap). A covered page that is missing fails the read.
+- **Event ids.** An id is a position: the lake's n-th covered page is `base + n`, where `base` is the last embedded
+  id. Ids stay dense and ordered when a sequence was skipped, so the cursors callers hold keep working.
+- **Legacy.** Events already embedded in a runtime document stay exactly where they are and read first, before the
+  covered pages; new events never go back into the document. A later step converts the embedded prefix. A handle
+  without the lake refuses to read or write events of a document whose coverage is non-empty.
+- **Cycle numbers** keep a small high-water mark (`cycle-number-high-water`) in control state so numbering a cycle
+  does not scan history. It is computed from every event the first time the lake is written.
+- **Measured** (synthetic, 7 events of about 3 KB per item, 30 items): document growth per item 21,472 bytes to 50;
+  journal bytes written per item 860,069 to 3,692; document after 30 items 638,300 to 2,006 bytes.
+
+**First caller: catalog job results (S2c).** `S3ConsoleStorage(journal, results=lake)` writes each finished
+job's result (completed, failed or interrupted) to the `console/job-results` lake and keeps in the catalog row
+only a small reference (`cyclotron-job-result-ref/v1` with domain, kind, sequence, digest and length) in
+place of the embedded JSON. The row, the claim `{owner, fence}` and the lake coverage (`records` in the
+catalog value) stay in the catalog. `finish_command` checks the claim and fence, writes the record, then
+flips the job to its terminal status with the reference in ONE `commit_with_records` commit. A worker that
+loses its claim, or whose commit fails or is uncertain, leaves only an uncovered page that no read can see;
+repeating the identical completion adopts that page. Claim, fence, one-worker-at-a-time and idempotent
+re-finish behave exactly as before. Reads (`jobs`, `command_envelope`, `job_result`, the publication receipt
+route) fetch the record by reference, check the job id and the digest, and refuse a reference the catalog
+does not cover. `jobs(run, results=False)` lists without fetching, and `status_snapshot` uses it to fetch
+only the one result it returns. A portable export embeds results again so a snapshot stays self-contained.
+With no lake configured, or for results already embedded in an existing catalog, behaviour is unchanged
+and embedded results keep reading; a later conversion step moves them. Measured on the synthetic job
+(about 4 KB result), the catalog grows about 6.1 KB per completed job when embedded and about 0.57 KB
+with the lake (the rest is the command payload and the reference), flat as jobs accumulate. Priming drafts,
+items, lists and classifiers stay in the catalog. The hosted runtime and the operator recovery tool both
+open the store with the lake. The existing `*/console/records/*` grants cover its objects, so no further
+IAM or bucket-policy change is needed.
+
+Deploying the lake needs the `records/` prefix in the lab stack (`infra/lab/pending-changes.md`); the
+cutover order is the runbook in `infra/lab/README.md` ("Record-lake cutover").
+
+### Converting existing data (S3)
+
+**In plain language.** History written before the lake (embedded events, raw replies, finished job results)
+stays readable where it is. `scripts/dev/convert_to_record_lake.py` moves it into the lake for one account,
+with the same two steps the live code uses: write the small files first, then ONE small commit that removes
+the embedded copies and says which files now count. It is a dry run unless `--apply` is given, and then
+checks, journal by journal, that every moved record is byte for byte what it was.
+
+- **What moves.** Runtime events (each runtime journal), raw replies (each shared-batches ledger, current and
+  superseded rows) and finished job results (the catalog). Events keep their ids and order: the embedded events
+  (ids 1..n) become the lake's first records. Lake events written between the deploy and the conversion are
+  copied after them and their old sequences marked skipped, up to the 64-skip budget; beyond that the journal
+  is reported as a problem and left alone (convert before new events are written). A result whose stored text is
+  not canonical JSON stays embedded and is listed.
+- **Ownership, as the worker does it.** `--apply` takes the workspace root (which guards the ledger and runtimes
+  under it) and each runtime's owner and fence. Anything owned by someone else is skipped and reported `busy`;
+  the tool never takes a worker's ownership. A catalog with running jobs is busy. The tool's own owner id is fixed
+  per account, so a run that stopped without releasing is resumed by the next run (the fence moves), and only
+  its own id is ever resumed. Ledgers and runtimes are attributed to their workspace root by the names the live
+  code derives; a journal with no root is a problem unless `--allow-unattributed` (runtimes only).
+- **Verification.** Pages are read back before the commit (an unequal page abandons the commit, leaving only
+  orphans). After each journal, fresh handles read it through the live code and compare ids, order, SHA-256 of
+  every record against its embedded original, the coverage, and that nothing else in the control state changed. A
+  mismatch stops the whole run (exit code 3).
+- **Resumable, idempotent.** Records are deterministic, so a re-run adopts the pages an interrupted run created;
+  a journal with nothing embedded is left alone. `--apply` prints each journal's revision and state digest from
+  before the commit: that earlier transaction stays in `payloads/` for an operator who must restore it.
+- **Exit codes.** 0 done (or dry run), 1 some journal busy or a problem, 2 refused (wrong AWS account), 3
+  verification failed.
+
+### Shared-batches: raw model replies (S2b)
+
+**In plain language.** The paid-request ledger used to keep every raw model reply inside its one big
+file (99.5% of that file). Now each reply is its own write-once page in the lake, and the ledger keeps
+only a small note per request: who asked, whether it was paid, and "reply is page N". Reading a cached
+answer fetches that one page. The never-pay-twice rule is untouched: the paid-call counter, the
+ceiling check and the "dispatch claim" still change atomically in the small ledger, before any provider
+call.
+
+**Layout.** One lake per ledger, `<account>/<workspace>/records/shared-batches/replies-<ledger>/<seq>.json`
+(`S3BatchStorage(..., replies=lake)`, wired in `S3WorkspaceStores` through `reply_lake_for`). A record holds
+`{fingerprint, owner, generation, payload}` with the reply text byte for byte. The ledger row keeps
+`{seq, sha256, length}` in the payload slot instead of the text; every read checks the record against that
+note and that the ledger's coverage names the sequence (a missing or altered record is an error, never a
+cache miss, so it can never make a paid request look unpaid).
+
+**Settling a request:** write the reply record first, then ONE commit (`commit_with_records`) flips the
+request to complete and stores the new coverage. Crash points:
+
+| Process stops... | State left | Effect |
+|---|---|---|
+| after reserve, before claim | attempt charged, unclaimed | no second reservation of that request (`BatchInProgress`); ceiling counts it |
+| after claim, during the provider call | pending and claimed | never dispatched again; explicit reconciliation, as before |
+| provider answered, reply record not written | pending and claimed | reply lost, still never repaid (same as before the lake) |
+| reply record written, flip not committed | orphan record no state covers | invisible to readers; usage unchanged (usage is the attempt count, written only by reserve); the same owner repeating the settlement adopts the orphan's sequence |
+| flip committed, response lost | complete, reply at seq N | `BatchUncertain`; repeating returns the stored reply, no second record, no second charge |
+| after the flip | complete | cache hits read the record by reference |
+
+If the reply record cannot be written at all (no permission, over `max_record_bytes`), the reply is embedded
+in the ledger the old way rather than dropped, because the provider has already been paid; a warning is logged.
+**Deploy order:** the `records/` prefix grants (`infra/lab/pending-changes.md`) must be live before this code
+runs against the hosted lab, or every reply takes that embedded fallback.
+
+**Compatibility.** Rows with embedded reply text keep reading and settling as before, in the same ledger as
+lake-backed rows. A ledger that cites records cannot be opened by a storage configured without a lake
+(fails closed). `export()` always returns replies inline, so exports compare equal across SQLite, embedded and
+lake-backed ledgers, and `restore()` into a lake-backed ledger writes the replies to the lake. Converting
+the existing embedded replies in the live ledger is the later S3 ticket. `S3EmbeddedStorage`'s
+own batch ledger is not wired to a lake yet.
+
+**Measured (synthetic 23.6 KB replies, 25 requests):** ledger growth per paid request fell from about
+23,930 bytes (reply embedded) to about 343 bytes (reference, attempt row, coverage), and no longer depends
+on the reply size.
+
 ## Verification at the initial S3 SDK checkpoint
 
 107 focused cloud SDK/native SDK/guard/learning-window/priming tests pass. The

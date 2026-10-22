@@ -1,0 +1,42 @@
+{
+  "id": "decision-flywheel-1abb5f98-ebde-4bca-8197-c7d6fbe7935c",
+  "title": "Catalog read robustness and write amplification (lab single-classifier C4)",
+  "description": "Typed cause for PayloadUnavailable/JournalUnavailable plus one transient S3 GET retry; find and stop the whole-snapshot rewrite storm (8,550 blobs / 11.19 GB since 2026-10-21T01Z, 1,000-2,172 commits/hour). Acceptance: transient-error retry spec; typed cause for permanent failure; measured commit-rate baseline before/after. Never retry writes or conditional puts.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1da33407-fd35-4934-b550-b6c1b1701579",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f331e8ec-07f4-4558-aee1-c980602c9cb5",
+      "author": "home",
+      "text": "Diagnosis (read-only, 2026-10-22T01:5xZ). Commits are made by the SQS worker command loop (cyclotron-console-worker, ~50 invocations/h), one per publication job, not by BFF reads. Per job: 3 catalog commits (enqueue, claim, finish) + a lease acquire AND release on the workspace journal and on each of 3 runtime journals (8 commits, each rewriting a ~3.2 MB snapshot) + per-event commits. A new item adds ~13 runtime commits per runtime (every append_event is its own commit). Head revisions: catalog 1202, 3 runtimes 1914 each, shared-batches 352, publication workspace 1326 = 8,622 blobs. 106 distinct items produced 356 jobs (3 publications x repeats). Plan: coalesce runtime event appends into the next durable barrier (cache_owned only), typed cause + one GET retry.",
+      "created_at": "2026-10-22T02:02:09.123337Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "7ad5b81d-753d-4f49-9674-33b1f8d813fd",
+      "author": "home",
+      "text": "Implemented in worktree Cyclotron-c4 (branch fix/catalog-write-amplification): s3_transient.py (one retry on transient GET, class-name-only cause), PayloadUnavailable/JournalUnavailable.cause + warning log, S3RuntimeStores event coalescing for owning handles. Spec benchmark: 1 new item + 2 replays x 3 classifiers = 48 -> 24 runtime commits, 9.5 -> 4.8 MB. Remaining amplification (lease acquire/release per job, 4 MiB journal budget at 3.2 MB) recorded as follow-ups. make check running.",
+      "created_at": "2026-10-22T02:08:02.628028Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "dbe13e3f-1c77-48a4-b725-f87522b92d7c",
+      "author": "home",
+      "text": "PR https://github.com/AnthusAI/Cyclotron/pull/97 opened to develop; make check exits 0. Not merged or deployed. Follow-ups: lease cycle per job, 4 MiB journal budget (runtimes at 3.2 MB), tag-based S3 lifecycle.",
+      "created_at": "2026-10-22T02:21:54.604320Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-22T02:01:58.963845Z",
+  "updated_at": "2026-10-22T02:21:54.604347Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

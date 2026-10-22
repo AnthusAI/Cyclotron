@@ -1,4 +1,26 @@
 {
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. Add-only JSON Pointer operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
-  "operations": []
+  "operations": [
+    {
+      "op": "add",
+      "path": "/Resources/BooksBucketPolicy/Properties/PolicyDocument/Statement/1/Resource/-",
+      "value": {
+        "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/records/*"
+      }
+    },
+    {
+      "op": "add",
+      "path": "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+      "value": {
+        "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*"
+      }
+    },
+    {
+      "op": "add",
+      "path": "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+      "value": {
+        "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*"
+      }
+    }
+  ]
 }

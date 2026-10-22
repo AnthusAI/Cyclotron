@@ -8,6 +8,7 @@ reads and writes.
 
 from .journal import CanonicalJournal, JournalConflict, JournalUnavailable, JournalUncertain, decode, encode
 from .journal import uuid as uuid
+from .s3_transient import cause_name, log, read_with_one_retry
 from .storage_payloads import S3Payloads
 
 
@@ -34,7 +35,7 @@ class S3Journal(CanonicalJournal):
         )
         self.boundary = (payloads.scope, payloads.bucket, payloads.owner)
 
-    def _get(self, key, *, missing=False, creation_probe=False):
+    def _fetch(self, key):
         stream = None
         try:
             response = self.payloads.client.get_object(
@@ -49,14 +50,22 @@ class S3Journal(CanonicalJournal):
             if len(content) != length:
                 raise ValueError("incomplete coordination object")
             return decode(content), etag
+        finally:
+            if stream is not None:
+                stream.close()
+
+    def _get(self, key, *, missing=False, creation_probe=False):
+        try:
+            # Reading the anchor or head is idempotent: one transient failure is retried. _put never is.
+            return read_with_one_retry(lambda: self._fetch(key), "coordination")
         except Exception as error:
             code = getattr(error, "response", {}).get("Error", {}).get("Code")
             if missing and (code == "NoSuchKey" or (creation_probe and code == "AccessDenied")):
                 return None
-            raise JournalUnavailable("canonical S3 coordination unavailable; do not initialize or dispatch") from None
-        finally:
-            if stream is not None:
-                stream.close()
+            log.warning("canonical S3 coordination unavailable: %s", cause_name(error))
+            raise JournalUnavailable(
+                "canonical S3 coordination unavailable; do not initialize or dispatch", cause_name(error)
+            ) from None
 
     def _put(self, key, value, etag=None):
         try:

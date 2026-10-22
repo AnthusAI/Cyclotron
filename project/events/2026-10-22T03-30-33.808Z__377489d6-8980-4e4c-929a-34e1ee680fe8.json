@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "377489d6-8980-4e4c-929a-34e1ee680fe8",
+  "issue_id": "decision-flywheel-7a6c114d-a996-4410-a09d-30be373a32d5",
+  "event_type": "field_updated",
+  "occurred_at": "2026-10-22T03:30:33.808Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Move web_jobs payload/result out of the catalog journal into records. Depends on S1.",
+        "to": "Move each article's result (jobs in the catalog) out into records.\nAcceptance: one-worker-at-a-time job claims preserved in the small control state; never-pay-twice unaffected; reads fall back to the old embedded form during migration; contract specs on every backend. Depends on S1."
+      }
+    }
+  }
+}
