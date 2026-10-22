@@ -11,7 +11,7 @@ test('Scenario: A labeler can compare a displayed prediction with a human label'
   expect(screen.getByText('A. Author')).toBeVisible()
   expect(screen.getByText('Journal 2')).toBeVisible()
   expect(screen.getByText(/Exclude · 80/)).toBeVisible()
-  fireEvent.change(screen.getByLabelText('Explanation (optional)'),{target:{value:'It improves knowledge access'}})
+  fireEvent.change(screen.getByLabelText(/^Why\? A sentence or two helps it learn what you want\./),{target:{value:'It improves knowledge access'}})
   fireEvent.click(screen.getByRole('button',{name:'Include'}))
   expect(submit).toHaveBeenCalledWith('label',{item_id:'paper',label:'include',comment:'It improves knowledge access',presentation_id:'shown'})
 })

@@ -1,0 +1,17 @@
+# LeftBlock overrides: each entry approves one finding (one rule on one exact
+# line content in one file). Changing that line re-blocks it. `kind` is the
+# rule's category, shown for reviewers; it is not part of matching.
+version: 1
+allow:
+  - id: "101f97ca7321f581"
+    rule: "leftblock-wif-key"
+    file: "src/decision_flywheel/vendor/trace-ui/web.css"
+    kind: "Bitcoin WIF private key (base58check)"
+    reason: "base64 embedded font data (woff/woff2) in the vendored trace-ui bundle, not a key; override approved by Ryan 2026-10-21"
+    added: 2026-10-22
+  - id: "013a07434032c121"
+    rule: "leftblock-wif-key"
+    file: "src/decision_flywheel/vendor/trace-ui/viewer.css"
+    kind: "Bitcoin WIF private key (base58check)"
+    reason: "base64 embedded font data (woff/woff2) in the vendored trace-ui bundle, not a key; override approved by Ryan 2026-10-21"
+    added: 2026-10-22
