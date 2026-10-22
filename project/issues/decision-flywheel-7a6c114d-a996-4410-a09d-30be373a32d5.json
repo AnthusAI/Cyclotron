@@ -3,7 +3,7 @@
   "title": "S2c job results out of the catalog",
   "description": "Move each article's result (jobs in the catalog) out into records.\nAcceptance: one-worker-at-a-time job claims preserved in the small control state; never-pay-twice unaffected; reads fall back to the old embedded form during migration; contract specs on every backend. Depends on S1.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -15,10 +15,18 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "077c3c5f-a36c-4bbd-9d0f-0a2d10fdb648",
+      "author": "home",
+      "text": "Deployed to the lab 2026-10-22 in v0.34.0 (change set record-lake-v0-34-0, approved by Ryan).",
+      "created_at": "2026-10-22T10:53:10.362496Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-22T03:28:48.056610Z",
-  "updated_at": "2026-10-22T03:30:33.808665Z",
-  "closed_at": null,
+  "updated_at": "2026-10-22T10:53:10.385363Z",
+  "closed_at": "2026-10-22T10:53:10.385330Z",
   "agent": {
     "platform": "claude-code",
     "model": "claude-sonnet-5-5",

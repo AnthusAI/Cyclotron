@@ -3,7 +3,7 @@
   "title": "S3 migration of live data and the lab deploy",
   "description": "One-time script that converts today's ~12 MB of live data into records, verified by rebuilding the old value and comparing, plus the reviewed lab deploy including the S1 bucket-policy and IAM change.\nAcceptance: conversion is re-runnable and verified; cutover with workers paused; never-pay-twice and one-worker-at-a-time preserved; explicit approval from Ryan for the change set before deploy. Depends on S2a, S2b, S2c.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -37,11 +37,18 @@
       "text": "Progress: Part A built and green locally (118 specs): record_lake_conversion.py + scripts/dev/convert_to_record_lake.py, library support (audit/convert/preview on S3RuntimeStores, S3BatchStorage, S3ConsoleStorage; check hook on commit_with_records; resume-own-owner acquire). Production dry run (read-only, get/list/head-only wrapper) succeeded: 5 journals (1 ledger, 3 runtimes, catalog), 3,817 records, control state 16,559,488 -> 1,069,869 bytes, lake +16,243,823 bytes. Next: runbook in infra/lab/README.md, docs, make check, PR.",
       "created_at": "2026-10-22T05:01:48.178427Z",
       "comment_type": "default"
+    },
+    {
+      "id": "8da5faa3-bed2-4b6f-a820-4348355a7beb",
+      "author": "home",
+      "text": "Cutover done 2026-10-22 with Ryan's go: router HN paused (enabled=false) and worker queue mapping disabled; change set record-lake-v0-34-0 executed (v0.34.0, package 63b054b8…); conversion --apply per journal, each verified by digest/order/coverage: shared-batches 150 records (3.59 MB -> 52 KB), 3 runtimes 1,259 records each (~4.16 MB -> ~52 KB each; first runtime resumed after transient S3 timeouts, as designed), catalog 458 records (2.89 MB -> 0.99 MB). Final dry run: 5 nothing-to-convert. Queue re-enabled and router HN enabled=true at 10:52Z.",
+      "created_at": "2026-10-22T10:53:10.407035Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-22T03:28:48.406703Z",
-  "updated_at": "2026-10-22T05:01:48.178452Z",
-  "closed_at": null,
+  "updated_at": "2026-10-22T10:53:10.429046Z",
+  "closed_at": "2026-10-22T10:53:10.429011Z",
   "agent": {
     "platform": "claude-code",
     "model": "claude-sonnet-5-5",
