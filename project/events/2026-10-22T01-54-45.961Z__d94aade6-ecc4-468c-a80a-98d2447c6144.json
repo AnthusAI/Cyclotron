@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d94aade6-ecc4-468c-a80a-98d2447c6144",
+  "issue_id": "decision-flywheel-dc8527aa-87e8-44da-9376-f1d8b12923a0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T01:54:45.961Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Lab transformer I8: Lab stack change set for transformer",
+    "description": "BFF lambda:InvokeFunctionUrl on the front; transformer registry env; PublicationTargets priming.listId for anth-us and threat-intelligence.\nAcceptance: check_lab_template passes; snapshot refreshed after deploy. Needs approval.\n\nSize: M\nDependencies: I6 deployed, Ryan's approval\nEpic: Lab is the single classifier per publication (decision-flywheel-1b8b860d). Related: hosted curation epic decision-flywheel-1da33407.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1b8b860d-554a-489d-b6c5-e8f5c711864c",
+    "labels": []
+  }
+}

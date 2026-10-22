@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3f2a9121-151b-4cf0-8267-ca19fe20f7c0",
+  "issue_id": "decision-flywheel-78059d96-2f65-4bbe-8323-c2f6970a7922",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T01:54:45.148Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Lab transformer I6: Transformer stack cyclotron-transformer",
+    "description": "Cluster, task def, roles, SG (egress 443 only, public subnets, no NAT), logs 14d, front Lambda + Function URL AWS_IAM, DynamoDB jobs table, in account 682849160744.\nAcceptance: reviewed change set with exact resources; SigV4 call from lab role succeeds, unsigned refused. Needs Ryan's approval to deploy.\n\nSize: L\nDependencies: I7 (image), Ryan's approval to deploy\nEpic: Lab is the single classifier per publication (decision-flywheel-1b8b860d). Related: hosted curation epic decision-flywheel-1da33407.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1b8b860d-554a-489d-b6c5-e8f5c711864c",
+    "labels": []
+  }
+}
