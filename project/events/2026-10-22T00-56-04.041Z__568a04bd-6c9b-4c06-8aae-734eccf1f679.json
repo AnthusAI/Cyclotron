@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "568a04bd-6c9b-4c06-8aae-734eccf1f679",
+  "issue_id": "decision-flywheel-2b9747b3-838b-4ff1-95cb-74fe22b5ff1b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T00:56:04.041Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "M4 Hosted editor steering of learned items, and safe undo",
+    "description": "Edit, retire or add an item -> candidate version -> held-out evaluation -> result for an editor to promote (PublicationSteering exists as a library); report steering:true only once it works end to end. Make undo of a trained-on label stop resetting all learned structure (flywheel.py:763-780), or at minimum warn first. Weeks. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-6bfa31b3-a00f-41cd-a75f-444fd2f44c04",
+    "labels": []
+  }
+}
