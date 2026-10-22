@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3160cc95-fd76-449f-b869-2d9c16f80dfb",
+  "issue_id": "decision-flywheel-8d5808cd-5e48-43d8-8886-bffc8f1f1a2a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T01:54:43.389Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Lab transformer C2: Firewall for pasted URLs",
+    "description": "A primed example's canonical source URL must not match any item the publication decides (checked at transform completion and at accept).\nAcceptance: spec covering both checkpoints.\n\nSize: M\nDependencies: C1\nEpic: Lab is the single classifier per publication (decision-flywheel-1b8b860d). Related: hosted curation epic decision-flywheel-1da33407.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1b8b860d-554a-489d-b6c5-e8f5c711864c",
+    "labels": []
+  }
+}

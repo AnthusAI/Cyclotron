@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1071ef84-60fd-41e3-9d75-f52e393e2bb5",
+  "issue_id": "decision-flywheel-1b8b860d-554a-489d-b6c5-e8f5c711864c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T01:54:30.815Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Lab is the single classifier per publication",
+    "description": "Decision (Ryan, 2026-10-22): the central Cyclotron lab is THE classifier per publication. Hosted URL reading = option B: a front Lambda with Function URL (AWS_IAM) plus one Fargate task per job (arm64, 2 vCPU / 8 GB, GROBID 0.9.1-crf sidecar), a DynamoDB jobs table, per-job cap of 7 requests / $0.50, a daily job cap, an AWS Budget of $25/mo, and the OpenAI key in SSM SecureString /cyclotron/transformer/openai-api-key. Deployed in account 682849160744 as the separate stack cyclotron-transformer. Lab criteria are rewritten from each publication's approved doctrine and approved by Ryan.\n\nRelated epics: decision-flywheel-a73f05cc (Embeddable cyclotron: Papyrus integration; an epic cannot be a child of an epic, so linked here) and decision-flywheel-1da33407 (Hosted curation upstream; its earlier C1-C7, I1-I5, P1 children are a different set). Papyrus-side tickets are on the PPY board; Prospectus R1/R2 are filed by the Prospectus session.\n\nSuggested order: 1 P4a, C5, C6, C4; 2 lab criteria sign-off; 3 C1 and P1 (with fakes); 4 I7, I6, I9 (approval); 5 I8 and lab deploy (approval); 6 P2, P3, S1 verify; 7 R1/R2 then S2, S3; 8 C3 then P5, P4b, P6.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

@@ -47,10 +47,17 @@
       "text": "2026-10-20 status check: hosted priming is proven in production on p.apyr.us (task a3f01a closed, PR #57 9dec0e6; classifier version 1 -> 2 with accepted example priming:29a0882390ee7063). Release and pin story 1019e0 closed today. Still open under this epic: structured import CSV/JSON/JSONL/spreadsheet (705e4a, in progress), storage persistence decision (b5f1a4, blocked), embedding docs extension (8b828a), and the hosted publication prediction and signed-login work on open draft PRs #58 and #59 (tracked in the new story filed today). Epic stays in progress.",
       "created_at": "2026-10-20T13:17:50.476862Z",
       "comment_type": "default"
+    },
+    {
+      "id": "8fa13439-3d89-407b-b034-3ce692cb832c",
+      "author": "home",
+      "text": "Approved by Ryan 2026-10-22: follow-on epic decision-flywheel-1b8b860d 'Lab is the single classifier per publication' filed (an epic cannot be a child of an epic, so it is linked here by comment).",
+      "created_at": "2026-10-22T01:55:01.225172Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-09T14:50:43.755286Z",
-  "updated_at": "2026-10-20T13:17:50.476891Z",
+  "updated_at": "2026-10-22T01:55:01.225201Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "95bde3b3-d8af-4255-8c10-9cc8bf1cf69a",
+  "issue_id": "decision-flywheel-18b552dd-0ccd-46ab-9338-8f918057babc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T01:54:44.780Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Lab transformer C6: Priming content check",
+    "description": "Refuse applying a single-class priming list (prime-p-apyr-us is 11 exclude / 0 include) unless explicitly acknowledged.\nAcceptance: spec that a single-class list is refused without explicit acknowledgement and accepted with it.\n\nSize: S\nDependencies: none\nEpic: Lab is the single classifier per publication (decision-flywheel-1b8b860d). Related: hosted curation epic decision-flywheel-1da33407.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1b8b860d-554a-489d-b6c5-e8f5c711864c",
+    "labels": []
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-199095b7-8271-4960-91a5-25c29eedf5ea",
+  "title": "Lab transformer I9: Budget, alarms and caps",
+  "description": "AWS Budget $25/mo (80%/100% email), error alarm, DynamoDB daily job cap, runbook for the SSM OpenAI key and OpenAI project cap.\nAcceptance: budget, alarm and cap exist (via reviewed change set); runbook committed.\n\nSize: S\nDependencies: I6\nEpic: Lab is the single classifier per publication (decision-flywheel-1b8b860d). Related: hosted curation epic decision-flywheel-1da33407.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1b8b860d-554a-489d-b6c5-e8f5c711864c",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-22T01:54:46.352375Z",
+  "updated_at": "2026-10-22T01:54:46.352425Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

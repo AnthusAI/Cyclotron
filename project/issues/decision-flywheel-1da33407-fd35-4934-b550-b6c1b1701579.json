@@ -10,9 +10,17 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "8803e173-1dc4-44a2-8eeb-e2bed9c45409",
+      "author": "home",
+      "text": "Approved by Ryan 2026-10-22: new epic decision-flywheel-1b8b860d 'Lab is the single classifier per publication' (lab-transformer work: C1-C6, I6-I9) is a NEW set of tickets, distinct from this epic's earlier C1-C7/I1-I5/P1 children. Related existing ticket: I1 'Commit the deployed lab stack template as source' is a natural prerequisite for the I6/I8 change sets. AWS changes need Ryan's explicit approval.",
+      "created_at": "2026-10-22T01:55:01.201546Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-21T03:07:33.182621Z",
-  "updated_at": "2026-10-21T03:07:33.182673Z",
+  "updated_at": "2026-10-22T01:55:01.201568Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
