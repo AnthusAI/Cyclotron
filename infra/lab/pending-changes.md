@@ -19,3 +19,5 @@ Lambda code changes.
 
 No `s3:ListBucket` is added. Reading covered records is a GET by sequence; listing (audit, orphan janitor) is
 not needed by S2 and would be a separate, reviewed grant.
+
+The journal byte budget bridge (JournalMaxBytes 16 MiB, v0.33.2, change set `journal-budget-v0-33-2`) was deployed on 2026-10-22 and is already in the snapshot.

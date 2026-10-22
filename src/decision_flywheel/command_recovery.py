@@ -15,6 +15,7 @@ worker's own rule is unchanged: it never takes over a running claim.
 
 import argparse
 import json
+import os
 import sys
 
 from .batch_storage import StorageScope
@@ -61,6 +62,18 @@ def purge_matching(sqs, url, job_id, *, apply):
     return len(matched)
 
 
+def journal_budget(environment):
+    """The same per-document budget the hosted lab uses (CYCLOTRON_MAX_BYTES, default 4 MiB)."""
+    from .hosted_runtime import MAX_JOURNAL_BYTES, HostedConfig
+
+    budget = environment.get("CYCLOTRON_MAX_BYTES", "")
+    if not budget:
+        return HostedConfig.__dataclass_fields__["max_bytes"].default
+    if not budget.isdigit() or not 1048576 <= int(budget) <= MAX_JOURNAL_BYTES:
+        raise ValueError("CYCLOTRON_MAX_BYTES must be a whole number of bytes between 1 MiB and 64 MiB")
+    return int(budget)
+
+
 def run(args, *, session):
     sts = session.client("sts")
     identity = sts.get_caller_identity()
@@ -68,7 +81,7 @@ def run(args, *, session):
         print(f"Refusing: caller account is not {args.expect_aws_account}", file=sys.stderr)
         return 2
     s3 = session.client("s3")
-    store = open_store(s3, args.books_bucket, identity["Account"], args.cyclotron_account)
+    store = open_store(s3, args.books_bucket, identity["Account"], args.cyclotron_account, max_bytes=journal_budget(os.environ))
     if args.command == "diagnose":
         print(json.dumps(store.command_recovery(args.job), indent=1))
         return 0

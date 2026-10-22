@@ -115,3 +115,11 @@ def test_actual_hosted_graphql_queue_worker_and_event_page_keep_original_tenant_
         denied=client.get(f'/api/runs/{run}/events',params={'account':str(uuid4())})
         assert denied.status_code==403
         assert access not in str(sent)
+
+
+def test_the_journal_byte_budget_defaults_to_four_mebibytes_and_can_be_raised_within_a_hard_ceiling():
+    from .hosted_runtime import HostedConfig
+    assert HostedConfig.from_environment(complete_environment()).max_bytes==4194304
+    assert HostedConfig.from_environment(complete_environment()|{'CYCLOTRON_MAX_BYTES':'16777216'}).max_bytes==16777216
+    for bad in ('4MiB','0','1048575','67108865','-1',' 16777216'):
+        with pytest.raises(ValueError):HostedConfig.from_environment(complete_environment()|{'CYCLOTRON_MAX_BYTES':bad})
