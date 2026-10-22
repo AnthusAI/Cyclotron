@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "816fac66-7f25-43e9-9905-96896d2ce6b1",
+  "issue_id": "decision-flywheel-cd0b4705-bd9e-419e-98ee-2323881cfeea",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T00:56:02.560Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "M2 Per-decision explanation: question contributions and nearest reviewed items",
+    "description": "Store each supporting question's contribution (head weight x answer) with the decision, and the nearest reviewed items by word overlap (LexicalRetriever over the labeled pool, stored data only). Semantic matching stays with the retriever epic 0276b251. About a week. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-6bfa31b3-a00f-41cd-a75f-444fd2f44c04",
+    "labels": []
+  }
+}

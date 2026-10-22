@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-ea4ee9c3-a3be-4a70-bfe3-470087511228",
+  "title": "M1 Read the learned state and per-version provenance",
+  "description": "Read API plus hosted operation for a classifier's current and past learned state (rubric, supporting questions, head weights, example ids, version, fingerprint). Per-version provenance by joining each classifier-activated snapshot to the optimizer-request/response, proposal-validated (rationale), promotion result and training_evidence ids that produced it. Read-side only; days. Plan: https://claude.ai/artifact/Jg1DpixLFcAvnPy7d9RNDE",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-6bfa31b3-a00f-41cd-a75f-444fd2f44c04",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-22T00:56:01.947179Z",
+  "updated_at": "2026-10-22T00:56:01.947232Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
