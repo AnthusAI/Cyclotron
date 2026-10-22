@@ -137,7 +137,30 @@ class EvaluationBackend(StorageBackend):
             handle.close()
 
 
+BATCH_BACKEND_NAMES = BACKEND_NAMES + ("s3+memory-lake", "s3+s3-lake", "file-journal+file-lake")
+
+
 class BatchBackend(StorageBackend):
+    """The ledger on every back end, and with raw replies in a record lake as well as embedded.
+
+    A ``<journal>+<lake>`` name keeps replies in a lake of that kind beside the journal.
+    """
+
+    def __init__(self, backend_name, directory):
+        journal_name, _, self.lake_name = backend_name.partition("+")
+        super().__init__(journal_name, directory)
+        self.memory_lake = {}
+
+    def lake_for(self, journal):
+        from .record_lake import FileRecordLake, MemoryRecordLake, S3RecordLake
+
+        kind = dict(domain="shared-batches", kind="replies", max_record_bytes=100000)
+        if self.lake_name == "memory-lake":
+            return MemoryRecordLake(journal.boundary[0], store=self.memory_lake, **kind)
+        if self.lake_name == "file-lake":
+            return FileRecordLake(journal.payloads, **kind)
+        return S3RecordLake(journal.payloads, **kind) if self.lake_name else None
+
     def _open_handle(self):
         if self.backend_name == "sqlite":
             from .batch_storage import SQLiteBatchStorage
@@ -145,6 +168,7 @@ class BatchBackend(StorageBackend):
             return SQLiteBatchStorage(self.directory / "batch.sqlite3")
         from .s3_batch_storage import S3BatchStorage
 
-        storage = S3BatchStorage(self.journal_named("contract-batch"), max_records=1000)
+        journal = self.journal_named("contract-batch")
+        storage = S3BatchStorage(journal, max_records=1000, replies=self.lake_for(journal))
         storage.initialize()
         return storage

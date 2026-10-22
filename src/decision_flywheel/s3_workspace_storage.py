@@ -8,7 +8,7 @@ from hashlib import sha256
 from uuid import uuid4
 
 from .journal import encode
-from .s3_batch_storage import S3BatchStorage
+from .s3_batch_storage import S3BatchStorage, reply_lake_for
 from .s3_embedded_storage import S3EmbeddedStorage
 from .s3_runtime_storage import S3RuntimeStores, runtime_events_lake
 
@@ -44,7 +44,9 @@ class S3WorkspaceStores:
                 raise ValueError("frozen workspace configuration changed")
             if existing is None:
                 self.root.put_meta("workspace-config", raw)
-            self.shared = S3BatchStorage(self._journal("shared-batches", self.name), max_records=self.max_records)
+            ledger = self._journal("shared-batches", self.name)
+            # Raw provider replies are write-once records beside the ledger, not rows inside it.
+            self.shared = S3BatchStorage(ledger, max_records=self.max_records, replies=reply_lake_for(ledger, self.name))
             self.shared.initialize()
         except BaseException:
             self.close()
