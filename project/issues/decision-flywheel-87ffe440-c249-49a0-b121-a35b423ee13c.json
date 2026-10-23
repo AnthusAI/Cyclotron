@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-87ffe440-c249-49a0-b121-a35b423ee13c",
+  "title": "E2 Read the catalog once per request and reuse decoded snapshots by head",
+  "description": "Each request builds a new store/journal (hosted_runtime.py:119-139); workspace() initialize() does anchor GET + full read (journal.py:171-196); every _read() is head GET + whole-catalog payload GET + JSON decode + full validation (s3_console_storage.py:206-228). Run details does ~7 such reads; runs list 2N+1. Change: (a) share one catalog snapshot per request across resolvers; (b) per-warm-Lambda cache of the parsed, validated catalog keyed by journal head digest (payloads are content-addressed and immutable), always revalidating with the cheap head GET; deep-copy or freeze before any write path; bounded memory (one entry per account scope); (c) skip the redundant initialize read when the journal exists. Writes and CAS unchanged. Acceptance: specs 'reuses a decoded catalog while the head is unchanged and reloads when it moves', 'run details read the catalog once', 'a write after a cached read still conflicts correctly on a moved head'; add a console_phase timing log for catalog_read with durationMs and cache hit/miss.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-23T12:06:57.082094Z",
+  "updated_at": "2026-10-23T12:06:57.082201Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

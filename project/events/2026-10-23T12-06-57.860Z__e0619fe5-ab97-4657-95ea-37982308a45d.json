@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e0619fe5-ab97-4657-95ea-37982308a45d",
+  "issue_id": "decision-flywheel-edb5e85f-fdb6-44f8-b74c-8a38e8c5e82c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-23T12:06:57.860Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "E4 Short positive memo for read permission (optional, after E1-E2 measured)",
+    "description": "Only if E1+E2 leave Prospectus as the dominant cost. Memo positive console:read results keyed by (session ref, token hash, account, op), TTL <= 30 s, capped at token expiry, dropped on logout and account select; never memo console:write (worker re-authorizes mutations anyway). Trade-off for Ryan to approve: a revoked membership keeps read access up to the TTL per warm container. Acceptance: 'membership revoked stops access after the TTL; logout drops the entry immediately'.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
+    "labels": []
+  }
+}

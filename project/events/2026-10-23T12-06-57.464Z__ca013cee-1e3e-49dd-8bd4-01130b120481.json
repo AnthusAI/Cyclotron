@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ca013cee-1e3e-49dd-8bd4-01130b120481",
+  "issue_id": "decision-flywheel-5bd2da18-538d-4183-835d-4b5fe3686680",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-23T12:06:57.464Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "E3 Workspace UI: no overlapping run-details polls",
+    "description": "trace-ui/src/WebApp.tsx:146-150 (served UI branch fix/hosted-signed-login-only and develop) re-sends the DETAILS graphql every second with setInterval and never waits for the previous response; at 15 s/request ~15 pile up. Change: self-scheduling loop that waits for the previous response, 3-5 s interval, pauses when the tab is hidden, backs off on errors/503. Also fold eventCursor into the details query, load {cyclotrons} lazily, skip cyclotronVersions when the run has none. Acceptance: spec 'does not start another details request while one is in flight' and 'pauses while hidden'. Deploy note: the live lab front end (CloudFront d1rab2h8u5j1hk, files last updated 2026-10-16) is built from the unmerged fix/hosted-signed-login-only line and is not in cyclotron-production; its deploy path must be found (likely the anthus account) before this can ship.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
+    "labels": []
+  }
+}

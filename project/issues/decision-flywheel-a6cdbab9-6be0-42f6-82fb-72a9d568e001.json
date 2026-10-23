@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
+  "title": "Lab request efficiency: basic screens must not need heavy cloud work",
+  "description": "Ryan 2026-10-23: opening the Anthus workspace failed with 'API call failed' / 'service unavailable'. Cause: the BFF hit the account Lambda concurrency limit of 10 (Throttles 12). Each request costs 6-20 s (mean 11.7 s): three sequential Prospectus calls (~4.8 s: identities/me twice + authorize) plus ~7 uncached whole-catalog S3 reads and validations per run-details query (~6 s). The served UI re-sends the run-details query every second with setInterval and never waits, so ~16 requests are in flight. Quota increase to 1000 requested (2b1494c13ba047d09585be7728017d48YPmQxmKY) as a safety margin only. Goal: a workspace load is a handful of requests, each well under a second, so 10 concurrent is ample. Related: C4 catalog write amplification.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-23T12:06:41.338614Z",
+  "updated_at": "2026-10-23T12:06:41.338667Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

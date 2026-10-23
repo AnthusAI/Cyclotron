@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "05b82e69-719a-4d59-b7c1-7dd0b5372145",
+  "issue_id": "decision-flywheel-32c39c9e-88b0-4a3f-bbc7-6a9b64e41ae6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-23T12:06:56.684Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "E1 One identity check and one authorize per request",
+    "description": "Today each /graphql, /runs/ and /api/runs/{id}/events request resolves the session twice: the HTTP middleware (web_api.py:533-540 -> account_routes.py:79-82 _session with verify_person -> identities/me) and again in AccountAuthorization.on_execute (web_api.py:442-447) and the events route (account_routes.py:341-342), then authorize (prospectus_accounts.py:234-242). Three sequential Prospectus calls, ~4.5 s. Change: resolve the session once in the middleware, keep it on request.state, reuse it in AccountAuthorization, events and timeline; run identities/me and authorize concurrently. Authorization still checked every request (no cached grant). Acceptance: spec 'one identities/me and one authorize per graphql, events and timeline request' with a fake Prospectus counting calls; existing auth specs unchanged; revoked membership still refused on the next request.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
+    "labels": []
+  }
+}
