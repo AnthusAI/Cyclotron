@@ -5,7 +5,7 @@ import {Label} from '@/components/ui/label'
 import {graphql} from './graphql'
 import {requestId} from './requestId'
 
-export function ComparisonResume({runId,ceiling,busy,enabled,status}:{runId:string;ceiling:number;busy:boolean;enabled:boolean;status:string}){
+export function ComparisonResume({runId,ceiling,busy,enabled,status,onChanged}:{runId:string;ceiling:number;busy:boolean;enabled:boolean;status:string;onChanged?:()=>void}){
   const [limit,setLimit]=useState(ceiling),[retryFailed,setRetryFailed]=useState(false),[confirmed,setConfirmed]=useState(false)
   const [identity,setIdentity]=useState(requestId),[sending,setSending]=useState(false),[queued,setQueued]=useState(false),[error,setError]=useState('')
   if(!['failed','interrupted'].includes(status))return null
@@ -16,7 +16,7 @@ export function ComparisonResume({runId,ceiling,busy,enabled,status}:{runId:stri
     try{
       await graphql('mutation($run:ID!,$request:String!,$ceiling:Int!,$retryFailed:Boolean!,$confirmed:Boolean!){resumeMatchedComparison(runId:$run,requestId:$request,maxRequests:$ceiling,retryFailed:$retryFailed,confirmed:$confirmed){id status}}',
         {run:runId,request:identity,ceiling:limit,retryFailed,confirmed:true})
-      setQueued(true)
+      setQueued(true);onChanged?.()
     }catch(e){setError((e as Error).message)}finally{setSending(false)}
   }
   const locked=busy||sending||queued
