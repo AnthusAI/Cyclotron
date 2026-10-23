@@ -38,7 +38,9 @@ class HostedAccounts:
         self.sessions = sessions or OAuthSessions(self.verifier)
         self.token_client = token_client or httpx.AsyncClient(timeout=10, follow_redirects=False)
         self.owns_token_client = token_client is None
-        self.access = AccountWorkspaceAccess(accounts, self.resolve_session, workspace_for_account)
+        self.access = AccountWorkspaceAccess(
+            accounts, self.resolve_session, workspace_for_account, resolve_session_pending=self.resolve_session_pending
+        )
 
     async def _timed(self, phase, operation, *args):
         started = time.monotonic()
@@ -56,11 +58,12 @@ class HostedAccounts:
                 )
             )
 
-    async def _session(self, connection, *, verify_person=True):
+    async def _session_pending(self, connection, *, verify_person=True):
+        """Return the locally proven session and the still-owed person check, so a caller can overlap it with other work."""
         identifier = connection.cookies.get(self.config.cookie_name)
         session = await self._timed("session_read", self.sessions.get, identifier)
         if not session:
-            return None
+            return None, None
         try:
             claims = await self._timed("token_verify", self.verifier.access, session.access_token)
             if claims["sub"] != session.subject:
@@ -76,21 +79,45 @@ class HostedAccounts:
                     or not lineage.isascii()
                 ):
                     raise SessionRejected("session binding is invalid")
-            if self.google_identity and verify_person:
+        except (SessionRejected, AccountAccessDenied):
+            await asyncio.to_thread(self.sessions.revoke, identifier)
+            return None, None
+        if not (self.google_identity and verify_person):
+            return session, None
+
+        async def confirm_person():
+            try:
                 person = await asyncio.to_thread(self.google_identity.me, session.access_token)
                 if not person or person["id"] != session.person_id:
                     raise SessionRejected("session identity enrollment changed")
-            return session
-        except (SessionRejected, AccountAccessDenied):
-            await asyncio.to_thread(self.sessions.revoke, identifier)
-            return None
+            except (SessionRejected, AccountAccessDenied):
+                await asyncio.to_thread(self.sessions.revoke, identifier)
+                return False
+            return True
 
-    async def resolve_session(self, connection):
-        session = await self._session(connection)
+        return session, confirm_person
+
+    async def _session(self, connection, *, verify_person=True):
+        session, confirm_person = await self._session_pending(connection, verify_person=verify_person)
+        if confirm_person is not None and not await confirm_person():
+            return None
+        return session
+
+    async def resolve_session_pending(self, connection):
+        session, confirm_person = await self._session_pending(connection)
         account_id = connection.query_params.get("account")
         if not session or not session.person_id or not account_id:
+            if confirm_person is not None:
+                await confirm_person()
+            return None, None
+        verified = VerifiedAccountSession(session.access_token, session.person_id, account_id, session_ref=session.session_ref)
+        return verified, confirm_person
+
+    async def resolve_session(self, connection):
+        verified, confirm_person = await self.resolve_session_pending(connection)
+        if confirm_person is not None and not await confirm_person():
             return None
-        return VerifiedAccountSession(session.access_token, session.person_id, account_id, session_ref=session.session_ref)
+        return verified
 
     async def _require(self, request, *, verify_person=True):
         session = await self._session(request, verify_person=verify_person)
@@ -338,7 +365,8 @@ class HostedAccounts:
 
         @app.get("/api/runs/{run_id}/events")
         async def event_page(request: Request, run_id: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)):
-            await self._require(request)
+            if not await self.access.authenticated(request):
+                raise HTTPException(401, "sign-in required")
             workspace = await self.access(request, "console:read")
             try:
                 rows = await asyncio.to_thread(workspace.store.events, run_id, after=after, limit=limit)

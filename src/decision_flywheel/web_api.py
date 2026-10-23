@@ -5,6 +5,7 @@ from hashlib import sha256
 import hmac
 from ipaddress import ip_address
 import json
+import time
 from pathlib import Path
 from typing import AsyncGenerator, Mapping
 from urllib.parse import urlsplit
@@ -531,6 +532,17 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.middleware('http')
     async def protect(request, next_handler):
+        started = time.monotonic()
+        response = await protect_request(request, next_handler)
+        if account_access:
+            from .prospectus_accounts import account_request_id
+            route = getattr(request.scope.get('route'), 'path', None) or 'unmatched'
+            print(json.dumps({'event': 'console_phase', 'requestId': account_request_id.get(), 'phase': 'request',
+                'route': route, 'method': request.method, 'status': response.status_code,
+                'durationMs': round((time.monotonic() - started) * 1000)}))
+        return response
+
+    async def protect_request(request, next_handler):
         if request.url.path.startswith(('/graphql','/runs/')):
             if not same_origin(request):
                 return JSONResponse({'error':'cross-origin access refused'}, status_code=403)

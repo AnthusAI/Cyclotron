@@ -637,7 +637,7 @@ def test_http_preflight_is_not_repeated_in_context_but_execution_rechecks_every_
             return person
 
         gateway.google_identity.me = me
-        for expected in (2, 4):
+        for expected in (1, 2):
             result = client.post(
                 "/graphql",
                 params={"account": account_id},
@@ -665,20 +665,22 @@ def test_revocation_or_outage_between_http_preflight_and_execution_denies_before
 
         def me(_):
             lookups.append("fresh")
-            if len(lookups) == 2:
+            if len(lookups) == 1:
                 if change == "revoked":
                     return None
                 if change == "outage":
                     raise ProspectusUnavailable("authority unavailable")
-                state["accounts"] = []
             return person
+
+        if change == "membership":
+            state["accounts"] = []
 
         gateway.google_identity.me = me
         gateway.access.workspace_for_account = lambda _: pytest.fail("denied operation reached workspace state")
         response = client.post("/graphql", params={"account": account_id}, json={"query": "{runs{name}}"})
-        assert response.status_code == 200 and response.json().get("errors")
+        assert response.status_code == {"revoked": 401, "outage": 503, "membership": 200}[change]
         assert response.json().get("data") is None
-        assert len(lookups) == 2
+        assert len(lookups) == 1
 
 
 def test_cross_origin_or_initial_preflight_failure_never_reaches_execution(hosted):
@@ -761,4 +763,80 @@ def test_context_without_its_private_marker_performs_full_authentication(hosted,
         gateway.google_identity.me = lambda _: lookups.append("fresh") or person
         result = client.post("/graphql", params={"account": account_id}, json={"query": "{runs{name}}"})
         assert result.json()["data"]["runs"][0]["name"] == "Private account run"
-        assert len(lookups) == 3
+        assert len(lookups) == 1
+
+
+def test_one_identities_me_and_one_authorize_per_graphql_events_and_timeline_request(hosted):
+    client, gateway, state, account_id = hosted
+    _, person, _ = google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Counted"}, headers=headers).status_code == 201
+        run = state["stores"][account_id].runs()[0]
+        identity_lookups = []
+        authorizations = []
+        gateway.google_identity.me = lambda _: identity_lookups.append("me") or person
+        central = gateway.accounts.transport
+
+        def counting(method, path, access_token, body=None, key=None):
+            if path.endswith("/authorize"):
+                authorizations.append(body["operation"])
+            return central(method, path, access_token, body, key)
+
+        gateway.accounts.transport = counting
+        requests = {
+            "graphql": lambda: client.post("/graphql", params={"account": account_id}, json={"query": "{runs{name}}"}),
+            "events": lambda: client.get(f"/api/runs/{run['id']}/events", params={"account": account_id}),
+            "timeline": lambda: client.get(f"/runs/{run['id']}/timeline", params={"account": account_id}),
+        }
+        for name, send in requests.items():
+            identity_lookups.clear()
+            authorizations.clear()
+            assert send().status_code == 200, name
+            assert identity_lookups == ["me"], name
+            assert authorizations == ["console:read"], name
+
+
+def test_membership_revoked_between_requests_is_refused_on_the_next_request(hosted):
+    client, gateway, state, account_id = hosted
+    google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Revocable"}, headers=headers).status_code == 201
+        query = {"query": "{runs{name}}"}
+        first = client.post("/graphql", params={"account": account_id}, json=query)
+        assert first.json()["data"]["runs"][0]["name"] == "Private account run"
+        state["accounts"] = []
+        second = client.post("/graphql", params={"account": account_id}, json=query)
+        assert second.json().get("data") is None and second.json().get("errors")
+
+
+def test_each_hosted_request_logs_its_route_template_and_duration_without_secrets(hosted, capsys):
+    import json
+
+    client, gateway, state, account_id = hosted
+    google_account_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        cookie = client.cookies.get(gateway.config.cookie_name)
+        token = gateway.sessions.get(cookie).access_token
+        capsys.readouterr()
+        client.get("/api/runs/some-run/events", params={"account": account_id})
+        output = capsys.readouterr().out
+        entries = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        requests = [entry for entry in entries if entry.get("phase") == "request"]
+        assert [entry["route"] for entry in requests] == ["/api/runs/{run_id}/events"]
+        assert requests[0]["event"] == "console_phase" and isinstance(requests[0]["durationMs"], int)
+        assert cookie not in output and token not in output and account_id not in output
