@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "3153bc13-f493-4634-9712-43efb0d887de",
+  "issue_id": "decision-flywheel-5bd2da18-538d-4183-835d-4b5fe3686680",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-23T13:25:48.500Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "a27895f0-381d-4a9c-8a14-6d3ab0efb02d",
+    "comment_author": "home"
+  }
+}

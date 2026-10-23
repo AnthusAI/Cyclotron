@@ -3,16 +3,38 @@
   "title": "E1 One identity check and one authorize per request",
   "description": "Today each /graphql, /runs/ and /api/runs/{id}/events request resolves the session twice: the HTTP middleware (web_api.py:533-540 -> account_routes.py:79-82 _session with verify_person -> identities/me) and again in AccountAuthorization.on_execute (web_api.py:442-447) and the events route (account_routes.py:341-342), then authorize (prospectus_accounts.py:234-242). Three sequential Prospectus calls, ~4.5 s. Change: resolve the session once in the middleware, keep it on request.state, reuse it in AccountAuthorization, events and timeline; run identities/me and authorize concurrently. Authorization still checked every request (no cached grant). Acceptance: spec 'one identities/me and one authorize per graphql, events and timeline request' with a fake Prospectus counting calls; existing auth specs unchanged; revoked membership still refused on the next request.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "5964ed87-ed2d-4e1a-9be0-545fb4f73121",
+      "author": "home",
+      "text": "Implemented on feature/lab-request-efficiency (commit 165d0e7): per-request session memo in AccountWorkspaceAccess, identities/me overlapped with read authorize, events/timeline reuse it, console_phase request route log. Specs in account_routes_test.py.",
+      "created_at": "2026-10-23T12:17:08.228855Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "29b25b2e-1cd1-4d84-b19d-66dc3838c18d",
+      "author": "home",
+      "text": "Implemented on feature/lab-request-efficiency; PR opened into develop (see PR).",
+      "created_at": "2026-10-23T12:29:01.267991Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "2d89e1bf-c0ff-4a94-af05-562ccc57f606",
+      "author": "home",
+      "text": "Done in code: merged PR #115 (d67f3f6), released v0.35.0. One session resolution per request; identities/me and authorize run concurrently (Prospectus calls 3 -> 2). make check passed (2873 + 278). NOT deployed: draft PR #116 points the lab functions at package sha256 cb34da2d..., waiting on Ryan's go to upload and run the change set. Next: Ryan go -> upload, sam deploy --no-execute-changeset, review, execute, check_lab_template --live, then measure the console_phase 'request' logs.",
+      "created_at": "2026-10-23T13:25:48.449487Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-23T12:06:56.684089Z",
-  "updated_at": "2026-10-23T12:06:56.684132Z",
+  "updated_at": "2026-10-23T13:25:48.526476Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

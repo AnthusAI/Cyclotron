@@ -10,9 +10,17 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "01084017-7e61-41dc-adaf-e2fbf5c52255",
+      "author": "home",
+      "text": "Status 2026-10-23 at the pause. E1+E2 are in v0.35.0, not deployed (draft PR #116, waiting on Ryan). E3 is merged to develop; the live UI is blocked on the unknown front-end deploy path (draft PR #112). E4 isn't started (optional). Lambda concurrency quota increase to 1000 is a case opened with AWS (request 2b1494c13ba047d09585be7728017d48YPmQxmKY); the limit is still 10.",
+      "created_at": "2026-10-23T13:25:48.620295Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-23T12:06:41.338614Z",
-  "updated_at": "2026-10-23T12:06:41.338667Z",
+  "updated_at": "2026-10-23T13:25:48.620331Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
