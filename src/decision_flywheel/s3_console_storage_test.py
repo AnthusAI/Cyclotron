@@ -425,3 +425,109 @@ def test_v1_console_migrates_without_inventing_job_actors():
     assert j.read().value["schema"] == "cyclotron-s3-console/v2"
     assert j.read().value["actors"] == {}
     assert s.run(run["id"])["name"] == "Local import"
+
+
+def cached_store(client=None, cache=None, **options):
+    from .catalog_snapshot_cache import CatalogSnapshotCache
+    from .s3_console_storage import S3ConsoleStorage
+
+    j = journal(client, name="console")
+    result = S3ConsoleStorage(j, max_records=10000, snapshot_cache=cache or CatalogSnapshotCache(), **options)
+    result.initialize()
+    return result
+
+
+def catalog_payload_gets(client, since):
+    return [r["Key"] for kind, r in client.calls[since:] if kind == "get" and not r["Key"].endswith(("head.json", "anchor.json"))]
+
+
+def test_it_reuses_a_decoded_catalog_while_the_head_is_unchanged_and_reloads_when_it_moves():
+    from .catalog_snapshot_cache import CatalogSnapshotCache
+
+    cache = CatalogSnapshotCache()
+    writer = cached_store(cache=cache)
+    seed(writer)
+    client = writer.journal.payloads.client
+    reader = cached_store(client, cache)
+    reader.item_lists()
+    mark = len(client.calls)
+    reader.item_lists()
+    reader.item_lists()
+    assert catalog_payload_gets(client, mark) == []
+    assert sum(1 for kind, r in client.calls[mark:] if kind == "get" and r["Key"].endswith("head.json")) == 2
+    writer.save_item_list("more", "More")
+    mark = len(client.calls)
+    assert {row["id"] for row in reader.item_lists()} == {"papers", "more"}
+    assert len(catalog_payload_gets(client, mark)) == 1
+
+
+def test_it_logs_a_catalog_read_phase_with_cache_hit_or_miss():
+    phases = []
+    s = cached_store(phase_log=lambda phase, started, **fields: phases.append((phase, fields["cache"])))
+    s.item_lists()
+    s.item_lists()
+    assert phases[-2:] == [("catalog_read", "miss"), ("catalog_read", "hit")]
+
+
+def test_a_write_after_a_cached_read_still_conflicts_correctly_on_a_moved_head():
+    from .storage_errors import StorageConflict
+
+    s = cached_store()
+    seed(s)
+    client = s.journal.payloads.client
+    rival = cached_store(client)
+    s.item_lists()
+    stale = s._record()
+    rival.save_item_list("rival", "Rival")
+    with pytest.raises(StorageConflict):
+        s.journal.commit(stale, {**stale.value, "claims": {}})
+    s.save_item_list("mine", "Mine")
+    assert {row["id"] for row in s.item_lists()} == {"papers", "rival", "mine"}
+
+
+def test_a_write_never_alters_the_cached_snapshot_it_started_from():
+    from copy import deepcopy
+
+    s = cached_store()
+    seed(s)
+    before = s._record()
+    frozen = deepcopy(before.value)
+    s.save_item_list("more", "More")
+    assert before.value == frozen
+    assert s.export_storage() is not s.export_storage()
+    exported = s.export_storage()
+    exported["tables"]["item_lists"].clear()
+    assert {row["id"] for row in s.item_lists()} == {"papers", "more"}
+
+
+def test_one_request_reads_the_catalog_once_across_resolvers_until_its_own_write():
+    from .catalog_snapshot_cache import CatalogSnapshotCache
+
+    writer = cached_store()
+    seed(writer)
+    client = writer.journal.payloads.client
+    request = cached_store(client, CatalogSnapshotCache(), reuse_reads_within_request=True)
+    mark = len(client.calls)
+    for _ in range(7):
+        request.item_lists()
+    assert len(catalog_payload_gets(client, mark)) == 1
+    heads = [r for kind, r in client.calls[mark:] if kind == "get" and r["Key"].endswith("head.json")]
+    assert len(heads) == 1
+    request.save_item_list("later", "Later")
+    assert "later" in {row["id"] for row in request.item_lists()}
+    request.release_request_snapshot()
+    writer.save_item_list("outside", "Outside")
+    assert "outside" in {row["id"] for row in request.item_lists()}
+
+
+def test_initializing_an_existing_catalog_without_verification_spends_only_the_anchor_read():
+    s = cached_store()
+    seed(s)
+    client = s.journal.payloads.client
+    from .s3_console_storage import S3ConsoleStorage
+
+    reopened = S3ConsoleStorage(journal(client, name="console"), max_records=10000)
+    mark = len(client.calls)
+    reopened.initialize(verify_existing=False)
+    keys = [r["Key"] for kind, r in client.calls[mark:] if kind == "get"]
+    assert len(keys) == 1 and keys[0].endswith("anchor.json")

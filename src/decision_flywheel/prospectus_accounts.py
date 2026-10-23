@@ -15,6 +15,21 @@ from uuid import UUID
 account_request_id = ContextVar("account_request_id", default=None)
 
 
+def log_console_phase(phase, started, **fields):
+    """One structured timing line per phase; callers pass only non-secret descriptors."""
+    print(
+        json.dumps(
+            {
+                "event": "console_phase",
+                "requestId": account_request_id.get(),
+                "phase": phase,
+                **fields,
+                "durationMs": round((time.monotonic() - started) * 1000),
+            }
+        )
+    )
+
+
 class AccountAccessDenied(Exception):
     """Central authorization failed; never fall back to the local workspace."""
 
@@ -245,7 +260,9 @@ class AccountWorkspaceAccess:
         import asyncio
 
         try:
-            await asyncio.to_thread(self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation)
+            await asyncio.to_thread(
+                self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation
+            )
         except Exception as error:
             return error
         return None
@@ -294,6 +311,8 @@ class AccountWorkspaceAccess:
             if prefetched[1] is not None:
                 raise prefetched[1]
         else:
-            await asyncio.to_thread(self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation)
+            await asyncio.to_thread(
+                self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation
+            )
         workspace = await asyncio.to_thread(self.workspace_for_account, session.account_id)
         return replace(workspace, account_id=session.account_id, request_session=session)
