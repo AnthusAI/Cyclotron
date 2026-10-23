@@ -212,6 +212,12 @@ approval. Agents do not run these commands.**
 5. Review the change set (`aws cloudformation describe-change-set`). Reject anything that replaces or deletes a bucket, the KMS key, the API, a role or a queue; list and attach the review to the ticket. Buckets and the key are `Retain`.
 6. Get Ryan's explicit approval of that change set, then execute it. Afterwards re-run `scripts/dev/check_lab_template.sh --live`, probe the unauthenticated API (expect 401/403), and refresh the snapshot in a follow-up commit.
 
+## Classifier criteria
+
+The lab classifiers' questions live in `infra/lab/criteria/` (question, labels, doctrine source, editor approval, previous
+text) and are applied to the catalog by `scripts/dev/lab_criteria.py`. See `criteria-runbook.md` for the reviewed change to the
+live standing run. `scripts/dev/lab_criteria.py plan` is read-only; `tests/test_lab_criteria.py` proves the committed files are what a deploy applies.
+
 ## Record-lake cutover
 
 Moves the lab from "history embedded in each journal" to the record lake (docs/s3-cloud-storage.md, "Record

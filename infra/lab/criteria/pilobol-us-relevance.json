@@ -1,0 +1,34 @@
+{
+  "schema": "cyclotron-lab-criteria/v1",
+  "classifier": {
+    "id": "pilobol-us-relevance",
+    "name": "Pilobolus relevance"
+  },
+  "labels": [
+    {
+      "label": "include",
+      "role": "positive"
+    },
+    {
+      "label": "exclude",
+      "role": "negative"
+    }
+  ],
+  "rubric": "",
+  "previous": null,
+  "question": "Should this source become a reference for Pilobolus, which tells strange, checkable stories about what happens as AI and machine-learning systems slowly take over ordinary life, for general readers who have never followed the technology? Include a source about something that actually happened to real people or in a real place, where the outcome is creeping or uncanny: a copy starting to feel more real than the thing it copies (feeds, bots, synthetic voices and faces, automated advice or companionship), an old human failure mode that AI speeds up and amplifies, or a gap between how fast attackers or opportunists adapt and how fast institutions can respond. It must offer one vivid example a reader could picture and verify, with a primary source behind it (the page itself, a filing, a recording, a named person). Exclude: product or model launches, benchmarks, funding and acquisition news, tools and tutorials, security advisories and vulnerability reports (unless the victim's strange story is the point), policy explainers and \"experts say\" commentary, predictions with no real case, and ordinary stories of someone fooled by a fake.",
+  "doctrine": {
+    "summary": "Approved Pilobolus mission (saved 2026-10-23 with Ryan's approval; no policy record yet). Illustrative accept/reject shapes from the unadopted draft criteria in shipped-handover-20261022/pilobolus-mission-draft.md sections 3-4 informed the wording only.",
+    "sources": [
+      {
+        "kind": "production-records",
+        "note": "Pilobolus newsroom backend (papyrus-production, AppSync 2tvll2u5ejafbmawb3v2sdonvi): Item item-editorial-doctrine-mission-v1"
+      }
+    ]
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-23"
+  }
+}
