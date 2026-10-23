@@ -27,10 +27,12 @@ import {MobileNavigation} from './MobileNavigation'
 import {navigationItems} from './navigation'
 export {TraceDetail} from './TraceDetail'
 
-type Run={cyclotronId?:string|null;labelingAccess?:{allowed:boolean;reason:string|null};id:string;name:string;mode:string;status:string;createdAt:string;config:{input_mode?:string;cyclotron_id?:string;selection_policy?:{primary:string;secondary?:string};max_requests?:number;backfill_count?:number;classifiers?:MetricClassifier[]};counts:{cycles:number;predictions:number;labels:number;optimizations:number}}
+type Run={cyclotronId?:string|null;eventCursor?:number;labelingAccess?:{allowed:boolean;reason:string|null};id:string;name:string;mode:string;status:string;createdAt:string;config:{input_mode?:string;cyclotron_id?:string;selection_policy?:{primary:string;secondary?:string};max_requests?:number;backfill_count?:number;classifiers?:MetricClassifier[]};counts:{cycles:number;predictions:number;labels:number;optimizations:number}}
 type Job={id:string;kind:string;status:string;result:Record<string,unknown>|null}
 const RUNS='{runs{id name mode status createdAt config counts cyclotronId} capabilities{liveEnabled itemCount}}'
-const DETAILS='query($id:ID!){run(runId:$id){id name mode status createdAt config counts labelingAccess cyclotronId} currentItem(runId:$id) jobs(runId:$id){id kind status result}}'
+const DETAILS_POLL_INTERVAL_MS=4000
+const DETAILS_POLL_BACKOFF_CAP_MS=30000
+const DETAILS='query($id:ID!){run(runId:$id){id name mode status createdAt config counts labelingAccess cyclotronId eventCursor} currentItem(runId:$id) jobs(runId:$id){id kind status result}}'
 const locationState=()=>new URLSearchParams(window.location.hash.slice(1))
 const routeSection=()=>{const value=locationState().get('section');return value==='classifiers'||value==='cyclotrons'?'cyclotrons':value==='items'?'items':'optimizations'}
 function LabelCard(props:{current:CurrentItem;busy:boolean;readOnly?:boolean;onSubmit:(kind:string,payload:Record<string,unknown>)=>void;classifiers?:MetricClassifier[];events?:TraceEvent[];footer?:ReactNode}){
@@ -126,11 +128,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
     let cancelled=false,unsubscribe:(()=>void)|undefined
     setRun(null);setEvents([]);setDetail(null);setCurrent(null);setJobs([]);setStream('Connecting')
     const load=async()=>{
-      if(view==='timeline'){
-        const result=await graphql<{run:{eventCursor:number}}>('query($id:ID!){run(runId:$id){eventCursor}}',{id:selected})
-        if(!cancelled)unsubscribe=subscribeEvents(selected,result.run?.eventCursor??0,event=>setEvents(previous=>[...previous,event]),setStream)
-        return
-      }
+      if(view==='timeline')return
       let cursor=0
       const collected:TraceEvent[]=[]
       while(!cancelled){
@@ -143,12 +141,29 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
       unsubscribe=subscribeEvents(selected,cursor,event=>setEvents(previous=>[...previous,event]),setStream)
     }
     load().catch(e=>{if(!cancelled)setError(e.message)})
-    const state=async()=>{
+    let pollTimer:ReturnType<typeof setTimeout>|undefined,inFlight=false,consecutiveFailures=0
+    const schedulePoll=(delay:number)=>{clearTimeout(pollTimer);if(!cancelled)pollTimer=setTimeout(pollDetails,delay)}
+    const pollDetails=async()=>{
+      if(cancelled||inFlight||document.hidden)return
+      inFlight=true
+      let nextDelay=DETAILS_POLL_INTERVAL_MS
       try{const result=await graphql<{run:Run;currentItem:CurrentItem|null;jobs:Job[]}>(DETAILS,{id:selected})
-        if(!cancelled){setRun(result.run);setCurrent(result.currentItem);setJobs(result.jobs)}}catch(e){if(!cancelled)setError((e as Error).message)}
+        if(!cancelled){
+          setRun(result.run);setCurrent(result.currentItem);setJobs(result.jobs)
+          if(view==='timeline'&&!unsubscribe)unsubscribe=subscribeEvents(selected,result.run?.eventCursor??0,event=>setEvents(previous=>[...previous,event]),setStream)
+        }
+        consecutiveFailures=0
+      }catch(e){
+        consecutiveFailures+=1
+        nextDelay=Math.min(DETAILS_POLL_INTERVAL_MS*2**consecutiveFailures,DETAILS_POLL_BACKOFF_CAP_MS)
+        if(!cancelled)setError((e as Error).message)
+      }finally{inFlight=false}
+      schedulePoll(nextDelay)
     }
-    state();const timer=setInterval(state,1000)
-    return ()=>{cancelled=true;unsubscribe?.();clearInterval(timer)}
+    const resumeWhenVisible=()=>{if(!document.hidden&&!inFlight){clearTimeout(pollTimer);void pollDetails()}}
+    document.addEventListener('visibilitychange',resumeWhenVisible)
+    void pollDetails()
+    return ()=>{cancelled=true;unsubscribe?.();clearTimeout(pollTimer);document.removeEventListener('visibilitychange',resumeWhenVisible)}
   },[selected,section,view,setError,graphql,subscribeEvents])
   const submittedJob=jobs.find(job=>job.id===submission?.jobId)
   const awaitingLabels=submission?.runId===selected&&!submission.unconfirmed&&
@@ -207,7 +222,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
         <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
         {timelineClassifiers?.length?<div className="flex items-center gap-2"><Label htmlFor="timeline-classifier" className="text-xs">Inspect classifier</Label><NativeSelect id="timeline-classifier" size="sm" value={resolvedTimelineClassifier} onChange={event=>setTimelineClassifier(event.target.value)}>{timelineClassifiers.map(classifier=><NativeSelectOption key={classifier.id} value={classifier.id}>{classifier.name}</NativeSelectOption>)}</NativeSelect></div>:null}
         {run.config.input_mode==='replay'?<ReplayControls key={run.id} busy={busy} readOnly={run.labelingAccess?.allowed===false} finished={jobs[0]?.result?.finished===true} failed={jobs[0]?.status==='failed'||jobs[0]?.status==='interrupted'} onAdvance={()=>submit('replay-next')} />:null}
-        <CyclotronVersions runId={run.id} busy={busy} onSelect={id=>{setSelected(id);setView('label')}} />
+        {run.cyclotronId??run.config.cyclotron_id?<CyclotronVersions runId={run.id} busy={busy} onSelect={id=>{setSelected(id);setView('label')}} />:null}
         {run.labelingAccess?.allowed===false?<p role="status" className="shrink-0 rounded-md border bg-muted px-3 py-2 text-sm">{run.labelingAccess.reason??'This run is read-only.'}</p>:null}
         {run.config.input_mode==='comparison'?<ComparisonResume key={`${run.id}:${jobs[0]?.id}`} runId={run.id} ceiling={run.config.max_requests??400} busy={busy} enabled={capabilities.liveEnabled} status={jobs[0]?.status??run.status} />:null}
         <Button variant="outline" size="sm" disabled={!capabilities.liveEnabled||busy} onClick={()=>setComparisonOpen(true)}>Compare runs</Button>
