@@ -92,6 +92,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
   const invalidTimelineClassifier=!!timelineClassifiers&&!!timelineClassifier&&!timelineClassifiers.some(classifier=>classifier.id===timelineClassifier)
   const resolvedTimelineClassifier=timelineClassifiers?.find(classifier=>classifier.id===timelineClassifier)?.id??timelineClassifiers?.[0]?.id??''
   const firstRoute=useRef(true)
+  const refreshDetails=useRef<()=>void>(()=>{})
   useEffect(()=>{
     const restore=()=>{const route=locationState();setSection(routeSection());setSelected(route.get('run')??'');setView(route.get('view')==='label'?'label':'timeline');setTimelineClassifier(route.get('classifier')??'')}
     window.addEventListener('popstate',restore);window.addEventListener('hashchange',restore)
@@ -141,7 +142,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
       unsubscribe=subscribeEvents(selected,cursor,event=>setEvents(previous=>[...previous,event]),setStream)
     }
     load().catch(e=>{if(!cancelled)setError(e.message)})
-    let pollTimer:ReturnType<typeof setTimeout>|undefined,inFlight=false,consecutiveFailures=0
+    let pollTimer:ReturnType<typeof setTimeout>|undefined,inFlight=false,dirty=false,consecutiveFailures=0
     const schedulePoll=(delay:number)=>{clearTimeout(pollTimer);if(!cancelled)pollTimer=setTimeout(pollDetails,delay)}
     const pollDetails=async()=>{
       if(cancelled||inFlight||document.hidden)return
@@ -158,12 +159,14 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
         nextDelay=Math.min(DETAILS_POLL_INTERVAL_MS*2**consecutiveFailures,DETAILS_POLL_BACKOFF_CAP_MS)
         if(!cancelled)setError((e as Error).message)
       }finally{inFlight=false}
+      if(dirty){dirty=false;nextDelay=0}
       schedulePoll(nextDelay)
     }
     const resumeWhenVisible=()=>{if(!document.hidden&&!inFlight){clearTimeout(pollTimer);void pollDetails()}}
+    refreshDetails.current=()=>{if(cancelled)return;if(inFlight){dirty=true;return}clearTimeout(pollTimer);void pollDetails()}
     document.addEventListener('visibilitychange',resumeWhenVisible)
     void pollDetails()
-    return ()=>{cancelled=true;unsubscribe?.();clearTimeout(pollTimer);document.removeEventListener('visibilitychange',resumeWhenVisible)}
+    return ()=>{cancelled=true;refreshDetails.current=()=>{};unsubscribe?.();clearTimeout(pollTimer);document.removeEventListener('visibilitychange',resumeWhenVisible)}
   },[selected,section,view,setError,graphql,subscribeEvents])
   const submittedJob=jobs.find(job=>job.id===submission?.jobId)
   const awaitingLabels=submission?.runId===selected&&!submission.unconfirmed&&
@@ -183,6 +186,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
       setJobs(previous=>[result.submitCommand,...previous])
       if(kind==='label')setSubmission(previous=>previous?{...previous,jobId:result.submitCommand.id}:null)
       if(kind==='skip')setCurrent(null)
+      refreshDetails.current()
       return result.submitCommand
     }catch(e){setError((e as Error).message);if(kind==='label')setSubmission(previous=>previous?{...previous,unconfirmed:true}:null);return null}finally{setSending(false)}
   }
@@ -190,6 +194,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
     setSending(true);setError('')
     try{const result=await graphql<{resumeFeedbackCommand:Job}>('mutation($id:ID!,$job:ID!){resumeFeedbackCommand(runId:$id,jobId:$job){id kind status result}}',{id:selected,job:jobId})
       setJobs(previous=>[result.resumeFeedbackCommand,...previous.filter(job=>job.id!==jobId)])
+      refreshDetails.current()
       return result.resumeFeedbackCommand
     }catch(e){setError((e as Error).message);return null}finally{setSending(false)}
   }
@@ -224,7 +229,7 @@ export function WebApp({embedded=false}:{embedded?:boolean}={}){
         {run.config.input_mode==='replay'?<ReplayControls key={run.id} busy={busy} readOnly={run.labelingAccess?.allowed===false} finished={jobs[0]?.result?.finished===true} failed={jobs[0]?.status==='failed'||jobs[0]?.status==='interrupted'} onAdvance={()=>submit('replay-next')} />:null}
         {run.cyclotronId??run.config.cyclotron_id?<CyclotronVersions runId={run.id} busy={busy} onSelect={id=>{setSelected(id);setView('label')}} />:null}
         {run.labelingAccess?.allowed===false?<p role="status" className="shrink-0 rounded-md border bg-muted px-3 py-2 text-sm">{run.labelingAccess.reason??'This run is read-only.'}</p>:null}
-        {run.config.input_mode==='comparison'?<ComparisonResume key={`${run.id}:${jobs[0]?.id}`} runId={run.id} ceiling={run.config.max_requests??400} busy={busy} enabled={capabilities.liveEnabled} status={jobs[0]?.status??run.status} />:null}
+        {run.config.input_mode==='comparison'?<ComparisonResume key={`${run.id}:${jobs[0]?.id}`} runId={run.id} ceiling={run.config.max_requests??400} busy={busy} enabled={capabilities.liveEnabled} status={jobs[0]?.status??run.status} onChanged={()=>refreshDetails.current()} />:null}
         <Button variant="outline" size="sm" disabled={!capabilities.liveEnabled||busy} onClick={()=>setComparisonOpen(true)}>Compare runs</Button>
         {view==='timeline'?<Button variant="outline" size="sm" onClick={()=>setRevision(events.at(-1)?.sequence??0)}><RefreshCw />Load latest events</Button>:null}
         </div>
