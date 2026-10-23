@@ -3,7 +3,7 @@
   "title": "Lab transformer C5: Editor approval record for lab criteria",
   "description": "Record, per classifier question, its source (doctrine file/commit) and editor-approval status; criteria text kept in version control.\nAcceptance: source and approval status persisted and auditable per question; criteria text in version control.\n\nSize: S\nDependencies: none (precedes lab criteria sign-off)\nEpic: Lab is the single classifier per publication (decision-flywheel-1b8b860d). Related: hosted curation epic decision-flywheel-1da33407.\n\nApproved by Ryan 2026-10-22; AWS changes need his explicit approval.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -29,10 +29,17 @@
         "model": "Claude Sonnet 5.5",
         "name": "Claude"
       }
+    },
+    {
+      "id": "2fbef33c-26b4-4c88-aab7-ac27e4232bdd",
+      "author": "home",
+      "text": "Criteria migration status 2026-10-23 (at the pause).\n- Done: PR #98 merged with data-parade-relevance and pilobol-us-relevance added (Ryan approved); format fix #114.\n- Step 2 APPLIED: anth-us, p-apyr-us and threat-intelligence r2; data-parade and pilobol-us r1; definition shared-source-relevance-r2 r1. A plan run now shows everything current. The old run keeps deciding; its priming is paused.\n- Router: STILL PAUSED (enabled=false). Re-enabling failed because the papyrus-production SSO had expired. Fix: seed_router_config.py --table papyrus-monitoring-MonitoringTable-1NCV9HR8I48UC --monitor-id hn --set enabled=true\n- Remaining:\n  - Step 3: bootstrap the successor run. Needs Ryan's lab browser session; currently blocked by lab throttling until v0.35.0 deploys or the AWS quota rises.\n  - Step 4: PublicationTargets change set. Five bindings at rev 2, drop pendingOutputs. Ryan picks the request ceiling: 118 carried over or a fresh 300.\n  - Step 5: relabel the 37 priming items.\n  - Step 6: router config. Set runId and bindingRevision 2, and add pilobol-us.\n- Rollback copies are in the session scratchpad migration/.\n- Router grants for Data Parade (11:13Z) and Pilobolus (11:31Z) are live.",
+      "created_at": "2026-10-23T13:26:28.791760Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-22T01:54:44.418629Z",
-  "updated_at": "2026-10-22T02:14:45.546785Z",
+  "updated_at": "2026-10-23T13:26:28.813349Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,
