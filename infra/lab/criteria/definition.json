@@ -2,9 +2,18 @@
   "schema": "cyclotron-lab-definition/v1",
   "id": "shared-source-relevance-r2",
   "name": "Shared source relevance",
-  "description": "One shared screen of each discovered source against Anth.us, p.apyr.us, Threat Intelligence and Data Parade.",
-  "draft_description": "Draft. One shared screen of each discovered source against Anth.us, p.apyr.us, Threat Intelligence and Data Parade. Criteria are drafts awaiting editor approval.",
-  "order": ["anth-us-relevance", "p-apyr-us-relevance", "threat-intelligence-relevance", "data-parade-relevance"],
-  "settings_from": {"id": "shared-source-relevance", "revision": 1},
+  "description": "One shared screen of each discovered source against Anth.us, p.apyr.us, Threat Intelligence, Data Parade and Pilobolus.",
+  "draft_description": "Draft. One shared screen of each discovered source against Anth.us, p.apyr.us, Threat Intelligence, Data Parade and Pilobolus. Criteria are drafts awaiting editor approval.",
+  "order": [
+    "anth-us-relevance",
+    "p-apyr-us-relevance",
+    "threat-intelligence-relevance",
+    "data-parade-relevance",
+    "pilobol-us-relevance"
+  ],
+  "settings_from": {
+    "id": "shared-source-relevance",
+    "revision": 1
+  },
   "supersedes": "shared-source-relevance"
 }
