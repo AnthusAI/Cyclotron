@@ -5,6 +5,7 @@ from hashlib import sha256
 import hmac
 from ipaddress import ip_address
 import json
+import time
 from pathlib import Path
 from typing import AsyncGenerator, Mapping
 from urllib.parse import urlsplit
@@ -445,6 +446,8 @@ class AccountAuthorization(SchemaExtension):
         if access:
             operation = 'console:write' if self.execution_context.operation_type.value == 'mutation' else 'console:read'
             workspace = await access(context['connection'], operation)
+            if self.execution_context.operation_type.value == 'subscription' and hasattr(workspace.store, 'release_request_snapshot'):
+                workspace.store.release_request_snapshot()
             context.update(store=workspace.store, service=workspace.service, account_id=workspace.account_id,
                            verified_session=getattr(workspace,"request_session",None))
             if getattr(workspace,"priming",None) is not None:
@@ -531,6 +534,15 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
 
     @app.middleware('http')
     async def protect(request, next_handler):
+        started = time.monotonic()
+        response = await protect_request(request, next_handler)
+        if account_access:
+            from .prospectus_accounts import log_console_phase
+            route = getattr(request.scope.get('route'), 'path', None) or 'unmatched'
+            log_console_phase('request', started, route=route, method=request.method, status=response.status_code)
+        return response
+
+    async def protect_request(request, next_handler):
         if request.url.path.startswith(('/graphql','/runs/')):
             if not same_origin(request):
                 return JSONResponse({'error':'cross-origin access refused'}, status_code=403)

@@ -15,6 +15,21 @@ from uuid import UUID
 account_request_id = ContextVar("account_request_id", default=None)
 
 
+def log_console_phase(phase, started, **fields):
+    """One structured timing line per phase; callers pass only non-secret descriptors."""
+    print(
+        json.dumps(
+            {
+                "event": "console_phase",
+                "requestId": account_request_id.get(),
+                "phase": phase,
+                **fields,
+                "durationMs": round((time.monotonic() - started) * 1000),
+            }
+        )
+    )
+
+
 class AccountAccessDenied(Exception):
     """Central authorization failed; never fall back to the local workspace."""
 
@@ -223,20 +238,81 @@ class AccountWorkspaceAccess:
     never a browser-supplied SQLite path. Neither callback persists memberships.
     """
 
-    def __init__(self, accounts, resolve_session, workspace_for_account):
+    def __init__(self, accounts, resolve_session, workspace_for_account, *, resolve_session_pending=None):
         self.accounts = accounts
         self.resolve_session = resolve_session
+        self.resolve_session_pending = resolve_session_pending
         self.workspace_for_account = workspace_for_account
 
-    async def authenticated(self, connection):
-        return isinstance(await self.resolve_session(connection), VerifiedAccountSession)
+    @staticmethod
+    def _request_scratch(connection):
+        """Per-HTTP-request memory only; a long-lived websocket never gets one, so it re-proves access every time."""
+        scope = getattr(connection, "scope", None)
+        if not isinstance(scope, dict) or scope.get("type") != "http":
+            return None
+        scratch = getattr(connection.state, "_cyclotron_access_scratch", None)
+        if scratch is None:
+            scratch = {}
+            connection.state._cyclotron_access_scratch = scratch
+        return scratch
 
-    async def __call__(self, connection, operation):
-        session = await self.resolve_session(connection)
-        if not isinstance(session, VerifiedAccountSession):
-            raise AccountAccessDenied("verified session required")
+    async def _authorization_outcome(self, session, operation):
         import asyncio
 
-        await asyncio.to_thread(self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation)
+        try:
+            await asyncio.to_thread(
+                self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation
+            )
+        except Exception as error:
+            return error
+        return None
+
+    async def _resolve(self, connection, prefetch_operation):
+        """Resolve the session once per request; overlap the person check with this request's authorization."""
+        import asyncio
+
+        remembered = self._request_scratch(connection)
+        memory = remembered if remembered is not None else {}
+        if "session" in memory:
+            return memory["session"], memory
+        if self.resolve_session_pending is None:
+            session = await self.resolve_session(connection)
+        else:
+            session, confirm_person = await self.resolve_session_pending(connection)
+            if confirm_person is not None and prefetch_operation is None:
+                if not await confirm_person():
+                    session = None
+            elif confirm_person is not None:
+                confirmed, outcome = await asyncio.gather(
+                    confirm_person(), self._authorization_outcome(session, prefetch_operation), return_exceptions=True
+                )
+                if isinstance(confirmed, BaseException):
+                    raise confirmed
+                if not confirmed:
+                    session = None
+                else:
+                    memory["authorization"] = (prefetch_operation, outcome)
+        memory["session"] = session
+        return session, memory
+
+    async def authenticated(self, connection):
+        prefetch = "console:read" if self._request_scratch(connection) is not None else None
+        session, _ = await self._resolve(connection, prefetch)
+        return isinstance(session, VerifiedAccountSession)
+
+    async def __call__(self, connection, operation):
+        import asyncio
+
+        session, memory = await self._resolve(connection, operation)
+        if not isinstance(session, VerifiedAccountSession):
+            raise AccountAccessDenied("verified session required")
+        prefetched = memory.pop("authorization", None)
+        if prefetched is not None and prefetched[0] == operation:
+            if prefetched[1] is not None:
+                raise prefetched[1]
+        else:
+            await asyncio.to_thread(
+                self.accounts.authorize, session.access_token, session.account_id, session.person_id, operation
+            )
         workspace = await asyncio.to_thread(self.workspace_for_account, session.account_id)
         return replace(workspace, account_id=session.account_id, request_session=session)

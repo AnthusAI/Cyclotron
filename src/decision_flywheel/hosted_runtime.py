@@ -19,6 +19,8 @@ from .s3_journal import S3Journal,encode,uuid
 from .storage_payloads import S3Payloads
 from .s3_sessions import S3OAuthSessions,KMSSessionCipher
 from .record_lake import S3RecordLake
+from .catalog_snapshot_cache import CatalogSnapshotCache
+from .prospectus_accounts import log_console_phase
 from .s3_console_storage import RESULTS_DOMAIN, RESULTS_KIND, S3ConsoleStorage
 from .s3_workspace_storage import S3WorkspaceStores
 from .hosted_console_service import HostedConsoleService
@@ -114,6 +116,7 @@ class HostedRuntime:
             if sqs is None:raise ValueError('explicit queue client required')
             def send(message):return sqs.send_message(QueueUrl=config.queue_url,MessageBody=json.dumps(message,separators=(',',':')))
         self.send=send
+        self.catalog_cache=CatalogSnapshotCache()
 
     def _journal(self,bucket,scope,domain,name):
         payloads=S3Payloads(self.s3,bucket,self.config.account,scope,max_bytes=self.config.max_bytes)
@@ -123,12 +126,13 @@ class HostedRuntime:
     def journal(self,account_id,domain,name):
         uuid(account_id)
         return self._journal(self.config.books_bucket,StorageScope(account_id,'console'),domain,name)
-    def console(self,account_id,*,initialize=False):
+    def console(self,account_id,*,initialize=False,request=False):
         journal=self.journal(account_id,'console','catalog')
         # Completed job results are write-once records under <account>/console/records/, not catalog rows.
         results=S3RecordLake(journal.payloads,RESULTS_DOMAIN,RESULTS_KIND,max_record_bytes=self.config.max_bytes)
-        store=S3ConsoleStorage(journal,max_records=self.config.max_records,results=results)
-        if initialize:store.initialize()
+        store=S3ConsoleStorage(journal,max_records=self.config.max_records,results=results,snapshot_cache=self.catalog_cache,
+            reuse_reads_within_request=request,phase_log=log_console_phase)
+        if initialize:store.initialize(verify_existing=False)
         return store
     def binding(self,account_id,run_id):
         uuid(run_id)
@@ -136,7 +140,7 @@ class HostedRuntime:
         return sha256(encode({'account':account_id,'workspace':'console','run':run_id,'config':run['config']})).hexdigest()
     def workspace(self,account_id):
         from .priming import PrimingService
-        store=self.console(account_id,initialize=True)
+        store=self.console(account_id,initialize=True,request=True)
         # Pure file priming is supported. No transformer/provider is inferred.
         priming=PrimingService(store,storage=store,client=_NoTransformerClient())
         service=HostedConsoleService(account_id,store,self.authorization,self.send,allow_live=self.config.allow_live,

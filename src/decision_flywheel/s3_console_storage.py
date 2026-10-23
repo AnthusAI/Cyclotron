@@ -5,12 +5,14 @@ operations, not a SQL parser, own revisions, pins, feedback and command claims.
 """
 
 import json
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
+from threading import RLock
 from uuid import uuid4
 
 from .catalog_storage import encoded, timestamp
@@ -124,7 +126,17 @@ class ResultsConverted:
 
 
 class S3ConsoleStorage:
-    def __init__(self, journal, *, max_records, max_conflicts=8, results=None):
+    def __init__(
+        self,
+        journal,
+        *,
+        max_records,
+        max_conflicts=8,
+        results=None,
+        snapshot_cache=None,
+        reuse_reads_within_request=False,
+        phase_log=None,
+    ):
         if results is not None and (results.scope != getattr(journal, "boundary", (None,))[0] or results.name != RESULTS_LAKE):
             raise ValueError("job result lake must match the catalog scope and be console/job-results")
         if (
@@ -144,6 +156,19 @@ class S3ConsoleStorage:
         self._tx = ContextVar("s3_console_transaction", default=None)
         self._claim = ContextVar("s3_console_claim", default=None)
         self._granted = set()
+        # Optional per-process memory of decoded catalogs, revalidated by the head on every read.
+        self.snapshot_cache = snapshot_cache
+        # Request-scoped stores hand every read of one request the same snapshot, until this store writes.
+        self.reuse_reads_within_request = reuse_reads_within_request
+        self.phase_log = phase_log
+        self._request_snapshot = None
+        self._request_lock = RLock()
+
+    def release_request_snapshot(self):
+        """Stop reusing one snapshot, for a store that outlives a single request."""
+        with self._request_lock:
+            self.reuse_reads_within_request = False
+            self._request_snapshot = None
 
     def _validate(self, value):
         if (
@@ -200,14 +225,32 @@ class S3ConsoleStorage:
             return {**value, "schema": "cyclotron-s3-console/v2", "actors": {}}
         return value
 
-    def initialize(self):
-        self._validate(self._upgrade(self.journal.initialize(initial()).value))
+    def initialize(self, *, verify_existing=True):
+        if verify_existing:
+            self._validate(self._upgrade(self.journal.initialize(initial()).value))
+        else:
+            self.journal.initialize(initial(), read_existing=False)
+
+    def _load(self):
+        """The head's record: reused from memory when the head still names the cached snapshot."""
+        started = time.monotonic()
+        cache = self.snapshot_cache
+        known = cache.get(self.journal) if cache is not None else None
+        record = self.journal.read(known=known) if known is not None else self.journal.read()
+        reused = known is not None and record.value is known.value
+        if not reused:
+            record = replace(record, value=self._upgrade(record.value))
+            self._validate(record.value)
+            if cache is not None:
+                cache.put(self.journal, record)
+        if self.phase_log is not None:
+            self.phase_log("catalog_read", started, cache="hit" if reused else "miss")
+        return record
 
     def _record(self):
-        record = self.journal.read()
-        record = replace(record, value=self._upgrade(record.value))
-        self._validate(record.value)
-        return record
+        with self._request_lock:
+            self._request_snapshot = None
+        return self._load()
 
     def _check_claim(self, value):
         claim = self._claim.get()
@@ -226,7 +269,15 @@ class S3ConsoleStorage:
                 raise ValueError("worker mutation requires command-bound cloud store")
 
     def _read(self):
-        value = self._tx.get() if self._tx.get() is not None else self._record().value
+        if self._tx.get() is not None:
+            value = self._tx.get()
+        elif self.reuse_reads_within_request:
+            with self._request_lock:
+                if self._request_snapshot is None:
+                    self._request_snapshot = self._load().value
+                value = self._request_snapshot
+        else:
+            value = self._load().value
         self._check_claim(value)
         return value
 
@@ -317,8 +368,10 @@ class S3ConsoleStorage:
             # A portable snapshot is self-contained: results come back embedded.
             jobs = [{**r, "result": self._result_text(value, r)} for r in snapshot["tables"]["web_jobs"]]
             snapshot = {**snapshot, "tables": {**snapshot["tables"], "web_jobs": jobs}}
-        return validate_console(
-            snapshot, max_records=min(max_records, self.max_records), max_bytes=min(max_bytes, self.journal.max_bytes)
+        return deepcopy(
+            validate_console(
+                snapshot, max_records=min(max_records, self.max_records), max_bytes=min(max_bytes, self.journal.max_bytes)
+            )
         )
 
     def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):

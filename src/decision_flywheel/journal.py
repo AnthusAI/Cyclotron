@@ -9,7 +9,7 @@ permission.
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
@@ -168,7 +168,7 @@ class CanonicalJournal:
             raise JournalUnavailable("head exists without namespace anchor; operator reconciliation required")
         return False
 
-    def initialize(self, value):
+    def initialize(self, value, *, read_existing=True):
         # Explicit new namespace only. The immutable anchor makes a missing head
         # after a crash/deletion unavailable rather than silently resetting money.
         # A no-ListBucket principal cannot distinguish missing from forbidden GET.
@@ -177,7 +177,7 @@ class CanonicalJournal:
         existing = self._get(self.anchor_key, missing=True, creation_probe=self.create_only_initialization)
         if existing is not None:
             self.known_anchor = self._checked_anchor(existing[0])
-            return self.read()
+            return self.read() if read_existing else None
         if self._get(self.head_key, missing=True, creation_probe=self.create_only_initialization) is not None:
             raise JournalUnavailable("head exists without namespace anchor; operator reconciliation required")
         # Enforce size before creating a namespace that would need reconciliation.
@@ -193,7 +193,12 @@ class CanonicalJournal:
         etag = self._put(self.head_key, head)
         return JournalRecord(self.namespace, anchor, 1, commit_id, etag, reference, decode(encode(value)))
 
-    def read(self):
+    def read(self, known=None):
+        """Read the head, and the state it names unless ``known`` is that very state.
+
+        Transactions are content-addressed and immutable, so a record whose head fields match the live head
+        has the live value; only the head GET is spent, and the etag comes from that fresh GET.
+        """
         anchor = self._anchor()
         head, etag = self._get(self.head_key)
         try:
@@ -212,6 +217,15 @@ class CanonicalJournal:
             ref = PayloadRef(self.payloads.scope, head["state"]["digest"], head["state"]["length"])
             if ref.length > self.max_bytes:
                 raise ValueError()
+            if (
+                known is not None
+                and known.namespace == self.namespace
+                and known.anchor == anchor
+                and known.revision == head["revision"]
+                and known.commit_id == head["commit"]
+                and known.reference == ref
+            ):
+                return replace(known, etag=etag)
             transaction = decode(self.payloads.get(ref))
             if (
                 set(transaction) != {"schema", "namespace", "anchor", "revision", "commit", "parent", "value"}
