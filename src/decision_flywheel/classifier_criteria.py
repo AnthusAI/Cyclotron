@@ -161,7 +161,14 @@ def plan_classifiers(store, criteria) -> list[Step]:
             if item.approved and live["name"] == item.name and config == expected:
                 steps.append(Step("current", item.classifier_id, live["revision"]))
             else:
-                steps.append(Step("drift", item.classifier_id, live["revision"], "a classifier meant to be new already exists with other text"))
+                steps.append(
+                    Step(
+                        "drift",
+                        item.classifier_id,
+                        live["revision"],
+                        "a classifier meant to be new already exists with other text",
+                    )
+                )
         elif item.approved and live["name"] == item.name and config == expected:
             steps.append(Step("current", item.classifier_id, live["revision"]))
         elif {k: config.get(k) for k in ("classes", "question", "rubric")} == item.previous_config() and "criteria" not in config:
