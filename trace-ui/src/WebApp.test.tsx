@@ -624,3 +624,23 @@ test('backs off after a failed details request',async()=>{
     expect(detailsRequestCount()).toBe(3)
   }finally{vi.useRealTimers()}
 })
+
+test('refreshes the details right after a label is submitted',async()=>{
+  vi.useFakeTimers()
+  try{
+    window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+    const first={item:{id:'first',title:'First paper',abstract:'First abstract',submitted_at:'2026-10-06',categories:['cs.AI'],authors:'A. Author'},prediction:{label:'exclude',confidence:.8,presentation_id:'first-presentation'}}
+    const shown=first
+    vi.mocked(graphql).mockImplementation(async(query)=>{
+      if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
+      if(query.includes('events('))return {events:[]}
+      if(query.includes('submitCommand'))return {submitCommand:{id:'label-job',kind:'label',status:'running',result:null}}
+      return {run:live,currentItem:shown,jobs:[]}
+    })
+    render(<WebApp />)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(100)})
+    const beforeSubmit=detailsRequestCount()
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Include'}));await vi.advanceTimersByTimeAsync(100)})
+    expect(detailsRequestCount()).toBe(beforeSubmit+1)
+  }finally{vi.useRealTimers()}
+})
