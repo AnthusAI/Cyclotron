@@ -59,7 +59,7 @@ class Criteria:
     question: str
     doctrine: dict
     approval: dict
-    previous: dict
+    previous: dict | None  # None: a new classifier that does not exist in the catalog yet
 
     @property
     def approved(self) -> bool:
@@ -82,7 +82,13 @@ class Criteria:
             "criteria": self.provenance(),
         }
 
-    def previous_config(self) -> dict:
+    @property
+    def is_new(self) -> bool:
+        return self.previous is None
+
+    def previous_config(self) -> dict | None:
+        if self.previous is None:
+            return None
         return {
             "classes": [dict(row) for row in self.labels],
             "question": self.previous["question"],
@@ -94,7 +100,9 @@ def parse(document: object, path: str) -> Criteria:
     if not isinstance(document, Mapping) or document.get("schema") != SCHEMA:
         raise ValueError(f"{path}: not a {SCHEMA} document")
     classifier = document.get("classifier") or {}
-    previous = document.get("previous") or {}
+    previous = document.get("previous")
+    if previous is not None and not isinstance(previous, Mapping):
+        raise ValueError(f"{path}: previous must be an object or null")
     if not isinstance(document.get("labels"), list) or len(document["labels"]) < 2:
         raise ValueError(f"{path}: at least two labels required")
     criteria = Criteria(
@@ -106,11 +114,12 @@ def parse(document: object, path: str) -> Criteria:
         _text(document.get("question"), "question"),
         dict(document.get("doctrine") or {}),
         dict(document.get("approval") or {}),
-        dict(previous),
+        None if previous is None else dict(previous),
     )
-    if type(previous.get("revision")) is not int:
-        raise ValueError(f"{path}: previous revision required")
-    _text(previous.get("question"), "previous question")
+    if previous is not None:
+        if type(previous.get("revision")) is not int:
+            raise ValueError(f"{path}: previous revision required")
+        _text(previous.get("question"), "previous question")
     validate_provenance(criteria.provenance())
     if path.rsplit("/", 1)[-1] != f"{criteria.classifier_id}.json":
         raise ValueError(f"{path}: file name must be the classifier id")
@@ -148,7 +157,12 @@ def plan_classifiers(store, criteria) -> list[Step]:
             continue
         config = live["config"]
         expected = item.classifier_config()
-        if item.approved and live["name"] == item.name and config == expected:
+        if item.is_new:
+            if item.approved and live["name"] == item.name and config == expected:
+                steps.append(Step("current", item.classifier_id, live["revision"]))
+            else:
+                steps.append(Step("drift", item.classifier_id, live["revision"], "a classifier meant to be new already exists with other text"))
+        elif item.approved and live["name"] == item.name and config == expected:
             steps.append(Step("current", item.classifier_id, live["revision"]))
         elif {k: config.get(k) for k in ("classes", "question", "rubric")} == item.previous_config() and "criteria" not in config:
             if item.approved:

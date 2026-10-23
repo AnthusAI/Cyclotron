@@ -1,0 +1,34 @@
+{
+  "schema": "cyclotron-lab-criteria/v1",
+  "classifier": {
+    "id": "data-parade-relevance",
+    "name": "Data Parade relevance"
+  },
+  "labels": [
+    {
+      "label": "include",
+      "role": "positive"
+    },
+    {
+      "label": "exclude",
+      "role": "negative"
+    }
+  ],
+  "rubric": "",
+  "previous": null,
+  "question": "Should this source become a reference for Data Parade, which covers technology for shifting privacy and security left, for engineers who design and review systems that handle personal and sensitive data? Include a source that explains or evidences how data actually moves through a system and where privacy or security risk rides along with it, or a technique, tool or design practice that catches that risk at design time (dataflow tracing, data classification, privacy or threat modelling, analysis of data handling, architecture and configuration choices), and that leaves an engineer something specific to check in their own system. Prefer primary sources: code, dataflows, configuration, documentation, research, incident write-ups, the regulations' own text. Exclude: breach news with no lesson about how the system allowed it, vendor marketing, compliance checklists with no link to design decisions, and general AI or security stories with no bearing on how personal or sensitive data is handled.",
+  "doctrine": {
+    "summary": "Data Parade starter mission (filed 2026-10-22 at Ryan's request; first paragraph is Ryan's sentence verbatim; marked to be edited later). The six Data Parade judgment questions check its own drafts and were deliberately not used for relevance.",
+    "sources": [
+      {
+        "kind": "production-records",
+        "note": "Data Parade newsroom backend (papyrus-production, AppSync rgfkmmyyyrc7fb55qd5smbfrpm): Item item-editorial-doctrine-mission-v1, created 2026-10-22T10:30:06Z"
+      }
+    ]
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-23"
+  }
+}

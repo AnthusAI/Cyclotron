@@ -153,3 +153,50 @@ def test_a_file_must_be_named_for_its_classifier_and_carry_a_previous_revision()
     broken["previous"] = {"question": "Old?"}
     with pytest.raises(ValueError, match="previous revision"):
         parse(broken, "a-rel.json")
+
+
+def new_document(identifier="c-rel"):
+    return {**document(identifier), "previous": None}
+
+
+def test_a_new_classifier_is_saved_as_revision_one_when_the_catalog_has_none():
+    s, criteria = seeded()
+    new = parse(new_document(), "c-rel.json")
+    assert new.is_new and new.previous_config() is None
+    steps = plan_classifiers(s, [*criteria, new])
+    assert [(x.action, x.live_revision) for x in steps][-1] == ("save", None)
+    definition = plan_definition(s, [*criteria, new], steps, {**DEFINITION, "order": ["a-rel", "b-rel", "c-rel"]})
+    assert dict(definition.classifiers) == {"a-rel": 2, "b-rel": 2, "c-rel": 1}
+    apply_plan(s, [*criteria, new], steps, definition)
+    assert s.classifier("c-rel")["revision"] == 1
+
+
+def test_a_file_without_a_previous_key_is_also_a_new_classifier():
+    omitted = new_document()
+    del omitted["previous"]
+    assert parse(omitted, "c-rel.json").is_new
+
+
+def test_a_new_classifier_that_already_exists_with_other_text_is_drift():
+    s, criteria = seeded()
+    new = parse(new_document(), "c-rel.json")
+    s.save_classifier("c-rel", "C-REL", {"classes": LABELS, "question": "Edited by hand?", "rubric": ""})
+    steps = plan_classifiers(s, [*criteria, new])
+    assert (steps[-1].action, steps[-1].live_revision) == ("drift", 1)
+    assert plan_definition(s, [*criteria, new], steps, {**DEFINITION, "order": ["a-rel", "b-rel", "c-rel"]}).action == "blocked"
+
+
+def test_a_new_classifier_already_applied_is_current():
+    s, criteria = seeded()
+    new = parse(new_document(), "c-rel.json")
+    s.save_classifier("c-rel", new.name, new.classifier_config())
+    steps = plan_classifiers(s, [*criteria, new])
+    assert (steps[-1].action, steps[-1].live_revision) == ("current", 1)
+
+
+def test_a_pending_new_classifier_is_held_and_previous_must_be_an_object_or_null():
+    s, _ = seeded()
+    pending = parse({**new_document(), "approval": {"status": "pending", "note": "waiting"}}, "c-rel.json")
+    assert plan_classifiers(s, [pending])[0].action == "hold"
+    with pytest.raises(ValueError, match="previous must be"):
+        parse({**new_document(), "previous": "none"}, "c-rel.json")

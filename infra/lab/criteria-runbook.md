@@ -40,10 +40,11 @@ deployed, and the only stack change is the `PublicationTargets` parameter.
 4. **Bindings.** `PublicationTargets` bindings carry an opaque `revision` ("1"). A request with a
    different `bindingRevision` is refused (409 "publication binding changed"). The Papyrus router
    holds one `cyclotron.runId` and one `cyclotron.bindingRevision` for all publications
-   (`CONFIG#router`), so all four bindings (including the pending `data-parade`) move together.
+   (`CONFIG#router`), so all four bindings (including `data-parade`) move together.
    A publication cannot appear in two targets, so the old and new runs cannot both be live.
 5. **Router behaviour (Papyrus, `docs/monitoring-cloud.md`).** PARK and `criteria_pending` apply
-   only to `pendingOutputs` (today `data-parade-relevance`) and do not change. Any other 409,
+   only to `pendingOutputs`; with `data-parade-relevance` now a classifier the target declares none, and the
+   router's `PARK#data-parade` clears on its next probe. Any other 409,
    including a stale binding, stops the sweep cleanly; items stay where they were and nothing is
    re-sent. A POST is never repeated. So a mismatch between router config and lab fails closed.
 6. **Decisions already made** stay where they are: the old run's jobs and engine store, catalog
@@ -65,11 +66,12 @@ append-only (the books bucket is versioned), so nothing below is deleted; new re
 being referenced.
 
 **0. Prepare (no writes).** Merge the criteria PR. Run
-`AWS_PROFILE=cyclotron-production CYCLOTRON_LAB_ACCOUNT_ID=<LAB_ACCOUNT_ID> python scripts/dev/lab_criteria.py plan`: expect `save` for the three
-classifiers and `define shared-source-relevance-r2` (revisions 2/2/2), and no `drift`. Save the
+`AWS_PROFILE=cyclotron-production CYCLOTRON_LAB_ACCOUNT_ID=<LAB_ACCOUNT_ID> python scripts/dev/lab_criteria.py plan`: expect `save` for the four
+classifiers (anth-us, p-apyr-us and threat-intelligence at revision 2, `data-parade-relevance` new at revision 1)
+and `define shared-source-relevance-r2` (revisions 2/2/2/1), and no `drift`. Save the
 current stack parameter `PublicationTargets` (`aws cloudformation describe-stacks`, read-only) and the
 Papyrus `CONFIG#router` item as the rollback copies. Get the old run's request usage. Editors/Ryan: confirm who
-will relabel priming (11 `prime-p-apyr-us`, 12 `prime-threat-intelligence`, 14 `prime-anth-us`).
+will relabel priming (11 `prime-p-apyr-us`, 12 `prime-threat-intelligence`, 14 `prime-anth-us`; Data Parade has no priming list yet).
 Editors and router: no change. Rollback: nothing to undo.
 
 **1. Quiesce.** Set the Papyrus router `enabled: false`. Wait until the lab shows no `pending`/`running`
@@ -78,7 +80,7 @@ cleanly; unprocessed items stay `collected`. Verify with the read-only watch scr
 
 **2. Write the revisions.** `CYCLOTRON_LAB_ACCOUNT_ID=<LAB_ACCOUNT_ID> python scripts/dev/lab_criteria.py apply --apply --approved-by "<who approved running it>"`
 (or the console `saveClassifier`/`saveCyclotronDefinition` as Ryan, from the same files). Writes three classifier
-revisions 2 and the successor definition `shared-source-relevance-r2` revision 1. Re-running is a no-op.
+revisions 2, the new `data-parade-relevance` revision 1, and the successor definition `shared-source-relevance-r2` revision 1. Re-running is a no-op.
 Effects: the old family `shared-source-relevance` rolls to definition revisions 2 to 4 (active), the old run's
 priming is paused (see above), nothing else. Verify: `plan` prints only `current`; the run
 `<OLD_RUN_ID>` config fingerprint is unchanged. Rollback: nothing is
@@ -87,8 +89,8 @@ accepts because its engine store is already primed.
 
 **3. Bootstrap the successor run** (data only, no provider call): `POST /publication-runs/bootstrap` as Ryan with
 `{"contractVersion":"cyclotron-publication/v1","requestId":"<new UUID>","name":"Standing Hacker News publication run (criteria r2)","config":{"cyclotron_id":"shared-source-relevance-r2","cyclotron_definition_revision":1,"item_list_id":"hn-operational"}}`.
-The receipt gives `runId`. Verify: the run's `classifiers` are the three revision 2 rows with
-`criteria.approval` (Ryan, 2026-10-22); `cyclotron_definition_revision` is 1; item count equals
+The receipt gives `runId`. Verify: the run's `classifiers` are the three revision 2 rows and `data-parade-relevance` revision 1, each with
+`criteria.approval` (Ryan, 2026-10-22; Data Parade 2026-10-23); `cyclotron_definition_revision` is 1; item count equals
 `hn-operational`. Retrying the same `requestId` returns the same run. Rollback: leave the run unreferenced.
 
 **4. Repoint the target (CloudFormation parameter only).** Change `PublicationTargets` to the JSON below, via a change
@@ -101,8 +103,7 @@ and nothing is replaced, get Ryan's approval, execute.
   "bindings":[{"publicationId":"anth-us","outputs":["anth-us-relevance"],"revision":"2","priming":{"listId":"prime-anth-us"}},
   {"publicationId":"p-apyr-us","outputs":["p-apyr-us-relevance"],"revision":"2","priming":{"listId":"prime-p-apyr-us"}},
   {"publicationId":"threat-intelligence","outputs":["threat-intelligence-relevance"],"revision":"2","priming":{"listId":"prime-threat-intelligence"}},
-  {"publicationId":"data-parade","outputs":["data-parade-relevance"],"revision":"2"}],
-  "pendingOutputs":["data-parade-relevance"]}]
+  {"publicationId":"data-parade","outputs":["data-parade-relevance"],"revision":"2"}]}]
 ```
 
 (Only p-apyr-us has `priming` today; adding it to the other two is optional and Ryan's call.) Effects: the old
@@ -120,10 +121,10 @@ so do it before step 6. Rollback: priming additions are recorded per store; aban
 **6. Repoint and re-enable the router.** Update `CONFIG#router` (`infra/monitoring/seed_router_config.py`):
 `cyclotron.runId=<NEW_RUN_ID>`, `cyclotron.bindingRevision="2"`; first one `mode: dry-run` sweep (request ids change, no
 Cyclotron call), then `live`. Verify the first receipts: `decision.bindingRevision` "2", expected labels on a few
-items you can judge, `waitingForClassifier` still only `data-parade`. Rollback: restore the saved router item and
+items you can judge, `waitingForClassifier` now empty (Data Parade has a classifier). Rollback: restore the saved router item and
 target parameter together; decisions already delivered stay delivered.
 
-**7. Clean up.** The successor definition carries no DRAFT marker (all three approved). Optionally give the old family a
+**7. Clean up.** The successor definition carries no DRAFT marker (all four approved). Optionally give the old family a
 clean superseded name with `saveCyclotronDefinition("shared-source-relevance", "Shared source relevance (superseded by
 shared-source-relevance-r2)", <its active refs>, <its settings>)`; this does not touch the retired run's pin.
 Record the run id, change-set id and files' commit on the ticket. Moving this to a single run again is what ade3088c delivers.
