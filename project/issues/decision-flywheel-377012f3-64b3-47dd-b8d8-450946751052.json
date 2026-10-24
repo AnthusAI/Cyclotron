@@ -3,17 +3,25 @@
   "title": "Flaky: test_independent_s3_reviewers_cannot_create_two_active_votes lets JournalConflict escape",
   "description": "src/decision_flywheel/s3_review_storage_test.py: two threads race record_vote; the loser sometimes raises decision_flywheel.journal.JournalConflict ('S3 head changed; read current authority before retry') instead of ValueError, so the test fails. Measured 2026-10-24: 3/20 failures at c279037 (before PR #115) and 4/20 after, so it predates the request-efficiency change. Fix either ReviewStore.record_vote (retry or convert a CAS conflict into the duplicate-vote refusal) or the test's expectation; decide which is the intended contract.",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "0b122880-0cbe-4933-8f42-d81ec7fb30da",
+      "author": "home",
+      "text": "Fixed in PR #117 (af57789). The behaviour was correct: the losing racer is refused either by the duplicate check or by the journal CAS (JournalConflict). Both keep one active vote. The test now accepts either refusal. 30/30 isolated runs pass and make check is green (2874 passed).",
+      "created_at": "2026-10-24T17:19:41.024118Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-10-24T17:05:33.144693Z",
-  "updated_at": "2026-10-24T17:05:33.144753Z",
-  "closed_at": null,
+  "updated_at": "2026-10-24T17:19:41.055986Z",
+  "closed_at": "2026-10-24T17:19:41.055941Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {}
