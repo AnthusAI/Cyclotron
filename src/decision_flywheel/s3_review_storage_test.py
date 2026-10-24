@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from .journal import JournalConflict
 from .review_storage_test import article
 from .reviewer_store import ReviewStore
 from .s3_journal_test import journal
@@ -54,7 +55,9 @@ def test_independent_s3_reviewers_cannot_create_two_active_votes():
         try:
             other.record_vote("one", label)
             return True
-        except ValueError:
+        # The loser is refused either by the duplicate check (it read after the winner committed) or by the
+        # journal's compare-and-swap (both read before either committed). Both refusals keep one active vote.
+        except (ValueError, JournalConflict):
             return False
 
     with ThreadPoolExecutor(max_workers=2) as pool:
