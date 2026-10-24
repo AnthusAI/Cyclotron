@@ -145,6 +145,34 @@ def test_four_remote_projections_share_one_native_request_after_queue_completion
     asyncio.run(run())
 
 
+def test_publication_operations_and_receipts_are_also_served_under_api(identity, monkeypatch):
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = setup(identity, monkeypatch)
+    pub = PUBS[0]
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url=config.public_origin,
+            cookies={"__Host-cyclotron-session": cookie},
+            headers={"Origin": config.public_origin, "X-CSRF-Token": session.csrf_token, "X-Cyclotron-Account": account},
+        ) as http:
+            response = await http.post(
+                f"/api/publications/{pub}/operations",
+                json={
+                    "contractVersion": "cyclotron-publication/v1",
+                    "operation": "decide",
+                    "payload": {"bindingRevision": "binding-one", "item": ITEM},
+                },
+            )
+            assert response.status_code == 202, response.text
+            await worker.worker().process(sent.pop(0))
+            receipt = await http.get(f"/api/publications/{pub}/commands/{response.json()['jobId']}")
+            assert receipt.status_code == 200, receipt.text
+            assert receipt.json()["publicationId"] == pub and receipt.json()["decision"]["classifiers"]
+
+    asyncio.run(run())
+
+
 def test_fifth_publication_waits_for_criteria_without_joining_the_shared_model_request(identity, monkeypatch):
     bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = setup(identity, monkeypatch)
     target = targets[0]
