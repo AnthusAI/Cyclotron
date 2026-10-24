@@ -104,7 +104,10 @@ def receipt(account, run):
 
 
 def install_bootstrap_route(app, runtime):
+    # The lab's CDN forwards /api/* to this service but not /publication-runs/*, so the same handler is also
+    # served under /api/ for signed-in browsers that reach the lab through its public address.
     @app.post("/publication-runs/bootstrap")
+    @app.post("/api/publication-runs/bootstrap")
     async def bootstrap(request: Request):
         raw = await request.body()
         if len(raw) > 65536:
