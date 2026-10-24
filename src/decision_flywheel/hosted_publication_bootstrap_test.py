@@ -36,6 +36,23 @@ def offline(identity, monkeypatch):
     return result
 
 
+def test_the_bootstrap_is_also_served_under_api_with_the_same_identity_and_receipt(identity, monkeypatch):
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = offline(identity, monkeypatch)
+    body = request()
+
+    async def run():
+        async with priming_client(app, config, cookie, session, account) as http:
+            created = await http.post("/api/publication-runs/bootstrap", json=body)
+            assert created.status_code == 201, created.text
+            receipt = created.json()
+            assert receipt["createdBy"] == session.person_id
+            again = await http.post("/publication-runs/bootstrap", json=body)
+            assert again.status_code == 200 and again.json() == receipt
+            assert len(store.runs()) == 1 and not sent and not model.calls
+
+    asyncio.run(run())
+
+
 def test_empty_account_bootstraps_one_frozen_run_and_can_prime_with_live_execution_disabled(identity, monkeypatch):
     bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = offline(identity, monkeypatch)
     body = request()
