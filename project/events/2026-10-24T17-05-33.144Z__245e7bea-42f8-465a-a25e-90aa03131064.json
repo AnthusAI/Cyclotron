@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "245e7bea-42f8-465a-a25e-90aa03131064",
+  "issue_id": "decision-flywheel-377012f3-64b3-47dd-b8d8-450946751052",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-24T17:05:33.144Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Flaky: test_independent_s3_reviewers_cannot_create_two_active_votes lets JournalConflict escape",
+    "description": "src/decision_flywheel/s3_review_storage_test.py: two threads race record_vote; the loser sometimes raises decision_flywheel.journal.JournalConflict ('S3 head changed; read current authority before retry') instead of ValueError, so the test fails. Measured 2026-10-24: 3/20 failures at c279037 (before PR #115) and 4/20 after, so it predates the request-efficiency change. Fix either ReviewStore.record_vote (retry or convert a CAS conflict into the duplicate-vote refusal) or the test's expectation; decide which is the intended contract.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
