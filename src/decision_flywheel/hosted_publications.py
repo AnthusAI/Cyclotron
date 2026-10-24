@@ -506,7 +506,10 @@ def install_publication_routes(app, runtime):
         meta = envelope(target, binding, run["config"])
         return session, target, binding, store, meta
 
+    # The lab's CDN forwards /api/* to this service but not /publications/*, so signed-in browsers on the
+    # lab's public address use the /api/ paths; both run the same handler and checks.
     @app.post("/publications/{publication}/operations")
+    @app.post("/api/publications/{publication}/operations")
     async def operation(publication: str, request: Request):
         content = await request.body()
         if len(content) > min(MAX_BYTES, 65536):
@@ -570,6 +573,7 @@ def install_publication_routes(app, runtime):
         return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
 
     @app.get("/publications/{publication}/commands/{job_id}")
+    @app.get("/api/publications/{publication}/commands/{job_id}")
     async def receipt(publication: str, job_id: str, request: Request):
         _, target, binding, store, meta = await access(request, publication, "console:read")
         try:
