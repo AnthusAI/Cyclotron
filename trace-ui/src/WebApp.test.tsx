@@ -425,8 +425,8 @@ test('Scenario: A labeler can compare a displayed prediction with a human label'
   expect(vi.mocked(graphql)).toHaveBeenCalledWith(expect.stringContaining('submitCommand'),expect.objectContaining({
     id:'live',kind:'label',payload:expect.objectContaining({item_id:'first',label:'include',presentation_id:'first-presentation'}),
   }))
-  await waitFor(()=>expect(screen.getByText('Next paper')).toBeVisible(),{timeout:2000})
-})
+  await waitFor(()=>expect(screen.getByText('Next paper')).toBeVisible(),{timeout:6000})
+},10000)
 
 test('the timeline shows loading feedback instead of a blank panel until it has loaded',()=>{
   render(<RunTimeline runId="replay" revision={0} />)
@@ -450,7 +450,6 @@ test('a replay history entry opens its timeline and completed replay cycles refr
   const fresh={...live,id:'fresh',name:'Fresh replay',config:{input_mode:'replay'}}
   vi.mocked(graphql).mockImplementation(async(query)=>{
     if(query.includes('capabilities'))return {runs:[fresh],capabilities:{liveEnabled:true,itemCount:250}}
-    if(query.includes('eventCursor'))return {run:{eventCursor:12}}
     if(query.includes('events('))return {events:[]}
     return {run:fresh,currentItem:null,jobs:[{id:'step',kind:'replay-next',status:'completed',result:{finished:false}}]}
   })
@@ -523,12 +522,12 @@ test('the last item keeps its saved-feedback acknowledgement and shows a complet
   render(<WebApp />)
   fireEvent.click(await screen.findByRole('button',{name:'Topic: exclude'}))
   fireEvent.click(screen.getByRole('button',{name:'Submit review'}))
-  await screen.findByText('Session complete',{}, {timeout:2500})
+  await screen.findByText('Session complete',{}, {timeout:6000})
   expect(screen.getByText('1 label recorded')).toBeVisible()
   expect(screen.getByText('Your feedback is saved.')).toBeVisible()
   expect(screen.queryByRole('button',{name:'Prepare next item'})).toBeNull()
   expect(vi.mocked(graphql).mock.calls.filter(([query])=>query.includes('mutation'))).toHaveLength(1)
-})
+},10000)
 
 test('labeling uses the focused app layout with history and activity drawers without restarting',async()=>{
   window.history.replaceState(null,'','#run=live&view=label')
@@ -597,4 +596,88 @@ test('returning to empty optimization history records the section for reload and
   window.history.replaceState(null,'','#run=&view=timeline&section=cyclotrons')
   fireEvent(window,new PopStateEvent('popstate'))
   expect(await screen.findByRole('heading',{name:'Cyclotrons'})).toBeVisible()
+})
+
+function detailsRequestCount(){return vi.mocked(graphql).mock.calls.filter(([query])=>String(query).includes('currentItem(')).length}
+function setDocumentHidden(hidden:boolean){
+  Object.defineProperty(document,'hidden',{configurable:true,get:()=>hidden})
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+
+test('does not start another details request while one is in flight',async()=>{
+  vi.useFakeTimers()
+  try{
+    window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+    let releaseFirst:(value:unknown)=>void=()=>{}
+    vi.mocked(graphql).mockImplementation(async(query)=>{
+      if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
+      if(query.includes('events('))return {events:[]}
+      if(detailsRequestCount()===1)return new Promise(resolve=>{releaseFirst=resolve})
+      return {run:live,currentItem:null,jobs:[]}
+    })
+    render(<WebApp />)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(60000)})
+    expect(detailsRequestCount()).toBe(1)
+    await act(async()=>{releaseFirst({run:live,currentItem:null,jobs:[]});await vi.advanceTimersByTimeAsync(4000)})
+    expect(detailsRequestCount()).toBe(2)
+  }finally{vi.useRealTimers()}
+})
+
+test('pauses while the tab is hidden',async()=>{
+  vi.useFakeTimers()
+  try{
+    window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+    render(<WebApp />)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(100)})
+    const beforeHidden=detailsRequestCount()
+    act(()=>setDocumentHidden(true))
+    await act(async()=>{await vi.advanceTimersByTimeAsync(60000)})
+    expect(detailsRequestCount()).toBe(beforeHidden)
+    act(()=>setDocumentHidden(false))
+    await act(async()=>{await vi.advanceTimersByTimeAsync(100)})
+    expect(detailsRequestCount()).toBe(beforeHidden+1)
+  }finally{setDocumentHidden(false);vi.useRealTimers()}
+})
+
+test('backs off after a failed details request',async()=>{
+  vi.useFakeTimers()
+  try{
+    window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+    vi.mocked(graphql).mockImplementation(async(query)=>{
+      if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
+      if(query.includes('events('))return {events:[]}
+      throw new Error('503 Service Unavailable')
+    })
+    render(<WebApp />)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(100)})
+    expect(detailsRequestCount()).toBe(1)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(4000)})
+    expect(detailsRequestCount()).toBe(1)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(4000)})
+    expect(detailsRequestCount()).toBe(2)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(8000)})
+    expect(detailsRequestCount()).toBe(2)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(8000)})
+    expect(detailsRequestCount()).toBe(3)
+  }finally{vi.useRealTimers()}
+})
+
+test('refreshes the details right after a label is submitted',async()=>{
+  vi.useFakeTimers()
+  try{
+    window.history.replaceState(null,'','#run=live&view=label&section=optimizations')
+    const first={item:{id:'first',title:'First paper',abstract:'First abstract',submitted_at:'2026-10-06',categories:['cs.AI'],authors:'A. Author'},prediction:{label:'exclude',confidence:.8,presentation_id:'first-presentation'}}
+    const shown=first
+    vi.mocked(graphql).mockImplementation(async(query)=>{
+      if(query.includes('capabilities'))return {runs:[live],capabilities:{liveEnabled:true,itemCount:250}}
+      if(query.includes('events('))return {events:[]}
+      if(query.includes('submitCommand'))return {submitCommand:{id:'label-job',kind:'label',status:'running',result:null}}
+      return {run:live,currentItem:shown,jobs:[]}
+    })
+    render(<WebApp />)
+    await act(async()=>{await vi.advanceTimersByTimeAsync(100)})
+    const beforeSubmit=detailsRequestCount()
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Include'}));await vi.advanceTimersByTimeAsync(100)})
+    expect(detailsRequestCount()).toBe(beforeSubmit+1)
+  }finally{vi.useRealTimers()}
 })

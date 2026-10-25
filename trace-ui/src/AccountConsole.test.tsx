@@ -1,7 +1,7 @@
 import {afterEach,expect,test,vi} from 'vitest'
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
-import {AccountConsole} from './AccountConsole'
+import {AccountConsole,REQUEST_ACCESS_URL} from './AccountConsole'
 import {SignInExpired,type ConsoleAccountsClient,type AuthenticatedConsoleSession,type AccountSummary} from './consoleSession'
 
 vi.mock('./WebApp',()=>({WebApp:()=> <div>Existing console workspace</div>}))
@@ -25,6 +25,22 @@ test('signed out people see Google sign-in and cannot mount the existing workspa
   render(<AccountConsole client={client}/> )
   expect(await screen.findByRole('link',{name:'Continue with Google'})).toHaveAttribute('href','/auth/login')
   expect(screen.queryByText('Existing console workspace')).toBeNull()
+})
+
+test('signed out people without an account can request access on the tracked engagement page',async()=>{
+  const client={...clientFor(),session:vi.fn(async()=>({authenticated:false as const,loginUrl:'/auth/login'}))}
+  render(<AccountConsole client={client}/> )
+  const link=await screen.findByRole('link',{name:'Request access'})
+  expect(link).toHaveAttribute('href','https://anth.us/engage/?solution=Cyclotron&cta=lab-sign-in')
+  expect(REQUEST_ACCESS_URL).toBe(link.getAttribute('href'))
+  expect(link).not.toHaveAttribute('target')
+  expect(screen.getByText(/No account yet\?/)).toBeVisible()
+})
+
+test('signed in people do not see the request access link',async()=>{
+  render(<AccountConsole client={clientFor()}/> )
+  await screen.findByRole('heading',{name:'Choose an account'})
+  expect(screen.queryByRole('link',{name:'Request access'})).toBeNull()
 })
 
 test('selecting a central account mounts the existing workspace and switching clears the old run route',async()=>{
