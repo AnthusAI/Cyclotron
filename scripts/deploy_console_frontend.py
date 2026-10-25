@@ -110,14 +110,28 @@ def main():
     deployment = aws(
         "amplify", "create-deployment", "--app-id", APP, "--branch-name", "production"
     )
-    response = httpx.put(
-        deployment["zipUploadUrl"],
-        content=data.getvalue(),
-        timeout=60,
-        follow_redirects=False,
-    )
-    if response.status_code not in (200, 201):
-        raise RuntimeError("Amplify artifact upload rejected")
+    # A created but never started deployment blocks the next one, so cancel it if the upload fails.
+    try:
+        response = httpx.put(
+            deployment["zipUploadUrl"],
+            content=data.getvalue(),
+            timeout=60,
+            follow_redirects=False,
+        )
+        if response.status_code not in (200, 201):
+            raise RuntimeError("Amplify artifact upload rejected")
+    except Exception:
+        aws(
+            "amplify",
+            "stop-job",
+            "--app-id",
+            APP,
+            "--branch-name",
+            "production",
+            "--job-id",
+            deployment["jobId"],
+        )
+        raise
     job = aws(
         "amplify",
         "start-deployment",
