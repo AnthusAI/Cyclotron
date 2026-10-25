@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-09f338c5-da1e-4d94-9a77-1bcaae0f3831",
+  "title": "Worker: retry transient Prospectus 503 in the scope recheck; explicit retry for a failed publication command",
+  "description": "2026-10-24 18:23Z: the first priming job of the r2 successor run (0089fae6) failed its scope recheck when Prospectus identities/me returned a transient 503 (ProspectusUnavailable at hosted_publications.py:317 check_scope). Redelivery then refused with CommandReconciliationRequired, the run went busy (run_busy for every command), and an operator reconcile was needed (done 2026-10-25 with Ryan's approval; audit on the job). Two fixes: (1) in the worker's scope recheck, retry ProspectusUnavailable with bounded backoff before giving up, and fail the job as 'interrupted' with a clear reason rather than leaving it running; (2) an explicit retry operation for a failed publication command. Today the same request identity returns the failed job (s3_console_storage.py ~1015), and the priming identity is a hash of the examples, so re-priming an unchanged list is impossible without editing an example. Acceptance: specs for 503-then-success, 503-exhausted ending in a terminal job, and explicit retry creating a new attempt with audit.",
+  "type": "bug",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-a6cdbab9-6be0-42f6-82fb-72a9d568e001",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-25T13:09:23.694686Z",
+  "updated_at": "2026-10-25T13:09:23.694757Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
