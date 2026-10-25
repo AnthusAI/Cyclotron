@@ -200,8 +200,12 @@ class S3BatchStorage:
 
     def reserve(self, fingerprint, maximum, owner, *, policy="reuse", retry_failed=False):
         validate_request(fingerprint, owner)
-        if type(maximum) is not int or maximum < 0 or policy not in ("reuse", "cache_only", "refresh"):
-            raise ValueError("valid request ceiling and policy required")
+        if (maximum is not None and (type(maximum) is not int or maximum < 0)) or policy not in (
+            "reuse",
+            "cache_only",
+            "refresh",
+        ):
+            raise ValueError("valid request ceiling or None and policy required")
 
         def change(state):
             row = self._row(state, fingerprint)
@@ -231,7 +235,7 @@ class S3BatchStorage:
                 and not (row[1] == "interrupted" and row[2] == '{"learning_abandoned":true}')
             ):
                 raise RuntimeError("explicit retry required for interrupted batch")
-            if len(state["attempts"]) >= maximum:
+            if maximum is not None and len(state["attempts"]) >= maximum:
                 raise RuntimeError("run decision request ceiling reached")
             if row:
                 state["history"].append([len(state["history"]) + 1, fingerprint, row[3], row[1], row[2], row[4]])

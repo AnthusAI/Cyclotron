@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event_id": "022ecbb8-c4cf-4a73-9ba9-bdae09db588a",
+  "issue_id": "decision-flywheel-1318264f-6baf-4c9e-bd9d-e71c6d584a77",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-25T12:42:32.706Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Standing Cyclotron targets run without arbitrary request or item quotas",
+    "description": "As a publication operator, I want a configured standing Cyclotron target to accept ongoing decisions and unique source items without arbitrary lifetime, per-day request, or total-item quotas, so that monitoring continues until actual service or physical resource constraints require backpressure.\n\nFeature: Standing publication targets are not quota-limited\n  Scenario: Requests continue past former per-day and lifetime ceilings\n    Given a standing publication target with the former total and per-day request ceilings\n    When its usage exceeds those configured values\n    Then eligible decisions continue through the existing guarded queue and request ledger\n    And usage accounting continues to record requests and provider usage\n  Scenario: Unique items are admitted beyond the former total item ceiling\n    Given a standing target that has registered the former maximum number of unique items\n    When a new valid unique item arrives\n    Then it is registered idempotently without an arbitrary item-cap refusal\n  Scenario: Real resource protections still provide backpressure\n    Given a standing target whose bounded storage journal or per-item payload reaches its technical limit\n    When an item is processed\n    Then existing validation, concurrency, retries, fault handling, and storage protections remain effective\n    And the refusal identifies the actual technical limit rather than a configured quota.\n\nDefinition of Done: remove standing-target total/per-day request quota and total unique-item capacity from trusted target configuration and runtime enforcement. Preserve the request ledger, measured usage, bounded request shape, queue/work batching, retries, concurrency, idempotency, and actual storage protections. Update hosted-publications docs, parameters/examples and tests. No deployment or live classification.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": [
+      "hosted-publications",
+      "metering"
+    ],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6 Luna",
+      "name": "email-intake"
+    }
+  }
+}

@@ -116,7 +116,6 @@ def test_live_runtime_wires_a_lazy_secret_reader_and_exact_machine_principals(mo
             "accountId": str(uuid4()),
             "runId": str(uuid4()),
             "standing": True,
-            "requestCeiling": {"total": 3},
             "bindings": [{"publicationId": "alpha", "outputs": ["alpha"], "revision": "1"}],
         }
     ]

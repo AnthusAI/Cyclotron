@@ -133,7 +133,7 @@ class Cyclotron:
         model,
         optimizer=None,
         *,
-        max_requests: int = 100,
+        max_requests: int | None = 100,
         redact: Sequence[str] = (),
         observer: Callable[[dict], None] | None = None,
         lease=None,
@@ -148,8 +148,8 @@ class Cyclotron:
     ):
         if not isinstance(definition, CyclotronDefinition):
             raise ValueError("definition must be a CyclotronDefinition")
-        if type(max_requests) is not int or max_requests < 1:
-            raise ValueError("max_requests must be a positive integer")
+        if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
+            raise ValueError("max_requests must be a positive integer or None")
         if review_program is not None and not isinstance(review_program, ReviewProgram):
             raise ValueError("review_program must be a ReviewProgram or None")
         seed_rubrics = dict(seed_rubrics or {})
@@ -257,9 +257,11 @@ class Cyclotron:
             share_supporting_questions=seeds.sharing(created=saved is None),
             storage=self.storage.batch_storage if self.storage is not None else None,
         )
-        # The shared ceiling counts every attempt in the store's lifetime; this
-        # open authorizes max_requests more.
-        self.shared.max_requests = self.shared.requests + max_requests if self.storage is None else max_requests
+        # None is reserved for explicitly uncapped shared workloads (such as
+        # hosted standing targets); bounded callers retain per-open limits.
+        self.shared.max_requests = (
+            self.shared.requests + max_requests if self.storage is None and max_requests is not None else max_requests
+        )
         self.specs = {spec.id: spec for spec in definition.classifiers}
         self.versions: dict[str, VersionTracker] = {}
         self._seen: dict[str, int] = {}

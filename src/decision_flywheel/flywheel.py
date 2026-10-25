@@ -150,7 +150,7 @@ class DecisionFlywheel:
     All reviews supplied for fitting need explicit selection propensities. Audit
     labels are not accepted here. The caller supplies their records as protected
     ID/text firewalls, without labels. max_requests is a per-open authorization
-    ceiling; each reserved attempt is also durably recorded before the call.
+    ceiling when set; each reserved attempt is also durably recorded before the call.
     """
 
     def __init__(
@@ -161,7 +161,7 @@ class DecisionFlywheel:
         optimizer: OptimizerAgent | None = None,
         *,
         observer: Callable[[dict], None] | None = None,
-        max_requests: int = 100,
+        max_requests: int | None = 100,
         max_request_bytes: int = 32000,
         calibration_method: str = "auto",
         redact: Sequence[str] = (),
@@ -209,8 +209,8 @@ class DecisionFlywheel:
         if type(context_validation_floor) is not int or context_validation_floor < 1:
             raise ValueError("context validation floor must be positive")
         self.context_validation_floor = context_validation_floor
-        if type(max_requests) is not int or max_requests < 1:
-            raise ValueError("max_requests must be positive")
+        if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
+            raise ValueError("max_requests must be positive or None")
         if type(max_request_bytes) is not int or max_request_bytes < 1:
             raise ValueError("max_request_bytes must be positive")
         if getattr(storage, "requires_durable_optimizer", False):
@@ -857,7 +857,7 @@ class DecisionFlywheel:
                 raw["usage"],
                 raw["latency_ms"],
             )
-        if self.requests >= self.max_requests:
+        if self.max_requests is not None and self.requests >= self.max_requests:
             from .observability import RequestBudgetExhausted
 
             raise RequestBudgetExhausted("decision-model request ceiling reached")

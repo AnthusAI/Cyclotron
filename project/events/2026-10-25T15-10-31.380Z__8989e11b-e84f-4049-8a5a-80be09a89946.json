@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "8989e11b-e84f-4049-8a5a-80be09a89946",
+  "issue_id": "decision-flywheel-1318264f-6baf-4c9e-bd9d-e71c6d584a77",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-25T15:10:31.380Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "f4800822-9ed5-42fc-81bc-3b4178ff7406",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6-luna",
+      "name": "email-intake"
+    }
+  }
+}

@@ -64,6 +64,14 @@ def test_two_connections_cannot_exceed_one_reserved_request(tmp_path):
     store.close()
 
 
+def test_unbounded_reservations_keep_idempotency_and_durable_attempt_accounting(tmp_path):
+    store = SQLiteBatchStorage(tmp_path / "shared.sqlite")
+    for index in range(4):
+        store.reserve(str(index + 1) * 64, None, str(uuid4()))
+    assert store.requests() == 4
+    store.close()
+
+
 def test_refresh_export_and_restore_preserve_payload_text_history_and_attempts(tmp_path):
     source = SQLiteBatchStorage(tmp_path / "source.sqlite")
     owner, second = str(uuid4()), str(uuid4())
