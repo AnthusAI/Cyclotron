@@ -13,7 +13,6 @@ from .hosted_publications import PublicationTarget
 from .hosted_publications_test import ITEM, PUBS, setup
 from .machine_access import MachineActor, MachineDenied
 from .provider_credentials import ProviderKeyUnavailable
-from .standing_publications import RequestCeiling
 
 ROLE = "arn:aws:iam::222222222222:role/synthetic-invoker"
 CALLER = "arn:aws:sts::222222222222:assumed-role/synthetic-invoker/papyrus-monitor"
@@ -35,14 +34,14 @@ class InjectIam:
         await self.app(scope, receive, send)
 
 
-def standing(targets, **ceiling):
-    targets[0] = replace(targets[0], standing=True, request_ceiling=RequestCeiling(**({"total": 5} | ceiling)))
+def standing(targets):
+    targets[0] = replace(targets[0], standing=True)
 
 
-def fixture(identity, monkeypatch, **ceiling):
+def fixture(identity, monkeypatch):
     parts = setup(identity, monkeypatch)
     bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = parts
-    standing(targets, **ceiling)
+    standing(targets)
     bff.machine_principals = worker.machine_principals = (ROLE,)
     return parts, InjectIam(app)
 
@@ -160,54 +159,22 @@ def test_ids_that_exist_in_a_priming_list_are_refused_without_registration_or_a_
     assert len(model.calls) == 1
 
 
-def test_the_trusted_cumulative_ceiling_fails_closed_and_does_not_call_the_provider(identity, monkeypatch):
-    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch, total=1)
+def test_standing_targets_process_more_than_the_former_daily_lifetime_and_item_ceilings(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
 
     async def go():
         async with client(wrapped, config, account) as http:
-            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
-            assert receipt.status_code == 200
-            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
-            assert receipt.status_code == 429 and receipt.json()["code"] == "request_ceiling_reached"
-            assert len(model.calls) == 1
-            # A cached decision is still served at the ceiling because it makes no new request.
-            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
-            assert receipt.status_code == 200 and len(model.calls) == 1
-            # The next request id for the refused source is not stuck behind the old terminal receipt.
-            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
-            assert receipt.status_code == 429
-
-    asyncio.run(go())
-
-
-def test_the_daily_allowance_accrues_and_has_not_started_before_its_date(identity, monkeypatch):
-    from . import standing_publications
-
-    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(
-        identity, monkeypatch, total=10, per_day=1, since="2026-10-21"
-    )
-    day = {"value": __import__("datetime").date(2026, 10, 20)}
-    monkeypatch.setattr(standing_publications, "today", lambda: day["value"])
-    monkeypatch.setattr("decision_flywheel.hosted_publications.today", lambda: day["value"])
-
-    async def go():
-        async with client(wrapped, config, account) as http:
-            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
-            assert receipt.status_code == 429 and not model.calls
-            day["value"] = day["value"].replace(day=21)
-            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
-            assert receipt.status_code == 200
-            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
-            assert receipt.status_code == 429 and len(model.calls) == 1
-            day["value"] = day["value"].replace(day=22)
-            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
-            assert receipt.status_code == 200 and len(model.calls) == 2
+            for index in range(301):
+                _, receipt = await decide(http, worker, sent, new_item(f"hn-{index}"))
+                assert receipt.status_code == 200, receipt.text
+            assert len(model.calls) == 301
+            assert len(store.items(targets[0].run_id)) >= 301
 
     asyncio.run(go())
 
 
 def test_a_missing_provider_key_refuses_before_registration_and_before_reserving_a_request(identity, monkeypatch):
-    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch, total=1)
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
     available = {"key": False}
 
     def factory(config):
@@ -223,7 +190,7 @@ def test_a_missing_provider_key_refuses_before_registration_and_before_reserving
             assert receipt.status_code == 503 and receipt.json()["code"] == "provider_key_unavailable"
             assert "hn-1" not in {row["id"] for row in store.items(targets[0].run_id)} and not model.calls
             available["key"] = True
-            # The single-request ceiling was not consumed by the refusal.
+            # A missing key does not register the item or consume an attempt.
             _, receipt = await decide(http, worker, sent, new_item("hn-1"))
             assert receipt.status_code == 200 and len(model.calls) == 1
 
@@ -283,7 +250,7 @@ def test_target_selection_is_closed_account_pinned_standing_only_and_never_calle
                     json=body("decide", {"bindingRevision": "stale", "item": ITEM}, "req-abcdefgh"),
                 )
             ).status_code == 409
-        targets[0] = replace(targets[0], standing=False, request_ceiling=None, max_items=None)
+        targets[0] = replace(targets[0], standing=False)
         async with client(wrapped, config, account) as http:
             assert (await http.post("/machine/publications/alpha/operations", json=body("status", {}))).status_code == 403
 
@@ -407,16 +374,13 @@ def test_a_machine_actor_cannot_be_forged_for_another_target_or_account():
         MachineActor(ROLE, "papyrus-monitor", str(uuid4()), str(uuid4()), "b", operation="console:read")
 
 
-def test_standing_targets_require_explicit_trusted_ceilings_and_others_forbid_them():
+def test_standing_targets_need_no_arbitrary_quota_configuration():
     from .publication_lab import PublicationBinding
 
     bindings = (PublicationBinding("alpha", ("alpha",), "one"),)
     a, r = str(uuid4()), str(uuid4())
-    with pytest.raises(ValueError, match="ceiling"):
-        PublicationTarget(a, r, bindings, standing=True)
-    with pytest.raises(ValueError, match="only to standing"):
-        PublicationTarget(a, r, bindings, request_ceiling=RequestCeiling(5))
-    assert PublicationTarget(a, r, bindings, standing=True, request_ceiling=RequestCeiling(5)).max_items == 500
+    assert PublicationTarget(a, r, bindings, standing=True).standing is True
+    assert PublicationTarget(a, r, bindings).standing is False
 
 
 def test_refusals_are_public_codes_only():

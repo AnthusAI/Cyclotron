@@ -53,11 +53,11 @@ deployed, and the only stack change is the `PublicationTargets` parameter.
    items is possible (the request id includes run and binding revision) but spends requests and
    is a separate approval. Machine feedback for items delivered under binding "1" is refused by
    binding "2", so drain outstanding feedback first or accept that it is dropped.
-7. **Request ceiling.** The cap is per store ledger. The new store starts at 0, so copying
-   `{"total":300,"perDay":100,"since":"2026-10-21"}` would grant a second budget. Set `total` to
-   300 minus the old run's attempts (read the `shared-batches` ledger or count the run's
-   `publication` jobs) unless Ryan wants a fresh budget. `maxItems` (300) counts the items copied
-   into the new run at bootstrap (currently the whole `hn-operational` list, 104).
+7. **Usage and storage.** Standing runs have no lifetime request quota, per-day request quota or
+   total item quota. The `shared-batches` ledger continues to record provider attempts and cached
+   results, but does not gate future calls. A new run does not grant a second request budget. The
+   console and result journals retain their physical record/byte budgets; check current capacity
+   before changing a run with a large operational item list.
 
 ## Runbook
 
@@ -98,8 +98,7 @@ set (`sam deploy --no-execute-changeset`), review that only the `BffFunction`/`W
 and nothing is replaced, get Ryan's approval, execute.
 
 ```json
-[{"accountId":"<LAB_ACCOUNT_ID>","runId":"<NEW_RUN_ID>","modelIdentity":"jev:jev-1.13.0","standing":true,
-  "requestCeiling":{"total":<300 minus used>,"perDay":100,"since":"2026-10-21"},"maxItems":300,
+[ {"accountId":"<LAB_ACCOUNT_ID>","runId":"<NEW_RUN_ID>","modelIdentity":"jev:jev-1.13.0","standing":true,
   "bindings":[{"publicationId":"anth-us","outputs":["anth-us-relevance"],"revision":"2","priming":{"listId":"prime-anth-us"}},
   {"publicationId":"p-apyr-us","outputs":["p-apyr-us-relevance"],"revision":"2","priming":{"listId":"prime-p-apyr-us"}},
   {"publicationId":"threat-intelligence","outputs":["threat-intelligence-relevance"],"revision":"2","priming":{"listId":"prime-threat-intelligence"}},

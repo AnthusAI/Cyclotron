@@ -5,7 +5,7 @@
   {"ParameterKey": "FederationReviewId", "ParameterValue": "cyclotron-google-only-unlinked-v1-20261015"},
   {"ParameterKey": "ExecutionPairReviewId", "ParameterValue": "cyclotron-execution-pair-v1-20261015"},
   {"ParameterKey": "MachineCallerRoleArn", "ParameterValue": "arn:aws:iam::123456789012:role/example-caller-role"},
-  {"ParameterKey": "PublicationTargets", "ParameterValue": "[{\"accountId\":\"EXAMPLE-ACCOUNT-ID\",\"runId\":\"EXAMPLE-RUN-ID\",\"modelIdentity\":\"jev:jev-1.13.0\",\"standing\":true,\"requestCeiling\":{\"total\":300,\"perDay\":100,\"since\":\"2026-01-01\"},\"maxItems\":300,\"bindings\":[{\"publicationId\":\"example-publication\",\"outputs\":[\"example-output\"],\"revision\":\"1\"}],\"pendingOutputs\":[]}]"},
+  {"ParameterKey": "PublicationTargets", "ParameterValue": "[{\"accountId\":\"EXAMPLE-ACCOUNT-ID\",\"runId\":\"EXAMPLE-RUN-ID\",\"modelIdentity\":\"jev:jev-1.13.0\",\"standing\":true,\"bindings\":[{\"publicationId\":\"example-publication\",\"outputs\":[\"example-output\"],\"revision\":\"1\"}],\"pendingOutputs\":[]}]"},
   {"ParameterKey": "AllowLive", "ParameterValue": "false"},
   {"ParameterKey": "PredictionModel", "ParameterValue": "jev-1.13.0"},
   {"ParameterKey": "PredictionMaxRequests", "ParameterValue": "100"}

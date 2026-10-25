@@ -74,6 +74,15 @@ def test_an_application_decides_and_reviews_by_its_own_ids(tmp_path):
     assert model.calls == 1
 
 
+def test_an_explicitly_uncapped_engine_records_each_distinct_provider_attempt(tmp_path):
+    model = Model()
+    with Cyclotron.open(tmp_path / "c", DEFINITION, model, max_requests=None) as cyclotron:
+        run(cyclotron.decide(item("first")))
+        run(cyclotron.decide(item("second", "no longer the same request")))
+        assert cyclotron.shared.requests == 2
+    assert model.calls == 2
+
+
 def test_an_unchanged_item_keeps_its_decision_without_a_model_call_even_after_a_restart(tmp_path):
     model = Model()
     with Cyclotron.open(tmp_path / "c", DEFINITION, model) as cyclotron:

@@ -23,9 +23,8 @@ from .optimizer_agent import DisabledOptimizer
 from .priming_context import catalog_priming, decode_priming
 from .prospectus_accounts import AccountAccessDenied, VerifiedAccountSession
 from .publication_lab import CONTRACT, MAX_BYTES, PublicationActor, PublicationBinding, PublicationLab
-from .s3_console_storage import StandingCapacity
 from .s3_embedded_storage import S3CyclotronStores
-from .standing_publications import DEFAULT_MAX_ITEMS, RequestCeiling, today, validate_item
+from .standing_publications import validate_item
 
 
 @dataclass(frozen=True)
@@ -35,11 +34,9 @@ class PublicationTarget:
     bindings: tuple[PublicationBinding, ...]
     pending_outputs: tuple[str, ...] = ()
     model_identity: str | None = None
-    # Standing runs accept streaming sources and a trusted cumulative request allowance.
-    # Only operator configuration can set these; no request field can.
+    # Standing runs accept streaming sources. Work is bounded per command; no lifetime or daily
+    # quota is enforced here. Usage is still recorded in the shared request ledger.
     standing: bool = False
-    request_ceiling: RequestCeiling | None = None
-    max_items: int | None = None
 
     def __post_init__(self):
         uuid(self.account_id)
@@ -63,15 +60,6 @@ class PublicationTarget:
             raise ValueError("pending outputs must name distinct declared publication outputs")
         if type(self.standing) is not bool:
             raise ValueError("standing must be a boolean")
-        if self.standing:
-            if not isinstance(self.request_ceiling, RequestCeiling):
-                raise ValueError("a standing target requires an explicit request ceiling")
-            if self.max_items is None:
-                object.__setattr__(self, "max_items", DEFAULT_MAX_ITEMS)
-            if type(self.max_items) is not int or not 1 <= self.max_items <= 100000:
-                raise ValueError("standing item capacity must be a bounded positive integer")
-        elif self.request_ceiling is not None or self.max_items is not None:
-            raise ValueError("request ceiling and item capacity belong only to standing targets")
 
 
 def targets_from_environment(environment):
@@ -91,15 +79,12 @@ def targets_from_environment(environment):
                 "pendingOutputs",
                 "modelIdentity",
                 "standing",
+                # Ignore these retired fields during the stack-parameter rollout. They no longer
+                # become target state or affect admission/request reservation.
                 "requestCeiling",
                 "maxItems",
             }:
                 raise ValueError()
-            ceiling = target.get("requestCeiling")
-            if ceiling is not None:
-                if not isinstance(ceiling, dict) or "total" not in ceiling or set(ceiling) - {"total", "perDay", "since"}:
-                    raise ValueError()
-                ceiling = RequestCeiling(ceiling["total"], ceiling.get("perDay"), ceiling.get("since"))
             pending = target.get("pendingOutputs", [])
             if not isinstance(pending, list) or any(not isinstance(output, str) for output in pending):
                 raise ValueError()
@@ -137,8 +122,6 @@ def targets_from_environment(environment):
                     tuple(pending),
                     target.get("modelIdentity"),
                     target.get("standing", False),
-                    ceiling,
-                    target.get("maxItems"),
                 )
             )
         return tuple(result)
@@ -367,16 +350,10 @@ class PublicationCommandRuntime:
             raise ValueError("baseline prediction requires optimizer disabled")
         registration, max_requests = None, 1 if priming else config["max_requests"]
         if target.standing and not priming:
-            max_requests = target.request_ceiling.allowed(today())
-            if max_requests < 1:
-                raise CommandRefused("request_ceiling_reached", "the standing request allowance has not started or is exhausted")
+            max_requests = None
             try:
                 item_id, values = validate_item(item, [spec.input_field for spec in specs])
-                registration = await asyncio.to_thread(
-                    self.view.register_standing_item, session.run_id, item_id, values, max_items=target.max_items
-                )
-            except StandingCapacity as exc:
-                raise CommandRefused("standing_capacity_reached", str(exc)) from None
+                registration = await asyncio.to_thread(self.view.register_standing_item, session.run_id, item_id, values)
             except ValueError as exc:
                 # Includes priming/evaluation overlap. Nothing was registered and no request was reserved.
                 raise CommandRefused("source_refused", str(exc)) from None
@@ -456,7 +433,6 @@ class PublicationCommandRuntime:
 REFUSAL_STATUS = {
     "provider_key_unavailable": 503,
     "request_ceiling_reached": 429,
-    "standing_capacity_reached": 507,
     "source_refused": 409,
 }
 

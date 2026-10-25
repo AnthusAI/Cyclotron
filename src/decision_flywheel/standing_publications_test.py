@@ -1,43 +1,13 @@
-"""Trusted standing-run policy: allowance arithmetic, item admission bounds and the proposed target shape."""
+"""Standing-run source validation and quota-free target configuration."""
 
 import json
-from datetime import date
 from uuid import uuid4
 
 import pytest
 
 from .hosted_publications import targets_from_environment
 from .machine_access import principals_from_environment
-from .standing_publications import MAX_VALUES_BYTES, RequestCeiling, validate_item
-
-
-def test_a_cumulative_ceiling_without_a_daily_allowance_is_just_the_total():
-    assert RequestCeiling(300).allowed(date(2030, 1, 1)) == 300
-
-
-def test_a_daily_allowance_accrues_from_its_start_date_up_to_the_total():
-    ceiling = RequestCeiling(250, per_day=100, since="2026-10-21")
-    assert ceiling.allowed(date(2026, 10, 20)) == 0
-    assert [ceiling.allowed(date(2026, 10, d)) for d in (21, 22, 23, 24)] == [100, 200, 250, 250]
-
-
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        {"total": 0},
-        {"total": True},
-        {"total": 100001},
-        {"total": 5, "per_day": 1},
-        {"total": 5, "since": "2026-10-21"},
-        {"total": 5, "per_day": 1, "since": "2026-13-40"},
-        {"total": 5, "per_day": 1, "since": "tomorrow"},
-        {"total": 5, "per_day": 0, "since": "2026-10-21"},
-    ],
-)
-def test_malformed_ceilings_are_refused(kwargs):
-    with pytest.raises(ValueError):
-        RequestCeiling(**kwargs)
-
+from .standing_publications import MAX_VALUES_BYTES, validate_item
 
 GOOD = {"id": "hn-42", "values": {"text": "A story.", "url": "https://example.test/a", "points": 12}}
 
@@ -70,6 +40,24 @@ def test_a_valid_source_is_returned_in_canonical_form():
 def test_unbounded_or_unfit_sources_are_refused(item):
     with pytest.raises(ValueError):
         validate_item(item, ["text"])
+
+
+def test_a_standing_target_does_not_need_request_or_item_quota_fields():
+    target = anthus_targets(RUN_PLACEHOLDER)[0]
+    target.pop("requestCeiling", None)
+    target.pop("maxItems", None)
+    (parsed,) = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps([target])})
+    assert parsed.standing is True
+    assert not hasattr(parsed, "request_ceiling") and not hasattr(parsed, "max_items")
+
+
+def test_legacy_standing_quota_fields_are_ignored_during_configuration_migration():
+    target = anthus_targets(RUN_PLACEHOLDER)[0]
+    target["requestCeiling"] = {"total": 300, "perDay": 100, "since": "2026-10-21"}
+    target["maxItems"] = 300
+    (parsed,) = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps([target])})
+    assert parsed.standing is True
+    assert not hasattr(parsed, "request_ceiling") and not hasattr(parsed, "max_items")
 
 
 def test_machine_principals_must_be_exact_distinct_role_arns():
@@ -105,8 +93,6 @@ def anthus_targets(run_id):
             "runId": run_id,
             "modelIdentity": "jev:jev-1.13.0",
             "standing": True,
-            "requestCeiling": {"total": 300, "perDay": 100, "since": "2026-10-21"},
-            "maxItems": 300,
             "bindings": [
                 {"publicationId": "anth-us", "outputs": ["anth-us-relevance"], "revision": "1"},
                 {"publicationId": "p-apyr-us", "outputs": ["p-apyr-us-relevance"], "revision": "1"},
@@ -123,17 +109,13 @@ def test_the_reviewed_anthus_target_configuration_parses():
     assert target.account_id == ACCOUNT and target.standing and target.model_identity == "jev:jev-1.13.0"
     assert [b.publication_id for b in target.bindings] == ["anth-us", "p-apyr-us", "threat-intelligence", "data-parade"]
     assert target.pending_outputs == ("data-parade-relevance",)
-    assert (target.request_ceiling.total, target.request_ceiling.per_day, target.max_items) == (300, 100, 300)
+    assert target.standing is True
+    assert not hasattr(target, "request_ceiling") and not hasattr(target, "max_items")
 
 
 def test_target_configuration_rejects_unknown_or_unsafe_standing_fields():
     for change in (
         {"standing": "true"},
-        {"standing": False},
-        {"requestCeiling": {"perDay": 5, "since": "2026-10-21"}},
-        {"requestCeiling": {"total": 5, "burst": 9}},
-        {"requestCeiling": 5},
-        {"maxItems": 0},
         {"machine": True},
     ):
         raw = [{**anthus_targets(RUN_PLACEHOLDER)[0], **change}]

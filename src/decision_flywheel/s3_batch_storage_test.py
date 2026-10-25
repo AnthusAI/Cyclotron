@@ -52,6 +52,18 @@ def test_independent_workers_race_for_one_atomic_budget_slot():
     assert not any("dynamo" in key for key in client.objects)
 
 
+def test_uncapped_reservations_keep_durable_attempt_accounting_and_idempotency():
+    s = store()
+    owners = []
+    for index in range(4):
+        owner = str(uuid4())
+        owners.append(owner)
+        s.reserve(str(index + 1) * 64, None, owner)
+    assert s.requests() == 4
+    assert s.reserve("1" * 64, None, owners[0]).fingerprint == "1" * 64
+    assert s.requests() == 4
+
+
 def test_lost_claim_response_never_authorizes_a_provider_and_restart_does_not_steal():
     s = store()
     owner = str(uuid4())

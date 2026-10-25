@@ -54,7 +54,9 @@ class BatchRecord:
 class BatchStorage(Protocol):
     def get(self, fingerprint: str, *, payload: bool = True) -> BatchRecord | None: ...
     def requests(self) -> int: ...
-    def reserve(self, fingerprint: str, maximum: int, owner: str, *, policy="reuse", retry_failed=False) -> BatchRecord: ...
+    def reserve(
+        self, fingerprint: str, maximum: int | None, owner: str, *, policy="reuse", retry_failed=False
+    ) -> BatchRecord: ...
     def claim(self, fingerprint: str, owner: str) -> bool: ...
     def settle(self, fingerprint: str, owner: str, status: str, payload: str | None = None) -> BatchRecord: ...
     def operation_mark(self) -> int: ...
@@ -236,8 +238,12 @@ class SQLiteBatchStorage:
 
     def reserve(self, fingerprint, maximum, owner, *, policy="reuse", retry_failed=False):
         validate_request(fingerprint, owner)
-        if type(maximum) is not int or maximum < 0 or policy not in ("reuse", "cache_only", "refresh"):
-            raise ValueError("valid request ceiling and policy required")
+        if (maximum is not None and (type(maximum) is not int or maximum < 0)) or policy not in (
+            "reuse",
+            "cache_only",
+            "refresh",
+        ):
+            raise ValueError("valid request ceiling or None and policy required")
         with self.lock, self.db:
             self.db.execute("BEGIN IMMEDIATE")
             row = self._get(fingerprint)
@@ -267,7 +273,7 @@ class SQLiteBatchStorage:
                 and not (row.status == "interrupted" and row.payload == '{"learning_abandoned":true}')
             ):
                 raise RuntimeError("explicit retry required for interrupted batch")
-            if self.requests() >= maximum:
+            if maximum is not None and self.requests() >= maximum:
                 raise RuntimeError("run decision request ceiling reached")
             if row:
                 self.db.execute(

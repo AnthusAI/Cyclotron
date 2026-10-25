@@ -1382,7 +1382,7 @@ class S3ConsoleStorage:
         self._run(value, run_id)
         return [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
 
-    def register_standing_item(self, run_id, item_id, values, *, max_items):
+    def register_standing_item(self, run_id, item_id, values):
         """Atomically register a never-before-seen source (or a new immutable revision) for a standing run.
 
         Only a fenced worker command may call this. The source joins the run's own operational list and
@@ -1391,7 +1391,7 @@ class S3ConsoleStorage:
         """
         if self._claim.get() is None:
             raise ValueError("standing registration requires a command-bound worker")
-        if type(max_items) is not int or max_items < 1 or not isinstance(item_id, str) or not isinstance(values, dict):
+        if not isinstance(item_id, str) or not isinstance(values, dict):
             raise ValueError("bounded standing item required")
         created = now()
 
@@ -1422,10 +1422,7 @@ class S3ConsoleStorage:
                         imported_at=created,
                     ),
                 )
-            held = rows(value, "web_items", run_id=run_id)
             row = one(value, "web_items", run_id=run_id, id=item_id)
-            if row is None and len(held) >= max_items:
-                raise StandingCapacity(max_items)
             frozen = encoded(
                 {**json.loads(revision["payload"]), "revision": revision["revision"], "fingerprint": revision["fingerprint"]}
             )
@@ -1765,12 +1762,6 @@ class S3ConsoleStorage:
     promote_supporting_question = _NativeAlgorithms.promote_supporting_question
     matched_run_preflight = _NativeAlgorithms.matched_run_preflight
     matched_run_sources = _NativeAlgorithms.matched_run_sources
-
-
-class StandingCapacity(ValueError):
-    def __init__(self, limit):
-        super().__init__(f"standing run item capacity of {limit} reached")
-        self.limit = limit
 
 
 class _CommandView:
