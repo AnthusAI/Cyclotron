@@ -1,6 +1,7 @@
 """Standing runs reached by a SigV4 service principal, over the real hosted API, queue, worker and S3 stores."""
 
 import asyncio
+import json
 from dataclasses import replace
 from uuid import uuid4
 
@@ -432,3 +433,259 @@ def test_an_item_whose_earlier_attempt_failed_is_refused_with_a_receipt_instead_
             assert receipt.status_code == 200
 
     asyncio.run(go())
+
+
+def decisions_body(bindings, item, request_id="req-all-0001"):
+    return {"contractVersion": CONTRACT, "requestId": request_id, "payload": {"bindings": bindings, "item": item}}
+
+
+def revisions(*names):
+    return {name: "binding-one" for name in names}
+
+
+async def drain(worker, sent):
+    while sent:
+        await worker.worker().process(sent.pop(0))
+
+
+def test_one_request_for_three_publications_makes_one_job_and_one_model_request_with_equal_decision_ids(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    run_id = targets[0].run_id
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta", "gamma"), new_item()))
+            assert posted.status_code == 202, posted.text
+            accepted = posted.json()
+            assert set(accepted) == {"contractVersion", "accountId", "runId", "jobId", "status", "bindings"}
+            assert accepted["bindings"] == revisions("alpha", "beta", "gamma") and accepted["runId"] == run_id
+            running = await http.get(f"/machine/decisions/{accepted['jobId']}")
+            assert running.status_code == 202 and running.json()["status"] == "pending"
+            assert len(sent) == 1
+            await drain(worker, sent)
+            done = await http.get(f"/machine/decisions/{accepted['jobId']}")
+            assert done.status_code == 200, done.text
+            receipt = done.json()
+            assert set(receipt) == {"contractVersion", "accountId", "runId", "jobId", "decisionId", "publications"}
+            assert set(receipt["publications"]) == {"alpha", "beta", "gamma"}
+            ids = {row["decision"]["decisionId"] for row in receipt["publications"].values()}
+            assert ids == {receipt["decisionId"]}
+            for name, row in receipt["publications"].items():
+                assert row["publicationId"] == name and set(row["decision"]["classifiers"]) == {name}
+                assert row["source"]["id"] == "hn-1"
+            assert len(model.calls) == 1
+            assert len([j for j in store.jobs(run_id) if j["kind"] == "publication"]) == 1
+            same = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta", "gamma"), new_item()))
+            assert same.status_code == 202 and same.json()["jobId"] == accepted["jobId"]
+            changed = await http.post(
+                "/machine/decisions", json=decisions_body(revisions("alpha", "beta", "gamma"), new_item(text="other"))
+            )
+            assert changed.status_code == 409 and changed.json()["code"] == "request_conflict"
+
+    asyncio.run(go())
+
+
+def test_each_projection_is_byte_identical_to_the_single_publication_receipt_for_the_same_decision(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item()))
+            await drain(worker, sent)
+            shared = (await http.get(f"/machine/decisions/{posted.json()['jobId']}")).json()
+            for name in ("alpha", "beta"):
+                _, single = await decide(http, worker, sent, new_item(), publication=name)
+                assert single.status_code == 200
+                assert json.dumps(single.json(), sort_keys=True) == json.dumps(shared["publications"][name], sort_keys=True)
+            assert len(model.calls) == 1
+
+    asyncio.run(go())
+
+
+def test_a_mismatched_revision_or_unknown_publication_gives_409_and_creates_no_job(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            for bindings in ({"alpha": "binding-one", "beta": "stale"}, {"alpha": "binding-one", "unknown": "binding-one"}):
+                refused = await http.post("/machine/decisions", json=decisions_body(bindings, new_item()))
+                assert refused.status_code == 409 and "binding changed" in refused.text
+            empty = await http.post("/machine/decisions", json=decisions_body({}, new_item()))
+            assert empty.status_code == 400
+            assert not sent and not [j for j in store.jobs(targets[0].run_id) if j["kind"] == "publication"]
+
+    asyncio.run(go())
+
+
+def test_a_pending_output_gives_409_and_creates_no_job(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    targets[0] = replace(targets[0], pending_outputs=("gamma",))
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            pending = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "gamma"), new_item()))
+            assert pending.status_code == 409 and "pending" in pending.text
+            assert not sent
+
+    asyncio.run(go())
+
+
+def test_live_disabled_refuses_the_shared_decision_and_unsigned_callers_are_refused(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    bff.config = replace(bff.config, allow_live=False)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            refused = await http.post("/machine/decisions", json=decisions_body(revisions("alpha"), new_item()))
+            assert refused.status_code == 503
+        async with client(wrapped, config, account, arn=None) as http:
+            assert (await http.post("/machine/decisions", json=decisions_body(revisions("alpha"), new_item()))).status_code == 403
+            assert (await http.get(f"/machine/decisions/{uuid4()}")).status_code == 403
+
+    asyncio.run(go())
+
+
+def test_a_missing_provider_key_refuses_the_shared_receipt_with_the_single_receipt_shape(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    def unavailable(config):
+        raise ProviderKeyUnavailable()
+
+    worker.model_factory = unavailable
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item()))
+            await drain(worker, sent)
+            receipt = await http.get(f"/machine/decisions/{posted.json()['jobId']}")
+            assert receipt.status_code == 503 and receipt.json()["code"] == "provider_key_unavailable"
+            assert not model.calls
+
+    asyncio.run(go())
+
+
+def test_a_single_publication_job_is_not_readable_through_the_shared_route_and_the_reverse(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            single, _ = await decide(http, worker, sent, new_item())
+            assert (await http.get(f"/machine/decisions/{single}")).status_code == 404
+            posted = await http.post(
+                "/machine/decisions", json=decisions_body(revisions("alpha"), new_item("hn-2"), "req-all-0002")
+            )
+            await drain(worker, sent)
+            assert (await http.get(f"/machine/publications/alpha/commands/{posted.json()['jobId']}")).status_code == 404
+
+    asyncio.run(go())
+
+
+def test_worker_jobs_per_story_drop_from_the_publication_count_to_one(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    names = ("alpha", "beta", "gamma", "delta")
+    stories = [new_item(f"story-{n}") for n in range(3)]
+    run_id = targets[0].run_id
+
+    def jobs():
+        return len([j for j in store.jobs(run_id) if j["kind"] == "publication"])
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            for story in stories:
+                for name in names:
+                    await decide(http, worker, sent, story, publication=name)
+            before = (jobs(), len(model.calls))
+            for n in range(len(stories)):
+                posted = await http.post(
+                    "/machine/decisions", json=decisions_body(revisions(*names), new_item(f"fresh-{n}"), f"req-bench-{n:04d}")
+                )
+                assert posted.status_code == 202
+                await drain(worker, sent)
+            return before, (jobs() - before[0], len(model.calls) - before[1])
+
+    before, after = asyncio.run(go())
+    assert before == (len(stories) * len(names), len(stories))
+    assert after == (len(stories), len(stories))
+    print(
+        f"jobs per story before={before[0] // len(stories)} after={after[0] // len(stories)}; model calls per story {before[1] // len(stories)} -> {after[1] // len(stories)}"
+    )
+
+
+def test_status_reflects_the_newest_shared_decision_job_for_each_of_its_publications(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            await decide(http, worker, sent, new_item("single-1"), publication="alpha")
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item("shared-1")))
+            await drain(worker, sent)
+            shared = (await http.get(f"/machine/decisions/{posted.json()['jobId']}")).json()
+            job = next(j for j in store.jobs(targets[0].run_id) if j["id"] == posted.json()["jobId"])
+            assert set(job["result"]["statusSnapshots"]) == {"alpha", "beta"}
+            for name in ("alpha", "beta"):
+                status = (await http.post(f"/machine/publications/{name}/operations", json=body("status", {}))).json()
+                assert status == job["result"]["statusSnapshots"][name] and status["publicationId"] == name
+            assert shared["publications"]["alpha"]["decision"]["decisionId"] == shared["decisionId"]
+            gamma = await http.post("/machine/publications/gamma/operations", json=body("status", {}))
+            assert gamma.status_code == 503
+
+    asyncio.run(go())
+
+
+def without_clock(value):
+    stamp = __import__("re").compile(r"\d{4}-\d\d-\d\dT[\d:.+]+")
+    return stamp.sub("<time>", json.dumps(value, sort_keys=True))
+
+
+def test_a_shared_jobs_status_snapshots_match_what_single_publication_jobs_record_for_the_same_state(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item()))
+            await drain(worker, sent)
+            shared = {
+                name: (await http.post(f"/machine/publications/{name}/operations", json=body("status", {}))).json()
+                for name in ("alpha", "beta")
+            }
+            for name in ("alpha", "beta"):
+                await decide(http, worker, sent, new_item(), publication=name)
+                single = (await http.post(f"/machine/publications/{name}/operations", json=body("status", {}))).json()
+                assert without_clock(single) == without_clock(shared[name])
+            assert posted.status_code == 202
+
+    asyncio.run(go())
+
+
+def test_only_the_first_status_step_writes_and_later_publications_cost_no_journal_commits(identity, monkeypatch):
+    from .publication_lab import PublicationLab
+
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    puts, spent = [0], []
+    real_put, real_command = worker.s3.put_object, PublicationLab.command
+
+    def counted(**request):
+        puts[0] += 1
+        return real_put(**request)
+
+    async def measured(self, actor, publication, operation, payload, **kwargs):
+        before = puts[0]
+        try:
+            return await real_command(self, actor, publication, operation, payload, **kwargs)
+        finally:
+            if operation == "status":
+                spent.append(puts[0] - before)
+
+    worker.s3.put_object = counted
+    monkeypatch.setattr(PublicationLab, "command", measured)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta", "gamma", "delta"), new_item()))
+            await drain(worker, sent)
+
+    asyncio.run(go())
+    outer = spent[1::2]
+    assert len(outer) == 4
+    print(f"S3 writes during each status step: {outer}; whole job: {puts[0]}")
+    assert outer[1:] == [0, 0, 0]
