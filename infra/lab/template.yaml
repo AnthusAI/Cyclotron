@@ -461,6 +461,8 @@ Resources:
             Resource:
             - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/publications/*/operations
             - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/publications/*/commands/*
+            - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/decisions
+            - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/decisions/*
   BffFunction:
     Type: AWS::Lambda::Function
     DependsOn: BffLogGroup

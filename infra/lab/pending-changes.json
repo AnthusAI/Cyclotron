@@ -1,4 +1,19 @@
 {
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. Add-only JSON Pointer operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
-  "operations": []
+  "operations": [
+    {
+      "op": "add",
+      "path": "/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+      "value": {
+        "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/decisions"
+      }
+    },
+    {
+      "op": "add",
+      "path": "/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+      "value": {
+        "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/decisions/*"
+      }
+    }
+  ]
 }
