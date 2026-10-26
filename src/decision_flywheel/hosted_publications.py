@@ -464,11 +464,13 @@ class PublicationCommandRuntime:
                     result = {"decisionId": decision.decision_id, "publications": projections}
                 elif registration is not None:
                     result = {**result, "source": registration}
-            if not shared:
+            if shared:
+                snapshots = {name: await lab.command(actor, name, "status", {}, execution_guard=fresh) for name in publications}
+            else:
                 status = await lab.command(actor, publication, "status", {}, execution_guard=fresh)
         await fresh()
         if shared:
-            return RuntimeCommand({"response": result})
+            return RuntimeCommand({"response": result, "statusSnapshots": snapshots})
         return RuntimeCommand({"response": result, "statusSnapshot": status})
 
 
@@ -480,17 +482,16 @@ REFUSAL_STATUS = {
 
 
 def status_snapshot(store, target, binding, publication):
-    """Newest verified completed worker snapshot for this binding, or None."""
+    """Newest verified completed worker snapshot for this binding, or None. ``jobs`` lists newest first."""
     # A lake-backed store lists jobs without fetching results and fetches only the one that matches.
     fetch = getattr(store, "job_result", None)
-    for job in reversed(store.jobs(target.run_id, results=False) if fetch else store.jobs(target.run_id)):
-        if (
-            job["kind"] == "publication"
-            and job["status"] == "completed"
-            and job["payload"].get("publication") == publication
-            and job["payload"].get("bindingRevision") == binding.revision
-        ):
-            return (fetch(job["id"]) if fetch else job["result"])["statusSnapshot"]
+    for job in store.jobs(target.run_id, results=False) if fetch else store.jobs(target.run_id):
+        payload = job["payload"]
+        single = payload.get("publication") == publication and payload.get("bindingRevision") == binding.revision
+        shared = is_shared_decision_command(job["kind"], payload) and payload["bindings"].get(publication) == binding.revision
+        if job["kind"] == "publication" and job["status"] == "completed" and (single or shared):
+            result = fetch(job["id"]) if fetch else job["result"]
+            return result["statusSnapshots"][publication] if shared else result["statusSnapshot"]
     return None
 
 

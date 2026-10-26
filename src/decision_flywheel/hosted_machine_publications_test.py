@@ -609,3 +609,83 @@ def test_worker_jobs_per_story_drop_from_the_publication_count_to_one(identity, 
     print(
         f"jobs per story before={before[0] // len(stories)} after={after[0] // len(stories)}; model calls per story {before[1] // len(stories)} -> {after[1] // len(stories)}"
     )
+
+
+def test_status_reflects_the_newest_shared_decision_job_for_each_of_its_publications(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            await decide(http, worker, sent, new_item("single-1"), publication="alpha")
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item("shared-1")))
+            await drain(worker, sent)
+            shared = (await http.get(f"/machine/decisions/{posted.json()['jobId']}")).json()
+            job = next(j for j in store.jobs(targets[0].run_id) if j["id"] == posted.json()["jobId"])
+            assert set(job["result"]["statusSnapshots"]) == {"alpha", "beta"}
+            for name in ("alpha", "beta"):
+                status = (await http.post(f"/machine/publications/{name}/operations", json=body("status", {}))).json()
+                assert status == job["result"]["statusSnapshots"][name] and status["publicationId"] == name
+            assert shared["publications"]["alpha"]["decision"]["decisionId"] == shared["decisionId"]
+            gamma = await http.post("/machine/publications/gamma/operations", json=body("status", {}))
+            assert gamma.status_code == 503
+
+    asyncio.run(go())
+
+
+def without_clock(value):
+    stamp = __import__("re").compile(r"\d{4}-\d\d-\d\dT[\d:.+]+")
+    return stamp.sub("<time>", json.dumps(value, sort_keys=True))
+
+
+def test_a_shared_jobs_status_snapshots_match_what_single_publication_jobs_record_for_the_same_state(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            posted = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item()))
+            await drain(worker, sent)
+            shared = {
+                name: (await http.post(f"/machine/publications/{name}/operations", json=body("status", {}))).json()
+                for name in ("alpha", "beta")
+            }
+            for name in ("alpha", "beta"):
+                await decide(http, worker, sent, new_item(), publication=name)
+                single = (await http.post(f"/machine/publications/{name}/operations", json=body("status", {}))).json()
+                assert without_clock(single) == without_clock(shared[name])
+            assert posted.status_code == 202
+
+    asyncio.run(go())
+
+
+def test_only_the_first_status_step_writes_and_later_publications_cost_no_journal_commits(identity, monkeypatch):
+    from .publication_lab import PublicationLab
+
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    puts, spent = [0], []
+    real_put, real_command = worker.s3.put_object, PublicationLab.command
+
+    def counted(**request):
+        puts[0] += 1
+        return real_put(**request)
+
+    async def measured(self, actor, publication, operation, payload, **kwargs):
+        before = puts[0]
+        try:
+            return await real_command(self, actor, publication, operation, payload, **kwargs)
+        finally:
+            if operation == "status":
+                spent.append(puts[0] - before)
+
+    worker.s3.put_object = counted
+    monkeypatch.setattr(PublicationLab, "command", measured)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta", "gamma", "delta"), new_item()))
+            await drain(worker, sent)
+
+    asyncio.run(go())
+    outer = spent[1::2]
+    assert len(outer) == 4
+    print(f"S3 writes during each status step: {outer}; whole job: {puts[0]}")
+    assert outer[1:] == [0, 0, 0]
