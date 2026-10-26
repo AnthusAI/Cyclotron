@@ -128,3 +128,12 @@ target parameter together; decisions already delivered stay delivered.
 clean superseded name with `saveCyclotronDefinition("shared-source-relevance", "Shared source relevance (superseded by
 shared-source-relevance-r2)", <its active refs>, <its settings>)`; this does not touch the retired run's pin.
 Record the run id, change-set id and files' commit on the ticket. Moving this to a single run again is what ade3088c delivers.
+
+## r3: adding Shipped (2026-10-26)
+
+Adding a classifier changes the definition, so r3 is another successor run by the same steps. `plan` must show
+the five r2-era classifiers as `current`, `save` for `shipped-relevance` at revision 1, and `define
+shared-source-relevance-r3` (2/2/2/1/1/1). No relabelling is needed: the existing priming labels are keyed to
+unchanged classifier revisions and carry over; prime each binding again on the new run. Bindings move to revision
+"3" together with the router's `bindingRevision`, and the router gains a `shipped` publication
+(corpus `knowledge-corpus-shipped`).

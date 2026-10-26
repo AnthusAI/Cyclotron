@@ -16,26 +16,42 @@ from decision_flywheel.s3_console_storage_test import store
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / "infra/lab/criteria"
-LIVE_FAMILY = "shared-source-relevance"
-NEW_CLASSIFIERS = ("data-parade-relevance", "pilobol-us-relevance")
+LIVE_FAMILY = "shared-source-relevance-r2"
+ORIGINAL_FAMILY = "shared-source-relevance"
+# Classifiers created at revision 1 by a reviewed criteria file (no ``previous``), and the date Ryan approved each.
+NEW_CLASSIFIERS = {"data-parade-relevance": "2026-10-23", "pilobol-us-relevance": "2026-10-23", "shipped-relevance": "2026-10-25"}
+# Classifiers that existed before the r3 deploy: everything but the one this deploy adds.
+ADDED_BY_THIS_DEPLOY = ("shipped-relevance",)
 
 
 def committed():
     return load_directory(DIRECTORY, relative_to=ROOT), load_definition(DIRECTORY)
 
 
-def catalog_at_revision_one(criteria):
-    """The lab catalog as read from production on 2026-10-21: three revision 1 classifiers and one definition.
+def catalog_after_r2(criteria, definition):
+    """The lab catalog as it stands after the r2 migration (2026-10-24/25), before this deploy.
 
-    Classifiers whose criteria file has no ``previous`` are new and are not in the catalog yet.
+    The three original classifiers have their revision 1 (previous) and revision 2 (approved) text; Data Parade and
+    Pilobolus exist at revision 1; the original family and the r2 successor definition both exist.
     """
     s = store()
-    existing = [c for c in criteria if not c.is_new]
-    for item in existing:
-        s.save_classifier(item.classifier_id, item.name, item.previous_config())
-    refs = [{"id": c.classifier_id, "revision": 1} for c in existing]
     settings = {"decisions_model": "jev-1.13.0", "decisions_provider": "jev", "description": "Draft."}
-    s.save_cyclotron_definition(LIVE_FAMILY, "Shared source relevance (DRAFT)", refs, settings)
+    rewritten = [c for c in criteria if not c.is_new]
+    for item in rewritten:
+        s.save_classifier(item.classifier_id, item.name, item.previous_config())
+    s.save_cyclotron_definition(
+        ORIGINAL_FAMILY, "Shared source relevance (DRAFT)", [{"id": c.classifier_id, "revision": 1} for c in rewritten], settings
+    )
+    for item in criteria:
+        if item.classifier_id not in ADDED_BY_THIS_DEPLOY:
+            s.save_classifier(item.classifier_id, item.name, item.classifier_config())
+    r2 = [cid for cid in definition["order"] if cid not in ADDED_BY_THIS_DEPLOY]
+    s.save_cyclotron_definition(
+        LIVE_FAMILY,
+        definition["name"],
+        [{"id": cid, "revision": 1 if cid in NEW_CLASSIFIERS else 2} for cid in r2],
+        {**settings, "description": "Five publications."},
+    )
     return s
 
 
@@ -62,14 +78,16 @@ def test_approved_files_record_who_approved_them_and_when():
     }
     on = {c.classifier_id: c.approval["approved_on"] for c in approved}
     assert all(c.approval["status"] == "approved" and c.approval["approved_by"] == "Ryan" for c in approved)
-    assert all(on.pop(cid) == "2026-10-23" for cid in NEW_CLASSIFIERS) and set(on.values()) == {"2026-10-22"}
+    assert all(on.pop(cid) == day for cid, day in NEW_CLASSIFIERS.items()) and set(on.values()) == {"2026-10-22"}
 
 
-def test_a_deploy_applies_existing_classifiers_as_revision_two_and_the_new_one_as_revision_one_in_a_successor_definition():
+def test_a_deploy_adds_only_the_new_classifier_and_defines_a_successor_with_the_live_revisions():
     criteria, definition = committed()
-    s = catalog_at_revision_one(criteria)
+    s = catalog_after_r2(criteria, definition)
     steps = plan_classifiers(s, criteria)
-    assert all(step.action == "save" for step in steps)
+    assert {step.classifier_id: step.action for step in steps} == {
+        c.classifier_id: "save" if c.classifier_id in ADDED_BY_THIS_DEPLOY else "current" for c in criteria
+    }
     plan = plan_definition(s, criteria, steps, definition)
     assert plan.action == "define" and not plan.name.endswith("awaiting editor approval)")
     apply_plan(s, criteria, steps, plan)
@@ -77,9 +95,6 @@ def test_a_deploy_applies_existing_classifiers_as_revision_two_and_the_new_one_a
         live = s.classifier(item.classifier_id)
         assert live["revision"] == (1 if item.is_new else 2)
         assert live["config"] == item.classifier_config()
-        assert live["config"]["question"] == item.question
-        if not item.is_new:
-            assert s.classifier(item.classifier_id, 1)["config"]["question"] == item.previous["question"]
     successor = s.cyclotron_definition(definition["id"])
     assert successor["classifiers"] == [
         {"id": cid, "revision": 1 if cid in NEW_CLASSIFIERS else 2} for cid in definition["order"]
@@ -89,21 +104,22 @@ def test_a_deploy_applies_existing_classifiers_as_revision_two_and_the_new_one_a
 
 def test_a_deploy_never_moves_the_definition_the_standing_run_is_pinned_to():
     criteria, definition = committed()
-    s = catalog_at_revision_one(criteria)
+    s = catalog_after_r2(criteria, definition)
+    before = s.cyclotron_definition(LIVE_FAMILY, 1)
     steps = plan_classifiers(s, criteria)
     apply_plan(s, criteria, steps, plan_definition(s, criteria, steps, definition))
-    pinned = s.cyclotron_definition(LIVE_FAMILY, 1)
-    assert pinned["classifiers"] == [{"id": cid, "revision": 1} for cid in definition["order"] if cid not in NEW_CLASSIFIERS]
-    # The engine store is named for the cyclotron id; a changed question needs a new id (ticket ade3088c).
+    assert s.cyclotron_definition(LIVE_FAMILY, 1)["classifiers"] == before["classifiers"]
+    # The engine store is named for the cyclotron id; a changed classifier set needs a new id (ticket ade3088c).
     assert definition["id"] != LIVE_FAMILY and definition["supersedes"] == LIVE_FAMILY
 
 
-def test_the_previous_text_in_each_file_is_what_the_live_catalog_must_still_hold():
+def test_a_hand_edited_live_question_blocks_the_deploy():
     criteria, definition = committed()
-    s = catalog_at_revision_one(criteria)
-    s.save_classifier(criteria[0].classifier_id, criteria[0].name, {**criteria[0].previous_config(), "question": "Hand edit?"})
+    s = catalog_after_r2(criteria, definition)
+    edited = next(c for c in criteria if not c.is_new)
+    s.save_classifier(edited.classifier_id, edited.name, {**edited.classifier_config(), "question": "Hand edit?"})
     steps = plan_classifiers(s, criteria)
-    assert steps[0].action == "drift"
+    assert next(step for step in steps if step.classifier_id == edited.classifier_id).action == "drift"
     assert plan_definition(s, criteria, steps, definition).action == "blocked"
 
 
