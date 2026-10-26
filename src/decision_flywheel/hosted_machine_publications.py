@@ -2,6 +2,8 @@
 
 ``POST /machine/publications/{publication}/operations`` accepts ``decide``, ``status`` and ``feedback``.
 ``GET  /machine/publications/{publication}/commands/{jobId}`` polls a queued ``decide``.
+``POST /machine/decisions`` queues one ``decide`` answering several publications of a standing target.
+``GET  /machine/decisions/{jobId}`` polls it and returns every requested publication's projection.
 
 The caller identity comes only from the API Gateway IAM context. Account and run are derived from the
 trusted target configuration; the account header must merely select a configured target. A machine
@@ -16,7 +18,7 @@ from hashlib import sha256
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .hosted_publications import envelope, receipt_response, status_snapshot, target_for
+from .hosted_publications import configured_targets, envelope, receipt_response, status_snapshot, target_for
 from .journal import uuid
 from .machine_access import MachineActor, MachineDenied, verified_caller
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
@@ -215,3 +217,120 @@ def install_machine_routes(app, runtime):
         ):
             raise HTTPException(404, "unknown publication command")
         return receipt_response(job, envelope(target, binding, run["config"]))
+
+    def resolve_account(request):
+        try:
+            role, session = verified_caller(request.scope, runtime.machine_principals)
+        except MachineDenied:
+            raise HTTPException(403, "machine access refused") from None
+        try:
+            account = uuid(request.headers.get("X-Cyclotron-Account"))
+        except (ValueError, TypeError):
+            raise HTTPException(400, "explicit account pin required") from None
+        return role, session, account
+
+    def decisions_meta(account, target, bindings):
+        return {"contractVersion": CONTRACT, "accountId": account, "runId": target.run_id, "bindings": bindings}
+
+    @app.post("/machine/decisions")
+    async def decisions(request: Request):
+        role, session, account = resolve_account(request)
+        content = await request.body()
+        if len(content) > 65536:
+            raise HTTPException(413, "bounded publication request required")
+        try:
+            body = json.loads(content)
+            payload = body["payload"]
+            if (
+                set(body) != {"contractVersion", "requestId", "payload"}
+                or body["contractVersion"] != CONTRACT
+                or not isinstance(body["requestId"], str)
+                or not REQUEST_ID.fullmatch(body["requestId"])
+                or not isinstance(payload, dict)
+                or set(payload) != {"bindings", "item"}
+                or not isinstance(payload["bindings"], dict)
+                or not 1 <= len(payload["bindings"]) <= 100
+                or any(not isinstance(k, str) or not isinstance(v, str) for k, v in payload["bindings"].items())
+            ):
+                raise ValueError()
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(400, "publication contract with a machine request id required") from None
+        bindings = payload["bindings"]
+        standing = [t for t in configured_targets(runtime) if t.account_id == account and t.standing]
+        if not standing:
+            raise HTTPException(403, "machine access refused")
+        target = next((t for t in standing if set(bindings) <= {b.publication_id for b in t.bindings}), None)
+        if target is None:
+            raise HTTPException(409, "publication binding changed")
+        known = {b.publication_id: b for b in target.bindings}
+        store = runtime.console(account)
+        try:
+            run = await asyncio.to_thread(store.run, target.run_id)
+        except (ValueError, StorageMissing):
+            raise HTTPException(409, "standing run unavailable") from None
+        if any(known[name].revision != revision for name, revision in bindings.items()):
+            raise HTTPException(409, "publication binding changed")
+        meta = decisions_meta(account, target, bindings)
+        if any(set(known[name].outputs) & set(target.pending_outputs) for name in bindings):
+            raise HTTPException(409, "publication criteria are pending")
+        if not runtime.config.allow_live:
+            raise HTTPException(503, "live publication predictions are disabled")
+        for name in bindings:
+            envelope(target, known[name], run["config"])
+        try:
+            inputs = [row["config"].get("input_field", "text") for row in run["config"]["classifiers"]]
+            item_id, values = validate_item(payload["item"], inputs)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        command = {"bindings": bindings, "item": {"id": item_id, "values": values}}
+        actor = MachineActor(
+            role, session, account, target.run_id, await asyncio.to_thread(runtime.binding, account, target.run_id)
+        )
+        try:
+            job = await runtime.workspace(account).service.submit_machine_command(
+                actor, "machine:" + body["requestId"], "publication", command
+            )
+        except AccountAccessDenied:
+            raise HTTPException(403, "machine access refused") from None
+        except ProspectusUnavailable:
+            raise HTTPException(503, "queue outcome unavailable; retry the same request id") from None
+        except StorageUncertain:
+            raise HTTPException(503, "outcome uncertain; retry the same request id") from None
+        except StorageConflict:
+            raise HTTPException(409, "catalog changed; retry the same request id") from None
+        except ValueError as exc:
+            busy = "in progress" in str(exc)
+            return JSONResponse(
+                {**meta, "code": "run_busy" if busy else "request_conflict", "message": str(exc)}, status_code=409
+            )
+        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
+
+    @app.get("/machine/decisions/{job_id}")
+    async def decisions_receipt(job_id: str, request: Request):
+        _, _, account = resolve_account(request)
+        store = runtime.console(account)
+        try:
+            uuid(job_id)
+            job, actor = await asyncio.to_thread(store.command_envelope, job_id)
+        except (ValueError, StorageMissing):
+            raise HTTPException(404, "unknown publication decision") from None
+        payload = job["payload"]
+        target = next((t for t in configured_targets(runtime) if t.account_id == account and t.run_id == job["run_id"]), None)
+        if (
+            target is None
+            or not target.standing
+            or not isinstance(actor, MachineActor)
+            or job["kind"] != "publication"
+            or set(payload) != {"bindings", "item"}
+        ):
+            raise HTTPException(404, "unknown publication decision")
+        meta = decisions_meta(account, target, payload["bindings"])
+        if job["status"] == "completed":
+            return {
+                "contractVersion": CONTRACT,
+                "accountId": account,
+                "runId": target.run_id,
+                "jobId": job["id"],
+                **job["result"]["response"],
+            }
+        return receipt_response(job, meta)

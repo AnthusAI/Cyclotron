@@ -194,6 +194,18 @@ def is_priming_command(kind, payload):
     )
 
 
+def is_shared_decision_command(kind, payload):
+    """One decision for several publications of a standing target; the stored job payload shape."""
+    return (
+        kind == "publication"
+        and isinstance(payload, dict)
+        and set(payload) == {"bindings", "item"}
+        and isinstance(payload["bindings"], dict)
+        and bool(payload["bindings"])
+        and all(isinstance(k, str) and isinstance(v, str) for k, v in payload["bindings"].items())
+    )
+
+
 def priming_snapshot(store, target, binding, config, list_id):
     if not target.model_identity:
         raise ValueError("reviewed publication model identity required for priming")
@@ -267,16 +279,27 @@ class PublicationCommandRuntime:
     async def execute(self, session, kind, payload, shown, config, *, request_id=None):
         priming = is_priming_command(kind, payload)
         machine = isinstance(self.actor, MachineActor)
-        if not priming and (kind != "publication" or set(payload) != {"publication", "bindingRevision", "item"}):
+        shared = is_shared_decision_command(kind, payload)
+        if not priming and not shared and (kind != "publication" or set(payload) != {"publication", "bindingRevision", "item"}):
             raise ValueError("supported publication prediction command required")
-        publication = payload["publication"]
+        if shared and not machine:
+            raise AccountAccessDenied("only machine callers may decide for several publications")
+        publications = tuple(payload["bindings"]) if shared else (payload["publication"],)
+        target = None
+        for name in publications:
+            found, binding = target_for(self.host, self.actor.account_id, name)
+            target = target or found
+            if found != target:
+                raise AccountAccessDenied("publications must share one configured target")
+            if machine and (priming or not found.standing):
+                raise AccountAccessDenied("machine callers may only decide on standing targets")
+            revision = payload["bindings"][name] if shared else payload["bindingRevision"]
+            if found.run_id != session.run_id or binding.revision != revision:
+                raise AccountAccessDenied("publication run or binding changed")
+            if set(binding.outputs) & set(found.pending_outputs):
+                raise ValueError("publication criteria are pending")
+        publication = publications[0]
         target, binding = target_for(self.host, self.actor.account_id, publication)
-        if machine and (priming or not target.standing):
-            raise AccountAccessDenied("machine callers may only decide on standing targets")
-        if target.run_id != session.run_id or binding.revision != payload["bindingRevision"]:
-            raise AccountAccessDenied("publication run or binding changed")
-        if set(binding.outputs) & set(target.pending_outputs):
-            raise ValueError("publication criteria are pending")
         examples = None
         catalog = self.host.console(self.actor.account_id) if priming else None
         if priming:
@@ -298,6 +321,9 @@ class PublicationCommandRuntime:
 
         def check_scope():
             self.check()
+            for name in publications:
+                if target_for(self.host, self.actor.account_id, name)[0] != target:
+                    raise AccountAccessDenied("publication target changed")
             if target_for(self.host, self.actor.account_id, publication) != (target, binding):
                 raise AccountAccessDenied("publication target changed")
             if priming:
@@ -370,7 +396,7 @@ class PublicationCommandRuntime:
         actor = PublicationActor(
             self.actor.account_id,
             self.actor.service_id if machine else self.actor.person_id,
-            frozenset((publication, cap) for cap in ("decide", "read")),
+            frozenset((name, cap) for name in publications for cap in ("decide", "read")),
         )
         definition = CyclotronDefinition(config["cyclotron_id"], tuple(specs), seed=config["seed"])
         with Cyclotron.open(
@@ -405,9 +431,18 @@ class PublicationCommandRuntime:
                 }
             else:
                 try:
-                    result = await lab.command(
-                        actor, publication, "decide", {"bindingRevision": binding.revision, "item": item}, execution_guard=fresh
-                    )
+                    if shared:
+                        decision, projections = await lab.decide_all(
+                            actor, publications, {"bindings": payload["bindings"], "item": item}, execution_guard=fresh
+                        )
+                    else:
+                        result = await lab.command(
+                            actor,
+                            publication,
+                            "decide",
+                            {"bindingRevision": binding.revision, "item": item},
+                            execution_guard=fresh,
+                        )
                 except RuntimeError as exc:
                     if "explicit retry required" in str(exc):
                         # Raised while reserving the shared request, before any dispatch: an earlier attempt at
@@ -423,10 +458,17 @@ class PublicationCommandRuntime:
                     raise CommandRefused(
                         "request_ceiling_reached", "the request ceiling was reached; no provider call was made"
                     ) from None
-                if registration is not None:
+                if shared:
+                    if registration is not None:
+                        projections = {name: {**row, "source": registration} for name, row in projections.items()}
+                    result = {"decisionId": decision.decision_id, "publications": projections}
+                elif registration is not None:
                     result = {**result, "source": registration}
-            status = await lab.command(actor, publication, "status", {}, execution_guard=fresh)
+            if not shared:
+                status = await lab.command(actor, publication, "status", {}, execution_guard=fresh)
         await fresh()
+        if shared:
+            return RuntimeCommand({"response": result})
         return RuntimeCommand({"response": result, "statusSnapshot": status})
 
 

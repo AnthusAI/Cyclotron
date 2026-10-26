@@ -127,6 +127,60 @@ class PublicationLab:
         }
         return result
 
+    def envelope(self, publication, binding):
+        return {
+            "contractVersion": CONTRACT,
+            "accountId": self.account_id,
+            "publicationId": publication,
+            "bindingRevision": binding.revision,
+            "features": {
+                "frozenContext": self.records is not None,
+                "replayExport": self.records is not None,
+                "steering": self.steering is not None,
+            },
+            "outputs": [
+                {
+                    "id": cid,
+                    "question": self.specs[cid].question,
+                    "classes": list(self.specs[cid].labels),
+                    "positiveLabel": self.specs[cid].positive_label,
+                }
+                for cid in binding.outputs
+            ],
+        }
+
+    async def decide_all(self, actor, publications, payload, *, execution_guard=None):
+        """One native decision projected for every named publication, each exactly as ``command`` would."""
+        if self.records is not None:
+            raise PublicationError("shared decisions for several publications need no frozen context", 400)
+        rows = [(publication, self.authorize(actor, publication, CAPABILITIES["decide"])) for publication in publications]
+        if not rows:
+            raise PublicationError("at least one publication is required", 400)
+        if set(payload) != {"bindings", "item"}:
+            raise PublicationError("unexpected decision fields", 400)
+        for publication, binding in rows:
+            if payload["bindings"].get(publication) != binding.revision:
+                raise PublicationError("publication binding revision changed")
+        item = payload["item"]
+        if not isinstance(item, dict) or set(item) != {"id", "values"} or not isinstance(item["values"], dict):
+            raise PublicationError("item needs an explicit identity and structured values", 400)
+        text(item["id"], "item identity")
+        if len(json.dumps(item, allow_nan=False).encode()) > MAX_BYTES:
+            raise PublicationError("item exceeds size limit", 413)
+        target = Item(item["id"], json.loads(json.dumps(item["values"], allow_nan=False)))
+
+        async def guarded():
+            if execution_guard is not None:
+                result = execution_guard()
+                if inspect.isawaitable(result):
+                    await result
+
+        decision = await self.engine.decide(target, execution_guard=guarded if execution_guard is not None else None)
+        return decision, {
+            publication: {**self.envelope(publication, binding), "decision": self.project(decision, binding)}
+            for publication, binding in rows
+        }
+
     async def command(self, actor, publication, operation, payload, *, execution_guard=None):
         if not isinstance(operation, str):
             raise PublicationError("operation must be text", 400)
@@ -149,26 +203,7 @@ class PublicationLab:
                     raise TypeError("execution guard must return None or raise")
             preflight()
 
-        envelope = {
-            "contractVersion": CONTRACT,
-            "accountId": self.account_id,
-            "publicationId": publication,
-            "bindingRevision": binding.revision,
-            "features": {
-                "frozenContext": self.records is not None,
-                "replayExport": self.records is not None,
-                "steering": self.steering is not None,
-            },
-            "outputs": [
-                {
-                    "id": cid,
-                    "question": self.specs[cid].question,
-                    "classes": list(self.specs[cid].labels),
-                    "positiveLabel": self.specs[cid].positive_label,
-                }
-                for cid in binding.outputs
-            ],
-        }
+        envelope = self.envelope(publication, binding)
         if operation in ("decide", "review", "steer") and payload.get("bindingRevision") != binding.revision:
             raise PublicationError("publication binding revision changed")
         try:
