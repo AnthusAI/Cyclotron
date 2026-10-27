@@ -10,9 +10,13 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# Decision Ready doorbell: parameter, condition, worker environment variable and a conditional PutEvents grant.
+# Removal of the retired request cap: the parameter and its variable on both functions.
 # Emptied again after the deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    "/Parameters/PredictionMaxRequests",
+    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -24,10 +28,17 @@ def test_lab_template_equals_the_deployed_snapshot_plus_the_reviewed_pending_cha
     assert check.diff_paths(check.load_template(), expected()) == []
 
 
-def test_pending_changes_are_exactly_the_reviewed_add_only_set():
+def test_pending_changes_are_exactly_the_reviewed_remove_set():
     pending = check.load_pending()
     assert [operation["path"] for operation in pending] == REVIEWED_PENDING_PATHS
-    assert {operation["op"] for operation in pending} <= {"add"}
+    assert {operation["op"] for operation in pending} <= {"add", "remove"}
+
+
+def test_the_retired_request_cap_is_gone_from_the_template_and_still_in_the_snapshot():
+    template, snapshot = check.load_template(), check.load_snapshot()
+    assert "PredictionMaxRequests" in snapshot["Parameters"] and "PredictionMaxRequests" not in template["Parameters"]
+    assert "PredictionMaxRequests" not in json.dumps(template)
+    assert "CYCLOTRON_PREDICTION_MAX_REQUESTS" not in json.dumps(template)
 
 
 def test_pending_changes_are_each_described_in_the_reviewer_note():
@@ -43,6 +54,25 @@ def test_an_unlisted_change_to_the_template_cannot_hide():
     template = check.load_template()
     template["Resources"]["LabVerifierRole"]["Properties"]["MaxSessionDuration"] = 43200
     assert any("MaxSessionDuration" in problem for problem in check.diff_paths(template, expected()))
+
+
+def test_a_pending_remove_deletes_exactly_the_named_mapping_key():
+    snapshot = check.load_snapshot()
+    result = check.apply_pending(snapshot, [{"op": "remove", "path": "/Parameters/PredictionMaxRequests"}])
+    assert set(result["Parameters"]) == set(snapshot["Parameters"]) - {"PredictionMaxRequests"}
+    assert "PredictionMaxRequests" in snapshot["Parameters"]
+
+
+def test_a_pending_remove_must_name_an_existing_mapping_key_with_no_value():
+    snapshot = check.load_snapshot()
+    for bad in (
+        {"op": "remove", "path": "/Parameters/NoSuchParameter"},
+        {"op": "remove", "path": "/Resources/BffRole/Properties/Policies/0"},
+        {"op": "remove", "path": "/Parameters/PredictionMaxRequests", "value": 1},
+        {"op": "remove"},
+    ):
+        with pytest.raises((ValueError, KeyError)):
+            check.apply_pending(snapshot, [bad])
 
 
 def test_pending_operations_may_only_add_new_paths():

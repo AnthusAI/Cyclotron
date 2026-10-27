@@ -257,8 +257,8 @@ class Cyclotron:
             share_supporting_questions=seeds.sharing(created=saved is None),
             storage=self.storage.batch_storage if self.storage is not None else None,
         )
-        # None is reserved for explicitly uncapped shared workloads (such as
-        # hosted standing targets); bounded callers retain per-open limits.
+        # None is reserved for explicitly uncapped shared workloads (hosted
+        # publication runs); bounded offline callers retain per-open limits.
         self.shared.max_requests = (
             self.shared.requests + max_requests if self.storage is None and max_requests is not None else max_requests
         )

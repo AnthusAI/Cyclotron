@@ -37,7 +37,7 @@ class OfflineModel:
         )
 
 
-def setup(identity, monkeypatch, *, create_run=True):
+def setup(identity, monkeypatch, *, create_run=True, items=(ITEM,)):
     verifier, token = identity
     person, account = str(uuid4()), str(uuid4())
     state, sent, targets = {"role": "owner", "denied": False}, [], []
@@ -86,7 +86,9 @@ def setup(identity, monkeypatch, *, create_run=True):
         )
     store.save_cyclotron_definition("shared", "Synthetic shared router", [{"id": p, "revision": 1} for p in PUBS], {})
     store.save_item_list("sources", "Synthetic sources")
-    store.upsert_list_items("sources", [{"id": ITEM["id"], "occurred_at": "2026-01-01", "values": ITEM["values"]}])
+    store.upsert_list_items(
+        "sources", [{"id": item["id"], "occurred_at": "2026-01-01", "values": item["values"]} for item in items]
+    )
     if create_run:
         run = bff.workspace(account).service.create_run(
             "Synthetic remote baseline", {"cyclotron_id": "shared", "item_list_id": "sources", "max_requests": 2}
@@ -104,6 +106,37 @@ def setup(identity, monkeypatch, *, create_run=True):
     monkeypatch.setattr("sqlite3.connect", forbidden)
     monkeypatch.setattr("pathlib.Path.mkdir", forbidden)
     return bff, worker, model, store, config, account, cookie, session, state, sent, targets, app
+
+
+def test_a_hosted_run_decides_more_items_than_its_configured_request_budget_with_no_ceiling_refusal(identity, monkeypatch):
+    items = [{"id": f"source-revision-{n}", "values": {"text": f"Synthetic source {n}."}} for n in range(4)]
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = setup(
+        identity, monkeypatch, items=items
+    )
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url=config.public_origin,
+            cookies={"__Host-cyclotron-session": cookie},
+            headers={"Origin": config.public_origin, "X-CSRF-Token": session.csrf_token, "X-Cyclotron-Account": account},
+        ) as http:
+            for item in items:
+                response = await http.post(
+                    "/publications/alpha/operations",
+                    json={
+                        "contractVersion": "cyclotron-publication/v1",
+                        "operation": "decide",
+                        "payload": {"bindingRevision": "binding-one", "item": item},
+                    },
+                )
+                assert response.status_code == 202, response.text
+                await worker.worker().process(sent.pop(0))
+                receipt = await http.get(f"/publications/alpha/commands/{response.json()['jobId']}")
+                assert receipt.status_code == 200, receipt.text
+            assert len(model.calls) == 4
+
+    asyncio.run(run())
 
 
 def test_four_remote_projections_share_one_native_request_after_queue_completion(identity, monkeypatch):

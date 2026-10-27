@@ -6,17 +6,14 @@ from .hosted_jev import HostedJevFactory
 from .jev import JevAdapter
 
 
-def test_explicit_factory_resolves_provider_only_for_matching_bounded_baseline(monkeypatch):
+def test_explicit_factory_resolves_provider_only_for_the_matching_baseline(monkeypatch):
     calls = []
     model = object()
     monkeypatch.setattr(JevAdapter, "from_environment", lambda **kw: calls.append(kw) or model)
-    factory = HostedJevFactory.from_environment(
-        {"CYCLOTRON_PREDICTION_MODEL": "synthetic-reviewed-model", "CYCLOTRON_PREDICTION_MAX_REQUESTS": "2"}
-    )
+    factory = HostedJevFactory.from_environment({"CYCLOTRON_PREDICTION_MODEL": "synthetic-reviewed-model"})
     assert not calls
     config = {"decisions_provider": "jev", "decisions_model": factory.model, "max_requests": 2}
     for changed in (
-        {"max_requests": 3},
         {"decisions_provider": "other"},
         {"decisions_model": "other"},
         {"priming_examples": [{"synthetic": True}]},
@@ -32,10 +29,9 @@ def test_explicit_factory_resolves_provider_only_for_matching_bounded_baseline(m
     "environment",
     [
         {},
-        {"CYCLOTRON_PREDICTION_MODEL": "synthetic"},
-        {"CYCLOTRON_PREDICTION_MODEL": "synthetic", "CYCLOTRON_PREDICTION_MAX_REQUESTS": "101"},
+        {"CYCLOTRON_PREDICTION_MODEL": " "},
     ],
 )
-def test_incomplete_or_unbounded_activation_is_rejected(environment):
+def test_activation_without_a_reviewed_model_is_rejected(environment):
     with pytest.raises(ValueError):
         HostedJevFactory.from_environment(environment)
