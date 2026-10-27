@@ -284,7 +284,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/6ca1b278be02e4c938e12b31e5295a5427eac2711d40954f8d1c09f53583c9fe"
+          "S3Key": "cyclotron-console/backend/5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0"
         },
         "Environment": {
           "Variables": {
@@ -975,7 +975,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/6ca1b278be02e4c938e12b31e5295a5427eac2711d40954f8d1c09f53583c9fe"
+          "S3Key": "cyclotron-console/backend/5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0"
         },
         "Environment": {
           "Variables": {
@@ -1255,6 +1255,16 @@
                       "Ref": "AWS::NoValue"
                     }
                   ]
+                },
+                {
+                  "Action": "sqs:SendMessage",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "CommandQueue",
+                      "Arn"
+                    ]
+                  }
                 }
               ],
               "Version": "2012-10-17"

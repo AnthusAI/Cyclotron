@@ -12,10 +12,7 @@ _SPEC.loader.exec_module(check)
 
 # The run job queue: sqs:SendMessage for the worker on the command queue.
 # Emptied again after the deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = [
-    # The run job queue: the worker re-sends a waiting job's wake-up (its only queue write).
-    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
