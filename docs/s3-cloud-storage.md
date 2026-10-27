@@ -481,9 +481,12 @@ scoped diagnostic evidence, not an automatic claim/paid-request reset.
 ### Reconciling a wedged command (operator)
 
 A worker that claims a command and then fails without a terminal receipt leaves the job `running`. The
-worker never takes it over, every redelivery fails closed and ends in the dead-letter queue, and the run
-refuses new commands with `run_busy` (409) because it "has work in progress". The operator command ends
-that one job, deliberately and with an audit trail:
+worker never takes it over and every redelivery fails closed and ends in the dead-letter queue. A run
+accepts every command and runs them one at a time in acceptance order, so the jobs queued behind the wedged
+one keep waiting (their wake-up messages are re-sent with a 10 s to 120 s delay) until an operator ends it.
+`diagnose` reports `stuck: true`, `runningMinutes`, `blockedJobs` and the `runQueue` once a claim is older than
+10 minutes (the worker times out after 3). After the reconcile, the next job starts within about 2 minutes.
+The operator command ends that one job, deliberately and with an audit trail:
 
 ```
 python -m decision_flywheel.command_recovery diagnose --profile P --expect-aws-account ACCT \

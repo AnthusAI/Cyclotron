@@ -375,7 +375,8 @@ def test_authorized_job_and_original_actor_commit_together_and_cannot_be_rebound
     fresh = store(journal(s.journal.payloads.client, name="console"))
     with pytest.raises(ValueError, match="receipt"):
         fresh.command_actor(job["id"], owner, claimed["claim_fence"])
-    assert fresh.command_recovery(job["id"]) == {
+    seen = fresh.command_recovery(job["id"])
+    assert {k: seen[k] for k in ("jobId", "runId", "status", "owner", "fence", "hasActor", "automaticTakeover")} == {
         "jobId": job["id"],
         "runId": run["id"],
         "status": "running",
@@ -384,6 +385,8 @@ def test_authorized_job_and_original_actor_commit_together_and_cannot_be_rebound
         "hasActor": True,
         "automaticTakeover": False,
     }
+    assert seen["stuck"] is False and seen["blockedJobs"] == 0 and seen["claimedAt"]
+    assert [row["jobId"] for row in seen["runQueue"]] == [job["id"]]
 
 
 def test_legacy_jobs_have_no_invented_actor_and_cannot_enter_authorized_worker():

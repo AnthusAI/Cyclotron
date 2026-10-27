@@ -68,6 +68,9 @@ SUPPORTED_OPERATIONS = ("status", "decide")
 NAMESPACED = re.compile(r"pub-[0-9a-f]{32}:")
 
 
+PRIME_POLL_SECONDS = 2
+
+
 class CurationError(Exception):
     def __init__(self, status, code, message):
         super().__init__(message)
@@ -454,6 +457,12 @@ async def accept(s, payload):
 async def apply_priming(request):
     """Apply every accepted example of the binding's list to the shared cyclotron's priming context."""
     store = request.runtime.console(request.account)
+    # This runs in the request, not on the run's job queue: the queue cannot carry a bearer credential (it holds
+    # session or service-principal authority), and the caller expects the applied result back. So it waits for the
+    # run to go idle first, and never starts over a running job. A job accepted while it waits can still start
+    # first; the engine's ownership lease then refuses the loser (auto_prime_failed, accept again), never both.
+    while await asyncio.to_thread(store.run_has_active_work, request.target.run_id):
+        await asyncio.sleep(PRIME_POLL_SECONDS)
     config = await asyncio.to_thread(request.run_config)
     _, fingerprint = await asyncio.to_thread(
         priming_snapshot, store, request.target, request.binding, config, request.binding.priming_list_id

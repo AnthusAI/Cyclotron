@@ -348,6 +348,12 @@ Resources:
               Resource:
                 Ref: DecisionEventBusArn
             - Ref: AWS::NoValue
+          - Effect: Allow
+            Action: sqs:SendMessage
+            Resource:
+              Fn::GetAtt:
+              - CommandQueue
+              - Arn
   WorkerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:

@@ -12,6 +12,10 @@ class StorageUncertain(RuntimeError):
     """The write may or may not have happened; the handle must be reopened and reconciled."""
 
 
+class CommandNotReady(RuntimeError):
+    """A queued command is not at the head of its run's queue yet, or the run is still busy; nothing was claimed."""
+
+
 class StorageLimit(ValueError):
     """A configured size or record budget would be exceeded; nothing was truncated."""
 
