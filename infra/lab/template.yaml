@@ -52,10 +52,6 @@ Parameters:
     Type: String
     Default: jev-1.13.0
     AllowedPattern: '[A-Za-z0-9._-]{1,64}'
-  PredictionMaxRequests:
-    Type: String
-    Default: '100'
-    AllowedPattern: '[0-9]{1,3}'
   JournalMaxBytes:
     Type: String
     Default: '4194304'
@@ -487,7 +483,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/c1341468f275df5548d6096936f82acc862cdda0b596ae45a0dce06c4c5d6f9c
+        S3Key: cyclotron-console/backend/90e3ed86159c6c21141abf6b0c0ef6e4217bb49aa781dc177d7638e385509c1f
       FunctionName: cyclotron-console-bff
       Handler: decision_flywheel.cloud_entry.bff_handler
       MemorySize: 1024
@@ -535,8 +531,6 @@ Resources:
             - Ref: AWS::NoValue
           CYCLOTRON_PREDICTION_MODEL:
             Ref: PredictionModel
-          CYCLOTRON_PREDICTION_MAX_REQUESTS:
-            Ref: PredictionMaxRequests
           CYCLOTRON_MAX_BYTES:
             Ref: JournalMaxBytes
           CYCLOTRON_LAB_VERIFIER_ROLE_ARN:
@@ -607,7 +601,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/c1341468f275df5548d6096936f82acc862cdda0b596ae45a0dce06c4c5d6f9c
+        S3Key: cyclotron-console/backend/90e3ed86159c6c21141abf6b0c0ef6e4217bb49aa781dc177d7638e385509c1f
       FunctionName: cyclotron-console-worker
       Handler: decision_flywheel.cloud_entry.worker_handler
       MemorySize: 1024
@@ -655,8 +649,6 @@ Resources:
             - Ref: AWS::NoValue
           CYCLOTRON_PREDICTION_MODEL:
             Ref: PredictionModel
-          CYCLOTRON_PREDICTION_MAX_REQUESTS:
-            Ref: PredictionMaxRequests
           CYCLOTRON_MAX_BYTES:
             Ref: JournalMaxBytes
           CYCLOTRON_DECISION_EVENT_BUS_ARN:

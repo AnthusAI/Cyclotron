@@ -123,7 +123,6 @@ def test_live_runtime_wires_a_lazy_secret_reader_and_exact_machine_principals(mo
         "CYCLOTRON_ALLOW_LIVE": "true",
         "CYCLOTRON_PUBLICATION_TARGETS": json.dumps(targets),
         "CYCLOTRON_PREDICTION_MODEL": "jev-1.13.0",
-        "CYCLOTRON_PREDICTION_MAX_REQUESTS": "100",
         "CYCLOTRON_MACHINE_PRINCIPALS": json.dumps([role]),
     }
     for key, value in environment.items():

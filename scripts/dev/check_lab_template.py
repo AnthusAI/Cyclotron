@@ -2,9 +2,10 @@
 
 Offline by default: the template must equal infra/lab/deployed-template.snapshot.json
 with infra/lab/pending-changes.json applied. The pending set is a list of
-add-only operations (a JSON Pointer path and the value added) that a reviewer reads
-beside infra/lab/pending-changes.md, so the next deploy changes exactly those
-paths and nothing else. An empty set means template == snapshot.
+operations that a reviewer reads beside infra/lab/pending-changes.md, so the next
+deploy changes exactly those paths and nothing else. An operation is either an add
+(a JSON Pointer path and the value added) or a remove (a JSON Pointer path to an
+existing mapping key, with no value). An empty set means template == snapshot.
 
 With --live the snapshot is also compared with the deployed stack via read-only
 `aws cloudformation get-template` (Original stage); it never calls any write API.
@@ -66,15 +67,21 @@ def _pointer(path: str) -> list[str]:
 
 
 def apply_pending(snapshot: object, operations: list[dict]) -> object:
-    """Apply add-only operations to a copy of snapshot; replace, remove and overwrite are refused."""
+    """Apply add and remove operations to a copy of snapshot; replace and overwrite are refused."""
     document = json.loads(json.dumps(snapshot))
     for operation in operations:
-        if set(operation) != {"op", "path", "value"} or operation["op"] != "add":
-            raise ValueError(f"pending operations must be add-only with op, path and value: {operation!r}")
+        shape = {"add": {"op", "path", "value"}, "remove": {"op", "path"}}.get(operation.get("op"))
+        if shape is None or set(operation) != shape:
+            raise ValueError(f"pending operations must be add (op, path, value) or remove (op, path): {operation!r}")
         *parents, leaf = _pointer(operation["path"])
         target = document
         for part in parents:
             target = target[int(part)] if isinstance(target, list) else target[part]
+        if operation["op"] == "remove":
+            if not isinstance(target, dict) or leaf not in target:
+                raise ValueError(f"pending remove must name an existing mapping key: {operation['path']}")
+            del target[leaf]
+            continue
         if isinstance(target, list):
             if leaf != "-":
                 raise ValueError(f"lists are appended with '-': {operation['path']}")
@@ -125,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     problems = diff_paths(template, expected_template(snapshot, pending))
     print(f"template.yaml vs snapshot + {len(pending)} pending change(s): {'MATCH' if not problems else 'DIFFERENT'}")
     for operation in pending:
-        print(f"  pending add {operation['path']}")
+        print(f"  pending {operation['op']} {operation['path']}")
     if args.live:
         live = fetch_live(args.stack, args.region)
         live_problems = diff_paths(snapshot, live)

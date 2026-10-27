@@ -1,41 +1,9 @@
 {
-  "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. Add-only JSON Pointer operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
+  "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. JSON Pointer add and remove operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
   "operations": [
-    {
-      "op": "add",
-      "path": "/Parameters/DecisionEventBusArn",
-      "value": {
-        "Type": "String",
-        "Default": "",
-        "AllowedPattern": "^$|arn:aws:events:[a-z0-9-]+:[0-9]{12}:event-bus/[A-Za-z0-9._-]{1,256}",
-        "Description": "Exact EventBridge bus ARN that receives one Decision Ready doorbell per finished machine decision; empty publishes nothing"
-      }
-    },
-    {
-      "op": "add",
-      "path": "/Conditions/HasDecisionEventBus",
-      "value": {"Fn::Not": [{"Fn::Equals": [{"Ref": "DecisionEventBusArn"}, ""]}]}
-    },
-    {
-      "op": "add",
-      "path": "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_DECISION_EVENT_BUS_ARN",
-      "value": {"Ref": "DecisionEventBusArn"}
-    },
-    {
-      "op": "add",
-      "path": "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-      "value": {
-        "Fn::If": [
-          "HasDecisionEventBus",
-          {"Effect": "Allow", "Action": "events:PutEvents", "Resource": {"Ref": "DecisionEventBusArn"}},
-          {"Ref": "AWS::NoValue"}
-        ]
-      }
-    },
-    {
-      "op": "add",
-      "path": "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-      "value": {"Effect": "Allow", "Action": "sqs:SendMessage", "Resource": {"Fn::GetAtt": ["CommandQueue", "Arn"]}}
-    }
+    {"op": "remove", "path": "/Parameters/PredictionMaxRequests"},
+    {"op": "remove", "path": "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS"},
+    {"op": "remove", "path": "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS"},
+    {"op": "add", "path": "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-", "value": {"Effect": "Allow", "Action": "sqs:SendMessage", "Resource": {"Fn::GetAtt": ["CommandQueue", "Arn"]}}}
   ]
 }

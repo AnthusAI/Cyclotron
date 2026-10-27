@@ -18,7 +18,7 @@ plus exactly the operations in `pending-changes.json` (ignoring formatting and k
 order). Operations may only add new paths, so nothing in the snapshot can change
 unnoticed; with an empty list it is the old template == snapshot proof. `--live`
 compares the deployed stack (read-only `get-template`) with the snapshot, so a
-drifted stack is reported separately from pending work. `tests/test_lab_template.py`
+drifted stack is reported separately from pending work. `tests/lab_template_test.py`
 runs the offline comparison in `make test` and asserts the pending paths exactly.
 
 Note: the deployed Original and Processed templates are identical and carry no
@@ -96,7 +96,6 @@ template matches. Changing any is a reviewed change:
 | `PublicationTargets` | Reviewed `CYCLOTRON_PUBLICATION_TARGETS` JSON (up to 3000 chars): which accounts, runs, model identities and publication bindings the hosted service may run. Standing targets have no lifetime/daily request or item quota. Empty leaves the variable unset. |
 | `AllowLive` | `CYCLOTRON_ALLOW_LIVE`. `true` permits live provider calls; default `false`. The stack description still says "live providers disabled". |
 | `PredictionModel` | `CYCLOTRON_PREDICTION_MODEL`, default `jev-1.13.0`. |
-| `PredictionMaxRequests` | `CYCLOTRON_PREDICTION_MAX_REQUESTS`, 1 to 3 digits, default 100. |
 | `LabVerifierEnabled` | `'true'` or `'false'`, default `'false'` (pending). When `true` the BFF gets `CYCLOTRON_LAB_VERIFIER_ROLE_ARN` and `CYCLOTRON_ACCOUNTS_API_URL`; `false` leaves both unset. |
 
 No parameter is secret; the provider key lives in Secrets Manager. Deployed values
@@ -216,7 +215,7 @@ approval. Agents do not run these commands.**
 
 The lab classifiers' questions live in `infra/lab/criteria/` (question, labels, doctrine source, editor approval, previous
 text) and are applied to the catalog by `scripts/dev/lab_criteria.py`. See `criteria-runbook.md` for the reviewed change to the
-live standing run. `scripts/dev/lab_criteria.py plan` is read-only; `tests/test_lab_criteria.py` proves the committed files are what a deploy applies.
+live standing run. `scripts/dev/lab_criteria.py plan` is read-only; `tests/lab_criteria_test.py` proves the committed files are what a deploy applies.
 
 ## Record-lake cutover
 
