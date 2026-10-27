@@ -12,12 +12,7 @@ _SPEC.loader.exec_module(check)
 
 # Decision Ready doorbell: parameter, condition, worker environment variable and a conditional PutEvents grant.
 # Emptied again after the deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = [
-    "/Parameters/DecisionEventBusArn",
-    "/Conditions/HasDecisionEventBus",
-    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_DECISION_EVENT_BUS_ARN",
-    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -98,6 +93,16 @@ def test_lab_verifier_role_trusts_only_the_bff_role_and_may_invoke_only_two_rout
     ]
 
 
+def _statements(statements):
+    """Policy statements with each conditional statement's branches expanded (AWS::NoValue dropped)."""
+    for statement in statements:
+        if "Fn::If" in statement:
+            _, *branches = statement["Fn::If"]
+            yield from _statements([b for b in branches if b != {"Ref": "AWS::NoValue"}])
+        else:
+            yield statement
+
+
 def test_only_the_bff_role_may_assume_the_verifier_and_the_worker_may_not():
     resources = check.load_template()["Resources"]
     grants = {}
@@ -105,7 +110,7 @@ def test_only_the_bff_role_may_assume_the_verifier_and_the_worker_may_not():
         if resource["Type"] != "AWS::IAM::Role":
             continue
         for policy in resource["Properties"].get("Policies", []):
-            for statement in policy["PolicyDocument"]["Statement"]:
+            for statement in _statements(policy["PolicyDocument"]["Statement"]):
                 actions = statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
                 if "sts:AssumeRole" in actions:
                     grants.setdefault(name, []).append(statement["Resource"])
