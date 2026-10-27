@@ -97,7 +97,9 @@ class HostedCommandWorker:
         publication_runtime_for_command=None,
         command_policy=None,
         data_command=None,
+        decision_events=None,
     ):
+        self.decision_events = decision_events
         self.allow_live = allow_live
         self.publication_runtime_for_command = publication_runtime_for_command
         self.command_policy = command_policy
@@ -107,6 +109,11 @@ class HostedCommandWorker:
             authorization,
             runtime_for_command,
         )
+
+    def _ring(self, job, actor, status):
+        """Doorbell after the terminal state is durable; best effort, never raises."""
+        if self.decision_events is not None:
+            self.decision_events.notify(job, actor, status)
 
     async def process(self, message):
         if not self.allow_live and self.data_command is None:
@@ -174,6 +181,7 @@ class HostedCommandWorker:
                     "failed",
                     {"refusal": {"code": refusal.code, "message": refusal.public_message}},
                 )
+                self._ring(job, actor, "failed")
                 return {"status": "failed", "jobId": job["id"], "code": refusal.code}
             await owned_guard()
         finally:
@@ -183,4 +191,5 @@ class HostedCommandWorker:
         if result.updates:
             raise ValueError("console runtime returned unsupported external item updates")
         await asyncio.to_thread(effects.finish_command, job["id"], "completed", dict(result.result))
+        self._ring(job, actor, "completed")
         return {"status": "completed", "jobId": job["id"]}

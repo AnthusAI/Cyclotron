@@ -85,8 +85,9 @@ class HostedConfig:
 
 
 class HostedRuntime:
-    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=(),curation_authority=None,sts=None,verifier_client=None):
+    def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=(),curation_authority=None,sts=None,verifier_client=None,decision_events=None):
         self.config,self.s3=config,s3
+        self.decision_events=decision_events
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
         self.model_factory=model_factory
@@ -224,7 +225,8 @@ class HostedRuntime:
                     lambda view,guard,check:self._runtime(message['accountId'],view,guard,check),allow_live=self.config.allow_live,
                     publication_runtime_for_command=publication if self.publication_targets is not None else None,
                     command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind),
-                    data_command=self._data_command if self.publication_targets is not None else None).process(message)
+                    data_command=self._data_command if self.publication_targets is not None else None,
+                    decision_events=self.decision_events).process(message)
         return Worker()
 
 
