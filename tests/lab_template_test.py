@@ -10,14 +10,8 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# The worker sweep: a once-a-minute schedule replaces the worker's re-sends to its own queue.
-# Emptied again after the deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = [
-    # Invokes the worker with a scheduled event; each invocation starts outside any SQS chain.
-    "/Resources/WorkerSweepSchedule",
-    # Lets only that rule invoke the worker.
-    "/Resources/WorkerSweepPermission",
-]
+# Nothing pending: the worker sweep is deployed.
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
