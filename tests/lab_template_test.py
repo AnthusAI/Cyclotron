@@ -16,6 +16,8 @@ REVIEWED_PENDING_PATHS = [
     "/Parameters/PredictionMaxRequests",
     "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
     "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
+    # The run job queue: the worker re-sends a waiting job's wake-up (its only queue write).
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
 ]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
@@ -28,7 +30,7 @@ def test_lab_template_equals_the_deployed_snapshot_plus_the_reviewed_pending_cha
     assert check.diff_paths(check.load_template(), expected()) == []
 
 
-def test_pending_changes_are_exactly_the_reviewed_remove_set():
+def test_pending_changes_are_exactly_the_reviewed_set():
     pending = check.load_pending()
     assert [operation["path"] for operation in pending] == REVIEWED_PENDING_PATHS
     assert {operation["op"] for operation in pending} <= {"add", "remove"}
