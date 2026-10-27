@@ -137,3 +137,12 @@ shared-source-relevance-r3` (2/2/2/1/1/1). No relabelling is needed: the existin
 unchanged classifier revisions and carry over; prime each binding again on the new run. Bindings move to revision
 "3" together with the router's `bindingRevision`, and the router gains a `shipped` publication
 (corpus `knowledge-corpus-shipped`).
+
+## r4: Shipped mission (2026-10-27)
+
+Shipped's publication mission was approved, so only `shipped-relevance` moves, to revision 2; the other five
+classifiers do not change. `plan` must show the others as `current`, `save` for `shipped-relevance` at revision 2, and
+`define shared-source-relevance-r4` (2/2/2/1/1/2). The old Shipped priming labels are keyed to revision 1, so
+Shipped's priming items need relabelling under revision 2 before priming the shipped binding (the other bindings'
+labels carry over, and each binding is primed again on the new run). Bindings move to revision "4" together with the
+router's `bindingRevision`.
