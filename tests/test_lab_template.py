@@ -10,8 +10,14 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# Record-lake prefix (S1): three list appends. Emptied again after the S3 deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = []
+# Decision Ready doorbell: parameter, condition, worker environment variable and a conditional PutEvents grant.
+# Emptied again after the deploy refreshes the snapshot.
+REVIEWED_PENDING_PATHS = [
+    "/Parameters/DecisionEventBusArn",
+    "/Conditions/HasDecisionEventBus",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_DECISION_EVENT_BUS_ARN",
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 

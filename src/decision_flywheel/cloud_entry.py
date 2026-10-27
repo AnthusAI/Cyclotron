@@ -48,6 +48,16 @@ def runtime():
             "kms", region_name=config.region, config=Config(retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)
         )
         sqs = session.create_client("sqs", region_name=config.region)
+        from .decision_events import DecisionEventNotifier
+
+        decision_events = DecisionEventNotifier.from_environment(
+            os.environ,
+            lambda: session.create_client(
+                "events",
+                region_name=config.region,
+                config=Config(retries={"total_max_attempts": 2}, connect_timeout=2, read_timeout=3),
+            ),
+        )
         _cached_runtime = HostedRuntime(
             config,
             s3=s3,
@@ -56,6 +66,7 @@ def runtime():
             model_factory=model_factory,
             publication_targets=targets,
             machine_principals=principals,
+            decision_events=decision_events,
         )
     return _cached_runtime
 
