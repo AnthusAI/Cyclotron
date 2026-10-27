@@ -8,11 +8,7 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: run job queue.** Jobs on a run queue in acceptance order and run one at a time. A worker that picks up a message for a job that is not yet at the head of its run re-sends the same references to the command queue with a delay (10 s doubling to 120 s) and settles the delivery. That is the worker's only queue write, so it needs one permission:
-
-- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-` (`sqs:SendMessage` on the command queue only)
-
-No queue, visibility, redrive or event-source setting changes.
+**No pending changes.** The run job queue (lab code e82eee2, package sha256 `5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0`) was deployed on 2026-10-27 with change set `run-queue-e82eee2`, adding `sqs:SendMessage` on the command queue for the worker. The snapshot was refreshed.
 
 Previously: the request caps were removed on 2026-10-27: change set `targets-remove-ceilings` (PublicationTargets without `requestCeiling`/`maxItems`), then `no-ceilings-377c478` (lab code 377c478, package sha256 `6ca1b278be02e4c938e12b31e5295a5427eac2711d40954f8d1c09f53583c9fe`) removing `PredictionMaxRequests` and `CYCLOTRON_PREDICTION_MAX_REQUESTS`. The snapshot was refreshed.
 
