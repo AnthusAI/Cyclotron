@@ -117,8 +117,6 @@ class HostedRuntime:
             if sqs is None:raise ValueError('explicit queue client required')
             def send(message):return sqs.send_message(QueueUrl=config.queue_url,MessageBody=json.dumps(message,separators=(',',':')))
         self.send=send
-        # Delayed re-send of a queued job's wake-up (the worker's only SQS write); absent without a queue client.
-        self.wake=(lambda message,delay:sqs.send_message(QueueUrl=config.queue_url,MessageBody=json.dumps(message,separators=(',',':')),DelaySeconds=delay)) if sqs is not None else None
         self.catalog_cache=CatalogSnapshotCache()
 
     def _journal(self,bucket,scope,domain,name):
@@ -218,17 +216,24 @@ class HostedRuntime:
     def worker(self):
         # The worker's own runtime credentials/central transport must be the
         # reviewed execution principal; the central pair is never caller input.
+        def command_worker(account_id):
+            def publication(view, guard, check, actor):
+                from .hosted_publications import PublicationCommandRuntime
+                return PublicationCommandRuntime(self, view, guard, check, actor)
+            return HostedCommandWorker(self.console,self.authorization,
+                lambda view,guard,check:self._runtime(account_id,view,guard,check),allow_live=self.config.allow_live,
+                publication_runtime_for_command=publication if self.publication_targets is not None else None,
+                command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind),
+                data_command=self._data_command if self.publication_targets is not None else None,
+                decision_events=self.decision_events)
         class Worker:
-            async def process(inner,message):
-                def publication(view, guard, check, actor):
-                    from .hosted_publications import PublicationCommandRuntime
-                    return PublicationCommandRuntime(self, view, guard, check, actor)
-                return await HostedCommandWorker(self.console,self.authorization,
-                    lambda view,guard,check:self._runtime(message['accountId'],view,guard,check),allow_live=self.config.allow_live,
-                    publication_runtime_for_command=publication if self.publication_targets is not None else None,
-                    command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind),
-                    data_command=self._data_command if self.publication_targets is not None else None,
-                    decision_events=self.decision_events,wake=self.wake).process(message)
+            async def process(inner,message,remaining=None):
+                return await command_worker(message['accountId']).deliver(message,remaining)
+            async def sweep(inner,remaining=None):
+                # The accounts with configured publication runs; a console-only run drains in its own delivery.
+                from .hosted_publications import configured_targets
+                accounts=sorted({t.account_id for t in configured_targets(self)}) if self.publication_targets is not None else []
+                return {account:await command_worker(account).sweep(account,remaining) for account in accounts}
         return Worker()
 
 

@@ -50,7 +50,7 @@ def test_sqs_partial_failure_never_treats_delivery_body_as_authority(monkeypatch
     calls = []
 
     class Worker:
-        async def process(self, message):
+        async def process(self, message, remaining=None):
             calls.append(message)
             if set(message) != {"accountId", "runId", "jobId"}:
                 raise ValueError("references only")
@@ -159,7 +159,7 @@ def test_failed_delivery_logs_classes_and_locations_but_never_messages_or_payloa
     from . import cloud_entry
 
     class Worker:
-        async def process(self, message):
+        async def process(self, message, remaining=None):
             try:
                 raise OSError("sk-secret-token and a private prompt")
             except OSError as inner:
@@ -175,3 +175,25 @@ def test_failed_delivery_logs_classes_and_locations_but_never_messages_or_payloa
     assert line["event"] == "delivery_failed" and line["errors"][:2] == ["builtins.ValueError", "builtins.OSError"]
     assert line["remainingMs"] == 170000 and any("cloud_entry_test.py" in frame for frame in line["frames"])
     assert "secret" not in out and "private prompt" not in out and "provider said" not in out and body not in out
+
+
+def test_the_scheduled_sweep_runs_outside_sqs_with_the_invocations_remaining_time(monkeypatch):
+    from . import cloud_entry
+
+    seen = []
+
+    class Worker:
+        async def sweep(self, remaining):
+            seen.append(remaining())
+            return {"account": ["completed"]}
+
+        async def process(self, message, remaining=None):
+            raise AssertionError("a schedule is not a delivery")
+
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", SimpleNamespace(worker=lambda: Worker()))
+    event = {"source": "aws.events", "detail-type": "Scheduled Event", "detail": {}}
+    context = SimpleNamespace(get_remaining_time_in_millis=lambda: 175000)
+    assert cloud_entry.worker_handler(event, context) == {"sweep": {"account": ["completed"]}}
+    assert seen == [175.0]
+    with pytest.raises(ValueError):  # anything else still needs a bounded SQS batch
+        cloud_entry.worker_handler({"source": "aws.events"}, context)

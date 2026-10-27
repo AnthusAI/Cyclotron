@@ -10,9 +10,14 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# The run job queue: sqs:SendMessage for the worker on the command queue.
+# The worker sweep: a once-a-minute schedule replaces the worker's re-sends to its own queue.
 # Emptied again after the deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    # Invokes the worker with a scheduled event; each invocation starts outside any SQS chain.
+    "/Resources/WorkerSweepSchedule",
+    # Lets only that rule invoke the worker.
+    "/Resources/WorkerSweepPermission",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -157,3 +162,13 @@ def test_verifier_configuration_is_absent_from_the_bff_environment_unless_enable
 def test_lab_template_keeps_the_machine_route_on_iam_auth():
     paths = check.load_template()["Resources"]["ConsoleApi"]["Properties"]["Body"]["paths"]
     assert paths["/machine/{proxy+}"]["x-amazon-apigateway-any-method"]["security"] == [{"AWS_IAM": []}]
+
+
+def test_the_worker_sweep_runs_once_a_minute_and_only_its_rule_may_invoke_the_worker_this_way():
+    resources = check.load_template()["Resources"]
+    rule = resources["WorkerSweepSchedule"]["Properties"]
+    assert rule["ScheduleExpression"] == "rate(1 minute)" and rule["State"] == "ENABLED"
+    assert rule["Targets"] == [{"Id": "worker-sweep", "Arn": {"Fn::GetAtt": ["WorkerFunction", "Arn"]}}]
+    permission = resources["WorkerSweepPermission"]["Properties"]
+    assert permission["Principal"] == "events.amazonaws.com"
+    assert permission["SourceArn"] == {"Fn::GetAtt": ["WorkerSweepSchedule", "Arn"]}

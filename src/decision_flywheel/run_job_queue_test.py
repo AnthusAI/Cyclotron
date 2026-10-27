@@ -8,7 +8,6 @@ import pytest
 
 from . import account_sessions_test
 from .command_recovery import open_store
-from .hosted_command_worker import defer_delay
 from .hosted_command_worker_test import setup as worker_setup
 from .hosted_machine_publications_test import body, client, fixture, new_item
 from .hosted_publications_test import ITEM
@@ -84,31 +83,70 @@ def test_a_crash_mid_job_blocks_the_queue_visibly_and_an_operator_reconcile_rele
     assert s.claim_command(owner=str(uuid4()), job_id=second["id"])["id"] == second["id"]
 
 
-def test_a_waiting_job_is_resent_with_a_growing_delay_and_runs_once_the_head_has_finished():
+def test_a_waiting_job_is_settled_as_queued_without_a_send_and_runs_when_the_head_finishes():
     s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
-    wakes = []
-    worker.wake = lambda message, delay: wakes.append((message, delay))
     first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
     second = s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
     refs = {"accountId": actor.account_id, "runId": run["id"]}
-    late = {**refs, "jobId": second["id"]}
-    for expected in (10, 20):
-        result = asyncio.run(worker.process(wakes.pop()[0] if wakes else late))
-        assert result["status"] == "queued" and result["retryAfter"] == expected
-    assert [m["attempt"] for m, _ in wakes] == [2] and s.queue_state(second["id"])["queued"] and model.calls == 0
-    assert asyncio.run(worker.process({**refs, "jobId": first["id"]}))["status"] == "completed"
-    assert asyncio.run(worker.process({**late, "attempt": 2}))["status"] != "queued"
-    assert not s.queue_state(second["id"])["queued"]
+    assert not hasattr(worker, "wake")  # the worker has no way to write to its own queue
+    assert asyncio.run(worker.deliver({**refs, "jobId": second["id"]})) == {"status": "queued", "jobId": second["id"]}
+    assert s.queue_state(second["id"])["queued"] and model.calls == 0
+    assert asyncio.run(worker.deliver({**refs, "jobId": first["id"]}))["jobId"] == second["id"]  # drained behind it
+    assert [j["status"] for j in s.jobs(run["id"])] == ["completed", "completed"]
 
 
-def test_delays_back_off_from_ten_seconds_to_a_two_minute_cap():
-    assert [defer_delay(n) for n in range(7)] == [10, 20, 40, 80, 120, 120, 120]
+def test_a_retired_resend_with_an_attempt_count_still_delivers_its_job():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    job = s.enqueue_authorized_command(run["id"], "only", "prepare", {}, actor)
+    message = {"accountId": actor.account_id, "runId": run["id"], "jobId": job["id"], "attempt": 7}
+    assert asyncio.run(worker.deliver(message))["status"] == "completed"
+
+
+def test_one_delivery_drains_the_whole_run_in_acceptance_order_when_time_allows():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    jobs = [s.enqueue_authorized_command(run["id"], f"job-{n}", "prepare", {}, actor) for n in range(4)]
+    refs = {"accountId": actor.account_id, "runId": run["id"]}
+    assert asyncio.run(worker.deliver({**refs, "jobId": jobs[0]["id"]}, lambda: 900))["jobId"] == jobs[-1]["id"]
+    claims = s._read()["claims"]
+    assert [j["status"] for j in s.jobs(run["id"])] == ["completed"] * 4
+    started = [claims[j["id"]]["at"] for j in jobs]
+    assert started == sorted(started)
+
+
+def test_a_delivery_starts_no_further_job_without_room_for_twice_the_last_one():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    ticks = iter([0.0, 80.0])  # the first job takes 80 seconds
+    worker.clock = lambda: next(ticks)
+    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
+    second = s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
+    refs = {"accountId": actor.account_id, "runId": run["id"]}
+    assert asyncio.run(worker.deliver({**refs, "jobId": first["id"]}, lambda: 159))["jobId"] == first["id"]
+    assert s.queue_state(second["id"])["ready"]  # left for the sweep
+
+
+def test_the_sweep_starts_each_runs_waiting_head_and_leaves_a_running_run_alone():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
+    s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
+    assert s.ready_heads() == [{"id": first["id"], "run_id": run["id"]}]
+    assert asyncio.run(worker.sweep(actor.account_id)) == ["completed"]
+    assert [j["status"] for j in s.jobs(run["id"])] == ["completed", "completed"] and s.ready_heads() == []
+    third = s.enqueue_authorized_command(run["id"], "third", "prepare", {}, actor)
+    s.claim_command(owner=str(uuid4()), job_id=third["id"])
+    s.enqueue_authorized_command(run["id"], "fourth", "prepare", {}, actor)
+    assert s.ready_heads() == [] and asyncio.run(worker.sweep(actor.account_id)) == []
+
+
+def test_a_failing_head_in_the_sweep_is_reported_by_class_only(capsys):
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
+    state["denied"] = True
+    assert asyncio.run(worker.sweep(actor.account_id)) == ["error"]
+    assert "queue_sweep_failed AccountAccessDenied" in capsys.readouterr().out
 
 
 def test_five_decisions_posted_at_once_are_all_accepted_queued_and_decided_in_posting_order(identity, monkeypatch):
     (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
-    later = []
-    worker.wake = lambda message, delay: later.append(message)  # SQS stand-in: a delayed message arrives next round
 
     async def go():
         async with client(wrapped, config, account) as http:
@@ -123,14 +161,11 @@ def test_five_decisions_posted_at_once_are_all_accepted_queued_and_decided_in_po
             jobs = [p.json()["jobId"] for p in posts]
             waiting = await http.get(f"/machine/publications/alpha/commands/{jobs[3]}")
             assert waiting.status_code == 202 and waiting.json()["queued"] is True and waiting.json()["queuePosition"] == 3
-            # Deliver the wake-ups newest first: the queue, not delivery order, decides who runs.
-            for _ in range(500):
-                if not sent:
-                    sent.extend(later)
-                    later.clear()
-                if not sent:
-                    break
+            # Deliver the BFF's wake-ups newest first: the queue, not delivery order, decides who runs.
+            assert len(sent) == 5
+            while sent:
                 await worker.worker().process(sent.pop())
+            assert sent == []  # the worker sent nothing back to its own queue
             receipts = [await http.get(f"/machine/publications/alpha/commands/{job}") for job in jobs]
             assert [r.status_code for r in receipts] == [200] * 5
             return jobs
@@ -221,42 +256,6 @@ def test_auto_priming_waits_for_a_busy_run_to_go_idle_before_it_applies(monkeypa
     with pytest.raises(Reached):  # the first step after the wait
         asyncio.run(hosted_curation_routes.apply_priming(request))
     assert polls == ["run-1"] * 3
-
-
-def test_the_next_queued_job_starts_without_waiting_for_its_backoff_when_the_head_finishes():
-    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
-    wakes = []
-    worker.wake = lambda message, delay: wakes.append((message, delay))
-    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
-    second = s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
-    refs = {"accountId": actor.account_id, "runId": run["id"]}
-    assert asyncio.run(worker.process({**refs, "jobId": first["id"]}))["status"] == "completed"
-    assert wakes == [({**refs, "jobId": second["id"]}, 0)]  # immediate, for the new head, no attempt counter
-    assert asyncio.run(worker.process(wakes.pop()[0]))["status"] != "queued"  # it starts on that wake-up
-    assert wakes == [] and not s.queue_state(second["id"])["queued"]
-
-
-def test_a_failed_wake_up_never_fails_the_finished_job(capsys):
-    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
-
-    def broken(message, delay):
-        raise RuntimeError("queue unavailable")
-
-    worker.wake = broken
-    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
-    s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
-    refs = {"accountId": actor.account_id, "runId": run["id"], "jobId": first["id"]}
-    assert asyncio.run(worker.process(refs))["status"] == "completed"
-    assert "queue_wake_failed RuntimeError" in capsys.readouterr().out
-
-
-def test_nothing_is_woken_when_no_job_waits_behind_the_finished_one():
-    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
-    wakes = []
-    worker.wake = lambda message, delay: wakes.append(message)
-    first = s.enqueue_authorized_command(run["id"], "only", "prepare", {}, actor)
-    asyncio.run(worker.process({"accountId": actor.account_id, "runId": run["id"], "jobId": first["id"]}))
-    assert wakes == []
 
 
 def test_a_reconcile_with_a_queue_url_wakes_the_next_job_at_once():
