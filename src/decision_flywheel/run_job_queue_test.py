@@ -221,3 +221,58 @@ def test_auto_priming_waits_for_a_busy_run_to_go_idle_before_it_applies(monkeypa
     with pytest.raises(Reached):  # the first step after the wait
         asyncio.run(hosted_curation_routes.apply_priming(request))
     assert polls == ["run-1"] * 3
+
+
+def test_the_next_queued_job_starts_without_waiting_for_its_backoff_when_the_head_finishes():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    wakes = []
+    worker.wake = lambda message, delay: wakes.append((message, delay))
+    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
+    second = s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
+    refs = {"accountId": actor.account_id, "runId": run["id"]}
+    assert asyncio.run(worker.process({**refs, "jobId": first["id"]}))["status"] == "completed"
+    assert wakes == [({**refs, "jobId": second["id"]}, 0)]  # immediate, for the new head, no attempt counter
+    assert asyncio.run(worker.process(wakes.pop()[0]))["status"] != "queued"  # it starts on that wake-up
+    assert wakes == [] and not s.queue_state(second["id"])["queued"]
+
+
+def test_a_failed_wake_up_never_fails_the_finished_job(capsys):
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+
+    def broken(message, delay):
+        raise RuntimeError("queue unavailable")
+
+    worker.wake = broken
+    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
+    s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
+    refs = {"accountId": actor.account_id, "runId": run["id"], "jobId": first["id"]}
+    assert asyncio.run(worker.process(refs))["status"] == "completed"
+    assert "queue_wake_failed RuntimeError" in capsys.readouterr().out
+
+
+def test_nothing_is_woken_when_no_job_waits_behind_the_finished_one():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    wakes = []
+    worker.wake = lambda message, delay: wakes.append(message)
+    first = s.enqueue_authorized_command(run["id"], "only", "prepare", {}, actor)
+    asyncio.run(worker.process({"accountId": actor.account_id, "runId": run["id"], "jobId": first["id"]}))
+    assert wakes == []
+
+
+def test_a_reconcile_with_a_queue_url_wakes_the_next_job_at_once():
+    from .command_recovery import wake_head
+
+    s, run = store_with_run()
+    first = s.command(run["id"], "req-1", "publication", PAYLOAD)
+    second = s.command(run["id"], "req-2", "publication", PAYLOAD)
+    claim = s.claim_command(owner=str(uuid4()), job_id=first["id"])
+    sent = []
+
+    class Sqs:
+        def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    assert wake_head(Sqs(), "https://queue", s, "account-a", first["id"]) is None  # head still running
+    s.finish_command(first["id"], "failed", {}, owner=claim["claim_owner"], fence=claim["claim_fence"])
+    assert wake_head(Sqs(), "https://queue", s, "account-a", first["id"]) == second["id"]
+    assert sent[0]["QueueUrl"] == "https://queue" and second["id"] in sent[0]["MessageBody"]

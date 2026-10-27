@@ -125,6 +125,23 @@ class HostedCommandWorker:
         if self.decision_events is not None:
             self.decision_events.notify(job, actor, status)
 
+    async def _wake_head(self, store, job, actor):
+        """Fast path: the terminal state is durable, so wake the run's new head now instead of at its backoff.
+
+        Best effort and never raises: a lost or duplicate wake-up is harmless (the head's own delayed message
+        is the safety net, and a duplicate for a job that is no longer pending or not at the head defers or no-ops).
+        """
+        if self.wake is None:
+            return
+        try:
+            head = await asyncio.to_thread(store.queue_head, job["run_id"])
+            if head is not None:
+                await asyncio.to_thread(
+                    self.wake, {"accountId": actor.account_id, "runId": job["run_id"], "jobId": head["id"]}, 0
+                )
+        except Exception as error:
+            print(f"queue_wake_failed {type(error).__name__}")  # class only: no job content or credentials
+
     async def _defer(self, message, attempt):
         """Hand the same references back to the queue, delayed, then settle this delivery.
 
@@ -217,6 +234,7 @@ class HostedCommandWorker:
                     {"refusal": {"code": refusal.code, "message": refusal.public_message}},
                 )
                 self._ring(job, actor, "failed")
+                await self._wake_head(store, job, actor)
                 return {"status": "failed", "jobId": job["id"], "code": refusal.code}
             await owned_guard()
         finally:
@@ -227,4 +245,5 @@ class HostedCommandWorker:
             raise ValueError("console runtime returned unsupported external item updates")
         await asyncio.to_thread(effects.finish_command, job["id"], "completed", dict(result.result))
         self._ring(job, actor, "completed")
+        await self._wake_head(store, job, actor)
         return {"status": "completed", "jobId": job["id"]}

@@ -485,7 +485,7 @@ worker never takes it over and every redelivery fails closed and ends in the dea
 accepts every command and runs them one at a time in acceptance order, so the jobs queued behind the wedged
 one keep waiting (their wake-up messages are re-sent with a 10 s to 120 s delay) until an operator ends it.
 `diagnose` reports `stuck: true`, `runningMinutes`, `blockedJobs` and the `runQueue` once a claim is older than
-10 minutes (the worker times out after 3). After the reconcile, the next job starts within about 2 minutes.
+10 minutes (the worker times out after 3). After the reconcile, the next job starts within about 2 minutes, or at once if `reconcile --apply` is given `--queue-url` (it then wakes the run's next queued job; needs `sqs:SendMessage`). Whenever a job finishes, the worker also wakes the run's new head immediately; the delayed re-send stays as the safety net.
 The operator command ends that one job, deliberately and with an audit trail:
 
 ```
