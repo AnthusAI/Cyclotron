@@ -96,7 +96,6 @@ template matches. Changing any is a reviewed change:
 | `PublicationTargets` | Reviewed `CYCLOTRON_PUBLICATION_TARGETS` JSON (up to 3000 chars): which accounts, runs, model identities and publication bindings the hosted service may run. Standing targets have no lifetime/daily request or item quota. Empty leaves the variable unset. |
 | `AllowLive` | `CYCLOTRON_ALLOW_LIVE`. `true` permits live provider calls; default `false`. The stack description still says "live providers disabled". |
 | `PredictionModel` | `CYCLOTRON_PREDICTION_MODEL`, default `jev-1.13.0`. |
-| `PredictionMaxRequests` | `CYCLOTRON_PREDICTION_MAX_REQUESTS`, 1 to 3 digits, default 100. |
 | `LabVerifierEnabled` | `'true'` or `'false'`, default `'false'` (pending). When `true` the BFF gets `CYCLOTRON_LAB_VERIFIER_ROLE_ARN` and `CYCLOTRON_ACCOUNTS_API_URL`; `false` leaves both unset. |
 
 No parameter is secret; the provider key lives in Secrets Manager. Deployed values

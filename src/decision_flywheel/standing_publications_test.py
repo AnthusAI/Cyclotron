@@ -44,20 +44,19 @@ def test_unbounded_or_unfit_sources_are_refused(item):
 
 def test_a_standing_target_does_not_need_request_or_item_quota_fields():
     target = anthus_targets(RUN_PLACEHOLDER)[0]
-    target.pop("requestCeiling", None)
-    target.pop("maxItems", None)
     (parsed,) = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps([target])})
     assert parsed.standing is True
     assert not hasattr(parsed, "request_ceiling") and not hasattr(parsed, "max_items")
 
 
-def test_legacy_standing_quota_fields_are_ignored_during_configuration_migration():
+@pytest.mark.parametrize(
+    "field,value", [("requestCeiling", {"total": 300, "perDay": 100, "since": "2026-10-21"}), ("maxItems", 300)]
+)
+def test_a_target_with_a_request_or_item_quota_field_is_rejected_as_an_unknown_key(field, value):
     target = anthus_targets(RUN_PLACEHOLDER)[0]
-    target["requestCeiling"] = {"total": 300, "perDay": 100, "since": "2026-10-21"}
-    target["maxItems"] = 300
-    (parsed,) = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps([target])})
-    assert parsed.standing is True
-    assert not hasattr(parsed, "request_ceiling") and not hasattr(parsed, "max_items")
+    target[field] = value
+    with pytest.raises(ValueError, match="invalid"):
+        targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps([target])})
 
 
 def test_machine_principals_must_be_exact_distinct_role_arns():

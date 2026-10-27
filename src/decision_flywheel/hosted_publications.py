@@ -79,10 +79,6 @@ def targets_from_environment(environment):
                 "pendingOutputs",
                 "modelIdentity",
                 "standing",
-                # Ignore these retired fields during the stack-parameter rollout. They no longer
-                # become target state or affect admission/request reservation.
-                "requestCeiling",
-                "maxItems",
             }:
                 raise ValueError()
             pending = target.get("pendingOutputs", [])
@@ -374,9 +370,8 @@ class PublicationCommandRuntime:
             raise ValueError("provider differs from reviewed publication model identity")
         if getattr(optimizer, "enabled", False):
             raise ValueError("baseline prediction requires optimizer disabled")
-        registration, max_requests = None, 1 if priming else config["max_requests"]
+        registration = None
         if target.standing and not priming:
-            max_requests = None
             try:
                 item_id, values = validate_item(item, [spec.input_field for spec in specs])
                 registration = await asyncio.to_thread(self.view.register_standing_item, session.run_id, item_id, values)
@@ -406,7 +401,7 @@ class PublicationCommandRuntime:
             optimizer,
             storage=stores,
             seed_rubrics=rubrics,
-            max_requests=max_requests,
+            max_requests=None,
         ) as engine:
             active_bindings = tuple(b for b in target.bindings if not set(b.outputs) & set(target.pending_outputs))
             lab = PublicationLab(engine, account_id=self.actor.account_id, bindings=active_bindings)
@@ -453,11 +448,7 @@ class PublicationCommandRuntime:
                             "an earlier attempt at this exact decision failed and needs an operator retry; "
                             "no provider call was made",
                         ) from None
-                    if "request ceiling reached" not in str(exc):
-                        raise
-                    raise CommandRefused(
-                        "request_ceiling_reached", "the request ceiling was reached; no provider call was made"
-                    ) from None
+                    raise
                 if shared:
                     if registration is not None:
                         projections = {name: {**row, "source": registration} for name, row in projections.items()}
@@ -476,7 +467,6 @@ class PublicationCommandRuntime:
 
 REFUSAL_STATUS = {
     "provider_key_unavailable": 503,
-    "request_ceiling_reached": 429,
     "source_refused": 409,
 }
 

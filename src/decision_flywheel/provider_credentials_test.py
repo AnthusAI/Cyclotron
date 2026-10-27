@@ -113,7 +113,7 @@ def test_the_hosted_factory_hands_the_key_to_the_sdk_without_touching_dotenv_or_
     seen = fake_sdk(monkeypatch)
     monkeypatch.setitem(sys.modules, "dotenv", None)  # would raise ImportError if the factory loaded dotenv
     before = dict(os.environ)
-    factory = HostedJevFactory("jev-1.13.0", 100, SecretsManagerKeySource(lambda: Client({"SecretString": KEY})))
+    factory = HostedJevFactory("jev-1.13.0", SecretsManagerKeySource(lambda: Client({"SecretString": KEY})))
     model, optimizer = factory(config())
     assert seen["api_key"] == KEY and seen["model"] == "jev-1.13.0"
     assert model.model_identity == "jev:jev-1.13.0" and optimizer.enabled is False
@@ -122,7 +122,7 @@ def test_the_hosted_factory_hands_the_key_to_the_sdk_without_touching_dotenv_or_
 
 def test_a_missing_key_fails_before_any_sdk_client_is_constructed(monkeypatch):
     seen = fake_sdk(monkeypatch)
-    factory = HostedJevFactory("jev-1.13.0", 100, SecretsManagerKeySource(lambda: Client({"SecretString": " "})))
+    factory = HostedJevFactory("jev-1.13.0", SecretsManagerKeySource(lambda: Client({"SecretString": " "})))
     with pytest.raises(ProviderKeyUnavailable):
         factory(config())
     assert not seen
@@ -133,5 +133,5 @@ def test_without_a_key_source_the_factory_keeps_its_environment_based_behavior(m
     dotenv = ModuleType("dotenv")
     dotenv.load_dotenv = lambda **kwargs: seen.setdefault("dotenv", True)
     monkeypatch.setitem(sys.modules, "dotenv", dotenv)
-    HostedJevFactory("jev-1.13.0", 100)(config())
+    HostedJevFactory("jev-1.13.0")(config())
     assert seen["dotenv"] and seen["api_key"] is None

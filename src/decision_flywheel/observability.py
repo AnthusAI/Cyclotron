@@ -51,7 +51,6 @@ async def step(wheel, stage, training, development, *, trigger="manual", request
                 "training_count": len(training),
                 "development_count": len(development),
                 "request_budget": request_budget,
-                "session_request_ceiling": ceiling,
             }
         )
         result = await wheel.optimize_stage(

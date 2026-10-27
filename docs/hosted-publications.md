@@ -41,9 +41,8 @@ additional ordinary application settings are parsed without creating resources:
 * `CYCLOTRON_PUBLICATION_TARGETS`: JSON list of
   `{"accountId":"<existing UUID>","runId":"<existing UUID>","bindings":[{"publicationId":"<name>","outputs":["<classifier>"],"revision":"<reviewed revision>"}]}`.
 * `CYCLOTRON_PREDICTION_MODEL`: explicit reviewed Jev model identity.
-* `CYCLOTRON_PREDICTION_MAX_REQUESTS`: integer from 1 through 100. Frozen run
-  provider/model/budget must match this reviewed ceiling; automatic run priming is rejected and
-  the optimizer is disabled. Existing provider credentials are resolved lazily
+  Frozen run provider and model must match it; automatic run priming is rejected and
+  the optimizer is disabled. There is no request cap: hosted publication runs never pass a request limit to the engine. Existing provider credentials are resolved lazily
   inside the authorized worker, not at BFF construction.
 
 No actual account, publication target, model, or budget is selected in this PR.
@@ -134,7 +133,7 @@ When the worker handles `decide` for a standing target it first resolves the pro
 
 ### Usage and resource protections
 
-Every standing-target provider attempt remains recorded atomically in the shared request ledger, including retries and failures; cached decisions do not create new provider attempts. The standing path does not pass an arbitrary lifetime or daily `max_requests` quota to the engine. Non-standing/evaluation runs retain their reviewed per-open request budgets.
+Every standing-target provider attempt remains recorded atomically in the shared request ledger, including retries and failures; cached decisions do not create new provider attempts. No hosted publication run, standing or not, passes a request quota to the engine, and there are no lifetime, daily or item quotas. `requestCeiling` and `maxItems` are not target fields: a `CYCLOTRON_PUBLICATION_TARGETS` value that still contains either is rejected at startup as an invalid target configuration.
 
 ### Capacity
 
@@ -149,7 +148,7 @@ Account and run come only from the matched target: `X-Cyclotron-Account` must eq
 Request body (all operations): `{"contractVersion":"cyclotron-publication/v1","operation":"decide|status|feedback","requestId":"<8-128 chars [A-Za-z0-9._:-]>","payload":{...}}`. `requestId` is required for `decide` and `feedback` and forbidden for `status`.
 
 * `decide`: payload `{"bindingRevision","item":{"id","values"}}`. Returns 202 with the publication envelope plus `jobId` and `status`. The same `requestId` with the same content returns the same durable job; with different content 409 `request_conflict`. Another job already pending for the run returns 409 `run_busy`; retry later. Use a new `requestId` to retry after a terminal refusal. Live prediction disabled returns 503.
-* Poll `GET .../commands/{jobId}`: 202 while pending or running; 200 with the native publication response when completed; refusals include 503 `provider_key_unavailable`, 429 `request_ceiling_reached` for bounded non-standing runs, and 409 `source_refused` (also returned when an earlier attempt at the same item and context failed and the shared request needs an operator retry; no provider call is made and the job ends `failed` with this receipt), each with `code` and a non-secret `message`; any other terminal failure is 409 `reconciliation_required`.
+* Poll `GET .../commands/{jobId}`: 202 while pending or running; 200 with the native publication response when completed; refusals include 503 `provider_key_unavailable`, and 409 `source_refused` (also returned when an earlier attempt at the same item and context failed and the shared request needs an operator retry; no provider call is made and the job ends `failed` with this receipt), each with `code` and a non-secret `message`; any other terminal failure is 409 `reconciliation_required`.
 * `status`: payload `{}`; returns the newest verified snapshot (200) or 503 before the first completed decision.
 * `feedback`: payload `{"bindingRevision","itemId","itemRevision","output","label","comment"?,"editor":{"site","subject"}}`. Handled synchronously (no queue, provider or optimizer). It stores one catalog human label for that classifier revision and item revision, and a `publication-machine-feedback` run event holding the machine role, session name and asserted editor, in one transaction. Idempotent by `requestId`; reusing it with a different label or output is 409. `output` must belong to the binding (403), the item must have been submitted to this run (409) and the label must be one of the classifier's labels (409). Returns 200 `{status:"recorded", recordedAs:"human-label", asserted:{machine,editor}, ...}`.
 
