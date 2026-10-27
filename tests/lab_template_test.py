@@ -12,11 +12,7 @@ _SPEC.loader.exec_module(check)
 
 # Removal of the retired request cap: the parameter and its variable on both functions.
 # Emptied again after the deploy refreshes the snapshot.
-REVIEWED_PENDING_PATHS = [
-    "/Parameters/PredictionMaxRequests",
-    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
-    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -34,11 +30,10 @@ def test_pending_changes_are_exactly_the_reviewed_remove_set():
     assert {operation["op"] for operation in pending} <= {"add", "remove"}
 
 
-def test_the_retired_request_cap_is_gone_from_the_template_and_still_in_the_snapshot():
-    template, snapshot = check.load_template(), check.load_snapshot()
-    assert "PredictionMaxRequests" in snapshot["Parameters"] and "PredictionMaxRequests" not in template["Parameters"]
-    assert "PredictionMaxRequests" not in json.dumps(template)
-    assert "CYCLOTRON_PREDICTION_MAX_REQUESTS" not in json.dumps(template)
+def test_the_retired_request_cap_is_gone_from_the_template_and_the_deployed_snapshot():
+    for document in (check.load_template(), check.load_snapshot()):
+        assert "PredictionMaxRequests" not in json.dumps(document)
+        assert "CYCLOTRON_PREDICTION_MAX_REQUESTS" not in json.dumps(document)
 
 
 def test_pending_changes_are_each_described_in_the_reviewer_note():
@@ -58,9 +53,9 @@ def test_an_unlisted_change_to_the_template_cannot_hide():
 
 def test_a_pending_remove_deletes_exactly_the_named_mapping_key():
     snapshot = check.load_snapshot()
-    result = check.apply_pending(snapshot, [{"op": "remove", "path": "/Parameters/PredictionMaxRequests"}])
-    assert set(result["Parameters"]) == set(snapshot["Parameters"]) - {"PredictionMaxRequests"}
-    assert "PredictionMaxRequests" in snapshot["Parameters"]
+    result = check.apply_pending(snapshot, [{"op": "remove", "path": "/Parameters/JournalMaxBytes"}])
+    assert set(result["Parameters"]) == set(snapshot["Parameters"]) - {"JournalMaxBytes"}
+    assert "JournalMaxBytes" in snapshot["Parameters"]
 
 
 def test_a_pending_remove_must_name_an_existing_mapping_key_with_no_value():
@@ -68,7 +63,7 @@ def test_a_pending_remove_must_name_an_existing_mapping_key_with_no_value():
     for bad in (
         {"op": "remove", "path": "/Parameters/NoSuchParameter"},
         {"op": "remove", "path": "/Resources/BffRole/Properties/Policies/0"},
-        {"op": "remove", "path": "/Parameters/PredictionMaxRequests", "value": 1},
+        {"op": "remove", "path": "/Parameters/JournalMaxBytes", "value": 1},
         {"op": "remove"},
     ):
         with pytest.raises((ValueError, KeyError)):
