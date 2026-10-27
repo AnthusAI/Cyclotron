@@ -277,8 +277,6 @@ class SQLiteRunStorage:
                 if row["kind"] != kind or row["payload"] != encode(payload):
                     raise ValueError("command identity has different content")
                 return self._job(row)
-            if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')", (run_id,)).fetchone():
-                raise ValueError("run already has work in progress")
             job_id = str(uuid4())
             db.execute(
                 "INSERT INTO web_jobs VALUES (?,?,?,?,?,?,?)",
@@ -316,6 +314,7 @@ class SQLiteRunStorage:
             if edition and edition["revision"] != edition["active_revision"]:
                 raise ValueError("activate this cyclotron version before recovering its feedback")
             if db.execute("SELECT 1 FROM web_jobs WHERE run_id=? AND status IN ('pending','running')", (run_id,)).fetchone():
+                # Re-pending an old job would jump the queue, so recovery still waits for an idle run.
                 raise ValueError("run already has work in progress")
             event = {
                 "kind": "feedback-command-resumed",
@@ -343,7 +342,14 @@ class SQLiteRunStorage:
     def claim_command(self):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT * FROM web_jobs WHERE status='pending' ORDER BY rowid LIMIT 1").fetchone()
+            # Oldest pending job of a run with nothing running: one job per run at a time, in acceptance order.
+            row = db.execute(
+                """SELECT * FROM web_jobs job WHERE status='pending'
+                AND NOT EXISTS (SELECT 1 FROM web_jobs other WHERE other.run_id=job.run_id AND other.status='running')
+                AND rowid=(SELECT MIN(first.rowid) FROM web_jobs first WHERE first.run_id=job.run_id
+                           AND first.status IN ('pending','running'))
+                ORDER BY rowid LIMIT 1"""
+            ).fetchone()
             if row is None:
                 return None
             db.execute("UPDATE web_jobs SET status='running' WHERE id=?", (row["id"],))

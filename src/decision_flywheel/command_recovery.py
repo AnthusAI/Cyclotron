@@ -64,6 +64,17 @@ def purge_matching(sqs, url, job_id, *, apply):
     return len(matched)
 
 
+def wake_head(sqs, url, store, account, job_id):
+    """After a reconcile, wake the run's next queued job now rather than at its backoff (at most 2 minutes)."""
+    run_id = store.command_recovery(job_id)["runId"]
+    head = store.queue_head(run_id)
+    if head is None:
+        return None
+    message = {"accountId": account, "runId": run_id, "jobId": head["id"]}
+    sqs.send_message(QueueUrl=url, MessageBody=json.dumps(message, separators=(",", ":")))
+    return head["id"]
+
+
 def journal_budget(environment):
     """The same per-document budget the hosted lab uses (CYCLOTRON_MAX_BYTES, default 4 MiB)."""
     from .hosted_runtime import MAX_JOURNAL_BYTES, HostedConfig
@@ -105,6 +116,9 @@ def run(args, *, session):
         + ": "
         + json.dumps(audit["reconciliation"], indent=1)
     )
+    if args.queue_url and args.apply:
+        woken = wake_head(session.client("sqs"), args.queue_url, store, args.cyclotron_account, args.job)
+        print("woke the next queued job: " + (woken or "none waiting"))
     if args.dlq_url:
         count = purge_matching(session.client("sqs"), args.dlq_url, args.job, apply=args.apply)
         print(f"dead-letter messages for this job: {count} " + ("deleted" if args.apply else "would be deleted"))
@@ -140,6 +154,7 @@ def parser():
     p.add_argument("--as", dest="as_status", choices=("failed", "interrupted"))
     p.add_argument("--reason")
     p.add_argument("--dlq-url")
+    p.add_argument("--queue-url", help="with --apply: also wake the run's next queued job at once (needs sqs:SendMessage)")
     p.add_argument("--apply", action="store_true", help="write; the default is a dry run")
     return p
 

@@ -8,6 +8,7 @@ import pytest
 from .command_recovery import main, open_store, purge_matching
 from .s3_console_storage import insert
 from .s3_journal_test import ConditionalS3
+from .storage_errors import CommandNotReady
 
 ITEM = {"publication": "anth-us", "bindingRevision": "1", "item": {"id": "hn-1"}}
 REASON = "wrong provider key; no prediction produced"
@@ -39,9 +40,12 @@ def test_dry_run_checks_everything_and_writes_nothing():
 
 def test_apply_ends_the_job_with_an_audit_record_and_unblocks_the_run():
     _, s, run, job, owner, fence = wedged()
-    with pytest.raises(ValueError, match="in progress"):
-        s.command(run["id"], "req-2", "publication", ITEM)
+    queued = s.command(run["id"], "req-2", "publication", ITEM)  # accepted, never refused, but it cannot start yet
+    assert queued["status"] == "pending"
+    with pytest.raises(CommandNotReady):
+        s.claim_command(owner=str(uuid4()), job_id=queued["id"])
     reconcile(s, job, owner, fence)
+    assert s.queue_state(queued["id"])["ready"]
     done = next(j for j in s.jobs(run["id"]) if j["id"] == job["id"])
     audit = done["result"]["reconciliation"]
     assert done["status"] == "failed"

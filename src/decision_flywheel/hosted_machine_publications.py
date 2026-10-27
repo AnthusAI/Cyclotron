@@ -18,13 +18,22 @@ from hashlib import sha256
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .hosted_publications import configured_targets, envelope, receipt_response, status_snapshot, target_for
+from .hosted_publications import (
+    QUEUE_REFUSALS,
+    configured_targets,
+    envelope,
+    queue_fields,
+    queue_refusal,
+    receipt_response,
+    status_snapshot,
+    target_for,
+)
 from .journal import uuid
 from .machine_access import MachineActor, MachineDenied, verified_caller
-from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable
+from .prospectus_accounts import AccountAccessDenied
 from .publication_lab import CONTRACT
 from .standing_publications import validate_item
-from .storage_errors import StorageConflict, StorageMissing, StorageUncertain
+from .storage_errors import StorageMissing, StorageUncertain
 
 REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{8,128}")
 FEEDBACK_KEYS = {"bindingRevision", "itemId", "itemRevision", "output", "label", "editor"}
@@ -116,17 +125,10 @@ def install_machine_routes(app, runtime):
             )
         except AccountAccessDenied:
             raise HTTPException(403, "machine access refused") from None
-        except ProspectusUnavailable:
-            raise HTTPException(503, "queue outcome unavailable; retry the same request id") from None
-        except StorageUncertain:
-            raise HTTPException(503, "outcome uncertain; retry the same request id") from None
-        except StorageConflict:
-            raise HTTPException(409, "catalog changed; retry the same request id") from None
+        except QUEUE_REFUSALS as error:
+            return queue_refusal(error, meta)
         except ValueError as exc:
-            busy = "in progress" in str(exc)
-            return JSONResponse(
-                {**meta, "code": "run_busy" if busy else "request_conflict", "message": str(exc)}, status_code=409
-            )
+            return JSONResponse({**meta, "code": "request_conflict", "message": str(exc)}, status_code=409)
         return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
 
     async def feedback(role, session, account, target, binding, run, store, request_id, payload):
@@ -216,7 +218,7 @@ def install_machine_routes(app, runtime):
             or job["payload"].get("bindingRevision") != binding.revision
         ):
             raise HTTPException(404, "unknown publication command")
-        return receipt_response(job, envelope(target, binding, run["config"]))
+        return receipt_response(job, envelope(target, binding, run["config"]), await asyncio.to_thread(queue_fields, store, job))
 
     def resolve_account(request):
         try:
@@ -292,17 +294,10 @@ def install_machine_routes(app, runtime):
             )
         except AccountAccessDenied:
             raise HTTPException(403, "machine access refused") from None
-        except ProspectusUnavailable:
-            raise HTTPException(503, "queue outcome unavailable; retry the same request id") from None
-        except StorageUncertain:
-            raise HTTPException(503, "outcome uncertain; retry the same request id") from None
-        except StorageConflict:
-            raise HTTPException(409, "catalog changed; retry the same request id") from None
+        except QUEUE_REFUSALS as error:
+            return queue_refusal(error, meta)
         except ValueError as exc:
-            busy = "in progress" in str(exc)
-            return JSONResponse(
-                {**meta, "code": "run_busy" if busy else "request_conflict", "message": str(exc)}, status_code=409
-            )
+            return JSONResponse({**meta, "code": "request_conflict", "message": str(exc)}, status_code=409)
         return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
 
     @app.get("/machine/decisions/{job_id}")
@@ -333,4 +328,4 @@ def install_machine_routes(app, runtime):
                 "jobId": job["id"],
                 **job["result"]["response"],
             }
-        return receipt_response(job, meta)
+        return receipt_response(job, meta, await asyncio.to_thread(queue_fields, store, job))

@@ -117,6 +117,8 @@ class HostedRuntime:
             if sqs is None:raise ValueError('explicit queue client required')
             def send(message):return sqs.send_message(QueueUrl=config.queue_url,MessageBody=json.dumps(message,separators=(',',':')))
         self.send=send
+        # Delayed re-send of a queued job's wake-up (the worker's only SQS write); absent without a queue client.
+        self.wake=(lambda message,delay:sqs.send_message(QueueUrl=config.queue_url,MessageBody=json.dumps(message,separators=(',',':')),DelaySeconds=delay)) if sqs is not None else None
         self.catalog_cache=CatalogSnapshotCache()
 
     def _journal(self,bucket,scope,domain,name):
@@ -226,7 +228,7 @@ class HostedRuntime:
                     publication_runtime_for_command=publication if self.publication_targets is not None else None,
                     command_policy=lambda actor,kind:self._publication_command_policy(actor.account_id,actor.run_id,kind),
                     data_command=self._data_command if self.publication_targets is not None else None,
-                    decision_events=self.decision_events).process(message)
+                    decision_events=self.decision_events,wake=self.wake).process(message)
         return Worker()
 
 

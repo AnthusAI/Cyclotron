@@ -21,10 +21,11 @@ from .journal import encode, uuid
 from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
 from .priming_context import catalog_priming, decode_priming
-from .prospectus_accounts import AccountAccessDenied, VerifiedAccountSession
+from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
 from .publication_lab import CONTRACT, MAX_BYTES, PublicationActor, PublicationBinding, PublicationLab
 from .s3_embedded_storage import S3CyclotronStores
 from .standing_publications import validate_item
+from .storage_errors import StorageConflict, StorageUncertain
 
 
 @dataclass(frozen=True)
@@ -485,12 +486,37 @@ def status_snapshot(store, target, binding, publication):
     return None
 
 
-def receipt_response(job, meta):
+RETRY_SECONDS = 5
+
+
+def queue_refusal(error, meta):
+    """A command whose record may not exist: the caller retries the same request id after Retry-After. A busy run is never a reason."""
+    headers = {"Retry-After": str(RETRY_SECONDS)}
+    if isinstance(error, StorageConflict):
+        raise HTTPException(409, "catalog changed; retry the same request id", headers=headers) from None
+    if isinstance(error, StorageUncertain):
+        raise HTTPException(503, "outcome uncertain; retry the same request id", headers=headers) from None
+    raise HTTPException(503, "queue outcome unavailable; retry the same request id", headers=headers) from None
+
+
+QUEUE_REFUSALS = (ProspectusUnavailable, StorageUncertain, StorageConflict)
+
+
+def queue_fields(store, job):
+    """Where an unfinished job stands: ``queued`` while it waits its turn, ``queuePosition`` jobs ahead of it."""
+    try:
+        state = store.queue_state(job["id"])
+    except (AttributeError, ValueError):
+        return {}
+    return {"queued": state["queued"], "queuePosition": state["position"]}
+
+
+def receipt_response(job, meta, queue=None):
     """Durable job state as a publication receipt; refusals carry their public code, never details."""
     if job["status"] == "completed":
         return job["result"]["response"]
     if job["status"] in ("pending", "running"):
-        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
+        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"], **(queue or {})}, status_code=202)
     refusal = (job.get("result") or {}).get("refusal") if job["status"] == "failed" else None
     if isinstance(refusal, dict) and isinstance(refusal.get("code"), str):
         return JSONResponse(
@@ -576,9 +602,12 @@ def install_publication_routes(app, runtime):
         verified = VerifiedAccountSession(
             session.access_token, session.person_id, target.account_id, session_ref=session.session_ref
         )
-        job = await runtime.workspace(target.account_id).service.submit_command(
-            verified, target.run_id, identity, "publication", command
-        )
+        try:
+            job = await runtime.workspace(target.account_id).service.submit_command(
+                verified, target.run_id, identity, "publication", command
+            )
+        except QUEUE_REFUSALS as error:
+            return queue_refusal(error, meta)
         return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
 
     @app.get("/publications/{publication}/commands/{job_id}")
@@ -597,4 +626,4 @@ def install_publication_routes(app, runtime):
             or job["payload"].get("bindingRevision") != binding.revision
         ):
             raise HTTPException(404, "unknown publication command")
-        return receipt_response(job, meta)
+        return receipt_response(job, meta, await asyncio.to_thread(queue_fields, store, job))

@@ -10,6 +10,14 @@ from uuid import uuid4
 from .command_refusal import CommandRefused
 from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
+from .storage_errors import CommandNotReady
+
+DEFER_BASE_SECONDS, DEFER_CAP_SECONDS, MAX_ATTEMPT = 10, 120, 16
+
+
+def defer_delay(attempt):
+    """Seconds before a queued job's wake-up is delivered again: 10, 20, 40, 80, then 120 at most."""
+    return min(DEFER_CAP_SECONDS, DEFER_BASE_SECONDS * 2 ** min(attempt, MAX_ATTEMPT))
 
 
 class CommandReconciliationRequired(RuntimeError):
@@ -98,8 +106,10 @@ class HostedCommandWorker:
         command_policy=None,
         data_command=None,
         decision_events=None,
+        wake=None,
     ):
         self.decision_events = decision_events
+        self.wake = wake
         self.allow_live = allow_live
         self.publication_runtime_for_command = publication_runtime_for_command
         self.command_policy = command_policy
@@ -115,19 +125,58 @@ class HostedCommandWorker:
         if self.decision_events is not None:
             self.decision_events.notify(job, actor, status)
 
+    async def _wake_head(self, store, job, actor):
+        """Fast path: the terminal state is durable, so wake the run's new head now instead of at its backoff.
+
+        Best effort and never raises: a lost or duplicate wake-up is harmless (the head's own delayed message
+        is the safety net, and a duplicate for a job that is no longer pending or not at the head defers or no-ops).
+        """
+        if self.wake is None:
+            return
+        try:
+            head = await asyncio.to_thread(store.queue_head, job["run_id"])
+            if head is not None:
+                await asyncio.to_thread(
+                    self.wake, {"accountId": actor.account_id, "runId": job["run_id"], "jobId": head["id"]}, 0
+                )
+        except Exception as error:
+            print(f"queue_wake_failed {type(error).__name__}")  # class only: no job content or credentials
+
+    async def _defer(self, message, attempt):
+        """Hand the same references back to the queue, delayed, then settle this delivery.
+
+        The fresh message restarts SQS's receive count, so a job waiting behind a long one never drifts into the
+        dead-letter queue. If it cannot be sent this delivery fails instead, and SQS redelivers it.
+        """
+        if self.wake is None:
+            raise CommandNotReady("queued command cannot be re-sent without a queue client")
+        delay = defer_delay(attempt)
+        await asyncio.to_thread(
+            self.wake, {**{k: message[k] for k in ("accountId", "runId", "jobId")}, "attempt": attempt + 1}, delay
+        )
+        return {"status": "queued", "jobId": message["jobId"], "retryAfter": delay}
+
     async def process(self, message):
         if not self.allow_live and self.data_command is None:
             raise ValueError("live worker requires separate operator authority")
-        if not isinstance(message, dict) or set(message) != {"accountId", "runId", "jobId"}:
+        keys = {"accountId", "runId", "jobId"}
+        if not isinstance(message, dict) or set(message) not in (keys, keys | {"attempt"}):
             raise ValueError("delivery contains references only")
-        for key in message:
+        for key in keys:
             uuid(message[key])
+        attempt = message.get("attempt", 0)
+        if type(attempt) is not int or not 0 <= attempt <= 100000:
+            raise ValueError("delivery attempt must be a bounded count")
         store = await asyncio.to_thread(self.store_for_account, message["accountId"])
         job, actor = await asyncio.to_thread(store.command_envelope, message["jobId"])
         if actor.account_id != message["accountId"] or actor.run_id != message["runId"] or job["run_id"] != actor.run_id:
             raise AccountAccessDenied("delivery target does not match canonical actor")
         if not self.allow_live and not self.data_command(job["kind"], job["payload"]):
             raise ValueError("live worker requires separate operator authority")
+        # One job per run at a time, in acceptance order. A job that is not at the head is neither claimed nor
+        # failed: its wake-up is re-sent with a delay. This is a read of queue order only, so it needs no authority.
+        if job["status"] == "pending" and not (await asyncio.to_thread(store.queue_state, job["id"]))["ready"]:
+            return await self._defer(message, attempt)
         guard = self.authorization.guard(actor)
         await guard()
         if self.command_policy is not None:
@@ -137,7 +186,10 @@ class HostedCommandWorker:
         if job["status"] != "pending":
             raise CommandReconciliationRequired("running command requires scoped reconciliation")
         owner = str(uuid4())
-        claim = await asyncio.to_thread(store.claim_command, owner=owner, job_id=job["id"])
+        try:
+            claim = await asyncio.to_thread(store.claim_command, owner=owner, job_id=job["id"])
+        except CommandNotReady:
+            return await self._defer(message, attempt)
         if claim is None:
             raise CommandReconciliationRequired("command already claimed; never infer a receipt")
         view = await asyncio.to_thread(store.for_command, job["id"], owner, claim["claim_fence"])
@@ -182,6 +234,7 @@ class HostedCommandWorker:
                     {"refusal": {"code": refusal.code, "message": refusal.public_message}},
                 )
                 self._ring(job, actor, "failed")
+                await self._wake_head(store, job, actor)
                 return {"status": "failed", "jobId": job["id"], "code": refusal.code}
             await owned_guard()
         finally:
@@ -192,4 +245,5 @@ class HostedCommandWorker:
             raise ValueError("console runtime returned unsupported external item updates")
         await asyncio.to_thread(effects.finish_command, job["id"], "completed", dict(result.result))
         self._ring(job, actor, "completed")
+        await self._wake_head(store, job, actor)
         return {"status": "completed", "jobId": job["id"]}

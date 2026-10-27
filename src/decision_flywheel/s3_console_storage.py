@@ -31,7 +31,7 @@ from .record_lake import (
     with_coverage,
 )
 from .run_storage import _UNSET
-from .storage_errors import StorageConflict
+from .storage_errors import CommandNotReady, StorageConflict
 from .storage_payloads import FilePayloads, S3Payloads
 
 # Completed job results live in the record lake; the catalog row keeps only this small reference.
@@ -52,6 +52,15 @@ def result_ref(raw):
     if isinstance(parsed, dict) and set(parsed) == {"schema", "ref"} and parsed["schema"] == RESULT_REF:
         return parsed["ref"]
     return None
+
+
+# The worker Lambda times out after 3 minutes (infra/lab/template.yaml); a claim older than this never finishes.
+STUCK_HEAD_MINUTES = 10
+
+
+def same_claim(claim, owner, fence):
+    """A claim is its owner and fence; the optional ``at`` only records when it was taken."""
+    return isinstance(claim, dict) and claim.get("owner") == owner and claim.get("fence") == fence
 
 
 def now():
@@ -197,7 +206,7 @@ class S3ConsoleStorage:
             raise ValueError("console record budget exceeded")
         for job_id, claim in value["claims"].items():
             job = one(value, "web_jobs", id=job_id)
-            if job is None or set(claim) != {"owner", "fence"} or type(claim["fence"]) is not int or claim["fence"] < 1:
+            if job is None or set(claim) - {"at"} != {"owner", "fence"} or type(claim["fence"]) is not int or claim["fence"] < 1:
                 raise ValueError("invalid command claim")
             uuid(claim["owner"])
         for job_id, actor in value["actors"].items():
@@ -258,7 +267,7 @@ class S3ConsoleStorage:
             return
         job_id, owner, fence = claim
         job = one(value, "web_jobs", id=job_id)
-        if job is None or job["status"] != "running" or value["claims"].get(job_id) != {"owner": owner, "fence": fence}:
+        if job is None or job["status"] != "running" or not same_claim(value["claims"].get(job_id), owner, fence):
             raise ValueError("stale command execution boundary")
 
     def _worker_write(self, value, run_id):
@@ -318,7 +327,7 @@ class S3ConsoleStorage:
             raise ValueError("command claim receipt not confirmed in this worker")
         value = self._read()
         job = one(value, "web_jobs", id=job_id)
-        if job is None or job["status"] != "running" or value["claims"].get(job_id) != {"owner": owner, "fence": fence}:
+        if job is None or job["status"] != "running" or not same_claim(value["claims"].get(job_id), owner, fence):
             raise ValueError("stale command capability")
         return _CommandView(self, (job_id, owner, fence), job["run_id"])
 
@@ -1017,8 +1026,7 @@ class S3ConsoleStorage:
                 if (old["kind"], old["payload"]) != (kind, raw):
                     raise ValueError("command identity has different content")
                 return self._job(value, old)
-            if any(r["status"] in ("pending", "running") for r in rows(value, "web_jobs", run_id=run_id)):
-                raise ValueError("run already has work in progress")
+            # Jobs queue in acceptance order (row order); a command is never refused because others are running or waiting.
             return self._job(
                 value,
                 insert(
@@ -1085,7 +1093,28 @@ class S3ConsoleStorage:
             "fence": claim.get("fence"),
             "hasActor": job_id in value["actors"],
             "automaticTakeover": False,
+            "claimedAt": claim.get("at"),
+            "runQueue": [
+                {"jobId": r["id"], "kind": r["kind"], "status": r["status"], "position": i}
+                for i, r in enumerate(self._unfinished(value, job["run_id"]))
+            ],
+            **self._stuck_head(value, job),
         }
+
+    @staticmethod
+    def _stuck_head(value, job, *, minutes=None):
+        """Signal a running job that has held its run longer than ``minutes`` (a crashed worker never finishes).
+
+        The worker never takes a running claim over, so only an operator reconcile ends it; jobs queued behind
+        it wait until then. Claims written before ``at`` existed report the age as unknown.
+        """
+        minutes = STUCK_HEAD_MINUTES if minutes is None else minutes
+        claim = value["claims"].get(job["id"], {})
+        if job["status"] != "running" or not claim.get("at"):
+            return {"stuck": False, "runningMinutes": None, "blockedJobs": 0}
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(claim["at"])).total_seconds() / 60
+        waiting = sum(r["status"] == "pending" for r in rows(value, "web_jobs", run_id=job["run_id"]))
+        return {"stuck": age > minutes, "runningMinutes": round(age, 1), "blockedJobs": waiting}
 
     def jobs(self, run_id, *, results=True):
         """The run's 20 newest jobs. ``results=False`` skips the lake fetch: a lake-held result then shows as
@@ -1097,7 +1126,52 @@ class S3ConsoleStorage:
             return [self._job(value, r) for r in newest]
         return [decoded(r, "payload", "result") for r in newest]
 
+    @staticmethod
+    def _unfinished(value, run_id):
+        """The run's pending and running jobs, oldest acceptance first."""
+        return [r for r in rows(value, "web_jobs", run_id=run_id) if r["status"] in ("pending", "running")]
+
+    @classmethod
+    def _ready(cls, value, job):
+        """A pending job may start only when nothing in its run is running and it heads the run's queue."""
+        unfinished = cls._unfinished(value, job["run_id"])
+        return job["status"] == "pending" and bool(unfinished) and unfinished[0]["id"] == job["id"]
+
+    def queue_head(self, run_id):
+        """The pending job that should start next in this run, or None (idle, or the oldest job is still running)."""
+        value = self._read()
+        self._run(value, run_id)
+        unfinished = self._unfinished(value, run_id)
+        return self._job(value, unfinished[0]) if unfinished and unfinished[0]["status"] == "pending" else None
+
+    def queue_state(self, job_id):
+        """Where one job stands in its run's queue: ``position`` counts unfinished jobs ahead of it (0 = next or running)."""
+        value = self._read()
+        job = one(value, "web_jobs", id=job_id)
+        if job is None:
+            raise ValueError("unknown command")
+        unfinished = self._unfinished(value, job["run_id"])
+        ids = [r["id"] for r in unfinished]
+        position = ids.index(job_id) if job_id in ids else None
+        return {
+            "status": job["status"],
+            "position": position,
+            "queued": job["status"] == "pending",
+            "ready": self._ready(value, job),
+        }
+
+    def run_has_active_work(self, run_id):
+        value = self._read()
+        self._run(value, run_id)
+        return bool(self._unfinished(value, run_id))
+
     def claim_command(self, *, owner=None, job_id=None):
+        """Claim the next job. Strictly one job per run runs at a time, in acceptance order.
+
+        With ``job_id``: claim it only if it heads its run's queue, otherwise raise ``CommandNotReady`` and
+        change nothing (a job that is not pending claims nothing, as before). Without: claim the oldest pending
+        job of any run that is ready.
+        """
         if owner is None:
             raise ValueError("cloud command claim requires an explicit worker operation owner")
         uuid(owner)
@@ -1105,14 +1179,17 @@ class S3ConsoleStorage:
         def apply(value):
             if any(c["owner"] == owner for c in value["claims"].values()):
                 raise ValueError("worker operation owner already claimed; reconcile its result")
-            job = next(
-                (r for r in rows(value, "web_jobs") if r["status"] == "pending" and (job_id is None or r["id"] == job_id)), None
-            )
+            if job_id is None:
+                job = next((r for r in rows(value, "web_jobs") if self._ready(value, r)), None)
+            else:
+                job = next((r for r in rows(value, "web_jobs") if r["status"] == "pending" and r["id"] == job_id), None)
+                if job is not None and not self._ready(value, job):
+                    raise CommandNotReady("an earlier command in this run has not finished")
             if job is None:
                 return None
             previous = value["claims"].get(job["id"])
             fence = previous["fence"] + 1 if previous else 1
-            value["claims"][job["id"]] = {"owner": owner, "fence": fence}
+            value["claims"][job["id"]] = {"owner": owner, "fence": fence, "at": now()}
             job["status"] = "running"
             return {**self._job(value, job), "claim_owner": owner, "claim_fence": fence}
 
@@ -1133,7 +1210,7 @@ class S3ConsoleStorage:
             """The running job this completion may settle, or None when it already settled identically."""
             job = one(value, "web_jobs", id=job_id)
             claim = value["claims"].get(job_id)
-            if job is None or claim != {"owner": owner, "fence": fence}:
+            if job is None or not same_claim(claim, owner, fence):
                 raise ValueError("stale cloud command completion")
             if job["status"] == status and self._result_text(value, job) == raw:
                 return None
@@ -1325,7 +1402,7 @@ class S3ConsoleStorage:
                 raise ValueError("unknown command")
             if job["status"] != "running":
                 raise ValueError("only a running command can be reconciled")
-            if value["claims"].get(job_id) != {"owner": owner, "fence": fence}:
+            if not same_claim(value["claims"].get(job_id), owner, fence):
                 raise ValueError("recorded owner and fence do not match")
             found = self._paid_outcome_evidence(value, job)
             if found:
