@@ -749,6 +749,29 @@ Resources:
       Tags:
         httpapi:createdBy: SAM
       AutoDeploy: true
+  WorkerSweepSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Once a minute, start each run's waiting head outside any SQS chain
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+      - Id: worker-sweep
+        Arn:
+          Fn::GetAtt:
+          - WorkerFunction
+          - Arn
+  WorkerSweepPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: WorkerFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - WorkerSweepSchedule
+        - Arn
 Conditions:
   HasDecisionEventBus:
     Fn::Not:

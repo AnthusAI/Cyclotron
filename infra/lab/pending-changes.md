@@ -8,7 +8,18 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.** The run job queue (lab code e82eee2, package sha256 `5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0`) was deployed on 2026-10-27 with change set `run-queue-e82eee2`, adding `sqs:SendMessage` on the command queue for the worker. The snapshot was refreshed.
+**Pending: the worker sweep.** AWS Lambda recursive-loop detection dropped the worker's own re-sends to
+`cyclotron-console-commands` (worker -> SQS -> worker) from 2026-10-27 15Z, which stalled the run queue.
+The worker no longer writes to its queue: it drains a run's queue within one invocation, and
+
+- `/Resources/WorkerSweepSchedule` invokes the worker once a minute with a scheduled event, which starts
+  each run's waiting head outside any SQS chain;
+- `/Resources/WorkerSweepPermission` lets only that rule invoke the worker.
+
+The worker role's `sqs:SendMessage` grant is now unused; removing it needs list-item removal in the
+checker, a follow-up.
+
+Previously: **No pending changes.** The run job queue (lab code e82eee2, package sha256 `5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0`) was deployed on 2026-10-27 with change set `run-queue-e82eee2`, adding `sqs:SendMessage` on the command queue for the worker. The snapshot was refreshed.
 
 Previously: the request caps were removed on 2026-10-27: change set `targets-remove-ceilings` (PublicationTargets without `requestCeiling`/`maxItems`), then `no-ceilings-377c478` (lab code 377c478, package sha256 `6ca1b278be02e4c938e12b31e5295a5427eac2711d40954f8d1c09f53583c9fe`) removing `PredictionMaxRequests` and `CYCLOTRON_PREDICTION_MAX_REQUESTS`. The snapshot was refreshed.
 

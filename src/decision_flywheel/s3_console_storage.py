@@ -1144,6 +1144,15 @@ class S3ConsoleStorage:
         unfinished = self._unfinished(value, run_id)
         return self._job(value, unfinished[0]) if unfinished and unfinished[0]["status"] == "pending" else None
 
+    def ready_heads(self):
+        """Every run's head that is waiting to start (its run has nothing running), oldest run first."""
+        value = self._read()
+        heads = {}
+        for r in rows(value, "web_jobs"):
+            if r["status"] in ("pending", "running"):
+                heads.setdefault(r["run_id"], r)
+        return [{"id": r["id"], "run_id": r["run_id"]} for r in heads.values() if r["status"] == "pending"]
+
     def queue_state(self, job_id):
         """Where one job stands in its run's queue: ``position`` counts unfinished jobs ahead of it (0 = next or running)."""
         value = self._read()

@@ -5,19 +5,13 @@ never steals a running claim or repeats a paid request after uncertain delivery.
 """
 
 import asyncio
+import time
 from uuid import uuid4
 
 from .command_refusal import CommandRefused
 from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
 from .storage_errors import CommandNotReady
-
-DEFER_BASE_SECONDS, DEFER_CAP_SECONDS, MAX_ATTEMPT = 10, 120, 16
-
-
-def defer_delay(attempt):
-    """Seconds before a queued job's wake-up is delivered again: 10, 20, 40, 80, then 120 at most."""
-    return min(DEFER_CAP_SECONDS, DEFER_BASE_SECONDS * 2 ** min(attempt, MAX_ATTEMPT))
 
 
 class CommandReconciliationRequired(RuntimeError):
@@ -106,10 +100,11 @@ class HostedCommandWorker:
         command_policy=None,
         data_command=None,
         decision_events=None,
-        wake=None,
+        clock=time.monotonic,
     ):
         self.decision_events = decision_events
-        self.wake = wake
+        self.clock = clock
+        self.last_job_seconds = 0.0
         self.allow_live = allow_live
         self.publication_runtime_for_command = publication_runtime_for_command
         self.command_policy = command_policy
@@ -125,36 +120,48 @@ class HostedCommandWorker:
         if self.decision_events is not None:
             self.decision_events.notify(job, actor, status)
 
-    async def _wake_head(self, store, job, actor):
-        """Fast path: the terminal state is durable, so wake the run's new head now instead of at its backoff.
+    def _has_time(self, remaining):
+        """Start another job only with room for twice the last one; an invocation never runs out mid job."""
+        return remaining is None or remaining() > 2 * self.last_job_seconds
 
-        Best effort and never raises: a lost or duplicate wake-up is harmless (the head's own delayed message
-        is the safety net, and a duplicate for a job that is no longer pending or not at the head defers or no-ops).
+    async def deliver(self, message, remaining=None):
+        """Run the delivered job, then the jobs queued behind it in its run, while this invocation has time.
+
+        The worker never writes to its own queue: AWS stops a worker -> SQS -> worker chain as a recursive
+        loop and drops the deliveries. A job's one wake-up comes from the BFF that accepted it; the jobs behind
+        a finished one run here, and the scheduled sweep starts any head left waiting when time runs out.
         """
-        if self.wake is None:
-            return
-        try:
-            head = await asyncio.to_thread(store.queue_head, job["run_id"])
-            if head is not None:
-                await asyncio.to_thread(
-                    self.wake, {"accountId": actor.account_id, "runId": job["run_id"], "jobId": head["id"]}, 0
-                )
-        except Exception as error:
-            print(f"queue_wake_failed {type(error).__name__}")  # class only: no job content or credentials
+        started = self.clock()
+        result = await self.process(message)
+        self.last_job_seconds = self.clock() - started
+        while result["status"] in ("completed", "failed") and self._has_time(remaining):
+            store = await asyncio.to_thread(self.store_for_account, message["accountId"])
+            head = await asyncio.to_thread(store.queue_head, message["runId"])
+            if head is None:
+                break
+            message = {"accountId": message["accountId"], "runId": message["runId"], "jobId": head["id"]}
+            started = self.clock()
+            result = await self.process(message)
+            self.last_job_seconds = self.clock() - started
+        return result
 
-    async def _defer(self, message, attempt):
-        """Hand the same references back to the queue, delayed, then settle this delivery.
+    async def sweep(self, account_id, remaining=None):
+        """The scheduled safety net: start every run's waiting head in the account, then drain each run.
 
-        The fresh message restarts SQS's receive count, so a job waiting behind a long one never drifts into the
-        dead-letter queue. If it cannot be sent this delivery fails instead, and SQS redelivers it.
+        A run whose head fails here is reported by class only and does not stop the other runs.
         """
-        if self.wake is None:
-            raise CommandNotReady("queued command cannot be re-sent without a queue client")
-        delay = defer_delay(attempt)
-        await asyncio.to_thread(
-            self.wake, {**{k: message[k] for k in ("accountId", "runId", "jobId")}, "attempt": attempt + 1}, delay
-        )
-        return {"status": "queued", "jobId": message["jobId"], "retryAfter": delay}
+        store = await asyncio.to_thread(self.store_for_account, account_id)
+        outcomes = []
+        for head in await asyncio.to_thread(store.ready_heads):
+            if not self._has_time(remaining):
+                break
+            message = {"accountId": account_id, "runId": head["run_id"], "jobId": head["id"]}
+            try:
+                outcomes.append((await self.deliver(message, remaining))["status"])
+            except Exception as error:
+                print(f"queue_sweep_failed {type(error).__name__}")  # class only: no job content or credentials
+                outcomes.append("error")
+        return outcomes
 
     async def process(self, message):
         if not self.allow_live and self.data_command is None:
@@ -164,6 +171,7 @@ class HostedCommandWorker:
             raise ValueError("delivery contains references only")
         for key in keys:
             uuid(message[key])
+        # Retired re-sends carried an attempt count; such a message still delivers its job.
         attempt = message.get("attempt", 0)
         if type(attempt) is not int or not 0 <= attempt <= 100000:
             raise ValueError("delivery attempt must be a bounded count")
@@ -174,9 +182,10 @@ class HostedCommandWorker:
         if not self.allow_live and not self.data_command(job["kind"], job["payload"]):
             raise ValueError("live worker requires separate operator authority")
         # One job per run at a time, in acceptance order. A job that is not at the head is neither claimed nor
-        # failed: its wake-up is re-sent with a delay. This is a read of queue order only, so it needs no authority.
+        # failed, and its wake-up is settled: the job ahead runs it when it finishes, or the sweep starts it.
+        # This is a read of queue order only, so it needs no authority.
         if job["status"] == "pending" and not (await asyncio.to_thread(store.queue_state, job["id"]))["ready"]:
-            return await self._defer(message, attempt)
+            return {"status": "queued", "jobId": job["id"]}
         guard = self.authorization.guard(actor)
         await guard()
         if self.command_policy is not None:
@@ -189,7 +198,7 @@ class HostedCommandWorker:
         try:
             claim = await asyncio.to_thread(store.claim_command, owner=owner, job_id=job["id"])
         except CommandNotReady:
-            return await self._defer(message, attempt)
+            return {"status": "queued", "jobId": job["id"]}
         if claim is None:
             raise CommandReconciliationRequired("command already claimed; never infer a receipt")
         view = await asyncio.to_thread(store.for_command, job["id"], owner, claim["claim_fence"])
@@ -234,7 +243,6 @@ class HostedCommandWorker:
                     {"refusal": {"code": refusal.code, "message": refusal.public_message}},
                 )
                 self._ring(job, actor, "failed")
-                await self._wake_head(store, job, actor)
                 return {"status": "failed", "jobId": job["id"], "code": refusal.code}
             await owned_guard()
         finally:
@@ -245,5 +253,4 @@ class HostedCommandWorker:
             raise ValueError("console runtime returned unsupported external item updates")
         await asyncio.to_thread(effects.finish_command, job["id"], "completed", dict(result.result))
         self._ring(job, actor, "completed")
-        await self._wake_head(store, job, actor)
         return {"status": "completed", "jobId": job["id"]}

@@ -123,7 +123,16 @@ def describe_failure(error, started, context=None):
     )
 
 
+def is_schedule(event):
+    return isinstance(event, dict) and event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event"
+
+
 def worker_handler(event, context):
+    remaining = getattr(context, "get_remaining_time_in_millis", None)
+    seconds = (lambda: remaining() / 1000) if callable(remaining) else None
+    if is_schedule(event):
+        # The once-a-minute sweep: a fresh invocation, outside any SQS chain, starts each run's waiting head.
+        return {"sweep": asyncio.run(runtime().worker().sweep(seconds))}
     if not isinstance(event, dict) or not isinstance(event.get("Records"), list) or len(event["Records"]) > 10:
         raise ValueError("bounded SQS batch required")
 
@@ -139,7 +148,7 @@ def worker_handler(event, context):
                 body = record.get("body")
                 if not isinstance(body, str) or len(body.encode()) > 4096:
                     raise ValueError("bounded queue references required")
-                await runtime().worker().process(json.loads(body))
+                await runtime().worker().process(json.loads(body), seconds)
             except Exception as error:
                 # No token, raw payload, private model error, message or source is logged: only exception
                 # classes and code locations (describe_failure). Uncertain/running claims retry only into
