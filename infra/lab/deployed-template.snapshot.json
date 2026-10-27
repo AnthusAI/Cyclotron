@@ -284,7 +284,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0"
+          "S3Key": "cyclotron-console/backend/8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32"
         },
         "Environment": {
           "Variables": {
@@ -975,7 +975,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0"
+          "S3Key": "cyclotron-console/backend/8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32"
         },
         "Environment": {
           "Variables": {
@@ -1275,6 +1275,41 @@
         "RoleName": "cyclotron-console-worker-runtime"
       },
       "Type": "AWS::IAM::Role"
+    },
+    "WorkerSweepPermission": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "WorkerFunction"
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "WorkerSweepSchedule",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "WorkerSweepSchedule": {
+      "Properties": {
+        "Description": "Once a minute, start each run's waiting head outside any SQS chain",
+        "ScheduleExpression": "rate(1 minute)",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "WorkerFunction",
+                "Arn"
+              ]
+            },
+            "Id": "worker-sweep"
+          }
+        ]
+      },
+      "Type": "AWS::Events::Rule"
     }
   }
 }
