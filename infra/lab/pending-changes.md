@@ -14,21 +14,7 @@ snapshot (`aws cloudformation get-template --template-stage Original`), empty
 
 No queue, visibility, redrive or event-source setting changes.
 
-**Pending: remove the request caps.** The hosted pipeline has no request or item cap. This change removes the `PredictionMaxRequests` template parameter and the `CYCLOTRON_PREDICTION_MAX_REQUESTS` variable on both functions, and the code stops reading `requestCeiling` and `maxItems` from `PublicationTargets` (they become unknown keys, which the parser rejects). Operations (all `remove`, each naming an existing key in the snapshot):
-
-- `/Parameters/PredictionMaxRequests`
-- `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS`
-- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS`
-
-**Deploy order is parameter first, then code. This order is required.** The new parser rejects `requestCeiling` and `maxItems`, so the new code started against a `PublicationTargets` value that still contains them fails at startup (`reviewed publication target configuration is invalid`). The currently deployed code treats both keys as optional and ignores them (v0.35.1), so removing them first is safe with the old code.
-
-1. Read the live value (read-only): `aws cloudformation describe-stacks --stack-name cyclotron-console --query "Stacks[0].Parameters[?ParameterKey=='PublicationTargets'].ParameterValue" --output text`. Save it as the rollback copy.
-2. Delete the `requestCeiling` and `maxItems` keys from every target object in that JSON, changing nothing else (account, run, `modelIdentity`, `standing`, `bindings`, `pendingOutputs` stay as they are).
-3. Update the stack with the currently deployed template and package, only `PublicationTargets` changed (use `UsePreviousValue` for every other parameter, including `PredictionMaxRequests` for now), through a change set. Verify the change set shows one parameter change and the two Lambda environment updates only.
-4. Deploy the new template and package. Do not pass `PredictionMaxRequests` in the parameters of this deploy (CloudFormation rejects a parameter the template does not declare). The change set must show the removal of `CYCLOTRON_PREDICTION_MAX_REQUESTS` from both functions and no other change.
-5. Refresh the snapshot and empty this list as usual.
-
-Rollback: restore the saved `PublicationTargets` value; old code accepts it, and new code does not.
+Previously: the request caps were removed on 2026-10-27: change set `targets-remove-ceilings` (PublicationTargets without `requestCeiling`/`maxItems`), then `no-ceilings-377c478` (lab code 377c478, package sha256 `6ca1b278be02e4c938e12b31e5295a5427eac2711d40954f8d1c09f53583c9fe`) removing `PredictionMaxRequests` and `CYCLOTRON_PREDICTION_MAX_REQUESTS`. The snapshot was refreshed.
 
 Previously: The Decision Ready doorbell (lab code 8908a33, package sha256 `90e3ed86159c6c21141abf6b0c0ef6e4217bb49aa781dc177d7638e385509c1f`) was deployed on 2026-10-27 with change set `decision-doorbell-8908a33`, with `DecisionEventBusArn` empty: no grant and no events until it is set to Papyrus's bus ARN. The snapshot was refreshed.
 
