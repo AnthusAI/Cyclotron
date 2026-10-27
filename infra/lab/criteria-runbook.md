@@ -5,7 +5,7 @@ Each file holds the question, labels, doctrine source, the editor approval (who,
 previous text. Applying a file saves a classifier revision whose config carries a `criteria`
 block (file, doctrine source, approval, question sha256), so the catalog alone shows where each
 question came from and who approved it. `scripts/dev/lab_criteria.py plan` compares the files
-with the live catalog (read-only, get-only S3 wrapper); `tests/test_lab_criteria.py` proves the
+with the live catalog (read-only, get-only S3 wrapper); `tests/lab_criteria_test.py` proves the
 committed files are exactly what a deploy applies.
 
 Every step that writes needs Ryan's explicit approval. Agents run only the read-only steps.

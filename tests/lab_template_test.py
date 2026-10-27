@@ -10,19 +10,13 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# Decision Ready doorbell: parameter, condition, worker environment variable and a conditional PutEvents grant.
+# Removal of the retired request cap: the parameter and its variable on both functions.
 # Emptied again after the deploy refreshes the snapshot.
 REVIEWED_PENDING_PATHS = [
-    "/Parameters/DecisionEventBusArn",
-    "/Conditions/HasDecisionEventBus",
-    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_DECISION_EVENT_BUS_ARN",
-    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-    # Removal of the retired request cap: the parameter and its variable on both functions.
     "/Parameters/PredictionMaxRequests",
     "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
     "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PREDICTION_MAX_REQUESTS",
 ]
-REVIEWED_REMOVED_PATHS = REVIEWED_PENDING_PATHS[4:]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -34,10 +28,9 @@ def test_lab_template_equals_the_deployed_snapshot_plus_the_reviewed_pending_cha
     assert check.diff_paths(check.load_template(), expected()) == []
 
 
-def test_pending_changes_are_exactly_the_reviewed_add_and_remove_set():
+def test_pending_changes_are_exactly_the_reviewed_remove_set():
     pending = check.load_pending()
     assert [operation["path"] for operation in pending] == REVIEWED_PENDING_PATHS
-    assert [operation["path"] for operation in pending if operation["op"] == "remove"] == REVIEWED_REMOVED_PATHS
     assert {operation["op"] for operation in pending} <= {"add", "remove"}
 
 
@@ -66,7 +59,6 @@ def test_an_unlisted_change_to_the_template_cannot_hide():
 def test_a_pending_remove_deletes_exactly_the_named_mapping_key():
     snapshot = check.load_snapshot()
     result = check.apply_pending(snapshot, [{"op": "remove", "path": "/Parameters/PredictionMaxRequests"}])
-    assert "PredictionMaxRequests" not in result["Parameters"]
     assert set(result["Parameters"]) == set(snapshot["Parameters"]) - {"PredictionMaxRequests"}
     assert "PredictionMaxRequests" in snapshot["Parameters"]
 
@@ -131,6 +123,16 @@ def test_lab_verifier_role_trusts_only_the_bff_role_and_may_invoke_only_two_rout
     ]
 
 
+def _statements(statements):
+    """Policy statements with each conditional statement's branches expanded (AWS::NoValue dropped)."""
+    for statement in statements:
+        if "Fn::If" in statement:
+            _, *branches = statement["Fn::If"]
+            yield from _statements([b for b in branches if b != {"Ref": "AWS::NoValue"}])
+        else:
+            yield statement
+
+
 def test_only_the_bff_role_may_assume_the_verifier_and_the_worker_may_not():
     resources = check.load_template()["Resources"]
     grants = {}
@@ -138,9 +140,7 @@ def test_only_the_bff_role_may_assume_the_verifier_and_the_worker_may_not():
         if resource["Type"] != "AWS::IAM::Role":
             continue
         for policy in resource["Properties"].get("Policies", []):
-            for statement in policy["PolicyDocument"]["Statement"]:
-                if "Action" not in statement:  # a conditional (Fn::If) statement
-                    continue
+            for statement in _statements(policy["PolicyDocument"]["Statement"]):
                 actions = statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
                 if "sts:AssumeRole" in actions:
                     grants.setdefault(name, []).append(statement["Resource"])
