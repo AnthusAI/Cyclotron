@@ -18,7 +18,7 @@ plus exactly the operations in `pending-changes.json` (ignoring formatting and k
 order). Operations may only add new paths, so nothing in the snapshot can change
 unnoticed; with an empty list it is the old template == snapshot proof. `--live`
 compares the deployed stack (read-only `get-template`) with the snapshot, so a
-drifted stack is reported separately from pending work. `tests/test_lab_template.py`
+drifted stack is reported separately from pending work. `tests/lab_template_test.py`
 runs the offline comparison in `make test` and asserts the pending paths exactly.
 
 Note: the deployed Original and Processed templates are identical and carry no
@@ -216,7 +216,7 @@ approval. Agents do not run these commands.**
 
 The lab classifiers' questions live in `infra/lab/criteria/` (question, labels, doctrine source, editor approval, previous
 text) and are applied to the catalog by `scripts/dev/lab_criteria.py`. See `criteria-runbook.md` for the reviewed change to the
-live standing run. `scripts/dev/lab_criteria.py plan` is read-only; `tests/test_lab_criteria.py` proves the committed files are what a deploy applies.
+live standing run. `scripts/dev/lab_criteria.py plan` is read-only; `tests/lab_criteria_test.py` proves the committed files are what a deploy applies.
 
 ## Record-lake cutover
 

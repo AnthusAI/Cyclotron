@@ -1,18 +1,13 @@
 # Pending lab stack changes
 
 Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
-`tests/test_lab_template.py` prove that `template.yaml` equals
+`tests/lab_template_test.py` prove that `template.yaml` equals
 `deployed-template.snapshot.json` plus exactly the add-only operations in
 `pending-changes.json`, and nothing else. After a deploy is executed, refresh the
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: Decision Ready doorbell.** When a machine decision job finishes, the worker puts one `Decision Ready` event (no decision content) on Papyrus's EventBridge bus. Nothing is created or granted until the `DecisionEventBusArn` parameter is set to that exact bus ARN at deploy time (default empty: no variable value, no grant, no events). Operations:
-
-- `/Parameters/DecisionEventBusArn` (String, default empty, ARN pattern or empty)
-- `/Conditions/HasDecisionEventBus` (parameter is not empty)
-- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_DECISION_EVENT_BUS_ARN` (the parameter)
-- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-` (`events:PutEvents` on exactly that ARN, only when the condition holds)
+**No pending changes.** The Decision Ready doorbell (lab code 8908a33, package sha256 `90e3ed86159c6c21141abf6b0c0ef6e4217bb49aa781dc177d7638e385509c1f`) was deployed on 2026-10-27 with change set `decision-doorbell-8908a33`, with `DecisionEventBusArn` empty: no grant and no events until it is set to Papyrus's bus ARN. The snapshot was refreshed.
 
 Previously: the machine invoker's /machine/decisions grant was deployed on 2026-10-26 with change set `machine-decisions-invoke`; the snapshot was refreshed.
 
