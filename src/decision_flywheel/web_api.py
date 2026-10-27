@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 import strawberry
 from strawberry.extensions import MaskErrors, SchemaExtension
@@ -538,8 +538,18 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         response = await protect_request(request, next_handler)
         if account_access:
             from .prospectus_accounts import log_console_phase
+            from .refusal_reason import logs_reason, refusal_reason
             route = getattr(request.scope.get('route'), 'path', None) or 'unmatched'
-            log_console_phase('request', started, route=route, method=request.method, status=response.status_code)
+            fields = {}
+            if logs_reason(request.url.path, response.status_code):
+                payload = b''.join([chunk async for chunk in response.body_iterator])
+                rebuilt = Response(payload, response.status_code)
+                rebuilt.raw_headers = response.raw_headers
+                response = rebuilt
+                reason = refusal_reason(response.status_code, payload)
+                if reason:
+                    fields['reason'] = reason
+            log_console_phase('request', started, route=route, method=request.method, status=response.status_code, **fields)
         return response
 
     async def protect_request(request, next_handler):

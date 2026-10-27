@@ -689,3 +689,42 @@ def test_only_the_first_status_step_writes_and_later_publications_cost_no_journa
     assert len(outer) == 4
     print(f"S3 writes during each status step: {outer}; whole job: {puts[0]}")
     assert outer[1:] == [0, 0, 0]
+
+
+def request_log_lines(output):
+    entries = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+    return [entry for entry in entries if entry.get("phase") == "request"]
+
+
+def test_refused_machine_requests_log_a_safe_reason_and_accepted_ones_none(identity, monkeypatch, capsys):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    secret = "private-item-text-4242"
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            capsys.readouterr()
+            stale = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "stale", "item": new_item(text=secret)}, "req-reason-0001"),
+            )
+            assert stale.status_code == 409
+            accepted = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "binding-one", "item": new_item()}, "req-reason-0002"),
+            )
+            assert accepted.status_code == 202
+            sent.clear()
+            conflict = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "binding-one", "item": new_item(text=secret)}, "req-reason-0002"),
+            )
+            assert conflict.status_code == 409 and conflict.json()["code"] == "request_conflict"
+
+    asyncio.run(go())
+    output = capsys.readouterr().out
+    lines = request_log_lines(output)
+    assert [line["status"] for line in lines] == [409, 202, 409]
+    assert lines[0]["reason"] == "publication binding changed"
+    assert "reason" not in lines[1]
+    assert lines[2]["reason"] == "request_conflict (ValueError)"
+    assert secret not in output and CALLER not in output
