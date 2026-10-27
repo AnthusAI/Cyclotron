@@ -15,10 +15,13 @@
     }
   ],
   "rubric": "",
-  "previous": null,
-  "question": "Should this source become a reference for Shipped, which tracks new arrivals in machine learning (open-weights releases, decision models in production, and the products built on them) from the moment they land? Include a source about a specific machine-learning release with a checkable primary source (release page, model card, repository, paper or documentation): an open-weights model; a decision model that returns typed decisions, scores or choices (such as a classifier, safety or routing model, or ranker) that is publicly usable or documented in use; an open text-to-speech model; or a real ML product or API people can use. Announcements count when the primary source is there. Exclude opinion and commentary, funding or acquisition news with no release, benchmarks or leaderboards with no new release, tutorials, and release claims with no primary source a reader can check.",
+  "previous": {
+    "revision": 1,
+    "question": "Should this source become a reference for Shipped, which tracks new arrivals in machine learning (open-weights releases, decision models in production, and the products built on them) from the moment they land? Include a source about a specific machine-learning release with a checkable primary source (release page, model card, repository, paper or documentation): an open-weights model; a decision model that returns typed decisions, scores or choices (such as a classifier, safety or routing model, or ranker) that is publicly usable or documented in use; an open text-to-speech model; or a real ML product or API people can use. Announcements count when the primary source is there. Exclude opinion and commentary, funding or acquisition news with no release, benchmarks or leaderboards with no new release, tutorials, and release claims with no primary source a reader can check."
+  },
+  "question": "Should this source become a reference for Shipped, which maps new arrivals in machine learning (open-weights releases, decision models in use, and the products and APIs built on them)? Include a source about a specific machine-learning release with a checkable primary source (model card, repository, paper, release page or documentation): an open-weights model; a decision model that returns typed decisions, scores or choices (such as a classifier, safety or routing model, or ranker) that is publicly usable or documented in use; an open text-to-speech model; or a real ML product or API people can use. Announcements count when the primary source is there. Exclude opinion and commentary, funding or acquisition news with no release, benchmarks or leaderboards with no new release, tutorials, and release claims with no primary source a reader can check.",
   "doctrine": {
-    "summary": "Shipped's approved site description and tagline (Ryan, 2026-10-22: 'Open-weights releases, decision models in production and the products built on them, tracked from the moment they land.' / 'New arrivals in machine learning.') and its section missions (open-weights, decisions). Shipped has no publication mission record yet; the beat corrections from Shipped implementation (primary source test, no 'vaporware' framing) are applied.",
+    "summary": "Shipped's approved publication mission (Ryan, 2026-10-27), stored as Shipped's editorial-doctrine-mission record, plus its section missions (open-weights, decisions). Its approved site description and tagline (Ryan, 2026-10-22: 'Open-weights releases, decision models in production and the products built on them, tracked from the moment they land.' / 'New arrivals in machine learning.') remain a source. The beat corrections from Shipped implementation (primary source test, no 'vaporware' framing) are applied.",
     "sources": [
       {
         "kind": "repo",
@@ -30,12 +33,16 @@
       {
         "kind": "production-records",
         "note": "Shipped newsroom backend (papyrus-production, AppSync 6sw6454pozbgvdgm233gqkxsxu): NewsroomSection open-weights and decisions"
+      },
+      {
+        "kind": "production-records",
+        "note": "Shipped newsroom backend (papyrus-production): editorial-doctrine-mission record, approved by Ryan 2026-10-27"
       }
     ]
   },
   "approval": {
     "status": "approved",
     "approved_by": "Ryan",
-    "approved_on": "2026-10-25"
+    "approved_on": "2026-10-27"
   }
 }

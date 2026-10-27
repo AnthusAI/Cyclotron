@@ -146,6 +146,15 @@ class Step:
     reason: str = ""
 
 
+def _is_previous(config: Mapping, item: Criteria) -> bool:
+    """True when a live config is the previous revision: unannotated, or annotated for exactly the previous question."""
+    criteria = config.get("criteria")
+    if criteria is None:
+        return True
+    digest = hashlib.sha256(item.previous["question"].encode()).hexdigest()
+    return isinstance(criteria, Mapping) and criteria.get("question_sha256") == digest
+
+
 def plan_classifiers(store, criteria) -> list[Step]:
     """Compare each criteria file with the latest live classifier revision. Reads only."""
     steps = []
@@ -171,7 +180,9 @@ def plan_classifiers(store, criteria) -> list[Step]:
                 )
         elif item.approved and live["name"] == item.name and config == expected:
             steps.append(Step("current", item.classifier_id, live["revision"]))
-        elif {k: config.get(k) for k in ("classes", "question", "rubric")} == item.previous_config() and "criteria" not in config:
+        elif {k: config.get(k) for k in ("classes", "question", "rubric")} == item.previous_config() and _is_previous(
+            config, item
+        ):
             if item.approved:
                 steps.append(Step("save", item.classifier_id, live["revision"], "live still has the previous question"))
             else:
