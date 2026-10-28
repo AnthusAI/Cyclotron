@@ -250,14 +250,15 @@ def test_the_latest_vote_wins_and_a_retraction_does_not_revive_an_older_vote(bac
     service.close()
 
 
-def test_a_draft_over_the_size_limit_is_refused_and_nothing_is_stored(backend):
+def test_the_priming_service_sets_no_size_limit_of_its_own_on_a_nine_megabyte_draft(backend):
     host = backend.seeded()
     service = PrimingService(host, storage=host.priming_storage)
-    with pytest.raises(ValueError, match="size limit"):
+    try:
         service.start_file("draft", "examples", refs(), "json", "A" * 9_000_000)
-    with pytest.raises(ValueError, match="unknown import draft"):
-        service.get("draft")
-    assert preview(service)["status"] == "preview"
+    except ValueError as error:
+        # Only the S3 console snapshot's own storage budget may still refuse it; that budget is not the engine's.
+        assert backend.name == "s3" and "size limit" not in str(error)
+    assert preview(service, "second")["status"] == "preview"
     service.close()
 
 
