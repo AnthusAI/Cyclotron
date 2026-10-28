@@ -50,9 +50,6 @@ from .publication_lab import CAPABILITIES, CONTRACT, PublicationError
 from .site_credentials import VerifiedSiteCredential, bearer_token
 from .storage_errors import StorageLimit
 
-MAX_BODY_BYTES = 4_000_000
-# Slice 1 accepts small hand-prepared files. Drafts share the account's catalog journal.
-MAX_IMPORT_CONTENT = 1_000_000
 READ, WRITE = "console:read", "console:write"
 ROUTE = "/api/newsroom/curation"
 PRIMING_ACTIONS = {
@@ -251,24 +248,15 @@ def pins(request, *, binding_required):
         uuid(values["account"])
     except (ValueError, TypeError):
         raise CurationError(400, "pins_required", "Expected account, publication and binding pins are required.") from None
-    if len(values["publication"]) > 200 or len(values["binding"]) > 200:
-        raise CurationError(400, "pins_required", "Expected account, publication and binding pins are required.")
     return values
 
 
-async def bounded_body(request):
-    declared = request.headers.get("content-length", "0")
-    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
-        raise CurationError(413, "request_too_large", "Curation request exceeds the size limit.")
+async def json_body(request):
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
         raise CurationError(415, "json_required", "A JSON request is required.")
-    body = bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > MAX_BODY_BYTES:
-            raise CurationError(413, "request_too_large", "Curation request exceeds the size limit.")
+    body = await request.body()
     try:
-        value = json.loads(bytes(body))
+        value = json.loads(body)
     except ValueError:
         raise CurationError(400, "invalid_request", "A JSON curation request is required.") from None
     if not isinstance(value, dict):
@@ -281,8 +269,6 @@ def graphql_operation(body):
         raise CurationError(400, "invalid_request", "An explicit priming query is required.")
     variables = body.get("variables")
     if variables is not None and not isinstance(variables, dict):
-        raise CurationError(400, "invalid_request", "An explicit priming query is required.")
-    if len(body["query"]) > 20000:
         raise CurationError(400, "invalid_request", "An explicit priming query is required.")
     try:
         document = parse(body["query"])
@@ -409,10 +395,8 @@ class PrimingMutation:
         if action == "file":
             s.check_contract(payload["list_id"], payload["refs"])
             content = payload["content"]
-            if not isinstance(content, str) or len(content) > MAX_IMPORT_CONTENT:
-                raise CurationError(
-                    413, "import_too_large", "This import is too large for the hosted lab; split it into smaller files."
-                )
+            if not isinstance(content, str):
+                raise CurationError(400, "invalid_request", "The import content must be text.")
             refs = await s.checked_contract(payload["list_id"], payload["refs"])
             payload = {**payload, "list_id": s.list_id, "refs": refs}
         if action == "accept":
@@ -605,7 +589,7 @@ def install_curation_routes(app: FastAPI, runtime):
     async def publication(http: Request):
         bearer_token_or_refusal(http)
         pin_values = pins(http, binding_required=True)
-        body = await bounded_body(http)
+        body = await json_body(http)
         operation, payload = body.get("operation"), body.get("payload")
         if set(body) != {"operation", "payload"} or operation not in CAPABILITIES or not isinstance(payload, dict):
             raise CurationError(400, "invalid_request", "An explicit publication operation is required.")
@@ -658,7 +642,7 @@ def install_curation_routes(app: FastAPI, runtime):
     async def priming(http: Request):
         bearer_token_or_refusal(http)
         pin_values = pins(http, binding_required=True)
-        body = await bounded_body(http)
+        body = await json_body(http)
         operation, variables = graphql_operation(body)
         request = await admit(http, operation, pin_values)
         pending = set(request.target.pending_outputs) & set(request.binding.outputs)

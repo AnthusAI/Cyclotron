@@ -156,13 +156,12 @@ def test_server_sessions_are_opaque_expiring_and_revocable(identity):
     assert sessions.get(identifier) is None
 
 
-def test_pending_logins_expire_and_memory_is_bounded(identity):
+def test_pending_logins_expire_and_any_number_may_be_pending_at_once(identity):
     verifier, _ = identity
     clock = [1000]
-    sessions = OAuthSessions(verifier, clock=lambda: clock[0], capacity=1)
+    sessions = OAuthSessions(verifier, clock=lambda: clock[0])
     first = sessions.begin()
-    with pytest.raises(SessionRejected):
-        sessions.begin()
+    assert len({sessions.begin().state for _ in range(6000)}) == 6000
     clock[0] += 301
     with pytest.raises(SessionRejected):
         sessions.consume(first.state, first.browser_cookie)

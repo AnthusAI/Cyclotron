@@ -636,3 +636,21 @@ def test_each_output_carries_a_fingerprint_of_its_exact_criteria_question():
     assert output["criteriaFingerprint"] == sha256(b"Is this relevant?").hexdigest()
     (changed,) = envelope(target, binding, config("Is this relevant to ML?"))["outputs"]
     assert changed["criteriaFingerprint"] != output["criteriaFingerprint"]
+
+
+def test_a_publication_request_body_over_sixty_four_kilobytes_is_accepted_and_queued(identity, monkeypatch):
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = setup(identity, monkeypatch)
+    value = {
+        "contractVersion": "cyclotron-publication/v1",
+        "operation": "decide",
+        "payload": {"bindingRevision": "binding-one", "item": ITEM},
+    }
+    content = json.dumps(value)[:-1] + " " * 200_000 + "}"
+
+    async def run():
+        async with priming_client(app, config, cookie, session, account) as http:
+            response = await http.post("/publications/alpha/operations", content=content)
+            assert response.status_code == 202, response.text
+            assert len(sent) == 1
+
+    asyncio.run(run())

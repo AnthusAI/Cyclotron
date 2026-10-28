@@ -363,9 +363,8 @@ The bearer curation routes (`/api/newsroom/curation/priming`, see
 - the view exposes one configured list (`priming.listId` in the trusted publication target)
   and only the binding's classifier revisions; any other list, classifier or draft id is
   refused before a storage read;
-- slice 1 caps one import at about 1 MB; that refusal leaves the catalog unchanged (`413`). Drafts,
-  accepted items and votes share the account's single catalog journal, which has no record or byte
-  budget.
+- an import has no size limit of its own. Drafts, accepted items and votes share the account's single
+  catalog journal, which has no record or byte budget.
 
 `accept` is idempotent: repeating the same acceptance returns the accepted draft and inserts
 nothing; a different acceptance of the same draft is refused. The same behaviours run on

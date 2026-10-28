@@ -404,7 +404,7 @@ async def optimize_stage(
             propensities=propensities,
             preferred_ids=preferred,
             max_trials=max_example_trials,
-            limit=min(limit, 200),
+            limit=limit,
         )
         best = measured["recommended_proposal"]
         counts = measured.get("by_class", {label: 0 for label in wheel.initial.task.labels})

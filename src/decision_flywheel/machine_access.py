@@ -15,9 +15,9 @@ from dataclasses import dataclass
 from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
 
-ROLE_ARN = re.compile(r"arn:aws:iam::([0-9]{12}):role/([A-Za-z0-9+=,.@_-]{1,64})")
-ASSUMED_ARN = re.compile(r"arn:aws:sts::([0-9]{12}):assumed-role/([A-Za-z0-9+=,.@_-]{1,64})/([A-Za-z0-9+=,.@_-]{2,64})")
-SESSION_NAME = re.compile(r"[A-Za-z0-9+=,.@_-]{2,64}")
+ROLE_ARN = re.compile(r"arn:aws:iam::([0-9]{12}):role/([A-Za-z0-9+=,.@_-]+)")
+ASSUMED_ARN = re.compile(r"arn:aws:sts::([0-9]{12}):assumed-role/([A-Za-z0-9+=,.@_-]+)/([A-Za-z0-9+=,.@_-]{2,})")
+SESSION_NAME = re.compile(r"[A-Za-z0-9+=,.@_-]{2,}")
 
 
 class MachineDenied(AccountAccessDenied):
@@ -33,7 +33,6 @@ def principals_from_environment(environment):
         values = json.loads(raw)
         if (
             not isinstance(values, list)
-            or len(values) > 20
             or len(set(values)) != len(values)
             or any(not isinstance(v, str) or not ROLE_ARN.fullmatch(v) for v in values)
         ):
@@ -80,7 +79,7 @@ class MachineActor:
             or not isinstance(self.session, str)
             or not SESSION_NAME.fullmatch(self.session)
             or not isinstance(self.binding, str)
-            or not 1 <= len(self.binding) <= 256
+            or not self.binding
             or self.operation != "console:write"
             or self.kind != "machine"
         ):

@@ -133,8 +133,8 @@ def worker_handler(event, context):
     if is_schedule(event):
         # The once-a-minute sweep: a fresh invocation, outside any SQS chain, starts each run's waiting head.
         return {"sweep": asyncio.run(runtime().worker().sweep(seconds))}
-    if not isinstance(event, dict) or not isinstance(event.get("Records"), list) or len(event["Records"]) > 10:
-        raise ValueError("bounded SQS batch required")
+    if not isinstance(event, dict) or not isinstance(event.get("Records"), list):
+        raise ValueError("SQS batch required")
 
     started = time.monotonic()
 
@@ -142,12 +142,12 @@ def worker_handler(event, context):
         failures = []
         for record in event["Records"]:
             identifier = record.get("messageId")
-            if not isinstance(identifier, str) or not 1 <= len(identifier) <= 128:
+            if not isinstance(identifier, str) or not identifier:
                 raise ValueError("SQS delivery identity required")
             try:
                 body = record.get("body")
-                if not isinstance(body, str) or len(body.encode()) > 4096:
-                    raise ValueError("bounded queue references required")
+                if not isinstance(body, str):
+                    raise ValueError("queue reference body required")
                 await runtime().worker().process(json.loads(body), seconds)
             except Exception as error:
                 # No token, raw payload, private model error, message or source is logged: only exception

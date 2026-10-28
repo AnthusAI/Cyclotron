@@ -41,8 +41,8 @@ def reviewed(source):
 
 
 def plan_matched_runs(before, after, *, limit=200):
-    if type(limit) is not int or not 1 <= limit <= 200:
-        raise ValueError("comparison limit must be between one and 200")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("comparison limit must be a positive integer")
     for source in (before, after):
         if source["config"].get("evaluation_protocol") != "protected-feedback-v1":
             raise ValueError("run has no verified protection protocol; use a fresh replay for a clean comparison")

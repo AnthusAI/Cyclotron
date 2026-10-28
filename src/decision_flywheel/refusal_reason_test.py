@@ -1,6 +1,6 @@
 import json
 
-from .refusal_reason import REASON_LIMIT, logs_reason, refusal_reason
+from .refusal_reason import logs_reason, refusal_reason
 
 
 def body(**value):
@@ -26,9 +26,9 @@ def test_unparseable_or_unexpected_bodies_have_no_reason():
     assert refusal_reason(400, body(detail=[{"input": "private"}])) is None
 
 
-def test_a_long_reason_is_capped_and_control_characters_removed():
+def test_a_long_reason_is_kept_whole_with_control_characters_removed():
     reason = refusal_reason(400, body(detail="a\nb" + "c" * 500))
-    assert len(reason) == REASON_LIMIT and "\n" not in reason
+    assert reason == "a b" + "c" * 500
 
 
 def test_only_machine_and_publication_routes_log_a_reason():

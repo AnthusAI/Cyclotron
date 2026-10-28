@@ -17,7 +17,6 @@ from .site_credentials import VerifiedSiteCredential
 
 identity = hosted.identity
 ROUTES = "/api/newsroom/curation"
-MAX_BODY = 4_000_000
 
 
 class Authority:
@@ -301,28 +300,19 @@ def test_pins_are_required_and_a_changed_binding_is_a_conflict(identity, monkeyp
     run(scenario())
 
 
-def test_request_bodies_are_capped_at_four_megabytes_before_authorization(identity, monkeypatch):
+def test_a_curation_request_body_over_four_megabytes_is_read_whole_and_answered(identity, monkeypatch):
     host = build(identity, monkeypatch)
 
     async def scenario():
         async with host.client() as http:
-            oversize = '{"query":"' + "x" * MAX_BODY + '"}'
-            response = await http.post(f"{ROUTES}/priming", content=oversize, headers={"Content-Type": "application/json"})
-            assert response.status_code == 413 and response.json()["code"] == "request_too_large"
+            body = {"query": GRAPHQL_DRAFT, "variables": {"id": "no-such-draft", "pad": "x" * 5_000_000}}
+            response = await http.post(f"{ROUTES}/priming", json=body)
+            # The whole body was read, authorized and executed: the draft lookup itself answers.
+            assert response.status_code == 409 and response.json()["error"] == "unknown import draft", response.text
             not_json = await http.post(f"{ROUTES}/publication", content="{}", headers={"Content-Type": "text/plain"})
             assert not_json.status_code == 415
 
-        # A chunked body without a declared length is still counted.
-        async def chunks():
-            yield b'{"query":"'
-            yield b"x" * (MAX_BODY + 1)
-
-        async with host.client() as http:
-            streamed = await http.post(f"{ROUTES}/priming", content=chunks(), headers={"Content-Type": "application/json"})
-            assert streamed.status_code == 413
-
     run(scenario())
-    assert not any(operation == "console:write" for _, _, operation in host.authority.calls)
 
 
 def test_capabilities_follow_the_role_and_viewers_cannot_mutate(identity, monkeypatch):
@@ -421,6 +411,11 @@ def test_priming_list_configuration_is_parsed_strictly_and_optionally():
         {"CYCLOTRON_PUBLICATION_TARGETS": environment_target({**base, "priming": {"listId": "accepted"}})}
     )
     assert parsed[0].bindings[0].priming_list_id == "accepted"
+    long_list = "accepted-" + "l" * 1_000
+    parsed = targets_from_environment(
+        {"CYCLOTRON_PUBLICATION_TARGETS": environment_target({**base, "priming": {"listId": long_list}})}
+    )
+    assert parsed[0].bindings[0].priming_list_id == long_list
     parsed = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": environment_target(base)})
     assert parsed[0].bindings[0].priming_list_id is None
     for invalid in (
@@ -431,7 +426,6 @@ def test_priming_list_configuration_is_parsed_strictly_and_optionally():
         {"priming": "accepted"},
         {"priming": None},
         {"surprise": True},
-        {"priming": {"listId": "x" * 201}},
     ):
         with pytest.raises(ValueError, match="invalid"):
             targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": environment_target({**base, **invalid})})
@@ -601,14 +595,29 @@ def test_slice_one_has_no_hosted_transformer(identity, monkeypatch):
     run(scenario())
 
 
+def test_an_import_over_one_megabyte_is_previewed_whole(identity, monkeypatch):
+    host = build(identity, monkeypatch)
+    row = {
+        "id": "long-example",
+        "occurred_at": "2026-01-01",
+        "values": {"text": "x" * 1_100_000},
+        "labels": {"alpha": {"label": "include", "rationale": "Synthetic human explanation"}},
+    }
+    content = base64.b64encode(json.dumps([row]).encode()).decode()
+    assert len(content) > 1_000_000
+
+    async def scenario():
+        async with host.client() as http:
+            assert data(await import_file(http, content=content))["status"] == "preview"
+
+    run(scenario())
+
+
 def test_an_oversized_import_fails_cleanly_and_the_catalog_journal_has_no_byte_budget_to_hit(identity, monkeypatch):
     host = build(identity, monkeypatch)
 
     async def scenario():
         async with host.client() as http:
-            too_large = "A" * 1_000_001
-            response = await import_file(http, content=too_large)
-            assert response.status_code == 413 and response.json()["code"] == "import_too_large"
             assert host.store.export_storage()["tables"]["priming_drafts"] == []
             # The catalog journal used to refuse a draft past its byte budget (storage_limit); it has none now.
             filler = base64.b64encode(

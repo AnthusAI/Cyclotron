@@ -35,6 +35,7 @@ def test_the_fixed_secret_name_is_the_only_one_ever_read():
     "raw,expected",
     [
         (KEY, KEY),
+        ("sk-" + "k" * 10_000, "sk-" + "k" * 10_000),
         (f"  {KEY}\n", KEY),
         (json.dumps({"api_key": KEY}), KEY),
         (json.dumps({"api_key": KEY, "other": "x"}), None),
@@ -48,7 +49,7 @@ def test_the_fixed_secret_name_is_the_only_one_ever_read():
         (b"bytes", None),
     ],
 )
-def test_plaintext_and_json_secrets_are_both_supported_and_anything_else_is_refused(raw, expected):
+def test_plaintext_and_json_secrets_of_any_length_are_supported_and_anything_else_is_refused(raw, expected):
     assert parse_secret(raw) == expected
 
 

@@ -29,7 +29,7 @@ def parse_secret(raw):
         if not isinstance(text, str):
             return None
         text = text.strip()
-    if not 8 <= len(text) <= 4096 or any(c.isspace() or not c.isprintable() for c in text):
+    if len(text) < 8 or any(c.isspace() or not c.isprintable() for c in text):
         return None
     return text
 

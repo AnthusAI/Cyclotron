@@ -74,7 +74,6 @@ export function PrimingPanel({client,listId,classifiers,initialDraftId,pollInter
   if(draft)void execute('cancel',{identifier:draft.id})
  }
  const upload=async(file:File)=>{
-  if(file.size>4_000_000){setError('File exceeds the 4 MB limit');return}
   const format=file.name.split('.').pop()?.toLowerCase()
   if(!['csv','json','jsonl','xlsx'].includes(format??'')){setError('Choose CSV, JSON, JSONL or Excel (.xlsx)');return}
   try{const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);start('file',{kind:format,content:btoa(binary)})}catch(reason){setError((reason as Error).message)}
