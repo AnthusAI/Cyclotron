@@ -30,6 +30,11 @@ CAPABILITIES = {
 }
 
 
+def criteria_fingerprint(question):
+    """sha256 of the exact criteria question: a vote carries to a later binding revision only while this is unchanged."""
+    return hashlib.sha256(question.encode()).hexdigest()
+
+
 class PublicationError(ValueError):
     def __init__(self, message, status=409, *, code="publication_error"):
         super().__init__(message)
@@ -142,6 +147,7 @@ class PublicationLab:
                 {
                     "id": cid,
                     "question": self.specs[cid].question,
+                    "criteriaFingerprint": criteria_fingerprint(self.specs[cid].question),
                     "classes": list(self.specs[cid].labels),
                     "positiveLabel": self.specs[cid].positive_label,
                 }

@@ -612,3 +612,27 @@ def test_native_priming_refuses_stale_authority_scope_or_catalog_before_applying
 
     asyncio.run(run())
     assert not model.calls
+
+
+def test_each_output_carries_a_fingerprint_of_its_exact_criteria_question():
+    from hashlib import sha256
+    from types import SimpleNamespace
+
+    from .hosted_publications import envelope
+
+    def config(question):
+        return {
+            "classifiers": [
+                {
+                    "id": "alpha",
+                    "config": {"question": question, "classes": [{"label": "include", "role": "positive"}, {"label": "exclude"}]},
+                }
+            ]
+        }
+
+    binding = SimpleNamespace(publication_id="alpha", revision="4", outputs=["alpha"])
+    target = SimpleNamespace(account_id="account-a", bindings=[binding], pending_outputs=())
+    (output,) = envelope(target, binding, config("Is this relevant?"))["outputs"]
+    assert output["criteriaFingerprint"] == sha256(b"Is this relevant?").hexdigest()
+    (changed,) = envelope(target, binding, config("Is this relevant to ML?"))["outputs"]
+    assert changed["criteriaFingerprint"] != output["criteriaFingerprint"]
