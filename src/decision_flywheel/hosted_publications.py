@@ -404,7 +404,7 @@ class PublicationCommandRuntime:
         )
         definition = CyclotronDefinition(config["cyclotron_id"], tuple(specs), seed=config["seed"])
 
-        async def work(engine):
+        async def work(engine, kept):
             active_bindings = tuple(b for b in target.bindings if not set(b.outputs) & set(target.pending_outputs))
             lab = PublicationLab(engine, account_id=self.actor.account_id, bindings=active_bindings)
             if priming:
@@ -457,14 +457,16 @@ class PublicationCommandRuntime:
                     result = {"decisionId": decision.decision_id, "publications": projections}
                 elif registration is not None:
                     result = {**result, "source": registration}
-            # Every snapshot is read under one guarded execution, then what the engine holds in memory is
-            # published before the receipt. Ownership is kept, so this invocation's next job can reuse it.
+            # Every snapshot is read under one guarded execution. An engine kept for the next job then publishes
+            # what it holds in memory before the receipt, keeping ownership; one opened for this job alone
+            # publishes it with its release, in one commit per output.
             async with engine.execution(execution_guard=fresh):
                 if shared:
                     snapshots = {name: await lab.command(actor, name, "status", {}) for name in publications}
                 else:
                     snapshots = await lab.command(actor, publication, "status", {})
-                engine.flush()
+                if kept:
+                    engine.flush()
             return result, snapshots
 
         def open_engine():
@@ -489,7 +491,7 @@ class PublicationCommandRuntime:
             held = await holder.take(key, open_engine, busy=(RuntimeOwnershipError,))
             held.model.model, held.model.guard = model, fresh
             try:
-                result, snapshots = await work(held.engine)
+                result, snapshots = await work(held.engine, holder is self.engines)
             finally:
                 held.model.guard = no_job_guard
         except BaseException:
