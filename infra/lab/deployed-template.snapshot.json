@@ -831,6 +831,10 @@
           "Ref": "ConsoleApi"
         },
         "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 5000,
+          "ThrottlingRateLimit": 10000
+        },
         "StageName": "$default",
         "Tags": {
           "httpapi:createdBy": "SAM"
