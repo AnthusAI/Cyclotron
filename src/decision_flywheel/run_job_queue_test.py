@@ -299,8 +299,8 @@ def test_a_quick_job_after_a_slow_one_does_not_license_a_third_without_room_for_
     jobs = [s.enqueue_authorized_command(run["id"], f"job-{n}", "prepare", {}, actor) for n in range(3)]
     process, now = worker.process, [0.0]
 
-    async def timed(message):  # the first job takes 80 seconds, the second 10
-        result = await process(message)
+    async def timed(message, **options):  # the first job takes 80 seconds, the second 10
+        result = await process(message, **options)
         now[0] += 80.0 if message["jobId"] == jobs[0]["id"] else 10.0
         return result
 

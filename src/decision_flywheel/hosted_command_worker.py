@@ -30,6 +30,58 @@ class AuthorizedModel:
         return await self.model.classify_many(*args, **kwargs)
 
 
+async def no_job_guard():
+    raise PermissionError("no job holds this engine; its model refuses every call")
+
+
+class HeldEngine:
+    """An engine kept open across the jobs of one worker invocation while their key stays identical.
+
+    The holder grants nothing: every job still runs its own guards before each engine call, paid model call
+    and durable write. ``take`` returns the held engine for an equal key, otherwise closes the held one and
+    opens another. A job that fails while using it ``discard``s it, so the next job opens fresh; the
+    invocation ``close``s it when it ends (its last job, its time, or an error).
+
+    ``wait_while`` (None: never wait) says whether an open that finds the engine owned by another worker may
+    pause and try again. A worker that loses the claim of a run's next job releases its held engine at once,
+    so an engine held for a moment by the worker that ran the job before is expected, not a crashed owner.
+    """
+
+    def __init__(self, *, wait_while=None, pause=0.1, sleep=asyncio.sleep):
+        self.key = self.held = None
+        self.wait_while, self.pause, self.sleep = wait_while, pause, sleep
+        self.opened = 0  # engines opened by this holder: the measure of reuse
+
+    async def take(self, key, open_engine, *, busy=()):
+        if self.held is not None and self.key == key:
+            return self.held
+        self.close()
+        while True:
+            try:
+                held = open_engine()
+                break
+            except busy:
+                if self.wait_while is None or not self.wait_while():
+                    raise
+            await self.sleep(self.pause)
+        self.key, self.held = key, held
+        self.opened += 1
+        return held
+
+    def close(self):
+        """Release the held engine; its release errors are raised."""
+        held, self.key, self.held = self.held, None, None
+        if held is not None:
+            held.close()
+
+    def discard(self):
+        """Release the held engine after a failure; that failure, not a release error, is the one reported."""
+        try:
+            self.close()
+        except Exception as error:  # noqa: BLE001 - class only: no job content or credentials
+            print(f"held_engine_release_failed {type(error).__name__}")
+
+
 class CommandEventSink:
     def __init__(self, view, run_id, check, *, batch_size=None):
         self.view, self.run_id, self.check = view, run_id, check
@@ -135,19 +187,29 @@ class HostedCommandWorker:
         The worker never writes to its own queue: AWS stops a worker -> SQS -> worker chain as a recursive
         loop and drops the deliveries. A job's one wake-up comes from the BFF that accepted it; the jobs behind
         a finished one run here, and the scheduled sweep starts any head left waiting when time runs out.
+
+        The jobs drained here share one ``HeldEngine``: a publication engine opened by the first stays open
+        for the next while nothing it was opened for has changed, and is released when this call ends.
         """
-        started = self.clock()
-        result = await self.process(message)
-        self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
-        while result["status"] in ("completed", "failed") and self._has_time(remaining):
-            store = await asyncio.to_thread(self.store_for_account, message["accountId"])
-            head = await asyncio.to_thread(store.queue_head, message["runId"])
-            if head is None:
-                break
-            message = {"accountId": message["accountId"], "runId": message["runId"], "jobId": head["id"]}
+        wait_while = None if remaining is None else (lambda: self._has_time(remaining))
+        engines = HeldEngine(wait_while=wait_while)
+        try:
             started = self.clock()
-            result = await self.process(message)
+            result = await self.process(message, engines=engines)
             self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
+            while result["status"] in ("completed", "failed") and self._has_time(remaining):
+                store = await asyncio.to_thread(self.store_for_account, message["accountId"])
+                head = await asyncio.to_thread(store.queue_head, message["runId"])
+                if head is None:
+                    break
+                message = {"accountId": message["accountId"], "runId": message["runId"], "jobId": head["id"]}
+                started = self.clock()
+                result = await self.process(message, engines=engines)
+                self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
+        except BaseException:
+            engines.discard()
+            raise
+        engines.close()
         return result
 
     async def sweep(self, account_id, remaining=None):
@@ -168,7 +230,14 @@ class HostedCommandWorker:
                 outcomes.append("error")
         return outcomes
 
-    async def process(self, message):
+    async def process(self, message, *, engines=None):
+        """Run one delivered job. ``engines`` (from ``deliver``) lets a publication job reuse an open engine.
+
+        Checks (authorization, command policy and the claim fence, read fresh each time) run before the
+        claim, once the claim is confirmed, before each durable write, before any paid model call and at the
+        end; a runtime that re-verifies at its own end (``session.verified_at_end``) is not checked again
+        before the receipt, whose write is itself checked.
+        """
         if not self.allow_live and self.data_command is None:
             raise ValueError("live worker requires separate operator authority")
         keys = {"accountId", "runId", "jobId"}
@@ -226,6 +295,8 @@ class HostedCommandWorker:
             if self.publication_runtime_for_command is None:
                 raise ValueError("publication worker composition is unavailable")
             runtime = self.publication_runtime_for_command(effects, owned_guard, check, actor)
+            if engines is not None:
+                runtime.engines = engines
         else:
             runtime = self.runtime_for_command(effects, owned_guard, check)
         run = await asyncio.to_thread(effects.run, actor.run_id)
@@ -240,8 +311,7 @@ class HostedCommandWorker:
                     session, job["kind"], job["payload"], shown, run["config"], request_id=job["request_id"]
                 )
             except CommandRefused as refusal:
-                # Refused before any provider dispatch: record a terminal, non-secret receipt.
-                await owned_guard()
+                # Refused before any provider dispatch: record a terminal, non-secret receipt (a checked write).
                 await asyncio.to_thread(
                     effects.finish_command,
                     job["id"],
@@ -250,7 +320,8 @@ class HostedCommandWorker:
                 )
                 self._ring(job, actor, "failed")
                 return {"status": "failed", "jobId": job["id"], "code": refusal.code}
-            await owned_guard()
+            if not getattr(session, "verified_at_end", False):
+                await owned_guard()  # Before closing operation state.
         finally:
             if session is not None:
                 await asyncio.to_thread(session.close)

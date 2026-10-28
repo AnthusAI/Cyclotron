@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from .application_runtime import RuntimeCommand
 from .command_refusal import CommandRefused
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
-from .hosted_command_worker import AuthorizedModel
+from .hosted_command_worker import AuthorizedModel, HeldEngine, no_job_guard
 from .journal import encode, uuid
 from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
@@ -24,6 +24,7 @@ from .priming_context import catalog_priming, decode_priming
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
 from .publication_lab import CONTRACT, PublicationActor, PublicationBinding, PublicationLab, criteria_fingerprint
 from .s3_embedded_storage import S3CyclotronStores
+from .s3_runtime_storage import RuntimeOwnershipError
 from .standing_publications import validate_item
 from .storage_errors import StorageConflict, StorageUncertain
 
@@ -264,12 +265,17 @@ class _GuardedJournal:
 
 
 class PublicationCommandRuntime:
+    # The worker's HeldEngine for this invocation, when it has one: a standing target's decision engine then
+    # stays open for the invocation's next job with the same key. None opens and releases one per job.
+    engines = None
+
     def __init__(self, host, view, guard, check, actor):
         self.host, self.view, self.guard, self.check, self.actor = host, view, guard, check, actor
 
     def open_session(self, run_id, config, items, shown):
-        # Opening a console command does not open provider/storage state yet.
-        return SimpleNamespace(run_id=run_id, config=config, close=lambda: None)
+        # Opening a console command does not open provider/storage state yet. ``execute`` re-verifies
+        # everything at its end, so the worker's receipt write (itself checked) needs no extra check.
+        return SimpleNamespace(run_id=run_id, config=config, close=lambda: None, verified_at_end=True)
 
     async def execute(self, session, kind, payload, shown, config, *, request_id=None):
         priming = is_priming_command(kind, payload)
@@ -326,9 +332,7 @@ class PublicationCommandRuntime:
                 if current != fingerprint:
                     raise ValueError("accepted priming snapshot changed")
 
-        async def fresh():
-            await self.guard()
-            await asyncio.to_thread(check_scope)
+        async def reauthorize():
             if machine:
                 # Authority is the trusted target configuration re-checked in check_scope; there is no
                 # human session or Prospectus membership behind a service principal.
@@ -345,7 +349,14 @@ class PublicationCommandRuntime:
                 self.host.accounts.authorize, original.access_token, self.actor.account_id, self.actor.person_id, "console:write"
             )
 
-        await fresh()
+        async def fresh():
+            # The worker's check (authorization, command policy, claim fence) runs inside check_scope.
+            await asyncio.to_thread(check_scope)
+            await reauthorize()
+
+        # The worker checked authorization and the claim fence just before this call and the scope was resolved
+        # above; a person's own authority is re-verified here, before anything is opened, reserved or written.
+        await reauthorize()
         specs, rubrics = [], {}
         for row in config["classifiers"]:
             definition = row["config"]
@@ -386,22 +397,14 @@ class PublicationCommandRuntime:
             journal = self.host.journal(self.actor.account_id, "shared-batches" if domain == "shared" else domain, key)
             return _GuardedJournal(journal, check_scope) if priming else journal
 
-        stores = S3CyclotronStores(journal("workspace", name), journal_for=journal)
         actor = PublicationActor(
             self.actor.account_id,
             self.actor.service_id if machine else self.actor.person_id,
             frozenset((name, cap) for name in publications for cap in ("decide", "read")),
         )
         definition = CyclotronDefinition(config["cyclotron_id"], tuple(specs), seed=config["seed"])
-        with Cyclotron.open(
-            None,
-            definition,
-            AuthorizedModel(model, fresh),
-            optimizer,
-            storage=stores,
-            seed_rubrics=rubrics,
-            max_requests=None,
-        ) as engine:
+
+        async def work(engine):
             active_bindings = tuple(b for b in target.bindings if not set(b.outputs) & set(target.pending_outputs))
             lab = PublicationLab(engine, account_id=self.actor.account_id, bindings=active_bindings)
             if priming:
@@ -454,14 +457,50 @@ class PublicationCommandRuntime:
                     result = {"decisionId": decision.decision_id, "publications": projections}
                 elif registration is not None:
                     result = {**result, "source": registration}
-            if shared:
-                snapshots = {name: await lab.command(actor, name, "status", {}, execution_guard=fresh) for name in publications}
-            else:
-                status = await lab.command(actor, publication, "status", {}, execution_guard=fresh)
+            # Every snapshot is read under one guarded execution, then what the engine holds in memory is
+            # published before the receipt. Ownership is kept, so this invocation's next job can reuse it.
+            async with engine.execution(execution_guard=fresh):
+                if shared:
+                    snapshots = {name: await lab.command(actor, name, "status", {}) for name in publications}
+                else:
+                    snapshots = await lab.command(actor, publication, "status", {})
+                engine.flush()
+            return result, snapshots
+
+        def open_engine():
+            # The engine calls this model. Each job binds its own provider and guard to it while it runs;
+            # between jobs it refuses every call.
+            bound = AuthorizedModel(model, no_job_guard)
+            engine = Cyclotron.open(
+                None,
+                definition,
+                bound,
+                optimizer,
+                storage=S3CyclotronStores(journal("workspace", name), journal_for=journal),
+                seed_rubrics=rubrics,
+                max_requests=None,
+            )
+            return SimpleNamespace(engine=engine, model=bound, close=engine.close)
+
+        # Everything an open engine is built from or answers to. Any difference opens a new one.
+        key = (self.actor, target, name, sha256(encode(config)).hexdigest(), type(model), model.model_identity, type(optimizer))
+        holder = self.engines if self.engines is not None and target.standing and not priming else HeldEngine()
+        try:
+            held = await holder.take(key, open_engine, busy=(RuntimeOwnershipError,))
+            held.model.model, held.model.guard = model, fresh
+            try:
+                result, snapshots = await work(held.engine)
+            finally:
+                held.model.guard = no_job_guard
+        except BaseException:
+            holder.discard()  # A job that fails never leaves the next one a half-used engine.
+            raise
+        if holder is not self.engines:
+            holder.close()
         await fresh()
         if shared:
             return RuntimeCommand({"response": result, "statusSnapshots": snapshots})
-        return RuntimeCommand({"response": result, "statusSnapshot": status})
+        return RuntimeCommand({"response": result, "statusSnapshot": snapshots})
 
 
 REFUSAL_STATUS = {
