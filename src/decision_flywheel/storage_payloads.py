@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .batch_storage import StorageScope
-from .s3_transient import cause_name, log, read_with_one_retry
+from .s3_transient import cause_name, error_code, log, read_with_one_retry
 
 
 class PayloadCorrupt(RuntimeError):
@@ -169,7 +169,7 @@ class S3Payloads(_Payloads):
                 Metadata={"sha256": reference.digest},
             )
         except Exception as error:
-            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            code = error_code(error)
             if code in ("PreconditionFailed", "ConditionalRequestConflict", "412", "409"):
                 self.get(reference)
             else:

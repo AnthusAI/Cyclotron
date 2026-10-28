@@ -101,3 +101,13 @@ def _once(error):
         return "ok"
 
     return read
+
+
+def test_a_dropped_connection_has_no_error_code_instead_of_crashing_the_handler():
+    from botocore.exceptions import ConnectionClosedError
+
+    from .s3_transient import error_code
+
+    assert error_code(ConnectionClosedError(endpoint_url="https://synthetic")) is None
+    assert error_code(ValueError("no response at all")) is None
+    assert error_code(type("E", (Exception,), {"response": {"Error": {"Code": "PreconditionFailed"}}})()) == "PreconditionFailed"

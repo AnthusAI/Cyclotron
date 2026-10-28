@@ -75,7 +75,7 @@ from .record_lake import (
     commit_with_records,
     coverage_in,
 )
-from .s3_transient import cause_name, read_with_one_retry
+from .s3_transient import cause_name, error_code, read_with_one_retry
 from .storage_payloads import FilePayloads, S3Payloads
 
 log = logging.getLogger(__name__)
@@ -244,7 +244,7 @@ class S3KeyedRecords(KeyedRecords):
             )
             return True
         except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") in _EXISTS:
+            if error_code(error) in _EXISTS:
                 return False
             raise RecordUncertain("S3 record write outcome uncertain; repeat the identical record") from None
 
@@ -269,7 +269,7 @@ class S3KeyedRecords(KeyedRecords):
             # A GET is idempotent, so one transient failure is retried. A missing key is not transient.
             return read_with_one_retry(lambda: self._get(key), "record")
         except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") == "NoSuchKey":
+            if error_code(error) == "NoSuchKey":
                 return None
             log.warning("keyed record unavailable: %s", cause_name(error))
             raise RecordUnavailable("record unavailable", cause_name(error)) from None

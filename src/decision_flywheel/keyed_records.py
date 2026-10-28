@@ -36,7 +36,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from .journal import decode, encode
-from .s3_transient import cause_name, log, read_with_one_retry
+from .s3_transient import cause_name, error_code, log, read_with_one_retry
 from .storage_errors import StorageConflict, StorageUncertain
 from .storage_payloads import FilePayloads, S3Payloads
 
@@ -127,12 +127,24 @@ class KeyedDocuments:
         and merging keeps every entry that may still matter.
         """
         path = self.path(kind, key)
+        uncertain = False
         while True:
             entries = merged(document, coverage, at, value)
             content = self._encode(kind, key, entries)
             try:
                 etag = self._create(path, content) if document is None else self._replace(path, content, document.etag)
                 return Document(etag, entries)
+            except KeyedUncertain:
+                # A dropped connection leaves the outcome unknown, so read it back once: the write either landed
+                # (the document holds exactly this content), did not (unchanged: write again), or another writer
+                # moved it (merge onto theirs, as after a conflict). A second unknown outcome is reported.
+                if uncertain:
+                    raise
+                uncertain = True
+                found = self.load(kind, key)
+                if found is not None and self._encode(kind, key, found.entries) == content:
+                    return found
+                document = found
             except KeyedConflict:
                 refused = document
                 document = self.load(kind, key)
@@ -173,7 +185,7 @@ class S3KeyedDocuments(KeyedDocuments):
         try:
             return read_with_one_retry(lambda: self._fetch(path), "keyed document")
         except Exception as error:
-            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            code = error_code(error)
             if code == "NoSuchKey":
                 return None  # only a real absence; a refused GET (AccessDenied) is an error below
             log.warning("keyed document unavailable: %s", cause_name(error))
@@ -194,7 +206,7 @@ class S3KeyedDocuments(KeyedDocuments):
                 raise ValueError("missing keyed ETag")
             return etag
         except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") in _EXISTS:
+            if error_code(error) in _EXISTS:
                 raise KeyedConflict("keyed document changed") from None
             raise KeyedUncertain("keyed document write outcome uncertain") from None
 
