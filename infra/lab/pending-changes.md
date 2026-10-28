@@ -8,7 +8,11 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.**
+**Pending: read-only access to the runtime journals for the BFF role.** One statement is appended to
+`/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-`: `s3:GetObject` (no PutObject) on
+`*/console/coordination/runtime/*`. The lab's decision detail reads each output's runtime head and keyed
+documents to show the exact decision request and response; it never writes them, and the worker remains the
+only role that can write a runtime.
 
 Previously: fewer S3 calls in sequence per decision (lab code c977e86, package sha256 `96954c94ccd0e70de286d549fe5328093004851349f9bf6b923526f6ec7d04c7`), deployed on 2026-10-28 with change set `serial-c977e86` at 19:54Z. Code only; the snapshot was refreshed.
 
