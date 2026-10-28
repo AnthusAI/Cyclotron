@@ -1,27 +1,4 @@
 {
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. JSON Pointer add and remove operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
-  "operations": [
-    {
-      "op": "add",
-      "path": "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
-      "value": {
-        "Effect": "Allow",
-        "Action": "s3:ListBucket",
-        "Resource": {
-          "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"
-        }
-      }
-    },
-    {
-      "op": "add",
-      "path": "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-      "value": {
-        "Effect": "Allow",
-        "Action": "s3:ListBucket",
-        "Resource": {
-          "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"
-        }
-      }
-    }
-  ]
+  "operations": []
 }
