@@ -53,7 +53,7 @@ def test_laya_batches_scoped_rubrics_examples_and_feature_questions_with_exact_t
         "a": ClassifierConfig(task, rubric="Prefer knowledge", example_ids=("demo",), tasks=(extra,)),
         "b": ClassifierConfig(task, rubric="Prefer evidence"),
     }
-    example = LabeledItem(Item("demo", {"text": "Known useful article"}), "yes")
+    example = LabeledItem(Item("demo", {"title": "Known useful article", "text": "Full body"}), "yes")
     events = []
     result = asyncio.run(
         LayaAdapter(model).classify_many(
@@ -64,7 +64,8 @@ def test_laya_batches_scoped_rubrics_examples_and_feature_questions_with_exact_t
     assert set(model.questions) == {"q0", "q1", "q2"}
     assert model.state["classifiers"]["a"]["rubric"] == "Prefer knowledge"
     assert model.state["classifiers"]["a"]["examples"][0]["label"] == "yes"
-    assert model.state["classifiers"]["a"]["examples"][0]["text"] == "Known useful article"
+    assert model.state["classifiers"]["a"]["examples"][0]["title"] == "Known useful article"
+    assert "text" not in model.state["classifiers"]["a"]["examples"][0]
     assert model.state["classifiers"]["b"]["examples"] == []
     assert set(result.answers["a"]) == {"decision", "knowledge"}
     assert result.answers["a"]["knowledge"].probabilities == {"yes": 0.8, "no": 0.2}

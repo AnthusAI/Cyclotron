@@ -40,8 +40,8 @@ def shared_questions(configurations):
     return {signature: ids for signature, ids in owners.items() if len(ids) > 1}
 
 
-def batch_request(configurations, target, training, *, now=None, share_questions=False):
-    """Compose one request. With ``share_questions``, a supporting question several classifiers ask is asked once.
+def batch_request(configurations, target, training, *, now=None, share_questions=False, with_composition=False):
+    """Compose one request, fitted to ``DECISION_REQUEST_BYTES`` (see ``request_composition``). With ``share_questions``, a supporting question several classifiers ask is asked once.
 
     Without it (the default, and every store created before sharing existed)
     each classifier's copy is asked separately in its own scope, exactly as
@@ -54,17 +54,17 @@ def batch_request(configurations, target, training, *, now=None, share_questions
     """
     if not configurations or set(configurations) != set(training):
         raise ValueError("every classifier needs its own explicit training pool")
-    state = {"target": dict(target.values), "classifiers": {}}
-    questions, identities, owners = {}, {}, {}
+    from .request_composition import altered, fit, interleave, keep_order
+
+    questions, identities, owners, examples = {}, {}, {}, {}
     shared, asked = (shared_questions(configurations) if share_questions else {}), {}
     for identifier, config in configurations.items():
         if not isinstance(identifier, str) or not identifier:
             raise ValueError("classifier identity required")
-        request = config.request(target, training[identifier], now=now)
+        examples[identifier] = config.eligible_examples(target, training[identifier])
+        config.state(target.values, (), now=now)  # validate the instant before composing
         scope = "state.classifiers[" + json.dumps(identifier) + "]"
-        state["classifiers"][identifier] = {key: value for key, value in request["state"].items() if key != "target"}
-        state["classifiers"][identifier]["configuration_fingerprint"] = config.fingerprint
-        for local_name, question in request["questions"].items():
+        for local_name, question in config.questions().items():
             task = config.task if local_name == "decision" else next(t for t in config.tasks if t.name == local_name)
             signature = _signature(task) if local_name != "decision" else None
             if signature in shared:
@@ -93,10 +93,39 @@ def batch_request(configurations, target, training, *, now=None, share_questions
                 instructions += f" Current datetime is in {scope}.current_datetime."
             questions[key] = {**question, "instructions": instructions}
             identities[key] = (identifier, local_name, task)
-    request = {"state": state, "questions": questions}
-    if owners:
-        request["owners"] = owners
-    return request, identities
+
+    def build(kept, values):
+        state = {"target": dict(values), "classifiers": {}}
+        for identifier, config in configurations.items():
+            shown = [example for key, example, _, _ in examples[identifier] if (identifier, key) in kept]
+            scoped = {k: v for k, v in config.state(values, shown, now=now).items() if k != "target"}
+            state["classifiers"][identifier] = {**scoped, "configuration_fingerprint": config.fingerprint}
+        request = {"state": state, "questions": questions}
+        if owners:
+            request["owners"] = owners
+        return request
+
+    priority = interleave(
+        {
+            identifier: keep_order(
+                [(key, label, recency) for key, _, label, recency in rows], configurations[identifier].task.labels
+            )
+            for identifier, rows in examples.items()
+        }
+    )
+    body_field = next(iter(configurations.values())).task.input_field
+    available = sum(len(rows) for rows in examples.values())
+    request, composition, kept = fit(build, priority, dict(target.values), body_field, available)
+    composition["classifiers"] = {
+        identifier: {
+            "examples_available": len(rows),
+            "examples_shown": sum((identifier, key) in kept for key, _, _, _ in rows),
+        }
+        for identifier, rows in examples.items()
+    }
+    if altered(composition):
+        request = {**request, "composition": composition}
+    return (request, identities, composition) if with_composition else (request, identities)
 
 
 def question_bindings(configurations, request, identities):

@@ -104,7 +104,9 @@ class SharedDecisions:
         self.prepared = {}
         options = options or CacheOptions()
         now = now or datetime.now(timezone.utc)
-        request, identities = batch_request(configs, target, training, now=now, share_questions=self.share_supporting_questions)
+        request, identities, composition = batch_request(
+            configs, target, training, now=now, share_questions=self.share_supporting_questions, with_composition=True
+        )
         self.validate_capabilities(request)
         fingerprint = key({"model": self.model.model_identity, "request": request})
         self.identity = fingerprint
@@ -156,6 +158,7 @@ class SharedDecisions:
                 "cache_policy": options.policy,
                 "retry_failed": options.retry_failed,
                 "output_shares": output_shares(request, identities),
+                "request_composition": composition,
             }
         )
         self.prepared_scope = (dict(configs), {cid: tuple(rows) for cid, rows in training.items()})

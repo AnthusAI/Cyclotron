@@ -914,7 +914,9 @@ class DecisionFlywheel:
     async def predict(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None, cache_options=None):
         self.reconcile_feedback(training)
         self.reconcile_model_context(training)
-        batch = await self._answers(self.active.config, target, training, now or datetime.now(timezone.utc), cache_options)
+        now = now or datetime.now(timezone.utc)
+        composition = self.active.config.compose(target, training, now=now)[1]
+        batch = await self._answers(self.active.config, target, training, now, cache_options)
         # A refresh can replace a consumed training response during this call.
         self.reconcile_model_context(training)
         if self.active.head:
@@ -936,6 +938,7 @@ class DecisionFlywheel:
             {
                 "kind": "prediction",
                 "target_id": target.id,
+                "request_composition": composition,
                 "label": result.label,
                 "version": self.active.fingerprint,
                 "fitted_head": self.active.head is not None,
@@ -1286,6 +1289,8 @@ class DecisionFlywheel:
         metrics["evaluation_independent_of_optimizer_context"] = not self.optimizer_context["evaluation_context_exposed"]
         metrics["available_count"] = available_count
         metrics["sample_limit"] = self.evaluation_policy.max_samples
+        metrics["evaluation_policy"] = self.evaluation_policy.manifest()
+        metrics["evaluation_policy_fingerprint"] = self.evaluation_policy.fingerprint
         metrics["sample_ids"] = [row.item.id for row in development]
         metrics["context_validation_floor"] = self.context_validation_floor
         metrics["evidence_status"] = (
