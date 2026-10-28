@@ -598,7 +598,7 @@ def test_native_priming_refuses_stale_authority_scope_or_catalog_before_applying
                 commit = _GuardedJournal.commit
 
                 def revoke_before_priming_write(journal, expected, value):
-                    if value.get("schema") == "cyclotron-s3-embedded/v1":
+                    if str(value.get("schema")).startswith("cyclotron-s3-embedded/"):
                         saved = value["data"]["meta"].get("priming_examples")
                         if saved and "synthetic-human-example" in str(saved):
                             state["denied"] = True

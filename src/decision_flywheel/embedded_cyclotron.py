@@ -29,7 +29,7 @@ import inspect
 import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from contextvars import ContextVar
 from copy import copy, deepcopy
 from dataclasses import asdict, replace
@@ -723,79 +723,84 @@ class Cyclotron:
         version (not an ML model refit) is promoted. No model call is repeated.
         """
         async with self.execution(execution_guard=execution_guard):
-            if not isinstance(item, Item):
-                raise ValueError("decide needs an Item")
-            if any(item.id == row.item.id for rows in self.priming_examples.values() for row in rows):
-                raise ValueError("priming items cannot be operational targets")
-            self._batches = []
-            for spec in self.definition.classifiers:
-                spec.task.validate_target(item)
-            self._sync()
-            fingerprint = hashlib.sha256(_json(dict(item.values)).encode()).hexdigest()
-            latest = self._latest_decision(item.id)
-            if latest is not None:
-                state, decision = latest
-                unchanged = self._item_fingerprint(decision.decision_id) == fingerprint
-                same_version = all(
-                    cid in decision.results and decision.results[cid].version == self.versions[cid].version for cid in self.wheels
-                )
-                if unchanged and (state == "reviewed" or same_version):
-                    return decision
-                if state == "open":
-                    self._close_waiting_cycles(item.id, decision.decision_id, "superseded by a new decision")
-                with self.root_storage.transaction():
-                    self.root_storage.set_decision_state(decision.decision_id, "superseded")
+            # An S3 root publishes everything one decision changes in one commit; SQLite commits as before.
+            with getattr(self.root_storage, "coalesced", nullcontext)():
+                return await self._decide(item)
+
+    async def _decide(self, item: Item) -> Decision:
+        if not isinstance(item, Item):
+            raise ValueError("decide needs an Item")
+        if any(item.id == row.item.id for rows in self.priming_examples.values() for row in rows):
+            raise ValueError("priming items cannot be operational targets")
+        self._batches = []
+        for spec in self.definition.classifiers:
+            spec.task.validate_target(item)
+        self._sync()
+        fingerprint = hashlib.sha256(_json(dict(item.values)).encode()).hexdigest()
+        latest = self._latest_decision(item.id)
+        if latest is not None:
+            state, decision = latest
+            unchanged = self._item_fingerprint(decision.decision_id) == fingerprint
+            same_version = all(
+                cid in decision.results and decision.results[cid].version == self.versions[cid].version for cid in self.wheels
+            )
+            if unchanged and (state == "reviewed" or same_version):
+                return decision
+            if state == "open":
+                self._close_waiting_cycles(item.id, decision.decision_id, "superseded by a new decision")
             with self.root_storage.transaction():
-                self.root_storage.put_item(item.id, _json(dict(item.values)), fingerprint)
-            # A suspended cycle from an interrupted decide is resumed here, and
-            # the shared request cache answers it without a new model call.
-            results, _ = await decide_with_shared_context(
-                self.wheels,
-                self.shared,
-                item,
-                self._partitions,
-                now=datetime.now(timezone.utc),
-                labeled_only_partitions=self._labeled_partitions,
-            )
-            self._sync()
-            decision_id = str(uuid4())
-            selection = self._select(item.id, {cid: result.confidence for cid, result in results.items()})
-            decision = Decision(
-                decision_id,
-                item.id,
-                _now(),
-                {
-                    cid: ClassifierDecision(
-                        cid,
-                        result.label,
-                        result.confidence,
-                        dict(result.probabilities) if result.probabilities else None,
-                        self.versions[cid].version,
-                        self.wheels[cid].active.fingerprint,
-                    )
-                    for cid, result in results.items()
-                },
-                selection,
-            )
-            for cid, wheel in self.wheels.items():
-                own = selection.for_output(cid)
-                if own.selected:
-                    continue
-                # This output is not asked; close its waiting cycle so it does not read as pending.
-                cycle = wheel.resume_cycle(item)
-                if cycle is not None:
-                    wheel._emit(
-                        {
-                            "kind": "review-not-requested",
-                            "target_id": item.id,
-                            "decision_id": decision_id,
-                            "propensity": own.propensity,
-                            "detail": own.detail,
-                        }
-                    )
-                    cycle.__exit__(None, None, None)
-            self._insert_decision(decision, fingerprint)
-            return decision
+                self.root_storage.set_decision_state(decision.decision_id, "superseded")
+        with self.root_storage.transaction():
+            self.root_storage.put_item(item.id, _json(dict(item.values)), fingerprint)
+        # A suspended cycle from an interrupted decide is resumed here, and
+        # the shared request cache answers it without a new model call.
+        results, _ = await decide_with_shared_context(
+            self.wheels,
+            self.shared,
+            item,
+            self._partitions,
+            now=datetime.now(timezone.utc),
+            labeled_only_partitions=self._labeled_partitions,
+        )
+        self._sync()
+        decision_id = str(uuid4())
+        selection = self._select(item.id, {cid: result.confidence for cid, result in results.items()})
+        decision = Decision(
+            decision_id,
+            item.id,
+            _now(),
+            {
+                cid: ClassifierDecision(
+                    cid,
+                    result.label,
+                    result.confidence,
+                    dict(result.probabilities) if result.probabilities else None,
+                    self.versions[cid].version,
+                    self.wheels[cid].active.fingerprint,
+                )
+                for cid, result in results.items()
+            },
+            selection,
+        )
+        for cid, wheel in self.wheels.items():
+            own = selection.for_output(cid)
+            if own.selected:
+                continue
+            # This output is not asked; close its waiting cycle so it does not read as pending.
+            cycle = wheel.resume_cycle(item)
+            if cycle is not None:
+                wheel._emit(
+                    {
+                        "kind": "review-not-requested",
+                        "target_id": item.id,
+                        "decision_id": decision_id,
+                        "propensity": own.propensity,
+                        "detail": own.detail,
+                    }
+                )
+                cycle.__exit__(None, None, None)
+        self._insert_decision(decision, fingerprint)
+        return decision
 
     # Review rate ----------------------------------------------------------
 

@@ -193,3 +193,278 @@ def test_one_item_can_be_read_without_listing_every_item():
         storage.put_item("known", '{"text":"yes"}', "fingerprint")
     assert storage.item_values("known") == '{"text":"yes"}'
     assert storage.item_values("missing") is None
+
+
+def _root_bytes(client, root, since):
+    """Bytes one root journal wrote after call ``since``: head, state blobs, records and keyed documents."""
+    from .journal import decode
+
+    prefix = root.head_key.rsplit("/", 1)[0] + "/"
+    lakes = tuple(f"/records/workspace/{kind}-root/" for kind in ("decisions", "events", "usage", "items", "commits"))
+    total = 0
+    for kind, request in client.calls[since:]:
+        key, body = request["Key"], request.get("Body", b"")
+        if kind != "put":
+            continue
+        if key.startswith(prefix) or any(lake in key for lake in lakes):
+            total += len(body)
+        elif "/payloads/" in key:
+            try:
+                value = decode(body)
+            except ValueError:
+                continue
+            if isinstance(value, dict) and value.get("namespace") == root.namespace:
+                total += len(body)
+    return total
+
+
+def _stores(client):
+    from .s3_embedded_storage import S3CyclotronStores
+
+    return S3CyclotronStores(
+        journal(client, name="root"), journal_for=lambda domain, name: journal(client, name=domain + "-" + name)
+    )
+
+
+def test_the_bytes_a_decision_writes_to_the_root_do_not_grow_with_the_decisions_before_it():
+    from .embedded_cyclotron import Cyclotron
+    from .s3_journal_test import ConditionalS3
+
+    client, model = ConditionalS3(), Model()
+    root = journal(client, name="root")
+
+    def decide(number):
+        before = len(client.calls)
+        with Cyclotron.open(None, DEFINITION, model, storage=_stores(client), max_requests=None) as engine:
+            asyncio.run(engine.decide(item(f"item-{number:03d}")))
+        return _root_bytes(client, root, before)
+
+    written = [decide(number) for number in range(1, 61)]
+    # Nothing earlier is rewritten; only counters that gained a digit (positions, cursors) may differ.
+    assert abs(written[59] - written[9]) <= 64, (written[9], written[59])
+
+
+def test_one_decision_moves_the_root_head_once():
+    from .embedded_cyclotron import Cyclotron
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    stores = _stores(client)
+    head = stores.root_storage.journal.head_key
+    with Cyclotron.open(None, DEFINITION, Model(), storage=stores, max_requests=None) as engine:
+        for number in range(3):
+            before = len(client.calls)
+            asyncio.run(engine.decide(item(f"item-{number}")))
+            assert [r["Key"] for kind, r in client.calls[before:] if kind == "put"].count(head) == 1
+        assert engine.root_storage.decision_count() == 3
+
+
+def _owned_root(client=None):
+    from .s3_embedded_storage import S3EmbeddedStorage
+
+    root = S3EmbeddedStorage(journal(client, name="root"), cache_owned=True)
+    root.initialize()
+    root.acquire(str(uuid4()))
+    return root
+
+
+def _reopened(client):
+    from .s3_embedded_storage import S3EmbeddedStorage
+
+    root = S3EmbeddedStorage(journal(client, name="root"))
+    root.initialize()
+    root.acquire(str(uuid4()))
+    return root
+
+
+def _head_puts(client, head, since):
+    return [r["Key"] for kind, r in client.calls[since:] if kind == "put"].count(head)
+
+
+def test_coalesced_transactions_publish_in_one_commit_and_each_still_rolls_back_alone():
+    root = _owned_root()
+    client, head = root.journal.payloads.client, root.journal.head_key
+    before = len(client.calls)
+    with root.coalesced():
+        root.append_event('{"n":1}')
+        with pytest.raises(RuntimeError):
+            with root.transaction():
+                root.append_event('{"n":"rolled back"}')
+                raise RuntimeError("synthetic failure")
+        root.put_item("item-a", '{"v":1}', "fp")
+        assert root.events(0, 10) == [(1, '{"n":1}')] and root.item_values("item-a") == '{"v":1}'
+        assert _head_puts(client, head, before) == 0
+    assert _head_puts(client, head, before) == 1
+    root.release()
+    fresh = _reopened(client)
+    assert fresh.events(0, 10) == [(1, '{"n":1}')] and fresh.items() == [("item-a", '{"v":1}')]
+    fresh.release()
+
+
+def test_leaving_a_coalesced_scope_by_an_exception_still_publishes_what_it_held():
+    root = _owned_root()
+    with pytest.raises(LookupError):
+        with root.coalesced():
+            root.put_meta("cursor", "7")
+            raise LookupError("the model call failed")
+    root.refresh()
+    assert root.meta("cursor") == ("7",)
+    root.release()
+
+
+def test_records_and_keyed_entries_of_a_commit_whose_head_never_moved_stay_invisible():
+    from copy import deepcopy
+
+    from .s3_journal_test import S3Error
+    from .storage_errors import StorageUncertain
+
+    root = _owned_root()
+    client, head = root.journal.payloads.client, root.journal.head_key
+    real = client.put_object
+
+    def head_fails(**request):
+        if request["Key"] == head:
+            raise S3Error("InternalError")
+        return real(**request)
+
+    client.put_object = head_fails
+    with pytest.raises(StorageUncertain):
+        with root.transaction():
+            root.put_item("item-a", '{"v":1}', "fp")
+            root.insert_decision(("d1", "item-a", "fp", "open", '{"payload":"d1"}'))
+            root.append_event('{"kind":"decision"}')
+    client.put_object = real
+    # An operator reconciles the poisoned owner; the head still holds the state before that commit.
+    record = root.journal.read()
+    value = deepcopy(record.value)
+    value["owner"] = None
+    root.journal.commit(record, value)
+    fresh = _reopened(client)
+    assert fresh.decision("d1") is None and fresh.item_values("item-a") is None and fresh.events(0, 10) == []
+    assert fresh.decision_count() == 0 and fresh.latest_decision("item-a") is None
+    # The next commit skips the abandoned sequences, and the abandoned keyed entries never count.
+    fresh.insert_decision(("d2", "item-a", "fp", "open", '{"payload":"d2"}'))
+    assert fresh.latest_decision("item-a") == ("open", '{"payload":"d2"}') and fresh.decision_ids() == [("d2",)]
+    assert fresh.decision("d1") is None and fresh.latest_id("item-a") == ("d2",)
+    fresh.release()
+
+
+def test_the_live_decision_of_an_item_follows_supersede_and_revival_in_any_order():
+    root = _owned_root()
+    for name in ("d1", "d2", "d3"):
+        root.insert_decision((name, "item-a", "fp-" + name, "open", '{"payload":"' + name + '"}'))
+    root.set_decision_state("d3", "superseded")
+    root.set_decision_state("d2", "superseded")
+    assert root.latest_decision("item-a") == ("open", '{"payload":"d1"}')
+    root.set_decision_state("d1", "superseded")
+    assert root.latest_decision("item-a") is None
+    root.set_decision_state("d2", "reviewed")
+    assert root.latest_decision("item-a") == ("reviewed", '{"payload":"d2"}')
+    root.set_decision_state("d1", "open")
+    assert root.latest_decision("item-a") == ("reviewed", '{"payload":"d2"}')
+    root.set_decision_state("d3", "open")
+    assert root.latest_decision("item-a") == ("open", '{"payload":"d3"}')
+    root.set_decision_state("d3", "superseded")
+    assert root.latest_decision("item-a") == ("reviewed", '{"payload":"d2"}')
+    assert root.latest_id("item-a") == ("d3",) and root.decision_fingerprint("d1") == "fp-d1"
+    root.release()
+
+
+def _v1_root(client):
+    """A v1 root as production holds it: every record inside the head, item values inline and by reference."""
+    from .s3_embedded_storage import legacy_empty
+
+    j = journal(client, name="root")
+    stored = j.payloads.put(b'{"v":"by reference"}')
+    value = legacy_empty()
+    data = value["data"]
+    data["meta"] = {"definition": "{}", "cursor:relevant": "4"}
+    data["items"] = {
+        "item-a": ['{"v":"inline"}', "fp-a"],
+        "item-b": [{"digest": stored.digest, "length": stored.length}, "fp-b"],
+    }
+    data["decisions"] = [
+        ["d1", "item-a", "fp-a", "superseded", '{"payload":"d1"}'],
+        ["d2", "item-a", "fp-a", "reviewed", '{"payload":"d2"}'],
+        ["d3", "item-b", "fp-b", "open", '{"payload":"d3"}'],
+    ]
+    data["reviews"] = [[1, "r1", "d2", "relevant", '{"review":1}']]
+    data["events"] = [[1, '{"kind":"decision"}'], [2, '{"kind":"review"}'], [3, '{"kind":"decision"}']]
+    data["learning"] = [[1, "relevant", 3, "2026-01-01", 0]]
+    data["usage"] = [[1, "d1", "decision_model", 10, 2, 5, "shared-batch"], [2, "d3", "optimizer", 7, 0, 1, None]]
+    data["shares"] = [[1, "relevant", 0.25], [1, "urgent", 0.75]]
+    j.initialize(value)
+    return j
+
+
+def test_a_v1_root_is_converted_by_its_first_owner_and_keeps_every_record_readable():
+    from .s3_embedded_storage import SCHEMA
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    legacy = _v1_root(client)
+    root = _reopened(client)
+    head = root.journal.read().value
+    assert head["schema"] == SCHEMA and set(head["data"]) == {"meta", "reviews", "learning", "latest", "late_shares"}
+    assert root.meta("cursor:relevant") == ("4",)
+    assert root.items() == [("item-a", '{"v":"inline"}'), ("item-b", '{"v":"by reference"}')]
+    assert root.decision_rows() == [
+        ("d1", "superseded", '{"payload":"d1"}'),
+        ("d2", "reviewed", '{"payload":"d2"}'),
+        ("d3", "open", '{"payload":"d3"}'),
+    ]
+    assert root.latest_decision("item-a") == ("reviewed", '{"payload":"d2"}') and root.latest_id("item-a") == ("d2",)
+    assert root.latest_id() == ("d3",) and root.decision_fingerprint("d3") == "fp-b"
+    assert root.decision("d1") == ('{"payload":"d1"}',)
+    assert root.events(1, 10) == [(2, '{"kind":"review"}'), (3, '{"kind":"decision"}')]
+    assert root.review("r1") == ('{"review":1}',) and root.next_learning() == (1, "relevant", 3)
+    assert root.usage_by_output() == [(1, "decision_model", 10, 2, 5, "shared-batch"), (2, "optimizer", 7, 0, 1, None)]
+    assert sorted(root.usage_shares()) == [(1, "relevant", 0.25), (1, "urgent", 0.75)]
+    # New records continue after the converted ones, so subscribe cursors and usage ids keep their meaning.
+    assert root.append_event('{"kind":"new"}') == 4 and root.insert_usage("d3", "m", 1, 0, 1, None) == 3
+    with pytest.raises(ValueError):
+        root.insert_decision(("d2", "item-b", "fp", "open", "{}"))
+    with pytest.raises(ValueError):
+        root.insert_usage_share(1, "relevant", 0.5)
+    root.release()
+    reopened = _reopened(client)
+    assert reopened.events(3, 10) == [(4, '{"kind":"new"}')] and reopened.decision_count() == 3
+    assert legacy.read().value["schema"] == SCHEMA
+    reopened.release()
+
+
+def test_a_conversion_whose_head_never_moved_leaves_the_v1_root_to_convert_on_the_next_acquire():
+    from .s3_embedded_storage import LEGACY_SCHEMA
+    from .s3_journal_test import ConditionalS3, S3Error
+    from .storage_errors import StorageUncertain
+
+    client = ConditionalS3()
+    legacy = _v1_root(client)
+    real = client.put_object
+
+    def head_fails(**request):
+        if request["Key"] == legacy.head_key:
+            raise S3Error("InternalError")
+        return real(**request)
+
+    client.put_object = head_fails
+    with pytest.raises(StorageUncertain):
+        _reopened(client)
+    client.put_object = real
+    assert legacy.read().value["schema"] == LEGACY_SCHEMA
+    root = _reopened(client)
+    assert root.decision_ids() == [("d1",), ("d2",), ("d3",)] and root.events(0, 10)[-1] == (3, '{"kind":"decision"}')
+    assert root.items()[0] == ("item-a", '{"v":"inline"}') and root.latest_decision("item-b") == ("open", '{"payload":"d3"}')
+    root.release()
+
+
+def test_a_v1_root_whose_event_ids_are_not_one_to_n_is_refused_rather_than_renumbered():
+    from .s3_embedded_storage import legacy_empty
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    value = legacy_empty()
+    value["data"]["events"] = [[1, "{}"], [3, "{}"]]
+    journal(client, name="root").initialize(value)
+    with pytest.raises(ValueError, match="1..n"):
+        _reopened(client)
