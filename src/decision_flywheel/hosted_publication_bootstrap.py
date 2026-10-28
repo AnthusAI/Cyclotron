@@ -123,10 +123,7 @@ def install_bootstrap_route(app, runtime):
                 or set(body["config"]) != {"cyclotron_id", "cyclotron_definition_revision", "item_list_id"}
                 or type(body["config"]["cyclotron_definition_revision"]) is not int
                 or body["config"]["cyclotron_definition_revision"] < 1
-                or any(
-                    not isinstance(body["config"][k], str) or not body["config"][k]
-                    for k in ("cyclotron_id", "item_list_id")
-                )
+                or any(not isinstance(body["config"][k], str) or not body["config"][k] for k in ("cyclotron_id", "item_list_id"))
             ):
                 raise ValueError()
             uuid(body["requestId"])

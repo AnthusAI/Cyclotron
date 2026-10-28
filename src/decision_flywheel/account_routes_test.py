@@ -451,9 +451,7 @@ def test_http_event_page_returns_a_megabyte_event_whole_and_an_outage_returns_no
         url = f"/api/runs/{run['id']}/events"
         whole = client.get(url, params={"account": account_id})
         assert whole.status_code == 200
-        assert [event["payload"]["text"] for event in whole.json()["events"] if event["sourceId"] == "large"] == [
-            "x" * 1048576
-        ]
+        assert [event["payload"]["text"] for event in whole.json()["events"] if event["sourceId"] == "large"] == ["x" * 1048576]
 
         def outage(*args, **kwargs):
             raise ProspectusUnavailable("synthetic unavailable")

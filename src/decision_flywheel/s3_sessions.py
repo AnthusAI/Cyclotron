@@ -54,11 +54,7 @@ class KMSSessionCipher:
         context = self._context(kind, reference)
         if set(envelope) != {"key", "nonce", "body"}:
             raise ValueError("invalid envelope")
-        values = {
-            key: base64.b64decode(value, validate=True)
-            for key, value in envelope.items()
-            if isinstance(value, str)
-        }
+        values = {key: base64.b64decode(value, validate=True) for key, value in envelope.items() if isinstance(value, str)}
         if set(values) != set(envelope) or len(values["nonce"]) != 12:
             raise ValueError("invalid envelope")
         result = self.client.decrypt(KeyId=self.key_arn, CiphertextBlob=values["key"], EncryptionContext=context)
