@@ -105,7 +105,7 @@ class HostedCommandWorker:
     ):
         self.decision_events = decision_events
         self.clock = clock
-        self.last_job_seconds = 0.0
+        self.longest_job_seconds = 0.0
         self.allow_live = allow_live
         self.publication_runtime_for_command = publication_runtime_for_command
         self.command_policy = command_policy
@@ -122,8 +122,12 @@ class HostedCommandWorker:
             self.decision_events.notify(job, actor, status)
 
     def _has_time(self, remaining):
-        """Start another job only with room for twice the last one; an invocation never runs out mid job."""
-        return remaining is None or remaining() > 2 * self.last_job_seconds
+        """Start another job only with room for twice the longest one this invocation has run.
+
+        Job times vary (a slow model reply can take several times a quick one), so the last job alone is not a
+        safe guide: a job cut off by the Lambda timeout keeps its running claim and holds its run's queue.
+        """
+        return remaining is None or remaining() > 2 * self.longest_job_seconds
 
     async def deliver(self, message, remaining=None):
         """Run the delivered job, then the jobs queued behind it in its run, while this invocation has time.
@@ -134,7 +138,7 @@ class HostedCommandWorker:
         """
         started = self.clock()
         result = await self.process(message)
-        self.last_job_seconds = self.clock() - started
+        self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
         while result["status"] in ("completed", "failed") and self._has_time(remaining):
             store = await asyncio.to_thread(self.store_for_account, message["accountId"])
             head = await asyncio.to_thread(store.queue_head, message["runId"])
@@ -143,7 +147,7 @@ class HostedCommandWorker:
             message = {"accountId": message["accountId"], "runId": message["runId"], "jobId": head["id"]}
             started = self.clock()
             result = await self.process(message)
-            self.last_job_seconds = self.clock() - started
+            self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
         return result
 
     async def sweep(self, account_id, remaining=None):

@@ -603,7 +603,7 @@ Resources:
         - WorkerRole
         - Arn
       Runtime: python3.13
-      Timeout: 180
+      Timeout: 900
       Environment:
         Variables:
           CYCLOTRON_ISSUER:

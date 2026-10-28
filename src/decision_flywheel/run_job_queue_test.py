@@ -294,3 +294,21 @@ def test_a_long_article_is_queued_with_only_a_reference_in_the_catalog_and_runs_
         s.command(run["id"], "req-long", "publication", {**payload, "item": {"id": "hn-long", "values": {"title": "U"}}})
     stored = next(r for r in s._read()["snapshot"]["tables"]["web_jobs"] if r["id"] == job["id"])
     assert body not in stored["payload"] and "valuesRef" in stored["payload"]
+
+
+def test_a_quick_job_after_a_slow_one_does_not_license_a_third_without_room_for_the_slow_one_twice():
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+    jobs = [s.enqueue_authorized_command(run["id"], f"job-{n}", "prepare", {}, actor) for n in range(3)]
+    process, now = worker.process, [0.0]
+
+    async def timed(message):  # the first job takes 80 seconds, the second 10
+        result = await process(message)
+        now[0] += 80.0 if message["jobId"] == jobs[0]["id"] else 10.0
+        return result
+
+    worker.process, worker.clock = timed, lambda: now[0]
+    refs = {"accountId": actor.account_id, "runId": run["id"]}
+    remaining = lambda: 250 - now[0]  # noqa: E731
+    assert asyncio.run(worker.deliver({**refs, "jobId": jobs[0]["id"]}, remaining))["jobId"] == jobs[1]["id"]
+    # 160 s are left after the quick job: room for twice it (20 s), but not twice the slow one (160 s).
+    assert s.queue_state(jobs[2]["id"])["ready"]
