@@ -10,6 +10,8 @@ snapshot (`aws cloudformation get-template --template-stage Original`), empty
 
 **No pending changes.**
 
+Previously: fewer S3 calls in sequence per decision (lab code c977e86, package sha256 `96954c94ccd0e70de286d549fe5328093004851349f9bf6b923526f6ec7d04c7`), deployed on 2026-10-28 with change set `serial-c977e86` at 19:54Z. Code only; the snapshot was refreshed.
+
 Previously: constant-cost storage (lab code 8b825ed, package sha256 `8546da09724174429bc350c9f1da63b005d913f83c3fb47b8aa62df67513606d`), deployed on 2026-10-28 with change set `storage-8b825ed` at 16:10Z, after change set `books-list-8b825ed` at 16:08Z deployed list access on the books bucket for the BFF and worker roles. One statement is appended to
 each role's policy: `s3:ListBucket` on the books bucket itself. Without it, S3 answers a GET of a key nobody
 wrote with AccessDenied rather than NoSuchKey, so storage cannot tell a new key from a forbidden one; the
