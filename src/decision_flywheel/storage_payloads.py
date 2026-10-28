@@ -7,6 +7,7 @@ authorization. Importing this module neither imports an AWS SDK nor finds creds.
 import os
 import re
 import tempfile
+import weakref
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -119,6 +120,21 @@ class FilePayloads(_Payloads):
             raise PayloadUnavailable("canonical payload unavailable", cause_name(error)) from None
 
 
+# Verified bytes of content-addressed S3 objects, shared by every adapter on the same injected client for the
+# life of the process. An object under a digest is create-only and never changes, so once one GET has verified
+# its digest and length, no later read in this process needs to fetch it again. Only verified reads are kept
+# (never the bytes of a put), so a payload altered under its digest before this process first read it still
+# fails closed. Keyed weakly by the client; a client that cannot be weakly referenced shares nothing.
+_VERIFIED_BY_CLIENT = weakref.WeakKeyDictionary()
+
+
+def _verified_cache(client):
+    try:
+        return _VERIFIED_BY_CLIENT.setdefault(client, {})
+    except TypeError:
+        return None
+
+
 class S3Payloads(_Payloads):
     """Native create-only S3 writes; SDK client is explicitly injected.
 
@@ -174,11 +190,18 @@ class S3Payloads(_Payloads):
 
     def get(self, reference):
         self._check(reference)
+        cache = _verified_cache(self.client)
+        key = (self.bucket, self.owner, self.scope.key, reference.digest, reference.length)
+        if cache is not None and key in cache:
+            return cache[key]
         try:
             # A GET is idempotent, so one transient failure is retried; corruption never is.
-            return read_with_one_retry(lambda: self._fetch(reference), "payload")
+            content = read_with_one_retry(lambda: self._fetch(reference), "payload")
         except PayloadCorrupt:
             raise
         except Exception as error:
             log.warning("canonical payload unavailable: %s", cause_name(error))
             raise PayloadUnavailable("canonical payload unavailable", cause_name(error)) from None
+        if cache is not None:
+            cache[key] = content
+        return content

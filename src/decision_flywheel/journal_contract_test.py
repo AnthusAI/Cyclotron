@@ -127,7 +127,7 @@ def test_a_steady_state_s3_read_costs_two_gets_and_a_commit_costs_none_for_the_a
     assert opened.anchor_key not in [request["Key"] for _, request in fake.calls]
 
 
-def test_a_new_s3_handle_reads_the_anchor_once_then_two_gets_per_read():
+def test_a_new_s3_handle_reads_the_anchor_and_transaction_once_then_only_the_head():
     fake = ConditionalS3()
     s3_journal(fake).initialize({"n": 0})
     reopened = s3_journal(fake)
@@ -136,4 +136,5 @@ def test_a_new_s3_handle_reads_the_anchor_once_then_two_gets_per_read():
     first_read_gets = len(fake.calls)
     fake.calls.clear()
     reopened.read()
-    assert (first_read_gets, len(fake.calls)) == (3, 2)
+    # The transaction a head names is immutable: once verified it is never fetched again in this process.
+    assert (first_read_gets, len(fake.calls)) == (3, 1)

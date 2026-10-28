@@ -208,3 +208,25 @@ def test_a_filesystem_failure_keeps_its_class_name(tmp_path):
     with pytest.raises(PayloadUnavailable) as raised:
         files.get(reference)
     assert raised.value.cause == "FileNotFoundError"
+
+
+def test_a_verified_s3_payload_is_fetched_once_per_process_by_every_adapter_on_its_client():
+    client, scope = S3(), StorageScope("account-a", "workspace-a")
+    reference = S3Payloads(client, "synthetic-bucket", "111111111111", scope).put(b'{"immutable":true}')
+    for _ in range(3):
+        reopened = S3Payloads(client, "synthetic-bucket", "111111111111", scope)
+        assert reopened.get(reference) == b'{"immutable":true}'
+    assert [kind for kind, _ in client.calls].count("get") == 1
+    other = S3Payloads(S3(), "synthetic-bucket", "111111111111", scope)
+    other.client.objects = dict(client.objects)
+    assert other.get(reference) == b'{"immutable":true}' and len(other.client.calls) == 1  # another client reads its own
+
+
+def test_a_payload_altered_before_its_first_read_still_fails_closed_and_is_not_kept():
+    payloads = S3Payloads(S3(), "synthetic-bucket", "111111111111", StorageScope("account-a", "workspace-a"))
+    reference = payloads.put(b'{"preserve":true}')  # a put is never taken as a verified read
+    payloads.client.objects[payloads._key(reference.digest)] = b"corrupt"
+    for _ in range(2):
+        with pytest.raises(PayloadCorrupt):
+            payloads.get(reference)
+    assert [kind for kind, _ in payloads.client.calls].count("get") == 2
