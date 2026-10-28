@@ -1177,8 +1177,8 @@ class Cyclotron:
         model, same version), dropped. Pass the returned cursor back to
         continue; the cursor survives restarts.
         """
-        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("cursor must be nonnegative and page size between 1 and 1000")
+        if type(after) is not int or after < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("cursor must be nonnegative and page size positive")
         self._sync()
         rows = self.root_storage.events(after, limit)
         return {

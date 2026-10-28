@@ -1082,8 +1082,8 @@ class DecisionFlywheel:
                     **self.sibling_briefing(),
                     "training_predictions": [
                         event
-                        for event in self.history(1000)
-                        if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}
+                        for event in self.events_of(("prediction",))
+                        if event["target_id"] in {row.item.id for row in training}
                     ],
                 },
                 protected=tuple(row.item for row in development) + tuple(protected),

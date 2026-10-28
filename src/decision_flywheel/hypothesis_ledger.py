@@ -140,11 +140,11 @@ class HypothesisLedger:
         payload = self.storage.idea_payload(idea_id)
         return json.loads(payload) if payload else None
 
-    def _idea_text(self, idea_id, width=120):
+    def _idea_text(self, idea_id):
         idea = self._idea_payload(idea_id)
         if not idea:
             return ""
-        return " ".join(str(idea.get("rationale") or idea.get("proposal") or "").split())[:width]
+        return " ".join(str(idea.get("rationale") or idea.get("proposal") or "").split())
 
     def _idea_ids(self, context_version=None):
         return self.storage.idea_ids(context_version)
@@ -152,14 +152,12 @@ class HypothesisLedger:
     def summary_for_optimizer(
         self,
         *,
-        limit=10,
         incumbent_id=None,
-        max_item_ids=5,
         exclude_items=frozenset(),
         context_version=None,
         skip_ids=frozenset(),
     ):
-        """Compact deterministic digest, best accuracy first. Item-id lists are capped and sorted.
+        """Deterministic digest of every idea, best accuracy first, with every fixed and broke item id.
         ``exclude_items`` hides items (for example a held-out reserve) from every count and list.
         ``context_version`` restricts the digest to one kind of evidence; ``skip_ids`` drops ids (old incumbents)."""
         ids = sorted(set(self._idea_ids(context_version)) - {incumbent_id} - set(skip_ids))
@@ -177,9 +175,9 @@ class HypothesisLedger:
             if incumbent_id:
                 pair = self.paired_comparison(idea_id, incumbent_id, exclude_items, context_version)
                 entry.update(
-                    fixed=pair["gained_items"][:max_item_ids],
+                    fixed=pair["gained_items"],
                     fixed_count=pair["gained"],
-                    broke=pair["lost_items"][:max_item_ids],
+                    broke=pair["lost_items"],
                     broke_count=pair["lost"],
                 )
             last = (self.verdicts(idea_id) or [None])[-1]
@@ -193,7 +191,7 @@ class HypothesisLedger:
                 )
             rows.append(entry)
         rows.sort(key=lambda r: (-r["accuracy"], -r["items_tested"], r["idea_id"]))
-        return rows[:limit]
+        return rows
 
     def stubborn_items(self, min_ideas=3, exclude_items=frozenset(), context_version=None):
         """Items evaluated by at least ``min_ideas`` ideas that every one of them got wrong."""
@@ -370,7 +368,7 @@ class HypothesisLedger:
         return out
 
     def error_records(
-        self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None, recent=20
+        self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None
     ):
         """Stories to aim at: first those every tried idea gets wrong (stubborn), then the incumbent's newest errors.
         Each row is {item_id, label, choice, kind}; ``choice`` is the wrong answer given."""
@@ -390,7 +388,8 @@ class HypothesisLedger:
                     }
                 )
         if incumbent_id:
-            for item, label, choice in self.storage.wrong(incumbent_id, context_version, recent=recent):
+            # Every incumbent error, newest first.
+            for item, label, choice in reversed(self.storage.wrong(incumbent_id, context_version)):
                 if item not in seen and item not in exclude_items:
                     seen.add(item)
                     rows.append({"item_id": item, "label": label, "choice": choice, "kind": "incumbent-error"})

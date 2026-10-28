@@ -10,7 +10,7 @@ import pytest
 from .classifier_config import ClassifiedAnswers, ClassifierConfig
 from .flywheel import DecisionFlywheel
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import CAPS, DevelopmentScorer, IdeaScreeningConfig, confirm, reserve_member, validate_proposals
+from .idea_screening import DevelopmentScorer, IdeaScreeningConfig, confirm, reserve_member, validate_proposals
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply, parse_proposals
 from .selection_policy import SelectionPolicy
@@ -285,14 +285,11 @@ def test_the_configuration_survives_a_restart_and_can_be_replaced(tmp_path):
         IdeaScreeningConfig(reserve_fraction=1.0)
 
 
-def test_the_optimizer_digest_is_capped_and_hides_reserve_outcomes(tmp_path):
+def test_the_optimizer_digest_carries_every_idea_and_hides_reserve_outcomes(tmp_path):
     wheel, model = make(tmp_path, ["better", "same", "worse"])
     run(wheel, rows(0, 300))
     briefing = wheel.optimizer.briefings[1]  # the example_ids request, after the rubric screen
     assert briefing["control_under_test"] == "example_ids"
-    assert len(briefing["hypothesis_ledger"]) <= CAPS["ledger_ideas"]
-    assert len(briefing["stubborn_items"]) <= CAPS["stubborn_items"]
-    assert len(briefing["prior_control_ideas"]) <= CAPS["prior_ideas"]
     salt = f"{TASK.fingerprint}:idea-screening"
     shown = {i for row in briefing["hypothesis_ledger"] for i in row.get("fixed", []) + row.get("broke", [])}
     assert shown and not any(reserve_member(salt, i, ON.reserve_fraction) for i in shown)
@@ -408,3 +405,13 @@ def test_the_same_inputs_repeat_the_same_round_exactly(tmp_path):
         return out
 
     assert snapshot("a.sqlite") == snapshot("b.sqlite")
+
+
+def test_the_optimizer_sees_all_30_prior_ideas_not_only_the_newest():
+    from types import SimpleNamespace
+
+    from .idea_screening import compact_ideas
+
+    ideas = [{"id": f"idea-{n:02}", "proposal": {"rubric": str(n)}, "created_cycle": n} for n in range(30)]
+    rows = compact_ideas(ideas, SimpleNamespace(verdicts=lambda idea_id: []))
+    assert [row["id"] for row in rows] == [f"idea-{n:02}" for n in range(30)]

@@ -11,7 +11,7 @@ from .control_scheduler import ControlScheduler
 from .cycle_replay import run_cycle_replay
 from .flywheel import DecisionFlywheel
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import DEFAULT_SHADOW_MIX, OPERATOR_CAPS, IdeaScreeningConfig, incumbent_id, parse_proposal_mix
+from .idea_screening import DEFAULT_SHADOW_MIX, IdeaScreeningConfig, incumbent_id, parse_proposal_mix
 from .models import DecisionResult, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent, OptimizerReply, parse_operator_proposals
 from .proposal_operators import ask_round, nearest_novelty, target_stories, text_novelty
@@ -140,7 +140,6 @@ def test_defaults_mix_and_validation():
         {"min_novelty": 1.0},
         {"min_novelty": True},
         {"target_sample": 0},
-        {"target_sample": 99},
         {"novelty_retries": -1},
         {"proposal_mix": {"bold": 1}, "mode": "dev_screen"},
     ):
@@ -285,8 +284,7 @@ def test_the_target_sample_has_revealed_training_stories_only_with_labels_and_ex
     assert by_id["g1"]["true_label"] == "include" and by_id["g1"]["answered"] == "exclude"
     assert by_id["g1"]["human_explanation"] == "Outcome was established in the text"
     assert by_id["g1"]["title"] == "Title 1" and by_id["g1"]["error_direction"] == "true include, answered exclude"
-    assert len(by_id["g4"]["excerpt"]) <= OPERATOR_CAPS["story_chars"]
-    # the sample is capped and balanced across error directions
+    # the sample is the configured size and balanced across error directions
     many = [story(i, "include" if i < 20 else "exclude") for i in range(10, 40)]
     ledger = seed_errors(
         wheel, [(f"g{i}", "include" if i < 20 else "exclude", "exclude" if i < 20 else "include") for i in range(10, 40)]
@@ -383,7 +381,7 @@ def test_combine_sends_both_parents_and_records_them_and_is_skipped_with_an_even
     assert sorted(combined["parents"]) == sorted(p["id"] for p in block["parents"])
 
 
-def test_the_prompt_payload_is_capped(tmp_path):
+def test_the_prompt_payload_carries_whole_stories_and_whole_parent_rubrics(tmp_path):
     wheel, _ = make(
         tmp_path,
         shadow_config(proposal_mix={"bold": 1, "target": 1, "combine": 1}, target_sample=20),
@@ -403,9 +401,9 @@ def test_the_prompt_payload_is_capped(tmp_path):
     asyncio.run(ask_round(wheel, builder(wheel, training), {}, "rubric", sched.ideas(), training, (), ()))
     requests = wheel.optimizer.briefings[0]["operator_requests"]
     assert len(requests["target"]["stories"]) == 20
-    assert all(len(s["excerpt"]) <= OPERATOR_CAPS["story_chars"] for s in requests["target"]["stories"])
-    assert all(len(p["rubric"]) <= OPERATOR_CAPS["parent_rubric_chars"] for p in requests["combine"]["parents"])
-    assert len(json.dumps(requests)) < 60000
+    assert all(s["excerpt"] == " ".join(("long " * 2000).split()) for s in requests["target"]["stories"])
+    assert all(len(p["rubric"]) >= len(huge.strip()) for p in requests["combine"]["parents"])
+    assert len(json.dumps(requests)) > 60000
 
 
 # -- lineage ----------------------------------------------------------------------------------------------

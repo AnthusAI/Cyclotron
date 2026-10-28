@@ -36,11 +36,9 @@ def _example_experiments(wheel, training, development):
         summary = {key: report[key] for key in ("baseline_fingerprint", "scope", "effect_scope", "by_class")}
         summary["rankings"] = [
             {key: row[key] for key in ("examples", "brier_gain", "accuracy_change", "question_effects")}
-            for row in report["rankings"][:4]
+            for row in report["rankings"]
         ]
         reports.append(summary)
-        if len(reports) == 3:
-            break
     return reports
 
 
@@ -273,8 +271,8 @@ async def optimize_stage(
             next(
                 (
                     event
-                    for event in reversed(wheel.history(1000))
-                    if event["kind"] == "optimizer-response" and event.get("briefing_fingerprint") == briefing.fingerprint
+                    for event in reversed(wheel.events_of(("optimizer-response",)))
+                    if event.get("briefing_fingerprint") == briefing.fingerprint
                 ),
                 None,
             )
@@ -389,8 +387,8 @@ async def optimize_stage(
 
         by_id = {row.item.id: row for row in training}
         hard = {}
-        for event in wheel.history(10000):
-            if event.get("kind") == "prediction" and event.get("target_id") in by_id:
+        for event in wheel.events_of(("prediction",)):
+            if event.get("target_id") in by_id:
                 row = by_id[event["target_id"]]
                 if event.get("label") != row.label:
                     hard[row.item.id] = event.get("confidence") or 0.0

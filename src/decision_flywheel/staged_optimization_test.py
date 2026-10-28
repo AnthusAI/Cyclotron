@@ -596,3 +596,31 @@ def test_question_discovery_flows_into_classifier_training_without_rediscovering
     asyncio.run(optimize_stage(wheel, "questions", TRAIN, DEV, **kwargs))
     assert len(calls) == 1
     wheel.close()
+
+
+def test_example_experiments_in_a_briefing_carry_every_ranking_of_every_current_report():
+    import json as _json_module
+    from types import SimpleNamespace
+
+    from .staged_optimization import _example_experiments
+
+    def report(n):
+        return {
+            "answer_dependencies": {},
+            "development_evidence": {"d": 1},
+            "baseline_fingerprint": f"b{n}",
+            "scope": "s",
+            "effect_scope": "e",
+            "by_class": {},
+            "rankings": [
+                {"examples": [f"x{r}"], "brier_gain": 0.0, "accuracy_change": 0.0, "question_effects": {}} for r in range(9)
+            ],
+        }
+
+    wheel = SimpleNamespace(
+        _evidence=lambda rows: {"d": 1},
+        answer_dependencies_current=lambda dependencies: True,
+        learning_storage=SimpleNamespace(completed=lambda stage: [(n, _json_module.dumps(report(n))) for n in range(7)]),
+    )
+    reports = _example_experiments(wheel, (), ())
+    assert len(reports) == 7 and all(len(row["rankings"]) == 9 for row in reports)
