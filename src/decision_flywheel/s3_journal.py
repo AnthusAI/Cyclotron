@@ -6,10 +6,16 @@ logic itself lives in journal.py; this module supplies the S3 conditional
 reads and writes.
 """
 
+import weakref
+
 from .journal import CanonicalJournal, JournalConflict, JournalUnavailable, JournalUncertain, decode, encode
 from .journal import uuid as uuid
 from .s3_transient import cause_name, log, read_with_one_retry
 from .storage_payloads import S3Payloads
+
+# Per injected client: (bucket, owner) -> {anchor key: verified anchor} (see CanonicalJournal._anchors).
+# Keyed weakly by the client, as the payload caches are.
+_ANCHORS_BY_CLIENT = weakref.WeakKeyDictionary()
 
 
 class S3Journal(CanonicalJournal):
@@ -32,6 +38,13 @@ class S3Journal(CanonicalJournal):
             create_only_initialization=create_only_initialization,
         )
         self.boundary = (payloads.scope, payloads.bucket, payloads.owner)
+
+    def _anchors(self):
+        try:
+            per_client = _ANCHORS_BY_CLIENT.setdefault(self.payloads.client, {})
+        except TypeError:
+            return None
+        return per_client.setdefault((self.payloads.bucket, self.payloads.owner), {})
 
     def _fetch(self, key):
         stream = None

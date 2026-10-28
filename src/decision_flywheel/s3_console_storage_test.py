@@ -514,7 +514,8 @@ def test_one_request_reads_the_catalog_once_across_resolvers_until_its_own_write
     mark = len(client.calls)
     for _ in range(7):
         request.item_lists()
-    assert len(catalog_payload_gets(client, mark)) == 1
+    # At most once: a catalog payload the writer already verified on this client is not fetched again.
+    assert len(catalog_payload_gets(client, mark)) <= 1
     heads = [r for kind, r in client.calls[mark:] if kind == "get" and r["Key"].endswith("head.json")]
     assert len(heads) == 1
     request.save_item_list("later", "Later")

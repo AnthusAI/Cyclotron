@@ -806,57 +806,18 @@ class DecisionFlywheel:
                 }
             )
 
-    async def _answers(self, config, target, training, now, cache_options=None):
-        from .decision_cache import CacheMiss, CacheOptions
+    async def _answers(self, config, target, training, now, cache_options=None, *, plan=None):
+        """The decision model's answers for one request: recorded ones when complete, else one reserved call.
 
-        options = cache_options if cache_options is not None else self.cache_options
-        if not isinstance(options, CacheOptions):
-            raise ValueError("cache_options must be CacheOptions")
-        request = config.request(target, training, now=now)
-        capabilities = getattr(self.model, "capabilities", None)
-        if capabilities is not None:
-            capabilities.validate_context(request["state"]["examples"])
-        identity = getattr(self.model, "cache_identity", None)
-        key = self._answer_key(config, target, training, now)
-        row = self.runtime_cache.answer(key)
-        self._emit(
-            {
-                "kind": "decision-cache",
-                "request_fingerprint": key,
-                "policy": options.policy,
-                "status": row[0] if row else "missing",
-                "retry_failed": options.retry_failed,
-            }
-        )
-        if options.policy == "cache_only" and (not row or row[0] != "complete"):
-            raise CacheMiss("no complete answer exists for the exact decision request")
-        if row and row[0] != "complete" and not options.retry_failed:
-            raise RuntimeError("an interrupted or failed request needs explicit retry authorization")
-        if row and row[0] == "complete" and options.policy != "refresh":
-            raw = json.loads(row[1])
-            self._emit(
-                {
-                    "kind": "features-cached",
-                    "target_id": target.id,
-                    "request_fingerprint": key,
-                    "request": request,
-                    "answers": raw["answers"],
-                    "cached": True,
-                }
-            )
-            self._record_answer_dependencies([self.answer_dependency(config, target, training, now)])
-            return ClassifiedAnswers(
-                {name: DecisionResult(**result) for name, result in raw["answers"].items()},
-                raw["model"],
-                raw["usage"],
-                raw["latency_ms"],
-            )
-        if self.max_requests is not None and self.requests >= self.max_requests:
-            from .observability import RequestBudgetExhausted
-
-            raise RequestBudgetExhausted("decision-model request ceiling reached")
-        self.requests += 1
-        self.runtime_cache.begin_answer(key, row)
+        ``plan`` is what ``_plan_answers`` returned for this same request; a planned reservation made by the
+        caller (``plan.reserve``, e.g. together with other outputs') is not made again.
+        """
+        plan = plan if plan is not None else self._plan_answers(config, target, training, now, cache_options)
+        if plan.cached is not None:
+            return plan.cached
+        if not plan.reserved:
+            plan.reserve()
+        key, row, options, identity, request = plan.key, plan.row, plan.options, plan.identity, plan.request
         self._emit(
             {
                 "kind": "features-requested",
@@ -897,6 +858,77 @@ class DecisionFlywheel:
         self._record_answer_dependencies([self.answer_dependency(config, target, training, now)])
         return batch
 
+    def _plan_answers(self, config, target, training, now, cache_options=None):
+        """Everything ``_answers`` does before reserving a paid call; no await, so it cannot interleave.
+
+        The result carries the recorded answers when they are complete (``cached``), otherwise ``reserve``:
+        the durable reservation the call needs first. A caller may make it (and set ``reserved``) before
+        ``_answers`` continues, for instance together with the reservations of other outputs.
+        """
+        from types import SimpleNamespace
+
+        from .decision_cache import CacheMiss, CacheOptions
+
+        options = cache_options if cache_options is not None else self.cache_options
+        if not isinstance(options, CacheOptions):
+            raise ValueError("cache_options must be CacheOptions")
+        request = config.request(target, training, now=now)
+        capabilities = getattr(self.model, "capabilities", None)
+        if capabilities is not None:
+            capabilities.validate_context(request["state"]["examples"])
+        identity = getattr(self.model, "cache_identity", None)
+        key = self._answer_key(config, target, training, now)
+        row = self.runtime_cache.answer(key)
+        self._emit(
+            {
+                "kind": "decision-cache",
+                "request_fingerprint": key,
+                "policy": options.policy,
+                "status": row[0] if row else "missing",
+                "retry_failed": options.retry_failed,
+            }
+        )
+        if options.policy == "cache_only" and (not row or row[0] != "complete"):
+            raise CacheMiss("no complete answer exists for the exact decision request")
+        if row and row[0] != "complete" and not options.retry_failed:
+            raise RuntimeError("an interrupted or failed request needs explicit retry authorization")
+        if row and row[0] == "complete" and options.policy != "refresh":
+            raw = json.loads(row[1])
+            self._emit(
+                {
+                    "kind": "features-cached",
+                    "target_id": target.id,
+                    "request_fingerprint": key,
+                    "request": request,
+                    "answers": raw["answers"],
+                    "cached": True,
+                }
+            )
+            self._record_answer_dependencies([self.answer_dependency(config, target, training, now)])
+            cached = ClassifiedAnswers(
+                {name: DecisionResult(**result) for name, result in raw["answers"].items()},
+                raw["model"],
+                raw["usage"],
+                raw["latency_ms"],
+            )
+            return SimpleNamespace(cached=cached, reserve=None, reserved=False)
+        if self.max_requests is not None and self.requests >= self.max_requests:
+            from .observability import RequestBudgetExhausted
+
+            raise RequestBudgetExhausted("decision-model request ceiling reached")
+        self.requests += 1
+        return SimpleNamespace(
+            cached=None,
+            # The reservation grants the paid call, so it is durable before the call is made.
+            reserve=lambda: self.runtime_cache.begin_answer(key, row),
+            reserved=False,
+            key=key,
+            row=row,
+            options=options,
+            identity=identity,
+            request=request,
+        )
+
     @staticmethod
     def _features(config, batch):
         tasks = {"decision": config.task, **{task.name: task for task in config.tasks}}
@@ -911,12 +943,36 @@ class DecisionFlywheel:
                 values[f"{name}/{label}"] = answer.probabilities[label]
         return values
 
-    async def predict(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None, cache_options=None):
+    def plan_prediction(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None, cache_options=None):
+        """The part of ``predict`` before its paid-call reservation, with no await.
+
+        ``plan.answers.reserve`` is that reservation (None when the answers are recorded already). Pass the
+        plan to ``predict`` to finish; a caller that made the reservation itself sets ``plan.answers.reserved``.
+        """
+        from types import SimpleNamespace
+
         self.reconcile_feedback(training)
         self.reconcile_model_context(training)
         now = now or datetime.now(timezone.utc)
         composition = self.active.config.compose(target, training, now=now)[1]
-        batch = await self._answers(self.active.config, target, training, now, cache_options)
+        answers = self._plan_answers(self.active.config, target, training, now, cache_options)
+        return SimpleNamespace(target=target, training=training, now=now, composition=composition, answers=answers)
+
+    async def predict(
+        self,
+        target: Item,
+        training: Sequence[LabeledItem],
+        *,
+        now: datetime | None = None,
+        cache_options=None,
+        plan=None,
+    ):
+        if plan is None:
+            plan = self.plan_prediction(target, training, now=now, cache_options=cache_options)
+        elif plan.target is not target or plan.training is not training:
+            raise ValueError("a prediction plan finishes only the prediction it was made for")
+        now, composition = plan.now, plan.composition
+        batch = await self._answers(self.active.config, target, training, now, cache_options, plan=plan.answers)
         # A refresh can replace a consumed training response during this call.
         self.reconcile_model_context(training)
         if self.active.head:

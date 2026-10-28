@@ -716,11 +716,11 @@ def test_a_status_step_writes_nothing_because_its_saved_status_fold_waits_for_th
             await drain(worker, sent)
 
     asyncio.run(go())
-    outer = spent[1::2]
+    outer = spent  # one status step per publication, all under one guarded execution
     assert len(outer) == 4
     print(f"S3 writes during each status step: {outer}; whole job: {puts[0]}")
     # The saved status fold (so no snapshot rereads history) is a derived summary: the runtime holds it and
-    # publishes it with the release commit, so a status step itself writes nothing.
+    # publishes it with the flush that ends the job, so a status step itself writes nothing.
     assert outer == [0, 0, 0, 0]
 
 

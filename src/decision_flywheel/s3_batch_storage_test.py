@@ -931,3 +931,92 @@ def test_a_migration_interrupted_midway_leaves_the_old_head_and_a_rerun_finishes
     assert rerun.journal.read().value["schema"] == "cyclotron-shared-batches/v2"
     assert rerun.journal.read().value["records"]["shared-batches/attempts-ledger"] == {"last": 41, "skipped": []}
     assert rerun.export()["batches"][:40] == before["batches"] and model.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# One guarded call shares one ledger head for its lookups; its writes still read the live head
+# ---------------------------------------------------------------------------
+
+
+def ledger_head_gets(s, since):
+    return sum(kind == "get" and r["Key"] == s.journal.head_key for kind, r in s.journal.payloads.client.calls[since:])
+
+
+def test_a_pinned_call_reads_the_ledger_head_once_however_many_lookups_it_makes():
+    s = store()
+    paid(s, "a" * 64, '{"ok":true}')
+    s.pin_reads()
+    mark = len(s.journal.payloads.client.calls)
+    for _ in range(25):
+        assert s.get("a" * 64, payload=False).generation == 1 and s.requests() == 1
+    assert ledger_head_gets(s, mark) == 1
+    s.pin_reads()  # the next guarded call sees the head as it is then
+    assert s.get("a" * 64, payload=False).generation == 1 and ledger_head_gets(s, mark) == 2
+
+
+def test_an_unpinned_handle_still_reads_the_live_head_for_every_lookup():
+    s = store()
+    paid(s, "a" * 64, '{"ok":true}')
+    mark = len(s.journal.payloads.client.calls)
+    for _ in range(3):
+        s.get("a" * 64, payload=False)
+    assert ledger_head_gets(s, mark) == 3
+
+
+def test_a_lookup_pinned_before_another_workers_reservation_never_lets_this_one_pay_twice():
+    s = store()
+    client = s.journal.payloads.client
+    s.pin_reads()
+    assert s.get("a" * 64) is None
+    rival = store(journal(client))
+    rival.reserve("a" * 64, 5, str(uuid4()), claim=True)
+    assert s.get("a" * 64) is None  # the pinned call still sees the head it read
+    with pytest.raises(BatchInProgress):
+        s.reserve("a" * 64, 5, str(uuid4()), claim=True)  # but a reservation reads the live head first
+    assert rival.requests() == 1
+
+
+def test_a_pinned_call_never_retries_an_interrupted_request_it_was_not_told_to():
+    s = store()
+    owner = str(uuid4())
+    s.reserve("a" * 64, 5, owner, claim=True)
+    s.settle("a" * 64, owner, "interrupted")
+    s.pin_reads()
+    assert s.get("a" * 64).status == "interrupted"
+    with pytest.raises(RuntimeError, match="explicit retry required"):
+        s.reserve("a" * 64, 5, str(uuid4()), claim=True)
+    assert s.requests() == 1
+
+
+def test_one_guarded_decision_reads_the_ledger_head_a_fixed_few_times_whatever_its_output_count():
+    import asyncio
+    from datetime import datetime, timezone
+
+    from .classifier_config import ClassifierConfig
+    from .models import DecisionTask, Item
+    from .shared_decisions import SharedDecisions
+
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    spent = {}
+    for outputs in (3, 6):
+        s, model = store(), Model()
+        configs = {f"out-{n}": ClassifierConfig(DecisionTask(f"out-{n}", ("yes", "no"), "Relevant?")) for n in range(outputs)}
+        consumer = SharedDecisions(None, model, max_requests=None, observer=lambda _: None, storage=s)
+        consumer.bind_context(configs, {name: () for name in configs})
+        target = Item("item-a", {"text": "Synthetic"})
+        s.pin_reads()  # the execution boundary of the guarded call
+        mark = len(s.journal.payloads.client.calls)
+
+        async def decision():
+            for name, config in configs.items():
+                adapter = consumer.adapter(name)
+                adapter.cache_identity(config, target, (), now=now)
+                await adapter.classify(config, target, (), now=now)
+                adapter.answer_dependency(config, target, (), now=now)
+                adapter.cache_identity(config, target, (), now=now)
+
+        asyncio.run(decision())
+        spent[outputs] = ledger_head_gets(s, mark)
+        assert model.calls == 1
+    # One read for the call's lookups, then the reservation and the settlement each read the live head.
+    assert spent == {3: 3, 6: 3}

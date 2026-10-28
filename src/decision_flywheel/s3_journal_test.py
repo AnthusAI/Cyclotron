@@ -359,3 +359,26 @@ def test_writes_and_conditional_puts_are_never_retried():
         j.commit(first, {"n": 2})
     assert len(attempts) == 1
     j.payloads.client.put_object = real
+
+
+def test_a_verified_anchor_is_read_once_per_process_and_a_replaced_one_still_fails_closed():
+    from .s3_journal import JournalUnavailable
+
+    client = ConditionalS3()
+    journal(client).initialize({"n": 0})
+    journal(client).read()  # the first handle to read it verifies the anchor
+    mark = len(client.calls)
+    for _ in range(3):
+        assert journal(client).initialize({"n": 0}).value == {"n": 0}
+    keys = [r["Key"] for kind, r in client.calls[mark:] if kind == "get"]
+    assert not any(key.endswith("anchor.json") for key in keys)
+    # An operator re-creates the namespace under a new anchor: the remembered one no longer matches its head.
+    other = ConditionalS3()
+    journal(other).initialize({"n": 0})
+    for key in (journal(client).anchor_key, journal(client).head_key):
+        client.objects[key] = other.objects[key]
+    with pytest.raises(JournalUnavailable):
+        journal(client).read()
+    for key, value in other.objects.items():
+        client.objects.setdefault(key, value)  # the reconciled namespace is complete again
+    assert journal(client).read().value == {"n": 0}

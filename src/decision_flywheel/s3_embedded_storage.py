@@ -34,7 +34,8 @@ from copy import deepcopy
 from hashlib import sha256
 from uuid import uuid4
 
-from .journal import Journal, commit_with_contract, uuid
+from .concurrent_calls import call_concurrently
+from .journal import CanonicalJournal, Journal, commit_with_contract, uuid
 from .keyed_records import keyed_documents_for, resolve
 from .record_lake import RECORDS_KEY, Coverage, FileRecordLake, RecordConflict, S3RecordLake, coverage_in, with_coverage
 from .s3_batch_storage import S3BatchStorage, reply_lake_for
@@ -264,10 +265,21 @@ class S3EmbeddedStorage:
 
     def refresh(self):
         self.flush()
-        self._cached = None
+        self.reread()
+
+    def reread(self):
+        """Read the head again and check this handle still owns it; nothing held is published.
+
+        The record this handle last committed or read is offered as known, so an unchanged head costs only
+        its GET (the transaction it names is immutable and already in hand).
+        """
+        known, self._cached = self._cached, None
         if self.poisoned:
             raise RuntimeOwnershipError("uncertain root transaction; reopen/reconcile before continuing")
-        record = self.journal.read()
+        if known is not None and isinstance(self.journal, CanonicalJournal):
+            record = self.journal.read(known=known)
+        else:
+            record = self.journal.read()
         self._validate(record.value)
         self._owned(record.value)
         self._cached = record
@@ -814,6 +826,7 @@ class S3CyclotronStores:
         self.lease = self
         self.batch_storage = None
         self.runtimes = {}
+        self.prepared = {}  # Acquired together by open_classifier_runtimes, not yet taken by an output.
 
     def _journal(self, domain, identifier):
         root = self.root_storage.journal
@@ -835,13 +848,41 @@ class S3CyclotronStores:
             self.root_storage.release()
             raise
 
-    def runtime_for_classifier(self, identifier):
-        if identifier in self.runtimes:
-            raise ValueError("classifier runtime already opened")
+    def _open_runtime(self, identifier):
         journal = self._journal("runtime", identifier)
         runtime = S3RuntimeStores(journal, cache_owned=True, events_lake=runtime_events_lake(journal))
         runtime.initialize()
         runtime.acquire(self.owner)
+        return runtime
+
+    def open_classifier_runtimes(self, identifiers):
+        """Initialize and acquire every named output's runtime at once, ready for ``runtime_for_classifier``.
+
+        All or nothing: when any one cannot be acquired, the ones that were are released again and the first
+        failure in the given order is raised.
+        """
+        identifiers = list(identifiers)
+        if len(set(identifiers)) != len(identifiers) or set(identifiers) & (set(self.runtimes) | set(self.prepared)):
+            raise ValueError("classifier runtime already opened")
+        opened = {}
+
+        def open_one(identifier):
+            opened[identifier] = self._open_runtime(identifier)
+
+        try:
+            call_concurrently([lambda identifier=identifier: open_one(identifier) for identifier in identifiers])
+        except BaseException:
+            try:
+                call_concurrently([runtime.close for runtime in opened.values()])
+            except BaseException:  # noqa: BLE001 - the acquire failure is the one to report
+                pass
+            raise
+        self.prepared.update({identifier: opened[identifier] for identifier in identifiers})
+
+    def runtime_for_classifier(self, identifier):
+        if identifier in self.runtimes:
+            raise ValueError("classifier runtime already opened")
+        runtime = self.prepared.pop(identifier) if identifier in self.prepared else self._open_runtime(identifier)
         self.runtimes[identifier] = runtime
         return runtime
 
@@ -852,20 +893,35 @@ class S3CyclotronStores:
 
     def execution_boundary(self):
         # Called only after the public per-call human/tenant guard succeeds.
-        # Native ownership excludes other writers; CAS still fences every write.
-        self.root_storage.refresh()
-        for runtime in self.runtimes.values():
-            runtime.refresh()
+        # Native ownership excludes other writers; CAS still fences every write. The heads are still read
+        # here, so a fence an operator moved is refused before this call reads state or pays a provider
+        # (a stale handle's own write would fail only after the paid call). They are independent GETs of
+        # immutable-backed heads, so they go out together: one round trip, however many runtimes are open.
+        # The shared ledger has no owner; its reads share one head for this call, its writes still read the
+        # live head first.
+        self.root_storage.flush()
+        call_concurrently([self.root_storage.reread, *(runtime.refresh for runtime in self.runtimes.values())])
+        if self.batch_storage is not None:
+            self.batch_storage.pin_reads()
+
+    def flush(self):
+        """Publish what the outputs and the root hold in memory, the outputs at once. Ownership is kept."""
+        call_concurrently([runtime.flush for runtime in self.runtimes.values()])
+        self.root_storage.flush()
+
+    @staticmethod
+    def run_concurrently(calls):
+        """An engine's independent per-output calls over these stores, at once (see ``concurrent_calls``)."""
+        return call_concurrently(calls)
 
     def release(self):
         errors = []
-        runtimes = list(self.runtimes.values())
-        self.runtimes = {}
-        for runtime in runtimes:
-            try:
-                runtime.close()
-            except BaseException as error:
-                errors.append(error)
+        runtimes = [*self.runtimes.values(), *self.prepared.values()]
+        self.runtimes, self.prepared = {}, {}
+        try:
+            call_concurrently([runtime.close for runtime in runtimes])
+        except BaseException as error:
+            errors.append(error)
         try:
             self.root_storage.release()
         except BaseException as error:

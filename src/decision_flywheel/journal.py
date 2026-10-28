@@ -103,6 +103,26 @@ class CanonicalJournal:
     def _put(self, key, value, etag=None):
         raise NotImplementedError
 
+    def _anchors(self):
+        """A process-wide map from anchor key to the anchor a GET verified there, or None to keep none.
+
+        An anchor is create-only and never replaced, so a later handle on the same store need not GET it again.
+        Only anchors read back are kept, never one this process just created. A namespace an operator removed
+        or re-anchored still fails closed: its head is missing or names another anchor, so reads refuse it.
+        """
+        return None
+
+    def _verified_anchor(self, value):
+        anchor = self._checked_anchor(value)
+        anchors = self._anchors()
+        if anchors is not None:
+            anchors[self.anchor_key] = anchor
+        return anchor
+
+    def _remembered_anchor(self):
+        anchors = self._anchors()
+        return anchors.get(self.anchor_key) if anchors is not None else None
+
     def _checked_anchor(self, value):
         try:
             if (
@@ -118,7 +138,7 @@ class CanonicalJournal:
     def _anchor(self):
         # The anchor is immutable once created, so one verified read serves the handle.
         if self.known_anchor is None:
-            self.known_anchor = self._checked_anchor(self._get(self.anchor_key)[0])
+            self.known_anchor = self._remembered_anchor() or self._verified_anchor(self._get(self.anchor_key)[0])
         return self.known_anchor
 
     def _head(self, anchor, revision, commit_id, reference):
@@ -150,6 +170,8 @@ class CanonicalJournal:
         return self._head(anchor, revision, commit_id, reference), reference, commit_id
 
     def exists(self):
+        if self.known_anchor is not None or self._remembered_anchor() is not None:
+            return True
         if self._get(self.anchor_key, missing=True) is not None:
             return True
         if self._get(self.head_key, missing=True) is not None:
@@ -162,9 +184,13 @@ class CanonicalJournal:
         # A no-ListBucket principal cannot distinguish missing from forbidden GET.
         # Only explicit initialization may probe this ambiguity: successful
         # create-only anchor AND head receipts establish creation, never the GET.
+        remembered = self._remembered_anchor()
+        if remembered is not None:
+            self.known_anchor = remembered
+            return self.read() if read_existing else None
         existing = self._get(self.anchor_key, missing=True, creation_probe=self.create_only_initialization)
         if existing is not None:
-            self.known_anchor = self._checked_anchor(existing[0])
+            self.known_anchor = self._verified_anchor(existing[0])
             return self.read() if read_existing else None
         if self._get(self.head_key, missing=True, creation_probe=self.create_only_initialization) is not None:
             raise JournalUnavailable("head exists without namespace anchor; operator reconciliation required")
@@ -188,6 +214,12 @@ class CanonicalJournal:
         """
         anchor = self._anchor()
         head, etag = self._get(self.head_key)
+        if isinstance(head, dict) and head.get("anchor") != anchor:
+            # Refused below. Forget the anchor too, so a namespace an operator re-anchored is read afresh next time.
+            self.known_anchor = None
+            anchors = self._anchors()
+            if anchors is not None:
+                anchors.pop(self.anchor_key, None)
         try:
             if (
                 set(head) != {"schema", "namespace", "anchor", "revision", "commit", "state"}

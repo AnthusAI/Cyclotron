@@ -72,5 +72,23 @@ def test_a_refused_read_is_an_error_never_an_absent_key():
     assert all(kind == "get" for kind, _ in client.calls)
 
 
+def test_a_write_refused_for_a_document_that_did_not_change_fails_instead_of_retrying_forever():
+    client = ConditionalS3()
+    documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
+    current = documents.store("item", "a", None, Coverage(), 1, {"v": 1})
+    puts = []
+
+    def refused(**request):
+        puts.append(request)
+        raise S3Error("PreconditionFailed")
+
+    client.put_object = refused
+    with pytest.raises(KeyedUnavailable):
+        documents.store("item", "a", current, Coverage(1), 2, {"v": 2})
+    with pytest.raises(KeyedUnavailable):
+        documents.store("item", "b", None, Coverage(), 1, {"v": 1})
+    assert len(puts) == 2
+
+
 def test_only_a_missing_key_reads_as_absent(documents):
     assert documents.load("item", "never-written") is None

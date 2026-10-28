@@ -52,6 +52,34 @@ def test_runtime_owner_is_exclusive_releases_explicitly_and_fences_the_old_handl
     other.close()
 
 
+def test_acquiring_a_free_runtime_right_after_initializing_it_reads_nothing_more():
+    from .s3_runtime_storage import S3RuntimeStores
+
+    client = stores().journal.payloads.client
+    fresh = S3RuntimeStores(journal(client, name="classifier-b"), cache_owned=True)
+    fresh.initialize()
+    mark = len(client.calls)
+    fresh.acquire(str(uuid4()))
+    assert [kind for kind, _ in client.calls[mark:]].count("get") == 0
+    assert fresh.journal.read().value["owner"] == fresh.authority[0]
+    fresh.close()
+
+
+def test_a_runtime_taken_between_initialize_and_acquire_is_still_refused():
+    from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
+
+    client = stores().journal.payloads.client
+    late = S3RuntimeStores(journal(client, name="classifier-c"))
+    late.initialize()  # sees the runtime free
+    winner = S3RuntimeStores(journal(client, name="classifier-c"))
+    winner.initialize()
+    winner.acquire(str(uuid4()))
+    with pytest.raises(RuntimeOwnershipError):
+        late.acquire(str(uuid4()))  # its conditional write fails, and the live head shows the winner
+    assert late.authority is None and winner.journal.read().value["owner"] == winner.authority[0]
+    winner.close()
+
+
 def test_cache_refresh_learning_aliases_and_pending_cleanup_preserve_domain_semantics():
     s = stores()
     cache = s.runtime_cache
@@ -443,6 +471,21 @@ def test_a_decision_reads_and_writes_the_same_after_a_long_history_and_commits_o
     # Nothing written holds rows of earlier decisions, so the bytes are the same twenty times further on, but
     # for the extra digits of revisions, fences, ordinals and lake positions.
     assert all(abs(b - a) <= 3 * 12 for a, b in zip(early_bytes, late_bytes))
+
+
+def test_a_decision_on_a_runtime_with_many_indexed_items_reads_and_writes_only_its_items_cycle_document():
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    for n in range(1, 301):  # three hundred items, each left with an unfinished cycle in the index
+        one_decision(client, n)
+    for probe in (301, 302):
+        start = len(client.calls)
+        one_decision(client, probe)
+        cycles = [(kind, r["Key"]) for kind, r in client.calls[start:] if "/keys/cycles/" in r["Key"]]
+        # One GET (resuming finds no unfinished cycle for the new item) and one PUT (its new cycle), both of the
+        # document of the item the decision's events name; none of the other three hundred are touched.
+        assert sorted(kind for kind, _ in cycles) == ["get", "put"] and len({key for _, key in cycles}) == 1
 
 
 def test_a_runtime_head_holds_no_answers_cycles_or_status_rows_however_many_items_it_decided():
