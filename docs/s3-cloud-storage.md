@@ -307,9 +307,8 @@ layout what one decision writes to the ledger does not depend on how many came b
   `export()` reads every attempt by GET without list permission.
 - **Two commits per paid request:** `reserve(..., claim=True)` reserves and claims in one commit and
   `claim` then confirms without a write; `settle` is the second. Plain `reserve` then `claim` still works.
-- **Missing keys without ListBucket:** S3 answers AccessDenied for a key nobody wrote. A handle treats that
-  as "absent" only after it has created and read back a `readable.json` sentinel in the same prefix, so a
-  real permission failure fails closed (no reservation, no dispatch).
+- **Missing keys:** the BFF and worker roles hold `s3:ListBucket` on the books bucket, so a key nobody wrote
+  is NoSuchKey. Any other read failure, AccessDenied included, is an error: no reservation, no dispatch.
 - **Old ledgers:** a v1 ledger reads exactly as before and is migrated by its first write, in one commit:
   every attempt, owner hint and finished generation is written as a record (repeats are harmless), then the
   head becomes v2. `export()` keeps the v1 snapshot shape, so SQLite and S3 still compare equal.

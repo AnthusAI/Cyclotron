@@ -778,33 +778,29 @@ def test_a_settled_request_whose_record_cannot_be_written_stays_in_the_head_unti
     assert batch_record(s, "a" * 64)["payload"] == '{"paid":true}' and s.get("a" * 64).payload == '{"paid":true}'
 
 
-class NoListS3(ConditionalS3):
-    """S3 as a principal without ListBucket sees it: a key nobody wrote is AccessDenied, not NoSuchKey."""
+class DeniedS3(ConditionalS3):
+    """S3 that refuses reads of the batch records, written or not, as a principal lacking the grant sees it."""
 
     denied = ()
 
     def get_object(self, **request):
-        key = request["Key"]
-        if ("/records/" in key and key not in self.objects) or any(part in key for part in self.denied):
+        if any(part in request["Key"] for part in self.denied):
             raise S3Error("AccessDenied")
         return super().get_object(**request)
 
 
-def test_without_list_permission_a_denied_missing_key_reads_as_absent_only_once_the_prefix_proves_readable():
+def test_a_denied_batch_record_read_refuses_and_never_looks_unpaid():
     from .record_lake import RecordUnavailable
 
-    client, model = NoListS3(), Model()
+    client, model = DeniedS3(), Model()
     s = store(journal(client))
     decide(s, model, "one")
-    decide(store(journal(client)), model, "one")  # a paid request answered again from its record
-    assert model.calls == 1 and s.requests() == 1
-    assert [k for k in client.objects if k.endswith("/readable.json")]
-    # A principal that cannot read the batch records at all fails closed: no reservation, no provider call.
     client.denied = ("/records/shared-batches/batches-",)
-    blind = store(journal(client))
-    with pytest.raises(RecordUnavailable):
-        decide(blind, model, "two")
-    assert model.calls == 1 and blind.requests() == 1
+    for name in ("one", "two"):  # a written record, and a key nobody wrote: neither reads as absent
+        blind = store(journal(client))
+        with pytest.raises(RecordUnavailable):
+            decide(blind, model, name)
+    assert model.calls == 1 and s.requests() == 1  # no second payment, no new reservation
 
 
 def test_an_old_format_ledger_answers_an_already_paid_request_from_its_record_then_migrates_on_first_write(tmp_path):

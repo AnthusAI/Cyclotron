@@ -97,8 +97,6 @@ RECORD_ERRORS = (RecordUncertain, RecordLimit, RecordConflict, RecordUnavailable
 KEYED_SCHEMA = "cyclotron-keyed-record/v1"
 _KEY = re.compile(r"[a-zA-Z0-9_-]+")
 _EXISTS = ("PreconditionFailed", "ConditionalRequestConflict", "412", "409")
-_DENIED = ("AccessDenied", "403")
-SENTINEL = "readable"
 
 
 class KeyedRecords:
@@ -213,9 +211,8 @@ class FileKeyedRecords(KeyedRecords):
 class S3KeyedRecords(KeyedRecords):
     """Create-only S3 objects at ``<account>/<workspace>/records/<domain>/<kind>/<key>.json``.
 
-    A principal without list permission gets AccessDenied, not NoSuchKey, for a key nobody wrote. Such a
-    denial counts as "not written" only once this handle has proved it can read this very prefix, by
-    reading a sentinel record it creates there. A real permission failure therefore fails closed.
+    A key nobody wrote is NoSuchKey (the role holds ``s3:ListBucket`` on the bucket). Any other failure,
+    AccessDenied included, is an error and never reads as "not written", so it fails closed.
     """
 
     def __init__(self, payloads, domain, kind):
@@ -227,7 +224,6 @@ class S3KeyedRecords(KeyedRecords):
                 raise ValueError("conditional S3 client requires total_max_attempts=1")
         super().__init__(payloads.scope, domain, kind)
         self.client, self.bucket, self.owner = payloads.client, payloads.bucket, payloads.owner
-        self.readable = False
 
     def _key(self, key):
         return f"{self.namespace}/{key}.json"
@@ -264,31 +260,15 @@ class S3KeyedRecords(KeyedRecords):
             if stream is not None:
                 stream.close()
 
-    def _read(self, key):
-        """(bytes or None, error code or None)."""
+    def _fetch(self, key):
         try:
-            return read_with_one_retry(lambda: self._get(key), "record"), None
+            # A GET is idempotent, so one transient failure is retried. A missing key is not transient.
+            return read_with_one_retry(lambda: self._get(key), "record")
         except Exception as error:
-            code = getattr(error, "response", {}).get("Error", {}).get("Code")
-            if code == "NoSuchKey" or code in _DENIED:
-                return None, code
+            if getattr(error, "response", {}).get("Error", {}).get("Code") == "NoSuchKey":
+                return None
             log.warning("keyed record unavailable: %s", cause_name(error))
             raise RecordUnavailable("record unavailable", cause_name(error)) from None
-
-    def _prove_readable(self):
-        if not self.readable:
-            content = self._encode(SENTINEL, {"purpose": "proves this prefix is readable"})
-            self._create(SENTINEL, content)
-            found, _ = self._read(SENTINEL)
-            if found != content:
-                raise RecordUnavailable("keyed records are not readable; never treat a denial as a missing record")
-            self.readable = True
-
-    def _fetch(self, key):
-        content, code = self._read(key)
-        if code in _DENIED:
-            self._prove_readable()
-        return content
 
 
 def _ledger_name(journal):
