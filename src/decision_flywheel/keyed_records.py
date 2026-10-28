@@ -16,10 +16,16 @@ So a document holds the current value plus at most the writes still in flight: i
 layout, never by a cap. Writes are compare-and-set on the object's ETag, so two writers never lose each
 other's entries.
 
-Absence without list permission. Without ``s3:ListBucket`` a GET of a missing key is refused (403), which
-says nothing about absence. A refused GET is therefore followed by a create-only PUT of an empty document:
-if it is created the key was absent (an empty document reads as absent), and if it already exists the GET is
-repeated. A refused create-only PUT stays an error, so missing permissions never read as "absent".
+API (shared by every journal that needs a lookup by key):
+
+* ``keyed_documents_for(journal)`` -- the documents beside a canonical S3 or file journal.
+* ``documents.load(kind, key)`` -- the stored ``Document``, or None when the key has none. Absence is
+  ``NoSuchKey`` only (the roles hold ``s3:ListBucket``); any other failure, AccessDenied included, raises
+  ``KeyedUnavailable`` and never reads as absent.
+* ``documents.store(kind, key, document, coverage, at, value)`` -- the conditional put: create-only when
+  ``document`` is None, else ``If-Match`` its ETag; a changed document is read again and merged again.
+  ``coverage`` is the head's current coverage of the commit lake, ``at`` the new commit record's sequence.
+* ``resolve(document, coverage)`` -- the head-coverage rule: the newest entry the coverage covers, else None.
 """
 
 import fcntl
@@ -36,7 +42,6 @@ from .storage_payloads import FilePayloads, S3Payloads
 
 SCHEMA = "cyclotron-keyed/v1"
 _EXISTS = ("PreconditionFailed", "ConditionalRequestConflict", "412", "409")
-_REFUSED = ("AccessDenied", "403")
 
 
 class KeyedConflict(StorageConflict):
@@ -112,16 +117,7 @@ class KeyedDocuments:
 
     def load(self, kind, key):
         """The stored document, or None when the key has none."""
-        path = self.path(kind, key)
-        found = self._get(path)
-        if found is _REFUSED:
-            # Absence cannot be read without list permission; a create-only empty document proves it.
-            try:
-                return Document(self._create(path, self._encode(kind, key, ())), ())
-            except KeyedConflict:
-                found = self._get(path)
-                if found is _REFUSED:
-                    raise KeyedUnavailable("keyed document refused") from None
+        found = self._get(self.path(kind, key))
         return None if found is None else self._decode(kind, key, *found)
 
     def store(self, kind, key, document, coverage, at, value):
@@ -174,9 +170,7 @@ class S3KeyedDocuments(KeyedDocuments):
         except Exception as error:
             code = getattr(error, "response", {}).get("Error", {}).get("Code")
             if code == "NoSuchKey":
-                return None
-            if code in _REFUSED:
-                return _REFUSED
+                return None  # only a real absence; a refused GET (AccessDenied) is an error below
             log.warning("keyed document unavailable: %s", cause_name(error))
             raise KeyedUnavailable("keyed document unavailable", cause_name(error)) from None
 

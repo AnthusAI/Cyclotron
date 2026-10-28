@@ -3,7 +3,7 @@
 import pytest
 
 from .batch_storage import StorageScope
-from .keyed_records import FileKeyedDocuments, KeyedUncertain, S3KeyedDocuments, merged, resolve
+from .keyed_records import FileKeyedDocuments, KeyedUnavailable, S3KeyedDocuments, merged, resolve
 from .record_lake import Coverage
 from .s3_journal_test import ConditionalS3, S3Error
 from .storage_payloads import FilePayloads, S3Payloads
@@ -58,32 +58,19 @@ def test_the_merge_keeps_the_newest_covered_entry_and_the_ones_above_the_coverag
     assert merged(Held, Coverage(4, (3,)), 6, "new") == ((2, "b"), (5, "in flight"), (6, "new"))
 
 
-def test_without_list_permission_a_refused_read_is_settled_by_a_create_only_empty_document():
-    client = ConditionalS3()
-    real = client.get_object
-
-    def refusing(**request):
-        if request["Key"] not in client.objects:
-            client.calls.append(("get", request))
-            raise S3Error("AccessDenied")
-        return real(**request)
-
-    client.get_object = refusing
-    documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
-    absent = documents.load("item", "a")
-    assert absent is not None and absent.entries == () and resolve(absent, Coverage(9)) is None
-    written = documents.store("item", "a", absent, Coverage(), 1, {"v": 1})
-    assert resolve(documents.load("item", "a"), Coverage(1)) == {"v": 1} and written.entries == ((1, {"v": 1}),)
-
-
-def test_a_refused_create_is_an_error_never_an_absent_key():
+def test_a_refused_read_is_an_error_never_an_absent_key():
     client = ConditionalS3()
 
     def refused(**request):
+        client.calls.append(("get", request))
         raise S3Error("AccessDenied")
 
     client.get_object = refused
-    client.put_object = refused
     documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
-    with pytest.raises(KeyedUncertain):
+    with pytest.raises(KeyedUnavailable):
         documents.load("item", "a")
+    assert all(kind == "get" for kind, _ in client.calls)
+
+
+def test_only_a_missing_key_reads_as_absent(documents):
+    assert documents.load("item", "never-written") is None
