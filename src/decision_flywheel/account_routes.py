@@ -364,14 +364,21 @@ class HostedAccounts:
                 return {"authenticated": False, "loginUrl": "/auth/login"}
 
         @app.get("/api/runs/{run_id}/events")
-        async def event_page(request: Request, run_id: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)):
+        async def event_page(request: Request, run_id: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1)):
             if not await self.access.authenticated(request):
                 raise HTTPException(401, "sign-in required")
             workspace = await self.access(request, "console:read")
-            try:
-                rows = await asyncio.to_thread(workspace.store.events, run_id, after=after, limit=limit)
-            except ValueError:
-                raise HTTPException(404, "unknown run") from None
+            rows, cursor = [], after
+            # Any page size: read the store's own pages until the requested count or the end of the run.
+            while len(rows) < limit:
+                try:
+                    page = await asyncio.to_thread(workspace.store.events, run_id, after=cursor)
+                except ValueError:
+                    raise HTTPException(404, "unknown run") from None
+                if not page:
+                    break
+                rows.extend(page[: limit - len(rows)])
+                cursor = page[-1]["sequence"]
             events = [{"sequence": row["sequence"], "sourceId": row["source_id"], "payload": row["payload"]} for row in rows]
             return JSONResponse({"events": events}, headers={"Cache-Control": "private, no-store"})
 

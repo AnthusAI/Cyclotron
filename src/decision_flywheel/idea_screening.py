@@ -19,11 +19,10 @@ SCREENED_CONTROLS = ("rubric", "example_ids")
 MODES = ("shadow", "dev_screen")
 # Bounded optimizer payload: newest prior ideas, ledger digest rows, fixed/broke ids per row, stubborn ids.
 CAPS = {"prior_ideas": 20, "ledger_ideas": 10, "item_ids_per_idea": 5, "stubborn_items": 20}
-# Proposal operators (Stage 2c). One optimizer call per round carries every operator's block, so the blocks are capped:
-# at most 8 target stories of 400 characters, two parent rubrics of 4000 characters, 8 fixed/broke ids per parent.
+# Proposal operators (Stage 2c). One optimizer call per round carries every operator's block; stories, parent
+# rubrics and fixed/broke ids are passed whole.
 OPERATORS = ("mutate", "bold", "target", "combine")
 DEFAULT_SHADOW_MIX = {"mutate": 0, "bold": 2, "target": 2, "combine": 2}
-OPERATOR_CAPS = {"story_chars": 400, "parent_rubric_chars": 4000, "parent_item_ids": 8, "target_sample_max": 20}
 
 
 @dataclass(frozen=True)
@@ -142,8 +141,8 @@ class IdeaScreeningConfig:
             object.__setattr__(self, "proposal_mix", {op: mix.get(op, 0) for op in OPERATORS})
         if isinstance(self.min_novelty, bool) or not isinstance(self.min_novelty, (int, float)) or not 0 <= self.min_novelty < 1:
             raise ValueError("min_novelty must be in [0,1)")
-        if type(self.target_sample) is not int or not 1 <= self.target_sample <= OPERATOR_CAPS["target_sample_max"]:
-            raise ValueError(f"target_sample must be an integer from 1 to {OPERATOR_CAPS['target_sample_max']}")
+        if type(self.target_sample) is not int or self.target_sample < 1:
+            raise ValueError("target_sample must be a positive integer")
         if type(self.novelty_retries) is not int or not 0 <= self.novelty_retries <= 3:
             raise ValueError("novelty_retries must be an integer from 0 to 3")
         if self.mode not in MODES:

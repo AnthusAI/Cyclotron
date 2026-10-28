@@ -180,11 +180,10 @@ class OAuthSessions:
     cached. A future multi-process host must replace this store, not replicate it.
     """
 
-    def __init__(self, verifier, *, clock=time.time, max_age=3600, capacity=5000):
+    def __init__(self, verifier, *, clock=time.time, max_age=3600):
         self.verifier = verifier
         self.clock = clock
         self.max_age = max_age
-        self.capacity = capacity
         self.lock = RLock()
         self.pending = {}
         self.sessions = {}
@@ -197,8 +196,6 @@ class OAuthSessions:
     def begin(self, challenge=None):
         with self.lock:
             self._purge()
-            if len(self.pending) >= self.capacity:
-                raise SessionRejected("too many pending logins; try again later")
             expiry = min(self.clock() + 300, challenge.expires_at) if challenge else self.clock() + 300
             if expiry <= self.clock():
                 raise SessionRejected("identity challenge expired")
@@ -227,8 +224,6 @@ class OAuthSessions:
     def create(self, access_token, claims):
         with self.lock:
             self._purge()
-            if len(self.sessions) >= self.capacity:
-                raise SessionRejected("too many active sessions; try again later")
             identifier = secrets.token_urlsafe(48)
             session = ConsoleSession(
                 access_token, claims["sub"], min(float(claims["exp"]), self.clock() + self.max_age), secrets.token_urlsafe(32)

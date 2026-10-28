@@ -411,6 +411,11 @@ def test_priming_list_configuration_is_parsed_strictly_and_optionally():
         {"CYCLOTRON_PUBLICATION_TARGETS": environment_target({**base, "priming": {"listId": "accepted"}})}
     )
     assert parsed[0].bindings[0].priming_list_id == "accepted"
+    long_list = "accepted-" + "l" * 1_000
+    parsed = targets_from_environment(
+        {"CYCLOTRON_PUBLICATION_TARGETS": environment_target({**base, "priming": {"listId": long_list}})}
+    )
+    assert parsed[0].bindings[0].priming_list_id == long_list
     parsed = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": environment_target(base)})
     assert parsed[0].bindings[0].priming_list_id is None
     for invalid in (
@@ -421,7 +426,6 @@ def test_priming_list_configuration_is_parsed_strictly_and_optionally():
         {"priming": "accepted"},
         {"priming": None},
         {"surprise": True},
-        {"priming": {"listId": "x" * 201}},
     ):
         with pytest.raises(ValueError, match="invalid"):
             targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": environment_target({**base, **invalid})})

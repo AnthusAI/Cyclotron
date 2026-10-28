@@ -18,8 +18,6 @@ from uuid import UUID
 from .models import Item
 
 CONTRACT = "cyclotron-publication/v1"
-# Retained only for publication_steering, which another change owns; this module enforces no size limit.
-MAX_BYTES = 2_000_000
 CAPABILITIES = {
     "decide": "decide",
     "review": "review",

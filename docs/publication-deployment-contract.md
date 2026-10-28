@@ -228,9 +228,10 @@ and remains readable at the exact budget boundary. The injected catalog remains
 the only physical store; this adds no adapter or distributed reservation.
 
 Before native steering dispatch, the single-owner gateway checks room for both
-intent and completion rows and a conservative bounded result allowance. The
-configurable `max_result_bytes` defaults to 64,000. Results exceeding that declared allowance are never truncated or
-acknowledged as complete; they leave an explicit reconciliation state. Pending
+intent and completion rows. There is no steering command or result size limit: a
+result of any size is recorded whole, and only the catalog's own storage budget can
+refuse it; such a result is never truncated or acknowledged as complete and leaves
+an explicit reconciliation state. Pending
 and completed receipt lookup still precede dispatch, so receipt recovery does not
 need new execution capacity or another evaluation. This is local single-owner
 preflight, not a substitute for the pending cloud coordinator decision.

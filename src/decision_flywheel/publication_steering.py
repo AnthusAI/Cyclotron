@@ -8,8 +8,8 @@ that owner contract exists. Pending ambiguous operations never auto-dispatch.
 from datetime import datetime, timezone
 from types import MappingProxyType
 
-from .publication_lab import MAX_BYTES, PublicationActor, PublicationError, text
-from .publication_records import canonical, copied, digest
+from .publication_lab import PublicationActor, PublicationError, text
+from .publication_records import copied, digest
 
 
 class NativeOutputEvaluator:
@@ -60,9 +60,7 @@ class NativeOutputEvaluator:
 
 
 class PublicationSteering:
-    def __init__(
-        self, records, evaluators, *, owner_lock=None, owner_execution=None, allow_evaluation=False, max_result_bytes=64_000
-    ):
+    def __init__(self, records, evaluators, *, owner_lock=None, owner_execution=None, allow_evaluation=False):
         if (owner_lock is None) == (owner_execution is None):
             raise ValueError("exactly one existing engine execution owner required")
         if owner_lock is not None and not hasattr(owner_lock, "__aenter__"):
@@ -76,9 +74,6 @@ class PublicationSteering:
         self.owner_lock = owner_lock
         self.owner_execution = owner_execution
         self.allow_evaluation = allow_evaluation
-        if type(max_result_bytes) is not int or not 1 <= max_result_bytes <= MAX_BYTES:
-            raise ValueError("bounded positive steering result byte budget required")
-        self.max_result_bytes = max_result_bytes
 
     def found(self, kind, operation_id):
         rows = [
@@ -130,8 +125,6 @@ class PublicationSteering:
                 raise PublicationError("explicit native proposal fields required", 400)
         else:
             text(payload["trialFingerprint"], "trial identity")
-        if len(canonical(payload).encode()) > MAX_BYTES:
-            raise PublicationError("steering command exceeds byte limit", 413)
         operation_id = digest([actor.account_id, publication, actor.actor_id, payload["requestId"]])
         signature = digest(payload)
         execution = execution or self.owner_execution
@@ -196,15 +189,11 @@ class PublicationSteering:
             }
             try:
                 pending_record = self.records.preview("steering-pending", intent, at)
-                # A JSON string of this size bounds any accepted serialized
-                # result, with conservative extra quote bytes and row metadata.
+                # The completion row is checked without its result: a result of any size is
+                # accepted, and only the catalog's own budget can refuse it, after dispatch.
                 terminal_record = self.records.preview(
                     "steering-complete",
-                    {
-                        "operationId": operation_id,
-                        "signature": signature,
-                        "receipt": {**receipt, "result": "x" * self.max_result_bytes},
-                    },
+                    {"operationId": operation_id, "signature": signature, "receipt": {**receipt, "result": None}},
                     at,
                 )
                 self.records.ensure_capacity([pending_record, terminal_record])
@@ -215,8 +204,6 @@ class PublicationSteering:
             self.records.put("steering-pending", intent, at)
             try:
                 result = await evaluator.execute(action, payload)
-                if len(canonical(result).encode()) > self.max_result_bytes:
-                    raise ValueError("steering result exceeds declared byte budget")
                 receipt = {**receipt, "result": result}
                 receipt = copied(receipt)
                 self.records.put(

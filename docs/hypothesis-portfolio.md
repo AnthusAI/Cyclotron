@@ -279,12 +279,11 @@ re-ask for just the rejected number. A round with no rejection is exactly one ca
 `propose_operators` (custom ones) get the plain multi-proposal request sized to the mix total, with a
 `proposal-operator-skipped` event (operator `all`).
 
-### Caps on what is sent
+### What is sent
 
-At most `target_sample` stories (default 8, at most 20), each excerpt 400 characters and each title 160; two parent
-rubrics of at most 4000 characters, with at most 8 story ids each; plus the existing digest caps (20 prior ideas, 10
-ledger rows, 5 ids per row, 20 stubborn ids). The operator block is therefore a few kilobytes on top of the usual
-briefing.
+Up to `target_sample` stories (default 8, any positive number), each with its whole text and title; two parent
+rubrics, whole, with every story id each fixes; plus the existing digest caps (20 prior ideas, 10 ledger rows, 5 ids
+per row, 20 stubborn ids). Nothing in the operator block is clipped.
 
 ### Novelty gate (bold)
 

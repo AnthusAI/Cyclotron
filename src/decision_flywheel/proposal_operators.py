@@ -10,14 +10,14 @@ shadow evaluation had nothing to find. Each operator is a different way to ask f
 
 One optimizer call per round carries every operator's block and the reply labels each proposal with its operator.
 A bold proposal rejected by the novelty gate may be re-requested (``novelty_retries`` extra calls, default 1, only
-when something was rejected). Everything shown to the optimizer is capped (see ``OPERATOR_CAPS``).
+when something was rejected). Stories and rubrics shown to the optimizer are whole, never clipped.
 """
 
 import re
 
 from .flywheel import _json
 from .hypothesis_ledger import HypothesisLedger
-from .idea_screening import OPERATOR_CAPS, OPERATORS, incumbent_id, validate_proposals
+from .idea_screening import OPERATORS, incumbent_id, validate_proposals
 from .optimizer_agent import ask_optimizer
 
 SHINGLE = 3
@@ -44,9 +44,8 @@ def nearest_novelty(text, references):
     return min((text_novelty(text, r) for r in references), default=1.0)
 
 
-def _clip(value, width):
-    text = " ".join(str(value).split())
-    return text if len(text) <= width else text[: width - 1] + "…"
+def _whole(value):
+    return " ".join(str(value).split())
 
 
 def target_stories(wheel, ledger, training, development, protected, sample):
@@ -82,8 +81,8 @@ def target_stories(wheel, ledger, training, development, protected, sample):
         stories.append(
             {
                 "id": row.item.id,
-                "title": _clip(values["title"], 160) if values.get("title") else None,
-                "excerpt": _clip(body, OPERATOR_CAPS["story_chars"]),
+                "title": _whole(values["title"]) if values.get("title") else None,
+                "excerpt": _whole(body),
                 "true_label": row.label,
                 "answered": rec["choice"],
                 "error_direction": f"true {rec['label']}, answered {rec['choice']}",
@@ -111,16 +110,15 @@ def combine_block(wheel, ledger, ideas, count):
     )
     if "skipped" in pair:
         return None, None, pair["skipped"]
-    cap = OPERATOR_CAPS["parent_item_ids"]
     parents = []
     for name, _, mine in ((pair["a"], pair["b"], pair["fixes_a_not_b"]), (pair["b"], pair["a"], pair["fixes_b_not_a"])):
         rubric = wheel.active.config.rubric if name == inc else _rubric_of(by_id[name])
         entry = {
             "id": name,
             "is_incumbent": name == inc,
-            "rubric": _clip(rubric, OPERATOR_CAPS["parent_rubric_chars"]),
+            "rubric": _whole(rubric),
             "fixes_that_the_other_misses": len(mine),
-            "story_ids_fixed_only_by_this": mine[:cap],
+            "story_ids_fixed_only_by_this": list(mine),
         }
         if name != inc:
             vs = ledger.paired_comparison(name, inc, context_version=SHADOW)

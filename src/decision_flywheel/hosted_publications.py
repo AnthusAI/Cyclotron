@@ -42,10 +42,8 @@ class PublicationTarget:
     def __post_init__(self):
         uuid(self.account_id)
         uuid(self.run_id)
-        if self.model_identity is not None and (
-            not isinstance(self.model_identity, str) or not self.model_identity.strip() or len(self.model_identity) > 512
-        ):
-            raise ValueError("bounded configured model identity required")
+        if self.model_identity is not None and (not isinstance(self.model_identity, str) or not self.model_identity.strip()):
+            raise ValueError("configured model identity required")
         object.__setattr__(self, "bindings", tuple(self.bindings))
         object.__setattr__(self, "pending_outputs", tuple(self.pending_outputs))
         if (
@@ -69,7 +67,7 @@ def targets_from_environment(environment):
         return None
     try:
         values = json.loads(raw)
-        if not isinstance(values, list) or not values or len(values) > 100:
+        if not isinstance(values, list) or not values:
             raise ValueError()
         result = []
         for target in values:
@@ -100,7 +98,6 @@ def targets_from_environment(environment):
                     or set(priming) != {"listId"}
                     or not isinstance(priming["listId"], str)
                     or not priming["listId"].strip()
-                    or len(priming["listId"]) > 200
                 ):
                     raise ValueError()
                 bindings.append(
@@ -207,8 +204,8 @@ def is_shared_decision_command(kind, payload):
 def priming_snapshot(store, target, binding, config, list_id):
     if not target.model_identity:
         raise ValueError("reviewed publication model identity required for priming")
-    if not isinstance(list_id, str) or not list_id.strip() or len(list_id) > 200:
-        raise ValueError("bounded accepted priming list required")
+    if not isinstance(list_id, str) or not list_id.strip():
+        raise ValueError("accepted priming list required")
     classifiers = [row for row in config["classifiers"] if row["id"] in binding.outputs]
     for row in classifiers:
         if store.classifier(row["id"])["revision"] != row["revision"]:

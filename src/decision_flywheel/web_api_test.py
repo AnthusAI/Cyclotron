@@ -237,14 +237,14 @@ def test_cross_origin_requests_and_unauthenticated_remote_access_cannot_mutate(t
 
 
 def test_subscription_replays_committed_events_after_a_cursor(tmp_path):
-    from .web_api import schema, EventSubscriberLimit
+    from .web_api import schema
     store = WebStore(tmp_path / 'web.sqlite')
     run = store.create_run('A','recorded',{})
     first = store.append_event(run['id'],'one',{'kind':'prediction'})
     second = store.append_event(run['id'],'two',{'kind':'human-feedback'})
     async def read():
         stream = await schema.subscribe('subscription($id:ID!,$after:Int!){runEvents(runId:$id,after:$after){sequence payload}}',
-            variable_values={'id':run['id'],'after':first['sequence']},context_value={'store':store,'event_subscribers':EventSubscriberLimit(1)})
+            variable_values={'id':run['id'],'after':first['sequence']},context_value={'store':store})
         result = await anext(stream)
         await stream.aclose()
         return result
@@ -360,24 +360,18 @@ def test_loopback_trust_comes_from_injected_hosts_not_a_hard_coded_test_name(tmp
         assert client.post('/graphql', json={'query': '{runs{id}}'}).status_code == 200
 
 
-def test_live_event_subscribers_are_capped_and_released_when_they_leave(tmp_path):
-    from .web_api import schema, EventSubscriberLimit
+def test_a_hundred_live_event_subscribers_all_receive_the_committed_event(tmp_path):
+    from .web_api import schema
     store = WebStore(tmp_path / 'web.sqlite')
     run = store.create_run('A', 'recorded', {})
-    limit = EventSubscriberLimit(1)
+    store.append_event(run['id'], 'one', {'kind': 'prediction'})
     query = 'subscription($id:ID!){runEvents(runId:$id){sequence}}'
     async def attempt():
-        first = await schema.subscribe(query, variable_values={'id': run['id']},
-                                       context_value={'store': store, 'event_subscribers': limit})
-        pending = asyncio.ensure_future(anext(first))
-        await asyncio.sleep(.5)
-        second = await schema.subscribe(query, variable_values={'id': run['id']},
-                                        context_value={'store': store, 'event_subscribers': limit})
-        refused = await anext(second)
-        pending.cancel()
-        await asyncio.gather(pending, return_exceptions=True)
-        await first.aclose()
-        return refused
-    refused = asyncio.run(attempt())
-    assert 'too many live event subscribers' in refused.errors[0].message
-    assert limit.active == 0
+        streams = [await schema.subscribe(query, variable_values={'id': run['id']}, context_value={'store': store})
+                   for _ in range(100)]
+        results = [await anext(stream) for stream in streams]
+        for stream in streams:
+            await stream.aclose()
+        return results
+    results = asyncio.run(attempt())
+    assert all(not result.errors and result.data['runEvents']['sequence'] for result in results)

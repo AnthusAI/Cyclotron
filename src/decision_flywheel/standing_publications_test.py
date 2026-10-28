@@ -125,3 +125,10 @@ def test_target_configuration_rejects_unknown_or_unsafe_standing_fields():
         raw = [{**anthus_targets(RUN_PLACEHOLDER)[0], **change}]
         with pytest.raises(ValueError, match="configuration"):
             targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps(raw)})
+
+
+def test_a_target_configuration_of_three_hundred_targets_with_a_long_model_identity_parses():
+    identity = "jev:" + "m" * 2_000
+    raw = [{**anthus_targets(str(uuid4()))[0], "modelIdentity": identity} for _ in range(300)]
+    targets = targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps(raw)})
+    assert len(targets) == 300 and {target.model_identity for target in targets} == {identity}

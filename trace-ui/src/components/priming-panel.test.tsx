@@ -120,3 +120,13 @@ it('starts an import on a plain-HTTP host where crypto.randomUUID is missing',as
  await waitFor(()=>expect(api.command).toHaveBeenCalledWith('transform',expect.objectContaining({identifier:expect.stringMatching(/^[0-9a-f-]{36}$/)})))
  vi.unstubAllGlobals()
 })
+it('imports a file larger than four megabytes without a client-side size refusal',async()=>{
+ const api=client()
+ render(<PrimingPanel client={api} listId="examples" classifiers={[{id:'editor',revision:1}]} pollInterval={0}/> )
+ fireEvent.click(await screen.findByRole('button',{name:'From file'}))
+ const file=new File(['id,text\nsynthetic,Synthetic body\n'],'references.csv',{type:'text/csv'})
+ Object.defineProperty(file,'size',{value:5_000_000})
+ fireEvent.change(screen.getByLabelText('Reference file'),{target:{files:[file]}})
+ await waitFor(()=>expect(api.command).toHaveBeenCalledWith('file',expect.objectContaining({kind:'csv',content:btoa('id,text\nsynthetic,Synthetic body\n')})))
+ expect(screen.queryByText(/limit/)).not.toBeInTheDocument()
+})

@@ -476,7 +476,7 @@ average across all configured classes. Results record and display this choice.
 Undefined class rates remain undefined, with the unsupported classes disclosed;
 the comparison does not silently drop them or substitute zero.
 
-The read-only `matchedRunPreflight` query selects at most 200 shared items with
+The read-only `matchedRunPreflight` query selects up to `limit` shared items (default 200, no maximum) with
 matching pinned item content, classifier definitions, and protected human labels.
 It rejects legacy runs without the recorded protection protocol or a checkpoint
 event boundary. Any item previously exposed as learnable feedback in either run

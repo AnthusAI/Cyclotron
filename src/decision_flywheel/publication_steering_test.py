@@ -223,7 +223,7 @@ def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path
         if budget == "records":
             records.max_records = 1
         else:
-            records.max_bytes = 20_000
+            records.max_bytes = 1_000  # smaller than the steering receipts themselves
 
         class Evaluator:
             output_id = "intel"
@@ -251,5 +251,36 @@ def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path
         with pytest.raises(PublicationError, match="nothing dispatched"):
             await gateway.command(actor, binding, payload)
         assert evaluator.calls == 0 and records.records() == []
+
+    asyncio.run(scenario())
+
+
+def test_a_steering_result_of_two_hundred_kilobytes_is_recorded_whole(tmp_path):
+    async def scenario():
+        _, records, _, binding_ref = setup_records(tmp_path)
+        records.max_bytes = 10_000_000  # the catalog budget is configuration, not a steering limit
+
+        class Evaluator:
+            output_id = "intel"
+            active_fingerprint = "active-1"
+
+            async def execute(self, *args):
+                return {"report": "r" * 200_000}
+
+        binding = PublicationBinding("publication-a", ("intel",), "binding-1")
+        actor = PublicationActor("account-a", "editor-a", frozenset({("publication-a", "steer"), ("publication-a", "read")}))
+        payload = {
+            "bindingRevision": "binding-1",
+            "bindingRef": binding_ref.to_json(),
+            "classifier": "intel",
+            "requestId": "large-result",
+            "expectedFingerprint": "active-1",
+            "action": "evaluate",
+            "proposal": {"rubric": "Draft " + "d" * 100_000},
+            "explanation": "Human request.",
+        }
+        gateway = PublicationSteering(records, {"intel": Evaluator()}, owner_lock=asyncio.Lock(), allow_evaluation=True)
+        receipt = await gateway.command(actor, binding, payload)
+        assert receipt["result"] == {"report": "r" * 200_000}
 
     asyncio.run(scenario())

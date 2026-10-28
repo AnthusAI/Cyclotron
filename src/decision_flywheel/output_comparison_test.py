@@ -38,3 +38,18 @@ def test_comparison_selects_latest_unique_items_before_excluding_missing_raw_out
     result = compare_outputs(("yes", "no"), records)
     assert result["count"] == 0 and result["missing_raw_count"] == 200
     assert result["accuracy_delta"] is None
+
+
+def test_a_comparison_window_of_a_thousand_items_is_compared_whole():
+    records = [
+        {
+            "item_id": str(i),
+            "actual_label": "yes",
+            "decision_model_label": "yes",
+            "decision_model_probabilities": {"yes": 0.9, "no": 0.1},
+            "label": "yes",
+            "probabilities": {"yes": 0.9, "no": 0.1},
+        }
+        for i in range(1000)
+    ]
+    assert compare_outputs(("yes", "no"), records, limit=1000)["count"] == 1000

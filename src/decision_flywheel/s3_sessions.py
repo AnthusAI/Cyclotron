@@ -64,38 +64,19 @@ class KMSSessionCipher:
 
 
 class S3OAuthSessions:
-    def __init__(self, verifier, *, journal_for, cipher, clock=time.time, max_age=3600, capacity=5000):
-        if type(capacity) is not int or not 1 <= capacity <= 5000 or not 0 < max_age <= 3600:
-            raise ValueError("bounded session limits required")
+    def __init__(self, verifier, *, journal_for, cipher, clock=time.time, max_age=3600):
+        if not 0 < max_age <= 3600:
+            raise ValueError("a session lifetime of at most one hour is required")
         self.verifier, self._journal, self.cipher = verifier, journal_for, cipher
-        self.clock, self.max_age, self.capacity = clock, max_age, capacity
+        self.clock, self.max_age = clock, max_age
 
     @staticmethod
     def reference(identifier):
-        if not isinstance(identifier, str) or not identifier.isascii() or not 1 <= len(identifier) <= 256:
+        if not isinstance(identifier, str) or not identifier.isascii() or not identifier:
             raise SessionRejected("invalid session reference")
         return digest(identifier)
 
-    def _reserve(self, kind, reference, expiry):
-        quota = self._journal("quota", digest(kind))
-        for _ in range(8):
-            record = quota.initialize({"schema": "oauth-quota/v1", "entries": {}})
-            value = record.value
-            if set(value) != {"schema", "entries"} or value["schema"] != "oauth-quota/v1":
-                raise ValueError("invalid quota")
-            entries = {key: exp for key, exp in value["entries"].items() if exp > self.clock()}
-            if len(entries) >= self.capacity:
-                raise SessionRejected("session capacity reached; try later")
-            entries[reference] = expiry
-            try:
-                quota.commit(record, {"schema": "oauth-quota/v1", "entries": entries})
-                return
-            except JournalConflict:
-                continue
-        raise SessionStoreUnavailable("session store busy")
-
     def _new(self, kind, reference, expiry, payload):
-        self._reserve(kind, reference, expiry)
         value = {
             "schema": "oauth-record/v1",
             "kind": kind,
