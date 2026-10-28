@@ -98,8 +98,8 @@ def test_the_legacy_index_numbers_each_runs_jobs_and_items_and_each_lists_revisi
     assert legacy.item_order["r", 2] == "i2" and legacy.latest["l", "i1"] == 2
 
 
-def test_only_unfinished_jobs_and_items_waiting_for_review_must_stay_in_the_head():
-    assert not is_evictable("web_jobs", {"status": "running"}) and is_evictable("web_jobs", {"status": "failed"})
+def test_only_a_running_job_must_stay_in_the_head():
+    assert not is_evictable("web_jobs", {"status": "running"})
+    assert is_evictable("web_jobs", {"status": "pending"}) and is_evictable("web_jobs", {"status": "failed"})
     waiting = {"prediction": '{"label":"yes"}', "reviewed": 0}
-    assert in_review(waiting) and not is_evictable("web_items", waiting)
-    assert is_evictable("web_items", {**waiting, "reviewed": 1}) and is_evictable("list_item_revisions", {})
+    assert in_review(waiting) and is_evictable("web_items", waiting) and is_evictable("list_item_revisions", {})

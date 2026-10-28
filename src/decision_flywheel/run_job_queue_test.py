@@ -321,8 +321,9 @@ def test_validating_a_catalog_with_thousands_of_claimed_jobs_stays_linear():
         job = {"_rowid": n + 1, "id": str(uuid4()), "run_id": run["id"], "request_id": f"r{n}", "kind": "publication"}
         value["snapshot"]["tables"]["web_jobs"].append({**job, "payload": "{}", "status": "completed", "result": None})
         value["claims"][job["id"]] = {"owner": str(uuid4()), "fence": 1}
-        value["cold"]["hot"]["web_jobs"][job["id"]] = n + 1
+        value["cold"]["hot"]["web_jobs"][job["id"]] = [n + 1, 0]
     value["cold"]["rowids"]["web_jobs"] = value["cold"]["ordinals"]["web_jobs"][run["id"]] = 4000
+    value["cold"]["next"][run["id"]] = 4001
     started = time.monotonic()
     s._validate(value)
     assert time.monotonic() - started < 2.0  # one scan per claim over 4000 jobs (16 million row visits) took far longer
