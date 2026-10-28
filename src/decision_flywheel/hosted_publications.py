@@ -22,7 +22,7 @@ from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
 from .priming_context import catalog_priming, decode_priming
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
-from .publication_lab import CONTRACT, MAX_BYTES, PublicationActor, PublicationBinding, PublicationLab
+from .publication_lab import CONTRACT, MAX_BYTES, PublicationActor, PublicationBinding, PublicationLab, criteria_fingerprint
 from .s3_embedded_storage import S3CyclotronStores
 from .standing_publications import validate_item
 from .storage_errors import StorageConflict, StorageUncertain
@@ -162,6 +162,7 @@ def envelope(target, binding, config):
             {
                 "id": output,
                 "question": specs[output]["question"],
+                "criteriaFingerprint": criteria_fingerprint(specs[output]["question"]),
                 "classes": [row["label"] for row in specs[output]["classes"]],
                 "positiveLabel": next((row["label"] for row in specs[output]["classes"] if row.get("role") == "positive"), None),
             }
