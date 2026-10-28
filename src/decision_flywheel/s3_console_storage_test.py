@@ -426,7 +426,7 @@ def test_v1_console_migrates_without_inventing_job_actors():
     j.initialize(value)
     s = store(j)
     run = s.create_run("Local import", "live", {})
-    assert j.read().value["schema"] == "cyclotron-s3-console/v3"
+    assert j.read().value["schema"] == "cyclotron-s3-console/v4"
     assert j.read().value["actors"] == {}
     assert s.run(run["id"])["name"] == "Local import"
 
@@ -462,7 +462,7 @@ def test_it_reuses_a_decoded_catalog_while_the_head_is_unchanged_and_reloads_whe
     writer.save_item_list("more", "More")
     mark = len(client.calls)
     assert {row["id"] for row in reader.item_lists()} == {"papers", "more"}
-    assert len(catalog_payload_gets(client, mark)) == 1
+    assert len(catalog_payload_gets(client, mark)) == 2  # the new head state, and the one table that changed
 
 
 def test_it_logs_a_catalog_read_phase_with_cache_hit_or_miss():
@@ -627,6 +627,129 @@ def test_the_bytes_a_decision_writes_do_not_depend_on_how_many_jobs_are_queued_o
     assert abs(heads[500] - heads[10]) < 64
 
 
+def labelled(labels, padding):
+    """A standing run whose config carries ``padding`` bytes, plus ``labels`` human labels on primed items."""
+    s = store()
+    s.save_classifier("topic", "Topic", configuration())
+    s.save_item_list("standing", "Standing")
+    s.save_item_list("priming", "Priming")
+    items = [{"id": f"p{n}", "occurred_at": "2026-01-01", "values": {"text": f"Primer {n}"}} for n in range(labels)]
+    s.upsert_list_items("priming", items or [{"id": "p", "occurred_at": "2026-01-01", "values": {"text": "Primer"}}])
+    run = s.create_run("Standing", "live", {"item_list_id": "standing", "notes": "x" * padding})
+    for n in range(labels):
+        s.label_item("topic", 1, "priming", f"p{n}", 1, "science", "Because", f"label-{n}")
+    return s, run["id"]
+
+
+def test_the_bytes_a_decision_writes_do_not_depend_on_how_many_labels_exist_or_how_large_run_configs_are():
+    costs = {}
+    for labels, padding in ((10, 10), (500, 10), (10, 200_000)):
+        s, run_id = labelled(labels, padding)
+        client = s.journal.payloads.client
+        decide(s, run_id, 1)  # settle the setup's own last commit
+        mark = len(client.calls)
+        decide(s, run_id, 2)
+        costs[labels, padding] = written(client, mark)
+    base = costs[10, 10]
+    for other in (costs[500, 10], costs[10, 200_000]):
+        assert other[:2] == base[:2]  # the same number of writes and reads
+        assert abs(other[2] - base[2]) < 64  # the same bytes, give or take the digits of a counter
+
+
+def test_labels_keep_their_latest_active_value_retractions_and_request_ids_after_leaving_the_head():
+    s, _ = labelled(3, 10)
+    s.label_item("topic", 1, "priming", "p0", 1, "sport", "Changed my mind", "label-0-again")
+    s.retract_item_label("label-1", "undo-1")
+    s.save_item_list("later", "Later")  # moves every label and retraction out of the head
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    assert fresh.journal.read().value["snapshot"]["tables"]["item_feedback"] == []
+    assert [v["label"] for v in fresh.item_labels("priming", "p0", 1)] == ["sport"]
+    assert fresh.item_labels("priming", "p1", 1) == []
+    assert [v["request_id"] for v in fresh.item_labels("priming", "p2", 1)] == ["label-2"]
+    assert fresh.label_item("topic", 1, "priming", "p2", 1, "science", "Because", "label-2")["request_id"] == "label-2"
+    with pytest.raises(ValueError, match="different content"):
+        fresh.label_item("topic", 1, "priming", "p2", 1, "sport", "Because", "label-2")
+    assert fresh.retract_item_label("label-1", "undo-1")["feedback_request_id"] == "label-1"
+    with pytest.raises(ValueError, match="current label"):
+        fresh.retract_item_label("label-0", "undo-0")  # a later label replaced it
+    with pytest.raises(ValueError, match="already retracted"):
+        fresh.retract_item_label("label-1", "undo-1-again")
+    fresh.retract_item_label("label-0-again", "undo-0")
+    assert fresh.item_labels("priming", "p0", 1) == []
+    assert [r["request_id"] for r in fresh.export()["tables"]["item_feedback"]] == [
+        "label-0",
+        "label-1",
+        "label-2",
+        "label-0-again",
+    ]
+
+
+def test_run_events_list_from_a_cursor_after_they_leave_the_head():
+    s, run_id = standing()
+    job = s.command(run_id, "req", "publication", {"bindings": {"alpha": "1"}, "item": {"id": "a", "values": {}}})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner, job_id=job["id"])
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    for n in range(7):
+        view.append_event(run_id, f"source-{n}", {"kind": "step", "n": n})
+    view.append_event(run_id, "source-3", {"kind": "step", "n": 3})  # the same event again changes nothing
+    view.finish_command(claimed["id"], "completed", {"response": 1})
+    s.save_item_list("later", "Later")
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    every = fresh.all_events(run_id)
+    assert [e["payload"]["n"] for e in every] == list(range(7)) and fresh.event_cursor(run_id) == every[-1]["sequence"]
+    assert [e["payload"]["n"] for e in fresh.events(run_id, after=every[2]["sequence"], limit=3)] == [3, 4, 5]
+    assert fresh.events(run_id, after=every[-1]["sequence"]) == []
+    assert fresh.counts(run_id)["predictions"] == 0
+
+
+def test_rarely_changing_tables_are_written_only_when_they_change():
+    s, run_id = labelled(1, 50_000)
+    client = s.journal.payloads.client
+    mark = len(client.calls)
+    decide(s, run_id, 1)
+    big = [r for kind, r in client.calls[mark:] if kind == "put" and len(r["Body"]) > 40_000]
+    assert big == []  # the run's config was not rewritten
+    fresh = store(journal(client, name="console"))
+    assert fresh.run(run_id)["config"]["notes"] == "x" * 50_000
+    fresh.update_run_limits(run_id, 5, 5)
+    assert store(journal(client, name="console")).run(run_id)["config"]["max_requests"] == 5
+
+
+def test_a_v3_head_moves_its_labels_and_events_out_at_its_next_commit():
+    from .s3_console_storage import _V4_COLD
+
+    s, _ = labelled(3, 10)
+    with s.transaction():  # one commit, so these labels are still in the head
+        s.label_item("topic", 1, "priming", "p0", 1, "sport", "Later", "label-later")
+    record = s.journal.read()
+    value = s._read()
+    old = {k: v for k, v in value.items() if k != "parts"}
+    old["schema"] = "cyclotron-s3-console/v3"
+    old["cold"] = {
+        k: ({t: x for t, x in v.items() if t not in _V4_COLD} if k in ("rowids", "ordinals", "hot") else v)
+        for k, v in value["cold"].items()
+    }
+    rows_left = len(value["snapshot"]["tables"]["item_feedback"])
+    # A v3 head holds every label whole; put back the ones already filed as records.
+    old["snapshot"] = {
+        **value["snapshot"],
+        "tables": {**value["snapshot"]["tables"], "item_feedback": s.export()["tables"]["item_feedback"]},
+    }
+    old["snapshot"]["tables"]["item_feedback"] = [
+        {**r, "_rowid": r["sequence"]} for r in old["snapshot"]["tables"]["item_feedback"]
+    ]
+    s.journal.commit(record, old)
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    assert rows_left >= 1 and [v["label"] for v in fresh.item_labels("priming", "p0", 1)] == ["sport"]
+    fresh.save_item_list("later", "Later")
+    head = fresh.journal.read().value
+    assert head["schema"] == "cyclotron-s3-console/v4" and head["snapshot"]["tables"]["item_feedback"] == []
+    reopened = store(journal(s.journal.payloads.client, name="console"))
+    assert [v["label"] for v in reopened.item_labels("priming", "p0", 1)] == ["sport"]
+    assert len(reopened.export()["tables"]["item_feedback"]) == 4
+
+
 def test_queued_jobs_start_in_acceptance_order_from_their_records():
     from .storage_errors import CommandNotReady
 
@@ -749,7 +872,7 @@ def test_an_old_whole_state_catalog_still_lists_and_serves_its_jobs_and_items_an
     # The first write migrates: the head names the old blob instead of carrying its rows.
     s.save_item_list("later", "Later")
     head = j.read().value
-    assert head["schema"] == "cyclotron-s3-console/v3" and head["legacy"]["open"] == {run_id: 4}
+    assert head["schema"] == "cyclotron-s3-console/v4" and head["legacy"]["open"] == {run_id: 4}
     assert [r["id"] for r in head["snapshot"]["tables"]["web_jobs"]] == [running]
     assert len(encoded(head)) < old_bytes
     # A fresh process reads the migrated catalog the same way, and the running job still finishes under its fence.

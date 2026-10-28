@@ -27,6 +27,8 @@ class CatalogSnapshotCache:
         self._legacy = {}
         # Runs whose job this process holds a confirmed claim on, each with the newest record that showed it.
         self._holds = {}
+        # The current content of each journal's rarely changing tables, by table: (digest, rows).
+        self._parts = {}
 
     @staticmethod
     def _key(journal):
@@ -55,6 +57,15 @@ class CatalogSnapshotCache:
     def legacy(self, digest):
         with self._lock:
             return self._legacy.get(digest)
+
+    def part(self, journal, table, digest):
+        with self._lock:
+            held = self._parts.get((self._key(journal), table))
+            return held[1] if held is not None and held[0] == digest else None
+
+    def remember_part(self, journal, table, digest, found):
+        with self._lock:
+            self._parts[self._key(journal), table] = (digest, found)
 
     # Claim holds ----------------------------------------------------------------------------------------
     # While a worker holds a claim on a run's running job, nothing but that worker can change the run's own
