@@ -1,9 +1,11 @@
 """Where catalog rows go once the head no longer needs them: one create-only record per key.
 
-The console catalog head keeps only what can still change together: unfinished jobs and their claims and
-actors, items waiting for a human, rows written by the newest commit, and small counters. Every other job,
-item and item revision is a create-only record found by its key or by its position in its run or list, so a
-commit rewrites only the small head and costs the same on the first decision and the thousandth.
+The console catalog head keeps only what must change together: the running job with its claim and actor, the
+rows written by the newest commit, and small counters. Every other job, item, item revision, label, label
+retraction, run event and displayed prediction is a create-only record found by its key or by its position in
+its run or list, so a commit rewrites only the small head and costs the same on the first decision and the
+thousandth. (Tables that change rarely, such as runs and classifiers, are content-addressed payloads the head
+names by digest; see ``s3_console_storage.py``.)
 
 A record is written only from state a head has already committed, before the commit that drops the row from
 the head. A key therefore names exactly one content: repeating the write is harmless, and a reader that does
@@ -16,6 +18,16 @@ each kind named by a digest of the identity it stands for:
   once per time it left the head. A later slot is a later state; the newest slot is the item.
 - ``revisions-<digest>/<n>`` and ``revision-<digest>/<revision>``: one item revision, by its position in the
   list and by its list, item id and revision.
+- ``queued-<run>/<n>``: a job as it was accepted (row and actor), while it waits its turn.
+- ``labels/<n>``, ``label-<request>/1`` and the set ``item-labels-<list, item, revision>``: one label, by
+  position, by request id, and among the labels of its item revision.
+- ``retractions/<n>``, ``retraction-<request>/1`` and ``retracted-<label request>/1``: one label retraction.
+- ``events-<run>/<n>`` and ``event-<run, source>/1``: one run event, by position and by its source id.
+- ``predictions-<run>/<n>``, ``prediction-<run, list, item, revision>/1`` and the sets
+  ``item-predictions-<list, item, revision>`` and ``run-item-predictions-<run, item>``: one displayed prediction.
+
+A set is the records ``1, 2, ...`` of its kind up to the first missing one: each holds one committed row, so
+the set is every row filed under it, in no meaningful order.
 
 A catalog written before this layout keeps its last whole-state blob as the ``legacy`` layer: its rows are
 read from that immutable blob, and rows that changed since are found in the head or the records above.
@@ -30,7 +42,18 @@ from .record_lake import FileRecordLake, RecordConflict, RecordCorrupt, S3Record
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
 
 DOMAIN = "catalog"
-COLD_TABLES = ("web_jobs", "web_items", "list_item_revisions")
+# Tables whose rows grow with use, so each row leaves the head once committed.
+COLD_TABLES = (
+    "web_jobs",
+    "web_items",
+    "list_item_revisions",
+    "item_feedback",
+    "item_feedback_retractions",
+    "web_events",
+    "item_predictions",
+)
+# Tables whose rows have a position of their own that is not a slot or a job's queue place.
+GLOBAL = ("item_feedback", "item_feedback_retractions")
 TERMINAL = ("completed", "failed", "interrupted")
 
 
@@ -48,10 +71,19 @@ def row_key(table, row):
         return row["id"]
     if table == "web_items":
         return hot_key(row["run_id"], row["id"])
+    if table in GLOBAL:
+        return row["request_id"]
+    if table == "web_events":
+        return hot_key(row["run_id"], row["source_id"])
+    if table == "item_predictions":
+        return hot_key(row["run_id"], row["list_id"], row["item_id"], row["item_revision"])
     return hot_key(row["list_id"], row["id"], row["revision"])
 
 
 def partition(table, row):
+    """The run or list a row's position counts within; labels and retractions count within the whole catalog."""
+    if table in GLOBAL:
+        return ""
     return row["list_id"] if table == "list_item_revisions" else row["run_id"]
 
 
@@ -128,6 +160,75 @@ class ColdRows:
     @staticmethod
     def queued(run_id):
         return "queued-" + digest("queued", run_id)
+
+    @staticmethod
+    def labels():
+        return "labels"
+
+    @staticmethod
+    def label(request_id):
+        return "label-" + digest("label", request_id)
+
+    @staticmethod
+    def item_labels(list_id, item_id, revision):
+        return "item-labels-" + digest("item-labels", list_id, item_id, revision)
+
+    @staticmethod
+    def retractions():
+        return "retractions"
+
+    @staticmethod
+    def retraction(request_id):
+        return "retraction-" + digest("retraction", request_id)
+
+    @staticmethod
+    def retracted(label_request_id):
+        return "retracted-" + digest("retracted", label_request_id)
+
+    @staticmethod
+    def run_events(run_id):
+        return "events-" + digest("events", run_id)
+
+    @staticmethod
+    def event(run_id, source_id):
+        return "event-" + digest("event", run_id, source_id)
+
+    @staticmethod
+    def run_predictions(run_id):
+        return "predictions-" + digest("predictions", run_id)
+
+    @staticmethod
+    def prediction(run_id, list_id, item_id, revision):
+        return "prediction-" + digest("prediction", run_id, list_id, item_id, revision)
+
+    @staticmethod
+    def item_predictions(list_id, item_id, revision):
+        return "item-predictions-" + digest("item-predictions", list_id, item_id, revision)
+
+    @staticmethod
+    def run_item_predictions(run_id, item_id):
+        return "run-item-predictions-" + digest("run-item-predictions", run_id, item_id)
+
+    def members(self, kind):
+        """Every row filed in a set."""
+        found, seq = [], 1
+        while True:
+            row = self.get(kind, seq)
+            if row is None:
+                return found
+            found.append(row)
+            seq += 1
+
+    def file(self, kind, row):
+        """File one committed row in a set: in the first slot that is free or already holds it."""
+        seq = 1
+        while True:
+            held = self.get(kind, seq)
+            if held == row:
+                return
+            if held is None and self.put(kind, seq, row):
+                return
+            seq += 1 if held is not None else 0
 
     @staticmethod
     def job(job_id):
