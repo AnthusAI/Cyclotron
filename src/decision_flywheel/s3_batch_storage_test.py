@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from .batch_storage import BatchConflict, BatchInProgress, BatchUncertain
-from .s3_journal_test import journal
+from .s3_journal_test import ConditionalS3, S3Error, journal
 
 
 def store(j=None, **options):
@@ -192,7 +192,7 @@ def test_real_shared_consumer_restarts_from_s3_without_sqlite_or_replaying_compl
     assert model.calls == 1
 
 
-def test_real_shared_consumer_never_calls_provider_after_uncertain_claim(monkeypatch):
+def test_real_shared_consumer_never_calls_provider_after_an_uncertain_reservation_and_claim(monkeypatch):
     import asyncio
 
     from .classifier_config import ClassifierConfig
@@ -209,13 +209,14 @@ def test_real_shared_consumer_never_calls_provider_after_uncertain_claim(monkeyp
 
     s = store()
     model = Model()
-    claim = s.claim
+    reserve = s.reserve
 
-    def lose_claim(key, owner):
+    def lose_reservation(*args, **kwargs):
+        # The consumer reserves and claims in one commit; losing that commit's response is the uncertain claim.
         s.journal.payloads.client.lose = lambda key: key == s.journal.head_key
-        return claim(key, owner)
+        return reserve(*args, **kwargs)
 
-    monkeypatch.setattr(s, "claim", lose_claim)
+    monkeypatch.setattr(s, "reserve", lose_reservation)
     consumer = SharedDecisions(None, model, max_requests=1, observer=lambda _: None, storage=s)
     config = ClassifierConfig(DecisionTask("topic", ("yes", "no"), "Relevant?"))
     with pytest.raises(BatchUncertain):
@@ -284,46 +285,66 @@ def journal_bytes(s):
     return len(encode(s.journal.read().value))
 
 
+def batch_record(s, fingerprint, generation=1):
+    from .s3_batch_storage import batch_key
+
+    return s.records.get(batch_key(fingerprint, generation))
+
+
+def legacy_ledger(client, name, operations, *, lake=None, tmp_path):
+    """A ledger in the old whole-state layout, as production journals hold it today, built from real operations."""
+    from .batch_storage import SQLiteBatchStorage
+    from .s3_batch_storage import S3BatchStorage
+
+    native = SQLiteBatchStorage(tmp_path / f"{name}.sqlite")
+    operations(native)
+    j = journal(client, name=name)
+    j.initialize(native.export())
+    native.close()
+    if lake is not None:
+        assert S3BatchStorage(j, replies=lake).convert_embedded_replies() is not None  # replies already in the lake
+    return j
+
+
 def test_a_reply_leaves_the_journal_and_the_journal_keeps_only_a_reference(lake_world):
     s = lake_world.open()
     text = reply_text(20000)
     paid(s, "a" * 64, text)
     state = s.journal.read().value
-    row = state["batches"][0]
-    assert text not in json.dumps(state) and set(row[2]) == {"seq", "sha256", "length"} and row[2]["seq"] == 1
+    cited = batch_record(s, "a" * 64)["payload"]
+    assert text not in json.dumps(state) and state["held"] == []
+    assert set(cited) == {"seq", "sha256", "length"} and cited["seq"] == 1
     assert state["records"]["shared-batches/replies-run-a"] == {"last": 1, "skipped": []}
     assert s.get("a" * 64).payload == text and s.requests() == 1
     assert lake_world.stored_replies(s) == [1]
 
 
-def test_journal_bytes_per_paid_request_no_longer_depend_on_the_reply(lake_world):
+def test_the_head_does_not_grow_with_paid_requests_whatever_their_reply_size(lake_world):
     from .s3_batch_storage import S3BatchStorage
 
     def grow(storage, size, count=25):
+        paid(storage, f"{999:064x}", reply_text(size))  # past the first commit, whose coverage is new
         base = journal_bytes(storage)
         for index in range(count):
             paid(storage, f"{index:064x}", reply_text(size, marker=chr(97 + index % 26)))
-        return (journal_bytes(storage) - base) / count
+        return journal_bytes(storage) - base
 
     embedded = S3BatchStorage(journal(name="embedded"))
     embedded.initialize()
-    before = grow(embedded, 23000)
     small, large = lake_world.open("small"), lake_world.open("large")
-    after_small, after_large = grow(small, 2000), grow(large, 150000)
-    assert before > 23000
-    assert after_small < 700 and after_large < 700
-    assert abs(after_large - after_small) < 8  # a hundred times larger replies add no journal bytes
-    assert len(large.replies.sequences()) == 25
+    # Only the digits of the counters change: a finished request leaves the head.
+    assert grow(embedded, 23000) <= 3 and grow(small, 2000) <= 6 and grow(large, 150000) <= 6
+    assert len(large.replies.sequences()) == 26
 
 
-def test_the_journal_grows_linearly_with_requests_not_with_history_of_replies(lake_world):
+def test_the_head_stays_the_same_size_however_many_requests_came_before(lake_world):
     s = lake_world.open()
     sizes = []
     for index in range(30):
         paid(s, f"{index:064x}", reply_text(5000))
         sizes.append(journal_bytes(s))
-    steps = [b - a for a, b in zip(sizes, sizes[1:])]
-    assert max(steps) < 700 and max(steps) - min(steps) < 80  # constant step: each commit adds one small row
+    steps = [b - a for a, b in zip(sizes[1:], sizes[2:])]
+    assert max(steps) <= 3 and min(steps) >= 0  # only a counter's digits ever change
 
 
 def test_cache_hits_read_the_reply_from_the_lake_by_reference(lake_world):
@@ -415,7 +436,8 @@ def test_crash_after_the_reply_record_but_before_the_flip_leaves_an_unreadable_o
     again = lake_world.open()
     assert again.replies.sequences() == [1]  # the orphan exists in the lake
     state = again.journal.read().value
-    assert "records" not in state  # but no control state covers it
+    assert "shared-batches/replies-run-a" not in state["records"]  # but no control state covers it
+    assert [g["status"] for g in state["held"]] == ["pending"]  # and the head, not the record, decides
     assert again.get("a" * 64).status == "pending" and again.get("a" * 64).payload is None
     assert again.requests() == 1  # usage is not double counted and not lost
     with pytest.raises(BatchInProgress):
@@ -493,9 +515,9 @@ def test_a_flip_that_loses_the_head_race_retries_with_a_fresh_sequence_and_both_
     reader = lake_world.open()
     assert reader.get("a" * 64).payload == '{"first":true}' and reader.get("b" * 64).payload == '{"second":true}'
     assert reader.requests() == 2
-    # The loser's first record (1) was beaten to its sequence and left behind; both flips use fresh numbers.
-    assert sorted(r[2]["seq"] for r in reader.journal.read().value["batches"]) == [2, 3]
-    assert reader.journal.read().value["records"]["shared-batches/replies-run-a"] == {"last": 3, "skipped": [1]}
+    # The racer found sequence 1 taken and moved on; the loser's retry reuses the batch record it already wrote.
+    assert [batch_record(reader, fp)["payload"]["seq"] for fp in ("a" * 64, "b" * 64)] == [1, 2]
+    assert reader.replies.sequences() == [1, 2] and reader.journal.read().value["held"] == []
 
 
 def test_a_failed_reply_write_embeds_the_paid_reply_instead_of_dropping_it(lake_world):
@@ -510,7 +532,7 @@ def test_a_failed_reply_write_embeds_the_paid_reply_instead_of_dropping_it(lake_
     assert settled.payload == '{"paid":true}'
     again = lake_world.open()
     assert again.get("a" * 64).payload == '{"paid":true}' and again.requests() == 1
-    assert again.journal.read().value["batches"][0][2] == '{"paid":true}'  # embedded, legacy form
+    assert batch_record(again, "a" * 64)["payload"] == '{"paid":true}'  # inline in the batch record
 
 
 def test_a_reply_larger_than_the_old_four_mib_reply_budget_goes_to_the_lake_and_reads_back(lake_world):
@@ -520,7 +542,7 @@ def test_a_reply_larger_than_the_old_four_mib_reply_budget_goes_to_the_lake_and_
     s = lake_world.open()
     large = reply_text(5 * 1024 * 1024)
     paid(s, "a" * 64, large)
-    held = s.journal.read().value["batches"][0][2]
+    held = batch_record(s, "a" * 64)["payload"]
     assert isinstance(held, dict) and held["length"] == len(large.encode())
     assert lake_world.open().get("a" * 64).payload == large
 
@@ -555,32 +577,32 @@ def test_a_missing_or_altered_reply_record_fails_closed_and_never_looks_unpaid(l
     assert again.requests() == 1
 
 
-def test_legacy_embedded_replies_still_read_and_new_ones_join_them_in_the_lake(lake_world):
+def test_legacy_embedded_replies_still_read_and_new_ones_join_them_in_the_lake(lake_world, tmp_path):
     from .s3_batch_storage import S3BatchStorage
 
-    j = journal(lake_world.client)
-    legacy = S3BatchStorage(j)
-    legacy.initialize()
-    old = paid(legacy, "a" * 64, '{"old":true}')
+    owners = []
+    legacy_ledger(
+        lake_world.client, "run-a", lambda native: owners.append(paid(native, "a" * 64, '{"old":true}')), tmp_path=tmp_path
+    )
     upgraded = lake_world.open()
     assert upgraded.get("a" * 64).payload == '{"old":true}'
     assert upgraded.reserve("a" * 64, 5, str(uuid4())).payload == '{"old":true}'
-    assert upgraded.reserve("a" * 64, 5, old, policy="refresh").payload == '{"old":true}'
+    assert upgraded.reserve("a" * 64, 5, owners[0], policy="refresh").payload == '{"old":true}'
+    assert upgraded.journal.read().value["schema"] == "cyclotron-shared-batches/v1"  # reads never migrate
     paid(upgraded, "b" * 64, '{"new":true}')
     snapshot = upgraded.export()
     assert [row[2] for row in snapshot["batches"]] == ['{"old":true}', '{"new":true}']
-    assert isinstance(upgraded.journal.read().value["batches"][0][2], str)
-    assert isinstance(upgraded.journal.read().value["batches"][1][2], dict)
+    assert isinstance(batch_record(upgraded, "a" * 64)["payload"], str)
+    assert isinstance(batch_record(upgraded, "b" * 64)["payload"], dict)
     # a refresh moves the lake-held reply into history; its original owner still replays it
-    new_owner = str(uuid4())
-    upgraded.reserve("b" * 64, 5, new_owner, policy="refresh")
-    replay_owner = upgraded.journal.read().value["attempts"][1][2]
+    replay_owner = snapshot["attempts"][1][2]
+    upgraded.reserve("b" * 64, 5, str(uuid4()), policy="refresh")
     assert upgraded.reserve("b" * 64, 5, replay_owner, policy="refresh").payload == '{"new":true}'
     assert upgraded.export()["history"][-1][4] == '{"new":true}'
-    # a ledger that cites reply records cannot be opened without a lake
+    # a ledger that cites reply records cannot read them without a lake
     blind = S3BatchStorage(journal(lake_world.client))
     with pytest.raises(ValueError, match="lake"):
-        blind.requests()
+        blind.export()
 
 
 def test_export_and_restore_round_trip_through_the_lake_and_match_the_embedded_form(lake_world):
@@ -598,7 +620,7 @@ def test_export_and_restore_round_trip_through_the_lake_and_match_the_embedded_f
     target = lake_world.open("restored")
     target.restore(json.loads(json.dumps(snapshot)))
     assert target.export() == snapshot and target.requests() == s.requests()
-    assert target.replies.sequences() == [1, 2] and isinstance(target.journal.read().value["batches"][1][2], dict)
+    assert target.replies.sequences() == [] and isinstance(batch_record(target, "b" * 64)["payload"], str)
     assert target.reserve("a" * 64, 5, first, policy="refresh").payload == '{"v":1}'
     with pytest.raises(BatchConflict):
         target.restore(snapshot)
@@ -632,3 +654,204 @@ def test_a_lake_must_belong_to_the_journals_scope():
         )
     with pytest.raises(ValueError):
         S3BatchStorage(journal(), replies=object())
+
+
+# ---------------------------------------------------------------------------
+# Constant cost: finished requests are records found by key, the head keeps only work in flight
+# ---------------------------------------------------------------------------
+
+
+class Model:
+    """A decision model that answers every batch the same way and counts its paid calls."""
+
+    model_identity = "synthetic-constant"
+
+    def __init__(self):
+        self.calls = 0
+
+    async def classify_many(self, configs, *args, **kwargs):
+        from .batched_classification import BatchedAnswers
+        from .models import DecisionResult
+
+        self.calls += 1
+        return BatchedAnswers(
+            {cid: {"decision": DecisionResult("yes", {"yes": 0.8, "no": 0.2})} for cid in configs}, "synthetic", {}, 1
+        )
+
+
+def decide(storage, model, name, *, maximum=None):
+    import asyncio
+    from datetime import datetime, timezone
+
+    from .classifier_config import ClassifierConfig
+    from .models import DecisionTask, Item
+    from .shared_decisions import SharedDecisions
+
+    config = ClassifierConfig(DecisionTask("topic", ("yes", "no"), "Relevant?"))
+    consumer = SharedDecisions(None, model, max_requests=maximum, observer=lambda _: None, storage=storage)
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    asyncio.run(consumer.prepare({"topic": config}, Item(name, {"text": "Synthetic " + name}), {"topic": ()}, now=now))
+
+
+def test_the_bytes_and_calls_one_decision_spends_on_the_ledger_do_not_depend_on_how_many_came_before(lake_world):
+    s, model = lake_world.open(), Model()
+    client = lake_world.client
+    spent = {}
+    for number in range(1, 96):
+        before = len(client.calls)
+        decide(s, model, f"item-{number:03d}")
+        calls = client.calls[before:]
+        spent[number] = (
+            sum(len(request["Body"]) for kind, request in calls if kind == "put"),
+            sum(kind == "put" for kind, _ in calls),
+            sum(kind == "get" for kind, _ in calls),
+            sum(kind == "put" and request["Key"] == s.journal.head_key for kind, request in calls),
+        )
+    # Decision 55 and decision 95 (same counter widths) write the same bytes with the same calls.
+    assert spent[55] == spent[95]
+    assert spent[95][3] == 2  # two commits: reserve with its claim, then the reply
+    assert spent[95][0] < 5000
+    assert model.calls == 95 and s.journal.read().value["held"] == [] and s.requests() == 95
+
+
+def test_reserving_with_the_claim_is_one_commit_and_the_claim_then_needs_no_write():
+    s = store()
+    owner = str(uuid4())
+    client = s.journal.payloads.client
+
+    def heads():
+        return sum(kind == "put" and r["Key"] == s.journal.head_key for kind, r in client.calls)
+
+    before = heads()
+    row = s.reserve("a" * 64, 1, owner, claim=True)
+    assert row.claimed and row.status == "pending" and heads() == before + 1
+    assert s.claim("a" * 64, owner) and heads() == before + 1
+    assert not s.claim("a" * 64, owner)  # the claim is taken once
+    assert not store(journal(client)).claim("a" * 64, owner)  # and never by another handle
+    s.settle("a" * 64, owner, "complete", '{"ok":true}')
+    assert heads() == before + 2 and s.get("a" * 64).payload == '{"ok":true}'
+    # A plain reservation still leaves the claim to an explicit, separate commit.
+    other = str(uuid4())
+    assert not s.reserve("b" * 64, 3, other).claimed and s.claim("b" * 64, other)
+
+
+def test_an_uncertain_reservation_with_the_claim_never_authorizes_dispatch():
+    s = store()
+    owner = str(uuid4())
+    s.journal.payloads.client.lose = lambda key: key == s.journal.head_key
+    with pytest.raises(BatchUncertain):
+        s.reserve("a" * 64, 1, owner, claim=True)
+    assert not s.claim("a" * 64, owner)  # the commit landed, but its claim is never inferred from rereading
+    assert s.requests() == 1 and s.get("a" * 64).claimed
+
+
+def test_an_owner_reused_for_a_different_request_is_still_refused_after_its_request_finished():
+    s = store()
+    owner = str(uuid4())
+    s.reserve("a" * 64, 5, owner, claim=True)
+    s.settle("a" * 64, owner, "complete", '{"a":1}')
+    reopened = store(journal(s.journal.payloads.client))
+    with pytest.raises(BatchConflict, match="different request"):
+        reopened.reserve("b" * 64, 5, owner)
+    assert reopened.reserve("a" * 64, 5, owner).payload == '{"a":1}' and reopened.requests() == 1
+
+
+def test_a_settled_request_whose_record_cannot_be_written_stays_in_the_head_until_a_later_write():
+    from .record_lake import RecordUncertain
+
+    s = store()
+    owner = str(uuid4())
+    s.reserve("a" * 64, 5, owner, claim=True)
+    real = s.records._create
+
+    def unreachable(key, content):
+        raise RecordUncertain("records unreachable")
+
+    s.records._create = unreachable
+    assert s.settle("a" * 64, owner, "complete", '{"paid":true}').payload == '{"paid":true}'
+    held = s.journal.read().value["held"]
+    assert [(g["status"], g["payload"]) for g in held] == [("complete", '{"paid":true}')]
+    assert store(journal(s.journal.payloads.client)).get("a" * 64).payload == '{"paid":true}'
+    s.records._create = real
+    s.reserve("b" * 64, 5, str(uuid4()))  # the next commit writes it out
+    assert [g["fingerprint"] for g in s.journal.read().value["held"]] == ["b" * 64]
+    assert batch_record(s, "a" * 64)["payload"] == '{"paid":true}' and s.get("a" * 64).payload == '{"paid":true}'
+
+
+class DeniedS3(ConditionalS3):
+    """S3 that refuses reads of the batch records, written or not, as a principal lacking the grant sees it."""
+
+    denied = ()
+
+    def get_object(self, **request):
+        if any(part in request["Key"] for part in self.denied):
+            raise S3Error("AccessDenied")
+        return super().get_object(**request)
+
+
+def test_a_denied_batch_record_read_refuses_and_never_looks_unpaid():
+    from .record_lake import RecordUnavailable
+
+    client, model = DeniedS3(), Model()
+    s = store(journal(client))
+    decide(s, model, "one")
+    client.denied = ("/records/shared-batches/batches-",)
+    for name in ("one", "two"):  # a written record, and a key nobody wrote: neither reads as absent
+        blind = store(journal(client))
+        with pytest.raises(RecordUnavailable):
+            decide(blind, model, name)
+    assert model.calls == 1 and s.requests() == 1  # no second payment, no new reservation
+
+
+def test_an_old_format_ledger_answers_an_already_paid_request_from_its_record_then_migrates_on_first_write(tmp_path):
+    from .batch_storage import SQLiteBatchStorage
+    from .record_lake import S3RecordLake
+    from .record_lake_contract_test import ListingS3
+    from .s3_batch_storage import S3BatchStorage
+
+    client, model = ListingS3(), Model()
+    pending_owner, failed_owner = str(uuid4()), str(uuid4())
+
+    def history(native):
+        for name in ("paid-1", "paid-2", "paid-3"):
+            decide(native, model, name)
+        native.reserve("f" * 64, None, pending_owner, claim=True)  # dispatched before the deploy, never answered
+        native.reserve("e" * 64, None, failed_owner, claim=True)
+        native.settle("e" * 64, failed_owner, "failed")
+
+    j = journal(client, name="ledger")
+    lake = S3RecordLake(j.payloads, "shared-batches", "replies-ledger")
+    legacy_ledger(client, "ledger", history, lake=lake, tmp_path=tmp_path)
+    old = j.read().value
+    assert old["schema"] == "cyclotron-shared-batches/v1" and old["records"]["shared-batches/replies-ledger"]["last"] == 3
+    paid_calls = model.calls
+
+    ledger = S3BatchStorage(journal(client, name="ledger"), replies=lake)
+    ledger.initialize()
+    before = ledger.export()
+    decide(ledger, model, "paid-2")  # served from the old ledger: no model call and no write
+    assert model.calls == paid_calls and j.read().value == old
+    with pytest.raises(RuntimeError, match="explicit retry"):
+        ledger.reserve("e" * 64, None, str(uuid4()))  # a failed exact decision still needs an explicit retry
+    with pytest.raises(BatchInProgress):
+        ledger.reserve("f" * 64, None, str(uuid4()), retry_failed=True)
+
+    decide(ledger, model, "new-1")  # the first write migrates, then reserves
+    head = j.read().value
+    assert head["schema"] == "cyclotron-shared-batches/v2" and model.calls == paid_calls + 1
+    assert [(g["fingerprint"], g["owner"]) for g in head["held"]] == [("f" * 64, pending_owner)]
+    assert ledger.requests() == len(before["attempts"]) + 1
+    after = ledger.export()
+    assert after["history"] == before["history"] and after["attempts"][: len(before["attempts"])] == before["attempts"]
+    assert [row for row in after["batches"] if row[0] in {r[0] for r in before["batches"]}] == before["batches"]
+    fresh = S3BatchStorage(journal(client, name="ledger"), replies=lake)
+    decide(fresh, model, "paid-1")
+    assert model.calls == paid_calls + 1  # still answered by key after migration
+    assert not fresh.claim("f" * 64, pending_owner) and fresh.get("f" * 64).claimed
+    with pytest.raises(BatchInProgress):
+        fresh.reserve("f" * 64, None, str(uuid4()), retry_failed=True)
+    with pytest.raises(BatchConflict, match="different request"):
+        fresh.reserve("d" * 64, None, failed_owner)  # an old owner is still bound to its request
+    native = SQLiteBatchStorage(tmp_path / "compare.sqlite")
+    native.restore(after)
+    assert native.export() == after

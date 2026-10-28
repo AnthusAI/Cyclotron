@@ -304,3 +304,16 @@ def test_learning_abandonment_preserves_charged_attempts_and_only_fences_its_own
     with pytest.raises(RuntimeError, match="ceiling"):
         store.reserve("a" * 64, 3, str(uuid4()))
     store.close()
+
+
+def test_reserving_with_the_claim_takes_it_once_and_exports_like_a_separate_claim(tmp_path):
+    together, apart = SQLiteBatchStorage(tmp_path / "together.sqlite"), SQLiteBatchStorage(tmp_path / "apart.sqlite")
+    owner = str(uuid4())
+    row = together.reserve("a" * 64, 3, owner, claim=True)
+    assert row.claimed and together.claim("a" * 64, owner) and not together.claim("a" * 64, owner)
+    assert not SQLiteBatchStorage(tmp_path / "together.sqlite").claim("a" * 64, owner)
+    apart.reserve("a" * 64, 3, owner)
+    assert apart.claim("a" * 64, owner)
+    assert together.export() == apart.export()
+    together.close()
+    apart.close()

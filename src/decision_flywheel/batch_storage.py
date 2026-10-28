@@ -54,7 +54,7 @@ class BatchStorage(Protocol):
     def get(self, fingerprint: str, *, payload: bool = True) -> BatchRecord | None: ...
     def requests(self) -> int: ...
     def reserve(
-        self, fingerprint: str, maximum: int | None, owner: str, *, policy="reuse", retry_failed=False
+        self, fingerprint: str, maximum: int | None, owner: str, *, policy="reuse", retry_failed=False, claim=False
     ) -> BatchRecord: ...
     def claim(self, fingerprint: str, owner: str) -> bool: ...
     def settle(self, fingerprint: str, owner: str, status: str, payload: str | None = None) -> BatchRecord: ...
@@ -184,6 +184,7 @@ class SQLiteBatchStorage:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, timeout=30, check_same_thread=False)
         self.lock = RLock()
+        self._claims = set()  # (fingerprint, owner) this handle reserved and claimed in one transaction
         self.db.executescript("""CREATE TABLE IF NOT EXISTS batches(key TEXT PRIMARY KEY,status TEXT,payload TEXT);
             CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY,key TEXT);
             CREATE TABLE IF NOT EXISTS batch_history(id INTEGER PRIMARY KEY,key TEXT,generation INTEGER,status TEXT,payload TEXT);""")
@@ -235,12 +236,13 @@ class SQLiteBatchStorage:
         with self.lock:
             return self.db.execute("SELECT COUNT(*) FROM attempts").fetchone()[0]
 
-    def reserve(self, fingerprint, maximum, owner, *, policy="reuse", retry_failed=False):
+    def reserve(self, fingerprint, maximum, owner, *, policy="reuse", retry_failed=False, claim=False):
+        """Reserve one paid attempt. ``claim=True`` also takes the dispatch claim in the same transaction."""
         validate_request(fingerprint, owner)
-        if (maximum is not None and (type(maximum) is not int or maximum < 0)) or policy not in (
-            "reuse",
-            "cache_only",
-            "refresh",
+        if (
+            (maximum is not None and (type(maximum) is not int or maximum < 0))
+            or policy not in ("reuse", "cache_only", "refresh")
+            or type(claim) is not bool
         ):
             raise ValueError("valid request ceiling or None and policy required")
         with self.lock, self.db:
@@ -282,13 +284,18 @@ class SQLiteBatchStorage:
             self.db.execute("INSERT INTO attempts(key,owner) VALUES (?,?)", (fingerprint, owner))
             revision = self.db.execute("SELECT revision FROM batches WHERE key=?", (fingerprint,)).fetchone()
             self.db.execute(
-                'INSERT OR REPLACE INTO batches(key,status,payload,owner,claimed,revision) VALUES (?,"pending",NULL,?,0,?)',
-                (fingerprint, owner, revision[0] + 1 if revision else 1),
+                'INSERT OR REPLACE INTO batches(key,status,payload,owner,claimed,revision) VALUES (?,"pending",NULL,?,?,?)',
+                (fingerprint, owner, int(claim), (revision[0] + 1 if revision else 1) + int(claim)),
             )
+            if claim:
+                self._claims.add((fingerprint, owner))
             return self._get(fingerprint)
 
     def claim(self, fingerprint, owner):
         with self.lock, self.db:
+            if (fingerprint, owner) in self._claims:
+                self._claims.discard((fingerprint, owner))
+                return True  # claimed by this handle's own reservation
             return (
                 self.db.execute(
                     'UPDATE batches SET claimed=1,revision=revision+1 WHERE key=? AND owner=? AND status="pending" AND claimed=0',
