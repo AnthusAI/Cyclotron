@@ -328,3 +328,58 @@ def test_a_manual_override_is_explained_plainly_with_who_set_it():
     plain = build([], review_rate=rate).to_json()["reviewRate"]
     assert plain["plainReason"] == "The review rate was set to 50% by editor."
     assert plain["plainNextStep"] is None
+
+
+def test_a_saved_version_tracker_continues_exactly_as_one_that_replayed_every_event():
+    import json
+
+    from .cyclotron_status import VersionTracker
+
+    def activated(rubric, at):
+        return {"kind": "classifier-activated", "classifier_snapshot": {"config": {"rubric": rubric}}, "created_at": at}
+
+    early = [
+        {"kind": "cycle-started", "classifier_snapshot": {"config": {"rubric": ""}}},
+        activated("Prefer primary sources.", "t1"),
+    ]
+    later = [activated("Prefer primary sources.", "t2"), activated("Prefer field reporting.", "t3")]
+    replayed = VersionTracker()
+    for event in early + later:
+        replayed.feed(event)
+    saved = VersionTracker()
+    for event in early:
+        saved.feed(event)
+    resumed = VersionTracker.from_json(json.loads(json.dumps(saved.to_json())))
+    for event in later:
+        resumed.feed(event)
+    assert resumed.to_json() == replayed.to_json() and resumed.version == 3
+
+
+def test_a_saved_status_fold_gives_the_same_snapshot_as_folding_every_event():
+    import json
+    from datetime import datetime, timezone
+
+    from .cyclotron_status import StatusFold
+
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    events = [
+        prediction("a", "include", 0.9),
+        prediction("b", "exclude", 0.2),
+        review("a", "exclude", feedback_id="fa"),
+        review("b", "exclude", feedback_id="fb"),
+        review("b", "exclude", feedback_id="fb", action="retracted"),
+        prediction("c", "include", 0.7),
+        review("c", "include", feedback_id="fc", at="2026-10-09T12:00:00+00:00"),
+    ]
+    fixed = dict(cyclotron_id="papyrus-relevance", classifier="relevant", fingerprint="v-one", now=now)
+    whole = StatusFold(LABELS)
+    for event in events:
+        whole.feed(event)
+    first = StatusFold(LABELS)
+    for event in events[:3]:
+        first.feed(event)
+    resumed = StatusFold.from_json(json.loads(json.dumps(first.to_json())))
+    for event in events[3:]:
+        resumed.feed(event)
+    assert resumed.status(positive_label=LABELS[0], **fixed) == whole.status(positive_label=LABELS[0], **fixed)
+    assert build(events, now=now) == whole.status(positive_label=LABELS[0], **fixed)

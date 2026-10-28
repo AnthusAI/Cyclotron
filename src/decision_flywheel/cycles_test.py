@@ -112,3 +112,39 @@ def test_events_name_the_fit_proof_that_only_the_fit_records_in_full(tmp_path):
         }
         assert snapshot["head"]["provenance"] == fitted["provenance"]
     wheel.close()
+
+
+def test_the_unfinished_cycle_index_keeps_open_and_failed_cycles_and_drops_completed_ones():
+    from .cycles import note_cycle_event, unfinished_cycles_from
+
+    def event(kind, cycle_id, number, item="paper"):
+        return {"kind": kind, "cycle_id": cycle_id, "cycle_number": number, "cycle_item_id": item, "reason": "item-processing"}
+
+    events = [
+        event("cycle-started", "a", 1),
+        event("cycle-completed", "a", 1),
+        event("cycle-started", "b", 2),
+        event("cycle-failed", "b", 2),
+        event("cycle-started", "c", 3),
+        event("cycle-started", "x", 4, item="other"),
+        {"kind": "prediction", "cycle_item_id": "paper"},
+    ]
+    assert unfinished_cycles_from(events, "paper") == (("b", 2, "item-processing", True), ("c", 3, "item-processing", False))
+    index = {}
+    for row in events:
+        note_cycle_event(index, row)
+    note_cycle_event(index, event("cycle-completed", "x", 4, item="other"))
+    assert set(index) == {"paper"}
+
+
+def test_resume_reattaches_the_latest_unfinished_cycle_and_a_failed_one_only_for_replay(tmp_path):
+    wheel = DecisionFlywheel(tmp_path / "runtime.sqlite3", ClassifierConfig(TASK), FakeModel(), agent([]))
+    paper = Item("paper", {"text": "yes paper"})
+    with pytest.raises(RuntimeError):
+        with wheel.cycle(paper):
+            raise RuntimeError("interrupted")
+    assert wheel.resume_cycle(paper) is None
+    cycle = wheel.resume_cycle(paper, include_failed=True)
+    assert cycle is not None and cycle.context["cycle_item_id"] == "paper"
+    cycle.__exit__(None, None, None)
+    assert wheel.resume_cycle(paper, include_failed=True) is None

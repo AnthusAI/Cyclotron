@@ -325,6 +325,7 @@ class Cyclotron:
         self.wheels[spec.id] = wheel
         self.versions[spec.id] = VersionTracker(initial_snapshot(wheel))
         self._seen[spec.id] = 0
+        self._resume_tracker(spec.id)
 
     def _close_classifier(self, classifier: str) -> None:
         self.wheels.pop(classifier).close()
@@ -1315,6 +1316,20 @@ class Cyclotron:
 
     # Derived records ------------------------------------------------------
 
+    def _tracker_origin(self, cid: str) -> str:
+        """Identifies where replay starts for this classifier; a saved tracker resumes only from the same start."""
+        return hashlib.sha256(_json(initial_snapshot(self.wheels[cid])).encode()).hexdigest()
+
+    def _resume_tracker(self, cid: str) -> None:
+        """Pick up the version tracker saved with the cursor, so opening replays only newer events."""
+        row = self.root_storage.meta(f"tracker:{cid}")
+        if row is None:
+            return
+        saved = json.loads(row[0])
+        if saved["origin"] == self._tracker_origin(cid):
+            self.versions[cid] = VersionTracker.from_json(saved["tracker"])
+            self._seen[cid] = saved["seen"]
+
     def _sync(self) -> None:
         """Derive reviews, versions and subscribe events from classifier events.
 
@@ -1341,6 +1356,12 @@ class Cyclotron:
                                 page_events.extend(self._derive(cid, event, change))
                         if next_cursor > cursor:
                             self.root_storage.put_meta(f"cursor:{cid}", str(next_cursor))
+                        tracker = {
+                            "origin": self._tracker_origin(cid),
+                            "seen": page["cursor"],
+                            "tracker": self.versions[cid].to_json(),
+                        }
+                        self.root_storage.put_meta(f"tracker:{cid}", _json(tracker))
                 except BaseException:
                     # A rolled-back derived page must also roll back the
                     # in-memory source position/version before an in-process retry.

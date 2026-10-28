@@ -5,6 +5,38 @@ from uuid import uuid4
 
 from .classifier_snapshot import compact_snapshot
 
+CYCLE_EVENT_KINDS = ("cycle-started", "cycle-completed", "cycle-failed")
+
+
+def note_cycle_event(index, event):
+    """Fold one event into ``{item_id: [[cycle_id, cycle_number, reason, failed], ...]}`` in start order.
+
+    A completed cycle leaves the index; a failed one stays, marked, for a replay to finish under its own number.
+    """
+    kind, item_id = event.get("kind"), event.get("cycle_item_id")
+    if kind not in CYCLE_EVENT_KINDS or item_id is None:
+        return index
+    rows = index.setdefault(item_id, [])
+    if kind == "cycle-started":
+        rows.append([event["cycle_id"], event.get("cycle_number"), event.get("reason", "item-processing"), False])
+    else:
+        for row in rows:
+            if row[0] == event.get("cycle_id"):
+                row[3] = True
+        if kind == "cycle-completed":
+            rows[:] = [row for row in rows if row[0] != event.get("cycle_id")]
+    if not rows:
+        del index[item_id]
+    return index
+
+
+def unfinished_cycles_from(events, item_id):
+    """The index entry for one item, folded from cycle events in order (for stores that can query them)."""
+    index = {}
+    for event in events:
+        note_cycle_event(index, event)
+    return tuple(tuple(row) for row in index.get(item_id, ()))
+
 
 class Cycle:
     def __init__(self, wheel, item=None, *, reason="item-processing"):
@@ -24,27 +56,23 @@ class Cycle:
         """
         if wheel._cycle_running:
             raise RuntimeError("one operational cycle may run at a time")
-        closing_kinds = ("cycle-completed",) if include_failed else ("cycle-completed", "cycle-failed")
-        closed = set()
-        for event in reversed(wheel.events_of(("cycle-started", "cycle-completed", "cycle-failed"))):
-            if event["kind"] in closing_kinds:
-                closed.add(event.get("cycle_id"))
-            if event["kind"] == "cycle-started":
-                if event["cycle_id"] in closed or event.get("cycle_item_id") != item.id:
-                    continue
-                cycle = cls(wheel, item, reason=event.get("reason", "item-processing"))
-                cycle.context = {key: event[key] for key in ("cycle_id", "cycle_number", "cycle_item_id")}
-                cycle.token = wheel._cycle_context.set(cycle.context)
-                wheel._cycle_running = True
-                try:
-                    wheel._emit(
-                        {"kind": "cycle-resumed", "reason": cycle.reason, "classifier_snapshot": compact_snapshot(wheel.active)}
-                    )
-                except Exception:
-                    wheel._cycle_context.reset(cycle.token)
-                    wheel._cycle_running = False
-                    raise
-                return cycle
+        # The store keeps the item's unfinished cycles, so resuming never reads the event history.
+        for cycle_id, number, reason, failed in reversed(wheel.runtime_storage.unfinished_cycles(item.id)):
+            if failed and not include_failed:
+                continue
+            cycle = cls(wheel, item, reason=reason)
+            cycle.context = {"cycle_id": cycle_id, "cycle_number": number, "cycle_item_id": item.id}
+            cycle.token = wheel._cycle_context.set(cycle.context)
+            wheel._cycle_running = True
+            try:
+                wheel._emit(
+                    {"kind": "cycle-resumed", "reason": cycle.reason, "classifier_snapshot": compact_snapshot(wheel.active)}
+                )
+            except Exception:
+                wheel._cycle_context.reset(cycle.token)
+                wheel._cycle_running = False
+                raise
+            return cycle
         return None
 
     def __enter__(self):

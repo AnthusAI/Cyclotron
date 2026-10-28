@@ -31,6 +31,7 @@ class RuntimeStateStorage(Protocol):
     def events_of(self, kinds: tuple[str, ...]) -> tuple[dict, ...]: ...
     def active_labels(self) -> tuple[dict, ...]: ...
     def next_cycle_number(self) -> int: ...
+    def unfinished_cycles(self, item_id: str) -> tuple[tuple, ...]: ...
     def close(self) -> None: ...
 
 
@@ -135,6 +136,11 @@ class SQLiteRuntimeStateStorage:
             + ") ORDER BY id"
         )
         return tuple({**json.loads(payload), "event_id": identifier} for identifier, payload in self.db.execute(sql, kinds))
+
+    def unfinished_cycles(self, item_id):
+        from .cycles import CYCLE_EVENT_KINDS, unfinished_cycles_from
+
+        return unfinished_cycles_from(self.events_of(CYCLE_EVENT_KINDS), item_id)
 
     def next_cycle_number(self):
         return self.db.execute("SELECT COALESCE(MAX(json_extract(payload,'$.cycle_number')),0)+1 FROM runtime_events").fetchone()[
