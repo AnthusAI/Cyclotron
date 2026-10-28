@@ -176,8 +176,8 @@ class AccountsClient:
         if identifier.version != 4:
             raise ValueError("account creation requires a UUIDv4 idempotency key")
         key = str(identifier)
-        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 200:
-            raise ValueError("account name required (maximum 200 characters)")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("account name required")
         result = self.transport("POST", "/v1/accounts", human_token, {"name": name.strip()}, key)
         if not isinstance(result.get("account"), dict):
             raise ProspectusUnavailable("invalid account service response")

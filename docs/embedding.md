@@ -598,10 +598,10 @@ and `status` need the `console:read` role; accepting or importing needs `console
 The lab re-verifies the token with the account service on every request and again after the
 work. The `priming` object is `null` when the binding has no configured list. Slice 1 is file
 import only: there is no hosted transformer, so `transform` answers `400 no_hosted_transformer`.
-Draft names are private to the publication, an import is limited to about 1 MB, and accepting
+Draft names are private to the publication, an import has no size limit of its own, and accepting
 is idempotent and applies the examples to the publication's cyclotron so the next decision
 uses them. Refusals use stable codes (`bearer_required`, `bearer_invalid`, `access_refused`,
-`authority_unavailable`, `account_changed`, `outside_publication`, `import_too_large`,
+`authority_unavailable`, `account_changed`, `outside_publication`,
 `storage_limit`, `firewall_overlap`, `auto_prime_failed`, `operation_unavailable`).
 See `publication-deployment-contract.md` for the full contract.
 

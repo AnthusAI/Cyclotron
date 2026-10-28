@@ -18,6 +18,7 @@ from uuid import UUID
 from .models import Item
 
 CONTRACT = "cyclotron-publication/v1"
+# Retained only for publication_steering, which another change owns; this module enforces no size limit.
 MAX_BYTES = 2_000_000
 CAPABILITIES = {
     "decide": "decide",
@@ -43,8 +44,8 @@ class PublicationError(ValueError):
 
 
 def text(value, name):
-    if not isinstance(value, str) or not value.strip() or len(value) > 4000:
-        raise PublicationError(f"{name} must be non-empty bounded text", 400)
+    if not isinstance(value, str) or not value.strip():
+        raise PublicationError(f"{name} must be non-empty text", 400)
     return value
 
 
@@ -61,8 +62,6 @@ class PublicationBinding:
         text(self.revision, "binding revision")
         if self.priming_list_id is not None:
             text(self.priming_list_id, "priming list identity")
-            if len(self.priming_list_id) > 200:
-                raise ValueError("priming list identity must be bounded")
         object.__setattr__(self, "outputs", tuple(self.outputs))
         if not self.outputs or len(set(self.outputs)) != len(self.outputs):
             raise ValueError("publication needs distinct output identities")
@@ -171,8 +170,6 @@ class PublicationLab:
         if not isinstance(item, dict) or set(item) != {"id", "values"} or not isinstance(item["values"], dict):
             raise PublicationError("item needs an explicit identity and structured values", 400)
         text(item["id"], "item identity")
-        if len(json.dumps(item, allow_nan=False).encode()) > MAX_BYTES:
-            raise PublicationError("item exceeds size limit", 413)
         target = Item(item["id"], json.loads(json.dumps(item["values"], allow_nan=False)))
 
         async def guarded():
@@ -221,9 +218,6 @@ class PublicationLab:
                 if not isinstance(item, dict) or set(item) != {"id", "values"} or not isinstance(item["values"], dict):
                     raise PublicationError("item needs an explicit identity and structured values", 400)
                 text(item["id"], "item identity")
-                encoded = json.dumps(item, allow_nan=False)
-                if len(encoded.encode()) > MAX_BYTES:
-                    raise PublicationError("item exceeds size limit", 413)
                 target = Item(item["id"], json.loads(json.dumps(item["values"], allow_nan=False)))
                 prepared = None
 
@@ -289,8 +283,8 @@ class PublicationLab:
                 explanation = payload.get("explanation")
                 if explanation is None:
                     explanation = ""
-                if not isinstance(explanation, str) or len(explanation) > 4000:
-                    raise PublicationError("explanation must be bounded text when provided", 400)
+                if not isinstance(explanation, str):
+                    raise PublicationError("explanation must be text when provided", 400)
                 context = None
 
                 def preflight():
@@ -400,8 +394,6 @@ class PublicationLab:
                 return {**envelope, "classifiers": {cid: self.engine.status(cid).to_json() for cid in binding.outputs}}
             history = []
             rows = self.engine.decision_log()
-            if len(rows) > 200:
-                raise PublicationError("history exceeds local slice limit; bounded history adapter required", 413)
             replay = self.records.replay(publication, set(binding.outputs)) if self.records is not None else []
             reconciliation = self.records is not None and not self.feedback_composed(publication, binding)
             for row in rows:
@@ -461,7 +453,7 @@ class PublicationLab:
 
     def review_cursor(self, review_id):
         after = 0
-        for _ in range(10):
+        while True:
             page = self.engine.subscribe(after=after, limit=1000)
             for event in page["events"]:
                 if event["kind"] == "review" and event["review"]["reviewId"] == review_id:
@@ -469,11 +461,11 @@ class PublicationLab:
             if len(page["events"]) < 1000:
                 break
             after = page["cursor"]
-        raise PublicationError("review acknowledgement requires bounded authoritative event lookup")
+        raise PublicationError("review acknowledgement found no authoritative review event")
 
     def feedback_composed(self, publication, binding):
         after = 0
-        for _ in range(10):
+        while True:
             page = self.engine.subscribe(after=after, limit=1000)
             for event in page["events"]:
                 if event["kind"] == "review" and event["review"]["classifier"] in binding.outputs:
@@ -482,7 +474,6 @@ class PublicationLab:
             if len(page["events"]) < 1000:
                 return True
             after = page["cursor"]
-        raise PublicationError("canonical feedback reconciliation exceeds bounded event lookup")
 
 
 class EmbeddedPublicationClient:
@@ -547,13 +538,12 @@ class HTTPPublicationClient:
     def _response(self, response, publication):
         if response.status_code >= 300:
             code = "publication_error"
-            if len(response.content) <= MAX_BYTES:
-                try:
-                    error = response.json()
-                    if isinstance(error, dict) and error.get("code") in ("reconciliation_required", "account_changed"):
-                        code = error["code"]
-                except ValueError:
-                    pass
+            try:
+                error = response.json()
+                if isinstance(error, dict) and error.get("code") in ("reconciliation_required", "account_changed"):
+                    code = error["code"]
+            except ValueError:
+                pass
             message = (
                 "remote operation requires explicit reconciliation; outcome is uncertain"
                 if code == "reconciliation_required"
@@ -562,8 +552,6 @@ class HTTPPublicationClient:
             if code == "account_changed":
                 message = "selected account changed; refresh account context"
             raise PublicationError(message, response.status_code, code=code)
-        if len(response.content) > MAX_BYTES:
-            raise PublicationError("remote response exceeds size limit", 502)
         try:
             value = response.json()
         except ValueError:
@@ -624,11 +612,7 @@ def _create_publication_http(*, lab=None, authorize=None, resolve_access=None, r
                     actor = await actor
                 if not isinstance(actor, PublicationActor):
                     raise PublicationError("host authorization required", 403)
-            raw = bytearray()
-            async for chunk in request.stream():
-                raw.extend(chunk)
-                if len(raw) > MAX_BYTES:
-                    raise PublicationError("request exceeds size limit", 413)
+            raw = await request.body()
             try:
                 body = json.loads(raw)
             except (ValueError, UnicodeError):
@@ -672,8 +656,6 @@ def _create_publication_http(*, lab=None, authorize=None, resolve_access=None, r
                 body["payload"],
                 **({"execution_guard": execution_guard} if execution_guard is not None else {}),
             )
-            if len(json.dumps(result, allow_nan=False).encode()) > MAX_BYTES:
-                raise PublicationError("response exceeds contract size limit", 413)
             return JSONResponse(result, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
         except PublicationError as exc:
             return JSONResponse(

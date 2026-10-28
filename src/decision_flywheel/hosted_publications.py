@@ -22,7 +22,7 @@ from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
 from .priming_context import catalog_priming, decode_priming
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
-from .publication_lab import CONTRACT, MAX_BYTES, PublicationActor, PublicationBinding, PublicationLab, criteria_fingerprint
+from .publication_lab import CONTRACT, PublicationActor, PublicationBinding, PublicationLab, criteria_fingerprint
 from .s3_embedded_storage import S3CyclotronStores
 from .standing_publications import validate_item
 from .storage_errors import StorageConflict, StorageUncertain
@@ -548,8 +548,6 @@ def install_publication_routes(app, runtime):
     @app.post("/api/publications/{publication}/operations")
     async def operation(publication: str, request: Request):
         content = await request.body()
-        if len(content) > min(MAX_BYTES, 65536):
-            raise HTTPException(413, "bounded publication request required")
         try:
             body = json.loads(content)
             if set(body) != {"contractVersion", "operation", "payload"} or body["contractVersion"] != CONTRACT:

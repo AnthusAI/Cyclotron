@@ -75,7 +75,7 @@ class HostedAccounts:
                     or not math.isfinite(auth_time)
                     or auth_time > self.sessions.clock() + 30
                     or not isinstance(lineage, str)
-                    or not 0 < len(lineage) <= 256
+                    or not lineage
                     or not lineage.isascii()
                 ):
                     raise SessionRejected("session binding is invalid")
@@ -291,7 +291,7 @@ class HostedAccounts:
                     self.sessions.consume, request.query_params.get("state"), request.cookies.get(self.config.transaction_cookie)
                 )
                 code = request.query_params.get("code")
-                if not code or len(code) > 2048 or request.query_params.get("error"):
+                if not code or request.query_params.get("error"):
                     raise SessionRejected("invalid authorization response")
                 result = await self.token_client.post(
                     self.config.authorization_origin + "/oauth2/token",
@@ -305,7 +305,7 @@ class HostedAccounts:
                     follow_redirects=False,
                     timeout=10,
                 )
-                if result.status_code != 200 or len(result.content) > 65536:
+                if result.status_code != 200:
                     raise SessionRejected("authorization exchange failed")
                 tokens = result.json()
                 access_token, id_token = tokens["access_token"], tokens["id_token"]
@@ -372,17 +372,7 @@ class HostedAccounts:
                 rows = await asyncio.to_thread(workspace.store.events, run_id, after=after, limit=limit)
             except ValueError:
                 raise HTTPException(404, "unknown run") from None
-            events = []
-            length = 16
-            for row in rows:
-                event = {"sequence": row["sequence"], "sourceId": row["source_id"], "payload": row["payload"]}
-                size = len(json.dumps(event, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()) + 1
-                if length + size > 1048576:
-                    if not events:
-                        raise HTTPException(413, "event exceeds page budget; operator review required")
-                    break
-                events.append(event)
-                length += size
+            events = [{"sequence": row["sequence"], "sourceId": row["source_id"], "payload": row["payload"]} for row in rows]
             return JSONResponse({"events": events}, headers={"Cache-Control": "private, no-store"})
 
         @app.post("/api/accounts/select")

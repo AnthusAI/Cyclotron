@@ -184,6 +184,8 @@ def test_kms_envelope_binds_exact_key_application_kind_and_session_reference():
     with pytest.raises(Exception):
         cipher.decrypt("session", ref, damaged)
     assert kms.calls[0]["EncryptionContext"]["purpose"] == "oauth-session"
+    large = b"synthetic-jwt-" + b"j" * 100_000
+    assert cipher.decrypt("session", ref, cipher.encrypt("session", ref, large)) == large
 
 
 def test_missing_session_is_signed_out_but_corrupt_or_unavailable_canonical_state_is_not():

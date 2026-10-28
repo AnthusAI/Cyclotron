@@ -2,7 +2,6 @@
 
 import json
 
-REASON_LIMIT = 120
 LOGGED_PATHS = ("/machine/", "publications")
 # The conflict message is str(exc) from storage; only its code and class name are logged.
 CODE_ONLY = {"request_conflict": "ValueError"}
@@ -30,4 +29,4 @@ def refusal_reason(status, body):
     else:
         return None
     reason = "".join(ch if ch.isprintable() else " " for ch in reason)
-    return reason[:REASON_LIMIT] or None
+    return reason or None

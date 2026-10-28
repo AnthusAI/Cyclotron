@@ -32,7 +32,7 @@ class OAuthConfig:
     def __post_init__(self):
         if not re.fullmatch(r"https://cognito-idp\.[a-z0-9-]+\.amazonaws\.com/[A-Za-z0-9_-]+", self.issuer):
             raise ValueError("a pinned Cognito issuer is required")
-        if not self.client_id or len(self.client_id) > 128:
+        if not self.client_id:
             raise ValueError("a dedicated console app client is required")
         auth = urlsplit(self.authorization_origin)
         if auth.scheme != "https" or not auth.hostname or auth.path or auth.query or auth.fragment or auth.username:
@@ -75,7 +75,7 @@ class CognitoTokenVerifier:
 
     def _verify(self, token, kind):
         try:
-            if not isinstance(token, str) or not token or len(token) > 16384:
+            if not isinstance(token, str) or not token:
                 raise SessionRejected("invalid session token")
             header = jwt.get_unverified_header(token)
             if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):

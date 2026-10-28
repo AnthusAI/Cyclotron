@@ -34,12 +34,11 @@ class HostedConsoleService:
             raise AccountAccessDenied("request session changed")
         content = encode(payload)
         if (
-            len(content) > 65536
-            or any(secret and secret.encode() in content for secret in (*self.redact, session.access_token))
+            any(secret and secret.encode() in content for secret in (*self.redact, session.access_token))
             or not isinstance(request_id, str)
-            or not 1 <= len(request_id) <= 256
+            or not request_id
         ):
-            raise ValueError("bounded credential-free command required")
+            raise ValueError("credential-free command with a request identity required")
         binding = await asyncio.to_thread(self.authorization.binding_for_run, self.account_id, run_id)
         if self.command_policy is not None:
             self.command_policy(run_id, kind)
@@ -60,9 +59,9 @@ class HostedConsoleService:
             raise AccountAccessDenied("verified machine actor required")
         if not self.allow_live and not (self.data_command and self.data_command(kind, payload)):
             raise ValueError("live commands require separate operator authority")
-        content = encode(payload)
-        if len(content) > 65536 or not isinstance(request_id, str) or not 1 <= len(request_id) <= 256:
-            raise ValueError("bounded credential-free command required")
+        encode(payload)  # refuses a payload that is not plain JSON
+        if not isinstance(request_id, str) or not request_id:
+            raise ValueError("command with a request identity required")
         binding = await asyncio.to_thread(self.authorization.binding_for_run, self.account_id, actor.run_id)
         if binding != actor.binding:
             raise AccountAccessDenied("machine workspace binding changed")

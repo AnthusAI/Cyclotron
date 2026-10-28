@@ -728,3 +728,38 @@ def test_refused_machine_requests_log_a_safe_reason_and_accepted_ones_none(ident
     assert "reason" not in lines[1]
     assert lines[2]["reason"] == "request_conflict (ValueError)"
     assert secret not in output and CALLER not in output
+
+
+def test_a_decision_request_with_a_200_kb_article_body_is_accepted_and_queued(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    article = new_item("long-article-" + "i" * 300, text="word " * 40_000)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            single = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "binding-one", "item": article}, "req-long-single-" + "r" * 300),
+            )
+            assert single.status_code == 202, single.text
+            shared = await http.post(
+                "/machine/decisions", json=decisions_body(revisions("alpha", "beta"), article, "req-long-shared-0001")
+            )
+            assert shared.status_code == 202, shared.text
+            assert len(sent) == 2 and not model.calls
+
+    asyncio.run(go())
+
+
+def test_feedback_with_a_long_comment_and_long_editor_identity_is_recorded_whole(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    comment, subject = "Kept because " + "c" * 20_000, "editor-" + "s" * 1_000
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            await decide(http, worker, sent, new_item())
+            payload = feedback_payload(comment=comment, editor={"site": "site-" + "w" * 500, "subject": subject})
+            recorded = await http.post("/machine/publications/alpha/operations", json=body("feedback", payload, "fb-long-0001"))
+            assert recorded.status_code == 200, recorded.text
+            assert recorded.json()["asserted"]["editor"]["subject"] == subject
+
+    asyncio.run(go())

@@ -7,7 +7,7 @@ import pytest
 
 from .hosted_publications import targets_from_environment
 from .machine_access import principals_from_environment
-from .standing_publications import MAX_VALUES_BYTES, validate_item
+from .standing_publications import validate_item
 
 GOOD = {"id": "hn-42", "values": {"text": "A story.", "url": "https://example.test/a", "points": 12}}
 
@@ -24,22 +24,25 @@ def test_a_valid_source_is_returned_in_canonical_form():
         {**GOOD, "extra": 1},
         {**GOOD, "id": ""},
         {**GOOD, "id": " padded"},
-        {**GOOD, "id": "x" * 201},
         {**GOOD, "id": "new\nline"},
         {**GOOD, "id": 7},
         {**GOOD, "values": {}},
+        {**GOOD, "values": {"text": "ok", "": 1}},
         {**GOOD, "values": {"text": ""}},
         {**GOOD, "values": {"text": 5}},
         {**GOOD, "values": {"text": "ok", "bad": float("nan")}},
         {**GOOD, "values": {"text": "ok", "bad": object()}},
-        {**GOOD, "values": {"text": "x" * 20001}},
-        {**GOOD, "values": {"text": "ok", "pad": "y" * MAX_VALUES_BYTES}},
-        {**GOOD, "values": {"text": "ok", **{f"k{n}": 1 for n in range(40)}}},
     ],
 )
-def test_unbounded_or_unfit_sources_are_refused(item):
+def test_unfit_sources_are_refused(item):
     with pytest.raises(ValueError):
         validate_item(item, ["text"])
+
+
+def test_a_source_with_a_long_id_many_long_keys_and_a_200_kb_text_is_accepted_whole():
+    values = {"text": "x" * 200_000, **{f"field-{n:03d}-" + "k" * 100: n for n in range(100)}}
+    item = {"id": "i" * 1000, "values": values}
+    assert validate_item(item, ["text"]) == ("i" * 1000, values)
 
 
 def test_a_standing_target_does_not_need_request_or_item_quota_fields():
@@ -63,6 +66,8 @@ def test_machine_principals_must_be_exact_distinct_role_arns():
     role = "arn:aws:iam::222222222222:role/papyrus-monitor"
     assert principals_from_environment({}) == () and principals_from_environment({"CYCLOTRON_MACHINE_PRINCIPALS": ""}) == ()
     assert principals_from_environment({"CYCLOTRON_MACHINE_PRINCIPALS": json.dumps([role])}) == (role,)
+    many = [f"arn:aws:iam::222222222222:role/papyrus-monitor-{n}-" + "r" * 80 for n in range(50)]
+    assert principals_from_environment({"CYCLOTRON_MACHINE_PRINCIPALS": json.dumps(many)}) == tuple(many)
     for bad in (
         [role, role],
         ["arn:aws:iam::222222222222:role/*"],

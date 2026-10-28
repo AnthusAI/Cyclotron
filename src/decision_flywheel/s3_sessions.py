@@ -29,7 +29,7 @@ class KMSSessionCipher:
     def __init__(self, client, key_arn, *, application):
         if not re.fullmatch(r"arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]{36}", key_arn):
             raise ValueError("exact KMS key ARN required")
-        if not isinstance(application, str) or not re.fullmatch(r"[a-z0-9-]{1,64}", application):
+        if not isinstance(application, str) or not re.fullmatch(r"[a-z0-9-]+", application):
             raise ValueError("fixed application context required")
         self.client, self.key_arn, self.application = client, key_arn, application
 
@@ -40,8 +40,6 @@ class KMSSessionCipher:
 
     def encrypt(self, kind, reference, content):
         context = self._context(kind, reference)
-        if len(content) > 32768:
-            raise ValueError("session too large")
         result = self.client.generate_data_key(KeyId=self.key_arn, KeySpec="AES_256", EncryptionContext=context)
         if result.get("KeyId") != self.key_arn or len(result["Plaintext"]) != 32:
             raise ValueError("unexpected session encryption key")
@@ -59,17 +57,14 @@ class KMSSessionCipher:
         values = {
             key: base64.b64decode(value, validate=True)
             for key, value in envelope.items()
-            if isinstance(value, str) and len(value) <= 65536
+            if isinstance(value, str)
         }
-        if set(values) != set(envelope) or len(values["nonce"]) != 12 or len(values["key"]) > 6144:
+        if set(values) != set(envelope) or len(values["nonce"]) != 12:
             raise ValueError("invalid envelope")
         result = self.client.decrypt(KeyId=self.key_arn, CiphertextBlob=values["key"], EncryptionContext=context)
         if result.get("KeyId") != self.key_arn or len(result["Plaintext"]) != 32:
             raise ValueError("unexpected session encryption key")
-        content = AESGCM(result["Plaintext"]).decrypt(values["nonce"], values["body"], encode(context))
-        if len(content) > 32768:
-            raise ValueError("session too large")
-        return content
+        return AESGCM(result["Plaintext"]).decrypt(values["nonce"], values["body"], encode(context))
 
 
 class S3OAuthSessions:
