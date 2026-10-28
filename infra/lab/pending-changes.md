@@ -8,7 +8,9 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: remove the journal byte budget.** The storage layer no longer has a per-document byte budget
+**No pending changes.** Every arbitrary limit was removed and story values became content-addressed records (lab code eb4065b, package sha256 `6710747c8c7ce81a146f13192de4b60b8091125c2733192b2619255d13150b0a`), deployed on 2026-10-28 with change set `no-limits-eb4065b`. That removed the `JournalMaxBytes` parameter and `CYCLOTRON_MAX_BYTES` on both functions. The snapshot was refreshed.
+
+Previously: **Pending: remove the journal byte budget.** The storage layer no longer has a per-document byte budget
 (nor record, commit, skip or collision counts), so the parameter and the variable that fed it go:
 
 - `/Parameters/JournalMaxBytes`: the per-document S3 journal byte budget (default 4 MiB, 1 to 64 MiB).

@@ -1,17 +1,4 @@
 {
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. JSON Pointer add and remove operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
-  "operations": [
-    {
-      "op": "remove",
-      "path": "/Parameters/JournalMaxBytes"
-    },
-    {
-      "op": "remove",
-      "path": "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES"
-    },
-    {
-      "op": "remove",
-      "path": "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES"
-    }
-  ]
+  "operations": []
 }
