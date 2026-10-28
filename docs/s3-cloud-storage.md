@@ -194,6 +194,31 @@ owner, the fence, the paid-answer rows and a two-number coverage for the pages.
 - **Measured** (synthetic, 7 events of about 3 KB per item, 30 items): document growth per item 21,472 bytes to 50;
   journal bytes written per item 860,069 to 3,692; document after 30 items 638,300 to 2,006 bytes.
 
+### Runtime heads that do not grow (`cyclotron-s3-runtime/v2`)
+
+**In plain language.** A runtime head used to carry every answer, every item's unfinished cycles and every
+item's status row, and each of a decision's five commits rewrote all of it. Now the head carries only counters,
+the reservations still pending and references, and a decision commits once while it decides.
+
+- **Keyed tries** (`keyed_trie.py`). Settled answers (`answers`), the answer history (`answer-history`), each
+  item's unfinished cycles (`cycles`) and the status fold's rows (`status`) are hash tries of content-addressed
+  nodes (16 entries at most). The head names each root. Changing a key rewrites the nodes on its path, about
+  log16 of the keys; a lookup reads the same path. Absence is proved by the trie, so nothing GETs an object that
+  might not exist (the Lambda roles have no `ListBucket`, which would make a missing key look forbidden).
+- **Values by reference.** Every other domain (rounds, learning artifacts, evaluations, ...) and every state value
+  is one content-addressed payload, rewritten only when it changes. The cycle high-water mark stays inline.
+- **One event record per commit.** A commit's events are one chunk record `{"first": id, "events": [...]}`. The
+  head's `chunks` (`from`, `last`) says where chunks begin; the single-event records written before keep their
+  ids. A reader finds the chunk holding an id by galloping back from the newest one, then a binary search.
+- **One commit while deciding.** The answer reservation is durable before the paid call, as before. The
+  completion, failures, trace events and the status summary are held by the owning handle and published with
+  the next durable change or with the release. `refresh()` (every guarded call) keeps held changes while the head
+  is the one they were made on (one head GET) and poisons the handle if it moved. A crash before the release
+  leaves the reservation pending, which needs explicit retry, exactly as a crash during the call does.
+- **Old heads.** A `v1` head reads as it is and converts on its first write (usually the acquire): completed answers,
+  history and the cycle index move into their tries; earlier event records stay where they are. The status fold
+  saved whole moves into rows on the next status step. Old code refuses a `v2` head, so do not roll back past it.
+
 **First caller: catalog job results (S2c).** `S3ConsoleStorage(journal, results=lake)` writes each finished
 job's result (completed, failed or interrupted) to the `console/job-results` lake and keeps in the catalog row
 only a small reference (`cyclotron-job-result-ref/v1` with domain, kind, sequence, digest and length) in

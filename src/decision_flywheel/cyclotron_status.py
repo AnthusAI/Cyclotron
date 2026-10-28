@@ -319,21 +319,86 @@ class VersionTracker:
         return None
 
 
+class FoldRows:
+    """A status fold's per-item rows and its review-order index.
+
+    ``row/<item>`` holds what the fold knows of one item (the prediction shown, whether it awaits review, its
+    latest review's id, the counted review); ``order/<n>`` names the item whose review was given number ``n``.
+    Held in memory by default. With ``load``, rows not yet seen are read on demand from a keyed store (one
+    key at a time, never a scan), and ``changes()`` lists what the fold changed, for saving with it.
+    """
+
+    def __init__(self, load=None):
+        self.load = load
+        self.values: dict[str, Any] = {}
+        self.dirty: set[str] = set()
+
+    def _get(self, key):
+        if key not in self.values:
+            text = self.load(key) if self.load is not None else None
+            self.values[key] = json.loads(text) if text is not None else None
+        return self.values[key]
+
+    def _put(self, key, value):
+        self.values[key] = value
+        self.dirty.add(key)
+
+    def row(self, item_id: str) -> dict:
+        return dict(self._get("row/" + item_id) or {})
+
+    def put_row(self, item_id: str, row: dict) -> None:
+        if row != (self._get("row/" + item_id) or {}):
+            self._put("row/" + item_id, row or None)
+
+    def reviewed(self, number: int) -> str | None:
+        return self._get(f"order/{number}")
+
+    def put_reviewed(self, number: int, item_id: str | None) -> None:
+        self._put(f"order/{number}", item_id)
+
+    def changes(self) -> dict[str, str | None]:
+        return {
+            key: None if self.values[key] is None else json.dumps(self.values[key], sort_keys=True, separators=(",", ":"))
+            for key in sorted(self.dirty)
+        }
+
+    def present(self) -> dict[str, Any]:
+        return {key: value for key, value in sorted(self.values.items()) if value is not None}
+
+
 class StatusFold:
     """Everything a status snapshot needs from a classifier's events, folded one event at a time.
 
-    A saved fold resumes where it stopped, so a snapshot reads only the events since the last one.
+    A saved fold resumes where it stopped, so a snapshot reads only the events since the last one. Per-item
+    state lives in ``rows`` (``FoldRows``), so a fold kept in a keyed store reads and writes only the items an
+    event names. The fold itself keeps counts and the most recent counted reviews (``recent``, oldest first),
+    which is all an alignment window reads; an older review is fetched from the order index only when a
+    retraction or a correction pulls it into the window.
     """
 
-    def __init__(self, labels: tuple[str, ...], initial_snapshot: Mapping[str, Any] | None = None):
+    def __init__(self, labels: tuple[str, ...], initial_snapshot: Mapping[str, Any] | None = None, rows: FoldRows | None = None):
         self.labels = tuple(labels)
         self.versions = VersionTracker(initial_snapshot)
-        self.shown: dict[str, list] = {}  # item -> [label, probabilities] of the prediction shown
-        self.reviews: dict[str, list] = {}  # item -> [label, predicted, probabilities, feedback id]
-        self.order: list[str] = []
-        self.awaiting: set[str] = set()
-        self.latest_review: dict[str, str | None] = {}
+        self.rows = rows if rows is not None else FoldRows()
+        self.awaiting = 0  # items whose shown prediction awaits a review
         self.stale_since: str | None = None
+        self.reviewed = 0  # numbers given to counted reviews so far
+        self.counted = 0  # counted reviews that still stand
+        self.recent: list[list] = []  # [number, item, label, predicted, probabilities]: the latest that stand
+
+    def _waiting(self, row, waiting):
+        if waiting and not row.get("waiting"):
+            row["waiting"] = True
+            self.awaiting += 1
+        elif not waiting and row.get("waiting"):
+            del row["waiting"]
+            self.awaiting -= 1
+
+    def _drop_review(self, row):
+        number = row.pop("review")[4]
+        self.rows.put_reviewed(number, None)
+        self.counted -= 1
+        self.recent = [entry for entry in self.recent if entry[0] != number]
 
     def feed(self, event: Mapping[str, Any]) -> None:
         kind = event.get("kind")
@@ -344,58 +409,125 @@ class StatusFold:
             self.stale_since = event.get("created_at")
         if kind == "prediction":
             item_id = str(event["target_id"])
-            self.shown[item_id] = [event["label"], event.get("probabilities")]
-            self.awaiting.add(item_id)
+            row = self.rows.row(item_id)
+            row["shown"] = [event["label"], event.get("probabilities")]
+            self._waiting(row, True)
+            self.rows.put_row(item_id, row)
         elif kind == "human-feedback":
             feedback = event["feedback"]
             item_id = str(feedback.get("item_id", feedback.get("id")))
-            if event.get("action") == "retracted":
-                if self.latest_review.get(item_id) == feedback.get("id"):
-                    self.latest_review.pop(item_id)
-                    if item_id in self.shown:
-                        self.awaiting.add(item_id)
-                if item_id in self.reviews and self.reviews[item_id][3] == feedback.get("id"):
-                    self.reviews.pop(item_id)
-                    self.order.remove(item_id)
-                return
-            self.awaiting.discard(item_id)
-            self.latest_review[item_id] = feedback.get("id")
-            if event.get("selected_by", "program") == "reviewer":
-                return
-            label = feedback.get("final_answer_value")
-            prediction = self.shown.get(item_id)
-            predicted = prediction[0] if prediction else feedback.get("initial_answer_value")
-            if label not in self.labels or predicted not in self.labels:
-                return
-            probabilities = prediction[1] if prediction else None
-            if probabilities is not None and set(probabilities) != set(self.labels):
-                probabilities = None
-            if item_id in self.reviews:
-                self.order.remove(item_id)
-            self.reviews[item_id] = [label, predicted, probabilities, feedback.get("id")]
-            self.order.append(item_id)
+            row = self.rows.row(item_id)
+            self._feedback(event, feedback, row)
+            self.rows.put_row(item_id, row)
         elif kind in ("human-skipped", "review-not-requested"):
-            self.awaiting.discard(str(event.get("target_id")))
+            item_id = str(event.get("target_id"))
+            row = self.rows.row(item_id)
+            self._waiting(row, False)
+            self.rows.put_row(item_id, row)
 
-    def to_json(self) -> dict[str, Any]:
+    def _feedback(self, event, feedback, row):
+        identifier = feedback.get("id")
+        if event.get("action") == "retracted":
+            if "latest" in row and row["latest"] == identifier:
+                del row["latest"]
+                if "shown" in row:
+                    self._waiting(row, True)
+            if "review" in row and row["review"][3] == identifier:
+                self._drop_review(row)
+            return
+        self._waiting(row, False)
+        row["latest"] = identifier
+        if event.get("selected_by", "program") == "reviewer":
+            return
+        label = feedback.get("final_answer_value")
+        prediction = row.get("shown")
+        predicted = prediction[0] if prediction else feedback.get("initial_answer_value")
+        if label not in self.labels or predicted not in self.labels:
+            return
+        probabilities = prediction[1] if prediction else None
+        if probabilities is not None and set(probabilities) != set(self.labels):
+            probabilities = None
+        if "review" in row:
+            self._drop_review(row)
+        self.reviewed += 1
+        self.counted += 1
+        row["review"] = [label, predicted, probabilities, identifier, self.reviewed]
+        item_id = str(feedback.get("item_id", feedback.get("id")))
+        self.rows.put_reviewed(self.reviewed, item_id)
+        self.recent.append([self.reviewed, item_id, label, predicted, probabilities])
+
+    def window(self, size: int) -> list[tuple]:
+        """The latest ``size`` counted reviews, oldest first, as (item, label, predicted, probabilities)."""
+        need = min(size, self.counted)
+        number = self.recent[0][0] - 1 if self.recent else self.reviewed
+        while len(self.recent) < need and number > 0:
+            item_id = self.rows.reviewed(number)
+            review = self.rows.row(item_id).get("review") if item_id is not None else None
+            if review is not None and review[4] == number:
+                self.recent.insert(0, [number, item_id, *review[:3]])
+            number -= 1
+        return [tuple(entry[1:]) for entry in self.recent[-size:]]
+
+    def summary(self) -> dict[str, Any]:
+        """The counts the fold keeps beside its rows (everything but versions, recent reviews and rows)."""
         return {
             "labels": list(self.labels),
-            "versions": self.versions.to_json(),
-            "shown": self.shown,
-            "reviews": self.reviews,
-            "order": self.order,
-            "awaiting": sorted(self.awaiting),
-            "latest_review": self.latest_review,
+            "awaiting": self.awaiting,
             "stale_since": self.stale_since,
+            "reviewed": self.reviewed,
+            "counted": self.counted,
+        }
+
+    def to_json(self) -> dict[str, Any]:
+        """The whole fold, rows included, for a store that keeps it as one value."""
+        return {
+            "layout": 2,
+            **self.summary(),
+            "versions": self.versions.to_json(),
+            "recent": self.recent,
+            "rows": self.rows.present(),
         }
 
     @classmethod
+    def restore(cls, summary, versions, recent, rows: FoldRows) -> StatusFold:
+        fold = cls(tuple(summary["labels"]), rows=rows)
+        fold.versions = VersionTracker.from_json(versions)
+        fold.awaiting, fold.stale_since = summary["awaiting"], summary["stale_since"]
+        fold.reviewed, fold.counted = summary["reviewed"], summary["counted"]
+        fold.recent = [list(entry) for entry in recent]
+        return fold
+
+    @classmethod
     def from_json(cls, value: Mapping[str, Any]) -> StatusFold:
+        if value.get("layout") == 2:
+            rows = FoldRows()
+            rows.values = {key: row for key, row in value["rows"].items()}
+            return cls.restore(value, value["versions"], value["recent"], rows)
+        return cls._from_whole_maps(value)
+
+    @classmethod
+    def _from_whole_maps(cls, value: Mapping[str, Any]) -> StatusFold:
+        """Read a fold saved before rows existed: whole maps of shown predictions, reviews and awaiting items."""
         fold = cls(tuple(value["labels"]))
         fold.versions = VersionTracker.from_json(value["versions"])
-        fold.shown, fold.reviews, fold.order = dict(value["shown"]), dict(value["reviews"]), list(value["order"])
-        fold.awaiting, fold.latest_review = set(value["awaiting"]), dict(value["latest_review"])
         fold.stale_since = value["stale_since"]
+        shown, reviews, latest, awaiting = value["shown"], value["reviews"], value["latest_review"], set(value["awaiting"])
+        for item_id in sorted(set(shown) | set(reviews) | set(latest) | awaiting):
+            row = {}
+            if item_id in shown:
+                row["shown"] = shown[item_id]
+            if item_id in awaiting:
+                row["waiting"] = True
+            if item_id in latest:
+                row["latest"] = latest[item_id]
+            fold.rows.values["row/" + item_id] = row
+        for number, item_id in enumerate(value["order"], 1):
+            fold.rows.values["row/" + item_id]["review"] = [*reviews[item_id], number]
+            fold.rows.values[f"order/{number}"] = item_id
+            fold.recent.append([number, item_id, *reviews[item_id][:3]])
+        fold.rows.dirty = set(fold.rows.values)
+        fold.reviewed = fold.counted = len(value["order"])
+        fold.awaiting = len(awaiting)
         return fold
 
     def status(
@@ -409,7 +541,9 @@ class StatusFold:
         review_rate: ReviewRate | None = None,
         now: datetime | None = None,
     ) -> CyclotronStatus:
-        records = [(item_id, *self.reviews[item_id][:3]) for item_id in self.order]
+        valid = type(window) is int and window >= 1
+        # An invalid window is refused by the metrics, exactly as when every review was kept in memory.
+        records = self.window(window) if valid else [tuple(entry[1:]) for entry in self.recent]
         metrics = recent_reviewed_metrics(self.labels, records, limit=window) if records else None
         return CyclotronStatus(
             cyclotron_id,
@@ -421,7 +555,7 @@ class StatusFold:
             _calibration(metrics),
             review_rate or FULL_REVIEW,
             self.versions.last_change,
-            Pending(len(self.awaiting), self.stale_since),
+            Pending(self.awaiting, self.stale_since),
             refits=self.versions.refits,
         )
 
@@ -465,6 +599,16 @@ def status_from_events(
 
 
 STATUS_FOLD_KEY = "status-fold"
+# A runtime storage with keyed tries (``save_derived``) keeps the fold in parts, so a decision rewrites only
+# what changed: the summary and cursor here, the version tracker and recent reviews in their own state values,
+# and the rows in the ``status`` trie under the fold's origin.
+STATUS_VERSIONS_KEY = "status-fold-versions"
+STATUS_RECENT_KEY = "status-fold-recent"
+STATUS_ROWS = "status"
+
+
+def _compact(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def status_from_flywheel(
@@ -487,12 +631,26 @@ def status_from_flywheel(
     start = initial_snapshot(wheel)
     origin = hashlib.sha256(json.dumps([list(labels), _plain(start)], sort_keys=True).encode()).hexdigest()
     storage = wheel.runtime_storage
+    keyed = callable(getattr(storage, "save_derived", None))
+    prefix = origin[:16] + "/"
+    rows = FoldRows((lambda key: storage.keyed(STATUS_ROWS, prefix + key)) if keyed else None)
     saved = storage.state(STATUS_FOLD_KEY)
     saved = json.loads(saved) if saved is not None else None
+    changed = False
     if saved is not None and saved["origin"] == origin:
-        fold, cursor = StatusFold.from_json(saved["fold"]), saved["cursor"]
+        cursor = saved["cursor"]
+        if "fold" in saved:
+            fold = StatusFold.from_json(saved["fold"])
+            changed = keyed  # a fold saved whole moves into rows the first time
+            if keyed:
+                rows.values, rows.dirty = fold.rows.values, set(fold.rows.values)
+                fold.rows = rows
+        else:
+            versions = json.loads(storage.state(STATUS_VERSIONS_KEY))
+            recent = json.loads(storage.state(STATUS_RECENT_KEY))
+            fold = StatusFold.restore(saved, versions, recent, rows)
     else:
-        fold, cursor = StatusFold(labels, start), 0
+        fold, cursor = StatusFold(labels, start, rows=rows), 0
     reached = cursor
     while True:
         page = wheel.trace_events(after_event_id=reached, limit=1000)
@@ -501,12 +659,7 @@ def status_from_flywheel(
         if not page["events"]:
             break
         reached = page["cursor"]
-    if reached != cursor:
-        storage.put_state(
-            STATUS_FOLD_KEY,
-            json.dumps({"origin": origin, "cursor": reached, "fold": fold.to_json()}, sort_keys=True, separators=(",", ":")),
-        )
-    return fold.status(
+    status = fold.status(
         cyclotron_id=cyclotron_id,
         classifier=task.name,
         fingerprint=wheel.active.fingerprint,
@@ -515,6 +668,20 @@ def status_from_flywheel(
         review_rate=review_rate,
         now=now,
     )
+    if reached != cursor or changed:
+        if keyed:
+            fold.recent = fold.recent[-window:]  # the reporting window; older reviews stay in the order index
+            storage.save_derived(
+                {
+                    STATUS_FOLD_KEY: _compact({"origin": origin, "cursor": reached, **fold.summary()}),
+                    STATUS_VERSIONS_KEY: _compact(fold.versions.to_json()),
+                    STATUS_RECENT_KEY: _compact(fold.recent),
+                },
+                {STATUS_ROWS: {prefix + key: text for key, text in fold.rows.changes().items()}},
+            )
+        else:
+            storage.put_state(STATUS_FOLD_KEY, _compact({"origin": origin, "cursor": reached, "fold": fold.to_json()}))
+    return status
 
 
 def initial_snapshot(wheel) -> dict:
