@@ -206,3 +206,14 @@ def test_an_interrupted_measurement_reuses_completed_requests_on_explicit_retry(
     assert len(model.calls) == 6  # one completed baseline answer was reused, not repeated
     assert len(result["rankings"]) == 2
     wheel.close()
+
+
+def test_a_matched_example_measurement_accepts_a_sample_limit_of_500(tmp_path):
+    wheel = DecisionFlywheel(
+        tmp_path / "runtime.sqlite", ClassifierConfig(TASK, example_ids=("t0", "t1")), SignalModel(), agent([]), max_requests=50
+    )
+    report = asyncio.run(
+        measure_example_swaps(wheel, TRAIN, DEV, protected=(), propensities={r.item.id: 1.0 for r in TRAIN}, limit=500)
+    )
+    assert report["rankings"]
+    wheel.close()

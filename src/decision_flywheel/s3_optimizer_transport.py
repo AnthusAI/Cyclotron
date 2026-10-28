@@ -29,7 +29,7 @@ class S3OptimizerTransport:
         ):
             raise ValueError("explicit complete optimizer transport identity required")
         if type(max_calls) is not int or max_calls < 1:
-            raise ValueError("explicit paid optimizer call ceiling required")
+            raise ValueError("explicit optimizer call budget required")
         if getattr(transport, "model", identity["model"]) != identity["model"]:
             raise ValueError("optimizer identity differs from configured provider model")
         if execution_guard is not None and not callable(execution_guard):

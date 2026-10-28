@@ -158,3 +158,9 @@ def test_a_request_and_reply_larger_than_the_old_byte_budgets_are_recorded():
     transport = wrapped(provider)
     reply = transport([{"role": "user", "content": large}])
     assert reply.content.endswith(large + '"}') and transport.calls == 1
+
+
+def test_an_optimizer_prompt_and_reply_far_larger_than_100_kilobytes_pass_through_unrefused():
+    large = "x" * 300_000
+    transport = wrapped(lambda messages: OptimizerReply(messages[0]["content"], "synthetic"))
+    assert transport([{"role": "user", "content": large}]).content == large

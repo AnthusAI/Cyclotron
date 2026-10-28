@@ -59,7 +59,7 @@ def test_backfill_preserves_current_rubric_and_examples_and_never_promotes_a_cla
     kwargs = dict(protected=tuple(r.item for r in DEV), propensities={r.item.id: 1.0 for r in TRAIN})
     report = asyncio.run(measure_questions(wheel, TRAIN, [QUESTION], **kwargs))
     assert report["count"] == 6
-    assert report["limit"] == 200
+    assert report["limit"] is None  # every eligible label, no default window
     assert report["by_class"] == {"include": 3, "exclude": 3}
     assert report["main_answer_agreement"]["count"] == 6
     assert report["main_answer_agreement"]["accuracy"] == 0.5

@@ -17,10 +17,8 @@ from .idea_screen import holm, screen
 
 SCREENED_CONTROLS = ("rubric", "example_ids")
 MODES = ("shadow", "dev_screen")
-# Bounded optimizer payload: newest prior ideas, ledger digest rows, fixed/broke ids per row, stubborn ids.
-CAPS = {"prior_ideas": 20, "ledger_ideas": 10, "item_ids_per_idea": 5, "stubborn_items": 20}
-# Proposal operators (Stage 2c). One optimizer call per round carries every operator's block; stories, parent
-# rubrics and fixed/broke ids are passed whole.
+# Proposal operators (Stage 2c). One optimizer call per round carries every operator's block; each block carries its
+# stories, parent rubrics and fixed/broke ids whole.
 OPERATORS = ("mutate", "bold", "target", "combine")
 DEFAULT_SHADOW_MIX = {"mutate": 0, "bold": 2, "target": 2, "combine": 2}
 
@@ -48,19 +46,19 @@ class DiagnosisConfig:
     def __post_init__(self):
         if type(self.enabled) is not bool:
             raise ValueError("diagnosis enabled must be boolean")
-        for name, low, high in (
-            ("samples", 2, 20),
-            ("contrast", 1, 10),
-            ("min_cell", 2, 1000),
-            ("max_causes", 1, 12),
-            ("independent", 2, 4),
-            ("element_candidates", 0, 20),
-            ("element_sample", 20, 2000),
-            ("max_jev_calls", 1, 100000),
+        for name, low in (
+            ("samples", 2),
+            ("contrast", 1),
+            ("min_cell", 2),
+            ("max_causes", 1),
+            ("independent", 2),
+            ("element_candidates", 0),
+            ("element_sample", 20),
+            ("max_jev_calls", 1),
         ):
             value = getattr(self, name)
-            if type(value) is not int or not low <= value <= high:
-                raise ValueError(f"diagnosis {name} must be an integer from {low} to {high}")
+            if type(value) is not int or value < low:
+                raise ValueError(f"diagnosis {name} must be an integer of at least {low}")
 
     def as_json(self):
         return {
@@ -143,8 +141,8 @@ class IdeaScreeningConfig:
             raise ValueError("min_novelty must be in [0,1)")
         if type(self.target_sample) is not int or self.target_sample < 1:
             raise ValueError("target_sample must be a positive integer")
-        if type(self.novelty_retries) is not int or not 0 <= self.novelty_retries <= 3:
-            raise ValueError("novelty_retries must be an integer from 0 to 3")
+        if type(self.novelty_retries) is not int or self.novelty_retries < 0:
+            raise ValueError("novelty_retries must be a nonnegative integer")
         if self.mode not in MODES:
             raise ValueError(f"mode must be one of {', '.join(MODES)}")
         if not isinstance(self.diagnosis, DiagnosisConfig):
@@ -265,7 +263,7 @@ def incumbent_id(wheel):
 
 
 def compact_ideas(ideas, ledger):
-    rows = sorted(ideas, key=lambda i: (i.get("created_cycle", 0), i["id"]))[-CAPS["prior_ideas"] :]
+    rows = sorted(ideas, key=lambda i: (i.get("created_cycle", 0), i["id"]))
     out = []
     for idea in rows:
         last = (ledger.verdicts(idea["id"]) or [None])[-1]
@@ -308,21 +306,16 @@ def optimizer_context(wheel, ledger, ideas, reserve_ids):
     hidden = frozenset(reserve_ids)
     return {
         "prior_control_ideas": compact_ideas(ideas, ledger),
-        "hypothesis_ledger": ledger.summary_for_optimizer(
-            limit=CAPS["ledger_ideas"],
-            incumbent_id=incumbent_id(wheel),
-            max_item_ids=CAPS["item_ids_per_idea"],
-            exclude_items=hidden,
-        ),
-        "stubborn_items": ledger.stubborn_items(exclude_items=hidden)[: CAPS["stubborn_items"]],
+        "hypothesis_ledger": ledger.summary_for_optimizer(incumbent_id=incumbent_id(wheel), exclude_items=hidden),
+        "stubborn_items": ledger.stubborn_items(exclude_items=hidden),
     }
 
 
 class DevelopmentScorer:
     """scorer(idea, row): the idea's configuration applied through the flywheel's own decision-answer path.
 
-    Only development rows are accepted. Each call goes through ``wheel._answers``, which honors the request
-    byte ceiling, the per-open request ceiling, the answer cache and the durable answer record, so usage
+    Only development rows are accepted. Each call goes through ``wheel._answers``, which honors the per-open
+    request budget, the answer cache and the durable answer record, so usage
     reporting stays truthful (cache hits cost no request). ``calls`` counts scorer calls for max_screen_calls.
     """
 

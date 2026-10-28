@@ -194,11 +194,11 @@ def test_a_proposal_that_reaches_outside_its_stage_is_dropped_without_a_model_ca
     wheel.close()
 
 
-def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
+def test_a_datetime_candidate_larger_than_every_original_request_is_still_measured(tmp_path):
     from .flywheel import _json
 
     config = ClassifierConfig(TASK, rubric="Existing")
-    ceiling = max(len(_json(config.request(row.item, TRAIN)).encode()) for row in (*TRAIN, *DEV))
+    original = max(len(_json(config.request(row.item, TRAIN)).encode()) for row in (*TRAIN, *DEV))
     requests = []
 
     class RecordingModel(FakeModel):
@@ -211,7 +211,6 @@ def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
         config,
         RecordingModel(),
         OptimizerAgent(lambda _: OptimizerReply('{"dynamic_elements":["current_datetime"]}', "fake")),
-        max_request_bytes=ceiling,
     )
     result = asyncio.run(
         optimize_stage(
@@ -224,10 +223,8 @@ def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
             min_development_per_class=1,
         )
     )
-    assert not result["promoted"]
-    assert result["error_type"] == "ValueError"
-    assert requests == []
-    assert wheel.active.config == config
+    assert result.get("error_type") is None
+    assert any(len(_json(request).encode()) > original for request in requests)
     wheel.close()
 
 
@@ -599,3 +596,31 @@ def test_question_discovery_flows_into_classifier_training_without_rediscovering
     asyncio.run(optimize_stage(wheel, "questions", TRAIN, DEV, **kwargs))
     assert len(calls) == 1
     wheel.close()
+
+
+def test_example_experiments_in_a_briefing_carry_every_ranking_of_every_current_report():
+    import json as _json_module
+    from types import SimpleNamespace
+
+    from .staged_optimization import _example_experiments
+
+    def report(n):
+        return {
+            "answer_dependencies": {},
+            "development_evidence": {"d": 1},
+            "baseline_fingerprint": f"b{n}",
+            "scope": "s",
+            "effect_scope": "e",
+            "by_class": {},
+            "rankings": [
+                {"examples": [f"x{r}"], "brier_gain": 0.0, "accuracy_change": 0.0, "question_effects": {}} for r in range(9)
+            ],
+        }
+
+    wheel = SimpleNamespace(
+        _evidence=lambda rows: {"d": 1},
+        answer_dependencies_current=lambda dependencies: True,
+        learning_storage=SimpleNamespace(completed=lambda stage: [(n, _json_module.dumps(report(n))) for n in range(7)]),
+    )
+    reports = _example_experiments(wheel, (), ())
+    assert len(reports) == 7 and all(len(row["rankings"]) == 9 for row in reports)

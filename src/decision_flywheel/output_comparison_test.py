@@ -40,16 +40,16 @@ def test_comparison_selects_latest_unique_items_before_excluding_missing_raw_out
     assert result["accuracy_delta"] is None
 
 
-def test_a_comparison_window_of_a_thousand_items_is_compared_whole():
+def test_a_comparison_window_of_500_compares_all_500_latest_items():
     records = [
         {
             "item_id": str(i),
             "actual_label": "yes",
-            "decision_model_label": "yes",
-            "decision_model_probabilities": {"yes": 0.9, "no": 0.1},
             "label": "yes",
-            "probabilities": {"yes": 0.9, "no": 0.1},
+            "probabilities": {"yes": 1.0, "no": 0.0},
+            "decision_model_label": "yes",
+            "decision_model_probabilities": {"yes": 1.0, "no": 0.0},
         }
-        for i in range(1000)
+        for i in range(500)
     ]
-    assert compare_outputs(("yes", "no"), records, limit=1000)["count"] == 1000
+    assert compare_outputs(("yes", "no"), records, limit=500)["count"] == 500

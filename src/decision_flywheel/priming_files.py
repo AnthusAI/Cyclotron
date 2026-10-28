@@ -1,10 +1,9 @@
-"""Bounded structured-file previews and classifier-derived empty templates."""
+"""Structured-file previews and classifier-derived empty templates."""
 
 import base64
 import csv
 import io
 import json
-import zipfile
 from copy import copy
 from datetime import date, datetime
 
@@ -13,8 +12,7 @@ from jsonschema import Draft202012Validator
 from .catalog_storage import encoded, timestamp
 from .models import DecisionTask, Item
 
-MAX_BYTES = 4_000_000
-MAX_ROWS = 200
+XLSX_LAST_ROW = 1_048_576  # the spreadsheet format's own last row, not a Cyclotron limit
 
 
 def checked_schema(schema):
@@ -91,7 +89,7 @@ def template(kind, schema, classifiers):
         rule.showErrorMessage = True
         ws.add_data_validation(rule)
         column = get_column_letter(names.index(row["id"] + ".label") + 1)
-        rule.add(f"{column}2:{column}{MAX_ROWS + 1}")
+        rule.add(f"{column}2:{column}{XLSX_LAST_ROW}")  # the label choice covers every row the format holds
     for cell in ws[1]:
         font = copy(cell.font)
         font.bold = True
@@ -112,8 +110,6 @@ def read_rows(kind, content, schema, classifiers):
         raw = base64.b64decode(content, validate=True)
     except Exception:
         raise ValueError("file must be base64 encoded") from None
-    if len(raw) > MAX_BYTES:
-        raise ValueError("file exceeds size limit")
     errors = []
     if kind in ("json", "jsonl"):
         try:
@@ -151,13 +147,8 @@ def read_rows(kind, content, schema, classifiers):
             from openpyxl import load_workbook
 
             try:
-                with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-                    if sum(info.file_size for info in archive.infolist()) > MAX_BYTES * 10:
-                        raise ValueError("expanded workbook exceeds size limit")
                 wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=False)
                 ws = wb["Examples"] if "Examples" in wb.sheetnames else wb.active
-                if ws.max_row > MAX_ROWS + 1 or ws.max_column > 1000:
-                    raise ValueError("workbook exceeds row or column limit")
                 table = []
                 for n, line in enumerate(ws.iter_rows(), 1):
                     table.append([cell.value for cell in line])
@@ -214,8 +205,8 @@ def read_rows(kind, content, schema, classifiers):
             rows.append(row)
     else:
         raise ValueError("supported formats: csv, json, jsonl, xlsx")
-    if not 1 <= len(rows) <= MAX_ROWS:
-        raise ValueError("preview between one and 200 rows")
+    if not rows:
+        raise ValueError("preview needs at least one row")
     return rows, errors
 
 
@@ -278,8 +269,6 @@ def validate_rows(rows, schema, classifiers, *, require_labels=True):
         try:
             item = json.loads(encoded({k: v for k, v in row.items() if k not in ("labels", "model_representation")}))
             item["occurred_at"] = occurred
-            if len(encoded(item).encode()) > MAX_BYTES:
-                raise ValueError("item exceeds size limit")
         except (ValueError, TypeError):
             errors.append(error(n, "values", "Item is not bounded finite JSON"))
             item = None

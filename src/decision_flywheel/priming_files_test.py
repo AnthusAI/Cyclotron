@@ -124,3 +124,16 @@ def test_spreadsheet_formulas_and_unknown_columns_are_rejected():
     _, errors = read_rows("xlsx", base64.b64encode(f.getvalue()).decode(), SCHEMA, CLASSIFIERS)
     assert any("formula" in error["message"].lower() for error in errors)
     assert any(error["field"] == "unknown" for error in errors)
+
+
+def test_a_five_hundred_row_import_larger_than_four_megabytes_previews_every_row():
+    rows = [
+        {**ROW, "id": f"synthetic-{n}", "values": {**ROW["values"], "abstract": f"Synthetic evidence {n} " + "x" * 9000}}
+        for n in range(500)
+    ]
+    content = base64.b64encode("\n".join(json.dumps(row) for row in rows).encode()).decode()
+    assert len(base64.b64decode(content)) > 4_000_000
+    parsed, errors = read_rows("jsonl", content, SCHEMA, CLASSIFIERS)
+    assert errors == [] and len(parsed) == 500
+    valid, errors = validate_rows(parsed, SCHEMA, CLASSIFIERS)
+    assert errors == [] and len(valid) == 500

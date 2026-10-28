@@ -10,7 +10,7 @@ shadow evaluation had nothing to find. Each operator is a different way to ask f
 
 One optimizer call per round carries every operator's block and the reply labels each proposal with its operator.
 A bold proposal rejected by the novelty gate may be re-requested (``novelty_retries`` extra calls, default 1, only
-when something was rejected). Stories and rubrics shown to the optimizer are whole, never clipped.
+when something was rejected). Stories, parent rubrics and item ids reach the optimizer whole.
 """
 
 import re
@@ -44,7 +44,7 @@ def nearest_novelty(text, references):
     return min((text_novelty(text, r) for r in references), default=1.0)
 
 
-def _whole(value):
+def _flat(value):
     return " ".join(str(value).split())
 
 
@@ -61,7 +61,7 @@ def target_stories(wheel, ledger, training, development, protected, sample):
     hidden_ids = {r.item.id for r in development} | {i.id for i in protected}
     hidden_text = {_normalized_text(r.item, task) for r in development} | {_normalized_text(i, task) for i in protected}
     rows = {r.item.id: r for r in training if r.item.id not in hidden_ids and _normalized_text(r.item, task) not in hidden_text}
-    records = ledger.error_records(incumbent_id=incumbent_id(wheel), exclude_items=frozenset(hidden_ids), recent=200)
+    records = ledger.error_records(incumbent_id=incumbent_id(wheel), exclude_items=frozenset(hidden_ids))
     groups = {}
     for rec in records:
         if rec["item_id"] in rows:
@@ -81,8 +81,8 @@ def target_stories(wheel, ledger, training, development, protected, sample):
         stories.append(
             {
                 "id": row.item.id,
-                "title": _whole(values["title"]) if values.get("title") else None,
-                "excerpt": _whole(body),
+                "title": _flat(values["title"]) if values.get("title") else None,
+                "excerpt": _flat(body),
                 "true_label": row.label,
                 "answered": rec["choice"],
                 "error_direction": f"true {rec['label']}, answered {rec['choice']}",
@@ -116,9 +116,9 @@ def combine_block(wheel, ledger, ideas, count):
         entry = {
             "id": name,
             "is_incumbent": name == inc,
-            "rubric": _whole(rubric),
+            "rubric": _flat(rubric),
             "fixes_that_the_other_misses": len(mine),
-            "story_ids_fixed_only_by_this": list(mine),
+            "story_ids_fixed_only_by_this": mine,
         }
         if name != inc:
             vs = ledger.paired_comparison(name, inc, context_version=SHADOW)

@@ -36,11 +36,9 @@ def _example_experiments(wheel, training, development):
         summary = {key: report[key] for key in ("baseline_fingerprint", "scope", "effect_scope", "by_class")}
         summary["rankings"] = [
             {key: row[key] for key in ("examples", "brier_gain", "accuracy_change", "question_effects")}
-            for row in report["rankings"][:4]
+            for row in report["rankings"]
         ]
         reports.append(summary)
-        if len(reports) == 3:
-            break
     return reports
 
 
@@ -58,7 +56,6 @@ def stage_briefing(wheel, stage, training, development, protected, extra=None):
             "allowed_proposal_controls": [control, "dynamic_elements"] if stage == "questions" else [control],
             "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
             "stage": stage,
-            "request_budget_bytes": wheel.max_request_bytes,
             **({"example_experiments": measurements} if stage == "examples" else {}),
             **(wheel.sibling_briefing() if stage == "questions" else {}),
             **(extra or {}),
@@ -77,7 +74,7 @@ async def optimize_stage(
     *,
     protected,
     propensities,
-    limit=200,
+    limit=None,
     retry_interrupted=False,
     min_development_per_class=20,
     train_after_questions=True,
@@ -104,8 +101,8 @@ async def optimize_stage(
     controls = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}
     if stage not in controls:
         raise ValueError("stage must be rubric, examples or questions")
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise ValueError("retrospective limit must be a positive integer")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("retrospective limit must be a positive integer, or None for every item")
     if type(max_example_trials) is not int or max_example_trials < 1:
         raise ValueError("example trial ceiling must be positive")
     if (
@@ -274,8 +271,8 @@ async def optimize_stage(
             next(
                 (
                     event
-                    for event in reversed(wheel.history(1000))
-                    if event["kind"] == "optimizer-response" and event.get("briefing_fingerprint") == briefing.fingerprint
+                    for event in reversed(wheel.events_of(("optimizer-response",)))
+                    if event.get("briefing_fingerprint") == briefing.fingerprint
                 ),
                 None,
             )
@@ -390,8 +387,8 @@ async def optimize_stage(
 
         by_id = {row.item.id: row for row in training}
         hard = {}
-        for event in wheel.history(10000):
-            if event.get("kind") == "prediction" and event.get("target_id") in by_id:
+        for event in wheel.events_of(("prediction",)):
+            if event.get("target_id") in by_id:
                 row = by_id[event["target_id"]]
                 if event.get("label") != row.label:
                     hard[row.item.id] = event.get("confidence") or 0.0

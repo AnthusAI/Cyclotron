@@ -340,7 +340,6 @@ def test_independent_diagnoses_are_validated_strictly():
         {"other": 1},
         [],
         "text",
-        {"hypotheses": [{**good_diagnosis()["hypotheses"][0], "name": "x" * 99}]},
         {"hypotheses": [{**good_diagnosis()["hypotheses"][0], "description": ""}]},
         {"hypotheses": [{**good_diagnosis()["hypotheses"][0], "extra": 1}]},
     ]
@@ -349,7 +348,7 @@ def test_independent_diagnoses_are_validated_strictly():
             validate_diagnosis(reply, {"a1", "a2", "a3"})
 
 
-def test_reconcile_replies_reject_unknown_ids_wrong_cells_duplicates_and_overlength():
+def test_reconcile_replies_reject_unknown_ids_wrong_cells_and_duplicates():
     ok = validate_reconcile({"causes": [good_cause()], "generic_elements": [{"name": "other", "question": "Q?"}]}, **KW)
     assert ok["causes"][0]["candidate_element"]["name"] == "flag" and ok["generic_elements"][0]["name"] == "other"
     assert validate_reconcile({"causes": []}, **KW) == {"causes": [], "generic_elements": []}
@@ -360,11 +359,7 @@ def test_reconcile_replies_reject_unknown_ids_wrong_cells_duplicates_and_overlen
         good_cause(must_keep_story_ids=["a1"]),  # an error, not a contrast story
         good_cause(cell="nowhere->else"),
         good_cause(name=""),
-        good_cause(name="x" * 200),
         good_cause(patch=""),
-        good_cause(patch="p" * 900),
-        good_cause(description="d" * 900),
-        good_cause(proposed_rule="r" * 900),
         good_cause(confirmed="yes"),
         good_cause(id="has space"),
         good_cause(candidate_element={"name": "Bad Name", "question": "Q?"}),
@@ -389,6 +384,26 @@ def test_reconcile_replies_reject_unknown_ids_wrong_cells_duplicates_and_overlen
         validate_reconcile({"causes": [], "other": 1}, **KW)
     with pytest.raises(ValueError):
         validate_reconcile({"generic_elements": []}, **KW)
+
+
+def test_diagnosis_accepts_any_number_of_hypotheses_and_text_of_any_length():
+    one = good_diagnosis()["hypotheses"][0]
+    many = [{**one, "name": f"h{n}" + "x" * 500, "description": "d" * 5000} for n in range(12)]
+    assert len(validate_diagnosis({"hypotheses": many}, {"a1", "a2", "a3"})) == 12
+    long = good_cause(name="x" * 500, patch="p" * 5000, description="d" * 5000, proposed_rule="r" * 5000)
+    assert validate_reconcile({"causes": [long]}, **KW)["causes"][0]["patch"] == "p" * 5000
+
+
+def test_the_optimizer_sees_whole_story_text_and_whole_human_explanations():
+    from types import SimpleNamespace
+
+    from .diagnosis import show
+
+    body, reason = "word " * 2000, "because " * 500
+    row = LabeledItem(Item("s1", {"text": body}), "include", "trusted", {"human_feedback": reason})
+    wheel = SimpleNamespace(initial=SimpleNamespace(task=SimpleNamespace(input_field="text")))
+    shown = show(wheel, {"id": "s1", "row": row, "true": "include", "answered": "exclude", "probabilities": {}})
+    assert shown["text"] == body.strip() and shown["human_explanation"] == reason.strip()
 
 
 def test_a_bad_reply_is_retried_once_with_the_error_and_the_calls_are_counted(tmp_path):
@@ -861,7 +876,6 @@ def test_diagnosis_options_validate_persist_and_resume(tmp_path):
         {"samples": 1},
         {"samples": True},
         {"independent": 1},
-        {"independent": 9},
         {"min_cell": 1},
         {"element_candidates": -1},
         {"element_sample": 5},
@@ -1103,3 +1117,13 @@ def test_the_study_script_parses_records_and_validates_the_diagnosis_flags(capsy
                 ]
             )
         capsys.readouterr()
+
+
+def test_diagnosis_options_have_no_upper_ceiling():
+    config = DiagnosisConfig(
+        enabled=True, samples=50, contrast=30, max_causes=40, independent=30, element_candidates=60, element_sample=5000
+    )
+    assert config.independent == 30
+    from .diagnosis import _sample_name
+
+    assert [_sample_name(i) for i in (0, 3, 25, 26, 29)] == ["A", "D", "Z", "AA", "AD"]

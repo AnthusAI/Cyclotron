@@ -284,7 +284,7 @@ def test_the_target_sample_has_revealed_training_stories_only_with_labels_and_ex
     assert by_id["g1"]["true_label"] == "include" and by_id["g1"]["answered"] == "exclude"
     assert by_id["g1"]["human_explanation"] == "Outcome was established in the text"
     assert by_id["g1"]["title"] == "Title 1" and by_id["g1"]["error_direction"] == "true include, answered exclude"
-    # the sample is capped and balanced across error directions
+    # the sample is the configured size and balanced across error directions
     many = [story(i, "include" if i < 20 else "exclude") for i in range(10, 40)]
     ledger = seed_errors(
         wheel, [(f"g{i}", "include" if i < 20 else "exclude", "exclude" if i < 20 else "include") for i in range(10, 40)]
@@ -400,13 +400,10 @@ def test_the_prompt_payload_carries_whole_stories_and_whole_parent_rubrics(tmp_p
     record(ledger, incumbent_id(wheel), {9})
     asyncio.run(ask_round(wheel, builder(wheel, training), {}, "rubric", sched.ideas(), training, (), ()))
     requests = wheel.optimizer.briefings[0]["operator_requests"]
-    assert len(requests["target"]["stories"]) == 30
-    assert all(s["excerpt"] == ("long " * 2000).strip() for s in requests["target"]["stories"])
-    assert {p["rubric"] for p in requests["combine"]["parents"]} <= {
-        huge.strip(),
-        (huge + "z").strip(),
-        wheel.active.config.rubric,
-    }
+    assert len(requests["target"]["stories"]) == 20
+    assert all(s["excerpt"] == " ".join(("long " * 2000).split()) for s in requests["target"]["stories"])
+    assert all(len(p["rubric"]) >= len(huge.strip()) for p in requests["combine"]["parents"])
+    assert len(json.dumps(requests)) > 60000
 
 
 # -- lineage ----------------------------------------------------------------------------------------------

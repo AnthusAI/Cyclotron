@@ -245,12 +245,8 @@ class CyclotronRuntime:
         model, optimizer = self.model_factory(config)
         run = {"id": run_id, "config": dict(config)}
         observer = self.sink_factory(run_id)
-        configure_batch = getattr(observer, "set_batch_size", None)
-        if configure_batch is not None:
-            # The API accepts at most 200 events per durable append.  Flushes
-            # happen in execute(), so a completed command never leaves a
-            # buffered trace behind.
-            configure_batch(200)
+        # The sink appends a command's events together; execute() flushes, so a completed command never
+        # leaves a buffered trace behind.
         workspace = WorkspaceSession(
             self.store,
             run,

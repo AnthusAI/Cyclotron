@@ -31,19 +31,20 @@ class AuthorizedModel:
 
 
 class CommandEventSink:
-    def __init__(self, view, run_id, check, *, batch_size=100):
+    def __init__(self, view, run_id, check, *, batch_size=None):
         self.view, self.run_id, self.check = view, run_id, check
         self.pending = []
         self.set_batch_size(batch_size)
 
     def set_batch_size(self, value):
-        if type(value) is not int or not 1 <= value <= 200 or self.pending:
-            raise ValueError("bounded empty event buffer required")
+        """``None`` (the default) appends a command's events together when it flushes; a number flushes that often."""
+        if (value is not None and (type(value) is not int or value < 1)) or self.pending:
+            raise ValueError("a positive batch size or None, and an empty event buffer, required")
         self.batch_size = value
 
     def ingest(self, source_id, event):
         self.pending.append((source_id, event))
-        if len(self.pending) >= self.batch_size:
+        if self.batch_size is not None and len(self.pending) >= self.batch_size:
             self.flush()
 
     def flush(self):

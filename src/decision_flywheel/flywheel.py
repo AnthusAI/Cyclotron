@@ -162,7 +162,6 @@ class DecisionFlywheel:
         *,
         observer: Callable[[dict], None] | None = None,
         max_requests: int | None = 100,
-        max_request_bytes: int = 32000,
         calibration_method: str = "auto",
         redact: Sequence[str] = (),
         evaluation_weighting: str = "equal_class",
@@ -211,8 +210,6 @@ class DecisionFlywheel:
         self.context_validation_floor = context_validation_floor
         if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
             raise ValueError("max_requests must be positive or None")
-        if type(max_request_bytes) is not int or max_request_bytes < 1:
-            raise ValueError("max_request_bytes must be positive")
         if getattr(storage, "requires_durable_optimizer", False):
             from .s3_optimizer_transport import require_durable_optimizer
 
@@ -272,7 +269,7 @@ class DecisionFlywheel:
         self._step_running = False
         self.observer = observer or (lambda event: None)
         self.redact = tuple(value for value in redact if value)
-        self.max_requests, self.max_request_bytes, self.requests = max_requests, max_request_bytes, 0
+        self.max_requests, self.requests = max_requests, 0
         expected = _json({"task": initial.task.fingerprint, "model": model.model_identity})
         try:
             self.runtime_storage.bind_contract(expected)
@@ -819,9 +816,6 @@ class DecisionFlywheel:
         capabilities = getattr(self.model, "capabilities", None)
         if capabilities is not None:
             capabilities.validate_context(request["state"]["examples"])
-        serialized = _json(request)
-        if len(serialized.encode()) > self.max_request_bytes:
-            raise ValueError("complete decision request exceeds the configured byte safety ceiling")
         identity = getattr(self.model, "cache_identity", None)
         key = self._answer_key(config, target, training, now)
         row = self.runtime_cache.answer(key)
@@ -920,7 +914,9 @@ class DecisionFlywheel:
     async def predict(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None, cache_options=None):
         self.reconcile_feedback(training)
         self.reconcile_model_context(training)
-        batch = await self._answers(self.active.config, target, training, now or datetime.now(timezone.utc), cache_options)
+        now = now or datetime.now(timezone.utc)
+        composition = self.active.config.compose(target, training, now=now)[1]
+        batch = await self._answers(self.active.config, target, training, now, cache_options)
         # A refresh can replace a consumed training response during this call.
         self.reconcile_model_context(training)
         if self.active.head:
@@ -942,6 +938,7 @@ class DecisionFlywheel:
             {
                 "kind": "prediction",
                 "target_id": target.id,
+                "request_composition": composition,
                 "label": result.label,
                 "version": self.active.fingerprint,
                 "fitted_head": self.active.head is not None,
@@ -1085,12 +1082,11 @@ class DecisionFlywheel:
                     "selection_policy": asdict(self.selection_policy) if self.selection_policy else None,
                     "training_class_weighting": self.training_class_weighting,
                     "prior_hypotheses": self.hypotheses(),
-                    "request_budget_bytes": self.max_request_bytes,
                     **self.sibling_briefing(),
                     "training_predictions": [
                         event
-                        for event in self.history(1000)
-                        if event["kind"] == "prediction" and event["target_id"] in {row.item.id for row in training}
+                        for event in self.events_of(("prediction",))
+                        if event["target_id"] in {row.item.id for row in training}
                     ],
                 },
                 protected=tuple(row.item for row in development) + tuple(protected),
@@ -1293,6 +1289,8 @@ class DecisionFlywheel:
         metrics["evaluation_independent_of_optimizer_context"] = not self.optimizer_context["evaluation_context_exposed"]
         metrics["available_count"] = available_count
         metrics["sample_limit"] = self.evaluation_policy.max_samples
+        metrics["evaluation_policy"] = self.evaluation_policy.manifest()
+        metrics["evaluation_policy_fingerprint"] = self.evaluation_policy.fingerprint
         metrics["sample_ids"] = [row.item.id for row in development]
         metrics["context_validation_floor"] = self.context_validation_floor
         metrics["evidence_status"] = (

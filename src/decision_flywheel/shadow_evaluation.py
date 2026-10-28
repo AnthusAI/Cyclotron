@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 
 from .flywheel import FittedClassifier, _json
 from .hypothesis_ledger import HypothesisLedger, sign_test
-from .idea_screening import CAPS, incumbent_id
+from .idea_screening import incumbent_id
 
 SHADOW = "shadow"
 SHADOW_CONTROLS = ("rubric", "example_ids")
@@ -424,18 +424,12 @@ class ShadowEvaluator:
         inc = incumbent_id(self.wheel)
         old = self.storage.incumbent_ids()
         status = self.storage.statuses()
-        rows = self.ledger.summary_for_optimizer(
-            limit=CAPS["ledger_ideas"],
-            incumbent_id=inc,
-            max_item_ids=CAPS["item_ids_per_idea"],
-            context_version=SHADOW,
-            skip_ids=old,
-        )
+        rows = self.ledger.summary_for_optimizer(incumbent_id=inc, context_version=SHADOW, skip_ids=old)
         for row in rows:
             row["shadow_status"] = status.get(row["idea_id"])
         return {
             "hypothesis_ledger": rows,
-            "stubborn_items": self.ledger.stubborn_items(context_version=SHADOW)[: CAPS["stubborn_items"]],
+            "stubborn_items": self.ledger.stubborn_items(context_version=SHADOW),
         }
 
 
