@@ -20,6 +20,7 @@ from .catalog_cold_rows import (
     TERMINAL,
     ColdRows,
     Legacy,
+    in_review,
     is_evictable,
     load_legacy,
     partition,
@@ -89,14 +90,19 @@ def empty_cold():
     """Counters and positions for the tables whose rows leave the head (catalog_cold_rows.py).
 
     ``rowids`` and ``ordinals`` only ever grow: a row keeps its rowid (its place in table order) and its ordinal
-    (its position in its run or list) wherever it lives. ``hot`` holds the ordinal of each row still in the head
-    (an item also has its slot). ``distinct`` counts the item ids of each list; ``claimed`` names the runs a
-    worker has ever claimed a job in.
+    (its position in its run or list) wherever it lives. ``hot`` holds the position of each row still in the head:
+    a job's ordinal and whether its by-id pointers exist yet, an item's ordinal and slot, a revision's ordinal.
+    ``next`` is each run's first job that has not started: jobs start strictly in acceptance order, so the run's
+    queue is exactly the ordinals ``next`` to its counter, and the job just before ``next`` is the one running
+    (if it has not finished). ``review`` is each run's items waiting for a human, as ordinal intervals.
+    ``distinct`` counts the item ids of each list; ``claimed`` names the runs a worker has ever claimed in.
     """
     return {
         "rowids": {t: 0 for t in COLD_TABLES},
         "ordinals": {t: {} for t in COLD_TABLES},
         "hot": {t: {} for t in COLD_TABLES},
+        "next": {},
+        "review": {},
         "distinct": {},
         "claimed": [],
     }
@@ -111,6 +117,33 @@ def initial():
         "cold": empty_cold(),
         "legacy": None,
     }
+
+
+def with_ordinal(intervals, n, member):
+    """A sorted list of disjoint ``[first, last]`` intervals, with ``n`` added (member) or taken out."""
+    result = []
+    for first, last in intervals:
+        if first <= n <= last:
+            result += [[first, n - 1]] if first < n else []
+            result += [[n + 1, last]] if n < last else []
+        else:
+            result.append([first, last])
+    if member:
+        result.append([n, n])
+    merged = []
+    for first, last in sorted(result):
+        if merged and first <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], last)
+        else:
+            merged.append([first, last])
+    return merged
+
+
+def queue_bounds(value, run_id):
+    """(first unstarted ordinal, last accepted ordinal) of a run's queue; empty when first > last."""
+    cold = value["cold"]
+    last = cold["ordinals"]["web_jobs"].get(run_id, 0)
+    return cold["next"].get(run_id, last + 1), last
 
 
 def rows(value, domain, **fields):
@@ -150,7 +183,11 @@ def insert(value, domain, fields):
             raise ValueError("complete known domain record required")
         part = partition(domain, record)
         ordinal = cold["ordinals"][domain][part] = cold["ordinals"][domain].get(part, 0) + 1
-        cold["hot"][domain][row_key(domain, record)] = [ordinal, 1] if domain == "web_items" else ordinal
+        cold["hot"][domain][row_key(domain, record)] = (
+            [ordinal, 1] if domain == "web_items" else [ordinal, 0] if domain == "web_jobs" else ordinal
+        )
+        if domain == "web_jobs":
+            cold["next"].setdefault(part, ordinal)
         if domain == "list_item_revisions" and record["revision"] == 1:
             cold["distinct"][part] = cold["distinct"].get(part, 0) + 1
         records.append(record)
@@ -237,52 +274,81 @@ def validate_hot(snapshot):
     return snapshot
 
 
-def adopt_snapshot(value, snapshot):
-    """Make every row of a complete snapshot a head row, with fresh counters; the next commit moves them out."""
-    value["snapshot"] = snapshot
-    cold = value["cold"] = empty_cold()
-    for table in COLD_TABLES:
-        for row in snapshot["tables"][table]:
-            cold["rowids"][table] = max(cold["rowids"][table], row["_rowid"])
-            part = partition(table, row)
-            ordinal = cold["ordinals"][table][part] = cold["ordinals"][table].get(part, 0) + 1
-            cold["hot"][table][row_key(table, row)] = [ordinal, 1] if table == "web_items" else ordinal
-            if table == "list_item_revisions" and row["revision"] == 1:
-                cold["distinct"][part] = cold["distinct"].get(part, 0) + 1
+def queue_start(statuses):
+    """The first unstarted position (1-based) of a run whose jobs have these statuses in acceptance order.
 
-
-def migrated(value, reference):
-    """A v2 whole-state catalog as a v3 head: its old blob becomes the read-only legacy layer.
-
-    Nothing is copied. The head keeps the rows that can still change (unfinished jobs with their claims and
-    actors, items waiting for review) and the counters; every other row stays readable in the immutable blob
-    the head names. The first write commits this head, so an old catalog never has to move its rows.
+    Jobs start strictly in acceptance order, so the unfinished jobs are the run's newest, at most the oldest of
+    them running. A catalog that is not in that shape is refused: its queue needs an operator first.
     """
-    tables = value["snapshot"]["tables"]
-    cold = empty_cold()
+    unfinished = [n for n, status in enumerate(statuses, 1) if status in ("pending", "running")]
+    if (
+        unfinished != list(range(len(statuses) - len(unfinished) + 1, len(statuses) + 1))
+        or "running" in statuses[(unfinished[0] if unfinished else len(statuses) + 1) :]
+    ):
+        raise ValueError("run queue is out of acceptance order; reconcile it before this catalog moves")
+    return unfinished[0] + (statuses[unfinished[0] - 1] == "running") if unfinished else len(statuses) + 1
+
+
+def _counted(cold, tables):
+    """Fill counters, queue starts and review intervals from complete tables."""
+    by_run = {}
     for table in COLD_TABLES:
         for row in tables[table]:
             cold["rowids"][table] = max(cold["rowids"][table], row["_rowid"])
             part = partition(table, row)
-            cold["ordinals"][table][part] = cold["ordinals"][table].get(part, 0) + 1
+            ordinal = cold["ordinals"][table][part] = cold["ordinals"][table].get(part, 0) + 1
+            if table == "web_jobs":
+                by_run.setdefault(part, []).append(row["status"])
+            if table == "web_items" and in_review(row):
+                cold["review"][part] = with_ordinal(cold["review"].get(part, []), ordinal, True)
+    for run_id, statuses in by_run.items():
+        cold["next"][run_id] = queue_start(statuses)
     seen = set()
     for row in tables["list_item_revisions"]:
         if (row["list_id"], row["id"]) not in seen:
             seen.add((row["list_id"], row["id"]))
             cold["distinct"][row["list_id"]] = cold["distinct"].get(row["list_id"], 0) + 1
+    return by_run
+
+
+def adopt_snapshot(value, snapshot):
+    """Make every row of a complete snapshot a head row, with fresh counters; the next commit moves them out."""
+    value["snapshot"] = snapshot
+    cold = value["cold"] = empty_cold()
+    _counted(cold, snapshot["tables"])
+    ordinals = {}
+    for table in COLD_TABLES:
+        for row in snapshot["tables"][table]:
+            part = partition(table, row)
+            ordinal = ordinals[table, part] = ordinals.get((table, part), 0) + 1
+            meta = [ordinal, 1] if table == "web_items" else [ordinal, 0] if table == "web_jobs" else ordinal
+            cold["hot"][table][row_key(table, row)] = meta
+
+
+def migrated(value, reference):
+    """A v2 whole-state catalog as a v3 head: its old blob becomes the read-only legacy layer.
+
+    Nothing is copied. The head keeps only the running job (with its claim and actor) and counters: each run's
+    queue start, the review intervals and the position the legacy layer's unfinished jobs start at. Every other
+    row stays readable in the immutable blob the head names, so an old catalog never has to move its rows.
+    """
+    tables = value["snapshot"]["tables"]
+    cold = empty_cold()
+    by_run = _counted(cold, tables)
     runs = {r["id"]: r["run_id"] for r in tables["web_jobs"]}
     cold["claimed"] = sorted({runs[job_id] for job_id in value["claims"] if job_id in runs})
     legacy = Legacy(value) if any(tables[t] for t in COLD_TABLES) else None
     hot = {t: [] for t in COLD_TABLES}
     for row in tables["web_jobs"]:
-        if row["status"] not in TERMINAL:
+        if row["status"] == "running":
             hot["web_jobs"].append(row)
-            cold["hot"]["web_jobs"][row["id"]] = legacy.jobs[row["id"]]["ordinal"]
-    for row in tables["web_items"]:
-        if not is_evictable("web_items", row):
-            hot["web_items"].append(row)
-            cold["hot"]["web_items"][row_key("web_items", row)] = [legacy.items[row["run_id"], row["id"]]["ordinal"], 1]
+            cold["hot"]["web_jobs"][row["id"]] = [legacy.jobs[row["id"]]["ordinal"], 1]
     kept = {r["id"] for r in hot["web_jobs"]}
+    opened = {}
+    for run_id, statuses in by_run.items():
+        unfinished = [n for n, status in enumerate(statuses, 1) if status in ("pending", "running")]
+        if unfinished:
+            opened[run_id] = unfinished[0]
     result = {
         **{k: v for k, v in value.items() if k not in ("schema", "snapshot", "claims", "actors")},
         "schema": SCHEMA_V3,
@@ -290,7 +356,7 @@ def migrated(value, reference):
         "claims": {k: v for k, v in value["claims"].items() if k in kept},
         "actors": {k: v for k, v in value["actors"].items() if k in kept},
         "cold": cold,
-        "legacy": None if legacy is None else {"digest": reference.digest, "length": reference.length, "shadow": sorted(kept)},
+        "legacy": None if legacy is None else {"digest": reference.digest, "length": reference.length, "open": opened},
     }
     return result, legacy
 
@@ -407,16 +473,34 @@ class S3ConsoleStorage:
                 raise ValueError("catalog head rows out of order")
             for row in tables[table]:
                 held = hot[row_key(table, row)]
-                ordinal = held[0] if table == "web_items" else held
+                ordinal = held if table == "list_item_revisions" else held[0]
                 if type(ordinal) is not int or not 1 <= ordinal <= cold["ordinals"][table].get(partition(table, row), 0):
                     raise ValueError("catalog row position outside its counter")
-                if table == "web_items" and (len(held) != 2 or type(held[1]) is not int or held[1] < 1):
-                    raise ValueError("invalid catalog item slot")
+                if table != "list_item_revisions" and (len(held) != 2 or type(held[1]) is not int or held[1] < 0):
+                    raise ValueError("invalid catalog row slot")
+        running = set()
+        for row in tables["web_jobs"]:
+            ordinal = cold["hot"]["web_jobs"][row["id"]][0]
+            first, last = queue_bounds(value, row["run_id"])
+            if row["status"] == "running":
+                if ordinal != first - 1 or row["run_id"] in running:
+                    raise ValueError("a running job must be its run's one started, unfinished job")
+                running.add(row["run_id"])
+            if row["status"] == "pending" and not first <= ordinal <= last:
+                raise ValueError("a pending job must sit in its run's queue")
+            if row["status"] in TERMINAL and ordinal >= first:
+                raise ValueError("a finished job must have started")
+        for run_id, first in cold["next"].items():
+            if type(first) is not int or not 1 <= first <= cold["ordinals"]["web_jobs"].get(run_id, 0) + 1:
+                raise ValueError("invalid run queue start")
+        for run_id, spans in cold["review"].items():
+            if with_ordinal(spans, 0, False) != spans or not spans or spans[0][0] < 1:
+                raise ValueError("invalid review intervals")
+            if spans[-1][1] > cold["ordinals"]["web_items"].get(run_id, 0):
+                raise ValueError("review interval outside its run")
         legacy = value["legacy"]
         if legacy is not None and (
-            not isinstance(legacy, dict)
-            or set(legacy) != {"digest", "length", "shadow"}
-            or not isinstance(legacy["shadow"], list)
+            not isinstance(legacy, dict) or set(legacy) != {"digest", "length", "open"} or not isinstance(legacy["open"], dict)
         ):
             raise ValueError("invalid legacy catalog reference")
 
@@ -499,51 +583,82 @@ class S3ConsoleStorage:
     def _hot_meta(value, table, row):
         return value["cold"]["hot"][table][row_key(table, row)]
 
+    def _hot_entry(self, value, row):
+        return {
+            "row": row,
+            "ordinal": self._hot_meta(value, "web_jobs", row)[0],
+            "actor": value["actors"].get(row["id"]),
+            "claim": value["claims"].get(row["id"]),
+        }
+
+    def _job_at(self, value, run_id, n):
+        """The job at position ``n`` of the run, wherever it lives: ``{"row", "ordinal", "actor", "claim"}``.
+
+        Jobs start in acceptance order, so the position alone says where a job that is not in the head lives:
+        at or after the run's queue start it is still waiting (its accepted record, or the legacy blob), before
+        it it has finished (its final record, or the legacy blob if it finished before this layout).
+        """
+        last = value["cold"]["ordinals"]["web_jobs"].get(run_id, 0)
+        if type(n) is not int or not 1 <= n <= last:
+            return None
+        hot = next((r for r in rows(value, "web_jobs", run_id=run_id) if self._hot_meta(value, "web_jobs", r)[0] == n), None)
+        if hot is not None:
+            return self._hot_entry(value, hot)
+        first, _ = queue_bounds(value, run_id)
+        legacy = self._legacy(value)
+        if legacy is not None and n <= legacy.job_counts.get(run_id, 0):
+            opened = value["legacy"]["open"].get(run_id, legacy.job_counts[run_id] + 1)
+            if n < opened or n >= first:
+                return legacy.jobs[legacy.job_order[run_id, n]]
+        kind = ColdRows.queued(run_id) if n >= first else ColdRows.run_jobs(run_id)
+        entry = self._cold().get(kind, n)
+        if entry is None:
+            raise ValueError("catalog job record missing")
+        return entry
+
     def _job_entry(self, value, job_id):
         """One job wherever it lives: ``{"row", "ordinal", "actor", "claim"}``, or None for an unknown id."""
         row = one(value, "web_jobs", id=job_id)
         if row is not None:
-            return {
-                "row": row,
-                "ordinal": self._hot_meta(value, "web_jobs", row),
-                "actor": value["actors"].get(job_id),
-                "claim": value["claims"].get(job_id),
-            }
+            return self._hot_entry(value, row)
         legacy = self._legacy(value)
-        if legacy is not None and job_id in legacy.jobs and job_id not in value["legacy"]["shadow"]:
-            return legacy.jobs[job_id]
+        if legacy is not None and job_id in legacy.jobs:
+            found = legacy.jobs[job_id]
+            return self._job_at(value, found["row"]["run_id"], found["ordinal"])
         if not isinstance(job_id, str):
             return None
-        return self._cold().get(ColdRows.job(job_id), 1)
+        pointer = self._cold().get(ColdRows.job(job_id), 1)
+        return None if pointer is None else self._job_at(value, pointer["run"], pointer["ordinal"])
 
     def _request_entry(self, value, run_id, request_id):
         row = one(value, "web_jobs", run_id=run_id, request_id=request_id)
         if row is not None:
-            return self._job_entry(value, row["id"])
+            return self._hot_entry(value, row)
         legacy = self._legacy(value)
         if legacy is not None and (run_id, request_id) in legacy.requests:
-            job_id = legacy.requests[run_id, request_id]
-            if job_id not in value["legacy"]["shadow"]:
-                return legacy.jobs[job_id]
-        return self._cold().get(ColdRows.request(run_id, request_id), 1)
+            return self._job_entry(value, legacy.requests[run_id, request_id])
+        pointer = self._cold().get(ColdRows.request(run_id, request_id), 1)
+        return None if pointer is None else self._job_at(value, run_id, pointer["ordinal"])
 
     def _run_job_entries(self, value, run_id):
         """The run's jobs, newest first, read one at a time so a caller can stop early."""
-        hot = {self._hot_meta(value, "web_jobs", r): r["id"] for r in rows(value, "web_jobs", run_id=run_id)}
-        legacy = self._legacy(value)
         for n in range(value["cold"]["ordinals"]["web_jobs"].get(run_id, 0), 0, -1):
-            if n in hot:
-                yield self._job_entry(value, hot[n])
-                continue
-            if legacy is not None and n <= legacy.job_counts.get(run_id, 0):
-                job_id = legacy.job_order[run_id, n]
-                if job_id not in value["legacy"]["shadow"]:
-                    yield legacy.jobs[job_id]
-                    continue
-            entry = self._cold().get(ColdRows.run_jobs(run_id), n)
-            if entry is None:
-                raise ValueError("catalog job record missing")
-            yield entry
+            yield self._job_at(value, run_id, n)
+
+    @staticmethod
+    def _running(value, run_id):
+        return next((r for r in rows(value, "web_jobs", run_id=run_id) if r["status"] == "running"), None)
+
+    def _has_unfinished(self, value, run_id):
+        first, last = queue_bounds(value, run_id)
+        return self._running(value, run_id) is not None or first <= last
+
+    def _queue_head(self, value, run_id):
+        """The run's next job to start, or None (nothing waiting, or a job still running)."""
+        first, last = queue_bounds(value, run_id)
+        if self._running(value, run_id) is not None or first > last:
+            return None
+        return self._job_at(value, run_id, first)
 
     def _item_entry(self, value, run_id, item_id):
         """One run item wherever it lives: ``{"row", "ordinal", "slot"}``, or None."""
@@ -577,6 +692,21 @@ class S3ConsoleStorage:
         value["cold"]["hot"]["web_items"][key] = [entry["ordinal"], entry["slot"] + 1]
         value.setdefault(_HYDRATED, {})[key] = deepcopy(row)
         return row
+
+    def _item_at(self, value, run_id, n):
+        """The item row at position ``n`` of the run."""
+        hot = next((r for r in rows(value, "web_items", run_id=run_id) if self._hot_meta(value, "web_items", r)[0] == n), None)
+        if hot is not None:
+            return hot
+        legacy = self._legacy(value)
+        if legacy is not None and n <= legacy.item_counts.get(run_id, 0):
+            item_id = legacy.item_order[run_id, n]
+        else:
+            pointer = self._cold().get(ColdRows.run_items(run_id), n)
+            if pointer is None:
+                raise ValueError("catalog item record missing")
+            item_id = pointer["id"]
+        return self._item_entry(value, run_id, item_id)["row"]
 
     def _run_items(self, value, run_id):
         """The run's item rows in acceptance order."""
@@ -649,19 +779,29 @@ class S3ConsoleStorage:
 
     @staticmethod
     def _settle(value):
-        """Return rows brought in for an edit that did not change to where they came from."""
+        """Return rows brought in for an edit that did not change to where they came from, and file every item
+        the change holds in or out of its run's review intervals (an item can change only while in the head)."""
         for key, original in value.pop(_HYDRATED, {}).items():
             table = value["snapshot"]["tables"]["web_items"]
             row = next((r for r in table if row_key("web_items", r) == key), None)
             if row == original:
                 table.remove(row)
                 del value["cold"]["hot"]["web_items"][key]
+        review = value["cold"]["review"]
+        for row in value["snapshot"]["tables"]["web_items"]:
+            ordinal = value["cold"]["hot"]["web_items"][row_key("web_items", row)][0]
+            spans = with_ordinal(review.get(row["run_id"], []), ordinal, in_review(row))
+            if spans:
+                review[row["run_id"]] = spans
+            else:
+                review.pop(row["run_id"], None)
 
     def _evict(self, base, value):
         """Move rows the base head committed and this change leaves alone out of the head, into their records.
 
         Records are written before the commit that drops the rows, and only from committed state, so a key never
-        names two contents and a reader that misses a row in its head finds it in the records.
+        names two contents and a reader that misses a row in its head finds it in the records. A waiting job
+        leaves as its accepted record (it cannot change until it starts); a running job stays.
         """
         if base.get("schema") != SCHEMA_V3:
             return
@@ -686,12 +826,20 @@ class S3ConsoleStorage:
         """Write one committed row's records. False only when an item's slot holds another state."""
         cold = self._cold()
         if table == "web_jobs":
-            entry = {"row": row, "ordinal": held, "actor": base["actors"].get(row["id"]), "claim": base["claims"].get(row["id"])}
-            written = (
-                cold.put(ColdRows.run_jobs(row["run_id"]), held, entry)
-                and cold.put(ColdRows.job(row["id"]), 1, entry)
-                and cold.put(ColdRows.request(row["run_id"], row["request_id"]), 1, entry)
-            )
+            ordinal, pointed = held
+            entry = {
+                "row": row,
+                "ordinal": ordinal,
+                "actor": base["actors"].get(row["id"]),
+                "claim": base["claims"].get(row["id"]),
+            }
+            kind = ColdRows.queued(row["run_id"]) if row["status"] == "pending" else ColdRows.run_jobs(row["run_id"])
+            written = cold.put(kind, ordinal, entry)
+            if written and not pointed:
+                pointer = {"run": row["run_id"], "ordinal": ordinal, "id": row["id"]}
+                written = cold.put(ColdRows.job(row["id"]), 1, pointer) and cold.put(
+                    ColdRows.request(row["run_id"], row["request_id"]), 1, pointer
+                )
         elif table == "web_items":
             ordinal, slot = held
             if not cold.put(ColdRows.item(row["run_id"], row["id"]), slot, {"row": row, "ordinal": ordinal, "slot": slot}):
@@ -1407,7 +1555,7 @@ class S3ConsoleStorage:
             run = self._run(value, run_id)
             if run["mode"] != "live":
                 raise ValueError("only live runs accept operating limits")
-            if any(r["status"] in ("pending", "running") for r in rows(value, "web_jobs", run_id=run_id)):
+            if self._has_unfinished(value, run_id):
                 raise ValueError("wait for current work before changing limits")
             run["config"] = encoded(
                 {**load_config(run["config"]), "max_requests": max_requests, "max_optimizer_calls": max_optimizer_calls}
@@ -1624,8 +1772,8 @@ class S3ConsoleStorage:
         if job["status"] != "running" or not claim.get("at"):
             return {"stuck": False, "runningMinutes": None, "blockedJobs": 0}
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(claim["at"])).total_seconds() / 60
-        waiting = sum(r["status"] == "pending" for r in rows(value, "web_jobs", run_id=job["run_id"]))
-        return {"stuck": age > minutes, "runningMinutes": round(age, 1), "blockedJobs": waiting}
+        first, last = queue_bounds(value, job["run_id"])
+        return {"stuck": age > minutes, "runningMinutes": round(age, 1), "blockedJobs": max(last - first + 1, 0)}
 
     def jobs(self, run_id, *, results=True):
         """Every job of the run, newest first. ``results=False`` skips the lake fetch: a lake-held result then shows as
@@ -1639,32 +1787,38 @@ class S3ConsoleStorage:
         for entry in self._run_job_entries(value, run_id):
             yield self._job(value, entry["row"]) if results else decoded(entry["row"], "payload", "result")
 
-    @staticmethod
-    def _unfinished(value, run_id):
-        """The run's pending and running jobs, oldest acceptance first."""
-        return [r for r in rows(value, "web_jobs", run_id=run_id) if r["status"] in ("pending", "running")]
+    def _unfinished(self, value, run_id):
+        """The run's running and waiting jobs, oldest acceptance first. Reads every waiting job: diagnostics only."""
+        running = self._running(value, run_id)
+        first, last = queue_bounds(value, run_id)
+        return ([running] if running is not None else []) + [
+            self._job_at(value, run_id, n)["row"] for n in range(first, last + 1)
+        ]
 
-    @classmethod
-    def _ready(cls, value, job):
-        """A pending job may start only when nothing in its run is running and it heads the run's queue."""
-        unfinished = cls._unfinished(value, job["run_id"])
-        return job["status"] == "pending" and bool(unfinished) and unfinished[0]["id"] == job["id"]
+    def _position(self, value, entry):
+        """How many unfinished jobs are ahead of this one (0 = next or running), or None for a finished job."""
+        job = entry["row"]
+        if job["status"] == "running":
+            return 0
+        if job["status"] != "pending":
+            return None
+        first, _ = queue_bounds(value, job["run_id"])
+        return entry["ordinal"] - first + (self._running(value, job["run_id"]) is not None)
 
     def queue_head(self, run_id):
         """The pending job that should start next in this run, or None (idle, or the oldest job is still running)."""
         value = self._read()
         self._run(value, run_id)
-        unfinished = self._unfinished(value, run_id)
-        return self._job(value, unfinished[0]) if unfinished and unfinished[0]["status"] == "pending" else None
+        head = self._queue_head(value, run_id)
+        return None if head is None else self._job(value, head["row"])
+
+    def _ready_heads(self, value):
+        heads = [self._queue_head(value, run_id) for run_id in value["cold"]["ordinals"]["web_jobs"]]
+        return sorted((h["row"] for h in heads if h is not None), key=lambda r: r["_rowid"])
 
     def ready_heads(self):
         """Every run's head that is waiting to start (its run has nothing running), oldest run first."""
-        value = self._read()
-        heads = {}
-        for r in rows(value, "web_jobs"):
-            if r["status"] in ("pending", "running"):
-                heads.setdefault(r["run_id"], r)
-        return [{"id": r["id"], "run_id": r["run_id"]} for r in heads.values() if r["status"] == "pending"]
+        return [{"id": r["id"], "run_id": r["run_id"]} for r in self._ready_heads(self._read())]
 
     def queue_state(self, job_id):
         """Where one job stands in its run's queue: ``position`` counts unfinished jobs ahead of it (0 = next or running)."""
@@ -1673,20 +1827,18 @@ class S3ConsoleStorage:
         if entry is None:
             raise ValueError("unknown command")
         job = entry["row"]
-        unfinished = self._unfinished(value, job["run_id"])
-        ids = [r["id"] for r in unfinished]
-        position = ids.index(job_id) if job_id in ids else None
+        position = self._position(value, entry)
         return {
             "status": job["status"],
             "position": position,
             "queued": job["status"] == "pending",
-            "ready": self._ready(value, job),
+            "ready": job["status"] == "pending" and position == 0,
         }
 
     def run_has_active_work(self, run_id):
         value = self._read()
         self._run(value, run_id)
-        return bool(self._unfinished(value, run_id))
+        return self._has_unfinished(value, run_id)
 
     def claim_command(self, *, owner=None, job_id=None):
         """Claim the next job. Strictly one job per run runs at a time, in acceptance order.
@@ -1703,19 +1855,32 @@ class S3ConsoleStorage:
             if any(c["owner"] == owner for c in value["claims"].values()):
                 raise ValueError("worker operation owner already claimed; reconcile its result")
             if job_id is None:
-                job = next((r for r in rows(value, "web_jobs") if self._ready(value, r)), None)
+                heads = self._ready_heads(value)
+                entry = self._job_entry(value, heads[0]["id"]) if heads else None
             else:
-                job = next((r for r in rows(value, "web_jobs") if r["status"] == "pending" and r["id"] == job_id), None)
-                if job is not None and not self._ready(value, job):
+                entry = self._job_entry(value, job_id)
+                if entry is not None and entry["row"]["status"] != "pending":
+                    entry = None
+                if entry is not None and self._position(value, entry) != 0:
                     raise CommandNotReady("an earlier command in this run has not finished")
-            if job is None:
+            if entry is None:
                 return None
+            job = one(value, "web_jobs", id=entry["row"]["id"])
+            if job is None:
+                # A waiting job lives in its accepted record; starting it brings it (and its actor) into the head.
+                job = deepcopy(entry["row"])
+                table = value["snapshot"]["tables"]["web_jobs"]
+                table.insert(next((i for i, r in enumerate(table) if r["_rowid"] > job["_rowid"]), len(table)), job)
+                value["cold"]["hot"]["web_jobs"][job["id"]] = [entry["ordinal"], 1]
+                if entry["actor"] is not None:
+                    value["actors"][job["id"]] = deepcopy(entry["actor"])
             previous = value["claims"].get(job["id"])
             fence = previous["fence"] + 1 if previous else 1
             value["claims"][job["id"]] = {"owner": owner, "fence": fence, "at": now()}
             if job["run_id"] not in value["cold"]["claimed"]:
                 value["cold"]["claimed"] = sorted([*value["cold"]["claimed"], job["run_id"]])
             job["status"] = "running"
+            value["cold"]["next"][job["run_id"]] = entry["ordinal"] + 1
             return {**self._job(value, job), "claim_owner": owner, "claim_fence": fence}
 
         result = self._mutate(apply)
@@ -1749,7 +1914,7 @@ class S3ConsoleStorage:
             job = one(value, "web_jobs", id=job_id)
             job["status"] = status
             job["result"] = stored
-            latest = value["cold"]["hot"]["web_jobs"][job_id] == value["cold"]["ordinals"]["web_jobs"][job["run_id"]]
+            latest = value["cold"]["hot"]["web_jobs"][job_id][0] == value["cold"]["ordinals"]["web_jobs"][job["run_id"]]
             run = self._run(value, job["run_id"])
             if (
                 latest
@@ -1960,9 +2125,9 @@ class S3ConsoleStorage:
     def current_item(self, run_id):
         value = self._run_value(run_id)
         self._run(value, run_id)
-        row = next(
-            (r for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"] and r["prediction"] is not None), None
-        )
+        # The run's items waiting for review are kept as ordinal intervals; the first one is the current item.
+        spans = value["cold"]["review"].get(run_id)
+        row = self._item_at(value, run_id, spans[0][0]) if spans else None
         return {"item": self._payload(row["payload"]), "prediction": json.loads(row["prediction"])} if row else None
 
     def update_item(self, run_id, item_id, *, prediction=_UNSET, reviewed=_UNSET):
@@ -2187,7 +2352,7 @@ class S3ConsoleStorage:
             if version is None:
                 raise ValueError("unknown cyclotron version")
             ids = {r["run_id"] for r in rows(value, "cyclotron_versions", cyclotron_id=cyclotron_id)}
-            if any(r["run_id"] in ids and r["status"] in ("pending", "running") for r in rows(value, "web_jobs")):
+            if any(self._has_unfinished(value, run_id) for run_id in ids):
                 raise ValueError("wait for current work before reverting")
             one(value, "cyclotrons", id=cyclotron_id)["active_revision"] = revision
             return decoded(self._run(value, version["run_id"]), "config")
@@ -2246,7 +2411,7 @@ class S3ConsoleStorage:
         def apply(value):
             parent = self._run(value, parent_run_id)
             config = load_config(parent["config"])
-            if any(r["status"] in ("pending", "running") for r in rows(value, "web_jobs", run_id=parent_run_id)):
+            if self._has_unfinished(value, parent_run_id):
                 raise ValueError("wait for current work before extending the cyclotron")
             if parent["mode"] != "live" or not config.get("classifiers"):
                 raise ValueError("extend a live multi-classifier run")

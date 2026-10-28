@@ -583,6 +583,84 @@ def test_the_bytes_a_catalog_writes_per_decision_do_not_depend_on_how_many_jobs_
     assert head == 1  # only the newest finished job, until the next commit moves it out
 
 
+def backlog(queued, waiting):
+    """A standing run with ``queued`` jobs waiting their turn, and a live run with ``waiting`` items shown for review."""
+    s, run_id = standing()
+    payload = {"bindings": {"alpha": "1"}, "item": {"id": "queued", "values": {"text": "Queued"}}}
+    for n in range(queued):
+        s.command(run_id, f"queued-{n}", "publication", payload)
+    live = s.create_run("Live", "live", {}, items=[{"id": f"shown-{n}", "values": {"text": "x"}} for n in range(waiting)])
+    for n in range(waiting):
+        s.update_item(live["id"], f"shown-{n}", prediction={"label": "yes"})
+    return s, run_id, live["id"]
+
+
+def next_decision(s, run_id, n):
+    """Accept one more command, then start, register and finish the job at the head of the run's queue."""
+    item = {"id": f"item-{n}", "values": {"text": f"Source {n}"}}
+    s.command(run_id, f"next-{n}", "publication", {"bindings": {"alpha": "1"}, "item": item})
+    head = s.queue_head(run_id)
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner, job_id=head["id"])
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    view.register_standing_item(run_id, item["id"], item["values"])
+    view.current_item(run_id)
+    view.finish_command(claimed["id"], "completed", {"response": {"label": "yes", "n": n}})
+
+
+def test_the_bytes_a_decision_writes_do_not_depend_on_how_many_jobs_are_queued_or_items_await_review():
+    from .s3_console_storage import encoded
+
+    costs, heads = {}, {}
+    for size in (10, 500):
+        s, run_id, live_id = backlog(size, size)
+        client = s.journal.payloads.client
+        next_decision(s, run_id, 1)  # settle the backlog's own last commit
+        mark = len(client.calls)
+        next_decision(s, run_id, 2)
+        costs[size] = written(client, mark)
+        heads[size] = len(encoded(s.journal.read().value))
+        assert s.current_item(live_id)["item"]["id"] == "shown-0"
+        assert s.queue_state(s.jobs(run_id)[0]["id"])["position"] == size + 1 - 2
+    assert costs[10][:2] == costs[500][:2]  # the same number of writes and reads
+    assert abs(costs[500][2] - costs[10][2]) < 64  # the same bytes, give or take the digits of a counter
+    assert abs(heads[500] - heads[10]) < 64
+
+
+def test_queued_jobs_start_in_acceptance_order_from_their_records():
+    from .storage_errors import CommandNotReady
+
+    s, run_id, _ = backlog(5, 0)
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    assert fresh.journal.read().value["snapshot"]["tables"]["web_jobs"] == []  # every waiting job is a record
+    order = [j["id"] for j in reversed(fresh.jobs(run_id))]
+    assert [fresh.queue_state(job)["position"] for job in order] == [0, 1, 2, 3, 4]
+    assert fresh.ready_heads() == [{"id": order[0], "run_id": run_id}]
+    with pytest.raises(CommandNotReady):
+        fresh.claim_command(owner=str(uuid4()), job_id=order[1])
+    for expected in order:
+        owner = str(uuid4())
+        claimed = fresh.claim_command(owner=owner)
+        assert claimed["id"] == expected and fresh.claim_command(owner=str(uuid4())) is None
+        assert fresh.command_recovery(expected)["blockedJobs"] == len(order) - order.index(expected) - 1
+        fresh.finish_command(expected, "completed", {"n": 1}, owner=owner, fence=claimed["claim_fence"])
+    assert not fresh.run_has_active_work(run_id) and fresh.ready_heads() == []
+    assert [j["status"] for j in fresh.jobs(run_id)] == ["completed"] * 5
+
+
+def test_items_awaiting_review_are_found_in_order_without_their_rows_in_the_head():
+    s, _, live_id = backlog(0, 4)
+    s.update_item(live_id, "shown-0", reviewed=True)
+    s.update_item(live_id, "shown-2", reviewed=True)
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    assert fresh.journal.read().value["cold"]["review"][live_id] == [[2, 2], [4, 4]]
+    assert fresh.current_item(live_id)["item"]["id"] == "shown-1"
+    fresh.update_item(live_id, "shown-1", reviewed=True)
+    assert fresh.current_item(live_id)["item"]["id"] == "shown-3"
+    fresh.update_item(live_id, "shown-0", reviewed=False)  # an undo puts an item back in front
+    assert fresh.current_item(live_id)["item"]["id"] == "shown-0"
+
+
 def test_finished_jobs_items_and_revisions_still_list_and_serve_after_they_leave_the_head():
     s, run_id = standing()
     ids = [decide(s, run_id, n) for n in range(1, 6)]
@@ -671,7 +749,7 @@ def test_an_old_whole_state_catalog_still_lists_and_serves_its_jobs_and_items_an
     # The first write migrates: the head names the old blob instead of carrying its rows.
     s.save_item_list("later", "Later")
     head = j.read().value
-    assert head["schema"] == "cyclotron-s3-console/v3" and head["legacy"]["shadow"] == [running]
+    assert head["schema"] == "cyclotron-s3-console/v3" and head["legacy"]["open"] == {run_id: 4}
     assert [r["id"] for r in head["snapshot"]["tables"]["web_jobs"]] == [running]
     assert len(encoded(head)) < old_bytes
     # A fresh process reads the migrated catalog the same way, and the running job still finishes under its fence.

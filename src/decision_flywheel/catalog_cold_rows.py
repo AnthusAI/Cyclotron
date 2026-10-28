@@ -126,6 +126,10 @@ class ColdRows:
         return "jobs-" + digest("jobs", run_id)
 
     @staticmethod
+    def queued(run_id):
+        return "queued-" + digest("queued", run_id)
+
+    @staticmethod
     def job(job_id):
         return "job-" + digest("job", job_id)
 
@@ -187,8 +191,5 @@ def load_legacy(payloads, held, upgrade):
 
 
 def is_evictable(table, row):
-    if table == "web_jobs":
-        return row["status"] in TERMINAL
-    if table == "web_items":
-        return not in_review(row)
-    return True
+    """Every row but a running job's leaves the head once committed: a waiting job cannot change until it starts."""
+    return table != "web_jobs" or row["status"] != "running"
