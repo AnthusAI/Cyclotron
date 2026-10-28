@@ -170,3 +170,99 @@ def test_a_command_event_sink_holds_500_events_and_appends_them_as_one_batch():
     for n in range(500):
         sink.ingest(f"engine:{n}", {"n": n})
     assert len(appended) == 1 and [event["n"] for _, event in appended[0][1]] == list(range(500))
+
+
+class Opened:
+    def __init__(self, name, fail_close=False):
+        self.name, self.closed, self.fail_close = name, 0, fail_close
+
+    def close(self):
+        self.closed += 1
+        if self.fail_close:
+            raise OSError("synthetic release failure")
+
+
+class Busy(RuntimeError):
+    pass
+
+
+def refuse(error):
+    def open_engine():
+        raise error
+
+    return open_engine
+
+
+def test_a_held_engine_is_reused_for_an_equal_key_and_replaced_for_any_other():
+    from .hosted_command_worker import HeldEngine
+
+    holder, made = HeldEngine(), []
+
+    def opener(name):
+        def open_engine():
+            made.append(Opened(name))
+            return made[-1]
+
+        return open_engine
+
+    first = asyncio.run(holder.take(("run", "config-1"), opener("one")))
+    assert asyncio.run(holder.take(("run", "config-1"), opener("unused"))) is first
+    second = asyncio.run(holder.take(("run", "config-2"), opener("two")))
+    assert [engine.name for engine in made] == ["one", "two"] and first.closed == 1 and second.closed == 0
+    holder.close()
+    assert second.closed == 1 and holder.opened == 2
+    holder.close()  # Nothing held: nothing to release.
+    assert second.closed == 1
+
+
+def test_discarding_after_a_failure_releases_the_engine_and_keeps_the_original_error(capsys):
+    from .hosted_command_worker import HeldEngine
+
+    holder = HeldEngine()
+    engine = asyncio.run(holder.take("key", lambda: Opened("one", fail_close=True)))
+    holder.discard()
+    assert engine.closed == 1 and holder.held is None
+    assert capsys.readouterr().out.strip() == "held_engine_release_failed OSError"  # class only
+    asyncio.run(holder.take("key", lambda: Opened("again")))
+    assert holder.opened == 2  # the next job opens fresh
+
+
+def test_an_engine_held_by_another_worker_is_waited_for_only_while_there_is_time():
+    from .hosted_command_worker import HeldEngine
+
+    attempts, pauses = [], []
+
+    def open_engine():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise Busy("owned by the worker that ran the job before")
+        return Opened("free")
+
+    async def pause(seconds):
+        pauses.append(seconds)
+
+    holder = HeldEngine(wait_while=lambda: True, sleep=pause)
+    assert asyncio.run(holder.take("key", open_engine, busy=(Busy,))).name == "free"
+    assert len(attempts) == 3 and len(pauses) == 2
+    with pytest.raises(Busy):  # Out of time: the ownership error is raised as before.
+        asyncio.run(HeldEngine(wait_while=lambda: False, sleep=pause).take("key", refuse(Busy()), busy=(Busy,)))
+    with pytest.raises(Busy):  # No deadline known: never wait.
+        asyncio.run(HeldEngine(sleep=pause).take("key", refuse(Busy()), busy=(Busy,)))
+    with pytest.raises(ValueError):  # Only the named ownership errors are waited for.
+        asyncio.run(HeldEngine(wait_while=lambda: True, sleep=pause).take("key", refuse(ValueError()), busy=(Busy,)))
+    assert len(pauses) == 2
+
+
+def test_between_jobs_a_held_engines_model_refuses_every_call():
+    from .hosted_command_worker import AuthorizedModel, no_job_guard
+
+    class Provider:
+        calls = 0
+
+        async def classify_many(self, *args, **kwargs):
+            Provider.calls += 1
+
+    bound = AuthorizedModel(Provider(), no_job_guard)
+    with pytest.raises(PermissionError):
+        asyncio.run(bound.classify_many())
+    assert Provider.calls == 0

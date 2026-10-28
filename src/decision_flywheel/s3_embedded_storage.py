@@ -34,6 +34,7 @@ from copy import deepcopy
 from hashlib import sha256
 from uuid import uuid4
 
+from .concurrent_calls import call_concurrently
 from .journal import CanonicalJournal, Journal, commit_with_contract, uuid
 from .keyed_records import keyed_documents_for, resolve
 from .record_lake import RECORDS_KEY, Coverage, FileRecordLake, RecordConflict, S3RecordLake, coverage_in, with_coverage
@@ -825,6 +826,7 @@ class S3CyclotronStores:
         self.lease = self
         self.batch_storage = None
         self.runtimes = {}
+        self.prepared = {}  # Acquired together by open_classifier_runtimes, not yet taken by an output.
 
     def _journal(self, domain, identifier):
         root = self.root_storage.journal
@@ -846,13 +848,41 @@ class S3CyclotronStores:
             self.root_storage.release()
             raise
 
-    def runtime_for_classifier(self, identifier):
-        if identifier in self.runtimes:
-            raise ValueError("classifier runtime already opened")
+    def _open_runtime(self, identifier):
         journal = self._journal("runtime", identifier)
         runtime = S3RuntimeStores(journal, cache_owned=True, events_lake=runtime_events_lake(journal))
         runtime.initialize()
         runtime.acquire(self.owner)
+        return runtime
+
+    def open_classifier_runtimes(self, identifiers):
+        """Initialize and acquire every named output's runtime at once, ready for ``runtime_for_classifier``.
+
+        All or nothing: when any one cannot be acquired, the ones that were are released again and the first
+        failure in the given order is raised.
+        """
+        identifiers = list(identifiers)
+        if len(set(identifiers)) != len(identifiers) or set(identifiers) & (set(self.runtimes) | set(self.prepared)):
+            raise ValueError("classifier runtime already opened")
+        opened = {}
+
+        def open_one(identifier):
+            opened[identifier] = self._open_runtime(identifier)
+
+        try:
+            call_concurrently([lambda identifier=identifier: open_one(identifier) for identifier in identifiers])
+        except BaseException:
+            try:
+                call_concurrently([runtime.close for runtime in opened.values()])
+            except BaseException:  # noqa: BLE001 - the acquire failure is the one to report
+                pass
+            raise
+        self.prepared.update({identifier: opened[identifier] for identifier in identifiers})
+
+    def runtime_for_classifier(self, identifier):
+        if identifier in self.runtimes:
+            raise ValueError("classifier runtime already opened")
+        runtime = self.prepared.pop(identifier) if identifier in self.prepared else self._open_runtime(identifier)
         self.runtimes[identifier] = runtime
         return runtime
 
@@ -870,26 +900,28 @@ class S3CyclotronStores:
         # The shared ledger has no owner; its reads share one head for this call, its writes still read the
         # live head first.
         self.root_storage.flush()
-        checks = [self.root_storage.reread, *(runtime.refresh for runtime in self.runtimes.values())]
-        if len(checks) > 1:
-            with ThreadPoolExecutor(len(checks)) as pool:
-                futures = [pool.submit(check) for check in checks]
-            for future in futures:
-                future.result()  # every check finishes first; the first refusal then propagates
-        else:
-            checks[0]()
+        call_concurrently([self.root_storage.reread, *(runtime.refresh for runtime in self.runtimes.values())])
         if self.batch_storage is not None:
             self.batch_storage.pin_reads()
 
+    def flush(self):
+        """Publish what the outputs and the root hold in memory, the outputs at once. Ownership is kept."""
+        call_concurrently([runtime.flush for runtime in self.runtimes.values()])
+        self.root_storage.flush()
+
+    @staticmethod
+    def run_concurrently(calls):
+        """An engine's independent per-output calls over these stores, at once (see ``concurrent_calls``)."""
+        return call_concurrently(calls)
+
     def release(self):
         errors = []
-        runtimes = list(self.runtimes.values())
-        self.runtimes = {}
-        for runtime in runtimes:
-            try:
-                runtime.close()
-            except BaseException as error:
-                errors.append(error)
+        runtimes = [*self.runtimes.values(), *self.prepared.values()]
+        self.runtimes, self.prepared = {}, {}
+        try:
+            call_concurrently([runtime.close for runtime in runtimes])
+        except BaseException as error:
+            errors.append(error)
         try:
             self.root_storage.release()
         except BaseException as error:
