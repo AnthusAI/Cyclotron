@@ -10,14 +10,7 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = [
-    # Both functions move from 1024 MB to 3008 MB: Lambda gives CPU in proportion to memory, and an
-    # uncached catalog read took about 6 s at 1024 MB (a removal, then the new value, for each).
-    "/Resources/BffFunction/Properties/MemorySize",
-    "/Resources/BffFunction/Properties/MemorySize",
-    "/Resources/WorkerFunction/Properties/MemorySize",
-    "/Resources/WorkerFunction/Properties/MemorySize",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 

@@ -366,7 +366,7 @@
         },
         "FunctionName": "cyclotron-console-bff",
         "Handler": "decision_flywheel.cloud_entry.bff_handler",
-        "MemorySize": 1024,
+        "MemorySize": 3008,
         "Role": {
           "Fn::GetAtt": [
             "BffRole",
@@ -1037,7 +1037,7 @@
         },
         "FunctionName": "cyclotron-console-worker",
         "Handler": "decision_flywheel.cloud_entry.worker_handler",
-        "MemorySize": 1024,
+        "MemorySize": 3008,
         "Role": {
           "Fn::GetAtt": [
             "WorkerRole",

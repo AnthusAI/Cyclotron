@@ -8,7 +8,9 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: 3008 MB for both functions.** `/Resources/BffFunction/Properties/MemorySize` and
+**No pending changes.**
+
+Previously: **3008 MB for both functions**, deployed on 2026-10-28 with change set `memory-3008`; the snapshot was refreshed. `/Resources/BffFunction/Properties/MemorySize` and
 `/Resources/WorkerFunction/Properties/MemorySize` are removed, then added back as 3008 in place of 1024.
 Lambda allots CPU in proportion to memory. At 1024 MB, an uncached catalog read took a median of 6.2 s,
 against 0.87 s for the same read on a laptop, and a decision job does many such reads.
