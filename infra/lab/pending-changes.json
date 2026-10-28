@@ -1,23 +1,4 @@
 {
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. JSON Pointer add and remove operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
-  "operations": [
-    {
-      "op": "remove",
-      "path": "/Resources/BffFunction/Properties/MemorySize"
-    },
-    {
-      "op": "add",
-      "path": "/Resources/BffFunction/Properties/MemorySize",
-      "value": 3008
-    },
-    {
-      "op": "remove",
-      "path": "/Resources/WorkerFunction/Properties/MemorySize"
-    },
-    {
-      "op": "add",
-      "path": "/Resources/WorkerFunction/Properties/MemorySize",
-      "value": 3008
-    }
-  ]
+  "operations": []
 }
