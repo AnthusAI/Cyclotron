@@ -10,6 +10,8 @@ snapshot (`aws cloudformation get-template --template-stage Original`), empty
 
 **No pending changes.**
 
+Previously: decisions stop reading event history (lab code bf345f0, package sha256 `adb15079ad5cf43edc29611804c64882bdb246419b673b0901ce5dd14b2bc08c`), deployed on 2026-10-28 with change set `no-history-bf345f0`. Code only; the snapshot was refreshed.
+
 Previously: **3008 MB for both functions**, deployed on 2026-10-28 with change set `memory-3008`; the snapshot was refreshed. `/Resources/BffFunction/Properties/MemorySize` and
 `/Resources/WorkerFunction/Properties/MemorySize` are removed, then added back as 3008 in place of 1024.
 Lambda allots CPU in proportion to memory. At 1024 MB, an uncached catalog read took a median of 6.2 s,
