@@ -540,6 +540,39 @@ def test_a_converted_summary_is_written_ahead_in_the_background_and_counts_only_
     again.close()
 
 
+def chunk_bytes_of(client, start):
+    """Bytes of the event chunk records written since ``start``, and how many events they hold."""
+    import json
+
+    bodies = [r["Body"] for kind, r in client.calls[start:] if kind == "put" and "/records/runtime/" in r["Key"]]
+    return sum(map(len, bodies)), sum(len(json.loads(b)["value"]["events"]) for b in bodies)
+
+
+def test_a_decisions_chunk_bytes_are_the_same_after_many_decisions_on_a_runtime_converted_with_its_status_rows():
+    import json
+
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    old_runtime_with_answers(client, "classifier-a", 500)
+    s = lake_stores(client)  # the conversion
+    rows = {f"origin/row/item-{n}": json.dumps({"shown": ["yes", None], "waiting": True}) for n in range(1500)}
+    s.runtime_storage.save_derived({"status-fold": '{"cursor":0}'}, {"status": rows}, prepare=True)
+    start = len(client.calls)
+    s.close()
+    conversion = chunk_bytes_of(client, start)
+    assert conversion[1] == 0 and conversion[0] < 400  # a conversion's chunk names its changes by one digest
+    seen = {}
+    for n in range(1, 201):
+        start = len(client.calls)
+        one_decision(client, n)  # items of the same size, so only history could make the chunks differ
+        if n in (105, 200):
+            seen[n] = chunk_bytes_of(client, start)
+    # The chunks hold this decision's events and one fixed digest: nothing of the keys or decisions before.
+    # (Decisions 105 and 200 spell their numbers with the same digits but for the chunks' first event ids.)
+    assert seen[105][1] == seen[200][1] == 6 and abs(seen[200][0] - seen[105][0]) <= 2
+
+
 def old_runtime_with_answers(client, name, count):
     import json
 

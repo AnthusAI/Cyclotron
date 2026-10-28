@@ -421,3 +421,125 @@ def test_coalescing_writes_far_fewer_commits_with_the_lake_too():
     assert commits(False) == 5 * 9 + 1  # seven events and two answer changes per item, plus the release
     # One commit per item, the reservation; the completion and the events wait for the next one or the release.
     assert commits(True) == 5 * 1 + 1
+
+
+# --- An item's values go by reference -------------------------------------------------------------------
+
+
+def article(size):
+    return {"id": "story-1", "values": {"title": "A story", "body": "x" * size, "url": "https://example.test/story"}}
+
+
+def started(item, n=1):
+    return {"kind": "cycle-started", "cycle_id": f"c-{n}", "cycle_number": n, "cycle_item_id": item["id"], "item": item}
+
+
+def decide_article(client, name, item):
+    """A decision's events on one runtime, as the flywheel emits them, around a reservation, then the release."""
+    s = open_stores(client, name)
+    s.runtime_storage.append_event(json.dumps(started(item)))
+    s.runtime_cache.begin_answer("k-" + item["id"], None)
+    s.runtime_storage.append_event(json.dumps({"kind": "prediction", "target_id": item["id"], "label": "yes"}))
+    s.close()
+
+
+def chunk_bytes(client, start):
+    return sum(len(r["Body"]) for kind, r in client.calls[start:] if kind == "put" and "/records/runtime/" in r["Key"])
+
+
+def article_puts(client, start, size):
+    return [r for kind, r in client.calls[start:] if kind == "put" and "/payloads/" in r["Key"] and len(r["Body"]) > size]
+
+
+def test_a_decision_on_a_large_article_writes_the_same_chunk_bytes_and_the_article_once_for_every_runtime(capsys):
+    small, large = ConditionalS3(), ConditionalS3()
+    start = len(small.calls)
+    decide_article(small, "classifier-a", article(200))
+    small_bytes = chunk_bytes(small, start)
+    outputs = ["classifier-a", "classifier-b", "classifier-c"]
+    spent = []
+    for name in outputs:  # each output's runtime decides the same article
+        start = len(large.calls)
+        decide_article(large, name, article(200_000))
+        spent.append((chunk_bytes(large, start), len(article_puts(large, start, 200_000))))
+    with capsys.disabled():
+        print(f"\nchunk bytes per runtime decision: 200 B article {small_bytes}; 200 KB article {spent[0][0]}")
+    # The chunks never carry the article's text: only its reference, whose length has three more digits.
+    assert all(size - small_bytes == 3 for size, _ in spent)
+    assert [puts for _, puts in spent] == [1, 0, 0]  # written once in the shared store, then known to exist
+    again = open_stores(large, "classifier-b")  # a fresh handle of another runtime resolves it on its own
+    assert again.runtime_storage.history(2)[0]["item"] == article(200_000)
+    again.close()
+
+
+def test_trace_events_and_history_return_the_events_exactly_as_emitted_whether_referenced_or_inline():
+    from .record_lake import RECORDS_KEY, Coverage
+
+    client = ConditionalS3()
+    old = journal(client, name="classifier-a")
+    lake = runtime_events_lake(old)
+    inline = started(article(500), 1)
+    coverage, _ = lake.append(Coverage(), [json.dumps(inline)])  # an event written before references existed
+    record = S3RuntimeStores(old, events_lake=lake)
+    record.initialize()
+    value = old.read()
+    old.commit(value, {**value.value, RECORDS_KEY: {lake.name: coverage.to_json()}})
+    new = started({"id": "story-2", "values": {"title": "Another", "body": "y" * 3000}}, 2)
+    s = open_stores(client)
+    s.runtime_storage.append_event(json.dumps(new))
+    s.close()
+    stored = [json.loads(r["Body"])["value"] for kind, r in client.calls if kind == "put" and "/records/runtime/" in r["Key"]]
+    assert "valuesRef" in json.loads(stored[-1]["events"][0])["item"]  # the new one is stored by reference
+    reader = open_stores(client)
+    expected = [{**inline, "event_id": 1}, {**new, "event_id": 2}]
+    assert list(reader.runtime_storage.history(10)) == expected
+    assert reader.runtime_storage.trace_events(after_event_id=0)["events"] == expected
+    assert list(reader.runtime_storage.events_of(("cycle-started",))) == expected
+    assert [json.loads(p) for p in reader.runtime_storage.event_payloads(("cycle-started",))] == [inline, new]
+    assert [json.loads(p) for _, p in reader.audit_events().stored] == [inline, new]
+    reader.close()
+
+
+def test_a_replay_whose_cycles_start_by_reference_reproduces_the_decisions():
+    import asyncio
+
+    from .classifier_config import ClassifierConfig
+    from .cycle_replay import run_cycle_replay
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import TASK, FakeModel
+    from .replay import plan_replay
+    from .replay_test import rows
+    from .s3_runtime_storage_test import cloud_agent
+
+    ordered = rows()
+    plan = plan_replay(TASK, ordered, seed="by-reference", batch_size=100)
+
+    def wheel(storage, **options):
+        return DecisionFlywheel(None, ClassifierConfig(TASK), FakeModel(), cloud_agent(storage), storage=storage, **options)
+
+    def replay(wheel, **options):
+        return asyncio.run(
+            run_cycle_replay(
+                wheel, plan, optimize_every=100, retrain_every=100, stages=("rubric",), rubric_changes_every=None, **options
+            )
+        )
+
+    inline = wheel(open_stores(lake=False))
+    replay(inline)
+    expected = [e for e in inline.history(10000) if e["kind"] in ("cycle-started", "prediction")]
+    inline.close()
+    client = ConditionalS3()
+    first = wheel(open_stores(client), max_requests=2)
+    with pytest.raises(RuntimeError):
+        replay(first)  # pauses before its third paid prediction
+    first.close()
+    resumed = wheel(open_stores(client))
+    report = replay(resumed, resume=True)  # resuming reads the referenced cycle-started events
+    assert report["resumed_from_cycles"] == 2
+    got = [e for e in resumed.history(10000) if e["kind"] in ("cycle-started", "prediction")]
+    keep = ("kind", "cycle_number", "cycle_item_id", "item", "target_id", "label", "probabilities")
+    assert [{k: e.get(k) for k in keep} for e in got] == [{k: e.get(k) for k in keep} for e in expected]
+    resumed.close()
+    chunks = [json.loads(r["Body"])["value"] for kind, r in client.calls if kind == "put" and "/records/runtime/" in r["Key"]]
+    referenced = [json.loads(p) for c in chunks for p in c["events"] if json.loads(p)["kind"] == "cycle-started"]
+    assert referenced and all("valuesRef" in e["item"] and "values" not in e["item"] for e in referenced)
