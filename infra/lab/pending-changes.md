@@ -8,7 +8,9 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: list access on the books bucket for the BFF and worker roles.** One statement is appended to
+**No pending changes.**
+
+Previously: constant-cost storage (lab code 8b825ed, package sha256 `8546da09724174429bc350c9f1da63b005d913f83c3fb47b8aa62df67513606d`), deployed on 2026-10-28 with change set `storage-8b825ed` at 16:10Z, after change set `books-list-8b825ed` at 16:08Z deployed list access on the books bucket for the BFF and worker roles. One statement is appended to
 each role's policy: `s3:ListBucket` on the books bucket itself. Without it, S3 answers a GET of a key nobody
 wrote with AccessDenied rather than NoSuchKey, so storage cannot tell a new key from a forbidden one; the
 constant-cost storage looks records up by key and needs "not found" to mean exactly that. No prefix condition:

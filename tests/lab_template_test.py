@@ -10,12 +10,7 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = [
-    # Listing the books bucket lets a GET of a missing key answer "not found" instead of "access denied",
-    # so storage can tell a new key from a forbidden one. The bucket holds only console data both roles read.
-    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
-    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
