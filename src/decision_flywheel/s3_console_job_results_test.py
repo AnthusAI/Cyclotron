@@ -104,7 +104,7 @@ def test_failed_and_interrupted_results_also_leave_the_catalog(world):
     assert result_ref(s.journal.read().value["snapshot"]["tables"]["web_jobs"][0]["result"]) is not None
 
 
-def test_catalog_bytes_per_completed_job_stay_small_and_bounded_unlike_embedded_results(world, capsys):
+def test_catalog_bytes_stay_flat_per_completed_job_with_or_without_the_results_lake(world, capsys):
     def grow(s, count):
         run = s.create_run("Live", "live", {})
         sizes = [catalog_bytes(s)]
@@ -119,10 +119,11 @@ def test_catalog_bytes_per_completed_job_stay_small_and_bounded_unlike_embedded_
     per_job_embedded = (embedded[-1] - embedded[0]) / 12
     per_job_lake = (lake_sizes[-1] - lake_sizes[0]) / 12
     print(f"\n[{world.backend}] catalog bytes per completed job: embedded {per_job_embedded:.0f}, lake {per_job_lake:.0f}")
-    assert per_job_embedded > 2000
-    assert per_job_lake < 700 and per_job_lake < per_job_embedded / 5
-    deltas = [b - a for a, b in zip(lake_sizes[1:], lake_sizes[2:])]
-    assert max(deltas) - min(deltas) < 60  # growth per job is flat, not accelerating
+    # A finished job leaves the head at the next commit, so from the second job on the head does not grow at all,
+    # whether its result is embedded or in the lake.
+    for sizes in (embedded, lake_sizes):
+        assert max(sizes[2:]) - min(sizes[2:]) < 40  # only the digits of a counter, never another job
+    assert lake_sizes[-1] < embedded[-1]
     assert len(world.lake().sequences()) == 12
 
 
@@ -276,7 +277,7 @@ def test_a_copied_record_does_not_pass_as_another_jobs_result(world):
     lake = world.lake()
     value = s.journal.read().value
     # Point the second job at the first job's page, which is covered but belongs to another job.
-    rows = value["snapshot"]["tables"]["web_jobs"]
+    rows = [dict(e["row"]) for e in reversed(list(s._run_job_entries(value, run["id"])))]
     ref = result_ref(rows[0]["result"])
     rows[1]["result"] = rows[0]["result"]
     with pytest.raises(ValueError):

@@ -107,9 +107,8 @@ def test_one_delivery_drains_the_whole_run_in_acceptance_order_when_time_allows(
     jobs = [s.enqueue_authorized_command(run["id"], f"job-{n}", "prepare", {}, actor) for n in range(4)]
     refs = {"accountId": actor.account_id, "runId": run["id"]}
     assert asyncio.run(worker.deliver({**refs, "jobId": jobs[0]["id"]}, lambda: 900))["jobId"] == jobs[-1]["id"]
-    claims = s._read()["claims"]
     assert [j["status"] for j in s.jobs(run["id"])] == ["completed"] * 4
-    started = [claims[j["id"]]["at"] for j in jobs]
+    started = [s.command_recovery(j["id"])["claimedAt"] for j in jobs]
     assert started == sorted(started)
 
 
@@ -171,8 +170,7 @@ def test_five_decisions_posted_at_once_are_all_accepted_queued_and_decided_in_po
             return jobs
 
     jobs = asyncio.run(go())
-    claims = store._read()["claims"]
-    started = [claims[job]["at"] for job in jobs]
+    started = [store.command_recovery(job)["claimedAt"] for job in jobs]
     assert started == sorted(started) and len(model.calls) == 5
 
 
@@ -323,6 +321,8 @@ def test_validating_a_catalog_with_thousands_of_claimed_jobs_stays_linear():
         job = {"_rowid": n + 1, "id": str(uuid4()), "run_id": run["id"], "request_id": f"r{n}", "kind": "publication"}
         value["snapshot"]["tables"]["web_jobs"].append({**job, "payload": "{}", "status": "completed", "result": None})
         value["claims"][job["id"]] = {"owner": str(uuid4()), "fence": 1}
+        value["cold"]["hot"]["web_jobs"][job["id"]] = n + 1
+    value["cold"]["rowids"]["web_jobs"] = value["cold"]["ordinals"]["web_jobs"][run["id"]] = 4000
     started = time.monotonic()
     s._validate(value)
     assert time.monotonic() - started < 2.0  # one scan per claim over 4000 jobs (16 million row visits) took far longer

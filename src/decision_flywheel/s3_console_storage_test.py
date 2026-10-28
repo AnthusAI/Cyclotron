@@ -421,13 +421,12 @@ def test_v1_console_migrates_without_inventing_job_actors():
     from .s3_console_storage import initial
 
     j = journal(name="old-console")
-    value = initial()
-    value.pop("actors")
+    value = {k: initial()[k] for k in ("snapshot", "claims")}
     value["schema"] = "cyclotron-s3-console/v1"
     j.initialize(value)
     s = store(j)
     run = s.create_run("Local import", "live", {})
-    assert j.read().value["schema"] == "cyclotron-s3-console/v2"
+    assert j.read().value["schema"] == "cyclotron-s3-console/v3"
     assert j.read().value["actors"] == {}
     assert s.run(run["id"])["name"] == "Local import"
 
