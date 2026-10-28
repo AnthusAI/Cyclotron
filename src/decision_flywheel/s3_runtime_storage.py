@@ -24,6 +24,7 @@ chunks, with the same ids.
 import bisect
 import json
 import time
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
@@ -53,6 +54,8 @@ from .record_lake import (
 )
 from .storage_errors import StorageConflict
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
+from .value_records import REF as VALUES_REF
+from .value_records import canonical
 
 
 class RuntimeOwnershipError(RuntimeError):
@@ -108,6 +111,25 @@ def runtime_events_lake(journal):
     if isinstance(payloads, FilePayloads):
         return FileRecordLake(payloads, EVENTS_DOMAIN, kind)
     raise ValueError("an S3 or file payload adapter is required for the runtime events lake")
+
+
+# Content-addressed payloads known to exist, per payload store, shared by every handle in the process: the
+# objects are immutable and never deleted, so a digest once stored or read is never written again (six runtimes
+# deciding the same article write its values once). Keyed weakly by the injected client.
+_STORED_BY_CLIENT = weakref.WeakKeyDictionary()
+_STORED_BY_ROOT = {}
+
+
+def _stored_digests(payloads):
+    if isinstance(payloads, S3Payloads):
+        try:
+            per_client = _STORED_BY_CLIENT.setdefault(payloads.client, {})
+        except TypeError:
+            return set()  # a client that cannot be weakly referenced shares nothing
+        return per_client.setdefault((payloads.bucket, payloads.scope.key), set())
+    if isinstance(payloads, FilePayloads):
+        return _STORED_BY_ROOT.setdefault((str(payloads.root), payloads.scope.key), set())
+    return set()
 
 
 def ref_of(content):
@@ -188,6 +210,8 @@ class S3RuntimeStores:
         # claims their sequences in order.
         self._prepared = []
         self._prepared_values = {}  # (kind, key) -> text, visible to this handle until the covering commit
+        self._stored = _stored_digests(journal.payloads)
+        self._pending_blobs = {}  # item values referenced by held events, written with the commit that publishes them
         self._background = None
         self._blobs = {}  # digest -> bytes of content-addressed values read or written; they never change
         self._seen = None  # the last head read, so an unchanged head is not decoded again
@@ -422,7 +446,7 @@ class S3RuntimeStores:
 
     def _publish(self, blobs):
         """Write the content-addressed values a head will name, together, before the head moves."""
-        contents = [content for digest, content in blobs.items() if digest not in self._blobs]
+        contents = [content for digest, content in blobs.items() if digest not in self._blobs and digest not in self._stored]
         put = self.journal.payloads.put
         if len(contents) > 1:
             with ThreadPoolExecutor(self._lanes(len(contents))) as pool:
@@ -430,6 +454,7 @@ class S3RuntimeStores:
         elif contents:
             put(contents[0])
         self._blobs.update(blobs)
+        self._stored.update(blobs)
 
     def _settled(self, value, committed):
         """The working value of a head just committed from ``value``: keyed changes written, nothing pending."""
@@ -496,7 +521,7 @@ class S3RuntimeStores:
 
     def _commit(self, head, value, staged):
         stored, blobs = self._store(value, head)
-        self._publish(blobs)
+        self._publish({**blobs, **self._pending_blobs})
         keyed = (
             [(name, key, text) for name, held in value["maps"].items() for key, text in held["changes"].items()]
             if self.keyed_documents is not None
@@ -539,6 +564,7 @@ class S3RuntimeStores:
                 raise RuntimeOwnershipError("runtime head moved during a conversion; reopen/reconcile") from None
             raise
         self._prepared_values = {}
+        self._pending_blobs = {}
         return self._settled(value, committed)
 
     def _change(self, fn, *, ownership=True, recovery=False, defer=False):
@@ -594,6 +620,7 @@ class S3RuntimeStores:
         self._working = None
         self._held = []
         self._prepared, self._prepared_values = [], {}
+        self._pending_blobs = {}
 
     def change(self, fn, *, defer=False):
         return self._change(lambda value: fn(value["data"], value), defer=defer)
@@ -793,6 +820,42 @@ class S3RuntimeStores:
         for seq in seqs:
             check(got[seq])
         return [got[seq] for seq in seqs]
+
+    def _externalized(self, payload, event):
+        """The payload to store for ``event``: a ``cycle-started`` item's values become a ``valuesRef``.
+
+        The values are one content-addressed payload (``value_records.py``) in this runtime's own store, written
+        with the commit that publishes the event and not at all when that store already holds them.
+        """
+        item = event.get("item")
+        if event.get("kind") != "cycle-started" or not isinstance(item, dict) or not isinstance(item.get("values"), dict):
+            return payload
+        content = canonical(item["values"])
+        ref = ref_of(content)
+        if ref[0] not in self._blobs:
+            self._pending_blobs[ref[0]] = content
+        rest = {key: held for key, held in item.items() if key != "values"}
+        return _text({**event, "item": {**rest, VALUES_REF: {"digest": ref[0], "length": ref[1]}}})
+
+    def _inflated(self, payload):
+        """The event exactly as it was emitted: a referenced item's values read back (verified) in place."""
+        if VALUES_REF not in payload:
+            return payload
+        event = json.loads(payload)
+        item = event.get("item")
+        if event.get("kind") != "cycle-started" or not isinstance(item, dict) or VALUES_REF not in item:
+            return payload
+        ref = item[VALUES_REF]
+        if not isinstance(ref, dict) or set(ref) != {"digest", "length"}:
+            raise RecordCorrupt("invalid item values reference in a runtime event")
+        digest = ref["digest"]
+        # Values still waiting for their commit are read from memory; ``_blobs`` holds only stored ones.
+        content = self._pending_blobs.get(digest) or self._blobs.get(digest)
+        if content is None:
+            content = self.journal.payloads.get(PayloadRef(self.journal.payloads.scope, digest, ref["length"]))
+            self._blobs[digest] = content
+        rest = {key: held for key, held in item.items() if key != VALUES_REF}
+        return _text({**event, "item": {**rest, "values": decode(content)}})
 
     def _events(self, value, extra=None):
         return _Events(self, value, self._held if extra is None else extra)
@@ -995,6 +1058,15 @@ class _Events:
         return low
 
     def rows(self, after_id=0, limit=None):
+        """(id, payload) above ``after_id`` in order, each event as it was emitted (item values read back)."""
+        inflated = self.store._inflated
+        return ((identifier, inflated(payload)) for identifier, payload in self._rows(after_id, limit))
+
+    def tail(self, limit):
+        """The last ``limit`` rows, oldest first, each event as it was emitted."""
+        return [(identifier, self.store._inflated(payload)) for identifier, payload in self._tail(limit)]
+
+    def _rows(self, after_id=0, limit=None):
         """(id, payload) above ``after_id`` in order; at most ``limit`` of them, and no more records than that read."""
         remaining = limit
         for identifier, payload in self.legacy:
@@ -1027,7 +1099,7 @@ class _Events:
                 yield identifier, payload
                 remaining = remaining if remaining is None else remaining - 1
 
-    def tail(self, limit):
+    def _tail(self, limit):
         """The last ``limit`` rows, oldest first, reading only the records they need."""
         need = limit
         held = self.held[-need:] if need > 0 else ()
@@ -1139,7 +1211,8 @@ class _State(_View):
                 data["events"].append([identifier, payload])
             else:
                 # The event joins the chunk the next commit writes; nothing lands in the head but control state.
-                store._staged.append(payload)
+                # An item's values go by reference, so the chunk does not grow with the article's text.
+                store._staged.append(store._externalized(payload, json.loads(payload)))
                 events = _Events(store, value, store._staged)
                 identifier = events.last_id
             event = json.loads(payload)
