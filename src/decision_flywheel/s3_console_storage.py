@@ -215,6 +215,25 @@ def validate_hot(snapshot):
     watermark = snapshot["sequences"]["item_feedback"]
     if max((r["sequence"] for r in tables["item_feedback"]), default=0) > watermark:
         raise ValueError("invalid native sequence watermark")
+    # Feedback, its retractions and the classifiers they name all stay in the head, so their links are checked here.
+    classifiers = {(r["id"], r["revision"]): r for r in tables["classifiers"]}
+    feedback = set()
+    for row in tables["item_feedback"]:
+        classifier = classifiers.get((row["classifier_id"], row["classifier_revision"]))
+        if classifier is None:
+            raise ValueError("feedback references unknown pinned revisions")
+        config = json.loads(classifier["config"])
+        DecisionTask(row["classifier_id"], tuple(c["label"] for c in config["classes"]), config["question"]).validate_label(
+            row["label"]
+        )
+        if row["request_id"] in feedback:
+            raise ValueError("duplicate feedback identity")
+        feedback.add(row["request_id"])
+    retracted = set()
+    for row in tables["item_feedback_retractions"]:
+        if row["feedback_request_id"] not in feedback or row["feedback_request_id"] in retracted:
+            raise ValueError("invalid feedback retraction")
+        retracted.add(row["feedback_request_id"])
     return snapshot
 
 
@@ -2090,9 +2109,15 @@ class S3ConsoleStorage:
         self._mutate(apply)
 
     def insert_feedback(self, row):
-        self._mutate(
-            lambda value: insert(value, "item_feedback", dict(sequence=0, **dict(zip(TABLES["item_feedback"][1:], row))))
-        )
+        fields = dict(sequence=0, **dict(zip(TABLES["item_feedback"][1:], row)))
+
+        def apply(value):
+            # The head holds only some revisions, so the revision a label pins is checked against every one.
+            if self._revision_row(value, fields["list_id"], fields["item_id"], fields["item_revision"]) is None:
+                raise ValueError("feedback references unknown pinned revisions")
+            insert(value, "item_feedback", fields)
+
+        self._mutate(apply)
 
     def accepted_records(self, list_id, classifiers):
         value = self._read()
