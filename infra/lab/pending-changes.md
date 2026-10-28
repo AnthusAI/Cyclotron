@@ -8,7 +8,12 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.** The worker sweep (lab code 00e04dd, package sha256 `8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32`) was deployed on 2026-10-27 with change set `worker-sweep-00e04dd`, adding `WorkerSweepSchedule` (once a minute) and `WorkerSweepPermission`. The worker no longer writes to its own queue, so Lambda recursive-loop detection has nothing to stop. The worker role's `sqs:SendMessage` grant is unused; removing it needs list-item removal in the checker. The snapshot was refreshed.
+**Pending: no stage throttle.** `/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings`
+is removed. It held API Gateway's stage throttle (5 requests/s, burst 10), which answered Papyrus's
+collector with bare 429s (no Retry-After) and paused its collection for 30 minutes at a time. Without it
+the stage has no throttle of its own and only the AWS account's API Gateway quota applies.
+
+Previously: the worker sweep (lab code 00e04dd, package sha256 `8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32`) was deployed on 2026-10-27 with change set `worker-sweep-00e04dd`, adding `WorkerSweepSchedule` (once a minute) and `WorkerSweepPermission`. The worker no longer writes to its own queue, so Lambda recursive-loop detection has nothing to stop. The worker role's `sqs:SendMessage` grant is unused; removing it needs list-item removal in the checker. The snapshot was refreshed.
 
 Previously: the run job queue (lab code e82eee2, package sha256 `5c837f0b1d934ec54c03df1f9167dafe40ae69b5d0b0de9e3e647dc78e2abda0`) was deployed on 2026-10-27 with change set `run-queue-e82eee2`, adding `sqs:SendMessage` on the command queue for the worker. The snapshot was refreshed.
 

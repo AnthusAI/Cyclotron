@@ -740,9 +740,6 @@ Resources:
   ConsoleApiApiGatewayDefaultStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
-      DefaultRouteSettings:
-        ThrottlingBurstLimit: 10
-        ThrottlingRateLimit: 5
       ApiId:
         Ref: ConsoleApi
       StageName: $default
