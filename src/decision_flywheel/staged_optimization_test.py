@@ -194,11 +194,11 @@ def test_a_proposal_that_reaches_outside_its_stage_is_dropped_without_a_model_ca
     wheel.close()
 
 
-def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
+def test_a_datetime_candidate_larger_than_every_original_request_is_still_measured(tmp_path):
     from .flywheel import _json
 
     config = ClassifierConfig(TASK, rubric="Existing")
-    ceiling = max(len(_json(config.request(row.item, TRAIN)).encode()) for row in (*TRAIN, *DEV))
+    original = max(len(_json(config.request(row.item, TRAIN)).encode()) for row in (*TRAIN, *DEV))
     requests = []
 
     class RecordingModel(FakeModel):
@@ -211,7 +211,6 @@ def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
         config,
         RecordingModel(),
         OptimizerAgent(lambda _: OptimizerReply('{"dynamic_elements":["current_datetime"]}', "fake")),
-        max_request_bytes=ceiling,
     )
     result = asyncio.run(
         optimize_stage(
@@ -224,10 +223,8 @@ def test_datetime_candidate_cannot_exceed_the_complete_request_budget(tmp_path):
             min_development_per_class=1,
         )
     )
-    assert not result["promoted"]
-    assert result["error_type"] == "ValueError"
-    assert requests == []
-    assert wheel.active.config == config
+    assert result.get("error_type") is None
+    assert any(len(_json(request).encode()) > original for request in requests)
     wheel.close()
 
 

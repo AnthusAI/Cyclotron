@@ -17,8 +17,6 @@ def wrapped(transport, ledger=None, maximum=2):
         ledger or store(journal(name="optimizer")),
         identity={"provider": "synthetic", "model": "synthetic"},
         max_calls=maximum,
-        max_request_bytes=100000,
-        max_reply_bytes=100000,
     )
 
 
@@ -149,3 +147,9 @@ def test_per_invocation_guard_denial_precedes_reservation_and_is_rechecked_befor
     with pytest.raises(PermissionError):
         guarded([{"role": "user", "content": "synthetic"}])
     assert calls == [] and base.calls == 1
+
+
+def test_an_optimizer_prompt_and_reply_far_larger_than_100_kilobytes_pass_through_unrefused():
+    large = "x" * 300_000
+    transport = wrapped(lambda messages: OptimizerReply(messages[0]["content"], "synthetic"))
+    assert transport([{"role": "user", "content": large}]).content == large

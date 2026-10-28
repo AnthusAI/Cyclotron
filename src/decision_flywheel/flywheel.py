@@ -162,7 +162,6 @@ class DecisionFlywheel:
         *,
         observer: Callable[[dict], None] | None = None,
         max_requests: int | None = 100,
-        max_request_bytes: int = 32000,
         calibration_method: str = "auto",
         redact: Sequence[str] = (),
         evaluation_weighting: str = "equal_class",
@@ -211,8 +210,6 @@ class DecisionFlywheel:
         self.context_validation_floor = context_validation_floor
         if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
             raise ValueError("max_requests must be positive or None")
-        if type(max_request_bytes) is not int or max_request_bytes < 1:
-            raise ValueError("max_request_bytes must be positive")
         if getattr(storage, "requires_durable_optimizer", False):
             from .s3_optimizer_transport import require_durable_optimizer
 
@@ -272,7 +269,7 @@ class DecisionFlywheel:
         self._step_running = False
         self.observer = observer or (lambda event: None)
         self.redact = tuple(value for value in redact if value)
-        self.max_requests, self.max_request_bytes, self.requests = max_requests, max_request_bytes, 0
+        self.max_requests, self.requests = max_requests, 0
         expected = _json({"task": initial.task.fingerprint, "model": model.model_identity})
         try:
             self.runtime_storage.bind_contract(expected)
@@ -819,9 +816,6 @@ class DecisionFlywheel:
         capabilities = getattr(self.model, "capabilities", None)
         if capabilities is not None:
             capabilities.validate_context(request["state"]["examples"])
-        serialized = _json(request)
-        if len(serialized.encode()) > self.max_request_bytes:
-            raise ValueError("complete decision request exceeds the configured byte safety ceiling")
         identity = getattr(self.model, "cache_identity", None)
         key = self._answer_key(config, target, training, now)
         row = self.runtime_cache.answer(key)
@@ -1085,7 +1079,6 @@ class DecisionFlywheel:
                     "selection_policy": asdict(self.selection_policy) if self.selection_policy else None,
                     "training_class_weighting": self.training_class_weighting,
                     "prior_hypotheses": self.hypotheses(),
-                    "request_budget_bytes": self.max_request_bytes,
                     **self.sibling_briefing(),
                     "training_predictions": [
                         event

@@ -198,7 +198,6 @@ class JevAdapter:
         *,
         now=None,
         event_sink=None,
-        max_request_bytes=32000,
         share_supporting_questions=False,
     ):
         """One transport request; each classifier keeps its own context and answer group."""
@@ -209,7 +208,6 @@ class JevAdapter:
             target,
             training,
             now=now,
-            max_request_bytes=max_request_bytes,
             share_questions=share_supporting_questions,
         )
         state = {

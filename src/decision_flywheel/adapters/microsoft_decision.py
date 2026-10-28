@@ -169,7 +169,6 @@ class MicrosoftDecisionAdapter:
         *,
         now=None,
         event_sink=None,
-        max_request_bytes=32000,
         share_supporting_questions=False,
     ):
         """One request; each classifier keeps its own context and answer group."""
@@ -180,7 +179,6 @@ class MicrosoftDecisionAdapter:
             target,
             training,
             now=now,
-            max_request_bytes=max_request_bytes,
             share_questions=share_supporting_questions,
         )
         in_criteria = self.configuration.rubric_placement == "criteria"

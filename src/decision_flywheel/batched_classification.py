@@ -40,7 +40,7 @@ def shared_questions(configurations):
     return {signature: ids for signature, ids in owners.items() if len(ids) > 1}
 
 
-def batch_request(configurations, target, training, *, now=None, max_request_bytes=32000, share_questions=False):
+def batch_request(configurations, target, training, *, now=None, share_questions=False):
     """Compose one request. With ``share_questions``, a supporting question several classifiers ask is asked once.
 
     Without it (the default, and every store created before sharing existed)
@@ -96,8 +96,6 @@ def batch_request(configurations, target, training, *, now=None, max_request_byt
     request = {"state": state, "questions": questions}
     if owners:
         request["owners"] = owners
-    if len(json.dumps(request, ensure_ascii=False).encode()) > max_request_bytes:
-        raise ValueError("combined request exceeds context safety budget; partition classifiers explicitly")
     return request, identities
 
 

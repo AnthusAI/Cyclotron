@@ -67,17 +67,28 @@ def test_two_classifiers_and_their_features_use_one_request_with_scoped_context(
     assert ".rubric" not in next(iter(client.questions.values()))["instructions"]
 
 
-def test_oversized_batches_and_target_leakage_fail_before_a_model_call():
+def test_a_combined_request_far_larger_than_32_kilobytes_reaches_the_model_in_one_call():
     class Client:
-        def system_one(self, **kwargs):
-            raise AssertionError("invalid batch must never call a model")
+        calls = 0
+
+        def system_one(self, *, state, questions):
+            self.calls += 1
+            return SimpleNamespace(
+                answers={key: {"choice": next(iter(q["criteria"]))} for key, q in questions.items()},
+                model="fake",
+                usage=None,
+            )
 
     task = DecisionTask("main", ("yes", "no"), "Choose")
-    config = ClassifierConfig(task, rubric="x" * 100)
-    with pytest.raises(ValueError, match="budget"):
-        asyncio.run(
-            JevAdapter(Client()).classify_many({"a": config}, Item("target", {"text": "Target"}), {"a": []}, max_request_bytes=10)
-        )
+    config = ClassifierConfig(task, rubric="x" * 200_000)
+    client = Client()
+    result = asyncio.run(JevAdapter(client).classify_many({"a": config}, Item("target", {"text": "Target"}), {"a": []}))
+    assert client.calls == 1
+    assert set(result.answers["a"]) == {"decision"}
+
+
+def test_a_target_never_appears_among_its_own_batched_context_examples():
+    task = DecisionTask("main", ("yes", "no"), "Choose")
     from .batched_classification import batch_request
 
     request, _ = batch_request(

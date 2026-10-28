@@ -184,7 +184,6 @@ class ControlScheduler:
                     current={
                         **wheel.active.config.briefing_state(),
                         "control_under_test": control,
-                        "request_budget_bytes": wheel.max_request_bytes,
                         **extra,
                     },
                     protected=tuple(row.item for row in development) + tuple(protected),
@@ -403,7 +402,6 @@ class ControlScheduler:
                     current={
                         **wheel.active.config.briefing_state(),
                         "control_under_test": control,
-                        "request_budget_bytes": wheel.max_request_bytes,
                         "prior_control_ideas": [idea for idea in self.ideas() if idea["control"] == control],
                     },
                     protected=tuple(row.item for row in development) + tuple(protected),

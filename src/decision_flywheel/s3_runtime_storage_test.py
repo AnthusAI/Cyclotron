@@ -30,8 +30,6 @@ def cloud_agent(s):
         ledger,
         identity={"provider": "synthetic", "model": "fake-optimizer"},
         max_calls=20,
-        max_request_bytes=1000000,
-        max_reply_bytes=1000000,
     )
     return complete
 

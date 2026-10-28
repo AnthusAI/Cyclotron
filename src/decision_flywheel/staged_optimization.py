@@ -58,7 +58,6 @@ def stage_briefing(wheel, stage, training, development, protected, extra=None):
             "allowed_proposal_controls": [control, "dynamic_elements"] if stage == "questions" else [control],
             "selection_policy": asdict(wheel.selection_policy) if wheel.selection_policy else None,
             "stage": stage,
-            "request_budget_bytes": wheel.max_request_bytes,
             **({"example_experiments": measurements} if stage == "examples" else {}),
             **(wheel.sibling_briefing() if stage == "questions" else {}),
             **(extra or {}),
