@@ -497,6 +497,11 @@ class S3BatchStorage:
         self.journal = journal
         self.max_conflicts = max_conflicts
         self._view = None
+        # Reads may reuse the head this handle last read or committed only while it is pinned (pin_reads) and
+        # the view was taken since the latest pin. Writes always start from a fresh head read.
+        self._pinned = False
+        self._epoch = 0
+        self._view_epoch = None
         self._claims = {}  # (fingerprint, owner) -> generation this handle reserved and claimed in one commit
         self._written = {}  # batch records written during the current write, for its own conflict retries
 
@@ -548,13 +553,28 @@ class S3BatchStorage:
         record = self.journal.initialize(deepcopy(EMPTY_V2))
         self._check(record.value)
 
+    def pin_reads(self):
+        """Begin one guarded call: from here its reads share one head instead of each reading it again.
+
+        Until the next pin, ``get`` and ``requests`` reuse the head this handle last read or committed after
+        this pin (the first such read GETs it). That only fixes the moment a lookup observes, as if every read
+        of the call had happened at once; it grants nothing. Every write (reserve, claim, settle, abandon)
+        still reads the live head first and commits by a conditional write, so the paid-call rules are exactly
+        those of an unpinned handle. Audit and reconciliation reads (``operation_mark``,
+        ``pending_operations``, ``page``, ``export``) always read the live head.
+        """
+        self._pinned = True
+        self._epoch += 1
+
     def _read(self):
         known = self._view.record if self._view is not None else None
         if known is not None and isinstance(self.journal, CanonicalJournal):
             return self.journal.read(known=known)
         return self.journal.read()
 
-    def _state(self):
+    def _state(self, *, reuse=False):
+        if reuse and self._pinned and self._view is not None and self._view_epoch == self._epoch:
+            return self._view
         record = self._read()
         current = self._view
         if current is None or (current.record.anchor, current.record.revision, current.record.commit_id) != (
@@ -569,7 +589,22 @@ class S3BatchStorage:
             current = _View.__new__(_View)
             current.__dict__.update(self._view.__dict__, record=record)
         self._view = current
+        self._view_epoch = self._epoch
         return current
+
+    def _committed(self, before, record):
+        """The view of the head this handle just committed: what a read right now would return.
+
+        Create-only records found under the previous head (and the ones this commit wrote) are carried over;
+        a key found absent is looked up again, since this or another commit may have written it since.
+        """
+        view = _View(record, record.value, False)
+        if not before.legacy:
+            view.lookups = {key: value for key, value in before.lookups.items() if value is not None}
+        for (fingerprint, number), stored in self._written.items():
+            view.lookups[batch_key(fingerprint, number)] = stored
+        self._view = view
+        self._view_epoch = self._epoch
 
     # --- finding generations by key ------------------------------------------------------------------------
 
@@ -717,7 +752,7 @@ class S3BatchStorage:
                 state[RECORDS_KEY] = records
             self._check_v2(state)
 
-        commit_with_records(self.journal, view.record, writes, apply)
+        return commit_with_records(self.journal, view.record, writes, apply)[0]
 
     def _migrate(self, view):
         """One commit: every attempt, owner and finished generation becomes a record; the head becomes v2.
@@ -776,7 +811,7 @@ class S3BatchStorage:
                 if view.legacy:
                     self._migrate(view)
                     continue
-                self._commit(view, change)
+                committed = self._commit(view, change)
             except JournalConflict:
                 continue
             except JournalUncertain:
@@ -785,6 +820,7 @@ class S3BatchStorage:
                 if not records_uncertain:
                     raise
                 raise BatchUncertain("S3 record write uncertain; nothing reserved, reconcile before dispatch") from None
+            self._committed(view, committed)
             return result, True
         raise BatchConflict("S3 run contention limit reached; retry operation with its same owner")
 
@@ -800,11 +836,11 @@ class S3BatchStorage:
 
     def get(self, fingerprint, *, payload=True):
         """``payload=False`` skips the lake read; a reply held in the lake then shows as None."""
-        view = self._state()
+        view = self._state(reuse=True)
         return self._batch(self._current(view, fingerprint), payload=payload)
 
     def requests(self):
-        return self._state().value["attempts"]
+        return self._state(reuse=True).value["attempts"]
 
     def reserve(self, fingerprint, maximum, owner, *, policy="reuse", retry_failed=False, claim=False):
         """Reserve one paid attempt. ``claim=True`` also takes the dispatch claim in the same commit."""

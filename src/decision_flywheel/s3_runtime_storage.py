@@ -567,16 +567,20 @@ class S3RuntimeStores:
         self._pending_blobs = {}
         return self._settled(value, committed)
 
-    def _change(self, fn, *, ownership=True, recovery=False, defer=False):
+    def _change(self, fn, *, ownership=True, recovery=False, defer=False, start=None):
+        """``start``: a head to try first instead of reading one; its conditional write proves it current."""
         if self.poisoned and not recovery:
             raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
         for _ in range(self.max_conflicts):
             held = self._holding()
             head = (
-                self._cached
+                start
+                if start is not None
+                else self._cached
                 if held or (self.cache_owned and self._cached is not None and ownership and not recovery)
                 else self._fresh()
             )
+            start = None
             base = self._working if self._working is not None and held else head.value
             self._validate(base)
             if ownership:
@@ -640,7 +644,16 @@ class S3RuntimeStores:
             value["fence"] += 1
             return owner, value["fence"]
 
-        if self.keyed_documents is not None and not self.poisoned:
+        # The head initialize() just read and validated is tried first: the acquiring commit is conditional on
+        # it, so a head that moved since fails that write and the next attempt reads the live one. It is used
+        # only when it shows the runtime free to take, so a stale "owned" can never refuse a free runtime.
+        seen = self._seen if not self.poisoned else None
+        if seen is not None and (
+            seen.record.value.get("schema") != SCHEMA
+            or not (seen.value["owner"] is None or (resume and seen.value["owner"] == owner))
+        ):
+            seen = None
+        if self.keyed_documents is not None and not self.poisoned and seen is None:
             record = self.journal.read()
             if isinstance(record.value, dict) and record.value.get("schema") == SCHEMA_V1:
                 # Take an old-layout runtime without converting it yet: the head stays v1 (every row still in
@@ -656,7 +669,7 @@ class S3RuntimeStores:
                 self._prepare_from(head.value)
                 return
         # Set local permission ONLY after confirmed CAS success.
-        self.authority = self._change(apply, ownership=False)
+        self.authority = self._change(apply, ownership=False, start=seen)
 
     def close(self):
         if self.authority is None:

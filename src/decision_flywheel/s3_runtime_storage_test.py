@@ -52,6 +52,34 @@ def test_runtime_owner_is_exclusive_releases_explicitly_and_fences_the_old_handl
     other.close()
 
 
+def test_acquiring_a_free_runtime_right_after_initializing_it_reads_nothing_more():
+    from .s3_runtime_storage import S3RuntimeStores
+
+    client = stores().journal.payloads.client
+    fresh = S3RuntimeStores(journal(client, name="classifier-b"), cache_owned=True)
+    fresh.initialize()
+    mark = len(client.calls)
+    fresh.acquire(str(uuid4()))
+    assert [kind for kind, _ in client.calls[mark:]].count("get") == 0
+    assert fresh.journal.read().value["owner"] == fresh.authority[0]
+    fresh.close()
+
+
+def test_a_runtime_taken_between_initialize_and_acquire_is_still_refused():
+    from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
+
+    client = stores().journal.payloads.client
+    late = S3RuntimeStores(journal(client, name="classifier-c"))
+    late.initialize()  # sees the runtime free
+    winner = S3RuntimeStores(journal(client, name="classifier-c"))
+    winner.initialize()
+    winner.acquire(str(uuid4()))
+    with pytest.raises(RuntimeOwnershipError):
+        late.acquire(str(uuid4()))  # its conditional write fails, and the live head shows the winner
+    assert late.authority is None and winner.journal.read().value["owner"] == winner.authority[0]
+    winner.close()
+
+
 def test_cache_refresh_learning_aliases_and_pending_cleanup_preserve_domain_semantics():
     s = stores()
     cache = s.runtime_cache

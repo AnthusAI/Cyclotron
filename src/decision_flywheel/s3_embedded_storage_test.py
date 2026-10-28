@@ -500,3 +500,103 @@ def test_a_v1_root_whose_event_ids_are_not_one_to_n_is_refused_rather_than_renum
     journal(client, name="root").initialize(value)
     with pytest.raises(ValueError, match="1..n"):
         _reopened(client)
+
+
+# Owned reads -----------------------------------------------------------------------------------------------
+
+
+def _gets(client, since):
+    return [r["Key"] for kind, r in client.calls[since:] if kind == "get"]
+
+
+def test_an_owned_root_serves_repeated_reads_without_a_head_get():
+    root = _owned_root()
+    root.put_meta("cursor", "7")
+    client = root.journal.payloads.client
+    mark = len(client.calls)
+    for _ in range(20):
+        assert root.meta("cursor") == ("7",)
+    assert _gets(client, mark) == []
+    root.release()
+
+
+def test_a_conflicting_external_commit_still_poisons_the_owning_root_on_its_next_write():
+    from copy import deepcopy
+
+    from .s3_runtime_storage import RuntimeOwnershipError
+    from .storage_errors import StorageConflict
+
+    root = _owned_root()
+    root.put_meta("cursor", "7")
+    rival = journal(root.journal.payloads.client, name="root")
+    record = rival.read()
+    value = deepcopy(record.value)
+    value["data"]["meta"]["cursor"] = "rival"
+    rival.commit(record, value)
+    assert root.meta("cursor") == ("7",)  # served from the record this owner committed
+    with pytest.raises(StorageConflict):
+        root.put_meta("cursor", "8")
+    assert root.poisoned
+    with pytest.raises(RuntimeOwnershipError):
+        root.meta("cursor")
+
+
+def _composition(client):
+    from .s3_embedded_storage import S3CyclotronStores
+
+    composition = S3CyclotronStores(
+        journal(client, name="root"), journal_for=lambda domain, name: journal(client, name=domain + "-" + name)
+    )
+    composition.acquire()
+    return composition
+
+
+def test_a_guarded_call_reads_each_owned_head_once_at_the_same_time_and_no_transaction_again():
+    import threading
+    import time
+
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    composition = _composition(client)
+    runtimes = [composition.runtime_for_classifier(name) for name in ("a", "b", "c")]
+    runtimes[0].runtime_storage.put_state("k", '{"v":1}')
+    real, lock, state = client.get_object, threading.Lock(), {"now": 0, "most": 0}
+
+    def overlapping(**request):
+        with lock:
+            state["now"] += 1
+            state["most"] = max(state["most"], state["now"])
+        time.sleep(0.005)  # long enough for concurrent reads to overlap
+        try:
+            return real(**request)
+        finally:
+            with lock:
+                state["now"] -= 1
+
+    client.get_object = overlapping
+    mark = len(client.calls)
+    composition.execution_boundary()
+    heads = [composition.root_storage.journal.head_key, *(runtime.journal.head_key for runtime in runtimes)]
+    assert sorted(_gets(client, mark)) == sorted(heads)  # one head GET per owned journal, nothing else
+    assert state["most"] > 1
+    client.get_object = real
+    composition.release()
+
+
+def test_a_guarded_call_still_refuses_a_runtime_whose_fence_an_operator_moved():
+    from copy import deepcopy
+
+    from .s3_journal_test import ConditionalS3
+    from .s3_runtime_storage import RuntimeOwnershipError
+
+    client = ConditionalS3()
+    composition = _composition(client)
+    runtime = composition.runtime_for_classifier("a")
+    operator = journal(client, name=runtime.journal.namespace.rsplit("/", 1)[-1])
+    record = operator.read()
+    value = deepcopy(record.value)
+    value["owner"], value["fence"] = str(uuid4()), value["fence"] + 1
+    operator.commit(record, value)
+    with pytest.raises(RuntimeOwnershipError):
+        composition.execution_boundary()

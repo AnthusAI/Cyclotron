@@ -34,7 +34,7 @@ from copy import deepcopy
 from hashlib import sha256
 from uuid import uuid4
 
-from .journal import Journal, commit_with_contract, uuid
+from .journal import CanonicalJournal, Journal, commit_with_contract, uuid
 from .keyed_records import keyed_documents_for, resolve
 from .record_lake import RECORDS_KEY, Coverage, FileRecordLake, RecordConflict, S3RecordLake, coverage_in, with_coverage
 from .s3_batch_storage import S3BatchStorage, reply_lake_for
@@ -264,10 +264,21 @@ class S3EmbeddedStorage:
 
     def refresh(self):
         self.flush()
-        self._cached = None
+        self.reread()
+
+    def reread(self):
+        """Read the head again and check this handle still owns it; nothing held is published.
+
+        The record this handle last committed or read is offered as known, so an unchanged head costs only
+        its GET (the transaction it names is immutable and already in hand).
+        """
+        known, self._cached = self._cached, None
         if self.poisoned:
             raise RuntimeOwnershipError("uncertain root transaction; reopen/reconcile before continuing")
-        record = self.journal.read()
+        if known is not None and isinstance(self.journal, CanonicalJournal):
+            record = self.journal.read(known=known)
+        else:
+            record = self.journal.read()
         self._validate(record.value)
         self._owned(record.value)
         self._cached = record
@@ -852,10 +863,23 @@ class S3CyclotronStores:
 
     def execution_boundary(self):
         # Called only after the public per-call human/tenant guard succeeds.
-        # Native ownership excludes other writers; CAS still fences every write.
-        self.root_storage.refresh()
-        for runtime in self.runtimes.values():
-            runtime.refresh()
+        # Native ownership excludes other writers; CAS still fences every write. The heads are still read
+        # here, so a fence an operator moved is refused before this call reads state or pays a provider
+        # (a stale handle's own write would fail only after the paid call). They are independent GETs of
+        # immutable-backed heads, so they go out together: one round trip, however many runtimes are open.
+        # The shared ledger has no owner; its reads share one head for this call, its writes still read the
+        # live head first.
+        self.root_storage.flush()
+        checks = [self.root_storage.reread, *(runtime.refresh for runtime in self.runtimes.values())]
+        if len(checks) > 1:
+            with ThreadPoolExecutor(len(checks)) as pool:
+                futures = [pool.submit(check) for check in checks]
+            for future in futures:
+                future.result()  # every check finishes first; the first refusal then propagates
+        else:
+            checks[0]()
+        if self.batch_storage is not None:
+            self.batch_storage.pin_reads()
 
     def release(self):
         errors = []
