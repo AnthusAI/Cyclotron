@@ -252,6 +252,10 @@ Resources:
             Action: sts:AssumeRole
             Resource:
               Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier
+          - Effect: Allow
+            Action: s3:ListBucket
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
   BffLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -345,6 +349,10 @@ Resources:
               Fn::GetAtt:
               - CommandQueue
               - Arn
+          - Effect: Allow
+            Action: s3:ListBucket
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
   WorkerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:

@@ -8,7 +8,15 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.**
+**Pending: list access on the books bucket for the BFF and worker roles.** One statement is appended to
+each role's policy: `s3:ListBucket` on the books bucket itself. Without it, S3 answers a GET of a key nobody
+wrote with AccessDenied rather than NoSuchKey, so storage cannot tell a new key from a forbidden one; the
+constant-cost storage looks records up by key and needs "not found" to mean exactly that. No prefix condition:
+S3 decides 404 versus 403 from list permission on the bucket, which a prefix-conditioned grant may not satisfy.
+The bucket holds only `<account>/console/` data that both roles already read, so listing reveals key names
+only within data they can read. No other grant changes. The two operations append to
+`/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-` and
+`/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-`.
 
 Previously: decisions stop reading event history (lab code bf345f0, package sha256 `adb15079ad5cf43edc29611804c64882bdb246419b673b0901ce5dd14b2bc08c`), deployed on 2026-10-28 with change set `no-history-bf345f0`. Code only; the snapshot was refreshed.
 
