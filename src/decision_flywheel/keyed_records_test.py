@@ -92,3 +92,72 @@ def test_a_write_refused_for_a_document_that_did_not_change_fails_instead_of_ret
 
 def test_only_a_missing_key_reads_as_absent(documents):
     assert documents.load("item", "never-written") is None
+
+
+def test_a_write_whose_connection_drops_is_reported_uncertain_not_as_a_crash():
+    from botocore.exceptions import ConnectionClosedError
+
+    from .keyed_records import KeyedUncertain
+
+    client = ConditionalS3()
+
+    def dropped(**request):
+        raise ConnectionClosedError(endpoint_url="https://synthetic")
+
+    client.put_object = dropped
+    documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
+    with pytest.raises(KeyedUncertain):
+        documents._create(documents.path("item", "a"), b"{}")
+
+
+def _dropping(client, outcome):
+    """Drop the connection on the next write; ``outcome`` says whether the write landed first."""
+    real = client.put_object
+    state = {"armed": True}
+
+    def put(**request):
+        if state["armed"]:
+            state["armed"] = False
+            if outcome == "landed":
+                real(**request)
+            from botocore.exceptions import ConnectionClosedError
+
+            raise ConnectionClosedError(endpoint_url="https://synthetic")
+        return real(**request)
+
+    client.put_object = put
+
+
+def test_a_write_whose_connection_drops_after_it_landed_is_found_in_place_and_not_written_twice():
+    client = ConditionalS3()
+    documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
+    _dropping(client, "landed")
+    written = documents.store("item", "a", None, Coverage(), 1, {"v": 1})
+    assert resolve(written, Coverage(1)) == {"v": 1}
+    assert resolve(documents.load("item", "a"), Coverage(1)) == {"v": 1}
+    assert sum(1 for kind, _ in client.calls if kind == "put") == 1
+
+
+def test_a_write_whose_connection_drops_before_it_landed_is_written_again():
+    client = ConditionalS3()
+    documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
+    first = documents.store("item", "a", None, Coverage(), 1, {"v": 1})
+    _dropping(client, "lost")
+    written = documents.store("item", "a", first, Coverage(1), 2, {"v": 2})
+    assert resolve(documents.load("item", "a"), Coverage(2)) == {"v": 2} == resolve(written, Coverage(2))
+
+
+def test_two_dropped_connections_in_one_write_are_reported_uncertain():
+    from botocore.exceptions import ConnectionClosedError
+
+    from .keyed_records import KeyedUncertain
+
+    client = ConditionalS3()
+
+    def dropped(**request):
+        raise ConnectionClosedError(endpoint_url="https://synthetic")
+
+    client.put_object = dropped
+    documents = S3KeyedDocuments(S3Payloads(client, "synthetic-bucket", "111111111111", SCOPE), PREFIX)
+    with pytest.raises(KeyedUncertain):
+        documents.store("item", "a", None, Coverage(), 1, {"v": 1})

@@ -31,7 +31,7 @@ from typing import Protocol, runtime_checkable
 
 from .batch_storage import StorageScope
 from .journal import commit_with_contract, decode, encode
-from .s3_transient import cause_name, log, read_with_one_retry
+from .s3_transient import cause_name, error_code, log, read_with_one_retry
 from .storage_errors import StorageConflict, StorageLimit, StorageUncertain
 from .storage_payloads import FilePayloads, S3Payloads
 
@@ -355,7 +355,7 @@ class S3RecordLake(RecordLake):
             )
             return True
         except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") in _EXISTS:
+            if error_code(error) in _EXISTS:
                 return False
             raise RecordUncertain("S3 record write outcome uncertain; repeat the identical record") from None
 
@@ -380,7 +380,7 @@ class S3RecordLake(RecordLake):
             # A GET is idempotent, so one transient failure is retried. A missing key is not transient.
             return read_with_one_retry(lambda: self._get(seq), "record")
         except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") == "NoSuchKey":
+            if error_code(error) == "NoSuchKey":
                 return None
             log.warning("record unavailable: %s", cause_name(error))
             raise RecordUnavailable("record unavailable", cause_name(error)) from None

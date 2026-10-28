@@ -10,7 +10,7 @@ import weakref
 
 from .journal import CanonicalJournal, JournalConflict, JournalUnavailable, JournalUncertain, decode, encode
 from .journal import uuid as uuid
-from .s3_transient import cause_name, log, read_with_one_retry
+from .s3_transient import cause_name, error_code, log, read_with_one_retry
 from .storage_payloads import S3Payloads
 
 # Per injected client: (bucket, owner) -> {anchor key: verified anchor} (see CanonicalJournal._anchors).
@@ -70,7 +70,7 @@ class S3Journal(CanonicalJournal):
             # Reading the anchor or head is idempotent: one transient failure is retried. _put never is.
             return read_with_one_retry(lambda: self._fetch(key), "coordination")
         except Exception as error:
-            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            code = error_code(error)
             if missing and (code == "NoSuchKey" or (creation_probe and code == "AccessDenied")):
                 return None
             log.warning("canonical S3 coordination unavailable: %s", cause_name(error))
@@ -93,7 +93,7 @@ class S3Journal(CanonicalJournal):
                 raise ValueError("missing committed ETag")
             return result
         except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") in (
+            if error_code(error) in (
                 "PreconditionFailed",
                 "ConditionalRequestConflict",
                 "412",

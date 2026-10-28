@@ -50,6 +50,12 @@ def cause_name(error):
     return type(error).__name__
 
 
+def error_code(error):
+    """The S3 error code, or None. A dropped connection carries ``response = None``, not a dict."""
+    response = getattr(error, "response", None)
+    return (response.get("Error") or {}).get("Code") if isinstance(response, dict) else None
+
+
 def is_transient(error):
     if isinstance(error, (TimeoutError, ConnectionError)):
         return True
