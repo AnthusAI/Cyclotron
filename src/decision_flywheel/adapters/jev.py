@@ -13,6 +13,7 @@ from numbers import Real
 from typing import Any
 
 from ..classifier_config import ClassifiedAnswers, ClassifierConfig
+from ..command_refusal import ProviderRejectedRequest
 from ..models import DecisionResult, DecisionTask, Item, LabeledItem, ModelCapabilities
 
 _RUBRIC_HINT = " Use state.rubric as the human's decision criteria."
@@ -127,7 +128,7 @@ class JevAdapter:
         }
         question = {"type": "choice", "instructions": task.instructions, "criteria": {label: None for label in task.labels}}
         started = time.perf_counter()
-        response = await asyncio.to_thread(self.client.system_one, state=state, questions={task.name: question})
+        response = await asyncio.to_thread(_system_one, self.client, state=state, questions={task.name: question})
         answer = _mapping(_mapping(getattr(response, "answers", {})).get(task.name))
         result = DecisionResult(
             answer["choice"],
@@ -167,7 +168,7 @@ class JevAdapter:
             }
         )
         started = time.perf_counter()
-        response = await asyncio.to_thread(self.client.system_one, state=state, questions=questions)
+        response = await asyncio.to_thread(_system_one, self.client, state=state, questions=questions)
         raw = _mapping(getattr(response, "answers", {}))
         observe(
             {
@@ -236,7 +237,7 @@ class JevAdapter:
             }
         )
         started = time.perf_counter()
-        response = await asyncio.to_thread(self.client.system_one, state=state, questions=questions)
+        response = await asyncio.to_thread(_system_one, self.client, state=state, questions=questions)
         raw = _mapping(getattr(response, "answers", {}))
         model, usage = _string_or_none(getattr(response, "model", None)), _numeric_usage(getattr(response, "usage", None))
         observe(
@@ -258,6 +259,19 @@ class JevAdapter:
 
         groups = answer_groups(configurations, request, identities, answer)
         return BatchedAnswers(groups, model, usage, round((time.perf_counter() - started) * 1000, 2))
+
+
+REJECTED_STATUSES = (400, 422)  # the provider refused the request itself; repeating it cannot succeed
+
+
+def _system_one(client: Any, **request: Any) -> Any:
+    try:
+        return client.system_one(**request)
+    except Exception as error:
+        status = getattr(error, "status", None)
+        if status in REJECTED_STATUSES:
+            raise ProviderRejectedRequest(status, getattr(error, "request_id", None)) from None
+        raise
 
 
 def _mapping(value: Any) -> dict[str, Any]:
