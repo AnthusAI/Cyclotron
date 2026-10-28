@@ -56,9 +56,9 @@ def test_an_unlisted_change_to_the_template_cannot_hide():
 
 def test_a_pending_remove_deletes_exactly_the_named_mapping_key():
     snapshot = check.load_snapshot()
-    result = check.apply_pending(snapshot, [{"op": "remove", "path": "/Parameters/JournalMaxBytes"}])
-    assert set(result["Parameters"]) == set(snapshot["Parameters"]) - {"JournalMaxBytes"}
-    assert "JournalMaxBytes" in snapshot["Parameters"]
+    result = check.apply_pending(snapshot, [{"op": "remove", "path": "/Parameters/PredictionModel"}])
+    assert set(result["Parameters"]) == set(snapshot["Parameters"]) - {"PredictionModel"}
+    assert "PredictionModel" in snapshot["Parameters"]
 
 
 def test_a_pending_remove_must_name_an_existing_mapping_key_with_no_value():
@@ -66,7 +66,7 @@ def test_a_pending_remove_must_name_an_existing_mapping_key_with_no_value():
     for bad in (
         {"op": "remove", "path": "/Parameters/NoSuchParameter"},
         {"op": "remove", "path": "/Resources/BffRole/Properties/Policies/0"},
-        {"op": "remove", "path": "/Parameters/JournalMaxBytes", "value": 1},
+        {"op": "remove", "path": "/Parameters/PredictionModel", "value": 1},
         {"op": "remove"},
     ):
         with pytest.raises((ValueError, KeyError)):
