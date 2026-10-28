@@ -473,6 +473,21 @@ def test_a_decision_reads_and_writes_the_same_after_a_long_history_and_commits_o
     assert all(abs(b - a) <= 3 * 12 for a, b in zip(early_bytes, late_bytes))
 
 
+def test_a_decision_on_a_runtime_with_many_indexed_items_reads_and_writes_only_its_items_cycle_document():
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    for n in range(1, 301):  # three hundred items, each left with an unfinished cycle in the index
+        one_decision(client, n)
+    for probe in (301, 302):
+        start = len(client.calls)
+        one_decision(client, probe)
+        cycles = [(kind, r["Key"]) for kind, r in client.calls[start:] if "/keys/cycles/" in r["Key"]]
+        # One GET (resuming finds no unfinished cycle for the new item) and one PUT (its new cycle), both of the
+        # document of the item the decision's events name; none of the other three hundred are touched.
+        assert sorted(kind for kind, _ in cycles) == ["get", "put"] and len({key for _, key in cycles}) == 1
+
+
 def test_a_runtime_head_holds_no_answers_cycles_or_status_rows_however_many_items_it_decided():
     from .journal import encode
     from .s3_journal_test import ConditionalS3
