@@ -2,8 +2,12 @@
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. JSON Pointer add and remove operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
   "operations": [
     {
-      "op": "remove",
-      "path": "/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings"
+      "op": "add",
+      "path": "/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings",
+      "value": {
+        "ThrottlingRateLimit": 10000,
+        "ThrottlingBurstLimit": 5000
+      }
     }
   ]
 }

@@ -284,7 +284,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32"
+          "S3Key": "cyclotron-console/backend/c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735"
         },
         "Environment": {
           "Variables": {
@@ -831,10 +831,6 @@
           "Ref": "ConsoleApi"
         },
         "AutoDeploy": true,
-        "DefaultRouteSettings": {
-          "ThrottlingBurstLimit": 10,
-          "ThrottlingRateLimit": 5
-        },
         "StageName": "$default",
         "Tags": {
           "httpapi:createdBy": "SAM"
@@ -975,7 +971,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32"
+          "S3Key": "cyclotron-console/backend/c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735"
         },
         "Environment": {
           "Variables": {

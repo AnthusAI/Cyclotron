@@ -8,10 +8,13 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: no stage throttle.** `/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings`
-is removed. It held API Gateway's stage throttle (5 requests/s, burst 10), which answered Papyrus's
-collector with bare 429s (no Retry-After) and paused its collection for 30 minutes at a time. Without it
-the stage has no throttle of its own and only the AWS account's API Gateway quota applies.
+**Pending: the stage throttle at the account quota.** Dropping `DefaultRouteSettings` (deployed 2026-10-28,
+change set `no-stage-throttle-91290b3`, lab code 91290b3, package sha256
+`c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735`) did not clear the stage: an API
+Gateway v2 stage keeps its last throttle (5/s, burst 10) when the property is removed. Adding
+`/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings` back at the account's own
+API Gateway quota (`ThrottlingRateLimit` 10000, `ThrottlingBurstLimit` 5000, from Service Quotas) leaves
+no stage-specific ceiling. The snapshot was refreshed after the first deploy.
 
 Previously: the worker sweep (lab code 00e04dd, package sha256 `8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32`) was deployed on 2026-10-27 with change set `worker-sweep-00e04dd`, adding `WorkerSweepSchedule` (once a minute) and `WorkerSweepPermission`. The worker no longer writes to its own queue, so Lambda recursive-loop detection has nothing to stop. The worker role's `sqs:SendMessage` grant is unused; removing it needs list-item removal in the checker. The snapshot was refreshed.
 
