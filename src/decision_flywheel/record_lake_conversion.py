@@ -162,7 +162,7 @@ def _failed(report, error):
 
 def _without(value):
     """A control state with the parts a conversion changes taken out, to compare the rest."""
-    kept = {k: v for k, v in value.items() if k != RECORDS_KEY}
+    kept = {k: v for k, v in value.items() if k not in (RECORDS_KEY, "chunks")}
     if "data" in kept:
         data = {k: v for k, v in kept["data"].items() if k != "events"}
         data["state"] = {k: v for k, v in data.get("state", {}).items() if k != CYCLE_MARK_KEY}

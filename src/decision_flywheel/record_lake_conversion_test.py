@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from .batch_storage import StorageScope
+from .batch_storage import SQLiteBatchStorage, StorageScope
 from .journal import encode
 from .record_lake import MemoryRecordLake, coverage_in
 from .record_lake_contract_test import ListingS3
@@ -103,10 +103,13 @@ class World:
         catalog.initialize()
         run = catalog.create_run("Live", "live", {"classifiers": [{"id": CLASSIFIER, "revision": 1}]})
         self.run_id = run["id"]
-        for n in range(jobs):
-            self.finish_job(catalog, f"r{n}", {"response": {"label": "yes", "n": n, "pad": "x" * 300}, "finished": False})
-        ledger = self.ledger()
-        ledger.initialize()
+        # One catalog commit, so every finished job is still in the catalog head (a later commit moves finished jobs
+        # out of the head into their own records, where an embedded result no longer costs anything per commit).
+        with catalog.transaction():
+            for n in range(jobs):
+                self.finish_job(catalog, f"r{n}", {"response": {"label": "yes", "n": n, "pad": "x" * 300}, "finished": False})
+        # The ledger in its old whole-state layout with replies embedded, as today's code no longer writes it.
+        ledger = SQLiteBatchStorage(":memory:")
         self.fingerprints = []
         for n in range(replies):
             fp, owner = f"{n:064x}", str(uuid4())
@@ -115,6 +118,8 @@ class World:
             ledger.settle(fp, owner, "complete", json.dumps({"reply": n, "text": "雪" + "x" * 500}))
             self.fingerprints.append(fp)
         ledger.reserve(self.fingerprints[0], 100, str(uuid4()), policy="refresh")  # a history row too
+        self.account.journal("shared-batches", self.ledger_name).initialize(ledger.export())
+        ledger.close()
         runtime = self.runtime()
         runtime.initialize()
         runtime.acquire(str(uuid4()))
@@ -336,9 +341,10 @@ def test_a_catalog_with_a_running_job_is_busy(world):
     catalog = world.catalog()
     catalog.command(world.run_id, "running", "publication", {"publication": "p"})
     claimed = catalog.claim_command(owner=str(uuid4()))
+    before = catalog.journal.read().value
     reports = convert(world, apply=True)
     assert statuses(reports)["console:job-results"] == "busy"
-    assert len(catalog.audit_results()[1]) == 3 and claimed["status"] == "running"
+    assert catalog.journal.read().value == before and claimed["status"] == "running"
 
 
 def test_the_conversion_leaves_no_ownership_behind(world):

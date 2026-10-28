@@ -234,19 +234,33 @@ def test_release_publishes_held_events_in_the_same_commit_as_the_release():
     assert len(final.value["data"]["events"]) == 2
 
 
-def test_flush_and_refresh_publish_held_events():
+def test_flush_publishes_held_events_and_refresh_keeps_them_while_the_head_has_not_moved():
     s = owned_stores()
     s.runtime_storage.append_event('{"kind":"a"}')
     s.flush()
     assert len(s.journal.read().value["data"]["events"]) == 1
     s.runtime_storage.append_event('{"kind":"b"}')
-    s.refresh()
-    assert len(s.journal.read().value["data"]["events"]) == 2
-    s.flush()  # nothing held: no commit
     revision = heads(s)
+    s.refresh()  # a guarded call checks ownership with one head read; it does not cost a commit
+    assert heads(s) == revision and [e["kind"] for e in s.runtime_storage.history()] == ["a", "b"]
     s.flush()
+    assert len(s.journal.read().value["data"]["events"]) == 2
+    revision = heads(s)
+    s.flush()  # nothing held: no commit
     assert heads(s) == revision
     s.close()
+
+
+def test_a_refresh_after_the_head_moved_under_held_changes_poisons_the_handle():
+    from .s3_runtime_storage import RuntimeOwnershipError
+
+    s = owned_stores()
+    s.runtime_storage.append_event('{"kind":"a"}')
+    rival = journal(s.journal.payloads.client, name="classifier-a")
+    rival.commit(rival.read(), {**rival.read().value, "ordinal": 99})
+    with pytest.raises(RuntimeOwnershipError):
+        s.refresh()
+    assert s.poisoned
 
 
 def test_events_held_by_a_crashed_owner_are_not_durable_but_the_reservation_is():
@@ -288,9 +302,10 @@ def test_coalescing_can_be_switched_off_for_an_owning_handle():
 
 
 def journal_writes(client):
-    """(commits, bytes) of canonical transaction payloads written, counted at the S3 boundary."""
+    """(commits, bytes of every payload written: heads' states and values), at the S3 boundary."""
+    heads = [r for kind, r in client.calls if kind == "put" and r["Key"].endswith("/head.json")]
     puts = [r for kind, r in client.calls if kind == "put" and "/payloads/" in r["Key"]]
-    return len(puts), sum(len(r["Body"]) for r in puts)
+    return len(heads), sum(len(r["Body"]) for r in puts)
 
 
 def publication_jobs(coalesce):
@@ -347,8 +362,337 @@ def test_a_publication_job_sequence_writes_far_fewer_snapshots_when_events_are_c
             f"{before_commits} commits / {before_bytes / 1e6:.1f} MB -> {after_commits} commits / {after_bytes / 1e6:.1f} MB"
         )
     # New-item job, per runtime: acquire + 8 events + 2 answer changes + release = 12 commits, now acquire,
-    # reservation, completion and a release carrying the last events = 4. Each replay is acquire + release.
+    # the reservation, and a release carrying the completion and the events = 3. Each replay is acquire + release.
     assert before_commits == 3 * 12 + 2 * 3 * 2
-    assert after_commits == 3 * 4 + 2 * 3 * 2
+    assert after_commits == 3 * 3 + 2 * 3 * 2
     assert after_commits <= before_commits * 0.55
     assert after_bytes <= before_bytes * 0.55
+
+
+# --- Constant cost: what a decision writes does not depend on the decisions before it ---------------------
+
+
+def lake_stores(client, name="classifier-a"):
+    from .s3_runtime_storage import S3RuntimeStores, runtime_events_lake
+
+    j = journal(client, name=name)
+    result = S3RuntimeStores(j, cache_owned=True, events_lake=runtime_events_lake(j))
+    result.initialize()
+    result.acquire(str(uuid4()))
+    return result
+
+
+def one_decision(client, n):
+    """What a hosted job does to one output's runtime for one new item, on a fresh handle as each job opens."""
+    import json
+
+    s = lake_stores(client)
+    item, key = f"item-{n}", f"request-{n}"
+    event = lambda **fields: s.runtime_storage.append_event(json.dumps(fields))  # noqa: E731
+    assert s.runtime_storage.unfinished_cycles(item) == ()
+    number = s.runtime_storage.next_cycle_number()
+    event(kind="cycle-started", cycle_id=f"cycle-{n}", cycle_number=number, cycle_item_id=item, item={"id": item})
+    assert s.runtime_cache.answer(key) is None
+    event(kind="decision-cache", request_fingerprint=key, status="missing")
+    s.runtime_cache.begin_answer(key, None)
+    event(kind="features-requested", target_id=item, request_fingerprint=key)
+    s.runtime_cache.complete_answer(key, json.dumps({"answers": {"q": {"label": "yes"}}, "n": n}), previous=None)
+    event(kind="features-completed", target_id=item, request_fingerprint=key)
+    event(kind="prediction", target_id=item, label="yes", cycle_id=f"cycle-{n}", cycle_item_id=item)
+    event(kind="cycle-waiting-for-feedback", cycle_id=f"cycle-{n}", cycle_item_id=item)
+    s.runtime_storage.save_derived(
+        {"status-fold": json.dumps({"cursor": n, "awaiting": n})},
+        {"status": {f"row/{item}": json.dumps({"shown": ["yes", None], "waiting": True})}},
+    )
+    s.close()
+
+
+def writes_of(client, start):
+    """What one decision cost since ``start``: (commits, chunk records, keyed documents written, GETs) and
+    (head-state bytes, keyed-document bytes, other payload bytes)."""
+    calls = [request for kind, request in client.calls[start:] if kind == "put"]
+    payloads = [request["Body"] for request in calls if "/payloads/" in request["Key"]]
+    documents = [request["Body"] for request in calls if "/keys/" in request["Key"]]
+    state = sum(len(body) for body in payloads if body.startswith(b'{"anchor"'))
+    counts = (
+        sum(request["Key"].endswith("/head.json") for request in calls),
+        sum("/records/runtime/" in request["Key"] for request in calls),
+        len(documents),
+        sum(kind == "get" for kind, _ in client.calls[start:]),
+    )
+    return counts, (state, sum(map(len, documents)), sum(len(body) for body in payloads) - state)
+
+
+def test_a_decision_reads_and_writes_the_same_after_a_long_history_and_commits_once_while_it_decides(capsys):
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    seen = {}
+    for n in range(1, 401):
+        start = len(client.calls)
+        one_decision(client, n)
+        if n in (20, 400):
+            seen[n] = writes_of(client, start)
+    with capsys.disabled():
+        print(f"\nper decision ((commits, chunks, keyed documents, GETs), (head, keyed, other bytes)): {seen}")
+    (early, early_bytes), (late, late_bytes) = seen[20], seen[400]
+    # Acquire, the reservation (the one commit while deciding: it grants the paid call), and the release that
+    # carries the completion, the events and the status summary. Each commit's events are one chunk record.
+    # The settled answer, the item's cycles and its status row are one document each, found by the same reads.
+    assert early == late and early[:3] == (3, 2, 3)
+    # Nothing written holds rows of earlier decisions, so the bytes are the same twenty times further on, but
+    # for the extra digits of revisions, fences, ordinals and lake positions.
+    assert all(abs(b - a) <= 3 * 12 for a, b in zip(early_bytes, late_bytes))
+
+
+def test_a_runtime_head_holds_no_answers_cycles_or_status_rows_however_many_items_it_decided():
+    from .journal import encode
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    sizes = []
+    for n in range(1, 61):
+        one_decision(client, n)
+        if n in (10, 60):
+            sizes.append(len(encode(journal(client, name="classifier-a").read().value)))
+    assert abs(sizes[1] - sizes[0]) <= 8
+    s = lake_stores(client)
+    assert s.runtime_cache.answer("request-7")[0] == "complete"
+    assert s.runtime_storage.unfinished_cycles("item-7")[0][0] == "cycle-7"
+    assert s.runtime_storage.keyed("status", "row/item-7") is not None
+    assert s.runtime_cache.answer("request-60")[0] == "complete" and s.runtime_cache.answer("request-61") is None
+    assert [e["kind"] for e in s.runtime_storage.history(2)] == ["prediction", "cycle-waiting-for-feedback"]
+    s.close()
+
+
+def test_a_refused_keyed_read_fails_closed_instead_of_reading_as_a_new_request():
+    from .keyed_records import KeyedUnavailable
+    from .s3_journal_test import ConditionalS3, S3Error
+
+    client = ConditionalS3()
+    one_decision(client, 1)
+    s = lake_stores(client)
+    real = client.get_object
+
+    def refused(**request):
+        if "/keys/" in request["Key"]:
+            raise S3Error("AccessDenied")
+        return real(**request)
+
+    client.get_object = refused
+    with pytest.raises(KeyedUnavailable):
+        s.runtime_cache.answer("request-1")
+    with pytest.raises(KeyedUnavailable):
+        s.runtime_cache.answer("never-asked")  # only NoSuchKey means absent
+
+
+# --- Runtimes written by the previous layout ------------------------------------------------------------
+
+
+class SlowS3:
+    """A conditional S3 fake whose keyed-document writes take a moment, recording how many are in flight."""
+
+    def __init__(self):
+        import threading
+
+        from .s3_journal_test import ConditionalS3
+
+        self.inner, self.lock = ConditionalS3(), threading.Lock()
+        self.flight = self.most = 0
+        self.order = []  # ("key" | "head", namespace) in the order the writes finished
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def put_object(self, **request):
+        import time
+
+        keyed = "/keys/" in request["Key"]
+        with self.lock:
+            self.flight += keyed
+            self.most = max(self.most, self.flight)
+        try:
+            if keyed:
+                time.sleep(0.005)
+            return self.inner.put_object(**request)
+        finally:
+            with self.lock:
+                self.flight -= keyed
+                kind = "key" if keyed else "head" if request["Key"].endswith("/head.json") else None
+                if kind:
+                    self.order.append((kind, request["Key"].split("/coordination/")[1].split("/")[1]))
+
+
+def test_a_converted_summary_is_written_ahead_in_the_background_and_counts_only_with_the_release():
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    s = lake_stores(client)
+    revision = journal(client, name="classifier-a").read().revision
+    rows = {f"row/item-{n}": f'{{"n":{n}}}' for n in range(30)}
+    s.runtime_storage.save_derived({"status-fold": '{"cursor":0}'}, {"status": rows}, prepare=True)
+    assert s.runtime_storage.keyed("status", "row/item-7") == '{"n":7}'  # visible to the owner at once
+    assert journal(client, name="classifier-a").read().revision == revision  # nothing counts yet
+    s.close()
+    again = lake_stores(client)
+    assert again.runtime_storage.keyed("status", "row/item-29") == '{"n":29}'
+    assert again.runtime_storage.state("status-fold") == '{"cursor":0}'
+    again.close()
+
+
+def chunk_bytes_of(client, start):
+    """Bytes of the event chunk records written since ``start``, and how many events they hold."""
+    import json
+
+    bodies = [r["Body"] for kind, r in client.calls[start:] if kind == "put" and "/records/runtime/" in r["Key"]]
+    return sum(map(len, bodies)), sum(len(json.loads(b)["value"]["events"]) for b in bodies)
+
+
+def test_a_decisions_chunk_bytes_are_the_same_after_many_decisions_on_a_runtime_converted_with_its_status_rows():
+    import json
+
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    old_runtime_with_answers(client, "classifier-a", 500)
+    s = lake_stores(client)  # the conversion
+    rows = {f"origin/row/item-{n}": json.dumps({"shown": ["yes", None], "waiting": True}) for n in range(1500)}
+    s.runtime_storage.save_derived({"status-fold": '{"cursor":0}'}, {"status": rows}, prepare=True)
+    start = len(client.calls)
+    s.close()
+    conversion = chunk_bytes_of(client, start)
+    assert conversion[1] == 0 and conversion[0] < 400  # a conversion's chunk names its changes by one digest
+    seen = {}
+    for n in range(1, 201):
+        start = len(client.calls)
+        one_decision(client, n)  # items of the same size, so only history could make the chunks differ
+        if n in (105, 200):
+            seen[n] = chunk_bytes_of(client, start)
+    # The chunks hold this decision's events and one fixed digest: nothing of the keys or decisions before.
+    # (Decisions 105 and 200 spell their numbers with the same digits but for the chunks' first event ids.)
+    assert seen[105][1] == seen[200][1] == 6 and abs(seen[200][0] - seen[105][0]) <= 2
+
+
+def old_runtime_with_answers(client, name, count):
+    import json
+
+    from .learning_storage import ARTIFACTS
+    from .s3_runtime_storage import DICT_FIELDS, LIST_FIELDS
+
+    data = {**{k: {} for k in DICT_FIELDS}, **{k: [] for k in LIST_FIELDS}, "artifacts": {k: {} for k in ARTIFACTS}}
+    data["answers"] = {f"k{n}": ["complete", json.dumps({"n": n}), n] for n in range(1, count + 1)}
+    journal(client, name=name).initialize(
+        {"schema": "cyclotron-s3-runtime/v1", "owner": None, "fence": 0, "ordinal": count, "data": data}
+    )
+
+
+def test_old_runtimes_convert_concurrently_with_no_reads_of_absent_documents_and_each_head_commits_last():
+    client = SlowS3()
+    names = ["classifier-a", "classifier-b", "classifier-c"]
+    for name in names:
+        old_runtime_with_answers(client, name, 40)
+    client.inner.calls.clear()
+    client.order.clear()
+    handles = [lake_stores(client, name) for name in names]  # the hosted job takes every output's runtime first
+    for handle in handles:
+        handle.close()
+    # Every row's write ran alongside others, within one runtime and across them, not one after another.
+    assert client.most > 10
+    gets = [r["Key"] for kind, r in client.inner.calls if kind == "get"]
+    assert not any("/keys/" in key or "/records/" in key for key in gets)  # no GET of a document or an event
+    for handle in handles:
+        name = handle.journal.head_key.split("/coordination/")[1].split("/")[1]
+        mine = [kind for kind, owner in client.order if owner == name]
+        # The acquire's head, every row's document, then the head that covers them: it commits last.
+        assert mine == ["head"] + ["key"] * 40 + ["head"]
+    again = lake_stores(client, "classifier-b")
+    assert again.runtime_cache.answer("k17") == ("complete", '{"n": 17}')
+    again.close()
+
+
+def old_format_runtime(client):
+    """A runtime exactly as the v1 layout left it: everything inline in the head, one lake record per event."""
+    import json
+
+    from .learning_storage import ARTIFACTS
+    from .record_lake import RECORDS_KEY, Coverage
+    from .s3_runtime_storage import CYCLE_INDEX_KEY, CYCLE_MARK_KEY, DICT_FIELDS, LIST_FIELDS, runtime_events_lake
+
+    j = journal(client, name="classifier-a")
+    lake = runtime_events_lake(j)
+    events = [
+        {"kind": "cycle-started", "cycle_id": "c-1", "cycle_number": 1, "cycle_item_id": "item-1"},
+        {"kind": "prediction", "target_id": "item-1", "label": "yes"},
+        {"kind": "cycle-started", "cycle_id": "c-2", "cycle_number": 2, "cycle_item_id": "item-2"},
+        {"kind": "cycle-completed", "cycle_id": "c-2", "cycle_number": 2, "cycle_item_id": "item-2"},
+    ]
+    coverage, _ = lake.append(Coverage(), [json.dumps(e) for e in events])
+    data = {**{k: {} for k in DICT_FIELDS}, **{k: [] for k in LIST_FIELDS}, "artifacts": {k: {} for k in ARTIFACTS}}
+    data["answers"] = {"done": ["complete", '{"label":"yes"}', 2], "waiting": ["pending", None, 4]}
+    data["answer_history"] = [[1, "done", "failed", None]]
+    data["rounds"] = {"r1": ["complete", '{"round":1}', 1]}
+    data["state"] = {
+        "contract": '{"task":"t"}',
+        CYCLE_MARK_KEY: "2",
+        CYCLE_INDEX_KEY: json.dumps({"item-1": [["c-1", 1, "item-processing", False]]}),
+        "status-fold": '{"cursor":4,"fold":{"old":true},"origin":"o"}',
+    }
+    value = {"schema": "cyclotron-s3-runtime/v1", "owner": None, "fence": 3, "ordinal": 4, "data": data}
+    value[RECORDS_KEY] = {lake.name: coverage.to_json()}
+    j.initialize(value)
+    return [json.dumps(e) for e in events]
+
+
+def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_converts_by_its_next_commit():
+    import json
+
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    events = old_format_runtime(client)
+    s = lake_stores(client)  # acquiring keeps the old head (every row still in it) and starts the conversion
+    assert journal(client, name="classifier-a").read().value["schema"] == "cyclotron-s3-runtime/v1"
+
+    def readable(s):
+        rows = [(e.pop("event_id"), json.dumps(e)) for e in map(dict, s.runtime_storage.history(-1))]
+        assert rows[:4] == list(enumerate(events, 1))
+        assert s.runtime_cache.answer("done") == ("complete", '{"label":"yes"}')
+        assert s.runtime_cache.answer("waiting") == ("pending", None)
+        assert s.pending_storage.pending() == [("runtime_answers", 4, "waiting")]
+        assert s.pending_storage.marks()["runtime_answers"] == 4
+        assert s.runtime_storage.keyed("answer-history", "1") == '[1,"done","failed",null]'
+        assert s.runtime_storage.unfinished_cycles("item-1") == (("c-1", 1, "item-processing", False),)
+        assert s.runtime_storage.unfinished_cycles("item-2") == ()
+        assert s.runtime_storage.state("status-fold") == '{"cursor":4,"fold":{"old":true},"origin":"o"}'
+        assert s.runtime_storage.state("contract") == '{"task":"t"}'
+        assert s.runtime_cache.round("r1") == ("complete", '{"round":1}')
+
+    readable(s)
+    assert s.runtime_storage.next_cycle_number() == 3
+    assert s.runtime_storage.append_event('{"kind":"new"}') == 5
+    s.close()  # the release is the next commit: it covers the converted rows and stores the v2 head
+    stored = journal(client, name="classifier-a").read().value
+    assert stored["schema"] == "cyclotron-s3-runtime/v2" and stored["maps"] == {}
+    assert sum("/keys/" in k for k in client.objects) == 3  # "done", history 1 and item-1's cycles, one each
+    assert stored["data"]["answers"] == {"waiting": ["pending", None, 4]} and stored["data"]["answer_history"] == []
+    assert "unfinished-cycles" not in stored["data"]["state"] and set(stored["refs"]) == {"rounds"}
+    again = lake_stores(client)
+    readable(again)
+    assert [e["kind"] for e in again.runtime_storage.history(2)] == ["cycle-completed", "new"]
+    # The four old event records are untouched. After them: the conversion's chunk (no events; it stamps the
+    # moved documents) and the chunk holding the new event.
+    keys = sorted(k.rsplit("/", 1)[-1] for k in client.objects if "/records/runtime/" in k)
+    assert keys == [f"{n:012d}.json" for n in range(1, 7)]
+    again.close()
+
+
+def test_an_old_format_runtime_reads_without_any_write_before_it_is_owned():
+    from .s3_journal_test import ConditionalS3
+    from .s3_runtime_storage import S3RuntimeStores, runtime_events_lake
+
+    client = ConditionalS3()
+    events = old_format_runtime(client)
+    j = journal(client, name="classifier-a")
+    audit = S3RuntimeStores(j, events_lake=runtime_events_lake(j)).audit_events()
+    assert audit.record.value["schema"] == "cyclotron-s3-runtime/v1"
+    assert [p for _, p in audit.stored] == events and audit.embedded == []

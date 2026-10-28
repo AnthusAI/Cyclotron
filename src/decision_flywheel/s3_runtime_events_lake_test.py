@@ -68,7 +68,12 @@ def growth(lake, items=30, coalesce=True):
     return sizes, written, client
 
 
-def test_the_runtime_document_grows_by_a_small_constant_per_decided_item_instead_of_the_events(capsys):
+def chunk_events(client):
+    """Every event published, in order, from the chunk records written (one record per commit)."""
+    return [p for r in record_puts(client) for p in json.loads(r["Body"])["value"]["events"]]
+
+
+def test_the_runtime_document_does_not_grow_with_decided_items_and_each_commit_writes_one_event_record(capsys):
     embedded, embedded_written, _ = growth(lake=False)
     lake, lake_written, client = growth(lake=True)
     per_item = lambda sizes, a, b: (sizes[b] - sizes[a]) / (b - a)  # noqa: E731
@@ -80,11 +85,12 @@ def test_the_runtime_document_grows_by_a_small_constant_per_decided_item_instead
             f"document after 30 items {embedded[-1]} -> {lake[-1]}"
         )
     assert per_item(embedded, 10, 29) > 20000  # every event used to be copied into the document
-    assert per_item(lake, 10, 29) < 200  # the answer row and the coverage numbers are all that grow
-    assert abs(per_item(lake, 10, 19) - per_item(lake, 20, 29)) < 10  # constant, not accelerating
-    assert lake[-1] < 8000 < embedded[-1] / 20
+    assert per_item(lake, 10, 29) < 2  # answers live by key; only the coverage numbers' digits can grow
+    assert lake[-1] < 3000 < embedded[-1] / 20
     assert sum(lake_written[10:]) < sum(embedded_written[10:]) / 20
-    assert len(record_puts(client)) == 30 * 7  # nothing was lost: every event is its own record
+    # Nothing was lost: every event is in the chunk of the commit that published it, one record per commit
+    # (each item's reservation, then the release).
+    assert len(chunk_events(client)) == 30 * 7 and len(record_puts(client)) == 30 + 1
     assert all(r["IfNoneMatch"] == "*" for r in record_puts(client))
 
 
@@ -96,51 +102,63 @@ def test_events_leave_the_document_and_the_decision_commit_carries_the_coverage(
     s.runtime_cache.begin_answer("k", None)
     stored = head(s).value
     assert stored["data"]["events"] == [] and stored["data"]["answers"]["k"][0] == "pending"
-    assert coverage_in(stored, s.events_lake).last == 2
+    assert coverage_in(stored, s.events_lake).last == 1 and stored["chunks"] == {"from": 1, "last": 2}
     s.close()
 
 
 # --- Ordering, pagination and bounded reads --------------------------------------------------------------
 
 
-def seeded(count=250):
+def seeded(count=250, per=10):
+    """``count`` events published ``per`` to a commit, so ``count / per`` chunk records."""
     client = ConditionalS3()
     s = open_stores(client)
     for n in range(1, count + 1):
         s.runtime_storage.append_event(json.dumps({"kind": "step", "n": n}))
+        if n % per == 0:
+            s.flush()
     s.close()
     reader = open_stores(client)  # a new handle: nothing cached
     client.calls.clear()
     return client, reader
 
 
-def test_a_trace_page_reads_only_the_records_it_returns():
+def test_a_trace_page_reads_only_the_chunk_holding_the_events_it_returns():
     client, reader = seeded()
     page = reader.runtime_storage.trace_events(after_event_id=240, limit=5)
     assert [e["event_id"] for e in page["events"]] == [241, 242, 243, 244, 245] and page["cursor"] == 245
-    assert len(record_gets(client)) == 5
+    assert len(record_gets(client)) == 1
 
 
-def test_the_latest_history_reads_only_the_latest_records_and_keeps_their_order():
+def test_an_old_trace_cursor_finds_its_chunk_with_a_logarithmic_number_of_reads():
+    client, reader = seeded(2000)
+    page = reader.runtime_storage.trace_events(after_event_id=37, limit=20)
+    assert [e["event_id"] for e in page["events"]] == list(range(38, 58))
+    assert len(record_gets(client)) <= 2 * 8 + 3  # galloping back from the newest of 200 chunks, then a search
+
+
+def test_the_latest_history_reads_only_the_latest_chunk_and_keeps_their_order():
     client, reader = seeded()
     assert [e["event_id"] for e in reader.runtime_storage.history(3)] == [248, 249, 250]
-    assert len(record_gets(client)) == 3
+    assert len(record_gets(client)) == 1
+    assert [e["event_id"] for e in reader.runtime_storage.history(12)] == list(range(239, 251))
+    assert len(record_gets(client)) == 2
 
 
 def test_a_full_scan_pages_through_every_event_in_order_then_reuses_what_it_read():
     client, reader = seeded()
     assert [e["n"] for e in reader.runtime_storage.events_of(("step",))] == list(range(1, 251))
-    assert len(record_gets(client)) == 250
+    assert len(record_gets(client)) == 25
     reader.runtime_storage.events_of(("step",))
-    assert len(record_gets(client)) == 250  # immutable records are kept by the handle
+    assert len(record_gets(client)) == 25  # immutable records are kept by the handle
 
 
-def test_event_payloads_are_read_lazily_a_page_at_a_time():
+def test_event_payloads_are_read_lazily_a_chunk_at_a_time():
     client, reader = seeded()
     payloads = reader.runtime_storage.event_payloads(("step",))
     assert record_gets(client) == []
     first = next(payloads)
-    assert json.loads(first)["n"] == 1 and len(record_gets(client)) == 100
+    assert json.loads(first)["n"] == 1 and len(record_gets(client)) == 1
 
 
 def test_ids_stay_dense_and_ordered_when_a_sequence_was_skipped():
@@ -158,7 +176,7 @@ def test_ids_stay_dense_and_ordered_when_a_sequence_was_skipped():
 
 
 def test_a_missing_covered_record_fails_closed():
-    client, reader = seeded(3)
+    client, reader = seeded(3, per=1)
     del client.objects[next(k for k in client.objects if k.endswith("000000000002.json"))]
     with pytest.raises(Exception, match="record missing"):
         reader.runtime_storage.history(-1)
@@ -207,7 +225,7 @@ def test_events_embedded_in_an_existing_document_read_as_a_prefix_before_the_lak
     s.close()
     stored = head(s).value
     assert len(stored["data"]["events"]) == 3  # the embedded prefix is left exactly as it was
-    assert coverage_in(stored, s.events_lake).last == 2
+    assert coverage_in(stored, s.events_lake).last == 1 and stored["chunks"] == {"from": 1, "last": 5}
 
 
 def test_cycle_numbers_continue_across_the_legacy_prefix_and_the_lake():
@@ -269,7 +287,7 @@ def test_events_written_before_a_lost_head_race_are_invisible_and_poison_the_hol
     rival.commit(rival.read(), {**rival.read().value, "ordinal": 99})
     with pytest.raises(RuntimeOwnershipError):
         s.runtime_cache.begin_answer("k", None)
-    assert len([k for k in client.objects if "/records/" in k]) == 2  # the pages exist...
+    assert len([k for k in client.objects if "/records/" in k]) == 1  # the chunk exists...
     seen = head(s).value
     assert coverage_in(seen, s.events_lake).last == 0  # ...but nothing covers them
     assert s.events_lake.read_covered(coverage_in(seen, s.events_lake)) == []
@@ -335,29 +353,27 @@ def test_held_events_publish_with_the_next_durable_change_in_one_commit():
     assert head(s).revision == before and record_puts(client) == []
     assert [e["kind"] for e in s.runtime_storage.history()] == ["a", "b"]
     s.runtime_cache.begin_answer("k", None)
-    assert head(s).revision == before + 1 and len(record_puts(client)) == 2
+    assert head(s).revision == before + 1 and len(record_puts(client)) == 1  # both events, one chunk
     stored = head(s).value
-    assert coverage_in(stored, s.events_lake).last == 2 and stored["data"]["answers"]["k"][0] == "pending"
+    assert coverage_in(stored, s.events_lake).last == 1 and stored["data"]["answers"]["k"][0] == "pending"
     s.close()
 
 
-def test_release_flush_and_refresh_publish_held_events():
+def test_release_and_flush_publish_held_events_and_refresh_keeps_them_held():
     client = ConditionalS3()
     s = open_stores(client)
     s.runtime_storage.append_event('{"kind":"a"}')
     s.flush()
     assert coverage_in(head(s).value, s.events_lake).last == 1
-    s.runtime_storage.append_event('{"kind":"b"}')
-    s.refresh()
-    assert coverage_in(head(s).value, s.events_lake).last == 2
     revision = head(s).revision
-    s.flush()  # nothing held: no commit
-    assert head(s).revision == revision
+    s.runtime_storage.append_event('{"kind":"b"}')
+    s.refresh()  # the head has not moved, so the held event stays held
+    assert head(s).revision == revision and coverage_in(head(s).value, s.events_lake).last == 1
     s.runtime_storage.append_event('{"kind":"c"}')
     s.close()
     final = journal(client, name="classifier-a").read()
     assert final.revision == revision + 1 and final.value["owner"] is None
-    assert coverage_in(final.value, s.events_lake).last == 3
+    assert coverage_in(final.value, s.events_lake).last == 2 and final.value["chunks"]["last"] == 3
 
 
 def test_events_held_by_a_crashed_owner_are_not_durable_but_the_reservation_is():
@@ -403,4 +419,127 @@ def test_coalescing_writes_far_fewer_commits_with_the_lake_too():
         return journal(client, name="classifier-a").read().revision - start
 
     assert commits(False) == 5 * 9 + 1  # seven events and two answer changes per item, plus the release
-    assert commits(True) == 5 * 2 + 1  # reservation, then completion carrying the rest; the release has nothing held
+    # One commit per item, the reservation; the completion and the events wait for the next one or the release.
+    assert commits(True) == 5 * 1 + 1
+
+
+# --- An item's values go by reference -------------------------------------------------------------------
+
+
+def article(size):
+    return {"id": "story-1", "values": {"title": "A story", "body": "x" * size, "url": "https://example.test/story"}}
+
+
+def started(item, n=1):
+    return {"kind": "cycle-started", "cycle_id": f"c-{n}", "cycle_number": n, "cycle_item_id": item["id"], "item": item}
+
+
+def decide_article(client, name, item):
+    """A decision's events on one runtime, as the flywheel emits them, around a reservation, then the release."""
+    s = open_stores(client, name)
+    s.runtime_storage.append_event(json.dumps(started(item)))
+    s.runtime_cache.begin_answer("k-" + item["id"], None)
+    s.runtime_storage.append_event(json.dumps({"kind": "prediction", "target_id": item["id"], "label": "yes"}))
+    s.close()
+
+
+def chunk_bytes(client, start):
+    return sum(len(r["Body"]) for kind, r in client.calls[start:] if kind == "put" and "/records/runtime/" in r["Key"])
+
+
+def article_puts(client, start, size):
+    return [r for kind, r in client.calls[start:] if kind == "put" and "/payloads/" in r["Key"] and len(r["Body"]) > size]
+
+
+def test_a_decision_on_a_large_article_writes_the_same_chunk_bytes_and_the_article_once_for_every_runtime(capsys):
+    small, large = ConditionalS3(), ConditionalS3()
+    start = len(small.calls)
+    decide_article(small, "classifier-a", article(200))
+    small_bytes = chunk_bytes(small, start)
+    outputs = ["classifier-a", "classifier-b", "classifier-c"]
+    spent = []
+    for name in outputs:  # each output's runtime decides the same article
+        start = len(large.calls)
+        decide_article(large, name, article(200_000))
+        spent.append((chunk_bytes(large, start), len(article_puts(large, start, 200_000))))
+    with capsys.disabled():
+        print(f"\nchunk bytes per runtime decision: 200 B article {small_bytes}; 200 KB article {spent[0][0]}")
+    # The chunks never carry the article's text: only its reference, whose length has three more digits.
+    assert all(size - small_bytes == 3 for size, _ in spent)
+    assert [puts for _, puts in spent] == [1, 0, 0]  # written once in the shared store, then known to exist
+    again = open_stores(large, "classifier-b")  # a fresh handle of another runtime resolves it on its own
+    assert again.runtime_storage.history(2)[0]["item"] == article(200_000)
+    again.close()
+
+
+def test_trace_events_and_history_return_the_events_exactly_as_emitted_whether_referenced_or_inline():
+    from .record_lake import RECORDS_KEY, Coverage
+
+    client = ConditionalS3()
+    old = journal(client, name="classifier-a")
+    lake = runtime_events_lake(old)
+    inline = started(article(500), 1)
+    coverage, _ = lake.append(Coverage(), [json.dumps(inline)])  # an event written before references existed
+    record = S3RuntimeStores(old, events_lake=lake)
+    record.initialize()
+    value = old.read()
+    old.commit(value, {**value.value, RECORDS_KEY: {lake.name: coverage.to_json()}})
+    new = started({"id": "story-2", "values": {"title": "Another", "body": "y" * 3000}}, 2)
+    s = open_stores(client)
+    s.runtime_storage.append_event(json.dumps(new))
+    s.close()
+    stored = [json.loads(r["Body"])["value"] for kind, r in client.calls if kind == "put" and "/records/runtime/" in r["Key"]]
+    assert "valuesRef" in json.loads(stored[-1]["events"][0])["item"]  # the new one is stored by reference
+    reader = open_stores(client)
+    expected = [{**inline, "event_id": 1}, {**new, "event_id": 2}]
+    assert list(reader.runtime_storage.history(10)) == expected
+    assert reader.runtime_storage.trace_events(after_event_id=0)["events"] == expected
+    assert list(reader.runtime_storage.events_of(("cycle-started",))) == expected
+    assert [json.loads(p) for p in reader.runtime_storage.event_payloads(("cycle-started",))] == [inline, new]
+    assert [json.loads(p) for _, p in reader.audit_events().stored] == [inline, new]
+    reader.close()
+
+
+def test_a_replay_whose_cycles_start_by_reference_reproduces_the_decisions():
+    import asyncio
+
+    from .classifier_config import ClassifierConfig
+    from .cycle_replay import run_cycle_replay
+    from .flywheel import DecisionFlywheel
+    from .flywheel_test import TASK, FakeModel
+    from .replay import plan_replay
+    from .replay_test import rows
+    from .s3_runtime_storage_test import cloud_agent
+
+    ordered = rows()
+    plan = plan_replay(TASK, ordered, seed="by-reference", batch_size=100)
+
+    def wheel(storage, **options):
+        return DecisionFlywheel(None, ClassifierConfig(TASK), FakeModel(), cloud_agent(storage), storage=storage, **options)
+
+    def replay(wheel, **options):
+        return asyncio.run(
+            run_cycle_replay(
+                wheel, plan, optimize_every=100, retrain_every=100, stages=("rubric",), rubric_changes_every=None, **options
+            )
+        )
+
+    inline = wheel(open_stores(lake=False))
+    replay(inline)
+    expected = [e for e in inline.history(10000) if e["kind"] in ("cycle-started", "prediction")]
+    inline.close()
+    client = ConditionalS3()
+    first = wheel(open_stores(client), max_requests=2)
+    with pytest.raises(RuntimeError):
+        replay(first)  # pauses before its third paid prediction
+    first.close()
+    resumed = wheel(open_stores(client))
+    report = replay(resumed, resume=True)  # resuming reads the referenced cycle-started events
+    assert report["resumed_from_cycles"] == 2
+    got = [e for e in resumed.history(10000) if e["kind"] in ("cycle-started", "prediction")]
+    keep = ("kind", "cycle_number", "cycle_item_id", "item", "target_id", "label", "probabilities")
+    assert [{k: e.get(k) for k in keep} for e in got] == [{k: e.get(k) for k in keep} for e in expected]
+    resumed.close()
+    chunks = [json.loads(r["Body"])["value"] for kind, r in client.calls if kind == "put" and "/records/runtime/" in r["Key"]]
+    referenced = [json.loads(p) for c in chunks for p in c["events"] if json.loads(p)["kind"] == "cycle-started"]
+    assert referenced and all("valuesRef" in e["item"] and "values" not in e["item"] for e in referenced)

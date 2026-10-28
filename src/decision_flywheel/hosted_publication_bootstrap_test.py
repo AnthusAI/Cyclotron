@@ -151,7 +151,7 @@ def test_bootstrap_rejects_stale_or_foreign_evidence_and_handles_uncertain_retri
                 triggered = []
 
                 def intercept(journal, expected, value):
-                    if value.get("schema") == "cyclotron-s3-console/v2" and not triggered:
+                    if value.get("schema") == "cyclotron-s3-console/v4" and not triggered:
                         triggered.append(True)
                         if case == "revoke-at-commit":
                             state["denied"] = True

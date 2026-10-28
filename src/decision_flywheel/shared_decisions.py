@@ -111,8 +111,9 @@ class SharedDecisions:
         fingerprint = key({"model": self.model.model_identity, "request": request})
         self.identity = fingerprint
         owner = str(uuid4())
+        # Reserve and take the dispatch claim in one commit; the claim below confirms it without a write.
         row = self.storage.reserve(
-            fingerprint, self.max_requests, owner, policy=options.policy, retry_failed=options.retry_failed
+            fingerprint, self.max_requests, owner, policy=options.policy, retry_failed=options.retry_failed, claim=True
         )
         generation = row.generation
         cached = row.status == "complete"

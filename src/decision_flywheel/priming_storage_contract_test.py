@@ -316,5 +316,6 @@ def test_a_nine_megabyte_priming_draft_is_kept_by_s3_storage_with_no_journal_bud
     host.put_draft("draft", json.dumps(draft))
     reopened = backend.open()
     assert json.loads(reopened.draft("draft"))["padding"] == "x" * (9 * 1024 * 1024)
-    assert reopened.journal.read().reference.length > 9 * 1024 * 1024
+    # The draft lives in its table's content-addressed payload; the head only names it.
+    assert reopened.journal.read().reference.length < 64 * 1024
     service.close()

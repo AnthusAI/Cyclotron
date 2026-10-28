@@ -42,7 +42,15 @@ def runtime():
                 )
             )
             model_factory = HostedJevFactory.from_environment(os.environ, key_source)
-        settings = Config(signature_version="s3v4", retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)
+        # Storage writes independent records in parallel (one-time conversions, a decision's keyed documents), up to
+        # the client's connection pool; botocore's default of 10 would make them wait on each other.
+        settings = Config(
+            signature_version="s3v4",
+            retries={"total_max_attempts": 1},
+            connect_timeout=5,
+            read_timeout=10,
+            max_pool_connections=64,
+        )
         s3 = session.create_client("s3", region_name=config.region, config=settings)
         kms = session.create_client(
             "kms", region_name=config.region, config=Config(retries={"total_max_attempts": 1}, connect_timeout=5, read_timeout=10)

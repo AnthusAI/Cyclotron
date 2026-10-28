@@ -10,7 +10,12 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    # Listing the books bucket lets a GET of a missing key answer "not found" instead of "access denied",
+    # so storage can tell a new key from a forbidden one. The bucket holds only console data both roles read.
+    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -129,6 +134,21 @@ def _statements(statements):
             yield from _statements([b for b in branches if b != {"Ref": "AWS::NoValue"}])
         else:
             yield statement
+
+
+def test_only_the_bff_and_worker_may_list_the_books_bucket_and_nothing_else():
+    resources = check.load_template()["Resources"]
+    listed = {}
+    for name, resource in resources.items():
+        if resource["Type"] != "AWS::IAM::Role":
+            continue
+        for policy in resource["Properties"].get("Policies", []):
+            for statement in _statements(policy["PolicyDocument"]["Statement"]):
+                actions = statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
+                if "s3:ListBucket" in actions:
+                    listed.setdefault(name, []).append(statement["Resource"])
+    bucket = {"Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"}
+    assert listed == {"BffRole": [bucket], "WorkerRole": [bucket]}
 
 
 def test_only_the_bff_role_may_assume_the_verifier_and_the_worker_may_not():

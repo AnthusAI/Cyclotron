@@ -194,6 +194,32 @@ owner, the fence, the paid-answer rows and a two-number coverage for the pages.
 - **Measured** (synthetic, 7 events of about 3 KB per item, 30 items): document growth per item 21,472 bytes to 50;
   journal bytes written per item 860,069 to 3,692; document after 30 items 638,300 to 2,006 bytes.
 
+### Runtime heads that do not grow (`cyclotron-s3-runtime/v2`)
+
+**In plain language.** A runtime head used to carry every answer, every item's unfinished cycles and every
+item's status row, and each of a decision's five commits rewrote all of it. Now the head carries only counters,
+the reservations still pending and references, and a decision commits once while it decides.
+
+- **One document per key** (`keyed_records.py`, shared with the workspace). Settled answers (`answers`), the
+  answer history (`answer-history`), each item's unfinished cycles (`cycles`) and the status fold's rows
+  (`status`) are `<runtime coordination prefix>/keys/<kind>/<sha256(key)>.json`, found with one GET and written
+  with an ETag-conditional PUT. An entry is stamped with the sequence of the commit's chunk record and counts only
+  once the head covers it. `NoSuchKey` means absent (the roles hold `s3:ListBucket`); any other failure, AccessDenied
+  included, fails closed. A commit that changes keys but publishes no events still writes a (empty) chunk.
+- **Values by reference.** Every other domain (rounds, learning artifacts, evaluations, ...) and every state value
+  is one content-addressed payload, rewritten only when it changes. The cycle high-water mark stays inline.
+- **One event record per commit.** A commit's events are one chunk record `{"first": id, "events": [...]}`. The
+  head's `chunks` (`from`, `last`) says where chunks begin; the single-event records written before keep their
+  ids. A reader finds the chunk holding an id by galloping back from the newest one, then a binary search.
+- **One commit while deciding.** The answer reservation is durable before the paid call, as before. The
+  completion, failures, trace events and the status summary are held by the owning handle and published with
+  the next durable change or with the release. `refresh()` (every guarded call) keeps held changes while the head
+  is the one they were made on (one head GET) and poisons the handle if it moved. A crash before the release
+  leaves the reservation pending, which needs explicit retry, exactly as a crash during the call does.
+- **Old heads.** A `v1` head reads as it is and converts on its first write (usually the acquire): completed answers,
+  history and the cycle index move into keyed documents; earlier event records stay where they are. The status fold
+  saved whole moves into rows on the next status step. Old code refuses a `v2` head, so do not roll back past it.
+
 **First caller: catalog job results (S2c).** `S3ConsoleStorage(journal, results=lake)` writes each finished
 job's result (completed, failed or interrupted) to the `console/job-results` lake and keeps in the catalog row
 only a small reference (`cyclotron-job-result-ref/v1` with domain, kind, sequence, digest and length) in
@@ -289,6 +315,33 @@ own batch ledger is not wired to a lake yet.
 **Measured (synthetic 23.6 KB replies, 25 requests):** ledger growth per paid request fell from about
 23,930 bytes (reply embedded) to about 343 bytes (reference, attempt row, coverage), and no longer depends
 on the reply size.
+
+### Constant-cost shared-batch ledger (`cyclotron-shared-batches/v2`)
+
+The reference rows above still grew with every request, and every commit rewrote all of them. In the v2
+layout what one decision writes to the ledger does not depend on how many came before it.
+
+- **Head:** two counters (`attempts`, `superseded`), the generations still in flight (`held`: pending
+  requests, and a settled one only while its record could not be written) and lake coverage. A finished
+  request leaves the head.
+- **Batch records:** each finished generation is one create-only record found by key,
+  `records/shared-batches/batches-<ledger>/batch-<fingerprint>-<generation>.json`. A cache hit or an
+  idempotent retry is a GET by key; a reader walks only that one request's own generations.
+- **Owner hints:** `owner-<owner>.json` names an operation's request, verified against that request's
+  generations, so reusing an owner for another request is still refused.
+- **Attempts:** one record per attempt in the `attempts-<ledger>` lake (ordered, covered by the head), so
+  `export()` reads every attempt by GET without list permission.
+- **Two commits per paid request:** `reserve(..., claim=True)` reserves and claims in one commit and
+  `claim` then confirms without a write; `settle` is the second. Plain `reserve` then `claim` still works.
+- **Missing keys:** the BFF and worker roles hold `s3:ListBucket` on the books bucket, so a key nobody wrote
+  is NoSuchKey. Any other read failure, AccessDenied included, is an error: no reservation, no dispatch.
+- **Old ledgers:** a v1 ledger reads exactly as before and is migrated by its first write, in one commit:
+  every attempt, owner hint and finished generation is written as a record (repeats are harmless), then the
+  head becomes v2. `export()` keeps the v1 snapshot shape, so SQLite and S3 still compare equal.
+
+Measured with the hosted probe (one combined decision, local fakes): ledger state commits went from 3 per
+decision at 22,750 bytes (decision 20) and 63,436 bytes (decision 60) to 2 per decision at about 1,560 bytes
+at both.
 
 ## Verification at the initial S3 SDK checkpoint
 
