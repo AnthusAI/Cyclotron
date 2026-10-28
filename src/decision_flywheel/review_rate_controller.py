@@ -34,6 +34,17 @@ from .review_program import (
 
 FULL_REVIEW_DETAIL = "Every decision is reviewed; no review-rate program is configured."
 PROGRAM_STATE_KEY = "review_program_state"
+# Running counts of the last week's decisions by confidence pattern, so status never reads every decision.
+RECENT_DECISIONS_KEY = "review_program_recent_decisions"
+WEEK = timedelta(days=7)
+
+
+def _pattern(decision: Mapping[str, Any], threshold: float) -> str:
+    """How a decision counts toward expected reviews: "low" (always reviewed) or its number of confident outputs."""
+    values = [r["confidence"] for r in decision["classifiers"].values()]
+    # Routed decisions draw per output; older ones were selected as a whole on the lowest confidence.
+    confidences = values if "outputs" in decision["review"] else [None if None in values else min(values)]
+    return "low" if any(c is None or c < threshold for c in confidences) else str(len(confidences))
 
 
 class ReviewRateController:
@@ -135,12 +146,49 @@ class ReviewRateController:
                         **({"output": evidence["output"]} if "output" in evidence else {}),
                     )
                 )
+        recent = self._recent(now, decided)
         with self.root_storage.transaction():
             self.root_storage.put_meta(PROGRAM_STATE_KEY, _json(state.to_json()))
+            self.root_storage.put_meta(RECENT_DECISIONS_KEY, _json(recent))
             appended = [self.append_event(event) for event in events]
         for event in appended:
             self.observer(event)
         return current_rate(self.program, state, now), decided
+
+    def _recent(self, now: datetime, decided: int) -> dict:
+        """Counts of the decisions made in the week before ``now``, by pattern, advanced from the saved counts.
+
+        Decisions are kept in the order they were made, so the week's decisions are the positions from
+        ``start`` on: newer ones are added and the oldest leave as they age out. Each decision is read once
+        to be added and at most once more to leave, however long the history is.
+        """
+        threshold = self.program.confidence_threshold
+        row = self.root_storage.meta(RECENT_DECISIONS_KEY)
+        saved = json.loads(row[0]) if row else None
+        if saved is None or saved["threshold"] != threshold or saved["end"] > decided:
+            saved = {"threshold": threshold, "start": 0, "end": 0, "first": None, "counts": {}}
+        counts, start, end, first = dict(saved["counts"]), saved["start"], saved["end"], saved["first"]
+        known = {}
+
+        def read(offset):
+            decision = json.loads(self.root_storage.window_decisions(1, offset)[0][1])
+            return [decision["createdAt"], _pattern(decision, threshold)]
+
+        if decided > end:
+            for offset, (_, payload) in enumerate(self.root_storage.window_decisions(decided - end, end), start=end):
+                decision = json.loads(payload)
+                known[offset] = [decision["createdAt"], _pattern(decision, threshold)]
+                counts[known[offset][1]] = counts.get(known[offset][1], 0) + 1
+            first = first or known[start]
+            end = decided
+        week_ago = (now - WEEK).isoformat()
+        while first is not None and first[0] < week_ago:
+            counts[first[1]] -= 1
+            if not counts[first[1]]:
+                del counts[first[1]]
+            start += 1
+            first = (known.get(start) or read(start)) if start < end else None
+        return {"threshold": threshold, "start": start, "end": end, "first": first, "counts": counts}
 
     def set_rate(self, rate: float, *, set_by: str, expires_at: datetime | None = None) -> None:
         """An operator override of the review rate, with an optional expiry.
@@ -193,15 +241,12 @@ class ReviewRateController:
         active = override is not None and override.active(now)
         decided = self.root_storage.decision_count()
         until = self.program.window - decided % self.program.window
-        week_ago = (now - timedelta(days=7)).isoformat()
-        decisions = []
-        for (payload,) in self.root_storage.decision_payloads():
-            decision = json.loads(payload)
-            if decision["createdAt"] >= week_ago:
-                values = [r["confidence"] for r in decision["classifiers"].values()]
-                # Routed decisions draw per output; older ones were selected as a whole on the lowest confidence.
-                routed = "outputs" in decision["review"]
-                decisions.append(tuple(values) if routed else (None if None in values else min(values),))
+        # One stand-in per decision of the last week: always reviewed, or its number of confident outputs.
+        decisions = [
+            (None,) if pattern == "low" else (self.program.confidence_threshold,) * int(pattern)
+            for pattern, count in sorted(self._recent(now, decided)["counts"].items())
+            for _ in range(count)
+        ]
         rate = current_rate(self.program, state, now)
         return ReviewRate(
             state_name(self.program, state, now),
