@@ -657,7 +657,7 @@ def test_a_shared_jobs_status_snapshots_match_what_single_publication_jobs_recor
     asyncio.run(go())
 
 
-def test_only_the_first_status_step_writes_and_later_publications_cost_no_journal_commits(identity, monkeypatch):
+def test_after_the_first_status_step_each_publication_writes_only_its_saved_status_fold(identity, monkeypatch):
     from .publication_lab import PublicationLab
 
     (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
@@ -688,7 +688,8 @@ def test_only_the_first_status_step_writes_and_later_publications_cost_no_journa
     outer = spent[1::2]
     assert len(outer) == 4
     print(f"S3 writes during each status step: {outer}; whole job: {puts[0]}")
-    assert outer[1:] == [0, 0, 0]
+    # One runtime commit each (state blob and head): the saved status fold, so no snapshot rereads history.
+    assert outer[1:] == [2, 2, 2]
 
 
 def request_log_lines(output):

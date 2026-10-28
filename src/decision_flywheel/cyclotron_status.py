@@ -9,9 +9,10 @@ or policy-selected sample of decisions.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -261,6 +262,22 @@ class VersionTracker:
         self.last_change: LastChange | None = None
         self.snapshot = _plain(initial_snapshot)
 
+    def to_json(self) -> dict[str, Any]:
+        """Everything ``feed`` has learned, so a reopened engine resumes here instead of replaying history."""
+        return {
+            "version": self.version,
+            "refits": self.refits,
+            "last_change": asdict(self.last_change) if self.last_change is not None else None,
+            "snapshot": self.snapshot,
+        }
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> VersionTracker:
+        tracker = cls()
+        tracker.version, tracker.refits, tracker.snapshot = value["version"], value["refits"], value["snapshot"]
+        tracker.last_change = LastChange(**value["last_change"]) if value["last_change"] is not None else None
+        return tracker
+
     def feed(self, event: Mapping[str, Any]) -> LastChange | None:
         """Update from one event; return the change it caused, if any."""
         kind = event.get("kind")
@@ -302,6 +319,121 @@ class VersionTracker:
         return None
 
 
+class StatusFold:
+    """Everything a status snapshot needs from a classifier's events, folded one event at a time.
+
+    A saved fold resumes where it stopped, so a snapshot reads only the events since the last one.
+    """
+
+    def __init__(self, labels: tuple[str, ...], initial_snapshot: Mapping[str, Any] | None = None):
+        self.labels = tuple(labels)
+        self.versions = VersionTracker(initial_snapshot)
+        self.shown: dict[str, list] = {}  # item -> [label, probabilities] of the prediction shown
+        self.reviews: dict[str, list] = {}  # item -> [label, predicted, probabilities, feedback id]
+        self.order: list[str] = []
+        self.awaiting: set[str] = set()
+        self.latest_review: dict[str, str | None] = {}
+        self.stale_since: str | None = None
+
+    def feed(self, event: Mapping[str, Any]) -> None:
+        kind = event.get("kind")
+        self.versions.feed(event)
+        if kind == "promoted":
+            self.stale_since = None
+        elif kind == "human-feedback" and event.get("action") != "retracted" and self.stale_since is None:
+            self.stale_since = event.get("created_at")
+        if kind == "prediction":
+            item_id = str(event["target_id"])
+            self.shown[item_id] = [event["label"], event.get("probabilities")]
+            self.awaiting.add(item_id)
+        elif kind == "human-feedback":
+            feedback = event["feedback"]
+            item_id = str(feedback.get("item_id", feedback.get("id")))
+            if event.get("action") == "retracted":
+                if self.latest_review.get(item_id) == feedback.get("id"):
+                    self.latest_review.pop(item_id)
+                    if item_id in self.shown:
+                        self.awaiting.add(item_id)
+                if item_id in self.reviews and self.reviews[item_id][3] == feedback.get("id"):
+                    self.reviews.pop(item_id)
+                    self.order.remove(item_id)
+                return
+            self.awaiting.discard(item_id)
+            self.latest_review[item_id] = feedback.get("id")
+            if event.get("selected_by", "program") == "reviewer":
+                return
+            label = feedback.get("final_answer_value")
+            prediction = self.shown.get(item_id)
+            predicted = prediction[0] if prediction else feedback.get("initial_answer_value")
+            if label not in self.labels or predicted not in self.labels:
+                return
+            probabilities = prediction[1] if prediction else None
+            if probabilities is not None and set(probabilities) != set(self.labels):
+                probabilities = None
+            if item_id in self.reviews:
+                self.order.remove(item_id)
+            self.reviews[item_id] = [label, predicted, probabilities, feedback.get("id")]
+            self.order.append(item_id)
+        elif kind in ("human-skipped", "review-not-requested"):
+            self.awaiting.discard(str(event.get("target_id")))
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "labels": list(self.labels),
+            "versions": self.versions.to_json(),
+            "shown": self.shown,
+            "reviews": self.reviews,
+            "order": self.order,
+            "awaiting": sorted(self.awaiting),
+            "latest_review": self.latest_review,
+            "stale_since": self.stale_since,
+        }
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> StatusFold:
+        fold = cls(tuple(value["labels"]))
+        fold.versions = VersionTracker.from_json(value["versions"])
+        fold.shown, fold.reviews, fold.order = dict(value["shown"]), dict(value["reviews"]), list(value["order"])
+        fold.awaiting, fold.latest_review = set(value["awaiting"]), dict(value["latest_review"])
+        fold.stale_since = value["stale_since"]
+        return fold
+
+    def status(
+        self,
+        *,
+        cyclotron_id: str,
+        classifier: str,
+        fingerprint: str,
+        positive_label: str | None = None,
+        window: int = 200,
+        review_rate: ReviewRate | None = None,
+        now: datetime | None = None,
+    ) -> CyclotronStatus:
+        records = [(item_id, *self.reviews[item_id][:3]) for item_id in self.order]
+        metrics = recent_reviewed_metrics(self.labels, records, limit=window) if records else None
+        return CyclotronStatus(
+            cyclotron_id,
+            classifier,
+            self.versions.version,
+            fingerprint,
+            (now or datetime.now(timezone.utc)).isoformat(),
+            _alignment(metrics, window, positive_label),
+            _calibration(metrics),
+            review_rate or FULL_REVIEW,
+            self.versions.last_change,
+            Pending(len(self.awaiting), self.stale_since),
+            refits=self.versions.refits,
+        )
+
+
+def _positive(labels, positive_label):
+    if positive_label is None and len(labels) == 2:
+        positive_label = labels[0]
+    if positive_label is not None and positive_label not in labels:
+        raise ValueError("positive label must be one of the classifier labels")
+    return positive_label
+
+
 def status_from_events(
     events: Iterable[Mapping[str, Any]],
     *,
@@ -317,71 +449,22 @@ def status_from_events(
 ) -> CyclotronStatus:
     """Build the snapshot from flywheel events; no model calls, no hidden state."""
     labels = tuple(labels)
-    if positive_label is None and len(labels) == 2:
-        positive_label = labels[0]
-    if positive_label is not None and positive_label not in labels:
-        raise ValueError("positive label must be one of the classifier labels")
-    shown: dict[str, Mapping[str, Any]] = {}
-    reviews: dict[str, tuple[str, str, dict | None, str | None]] = {}
-    order: list[str] = []
-    versions = VersionTracker(initial_snapshot)
-    awaiting: set[str] = set()
-    latest_review: dict[str, str | None] = {}
+    positive_label = _positive(labels, positive_label)
+    fold = StatusFold(labels, initial_snapshot)
     for event in events:
-        kind = event.get("kind")
-        versions.feed(event)
-        if kind == "prediction":
-            item_id = str(event["target_id"])
-            shown[item_id] = event
-            awaiting.add(item_id)
-        elif kind == "human-feedback":
-            feedback = event["feedback"]
-            item_id = str(feedback.get("item_id", feedback.get("id")))
-            if event.get("action") == "retracted":
-                if latest_review.get(item_id) == feedback.get("id"):
-                    latest_review.pop(item_id)
-                    if item_id in shown:
-                        awaiting.add(item_id)
-                if item_id in reviews and reviews[item_id][3] == feedback.get("id"):
-                    reviews.pop(item_id)
-                    order.remove(item_id)
-                continue
-            awaiting.discard(item_id)
-            latest_review[item_id] = feedback.get("id")
-            if event.get("selected_by", "program") == "reviewer":
-                continue
-            label = feedback.get("final_answer_value")
-            prediction = shown.get(item_id)
-            predicted = prediction["label"] if prediction else feedback.get("initial_answer_value")
-            if label not in labels or predicted not in labels:
-                continue
-            probabilities = prediction.get("probabilities") if prediction else None
-            if probabilities is not None and set(probabilities) != set(labels):
-                probabilities = None
-            if item_id in reviews:
-                order.remove(item_id)
-            reviews[item_id] = (label, predicted, probabilities, feedback.get("id"))
-            order.append(item_id)
-        elif kind in ("human-skipped", "review-not-requested"):
-            awaiting.discard(str(event.get("target_id")))
-    records = [(item_id, *reviews[item_id][:3]) for item_id in order]
-    metrics = recent_reviewed_metrics(labels, records, limit=window) if records else None
-    alignment = _alignment(metrics, window, positive_label)
-    calibration = _calibration(metrics)
-    stale_since = _stale_since(events)
-    return CyclotronStatus(
-        cyclotron_id,
-        classifier,
-        versions.version,
-        fingerprint,
-        (now or datetime.now(timezone.utc)).isoformat(),
-        alignment,
-        calibration,
-        review_rate or FULL_REVIEW,
-        versions.last_change,
-        Pending(len(awaiting), stale_since),
-        refits=versions.refits,
+        fold.feed(event)
+    return fold.status(
+        cyclotron_id=cyclotron_id,
+        classifier=classifier,
+        fingerprint=fingerprint,
+        positive_label=positive_label,
+        window=window,
+        review_rate=review_rate,
+        now=now,
     )
+
+
+STATUS_FOLD_KEY = "status-fold"
 
 
 def status_from_flywheel(
@@ -393,19 +476,44 @@ def status_from_flywheel(
     review_rate: ReviewRate | None = None,
     now: datetime | None = None,
 ) -> CyclotronStatus:
-    """Snapshot one running classifier (a DecisionFlywheel) of a cyclotron."""
+    """Snapshot one running classifier (a DecisionFlywheel) of a cyclotron.
+
+    The fold is kept in the classifier's runtime state with the event it has reached, so a snapshot reads
+    only newer events. It resumes only from the same labels and initial snapshot; otherwise it starts over.
+    """
     task = wheel.initial.task
-    return status_from_events(
-        all_events(wheel),
+    labels = tuple(task.labels)
+    positive_label = _positive(labels, positive_label)
+    start = initial_snapshot(wheel)
+    origin = hashlib.sha256(json.dumps([list(labels), _plain(start)], sort_keys=True).encode()).hexdigest()
+    storage = wheel.runtime_storage
+    saved = storage.state(STATUS_FOLD_KEY)
+    saved = json.loads(saved) if saved is not None else None
+    if saved is not None and saved["origin"] == origin:
+        fold, cursor = StatusFold.from_json(saved["fold"]), saved["cursor"]
+    else:
+        fold, cursor = StatusFold(labels, start), 0
+    reached = cursor
+    while True:
+        page = wheel.trace_events(after_event_id=reached, limit=1000)
+        for event in page["events"]:
+            fold.feed(event)
+        if not page["events"]:
+            break
+        reached = page["cursor"]
+    if reached != cursor:
+        storage.put_state(
+            STATUS_FOLD_KEY,
+            json.dumps({"origin": origin, "cursor": reached, "fold": fold.to_json()}, sort_keys=True, separators=(",", ":")),
+        )
+    return fold.status(
         cyclotron_id=cyclotron_id,
         classifier=task.name,
-        labels=tuple(task.labels),
         fingerprint=wheel.active.fingerprint,
         positive_label=positive_label,
         window=window,
         review_rate=review_rate,
         now=now,
-        initial_snapshot=initial_snapshot(wheel),
     )
 
 
@@ -442,14 +550,3 @@ def _calibration(metrics) -> Calibration:
     says_sure = sum(b.confidence * b.count for b in bins) / total
     is_right = sum(b.accuracy * b.count for b in bins) / total
     return Calibration(says_sure, is_right, round(abs(says_sure - is_right) * 100), bins)
-
-
-def _stale_since(events) -> str | None:
-    """When the earliest review newer than the active version arrived."""
-    earliest = None
-    for event in events:
-        if event.get("kind") == "promoted":
-            earliest = None
-        elif event.get("kind") == "human-feedback" and event.get("action") != "retracted" and earliest is None:
-            earliest = event.get("created_at")
-    return earliest

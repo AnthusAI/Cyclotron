@@ -6,6 +6,7 @@ mutation checks the same owner/fence stored with its data, never a DDB lease.
 """
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from .active_labels import (
     rebuild_active_labels,
     record_feedback_event,
 )
+from .cycles import CYCLE_EVENT_KINDS, note_cycle_event, unfinished_cycles_from
 from .journal import Journal, commit_with_contract, decode, uuid
 from .learning_storage import ARTIFACTS, artifact_table
 from .record_lake import (
@@ -55,6 +57,7 @@ LIST_FIELDS = (
 EVENTS_DOMAIN = "runtime"
 # The highest cycle number seen, kept in the small control state so numbering a cycle never scans history.
 CYCLE_MARK_KEY = "cycle-number-high-water"
+CYCLE_INDEX_KEY = "unfinished-cycles"  # {item_id: [[cycle_id, cycle_number, reason, failed], ...]}
 PAGE = 100  # records fetched together; one page is also the most a reader holds beyond what it was asked for
 READ_WORKERS = 8
 CACHE_BYTES = 32_000_000  # records are immutable, so a handle may keep what it has read; bounded, never evicted
@@ -311,6 +314,7 @@ class S3RuntimeStores:
         """Payloads of covered records, in the order asked. Fetched together, never skipped when missing."""
         missing = [seq for seq in seqs if seq not in self._record_cache]
         got = {seq: self._record_cache[seq] for seq in seqs if seq in self._record_cache}
+        started = time.monotonic()
         if len(missing) > 1:
             with ThreadPoolExecutor(min(READ_WORKERS, len(missing))) as pool:
                 fetched = list(pool.map(self.events_lake.read, missing))
@@ -321,6 +325,17 @@ class S3RuntimeStores:
                 raise RecordCorrupt("runtime event record is not raw JSON text")
             self._remember(seq, payload)
             got[seq] = payload
+        if missing:
+            # Event history should be read only by audits and tools; this line makes any other read visible.
+            print(
+                json.dumps(
+                    {
+                        "event": "runtime_history_read",
+                        "records": len(missing),
+                        "durationMs": round((time.monotonic() - started) * 1000),
+                    }
+                )
+            )
         return [got[seq] for seq in seqs]
 
     def _events(self, value, extra=None):
@@ -565,6 +580,7 @@ class _State(_View):
                 data["state"][ACTIVE_LABELS_STATE_KEY] = dump_active_labels(active_by_item)
             if store.events_lake is not None:
                 _note_cycle(data, events, event)
+                _note_unfinished(data, events, event)
             return identifier
 
         return self.change(apply, defer=True)
@@ -615,6 +631,12 @@ class _State(_View):
             if json.loads(payload).get("kind") in kinds
         )
 
+    def unfinished_cycles(self, item_id):
+        saved = self.store._read()["state"].get(CYCLE_INDEX_KEY) if self.store.events_lake is not None else None
+        if saved is not None:
+            return tuple(tuple(row) for row in json.loads(saved).get(item_id, ()))
+        return unfinished_cycles_from(self.events_of(CYCLE_EVENT_KINDS), item_id)
+
     def next_cycle_number(self):
         mark = self.store._read()["state"].get(CYCLE_MARK_KEY) if self.store.events_lake is not None else None
         if mark is not None:
@@ -632,6 +654,20 @@ def _note_cycle(data, events, event):
     mark = _highest_cycle(events.rows()) if saved is None else max(json.loads(saved), event.get("cycle_number", 0) or 0)
     if saved is None or mark != json.loads(saved):
         data["state"][CYCLE_MARK_KEY] = json.dumps(mark)
+
+
+def _note_unfinished(data, events, event):
+    """Keep each item's unfinished cycles in control state; the first time, from every event so far."""
+    saved = data["state"].get(CYCLE_INDEX_KEY)
+    if saved is None:
+        index = {}
+        for _, payload in events.rows():
+            note_cycle_event(index, json.loads(payload))
+    elif event.get("kind") in CYCLE_EVENT_KINDS:
+        index = note_cycle_event(json.loads(saved), event)
+    else:
+        return
+    data["state"][CYCLE_INDEX_KEY] = json.dumps(index, sort_keys=True, separators=(",", ":"))
 
 
 class _Cache(_View):
