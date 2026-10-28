@@ -183,6 +183,12 @@ class S3RuntimeStores:
         # keyed state needs the events lake; a handle without one keeps keyed state inline in the head.
         self.keyed_documents = keyed_documents_for(journal) if events_lake is not None else None
         self._documents = {}  # (kind, key) -> Document or None, as last read or written by this handle
+        # Keyed changes written ahead of the commit that will cover them (a conversion's rows), in the background
+        # so many runtimes convert at once. Each is (future of its chunk sequence, its changes); one worker
+        # claims their sequences in order.
+        self._prepared = []
+        self._prepared_values = {}  # (kind, key) -> text, visible to this handle until the covering commit
+        self._background = None
         self._blobs = {}  # digest -> bytes of content-addressed values read or written; they never change
         self._seen = None  # the last head read, so an unchanged head is not decoded again
         self.max_conflicts = max_conflicts
@@ -299,7 +305,7 @@ class S3RuntimeStores:
         get = self.journal.payloads.get
         scope = self.journal.payloads.scope
         if len(missing) > 1:
-            with ThreadPoolExecutor(min(READ_WORKERS, len(missing))) as pool:
+            with ThreadPoolExecutor(self._lanes(len(missing))) as pool:
                 fetched = list(pool.map(lambda r: get(PayloadRef(scope, r[0], r[1])), missing))
         else:
             fetched = [get(PayloadRef(scope, r[0], r[1])) for r in missing]
@@ -419,7 +425,7 @@ class S3RuntimeStores:
         contents = [content for digest, content in blobs.items() if digest not in self._blobs]
         put = self.journal.payloads.put
         if len(contents) > 1:
-            with ThreadPoolExecutor(min(READ_WORKERS, len(contents))) as pool:
+            with ThreadPoolExecutor(self._lanes(len(contents))) as pool:
                 list(pool.map(put, contents))
         elif contents:
             put(contents[0])
@@ -496,37 +502,43 @@ class S3RuntimeStores:
             if self.keyed_documents is not None
             else []
         )
-        if not staged and not keyed:
+        claimed, unwritten = self._take_prepared()
+        keyed += unwritten  # a preparation that failed is written again, by this commit
+        if not staged and not keyed and not claimed:
             return self._settled(value, commit_with_contract(self.journal, head.record, stored, invalidate=self._poison))
         chunks = value.get("chunks")
         first = _Events(self, value).last_id + 1
-        # The chunk names the keyed changes it stamps (their digest). A retry of the identical commit adopts the
-        # identical record at the same sequence, as before; an attempt with other changes can never reuse an
-        # abandoned attempt's sequence, so entries stamped with it never become covered.
-        changes = sha256(encode(sorted([name, key, text] for name, key, text in keyed))).hexdigest()
-        chunk = {"first": first, "events": list(staged), "commit": changes}
         before = coverage_in(value, self.events_lake)
-
-        def settle(state, refs):
-            # The new coverage is already in ``state``; everything else is the change the caller built.
-            coverage = state[RECORDS_KEY]
-            state.clear()
-            state.update(stored)
-            state[RECORDS_KEY] = coverage
-            start = chunks["from"] if chunks else refs[self._lake_name][0].seq
-            state["chunks"] = {"from": start, "last": first + len(staged) - 1}
-
-        # Write the chunk first (harmless if abandoned), then flip the head once: the record counts only
-        # together with the control change it belongs to.
-        def documents(refs):
-            # After the chunk is written and before the head moves: each key's document gains an entry stamped
-            # with the chunk's sequence, which counts only once the head covers it.
-            self._store_keyed(keyed, before, refs[self._lake_name][0].seq)
-
-        committed, refs = commit_with_records(
-            self.journal, head.record, [(self.events_lake, [chunk])], settle, invalidate=self._poison, check=documents
+        # Prepared chunks were written above the head's coverage; whatever lies between them (another attempt's
+        # abandoned record) is skipped, as an append would skip it.
+        top = max([before.last, *claimed])
+        coverage = Coverage(
+            top, tuple(sorted({*before.skipped, *(n for n in range(before.last + 1, top + 1) if n not in claimed)}))
         )
-        self._remember(refs[self._lake_name][0].seq, chunk)
+        seqs = list(claimed)
+        if staged or keyed:
+            # The chunk names the keyed changes it stamps (their digest). A retry of the identical commit adopts
+            # the identical record at the same sequence; an attempt with other changes can never reuse an
+            # abandoned attempt's sequence, so entries stamped with it never become covered.
+            changes = sha256(encode(sorted([name, key, text] for name, key, text in keyed))).hexdigest()
+            chunk = {"first": first, "events": list(staged), "commit": changes}
+            # The chunk first (harmless if abandoned), then each key's document gains an entry stamped with its
+            # sequence, and only then the head moves: they count only together with the change they belong to.
+            coverage, refs = self.events_lake.append(coverage, [chunk])
+            seqs.append(refs[0].seq)
+            self._store_keyed(keyed, before, refs[0].seq)
+            self._remember(refs[0].seq, chunk)
+        stored[RECORDS_KEY] = {**stored.get(RECORDS_KEY, {}), self._lake_name: coverage.to_json()}
+        stored["chunks"] = {"from": chunks["from"] if chunks else min(seqs), "last": first + len(staged) - 1}
+        try:
+            committed = commit_with_contract(self.journal, head.record, stored, invalidate=self._poison)
+        except StorageConflict:
+            if claimed:
+                # Prepared rows are stamped for this head only; they cannot be carried onto a moved one.
+                self._poison()
+                raise RuntimeOwnershipError("runtime head moved during a conversion; reopen/reconcile") from None
+            raise
+        self._prepared_values = {}
         return self._settled(value, committed)
 
     def _change(self, fn, *, ownership=True, recovery=False, defer=False):
@@ -581,6 +593,7 @@ class S3RuntimeStores:
         self._cached = None
         self._working = None
         self._held = []
+        self._prepared, self._prepared_values = [], {}
 
     def change(self, fn, *, defer=False):
         return self._change(lambda value: fn(value["data"], value), defer=defer)
@@ -600,6 +613,21 @@ class S3RuntimeStores:
             value["fence"] += 1
             return owner, value["fence"]
 
+        if self.keyed_documents is not None and not self.poisoned:
+            record = self.journal.read()
+            if isinstance(record.value, dict) and record.value.get("schema") == SCHEMA_V1:
+                # Take an old-layout runtime without converting it yet: the head stays v1 (every row still in
+                # it), and its rows are written to keyed documents in the background while the caller goes on,
+                # so several runtimes convert at once. The next commit covers them and stores the v2 head.
+                self._check_stored(record.value)
+                value = deepcopy(record.value)
+                result = apply(value)
+                committed = commit_with_contract(self.journal, record, value, invalidate=self._poison)
+                self.authority = result
+                head = self._head(committed)
+                self._cached = head
+                self._prepare_from(head.value)
+                return
         # Set local permission ONLY after confirmed CAS success.
         self.authority = self._change(apply, ownership=False)
 
@@ -613,6 +641,9 @@ class S3RuntimeStores:
         try:
             self._change(release, recovery=True)
         finally:
+            if self._background is not None:
+                self._background.shutdown(wait=True)
+                self._background = None
             self.authority = None
             self._cached = None
             self._working = None
@@ -624,36 +655,79 @@ class S3RuntimeStores:
             self._documents[(name, key)] = self.keyed_documents.load(name, key)
         return self._documents[(name, key)]
 
-    def _load_documents(self, pairs):
-        """Read the documents not yet held, together (one GET each; a missing key reads as absent)."""
-        missing = list(dict.fromkeys(pair for pair in pairs if pair not in self._documents))
-        load = lambda pair: self.keyed_documents.load(*pair)  # noqa: E731
-        if len(missing) > 1:
-            with ThreadPoolExecutor(min(READ_WORKERS, len(missing))) as pool:
-                found = list(pool.map(load, missing))
-        else:
-            found = [load(pair) for pair in missing]
-        self._documents.update(zip(missing, found))
+    def _lanes(self, count):
+        """How many requests to run at once: all of them, up to the connections the injected client keeps."""
+        config = getattr(getattr(self.journal.payloads, "client", None), "meta", None)
+        pool = getattr(getattr(config, "config", None), "max_pool_connections", None)
+        return max(1, min(count, pool)) if type(pool) is int and pool > 0 else max(1, count)
 
     def _store_keyed(self, changes, coverage, at):
-        self._load_documents([(name, key) for name, key, _ in changes])
+        """Write each change's document entry, all at once. A document not read yet is written create-only
+        (no GET first); one that turns out to exist is read and merged by the conditional write itself."""
         write = (
             lambda change: self.keyed_documents.store(  # noqa: E731
-                change[0], change[1], self._documents[change[:2]], coverage, at, change[2]
+                change[0], change[1], self._documents.get(change[:2]), coverage, at, change[2]
             )
         )
         if len(changes) > 1:
-            with ThreadPoolExecutor(min(READ_WORKERS, len(changes))) as pool:
+            with ThreadPoolExecutor(self._lanes(len(changes))) as pool:
                 written = list(pool.map(write, changes))
         else:
             written = [write(change) for change in changes]
         for (name, key, _), document in zip(changes, written):
             self._documents[(name, key)] = document
 
+    def _prepare(self, changes, value):
+        """Write keyed changes ahead of the commit that will cover them, in the background.
+
+        A chunk record with no events claims a sequence above the head's coverage (and above any preparation
+        before it), then every change's document gains an entry stamped with it. None of it counts until the
+        next commit of this handle covers that sequence; until then this handle reads the changes from memory.
+        """
+        if not changes:
+            return
+        for name, key, text in changes:
+            self._prepared_values[(name, key)] = text
+        before = coverage_in(value, self.events_lake)
+        first = _Events(self, value).stored_last + 1
+        digest = sha256(encode(sorted([name, key, text] for name, key, text in changes))).hexdigest()
+        earlier = self._prepared[-1][0] if self._prepared else None
+
+        def run():
+            floor = earlier.result() if earlier is not None else before.last
+            claim = Coverage(max(floor, before.last), tuple(n for n in before.skipped if n <= max(floor, before.last)))
+            _, refs = self.events_lake.append(claim, [{"first": first, "events": [], "commit": digest}])
+            self._store_keyed(changes, before, refs[0].seq)
+            return refs[0].seq
+
+        if self._background is None:
+            self._background = ThreadPoolExecutor(1)
+        self._prepared.append((self._background.submit(run), list(changes)))
+
+    def _prepare_from(self, value):
+        """Move a converted head's pending keyed rows out of ``value`` into a background preparation."""
+        changes = [(name, key, text) for name, held in value["maps"].items() for key, text in held["changes"].items()]
+        for held in value["maps"].values():
+            held["changes"] = {}
+        self._prepare(changes, value)
+
+    def _take_prepared(self):
+        """(sequences of the preparations that landed, changes of those that did not), waiting for all of them."""
+        claimed, unwritten = [], []
+        for future, changes in self._prepared:
+            try:
+                claimed.append(future.result())
+            except Exception:
+                unwritten += changes
+        self._prepared = []
+        return claimed, unwritten
+
     def _map_get(self, value, name, key):
         held = value["maps"].get(name)
         if held is not None and key in held["changes"]:
             return held["changes"][key]
+        if (name, key) in self._prepared_values:
+            return self._prepared_values[(name, key)]
         if self.keyed_documents is not None:
             found = resolve(self._document(name, key), coverage_in(value, self.events_lake))
             if found is not None:
@@ -1024,11 +1098,13 @@ class _State(_View):
         store = self.store
         return store._map_get(store._read_value(), name, key)
 
-    def save_derived(self, states, maps=None):
+    def save_derived(self, states, maps=None, *, prepare=False):
         """Save a derived summary: state values and keyed changes (``None`` removes a key), together.
 
         A summary can always be rebuilt from the events it was folded from, and its cursor is saved with it,
-        so an owning handle holds it and publishes it with the next durable change or at release.
+        so an owning handle holds it and publishes it with the next durable change or at release. With
+        ``prepare`` (a summary converted from an older layout: many keys at once), the keyed changes are written
+        in the background straight away, still counting only once that commit covers them.
         """
         maps = maps or {}
         for payload in states.values():
@@ -1043,6 +1119,9 @@ class _State(_View):
 
         def apply(data, value):
             data["state"].update(states)
+            if prepare and store.keyed_documents is not None:
+                store._prepare([(name, key, text) for name, changes in maps.items() for key, text in changes.items()], value)
+                return
             for name, changes in maps.items():
                 for key, text in changes.items():
                     store._map_put(value, name, key, text)

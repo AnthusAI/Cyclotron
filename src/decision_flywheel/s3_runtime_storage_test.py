@@ -489,6 +489,94 @@ def test_a_refused_keyed_read_fails_closed_instead_of_reading_as_a_new_request()
 # --- Runtimes written by the previous layout ------------------------------------------------------------
 
 
+class SlowS3:
+    """A conditional S3 fake whose keyed-document writes take a moment, recording how many are in flight."""
+
+    def __init__(self):
+        import threading
+
+        from .s3_journal_test import ConditionalS3
+
+        self.inner, self.lock = ConditionalS3(), threading.Lock()
+        self.flight = self.most = 0
+        self.order = []  # ("key" | "head", namespace) in the order the writes finished
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def put_object(self, **request):
+        import time
+
+        keyed = "/keys/" in request["Key"]
+        with self.lock:
+            self.flight += keyed
+            self.most = max(self.most, self.flight)
+        try:
+            if keyed:
+                time.sleep(0.005)
+            return self.inner.put_object(**request)
+        finally:
+            with self.lock:
+                self.flight -= keyed
+                kind = "key" if keyed else "head" if request["Key"].endswith("/head.json") else None
+                if kind:
+                    self.order.append((kind, request["Key"].split("/coordination/")[1].split("/")[1]))
+
+
+def test_a_converted_summary_is_written_ahead_in_the_background_and_counts_only_with_the_release():
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    s = lake_stores(client)
+    revision = journal(client, name="classifier-a").read().revision
+    rows = {f"row/item-{n}": f'{{"n":{n}}}' for n in range(30)}
+    s.runtime_storage.save_derived({"status-fold": '{"cursor":0}'}, {"status": rows}, prepare=True)
+    assert s.runtime_storage.keyed("status", "row/item-7") == '{"n":7}'  # visible to the owner at once
+    assert journal(client, name="classifier-a").read().revision == revision  # nothing counts yet
+    s.close()
+    again = lake_stores(client)
+    assert again.runtime_storage.keyed("status", "row/item-29") == '{"n":29}'
+    assert again.runtime_storage.state("status-fold") == '{"cursor":0}'
+    again.close()
+
+
+def old_runtime_with_answers(client, name, count):
+    import json
+
+    from .learning_storage import ARTIFACTS
+    from .s3_runtime_storage import DICT_FIELDS, LIST_FIELDS
+
+    data = {**{k: {} for k in DICT_FIELDS}, **{k: [] for k in LIST_FIELDS}, "artifacts": {k: {} for k in ARTIFACTS}}
+    data["answers"] = {f"k{n}": ["complete", json.dumps({"n": n}), n] for n in range(1, count + 1)}
+    journal(client, name=name).initialize(
+        {"schema": "cyclotron-s3-runtime/v1", "owner": None, "fence": 0, "ordinal": count, "data": data}
+    )
+
+
+def test_old_runtimes_convert_concurrently_with_no_reads_of_absent_documents_and_each_head_commits_last():
+    client = SlowS3()
+    names = ["classifier-a", "classifier-b", "classifier-c"]
+    for name in names:
+        old_runtime_with_answers(client, name, 40)
+    client.inner.calls.clear()
+    client.order.clear()
+    handles = [lake_stores(client, name) for name in names]  # the hosted job takes every output's runtime first
+    for handle in handles:
+        handle.close()
+    # Every row's write ran alongside others, within one runtime and across them, not one after another.
+    assert client.most > 10
+    gets = [r["Key"] for kind, r in client.inner.calls if kind == "get"]
+    assert not any("/keys/" in key or "/records/" in key for key in gets)  # no GET of a document or an event
+    for handle in handles:
+        name = handle.journal.head_key.split("/coordination/")[1].split("/")[1]
+        mine = [kind for kind, owner in client.order if owner == name]
+        # The acquire's head, every row's document, then the head that covers them: it commits last.
+        assert mine == ["head"] + ["key"] * 40 + ["head"]
+    again = lake_stores(client, "classifier-b")
+    assert again.runtime_cache.answer("k17") == ("complete", '{"n": 17}')
+    again.close()
+
+
 def old_format_runtime(client):
     """A runtime exactly as the v1 layout left it: everything inline in the head, one lake record per event."""
     import json
@@ -522,19 +610,15 @@ def old_format_runtime(client):
     return [json.dumps(e) for e in events]
 
 
-def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_converts_on_its_first_write():
+def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_converts_by_its_next_commit():
     import json
 
     from .s3_journal_test import ConditionalS3
 
     client = ConditionalS3()
     events = old_format_runtime(client)
-    s = lake_stores(client)  # acquiring is the first write
-    stored = journal(client, name="classifier-a").read().value
-    assert stored["schema"] == "cyclotron-s3-runtime/v2" and stored["maps"] == {}
-    assert sum("/keys/" in k for k in client.objects) == 3  # "done", history 1 and item-1's cycles, one each
-    assert stored["data"]["answers"] == {"waiting": ["pending", None, 4]} and stored["data"]["answer_history"] == []
-    assert "unfinished-cycles" not in stored["data"]["state"] and set(stored["refs"]) == {"rounds"}
+    s = lake_stores(client)  # acquiring keeps the old head (every row still in it) and starts the conversion
+    assert journal(client, name="classifier-a").read().value["schema"] == "cyclotron-s3-runtime/v1"
 
     def readable(s):
         rows = [(e.pop("event_id"), json.dumps(e)) for e in map(dict, s.runtime_storage.history(-1))]
@@ -553,7 +637,12 @@ def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_co
     readable(s)
     assert s.runtime_storage.next_cycle_number() == 3
     assert s.runtime_storage.append_event('{"kind":"new"}') == 5
-    s.close()
+    s.close()  # the release is the next commit: it covers the converted rows and stores the v2 head
+    stored = journal(client, name="classifier-a").read().value
+    assert stored["schema"] == "cyclotron-s3-runtime/v2" and stored["maps"] == {}
+    assert sum("/keys/" in k for k in client.objects) == 3  # "done", history 1 and item-1's cycles, one each
+    assert stored["data"]["answers"] == {"waiting": ["pending", None, 4]} and stored["data"]["answer_history"] == []
+    assert "unfinished-cycles" not in stored["data"]["state"] and set(stored["refs"]) == {"rounds"}
     again = lake_stores(client)
     readable(again)
     assert [e["kind"] for e in again.runtime_storage.history(2)] == ["cycle-completed", "new"]

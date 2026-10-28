@@ -636,12 +636,12 @@ def status_from_flywheel(
     rows = FoldRows((lambda key: storage.keyed(STATUS_ROWS, prefix + key)) if keyed else None)
     saved = storage.state(STATUS_FOLD_KEY)
     saved = json.loads(saved) if saved is not None else None
-    changed = False
+    changed = migrated = False
     if saved is not None and saved["origin"] == origin:
         cursor = saved["cursor"]
         if "fold" in saved:
             fold = StatusFold.from_json(saved["fold"])
-            changed = keyed  # a fold saved whole moves into rows the first time
+            changed = migrated = keyed  # a fold saved whole moves into rows the first time
             if keyed:
                 rows.values, rows.dirty = fold.rows.values, set(fold.rows.values)
                 fold.rows = rows
@@ -678,6 +678,7 @@ def status_from_flywheel(
                     STATUS_RECENT_KEY: _compact(fold.recent),
                 },
                 {STATUS_ROWS: {prefix + key: text for key, text in fold.rows.changes().items()}},
+                prepare=migrated,  # a fold saved whole writes every row once: in the background, all at once
             )
         else:
             storage.put_state(STATUS_FOLD_KEY, _compact({"origin": origin, "cursor": reached, "fold": fold.to_json()}))
