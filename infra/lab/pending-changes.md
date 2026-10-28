@@ -8,7 +8,7 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: the stage throttle at the account quota.** Dropping `DefaultRouteSettings` (deployed 2026-10-28,
+**No pending changes.** The stage throttle at the account quota was deployed on 2026-10-28 with change set `stage-account-quota`; the snapshot was refreshed. Before that: Dropping `DefaultRouteSettings` (deployed 2026-10-28,
 change set `no-stage-throttle-91290b3`, lab code 91290b3, package sha256
 `c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735`) did not clear the stage: an API
 Gateway v2 stage keeps its last throttle (5/s, burst 10) when the property is removed. Adding

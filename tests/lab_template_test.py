@@ -10,10 +10,7 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = [
-    # The stage throttle set to the account's own API Gateway quota (10000/s, burst 5000): no stage ceiling.
-    "/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
