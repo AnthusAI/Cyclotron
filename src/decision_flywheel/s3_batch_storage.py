@@ -1,6 +1,6 @@
 """S3-authoritative shared batches, atomic paid budget and fenced dispatch claims.
 
-One explicitly bounded run ledger; immutable transaction values retain exact text
+One run ledger; immutable transaction values retain exact text
 and all charged history. No SQLite connection or DynamoDB authority is used.
 
 Raw provider replies. With a ``replies`` record lake, a completed request keeps its raw reply as a
@@ -20,7 +20,7 @@ Crash analysis, by the point where the process stops:
    finds the flip landed (identical reply, returned as is) or finds it did not and flips it.
 6. Flip landed: the request is complete; cache hits read the record by reference.
 
-If writing the reply record itself fails (no records permission, record over budget), the reply is
+If writing the reply record itself fails (no records permission, an unreadable lake), the reply is
 embedded in the journal as before rather than dropped, because the provider has already been paid.
 Replies embedded by earlier versions keep working; a later conversion moves them into the lake.
 """
@@ -63,19 +63,16 @@ log = logging.getLogger(__name__)
 EMPTY = {"schema": "cyclotron-shared-batches/v1", "batches": [], "attempts": [], "history": []}
 
 
-REPLY_RECORD_BYTES = 4 * 1024 * 1024
-
-
-def reply_lake_for(journal, ledger, *, max_record_bytes=REPLY_RECORD_BYTES):
+def reply_lake_for(journal, ledger):
     """The reply lake that sits beside a ledger journal, on the same store, or None for an unknown store.
 
     One lake per ledger (``replies-<ledger>``) so ledgers that share a scope never share a sequence.
     """
     payloads, kind = getattr(journal, "payloads", None), f"replies-{ledger}"
     if isinstance(payloads, S3Payloads):
-        return S3RecordLake(payloads, "shared-batches", kind, max_record_bytes=max_record_bytes)
+        return S3RecordLake(payloads, "shared-batches", kind)
     if isinstance(payloads, FilePayloads):
-        return FileRecordLake(payloads, "shared-batches", kind, max_record_bytes=max_record_bytes)
+        return FileRecordLake(payloads, "shared-batches", kind)
     return None
 
 
@@ -104,19 +101,18 @@ class RepliesConverted:
 
 
 class S3BatchStorage:
-    def __init__(self, journal, *, max_records, max_conflicts=8, replies=None):
+    def __init__(self, journal, *, max_conflicts=8, replies=None):
         if not isinstance(journal, Journal):
             raise ValueError("canonical journal required")
         if replies is not None and (not isinstance(replies, RecordLake) or replies.scope != journal.boundary[0]):
             raise ValueError("reply record lake must belong to the journal's scope")
         self.replies = replies
-        if type(max_records) is not int or max_records < 1 or type(max_conflicts) is not int or not 1 <= max_conflicts <= 100:
-            raise ValueError("explicit record budget and bounded contention retries required")
+        if type(max_conflicts) is not int or max_conflicts < 1:
+            raise ValueError("a positive contention retry count required")
         self.journal = journal
-        self.max_records = max_records
         self.max_conflicts = max_conflicts
 
-    def _check(self, value, max_records=None):
+    def _check(self, value):
         if not isinstance(value, dict) or set(value) not in (set(EMPTY), set(EMPTY) | {RECORDS_KEY}):
             raise ValueError("complete shared batch state required")
         validate_snapshot(value, replies=True)
@@ -128,10 +124,6 @@ class S3BatchStorage:
             coverage = coverage_in(value, self.replies)
             if not all(coverage.covers(ref["seq"]) for ref in cited) or len({ref["seq"] for ref in cited}) != len(cited):
                 raise ValueError("reply references must name distinct covered records")
-        if sum(len(value[k]) for k in ("batches", "attempts", "history")) > (
-            self.max_records if max_records is None else min(max_records, self.max_records)
-        ):
-            raise ValueError("shared batch record budget exceeded; no history truncation")
         return value
 
     def initialize(self):
@@ -425,17 +417,15 @@ class S3BatchStorage:
         return self._mutate(change)
 
     def page(self, *, after=None, limit=100):
-        if type(limit) is not int or not 1 <= limit <= 1000 or after is not None and not isinstance(after, str):
-            raise ValueError("bounded page required")
+        if type(limit) is not int or limit < 1 or after is not None and not isinstance(after, str):
+            raise ValueError("positive page size required")
         state = self._read().value
         rows = [r for r in state["batches"] if r[0] > (after or "")][: limit + 1]
         return [self._record(state, r) for r in rows[:limit]], rows[limit - 1][0] if len(rows) > limit else None
 
-    def export(self, *, max_records=10000):
+    def export(self):
         """The portable snapshot, with every raw reply back inline, whichever way it is stored."""
-        if type(max_records) is not int or max_records < 1:
-            raise ValueError("bounded export required")
-        state = deepcopy(self._check(self._read().value, max_records))
+        state = deepcopy(self._check(self._read().value))
         snapshot = {name: state[name] for name in EMPTY}
         for row in snapshot["batches"]:
             if is_reply_reference(row[2]):

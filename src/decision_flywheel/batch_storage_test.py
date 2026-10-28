@@ -148,8 +148,6 @@ def test_invalid_migration_rejects_before_any_destination_write(tmp_path):
     with pytest.raises(ValueError):
         destination.restore(snapshot)
     assert destination.requests() == 0 and destination.export()["batches"] == []
-    with pytest.raises(ValueError):
-        source.export(max_records=1)
     source.close()
     destination.close()
 

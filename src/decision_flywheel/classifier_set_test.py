@@ -216,7 +216,6 @@ def test_cloud_storage_extends_and_retires_classifiers_and_replays_them_on_reope
     def stores():
         return S3CyclotronStores(
             journal(client, name="set-root"),
-            max_records=10000,
             journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
         )
 

@@ -37,10 +37,16 @@ def test_trace_events_page_in_order_after_a_cursor(storage):
     assert storage.events(limit=1)[0][1] == trace_payload(1)
 
 
-def test_trace_cursors_must_be_bounded(storage):
-    for bad_after, bad_limit in ((-1, 10), (0, 0), (0, 1001), ("0", 10), (0, "10")):
+def test_trace_cursors_must_be_well_formed(storage):
+    for bad_after, bad_limit in ((-1, 10), (0, 0), ("0", 10), (0, "10")):
         with pytest.raises(ValueError):
             storage.events(after=bad_after, limit=bad_limit)
+
+
+def test_a_trace_page_larger_than_the_old_thousand_event_ceiling_is_served(storage):
+    for n in range(3):
+        storage.append_trace(f"step-{n}", trace_payload(n))
+    assert len(storage.events(limit=5000)) == 3
 
 
 def test_clock_and_trace_survive_reopening_the_same_store(evaluation_backend):

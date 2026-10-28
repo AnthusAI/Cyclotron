@@ -20,11 +20,11 @@ from .web_store import WebStore
 def archive(request, tmp_path):
     scope = StorageScope("account-a", "workspace-a")
     payloads = (
-        FilePayloads(tmp_path / "payloads", scope, max_bytes=1000000)
+        FilePayloads(tmp_path / "payloads", scope)
         if request.param == "file"
-        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope, max_bytes=1000000)
+        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope)
     )
-    return CatalogArchive(payloads, scope, max_records=100, max_bytes=1000000)
+    return CatalogArchive(payloads, scope)
 
 
 def test_canonical_records_roundtrip_exact_history_and_rebuildable_index(archive, tmp_path):
@@ -34,7 +34,7 @@ def test_canonical_records_roundtrip_exact_history_and_rebuildable_index(archive
     assert archive.publish(snapshot) == first
     assert archive.read(first.manifest) == snapshot
     index = DynamoPayloadIndex(Dynamo(), "synthetic-index", archive.scope)
-    assert index.rebuild(archive.payloads, [*first.records, first.manifest], max_records=100) == len(first.records) + 1
+    assert index.rebuild(archive.payloads, [*first.records, first.manifest]) == len(first.records) + 1
     destination = WebStore(tmp_path / "destination.sqlite")
     destination.catalog_storage.restore(archive.read(first.manifest))
     assert destination.catalog_storage.export() == snapshot
@@ -43,16 +43,15 @@ def test_canonical_records_roundtrip_exact_history_and_rebuildable_index(archive
     assert not hasattr(archive, "activate") and not hasattr(index, "commit_catalog")
 
 
-def test_manifest_scope_and_aggregate_budgets_are_checked_before_rows_are_read(archive, tmp_path):
+def test_manifest_scope_is_checked_before_rows_are_read(archive, tmp_path):
     publication = archive.publish(populated(tmp_path / "source.sqlite").catalog_storage.export())
     with pytest.raises(PermissionError):
         archive.read(replace(publication.manifest, scope=StorageScope("foreign", "workspace-a")))
-    bounded = CatalogArchive(archive.payloads, archive.scope, max_records=1, max_bytes=1000000)
-    with pytest.raises(ValueError):
-        bounded.read(publication.manifest)
-    bounded = CatalogArchive(archive.payloads, archive.scope, max_records=100, max_bytes=100)
-    with pytest.raises(ValueError):
-        bounded.read(publication.manifest)
+
+
+def test_an_archive_takes_no_record_or_byte_budget():
+    with pytest.raises(TypeError):
+        CatalogArchive(None, StorageScope("a", "w"), max_records=1, max_bytes=1)
 
 
 def test_changed_membership_or_missing_record_fails_despite_existing_index_hints(archive, tmp_path):
@@ -74,8 +73,8 @@ def test_changed_membership_or_missing_record_fails_despite_existing_index_hints
 def test_lost_s3_row_publication_can_retry_same_catalog_without_selecting_a_head(tmp_path):
     client = S3()
     scope = StorageScope("a", "w")
-    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope, max_bytes=1000000)
-    archive = CatalogArchive(payloads, scope, max_records=100, max_bytes=1000000)
+    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope)
+    archive = CatalogArchive(payloads, scope)
     snapshot = populated(tmp_path / "source.sqlite").catalog_storage.export()
     client.lose_response = True
     with pytest.raises(PayloadUncertain):
@@ -87,21 +86,15 @@ def test_lost_s3_row_publication_can_retry_same_catalog_without_selecting_a_head
     assert len(client.objects) == len(set(publication.records)) + 1
 
 
-def test_empty_catalog_roundtrips_and_aggregate_limit_fails_before_publication(archive, tmp_path):
+def test_empty_catalog_roundtrips(archive, tmp_path):
     snapshot = WebStore(tmp_path / "empty.sqlite").catalog_storage.export()
     publication = archive.publish(snapshot)
     assert publication.records == () and archive.read(publication.manifest) == snapshot
-    snapshot = populated(tmp_path / "source.sqlite").catalog_storage.export()
-    client = archive.payloads
-    calls = []
-    original = client.put
 
-    def put(content):
-        calls.append(content)
-        return original(content)
 
-    client.put = put
-    limited = CatalogArchive(client, archive.scope, max_records=100, max_bytes=len(encode(snapshot)))
-    with pytest.raises(ValueError, match="aggregate"):
-        limited.publish(snapshot)
-    assert calls == []
+def test_an_item_larger_than_the_old_four_mb_item_cap_publishes_and_reads_back(archive, tmp_path):
+    store = WebStore(tmp_path / "large.sqlite")
+    store.save_item_list("big", "Big")
+    store.upsert_list_items("big", [{"id": "one", "occurred_at": "2026-01-01", "values": {"text": "x" * (5 * 1024 * 1024)}}])
+    snapshot = store.catalog_storage.export()
+    assert archive.read(archive.publish(snapshot).manifest) == snapshot

@@ -17,8 +17,6 @@ def wrapped(transport, ledger=None, maximum=2):
         ledger or store(journal(name="optimizer")),
         identity={"provider": "synthetic", "model": "synthetic"},
         max_calls=maximum,
-        max_request_bytes=100000,
-        max_reply_bytes=100000,
     )
 
 
@@ -118,7 +116,7 @@ def test_cloud_sdk_rejects_unmetered_optimizer_before_creating_a_namespace(monke
 
     client = ConditionalS3()
     s = S3CyclotronStores(
-        journal(client, name="root"), max_records=1000, journal_for=lambda domain, name: journal(client, name=domain + "-" + name)
+        journal(client, name="root"), journal_for=lambda domain, name: journal(client, name=domain + "-" + name)
     )
     with pytest.raises(ValueError, match="paid-call transport"):
         Cyclotron.open(None, DEFINITION, Model(), agent([]), storage=s)
@@ -149,3 +147,14 @@ def test_per_invocation_guard_denial_precedes_reservation_and_is_rechecked_befor
     with pytest.raises(PermissionError):
         guarded([{"role": "user", "content": "synthetic"}])
     assert calls == [] and base.calls == 1
+
+
+def test_a_request_and_reply_larger_than_the_old_byte_budgets_are_recorded():
+    large = "x" * (5 * 1024 * 1024)
+
+    def provider(messages):
+        return OptimizerReply('{"rationale":"' + large + '"}', "synthetic")
+
+    transport = wrapped(provider)
+    reply = transport([{"role": "user", "content": large}])
+    assert reply.content.endswith(large + '"}') and transport.calls == 1

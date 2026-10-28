@@ -127,7 +127,7 @@ When the worker handles `decide` for a standing target it first resolves the pro
 
 * A never-before-seen `{id, values}` is appended to the run's own operational list (as revision 1) and to the run's item table in one console CAS transaction that is fenced by the command claim. Identical values return the existing revision without a write. The same id with different values creates a new immutable revision (revision + 1) and moves the run's item pointer to it. Earlier revisions stay readable by `itemRevision`.
 * The id, size and shape are bounded: id 1-200 printable characters without edge whitespace; 1-32 value keys; encoded values at most 32 KiB; every classifier input field (default `text`) a non-empty string of at most 20,000 characters. The classifier set comes from the frozen run, never from the caller.
-* An id that already exists in any other item list of the account (priming or evaluation lists) is refused with `source_refused`, so operational and priming items stay disjoint. Unique items are admitted without a run-level count cap. Normal per-item shape validation, bounded command batches and the console's physical record/byte budgets still apply (see Capacity).
+* An id that already exists in any other item list of the account (priming or evaluation lists) is refused with `source_refused`, so operational and priming items stay disjoint. Unique items are admitted without a run-level count cap. Normal per-item shape validation still applies (see Capacity).
 * The shared decision, cache and fingerprint pinning are the existing engine behavior. An identical re-request (same content, any request id) is served from the persisted shared decision and makes no second model call. Successful responses for standing targets add `"source": {"id", "revision", "fingerprint"}`; use `source.revision` as `itemRevision` for feedback. Each entry in `outputs` carries `criteriaFingerprint`, the sha256 of its exact `question`: a vote recorded under one binding revision still applies under a later one only while the fingerprint is unchanged. For a decision stored before the field existed, compute it from that output's `question`.
 * Registration happens before the request reservation. A later provider or storage failure can therefore leave a registered but undecided source; re-sending it is idempotent and the durable receipt remains available for retry/reconciliation.
 
@@ -137,7 +137,7 @@ Every standing-target provider attempt remains recorded atomically in the shared
 
 ### Capacity
 
-The console catalog and the shared-batch ledger are each a single S3 journal object limited by `max_records` and `max_bytes` (defaults 10000 records, 4 MiB). Every registered source, completed job (with its decision snapshot) and event consumes that physical store budget. These are infrastructure safety limits, not decision or item quotas; exhaustion remains a visible storage failure and requires capacity planning or a storage-layout change. Usage is not reset or replenished by the calendar.
+The console catalog and the shared-batch ledger are each a single S3 journal object with no record, byte or commit budget: there is no `max_records`, `max_bytes` or `max_commits`, and no `CYCLOTRON_MAX_BYTES`. Completed job results, raw replies and runtime events live in write-once record lakes beside the journals, also with no per-record byte budget and no skip or collision count. Usage is not reset or replenished by the calendar.
 
 ## Machine access (service principals)
 

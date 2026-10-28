@@ -8,7 +8,21 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**No pending changes.** The stage throttle at the account quota was deployed on 2026-10-28 with change set `stage-account-quota`; the snapshot was refreshed. Before that: Dropping `DefaultRouteSettings` (deployed 2026-10-28,
+**Pending: remove the journal byte budget.** The storage layer no longer has a per-document byte budget
+(nor record, commit, skip or collision counts), so the parameter and the variable that fed it go:
+
+- `/Parameters/JournalMaxBytes`: the per-document S3 journal byte budget (default 4 MiB, 1 to 64 MiB).
+  Nothing reads it any more.
+- `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES`: the BFF's copy of that
+  budget. `HostedConfig` no longer reads `CYCLOTRON_MAX_BYTES`; a leftover value is ignored.
+- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES`: the worker's copy, as
+  for the BFF.
+
+Deploy the code first or together: the old code reads `CYCLOTRON_MAX_BYTES` only when it is set and
+otherwise uses its built-in 4 MiB default, so removing the variable under old code would lower a raised
+budget back to 4 MiB. The new code has no budget either way.
+
+Before that, **no pending changes.** The stage throttle at the account quota was deployed on 2026-10-28 with change set `stage-account-quota`; the snapshot was refreshed. Before that: Dropping `DefaultRouteSettings` (deployed 2026-10-28,
 change set `no-stage-throttle-91290b3`, lab code 91290b3, package sha256
 `c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735`) did not clear the stage: an API
 Gateway v2 stage keeps its last throttle (5/s, burst 10) when the property is removed. Adding

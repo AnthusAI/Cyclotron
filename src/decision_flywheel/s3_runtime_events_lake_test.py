@@ -14,9 +14,7 @@ from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, events_k
 def open_stores(client=None, name="classifier-a", *, lake=True, acquire=True, **options):
     client = client or ConditionalS3()
     j = journal(client, name=name)
-    result = S3RuntimeStores(
-        j, max_records=10000, cache_owned=True, events_lake=runtime_events_lake(j) if lake else None, **options
-    )
+    result = S3RuntimeStores(j, cache_owned=True, events_lake=runtime_events_lake(j) if lake else None, **options)
     result.initialize()
     if acquire:
         result.acquire(str(uuid4()))
@@ -241,12 +239,10 @@ def test_a_lake_of_another_runtime_or_scope_is_refused():
     j = journal(client, name="classifier-a")
     other = journal(client, name="classifier-b")
     with pytest.raises(ValueError):
-        S3RuntimeStores(j, max_records=10, events_lake=runtime_events_lake(other))
-    wrong_scope = MemoryRecordLake(
-        other.boundary[0].__class__("account-b", "workspace-a"), "runtime", events_kind(j), max_record_bytes=1000
-    )
+        S3RuntimeStores(j, events_lake=runtime_events_lake(other))
+    wrong_scope = MemoryRecordLake(other.boundary[0].__class__("account-b", "workspace-a"), "runtime", events_kind(j))
     with pytest.raises(ValueError):
-        S3RuntimeStores(j, max_records=10, events_lake=wrong_scope)
+        S3RuntimeStores(j, events_lake=wrong_scope)
 
 
 def test_runtimes_in_one_scope_do_not_share_a_lake():

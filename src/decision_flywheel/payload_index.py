@@ -25,7 +25,7 @@ class DynamoPayloadIndex:
     """Low-level DynamoDB client; string PK=account/workspace, SK=SHA256.
 
     No infrastructure is created. Losing the table loses only discovery hints;
-    a bounded stream of known canonical references can rebuild it. The index
+    a stream of known canonical references can rebuild it. The index
     does not identify a current generation, prove completeness or grant dispatch.
     """
 
@@ -34,19 +34,15 @@ class DynamoPayloadIndex:
             raise ValueError("fixed table and account/workspace scope required")
         self.client, self.table, self.scope = client, table, scope
 
-    def rebuild(self, payloads, references, *, max_records):
-        """Add verified candidates; bounded and safely repeatable after failure.
+    def rebuild(self, payloads, references):
+        """Add verified candidates; safely repeatable after failure.
 
         Explicit failure can leave partial index progress. It never removes
         canonical bytes or existing candidates. Snapshot discovery is the host's
-        job; this is not an unbounded bucket/table scan or a migration authority.
+        job; this is not a bucket/table scan or a migration authority.
         """
-        if type(max_records) is not int or max_records < 1:
-            raise ValueError("bounded rebuild required")
         count = 0
         for reference in references:
-            if count >= max_records:
-                raise ValueError("payload index rebuild budget exceeded")
             if not isinstance(reference, PayloadRef) or reference.scope != self.scope:
                 raise PermissionError("payload index scope refused")
             payloads.get(reference)  # Verify canonical existence, length and hash.
@@ -69,8 +65,8 @@ class DynamoPayloadIndex:
             raise IndexCorrupt("invalid payload index key") from None
 
     def page(self, *, after=None, limit=100):
-        if type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("bounded index page required")
+        if type(limit) is not int or limit < 1:
+            raise ValueError("positive index page size required")
         request = dict(
             TableName=self.table,
             KeyConditionExpression="PK = :scope",
@@ -86,7 +82,7 @@ class DynamoPayloadIndex:
         response = self.client.query(**request)
         rows = response.get("Items")
         if not isinstance(rows, list) or len(rows) > limit:
-            raise IndexCorrupt("invalid bounded index page")
+            raise IndexCorrupt("index page larger than requested")
         references, last = [], after
         for row in rows:
             try:

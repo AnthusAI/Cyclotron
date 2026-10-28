@@ -53,11 +53,11 @@ verdicts, diagnosis causes/elements and four forward-evaluation tables.
 
 ```python
 # Source is a quiescent native runtime store, or wheel.runtime_storage.
-snapshot = source.export_storage(max_records=10000, max_bytes=64000000)
+snapshot = source.export_storage()
 
 from decision_flywheel.runtime_storage import SQLiteRuntimeStateStorage
 restored = SQLiteRuntimeStateStorage(destination_path)
-restored.restore_storage(snapshot, max_records=10000, max_bytes=64000000)
+restored.restore_storage(snapshot)
 restored.close()
 # Open DecisionFlywheel with the matching task/model contract afterwards.
 ```
@@ -71,8 +71,8 @@ verdict order and newest-first artifact reuse. Runtime event and answer-history
 integer IDs preserve their rowids; these tables do not use AUTOINCREMENT and have
 no independent sequence watermark.
 
-Export uses one SQLite snapshot and explicit record/byte preflights. Import first
-copies/validates the bounded snapshot, column types, JSON, ordinals, table presence
+Export uses one SQLite snapshot with no record or byte budget. Import first
+copies/validates the snapshot, column types, JSON, ordinals, table presence
 and every native unique/key constraint in a trusted scratch schema. It never
 executes imported SQL. Unknown or changed table definitions, extra unique
 constraints, views and triggers fail closed. Restore requires an empty destination
@@ -99,7 +99,7 @@ Focused consumer/repository regression: **199 tests passed**. The final migratio
 specifications passed **14 tests** in a separate final run after adding injected-S3 transport and actual
 cache-only reopen coverage. These include complete 20-table round trips, raw JSON,
 row-order/timestamp ties, lazy schemas, interrupted restore rollback, concurrent
-multi-domain export consistency, bad schemas/identities/budgets, pending work and
+multi-domain export consistency, bad schemas/identities, snapshots past the old budgets, pending work and
 provider-free restart. A control/training integration test replaces `wheel.db`
 with a rejecting object and completes the three-control experiment using only the
 repositories.

@@ -31,7 +31,6 @@ from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, events_k
 from .storage_errors import StorageUncertain
 
 SCOPE = StorageScope("account-a", "console")
-LIMIT = 4_000_000
 CLASSIFIER = "classifier-1"
 ROOT = "run-1"
 
@@ -52,27 +51,20 @@ class World:
         self.backend, self.tmp_path = backend, tmp_path
         self.client, self.memory = TreeS3(), {}
         if backend == "file":
-            self.account = file_account(tmp_path, SCOPE, max_bytes=LIMIT)
+            self.account = file_account(tmp_path, SCOPE)
         else:
             self.account = s3_account(
                 self.client,
                 "synthetic-bucket",
                 "111111111111",
                 "account-a",
-                max_bytes=LIMIT,
-                max_records=10000,
-                max_commits=100000,
             )
         if backend == "memory":
-            self.account.events_lake = lambda j: MemoryRecordLake(
-                j.boundary[0], "runtime", events_kind(j), max_record_bytes=LIMIT, store=self.memory
-            )
+            self.account.events_lake = lambda j: MemoryRecordLake(j.boundary[0], "runtime", events_kind(j), store=self.memory)
             self.account.reply_lake = lambda j, label: MemoryRecordLake(
-                j.boundary[0], "shared-batches", f"replies-{label}", max_record_bytes=LIMIT, store=self.memory
+                j.boundary[0], "shared-batches", f"replies-{label}", store=self.memory
             )
-            self.account.results_lake = lambda j: MemoryRecordLake(
-                j.boundary[0], RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=LIMIT, store=self.memory
-            )
+            self.account.results_lake = lambda j: MemoryRecordLake(j.boundary[0], RESULTS_DOMAIN, RESULTS_KIND, store=self.memory)
 
     # -- naming, as the live code derives it
     @property
@@ -94,18 +86,18 @@ class World:
     # -- the old way: nothing goes to a lake
     def catalog(self, *, lake=False):
         j = self.account.journal("console", "catalog")
-        return S3ConsoleStorage(j, max_records=10000, results=self.account.results_lake(j) if lake else None)
+        return S3ConsoleStorage(j, results=self.account.results_lake(j) if lake else None)
 
     def ledger(self, *, lake=False):
         j = self.account.journal("shared-batches", self.ledger_name)
-        return S3BatchStorage(j, max_records=10000, replies=self.account.reply_lake(j, self.hosted) if lake else None)
+        return S3BatchStorage(j, replies=self.account.reply_lake(j, self.hosted) if lake else None)
 
     def runtime(self, name=None, *, lake=False):
         j = self.account.journal("runtime", name or self.runtime_name)
-        return S3RuntimeStores(j, max_records=10000, events_lake=self.account.events_lake(j) if lake else None)
+        return S3RuntimeStores(j, events_lake=self.account.events_lake(j) if lake else None)
 
     def seed(self, events=7, replies=3, jobs=3):
-        root = S3EmbeddedStorage(self.account.journal("workspace", ROOT), max_records=10000)
+        root = S3EmbeddedStorage(self.account.journal("workspace", ROOT))
         root.initialize()
         catalog = self.catalog()
         catalog.initialize()
@@ -145,7 +137,7 @@ class World:
     # -- what a reader sees now, through the live code
     def events(self):
         j = self.account.journal("runtime", self.runtime_name)
-        store = S3RuntimeStores(j, max_records=10000, events_lake=self.account.events_lake(j))
+        store = S3RuntimeStores(j, events_lake=self.account.events_lake(j))
         return store.audit_events()
 
     def replies(self):
@@ -230,9 +222,6 @@ def test_the_dry_run_cannot_write_even_if_it_tried(world):
         "synthetic-bucket",
         "111111111111",
         "account-a",
-        max_bytes=LIMIT,
-        max_records=10000,
-        max_commits=100000,
     )
     calls = len(world.client.calls)
     reports = convert_account(account)
@@ -291,7 +280,7 @@ def test_the_worker_can_take_every_journal_afterwards_and_the_lake_is_never_rewr
     assert runtime.runtime_storage.next_cycle_number() == 10
     assert [e["event_id"] for e in runtime.runtime_storage.history(-1)] == list(range(1, 9))
     runtime.close()
-    root = S3EmbeddedStorage(world.account.journal("workspace", ROOT), max_records=10000)
+    root = S3EmbeddedStorage(world.account.journal("workspace", ROOT))
     root.acquire(str(uuid4()))
     root.release()
     if world.backend != "file":
@@ -326,16 +315,13 @@ def test_a_runtime_held_by_a_worker_is_skipped_and_reported_busy(world):
 
 
 def test_a_workspace_held_by_a_worker_skips_its_ledger_and_runtimes(world):
-    root = S3EmbeddedStorage(world.account.journal("workspace", ROOT), max_records=10000)
+    root = S3EmbeddedStorage(world.account.journal("workspace", ROOT))
     root.acquire(str(uuid4()))
     reports = convert(world, apply=True)
     assert statuses(reports)["runtime:runtime-events"] == statuses(reports)["shared-batches:reply-ledger"] == "busy"
     assert statuses(reports)["console:job-results"] == "converted"
     assert len(world.events().embedded) == 7 and world.ledger().audit_replies()[1]
-    assert (
-        S3EmbeddedStorage(world.account.journal("workspace", ROOT), max_records=10000).journal.read().value["owner"]
-        == root.authority[0]
-    )
+    assert S3EmbeddedStorage(world.account.journal("workspace", ROOT)).journal.read().value["owner"] == root.authority[0]
     root.release()
     assert set(statuses(convert(world, apply=True)).values()) <= {"converted", "nothing-to-convert"}
 
@@ -358,7 +344,7 @@ def test_a_catalog_with_a_running_job_is_busy(world):
 def test_the_conversion_leaves_no_ownership_behind(world):
     convert(world, apply=True)
     assert world.events().record.value["owner"] is None
-    assert S3EmbeddedStorage(world.account.journal("workspace", ROOT), max_records=10000).journal.read().value["owner"] is None
+    assert S3EmbeddedStorage(world.account.journal("workspace", ROOT)).journal.read().value["owner"] is None
 
 
 # --- interruption and resume -----------------------------------------------------------------------------
@@ -461,7 +447,7 @@ def assert_fully_converted(world, original):
     assert world.results() == original["results"]
     lake = world.account.results_lake(world.catalog().journal)
     assert coverage_in(world.catalog().journal.read().value, lake).skipped == () and len(world.lake_keys()) == 7 + 3 + 3
-    root = S3EmbeddedStorage(world.account.journal("workspace", ROOT), max_records=10000)
+    root = S3EmbeddedStorage(world.account.journal("workspace", ROOT))
     assert root.journal.read().value["owner"] is None
 
 
@@ -567,7 +553,7 @@ def test_verification_catches_a_record_corrupted_after_the_commit_and_stops_the_
     if "results" in later:
         assert len(world.catalog().audit_results()[1]) == 3
     # Ownership is released even on a mismatch, so a worker is not locked out by a half-finished tool.
-    assert S3EmbeddedStorage(world.account.journal("workspace", ROOT), max_records=10000).journal.read().value["owner"] is None
+    assert S3EmbeddedStorage(world.account.journal("workspace", ROOT)).journal.read().value["owner"] is None
 
 
 @pytest.mark.parametrize("kind", ["events", "replies", "results"])
@@ -623,16 +609,20 @@ def test_lake_events_written_after_deploy_keep_their_ids_and_order_when_the_embe
     worker.close()
 
 
-def test_more_lake_events_than_the_skip_budget_allows_is_a_problem_and_nothing_changes(world):
+def test_more_lake_events_than_the_old_skip_budget_still_convert_with_ids_and_order_kept(world):
+    # The old 64-entry skip budget refused this runtime; now every earlier lake record is copied after the embedded ones.
+    original = world.events().embedded
     runtime = world.runtime(lake=True)
     runtime.acquire(str(uuid4()))
     for n in range(70):
         runtime.runtime_storage.append_event(json.dumps({"kind": "new", "n": n}))
     runtime.close()
-    before = world.sizes()
     report = convert(world, apply=True, only=("runtime/",))[0]
-    assert report.status == "problem" and "too many records" in report.problems[0]
-    assert world.sizes() == before and len(world.events().embedded) == 7
+    assert report.status == "converted" and report.problems == []
+    audit = world.events()
+    assert audit.embedded == [] and [i for i, _ in audit.stored] == list(range(1, 78))
+    assert audit.stored[:7] == original and [json.loads(p)["n"] for _, p in audit.stored[7:]] == list(range(70))
+    assert len(audit.coverage.skipped) == 70
 
 
 def test_embedded_event_ids_that_are_not_one_to_n_are_refused_rather_than_renumbered(world):
@@ -769,7 +759,7 @@ def test_check_hook_abandons_a_commit_after_the_pages_are_written():
 
     j = journal(name="hook")
     first = j.initialize({"x": 1})
-    lake = MemoryRecordLake(j.boundary[0], "runtime", "events", max_record_bytes=1000)
+    lake = MemoryRecordLake(j.boundary[0], "runtime", "events")
 
     def refuse(refs):
         raise ConversionMismatch("no")

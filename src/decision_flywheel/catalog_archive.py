@@ -1,6 +1,6 @@
 """Immutable catalog migration records, independent of cloud write coordination.
 
-This transports a bounded validated catalog snapshot. It is NOT an implementation
+This transports a validated catalog snapshot. It is NOT an implementation
 of the live CatalogStorage mutation contract or an activation/head protocol.
 """
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 
 from .batch_storage import StorageScope
-from .catalog_snapshot import COLUMNS, SCHEMA, budgets, decode, encode, validate
+from .catalog_snapshot import COLUMNS, SCHEMA, decode, encode, validate
 from .storage_payloads import PayloadRef
 
 MANIFEST_SCHEMA = "cyclotron-catalog-manifest/v1"
@@ -40,22 +40,19 @@ class CatalogArchive:
         if type(value) is not int or value < 0:
             raise ValueError("invalid catalog sequence watermark")
 
-    def __init__(self, payloads, scope, *, max_records, max_bytes):
-        budgets(max_records, max_bytes)
+    def __init__(self, payloads, scope):
         if not isinstance(scope, StorageScope) or getattr(payloads, "scope", None) != scope:
             raise PermissionError("fixed canonical catalog scope required")
         self.payloads, self.scope = payloads, scope
-        self.max_records, self.max_bytes = max_records, max_bytes
 
     def publish(self, snapshot):
-        snapshot = self.validator(snapshot, max_records=self.max_records, max_bytes=self.max_bytes)
+        snapshot = self.validator(snapshot)
         contents = []
         records = []
         for table in self.columns:
             for row in snapshot["tables"][table]:
                 content = encode({"table": table, "row": row})
-                # Compute references before publication so aggregate budgets fail
-                # before side effects. Payloads independently verifies each put.
+                # Payloads independently verifies each put.
                 reference = PayloadRef(self.scope, sha256(content).hexdigest(), len(content))
                 contents.append(content)
                 records.append({"table": table, "digest": reference.digest, "length": reference.length})
@@ -67,16 +64,12 @@ class CatalogArchive:
                 "records": records,
             }
         )
-        if len(manifest) + sum(map(len, contents)) > self.max_bytes:
-            raise ValueError("canonical catalog aggregate byte budget exceeded")
         references = tuple(self.payloads.put(content) for content in contents)
         return CatalogPublication(self.payloads.put(manifest), references)
 
     def read(self, reference):
         if not isinstance(reference, PayloadRef) or reference.scope != self.scope:
             raise PermissionError("canonical catalog scope refused")
-        if reference.length > self.max_bytes:
-            raise ValueError("canonical catalog aggregate byte budget exceeded")
         manifest = decode(self.payloads.get(reference))
         if (
             not isinstance(manifest, dict)
@@ -87,9 +80,8 @@ class CatalogArchive:
             raise ValueError("invalid canonical catalog manifest")
         self._check_metadata(manifest[self.metadata_field])
         rows = manifest["records"]
-        if not isinstance(rows, list) or len(rows) > self.max_records:
-            raise ValueError("canonical catalog record budget exceeded")
-        total = reference.length
+        if not isinstance(rows, list):
+            raise ValueError("canonical catalog membership list required")
         references = []
         seen = set()
         for row in rows:
@@ -104,9 +96,6 @@ class CatalogArchive:
             if candidate.digest in seen:
                 raise ValueError("duplicate canonical catalog membership")
             seen.add(candidate.digest)
-            total += candidate.length
-            if total > self.max_bytes:
-                raise ValueError("canonical catalog aggregate byte budget exceeded")
             references.append(candidate)
         tables = {table: [] for table in self.columns}
         for member, candidate in zip(rows, references):
@@ -115,9 +104,7 @@ class CatalogArchive:
                 raise ValueError("canonical catalog record/manifest mismatch")
             tables[member["table"]].append(envelope["row"])
         return self.validator(
-            {"schema": self.snapshot_schema, "tables": tables, self.snapshot_metadata_field: manifest[self.metadata_field]},
-            max_records=self.max_records,
-            max_bytes=self.max_bytes,
+            {"schema": self.snapshot_schema, "tables": tables, self.snapshot_metadata_field: manifest[self.metadata_field]}
         )
 
 

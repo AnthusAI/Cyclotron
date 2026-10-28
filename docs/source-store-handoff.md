@@ -67,12 +67,11 @@ is unchanged. Frozen model/head/plan validation and cumulative endpoint ceilings
 remain in the shared evaluator. This does not make a distributed budget authority
 choice or claim that a supplied partial cloud composition is deployable.
 
-## Bounded native migrations
+## Native migrations
 
 `domain_snapshots.py` supplies `embedded_codec()`, `review_codec()` and
 `evaluation_codec()` over the shared `NativeDomainCodec`. Native storage adapters
-expose `export_storage(max_records=..., max_bytes=...)` and
-`restore_storage(snapshot, ...)`. Restore requires a fresh/empty compatible
+expose `export_storage()` and `restore_storage(snapshot)`, with no record or byte budget. Restore requires a fresh/empty compatible
 native destination with no open transaction. Snapshots carry fixed raw columns,
 physical `_rowid` and native sequence watermarks, never executable SQL.
 

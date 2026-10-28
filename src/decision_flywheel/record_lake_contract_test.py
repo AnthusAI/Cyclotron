@@ -4,15 +4,13 @@ import pytest
 
 from .batch_storage import StorageScope
 from .file_journal import LocalFileJournal
-from .journal import JournalConflict, JournalLimit
+from .journal import JournalConflict
 from .record_lake import (
-    MAX_SKIPPED,
     Coverage,
     FileRecordLake,
     MemoryRecordLake,
     RecordConflict,
     RecordLake,
-    RecordLimit,
     RecordUnavailable,
     S3RecordLake,
     commit_with_records,
@@ -23,7 +21,8 @@ from .s3_journal_test import journal as s3_journal
 from .storage_payloads import FilePayloads
 
 SCOPE = StorageScope("account-a", "workspace-a")
-LIMIT = 2000
+# Larger than every byte budget the storage layer used to enforce (4 MiB per reply record and journal).
+LARGE = "x" * (5 * 1024 * 1024)
 
 
 class ListingS3(ConditionalS3):
@@ -66,15 +65,15 @@ def world(request, tmp_path):
         def journal(self, name="run-a"):
             if request.param == "s3":
                 return s3_journal(fake, SCOPE, name)
-            payloads = FilePayloads(tmp_path, SCOPE, max_bytes=1000000)
-            return LocalFileJournal(payloads, "runtime", name, max_bytes=1000000, max_commits=100)
+            payloads = FilePayloads(tmp_path, SCOPE)
+            return LocalFileJournal(payloads, "runtime", name)
 
-        def lake(self, kind="events", limit=LIMIT):
+        def lake(self, kind="events"):
             if request.param == "memory":
-                return MemoryRecordLake(SCOPE, "runtime", kind, max_record_bytes=limit, store=memory_store)
+                return MemoryRecordLake(SCOPE, "runtime", kind, store=memory_store)
             if request.param == "file":
-                return FileRecordLake(FilePayloads(tmp_path, SCOPE, max_bytes=1000000), "runtime", kind, max_record_bytes=limit)
-            return S3RecordLake(self.journal().payloads, "runtime", kind, max_record_bytes=limit)
+                return FileRecordLake(FilePayloads(tmp_path, SCOPE), "runtime", kind)
+            return S3RecordLake(self.journal().payloads, "runtime", kind)
 
         def stored(self, kind="events"):
             """Raw bytes by sequence, straight from the underlying store."""
@@ -112,27 +111,21 @@ def test_kinds_are_separate_collections(world):
     assert world.lake("answers").sequences() == []
 
 
-def test_a_record_over_its_own_size_limit_is_refused_and_a_record_at_the_limit_is_kept(world):
-    lake = world.lake(limit=200)
-    with pytest.raises(RecordLimit):
-        lake.put(1, {"text": "x" * 500})
-    assert lake.sequences() == []
-    overhead = len(lake._encode(1, {"text": ""}))
-    lake.put(1, {"text": "x" * (200 - overhead)})
-    assert len(world.stored()[1]) == 200
+def test_a_record_larger_than_the_old_four_mib_record_budget_is_written_and_reads_back(world):
+    lake = world.lake()
+    ref = lake.put(1, {"text": LARGE})
+    assert ref.length > 5 * 1024 * 1024 and len(world.stored()[1]) == ref.length
+    assert world.lake().read(1) == {"text": LARGE}
 
 
-def test_the_size_limit_is_per_record_so_the_collection_can_grow_past_it(world):
-    lake = world.lake(limit=200)
-    for seq in range(1, 31):
-        lake.put(seq, {"text": "x" * 40})
-    assert len(lake.sequences()) == 30 and sum(len(c) for c in world.stored().values()) > 200
+def test_a_lake_has_no_per_record_byte_budget_to_configure(world):
+    assert not hasattr(world.lake(), "max_record_bytes")
 
 
-def test_an_oversized_record_in_a_batch_stops_the_whole_batch_before_any_write(world):
-    lake = world.lake(limit=200)
-    with pytest.raises(RecordLimit):
-        lake.append(Coverage(), [{"text": "ok"}, {"text": "x" * 500}])
+def test_a_non_json_record_in_a_batch_stops_the_whole_batch_before_any_write(world):
+    lake = world.lake()
+    with pytest.raises(ValueError):
+        lake.append(Coverage(), [{"text": "ok"}, {"value": float("nan")}])
     assert lake.sequences() == []
 
 
@@ -191,12 +184,13 @@ def test_a_crash_between_writing_records_and_flipping_the_head_changes_nothing_a
     assert world.journal().read().value == {"status": "idle"}
 
 
-def test_a_state_over_the_journal_limit_refuses_the_commit_and_the_records_stay_invisible(world):
+def test_a_control_state_larger_than_the_old_journal_budget_commits_and_its_records_become_visible(world):
     journal, lake = world.journal(), world.lake()
     head = journal.initialize({"status": "idle"})
-    with pytest.raises(JournalLimit):
-        commit_with_records(journal, head, [(lake, [{"e": 1}])], lambda state, made: state.update(big="x" * 1000001))
-    assert coverage_in(world.journal().read().value, lake) == Coverage()
+    commit_with_records(journal, head, [(lake, [{"e": 1}])], lambda state, made: state.update(big=LARGE))
+    seen = world.journal().read()
+    assert seen.value["big"] == LARGE
+    assert lake.read_covered(coverage_in(seen.value, lake)) == [(1, {"e": 1})]
 
 
 def test_a_retry_after_an_abandoned_attempt_adopts_an_identical_record_or_skips_a_different_one(world):
@@ -240,16 +234,18 @@ def test_a_covered_record_that_has_gone_missing_fails_closed(world):
         lake.read_covered(Coverage(2))
 
 
-def test_too_many_orphans_to_record_fails_loudly_instead_of_growing_the_control_state(world):
+def test_any_number_of_occupied_sequences_are_skipped_and_the_fresh_record_takes_the_next_one(world):
+    # More orphans than the old skip (64) and per-record collision (16) budgets ever allowed.
     lake = world.lake()
-    for seq in range(1, MAX_SKIPPED + 3):
+    for seq in range(1, 101):
         lake.put(seq, {"orphan": seq})
-    with pytest.raises(RecordConflict):
-        lake.append(Coverage(), [{"fresh": 1}])
+    coverage, refs = lake.append(Coverage(), [{"fresh": 1}])
+    assert coverage == Coverage(101, tuple(range(1, 101))) and [ref.seq for ref in refs] == [101]
+    assert lake.read_covered(coverage) == [(101, {"fresh": 1})]
 
 
 def test_a_foreign_scope_lake_cannot_join_a_journal_commit(world):
     journal = world.journal()
-    foreign = MemoryRecordLake(StorageScope("other", "workspace-a"), "runtime", "events", max_record_bytes=LIMIT)
+    foreign = MemoryRecordLake(StorageScope("other", "workspace-a"), "runtime", "events")
     with pytest.raises(PermissionError):
         commit_with_records(journal, journal.initialize({}), [(foreign, [{"e": 1}])])

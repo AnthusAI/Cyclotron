@@ -102,7 +102,6 @@ def test_actual_s3_sdk_rechecks_after_waiting_for_execution_ownership_before_sta
     model = Model()
     composition = S3CyclotronStores(
         journal(client, name="guard-root"),
-        max_records=1000,
         journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
     )
 

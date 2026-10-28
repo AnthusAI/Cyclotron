@@ -216,14 +216,12 @@ def test_lost_settlement_acknowledgement_recovers_receipt_without_another_execut
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("budget", ["records", "bytes"])
-def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path, budget):
+def test_receipts_past_the_old_record_and_byte_budgets_still_let_steering_dispatch(tmp_path):
     async def scenario():
         _, records, _, binding_ref = setup_records(tmp_path)
-        if budget == "records":
-            records.max_records = 1
-        else:
-            records.max_bytes = 20_000
+        # More than the old one-record and 20,000-byte ceilings these specs once set.
+        records.put("fixture", {"text": "x" * 30_000}, "2026-01-02T00:00:00Z")
+        records.put("fixture", {"text": "y" * 30_000}, "2026-01-02T00:00:01Z")
 
         class Evaluator:
             output_id = "intel"
@@ -248,8 +246,13 @@ def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path
             "explanation": "Human request.",
         }
         gateway = PublicationSteering(records, {"intel": evaluator}, owner_lock=asyncio.Lock(), allow_evaluation=True)
-        with pytest.raises(PublicationError, match="nothing dispatched"):
-            await gateway.command(actor, binding, payload)
-        assert evaluator.calls == 0 and records.records() == []
+        await gateway.command(actor, binding, payload)
+        assert evaluator.calls == 1
+        assert sorted(row["kind"] for row in records.records()) == [
+            "fixture",
+            "fixture",
+            "steering-complete",
+            "steering-pending",
+        ]
 
     asyncio.run(scenario())

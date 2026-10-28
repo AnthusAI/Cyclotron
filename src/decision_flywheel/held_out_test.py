@@ -138,7 +138,7 @@ def test_the_cloud_store_keeps_held_out_sets_and_reports_across_reopen():
     client = ConditionalS3()
 
     def cloud_stores():
-        return S3CyclotronStores(journal(client, name="held-out-root"), max_records=10000,
+        return S3CyclotronStores(journal(client, name="held-out-root"),
                                  journal_for=lambda domain, name: journal(client, name=domain + "-" + name))
     with Cyclotron.open(None, learning_definition(), RubricReadingModel(), storage=cloud_stores(),
                         max_requests=500) as cyclotron:

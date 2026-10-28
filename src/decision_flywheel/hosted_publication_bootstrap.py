@@ -36,9 +36,7 @@ def freeze_run(runtime, account, session, body):
         runtime.accounts.authorize(current.access_token, account, current.person_id, "console:write")
 
     check()
-    store = S3ConsoleStorage(
-        _GuardedJournal(runtime.journal(account, "console", "catalog"), check), max_records=runtime.config.max_records
-    )
+    store = S3ConsoleStorage(_GuardedJournal(runtime.journal(account, "console", "catalog"), check))
     signature = sha256(encode([account, body["name"], body["config"]])).hexdigest()
     with store.transaction():
         # Retry checks precede latest resolution: a later catalog revision must

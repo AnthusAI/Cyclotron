@@ -52,7 +52,7 @@ class RevisionRef:
 
 
 class PublicationRecords:
-    def __init__(self, catalog, *, account_id, source_lists, binding_list, record_list, max_records=1000, max_bytes=2_000_000):
+    def __init__(self, catalog, *, account_id, source_lists, binding_list, record_list):
         if (
             not account_id
             or not source_lists
@@ -66,8 +66,6 @@ class PublicationRecords:
         self.source_lists = frozenset(source_lists)
         self.binding_list = binding_list
         self.record_list = record_list
-        self.max_records = max_records
-        self.max_bytes = max_bytes
 
     def reference(self, list_id, item_id, revision):
         if list_id not in self.source_lists | {self.binding_list}:
@@ -148,29 +146,14 @@ class PublicationRecords:
                 "data": data,
             }
         )
-        if len(canonical(values).encode()) > self.max_bytes:
-            raise ValueError("publication record exceeds byte budget")
         identifier = "publication-" + digest(values)
         occurred = datetime.fromisoformat(at.replace("Z", "+00:00"))
         occurred = occurred.replace(tzinfo=timezone.utc) if occurred.tzinfo is None else occurred.astimezone(timezone.utc)
         return {"id": identifier, "occurred_at": occurred.isoformat(), "values": values}
 
-    def check_budget(self, rows):
-        if len(rows) > self.max_records or len(canonical(rows).encode()) > self.max_bytes:
-            raise ValueError("publication record discovery budget exceeded")
-
     def ensure_capacity(self, items):
-        # Exact local catalog-row accounting under the existing single owner;
-        # this preflight is not a distributed reservation or claim.
-        rows = list(self._rows())
-        existing = frozenset(row["id"] for row in rows)
-        known = set(existing)
-        for item in items:
-            if item["id"] not in known:
-                rows.append({**item, "revision": 1, "fingerprint": digest(item)})
-                known.add(item["id"])
-        self.check_budget(rows)
-        return existing
+        """The record ids that already exist. Validates every stored record; there is no count or byte ceiling."""
+        return frozenset(row["id"] for row in self._rows())
 
     def put(self, kind, data, at):
         item = self.preview(kind, data, at)
@@ -181,7 +164,6 @@ class PublicationRecords:
 
     def _rows(self):
         rows = self.catalog.snapshot_items(self.record_list)
-        self.check_budget(rows)
         for row in rows:
             values = row["values"]
             if (

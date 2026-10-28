@@ -19,7 +19,6 @@ from .s3_journal_test import journal as s3_journal
 from .storage_payloads import FilePayloads
 
 SCOPE = StorageScope("account-a", "workspace-a")
-LIMIT = 100000
 
 
 def decision_result(n):
@@ -39,20 +38,18 @@ def world(request, tmp_path):
         def journal(self):
             if request.param == "s3":
                 return s3_journal(fake, SCOPE, "console")
-            payloads = FilePayloads(tmp_path, SCOPE, max_bytes=1000000)
-            return LocalFileJournal(payloads, "console", "catalog", max_bytes=1000000, max_commits=1000)
+            payloads = FilePayloads(tmp_path, SCOPE)
+            return LocalFileJournal(payloads, "console", "catalog")
 
         def lake(self):
             if request.param == "memory":
-                return MemoryRecordLake(SCOPE, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=LIMIT, store=memory_store)
+                return MemoryRecordLake(SCOPE, RESULTS_DOMAIN, RESULTS_KIND, store=memory_store)
             if request.param == "file":
-                return FileRecordLake(
-                    FilePayloads(tmp_path, SCOPE, max_bytes=1000000), RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=LIMIT
-                )
-            return S3RecordLake(self.journal().payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=LIMIT)
+                return FileRecordLake(FilePayloads(tmp_path, SCOPE), RESULTS_DOMAIN, RESULTS_KIND)
+            return S3RecordLake(self.journal().payloads, RESULTS_DOMAIN, RESULTS_KIND)
 
         def store(self, *, lake=True, initialize=False):
-            result = S3ConsoleStorage(self.journal(), max_records=10000, results=self.lake() if lake else None)
+            result = S3ConsoleStorage(self.journal(), results=self.lake() if lake else None)
             if initialize:
                 result.initialize()
             return result
@@ -290,10 +287,9 @@ def test_a_copied_record_does_not_pass_as_another_jobs_result(world):
 def test_a_lake_that_is_not_this_catalogs_job_result_lake_is_refused(world):
     j = world.journal()
     with pytest.raises(ValueError):
-        S3ConsoleStorage(j, max_records=10, results=MemoryRecordLake(SCOPE, "console", "events", max_record_bytes=100))
+        S3ConsoleStorage(j, results=MemoryRecordLake(SCOPE, "console", "events"))
     with pytest.raises(ValueError):
         S3ConsoleStorage(
             j,
-            max_records=10,
-            results=MemoryRecordLake(StorageScope("account-b", "w"), RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=100),
+            results=MemoryRecordLake(StorageScope("account-b", "w"), RESULTS_DOMAIN, RESULTS_KIND),
         )

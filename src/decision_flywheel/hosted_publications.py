@@ -246,7 +246,7 @@ class _GuardedJournal:
 
     def __init__(self, journal, check):
         self.journal, self.check = journal, check
-        self.namespace, self.max_bytes, self.boundary = journal.namespace, journal.max_bytes, journal.boundary
+        self.namespace, self.boundary = journal.namespace, journal.boundary
 
     def exists(self):
         return self.journal.exists()
@@ -389,7 +389,7 @@ class PublicationCommandRuntime:
             journal = self.host.journal(self.actor.account_id, "shared-batches" if domain == "shared" else domain, key)
             return _GuardedJournal(journal, check_scope) if priming else journal
 
-        stores = S3CyclotronStores(journal("workspace", name), journal_for=journal, max_records=self.host.config.max_records)
+        stores = S3CyclotronStores(journal("workspace", name), journal_for=journal)
         actor = PublicationActor(
             self.actor.account_id,
             self.actor.service_id if machine else self.actor.person_id,

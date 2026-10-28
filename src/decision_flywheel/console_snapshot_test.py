@@ -44,11 +44,11 @@ def test_console_roundtrip_preserves_definition_pins_commands_items_cursors_and_
     snapshot = source.export_storage()
     scope = StorageScope("account", "workspace")
     payloads = (
-        FilePayloads(tmp_path / "payloads", scope, max_bytes=1000000)
+        FilePayloads(tmp_path / "payloads", scope)
         if backend == "file"
-        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope, max_bytes=1000000)
+        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope)
     )
-    archive = ConsoleArchive(payloads, scope, max_records=1000, max_bytes=1000000)
+    archive = ConsoleArchive(payloads, scope)
     publication = archive.publish(snapshot)
     assert archive.publish(snapshot) == publication
     assert archive.read(publication.manifest) == snapshot
@@ -90,10 +90,20 @@ def test_console_restore_rejects_changed_references_duplicate_ordinals_and_missi
         with pytest.raises(ValueError):
             destination.restore_storage(candidate)
         assert destination.runs() == [] and destination.classifiers() == []
-    with pytest.raises(ValueError):
+
+
+def test_a_console_larger_than_the_old_record_and_byte_budgets_exports_and_restores(tmp_path):
+    source, _, _ = console(tmp_path / "source.sqlite")
+    source.save_item_list("big", "Big")
+    items = [{"id": f"item-{n:05d}", "occurred_at": "2026-01-01", "values": {"n": n}} for n in range(250)]
+    items.append({"id": "large", "occurred_at": "2026-01-02", "values": {"text": "x" * (5 * 1024 * 1024)}})
+    source.upsert_list_items("big", items)
+    snapshot = source.export_storage()
+    destination = WebStore(tmp_path / "destination.sqlite")
+    destination.restore_storage(snapshot)
+    assert destination.export_storage() == snapshot
+    with pytest.raises(TypeError):
         source.export_storage(max_records=1)
-    with pytest.raises(ValueError):
-        source.export_storage(max_bytes=100)
 
 
 def test_unknown_native_columns_are_never_silently_dropped_from_console_export(tmp_path):

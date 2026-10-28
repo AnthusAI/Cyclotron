@@ -26,7 +26,6 @@ def test_each_frozen_set_is_stored_as_its_own_record_with_an_index_in_the_cloud_
     client = ConditionalS3()
     stores = S3CyclotronStores(
         journal(client, name="held-out-root"),
-        max_records=10000,
         journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
     )
     with Cyclotron.open(None, learning_definition(), RubricReadingModel(), storage=stores, max_requests=500) as cyclotron:

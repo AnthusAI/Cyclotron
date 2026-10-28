@@ -37,12 +37,10 @@ from .storage_payloads import FilePayloads, S3Payloads
 
 SCHEMA = "cyclotron-record/v1"
 SEQUENCE_WIDTH = 12
+# The widest sequence the fixed-width record filename can spell. A filename format, not a budget.
 MAX_SEQUENCE = 10**SEQUENCE_WIDTH - 1
-# Orphans are rare. A bounded skip list keeps control state small and makes a runaway writer fail loudly.
-MAX_SKIPPED = 64
-MAX_COLLISIONS_PER_RECORD = 16
 RECORDS_KEY = "records"
-_NAME = re.compile(r"[a-zA-Z0-9_-]{1,128}")
+_NAME = re.compile(r"[a-zA-Z0-9_-]+")
 _FILE = re.compile(rf"(\d{{{SEQUENCE_WIDTH}}})\.json")
 _EXISTS = ("PreconditionFailed", "ConditionalRequestConflict", "412", "409")
 
@@ -52,7 +50,7 @@ class RecordConflict(StorageConflict):
 
 
 class RecordLimit(StorageLimit):
-    """A record, sequence or skip budget would be exceeded. Nothing was written or truncated."""
+    """A sequence falls outside the fixed-width record filename format. Nothing was written."""
 
 
 class RecordUncertain(StorageUncertain):
@@ -98,7 +96,6 @@ class Coverage:
         if (
             type(self.last) is not int
             or not 0 <= self.last <= MAX_SEQUENCE
-            or len(skipped) > MAX_SKIPPED
             or any(type(s) is not int or not 1 <= s < self.last for s in skipped)
             or list(skipped) != sorted(set(skipped))
         ):
@@ -145,7 +142,6 @@ class Records(Protocol):
     domain: str
     kind: str
     name: str
-    max_record_bytes: int
 
     def put(self, seq, value) -> RecordRef: ...
     def read(self, seq): ...
@@ -158,12 +154,10 @@ class Records(Protocol):
 class RecordLake:
     """Shared record logic. A back end supplies only ``_create``, ``_fetch`` and ``_list``."""
 
-    def __init__(self, scope, domain, kind, *, max_record_bytes):
+    def __init__(self, scope, domain, kind):
         if not isinstance(scope, StorageScope) or any(not isinstance(v, str) or not _NAME.fullmatch(v) for v in (domain, kind)):
             raise ValueError("fixed scope, domain and kind required")
-        if type(max_record_bytes) is not int or max_record_bytes < 1:
-            raise ValueError("explicit positive per-record byte budget required")
-        self.scope, self.domain, self.kind, self.max_record_bytes = scope, domain, kind, max_record_bytes
+        self.scope, self.domain, self.kind = scope, domain, kind
         self.name = f"{domain}/{kind}"
         self.namespace = f"{scope.key}/records/{domain}/{kind}"
 
@@ -183,11 +177,8 @@ class RecordLake:
     # Records ---------------------------------------------------------------
     def _encode(self, seq, value):
         if type(seq) is not int or not 1 <= seq <= MAX_SEQUENCE:
-            raise RecordLimit("record sequence out of range")
-        content = encode({"schema": SCHEMA, "namespace": self.namespace, "seq": seq, "value": value})
-        if len(content) > self.max_record_bytes:
-            raise RecordLimit("record exceeds its byte budget; nothing written")
-        return content
+            raise RecordLimit("record sequence outside the record filename format")
+        return encode({"schema": SCHEMA, "namespace": self.namespace, "seq": seq, "value": value})
 
     def _ref(self, seq, content):
         return RecordRef(self.domain, self.kind, seq, sha256(content).hexdigest(), len(content))
@@ -202,7 +193,7 @@ class RecordLake:
         return self._ref(seq, content)
 
     def encoded_size(self, seq, value):
-        """Bytes the record would occupy at ``seq``. Refuses what exceeds the byte budget."""
+        """Bytes the record would occupy at ``seq``."""
         return len(self._encode(seq, value))
 
     def stored_ref(self, seq):
@@ -240,23 +231,17 @@ class RecordLake:
         """
         values = list(values)
         for value in values:
-            self._encode(MAX_SEQUENCE, value)  # size-check everything before writing anything
+            self._encode(MAX_SEQUENCE, value)  # prove everything is canonical JSON before writing anything
         seq, skipped, refs = coverage.last, list(coverage.skipped), []
         for value in values:
-            collisions = 0
             while True:
                 seq += 1
                 try:
                     refs.append(self.put(seq, value))
                     break
                 except RecordConflict:
-                    # An abandoned or competing write holds this sequence. Skip it; the control state will say so.
+                    # An abandoned or competing write holds this sequence. Skip it, take the next; the control state will say so.
                     skipped.append(seq)
-                    collisions += 1
-                    if collisions > MAX_COLLISIONS_PER_RECORD:
-                        raise RecordConflict("too many occupied sequences; reconcile orphans") from None
-        if len(skipped) > MAX_SKIPPED:
-            raise RecordLimit("too many skipped sequences; reconcile orphans before appending")
         return Coverage(seq, tuple(skipped)), refs
 
     def read_covered(self, coverage, after=0, limit=None):
@@ -271,8 +256,8 @@ class RecordLake:
 class MemoryRecordLake(RecordLake):
     """In-process lake for tests. Pass the same ``store`` dict to model reopening."""
 
-    def __init__(self, scope, domain, kind, *, max_record_bytes, store=None):
-        super().__init__(scope, domain, kind, max_record_bytes=max_record_bytes)
+    def __init__(self, scope, domain, kind, *, store=None):
+        super().__init__(scope, domain, kind)
         self.store = {} if store is None else store
 
     def _create(self, seq, content):
@@ -289,10 +274,10 @@ class MemoryRecordLake(RecordLake):
 class FileRecordLake(RecordLake):
     """Trusted local directory, byte-identical in layout to the S3 keys under the payload root."""
 
-    def __init__(self, payloads, domain, kind, *, max_record_bytes):
+    def __init__(self, payloads, domain, kind):
         if not isinstance(payloads, FilePayloads):
             raise ValueError("injected scoped file payload adapter required")
-        super().__init__(payloads.scope, domain, kind, max_record_bytes=max_record_bytes)
+        super().__init__(payloads.scope, domain, kind)
         self.directory = payloads.root / self.namespace
 
     def _path(self, seq):
@@ -320,14 +305,11 @@ class FileRecordLake(RecordLake):
     def _fetch(self, seq):
         try:
             with open(self._path(seq), "rb") as stream:
-                content = stream.read(self.max_record_bytes + 1)
+                return stream.read()
         except FileNotFoundError:
             return None
         except OSError as error:
             raise RecordUnavailable("record unavailable", cause_name(error)) from None
-        if len(content) > self.max_record_bytes:
-            raise RecordCorrupt("record exceeds its byte budget")
-        return content
 
     def _list(self, after, limit):
         try:
@@ -347,7 +329,7 @@ class S3RecordLake(RecordLake):
     guarantee the payload store relies on; the bucket policy enforces it for the whole ``records`` prefix.
     """
 
-    def __init__(self, payloads, domain, kind, *, max_record_bytes):
+    def __init__(self, payloads, domain, kind):
         if not isinstance(payloads, S3Payloads):
             raise ValueError("injected scoped S3 payload adapter required")
         # As for S3Journal: a hidden SDK retry could turn a lost successful PUT into a later 412.
@@ -355,7 +337,7 @@ class S3RecordLake(RecordLake):
         if meta is not None and getattr(meta, "config", None) is not None:
             if (meta.config.retries or {}).get("total_max_attempts") != 1:
                 raise ValueError("conditional S3 client requires total_max_attempts=1")
-        super().__init__(payloads.scope, domain, kind, max_record_bytes=max_record_bytes)
+        super().__init__(payloads.scope, domain, kind)
         self.client, self.bucket, self.owner = payloads.client, payloads.bucket, payloads.owner
 
     def _key(self, seq):
@@ -383,7 +365,7 @@ class S3RecordLake(RecordLake):
             response = self.client.get_object(Bucket=self.bucket, Key=self._key(seq), ExpectedBucketOwner=self.owner)
             stream = response["Body"]
             length = response["ContentLength"]
-            if type(length) is not int or not 0 < length <= self.max_record_bytes:
+            if type(length) is not int or length < 1:
                 raise ValueError("invalid record object")
             content = stream.read(length + 1)
             if len(content) != length:
@@ -434,7 +416,7 @@ def commit_with_records(journal, expected, writes, change=None, *, invalidate=No
     created, then ONE journal commit stores the updated coverage together with whatever ``change(state, refs)``
     edits in place (``refs`` maps ``lake.name`` to that lake's ``RecordRef`` list). If anything fails before or
     during that commit the records stay in the lake as orphans that no state covers, so nobody can read them.
-    Returns ``(JournalRecord, refs)``. Conflict, uncertain and limit outcomes surface as the shared storage
+    Returns ``(JournalRecord, refs)``. Conflict and uncertain outcomes surface as the shared storage
     exceptions, exactly as ``commit_with_contract`` reports them; retrying a conflict stays the caller's call.
 
     ``check(refs)``, when given, runs after every page is written and before the head moves. Raising from it

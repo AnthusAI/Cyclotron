@@ -195,14 +195,32 @@ def test_a_restart_preserves_commands_that_have_not_started(tmp_path):
     assert store.claim_command()["id"] == job["id"]
 
 
-def test_event_batches_roll_back_together_and_read_pages_are_bounded(tmp_path):
+def test_event_batches_roll_back_together_and_a_page_must_hold_at_least_one_event(tmp_path):
     store = WebStore(tmp_path / "web.sqlite")
     run = store.create_run("A", "recorded", {})
     with pytest.raises(ValueError):
         store.append_batch(run["id"], [("one", {"kind": "prediction"}), ("bad", {})])
     assert store.events(run["id"]) == []
     with pytest.raises(ValueError):
-        store.events(run["id"], limit=10001)
+        store.events(run["id"], limit=0)
+
+
+def test_event_batches_and_events_past_the_old_count_and_size_caps_are_kept(tmp_path):
+    # The old caps were 200 events per batch, 4,000,000 bytes per event and 1,000 events per page.
+    store = WebStore(tmp_path / "web.sqlite")
+    run = store.create_run("A", "recorded", {})
+    batch = [(f"e{n}", {"kind": "prediction", "n": n}) for n in range(1200)]
+    batch.append(("large", {"kind": "prediction", "text": "x" * (5 * 1024 * 1024)}))
+    assert len(store.append_batch(run["id"], batch)) == 1201
+    events = store.events(run["id"], limit=5000)
+    assert len(events) == 1201 and events[-1]["payload"]["text"] == "x" * (5 * 1024 * 1024)
+
+
+def test_a_run_lists_every_job_newest_first_past_the_old_twenty_job_window(tmp_path):
+    store = WebStore(tmp_path / "web.sqlite")
+    run = store.create_run("Live", "live", {})
+    made = [store.command(run["id"], f"request-{n}", "skip", {"n": n})["id"] for n in range(25)]
+    assert [job["id"] for job in store.jobs(run["id"])] == list(reversed(made))
 
 
 def test_final_summary_is_persisted_without_rewriting_run_configuration(tmp_path):

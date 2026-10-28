@@ -206,8 +206,8 @@ class SQLiteRunStorage:
 
     def append_batch(self, run_id, events):
         self.run(run_id)
-        if not 1 <= len(events) <= 200:
-            raise ValueError("ingest between one and 200 events")
+        if not events:
+            raise ValueError("ingest at least one event")
         results = []
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -215,8 +215,6 @@ class SQLiteRunStorage:
                 if not source_id or not isinstance(payload, dict) or not payload.get("kind"):
                     raise ValueError("event identity and kind required")
                 data = encode(payload)
-                if len(data.encode()) > 4_000_000:
-                    raise ValueError("event exceeds size limit")
                 row = db.execute("SELECT * FROM web_events WHERE run_id=? AND source_id=?", (run_id, source_id)).fetchone()
                 if row and row["payload"] != data:
                     raise ValueError("event identity already has different content")
@@ -235,8 +233,8 @@ class SQLiteRunStorage:
 
     def events(self, run_id, *, after=0, limit=1000):
         self.run(run_id)
-        if not 1 <= limit <= 1000 or after < 0:
-            raise ValueError("event page must be bounded")
+        if limit < 1 or after < 0:
+            raise ValueError("a non-negative cursor and positive page size required")
         with self.connect() as db:
             return [
                 self._event(r)
@@ -335,9 +333,7 @@ class SQLiteRunStorage:
     def jobs(self, run_id):
         self.run(run_id)
         with self.connect() as db:
-            return [
-                self._job(r) for r in db.execute("SELECT * FROM web_jobs WHERE run_id=? ORDER BY rowid DESC LIMIT 20", (run_id,))
-            ]
+            return [self._job(r) for r in db.execute("SELECT * FROM web_jobs WHERE run_id=? ORDER BY rowid DESC", (run_id,))]
 
     def claim_command(self):
         with self.connect() as db:

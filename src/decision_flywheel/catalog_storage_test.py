@@ -55,10 +55,19 @@ def test_catalog_roundtrip_retains_all_versions_explanations_tombstones_and_raw_
     assert vote["sequence"] == 101
     with pytest.raises(CatalogConflict):
         destination.catalog_storage.restore(snapshot)
-    with pytest.raises(ValueError):
-        source.catalog_storage.export(max_records=1)
-    with pytest.raises(ValueError):
-        source.catalog_storage.export(max_bytes=100)
+
+
+def test_more_items_and_larger_items_than_the_old_caps_upsert_page_and_export(tmp_path):
+    store = WebStore(tmp_path / "large.sqlite")
+    store.save_item_list("papers", "Papers")
+    items = [{"id": f"item-{n:04d}", "occurred_at": "2026-01-01", "values": {"n": n}} for n in range(250)]
+    items.append({"id": "big", "occurred_at": "2026-01-02", "values": {"text": "x" * (5 * 1024 * 1024)}})
+    assert store.upsert_list_items("papers", items)["inserted"] == 251
+    assert len(store.list_items("papers", limit=500)) == 251
+    snapshot = store.catalog_storage.export()
+    assert len(snapshot["tables"]["list_item_revisions"]) == 251
+    with pytest.raises(TypeError):
+        store.catalog_storage.export(max_records=1)
 
 
 def test_invalid_snapshot_never_changes_the_empty_destination(tmp_path):

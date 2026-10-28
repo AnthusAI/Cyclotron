@@ -34,9 +34,8 @@ Safety.
   which is the exact earlier transaction (still in ``payloads/``) an operator would restore from.
 
 A runtime that already received lake events (after the new code was deployed, before this tool ran) is
-handled up to the lake's skip budget: the embedded events go first and the earlier lake records are
-copied after them so ids and order are unchanged. Beyond that budget the journal is reported as a
-problem and left alone; run the tool before new events are written.
+handled however many there are: the embedded events go first and the earlier lake records are copied
+after them (their old sequences marked skipped) so ids and order are unchanged.
 """
 
 import argparse
@@ -121,17 +120,16 @@ class Account:
         journal,
         names,
         *,
-        max_records=10000,
         events_lake=runtime_events_lake,
         reply_lake=reply_lake_for,
         results_lake=results_lake_for,
     ):
-        self.journal, self.names, self.max_records = journal, names, max_records
+        self.journal, self.names = journal, names
         self.events_lake, self.reply_lake, self.results_lake = events_lake, reply_lake, results_lake
 
     def catalog(self):
         journal = self.journal("console", "catalog")
-        return S3ConsoleStorage(journal, max_records=self.max_records, results=self.results_lake(journal))
+        return S3ConsoleStorage(journal, results=self.results_lake(journal))
 
 
 def conversion_owner(namespace):
@@ -206,7 +204,7 @@ def convert_runtime(account, unit, *, apply, owner):
     report = Report(f"runtime/{unit.name}", "runtime-events")
     journal = account.journal("runtime", unit.name)
     lake = account.events_lake(journal)
-    store = S3RuntimeStores(journal, max_records=account.max_records, events_lake=lake)
+    store = S3RuntimeStores(journal, events_lake=lake)
     try:
         audit = store.audit_events()
     except Exception as error:
@@ -272,7 +270,7 @@ def convert_runtime(account, unit, *, apply, owner):
 def _verify_runtime(account, unit, moved):
     journal = account.journal("runtime", unit.name)
     lake = account.events_lake(journal)
-    store = S3RuntimeStores(journal, max_records=account.max_records, events_lake=lake)
+    store = S3RuntimeStores(journal, events_lake=lake)
     audit = _read_back("runtime events", store.audit_events)
     bad = []
     if audit.embedded:
@@ -305,7 +303,7 @@ def convert_ledger(account, unit, *, apply):
         report.status = "problem"
         report.problems.append("cannot tell which reply lake this ledger uses (no workspace root found for it)")
         return report
-    storage = S3BatchStorage(journal, max_records=account.max_records, replies=lake)
+    storage = S3BatchStorage(journal, replies=lake)
     try:
         record, originals = storage.audit_replies()
         _begin(report, record)
@@ -337,7 +335,7 @@ def convert_ledger(account, unit, *, apply):
 def _verify_ledger(account, unit, before, moved):
     journal = account.journal("shared-batches", unit.name)
     lake = account.reply_lake(journal, unit.label)
-    fresh = S3BatchStorage(journal, max_records=account.max_records, replies=lake)
+    fresh = S3BatchStorage(journal, replies=lake)
     bad = []
     record, left = _read_back("reply ledger", fresh.audit_replies)
     if left:
@@ -506,7 +504,7 @@ def convert_account(account, *, apply=False, only=(), allow_unattributed=False, 
         if not units:
             continue
         journal = account.journal("workspace", root)
-        holder = S3EmbeddedStorage(journal, max_records=account.max_records)
+        holder = S3EmbeddedStorage(journal)
         busy = None
         try:
             if apply:
@@ -591,15 +589,15 @@ class ReadOnlyS3:
         raise PermissionError(f"dry run is read-only; {name} refused")
 
 
-def s3_account(s3, bucket, aws_account, cyclotron_account, *, max_bytes, max_records, max_commits):
+def s3_account(s3, bucket, aws_account, cyclotron_account):
     from .s3_journal import S3Journal
     from .storage_payloads import S3Payloads
 
     scope = StorageScope(cyclotron_account, "console")
 
     def journal(domain, name):
-        payloads = S3Payloads(s3, bucket, aws_account, scope, max_bytes=max_bytes)
-        return S3Journal(payloads, domain, name, max_bytes=max_bytes, max_commits=max_commits, create_only_initialization=True)
+        payloads = S3Payloads(s3, bucket, aws_account, scope)
+        return S3Journal(payloads, domain, name, create_only_initialization=True)
 
     def names(domain):
         prefix, found, token = f"{scope.key}/coordination/{domain}/", [], None
@@ -613,10 +611,10 @@ def s3_account(s3, bucket, aws_account, cyclotron_account, *, max_bytes, max_rec
             if not token:
                 return sorted(found)
 
-    return Account(journal, names, max_records=max_records)
+    return Account(journal, names)
 
 
-def file_account(directory, scope, *, max_bytes=4194304, max_records=10000, max_commits=1000000):
+def file_account(directory, scope):
     """The same account over a local directory (the file journal and file lakes), for specs and rehearsals."""
     from pathlib import Path
 
@@ -626,9 +624,7 @@ def file_account(directory, scope, *, max_bytes=4194304, max_records=10000, max_
     root = Path(directory)
 
     def journal(domain, name):
-        return LocalFileJournal(
-            FilePayloads(root, scope, max_bytes=max_bytes), domain, name, max_bytes=max_bytes, max_commits=max_commits
-        )
+        return LocalFileJournal(FilePayloads(root, scope), domain, name)
 
     def names(domain):
         try:
@@ -636,7 +632,7 @@ def file_account(directory, scope, *, max_bytes=4194304, max_records=10000, max_
         except FileNotFoundError:
             return []
 
-    return Account(journal, names, max_records=max_records)
+    return Account(journal, names)
 
 
 def summary(reports, apply):
@@ -668,9 +664,6 @@ def run(args, *, session, out=print):
         args.books_bucket,
         identity["Account"],
         args.cyclotron_account,
-        max_bytes=args.max_bytes,
-        max_records=args.max_records,
-        max_commits=args.max_commits,
     )
     out(
         ("APPLY: converting" if args.apply else "DRY RUN (reads only; nothing is written; pass --apply to convert)")
@@ -712,18 +705,12 @@ def parser():
         action="store_true",
         help="also convert runtimes with no workspace root, holding only their own ownership",
     )
-    p.add_argument("--max-bytes", type=int, default=16 * 1024 * 1024, help="journal byte budget (the hosted CYCLOTRON_MAX_BYTES)")
-    p.add_argument("--max-records", type=int, default=10000)
-    p.add_argument("--max-commits", type=int, default=1000000)
     p.add_argument("--apply", action="store_true", help="write; the default is a read-only dry run")
     return p
 
 
 def main(argv=None, *, session=None, out=print):
     args = parser().parse_args(argv)
-    if args.max_bytes < 1048576 or args.max_records < 1 or args.max_commits < 1:
-        print("Refusing: budgets must be positive and --max-bytes at least 1 MiB", file=sys.stderr)
-        return 2
     if session is None:
         session = aws_session(args.profile, args.region)
     return run(args, session=session, out=out)

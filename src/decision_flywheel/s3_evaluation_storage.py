@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from .journal import Journal, commit_with_contract, decode, encode, uuid
+from .journal import Journal, commit_with_contract, decode, uuid
 from .s3_runtime_storage import RuntimeOwnershipError
 from .storage_errors import StorageConflict
 
@@ -12,11 +12,10 @@ def empty():
 
 
 class S3EvaluationStorage:
-    def __init__(self, journal, *, max_records):
-        if not isinstance(journal, Journal) or type(max_records) is not int or max_records < 1:
-            raise ValueError("canonical evaluation journal and record budget required")
+    def __init__(self, journal):
+        if not isinstance(journal, Journal):
+            raise ValueError("canonical evaluation journal required")
         self.journal = journal
-        self.max_records = max_records
         self.authority = None
         self.poisoned = False
 
@@ -32,12 +31,8 @@ class S3EvaluationStorage:
             raise ValueError("invalid evaluation watermark/fence")
         if value["owner"] is not None:
             uuid(value["owner"])
-        if (
-            not isinstance(value["clocks"], list)
-            or not isinstance(value["trace"], list)
-            or len(value["clocks"]) + len(value["trace"]) > self.max_records
-        ):
-            raise ValueError("evaluation record budget exceeded")
+        if not isinstance(value["clocks"], list) or not isinstance(value["trace"], list):
+            raise ValueError("evaluation clock and trace lists required")
         for key in ("clocks", "trace"):
             ids, identities = set(), set()
             for row in value[key]:
@@ -140,11 +135,11 @@ class S3EvaluationStorage:
         return self._change(apply)
 
     def events(self, *, after=0, limit=100):
-        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("bounded trace cursor required")
+        if type(after) is not int or after < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("a non-negative trace cursor and positive page size required")
         return [(i, p) for i, key, p in self._record().value["trace"] if i > after][:limit]
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
+    def export_storage(self):
         value = self._record().value
         result = {
             "schema": "cyclotron-evaluation/v1",
@@ -154,26 +149,9 @@ class S3EvaluationStorage:
             },
             "metadata": {"sequences": {"trace": value["watermark"]}},
         }
-        if (
-            type(max_records) is not int
-            or max_records < 1
-            or len(value["clocks"]) + len(value["trace"]) > max_records
-            or type(max_bytes) is not int
-            or max_bytes < 1
-            or len(encode(result)) > max_bytes
-        ):
-            raise ValueError("evaluation export budget exceeded")
         return result
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
-        if (
-            type(max_records) is not int
-            or max_records < 1
-            or type(max_bytes) is not int
-            or max_bytes < 1
-            or len(encode(snapshot)) > max_bytes
-        ):
-            raise ValueError("evaluation import budget exceeded")
+    def restore_storage(self, snapshot):
         snapshot = deepcopy(snapshot)
         if (
             not isinstance(snapshot, dict)
@@ -199,8 +177,6 @@ class S3EvaluationStorage:
         proposed["trace"] = [[r["id"], r["key"], r["payload"]] for r in snapshot["tables"]["trace"]]
         proposed["watermark"] = snapshot["metadata"]["sequences"]["trace"]
         self._validate(proposed)
-        if len(proposed["clocks"]) + len(proposed["trace"]) > max_records:
-            raise ValueError("evaluation import record budget exceeded")
 
         def apply(value):
             if value["clocks"] or value["trace"] or value["watermark"]:

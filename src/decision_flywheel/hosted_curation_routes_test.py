@@ -601,7 +601,7 @@ def test_slice_one_has_no_hosted_transformer(identity, monkeypatch):
     run(scenario())
 
 
-def test_an_oversized_import_fails_cleanly_with_no_partial_commit(identity, monkeypatch):
+def test_an_oversized_import_fails_cleanly_and_the_catalog_journal_has_no_byte_budget_to_hit(identity, monkeypatch):
     host = build(identity, monkeypatch)
 
     async def scenario():
@@ -610,9 +610,7 @@ def test_an_oversized_import_fails_cleanly_with_no_partial_commit(identity, monk
             response = await import_file(http, content=too_large)
             assert response.status_code == 413 and response.json()["code"] == "import_too_large"
             assert host.store.export_storage()["tables"]["priming_drafts"] == []
-            # Within the import cap but beyond what the account's catalog journal can hold.
-            current = len(json.dumps(host.store.export_storage()))
-            host.bff.config = replace(host.config, max_bytes=current + 4096)
+            # The catalog journal used to refuse a draft past its byte budget (storage_limit); it has none now.
             filler = base64.b64encode(
                 json.dumps(
                     [
@@ -625,10 +623,8 @@ def test_an_oversized_import_fails_cleanly_with_no_partial_commit(identity, monk
                     ]
                 ).encode()
             ).decode()
-            full = await import_file(http, content=filler)
-            assert full.status_code == 413 and full.json()["code"] == "storage_limit", full.text
-            host.bff.config = host.config
-            assert host.store.export_storage()["tables"]["priming_drafts"] == []
+            assert data(await import_file(http, content=filler))["status"] == "preview"
+            assert len(host.store.export_storage()["tables"]["priming_drafts"]) == 1
             assert data(await import_file(http, identifier="after"))["status"] == "preview"
 
     run(scenario())

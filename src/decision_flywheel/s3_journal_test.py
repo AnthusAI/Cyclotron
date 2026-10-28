@@ -62,8 +62,8 @@ def journal(client=None, scope=None, name="run-a", **options):
 
     scope = scope or StorageScope("account-a", "workspace-a")
     client = client or ConditionalS3()
-    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope, max_bytes=1000000)
-    return S3Journal(payloads, "shared-batches", name, max_bytes=1000000, max_commits=100, **options)
+    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope)
+    return S3Journal(payloads, "shared-batches", name, **options)
 
 
 def test_create_commit_and_restart_read_canonical_s3_without_an_index():
@@ -126,30 +126,26 @@ def test_missing_or_changed_immutable_record_is_not_recovered_from_index_or_prio
         j.read()
 
 
-def test_scope_and_explicit_limits_fail_before_any_canonical_mutation():
-    from .journal import JournalLimit
-
+def test_a_foreign_scope_fails_before_any_canonical_mutation_and_a_large_value_commits():
     j = journal()
     head = j.initialize({"x": 1})
-    with pytest.raises(JournalLimit):
-        j.commit(head, {"x": "a" * 1000001})
     foreign = journal(j.payloads.client, StorageScope("foreign", "workspace-a"))
     with pytest.raises(PermissionError):
         foreign.commit(head, {"x": 2})
     assert j.read().value == {"x": 1}
+    large = "a" * (5 * 1024 * 1024)
+    j.commit(j.read(), {"x": large})
+    assert journal(j.payloads.client).read().value == {"x": large}
 
 
-def test_commit_limit_and_unknown_sdk_retry_configuration_fail_before_head_mutation():
+def test_commits_past_the_old_commit_budget_advance_and_unknown_sdk_retry_configuration_fails_before_any_call():
     from types import SimpleNamespace
 
-    from .journal import JournalLimit
-
     j = journal()
-    head = j.initialize({"x": 1})
-    j.max_commits = 1
-    with pytest.raises(JournalLimit):
-        j.commit(head, {"x": 2})
-    assert j.read().value == {"x": 1}
+    record = j.initialize({"x": 0})
+    for n in range(1, 101):
+        record = j.commit(record, {"x": n})
+    assert journal(j.payloads.client).read().revision == 101
     client = ConditionalS3()
     client.meta = SimpleNamespace(config=SimpleNamespace(retries={"total_max_attempts": 3}))
     with pytest.raises(ValueError, match="total_max_attempts"):
@@ -184,8 +180,8 @@ def test_real_botocore_request_model_accepts_conditional_heads_with_single_attem
         config=Config(signature_version="s3v4", retries={"total_max_attempts": 1}),
     )
     scope = StorageScope("synthetic", "workspace")
-    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope, max_bytes=1000000)
-    j = S3Journal(payloads, "shared", "run", max_bytes=1000000, max_commits=100)
+    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope)
+    j = S3Journal(payloads, "shared", "run")
     common = {
         "Bucket": "synthetic-bucket",
         "Key": j.head_key,
@@ -218,9 +214,7 @@ def test_explicit_create_only_initialization_needs_no_list_permission_and_never_
 
     def open():
         base = journal(client)
-        return S3Journal(
-            base.payloads, "shared-batches", "run-a", max_bytes=1000000, max_commits=100, create_only_initialization=True
-        )
+        return S3Journal(base.payloads, "shared-batches", "run-a", create_only_initialization=True)
 
     j = open()
     j.initialize({"charged": 1})
@@ -267,7 +261,7 @@ def test_ambiguous_creation_probe_still_cannot_overwrite_an_existing_unreadable_
         return get(**request)
 
     client.get_object = denied
-    new = S3Journal(old.payloads, "shared-batches", "run-a", max_bytes=1000000, max_commits=100, create_only_initialization=True)
+    new = S3Journal(old.payloads, "shared-batches", "run-a", create_only_initialization=True)
     with pytest.raises(JournalConflict):
         new.initialize({"paid": 0})
     assert client.objects[old.head_key] == original

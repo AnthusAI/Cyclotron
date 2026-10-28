@@ -48,11 +48,11 @@ def test_complete_native_domain_roundtrip_preserves_every_row_and_observable_ord
     assert codec.export(destination) == snapshot
     scope = StorageScope("account", "workspace")
     payloads = (
-        FilePayloads(tmp_path / "payloads", scope, max_bytes=64000000)
+        FilePayloads(tmp_path / "payloads", scope)
         if backend == "file"
-        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope, max_bytes=64000000)
+        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope)
     )
-    archive = DomainArchive(codec, payloads, scope, max_records=10000, max_bytes=64000000)
+    archive = DomainArchive(codec, payloads, scope)
     assert archive.read(archive.publish(snapshot).manifest) == snapshot
     if domain == "evaluation":
         assert destination.execute("INSERT INTO trace(key,payload) VALUES (?,?)", ("later", "{}")).lastrowid == 3
@@ -100,14 +100,10 @@ def test_domain_restore_rollback_keeps_destination_empty_on_failure_mid_composit
     owner.close()
 
 
-def test_domain_unknown_schema_bad_ordinals_and_budgets_fail_explicitly(tmp_path):
+def test_domain_unknown_schema_and_bad_ordinals_fail_explicitly(tmp_path):
     owner = ReviewStore(tmp_path / "review.sqlite", study_seed="test")
     owner.import_articles([article()])
     codec = review_codec()
-    with pytest.raises(ValueError, match="record budget"):
-        codec.export(owner.storage.db, max_records=1)
-    with pytest.raises(ValueError, match="byte budget"):
-        codec.export(owner.storage.db, max_bytes=10)
     snapshot = codec.export(owner.storage.db)
     snapshot["tables"]["articles"][0]["_rowid"] = 0
     with pytest.raises(ValueError):
@@ -115,6 +111,20 @@ def test_domain_unknown_schema_bad_ordinals_and_budgets_fail_explicitly(tmp_path
     owner.storage.db.execute("CREATE TABLE future(id TEXT)")
     with pytest.raises(ValueError, match="schema"):
         codec.export(owner.storage.db)
+    owner.close()
+
+
+def test_a_domain_larger_than_the_old_record_and_byte_budgets_exports_and_validates(tmp_path):
+    from .reviewer_store import Article
+
+    owner = ReviewStore(tmp_path / "review.sqlite", study_seed="test")
+    large = Article("large", "Title", "x" * (5 * 1024 * 1024), "2026-01-01", ("cs.AI",))
+    owner.import_articles([large, *(article(f"a{n}") for n in range(30))])
+    codec = review_codec()
+    snapshot = codec.export(owner.storage.db)
+    assert len(snapshot["tables"]["articles"]) == 31 and codec.validate(snapshot) == snapshot
+    with pytest.raises(TypeError):
+        codec.export(owner.storage.db, max_records=1)
     owner.close()
 
 

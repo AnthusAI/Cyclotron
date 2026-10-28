@@ -35,8 +35,8 @@ class CatalogStorage(Protocol):
     def retract_item_label(self, feedback_request_id, request_id): ...
     def record_item_prediction(self, run_id, list_id, item_id, item_revision, prediction): ...
     def item_results(self, list_id, item_id, item_revision): ...
-    def export(self, *, max_records=10000, max_bytes=64000000): ...
-    def restore(self, snapshot, *, max_records=10000, max_bytes=64000000): ...
+    def export(self): ...
+    def restore(self, snapshot): ...
 
 
 def encoded(value):
@@ -166,8 +166,8 @@ class SQLiteCatalogStorage:
             ]
 
     def upsert_list_items(self, list_id, items):
-        if not 1 <= len(items) <= 200:
-            raise ValueError("upsert between one and 200 items")
+        if not items:
+            raise ValueError("upsert at least one item")
         counts = dict(inserted=0, updated=0, unchanged=0)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -178,8 +178,6 @@ class SQLiteCatalogStorage:
                     raise ValueError("item identity and structured values required")
                 occurred = timestamp(item["occurred_at"])
                 data = encoded({**item, "occurred_at": occurred})
-                if len(data.encode()) > 4_000_000:
-                    raise ValueError("item exceeds size limit")
                 fingerprint = hashlib.sha256(data.encode()).hexdigest()
                 old = db.execute(
                     "SELECT * FROM list_item_revisions WHERE list_id=? AND id=? ORDER BY revision DESC LIMIT 1",
@@ -197,8 +195,8 @@ class SQLiteCatalogStorage:
         return counts
 
     def list_items(self, list_id, *, after=0, limit=200):
-        if after < 0 or not 1 <= limit <= 200:
-            raise ValueError("item page must be bounded")
+        if after < 0 or limit < 1:
+            raise ValueError("a non-negative offset and positive page size required")
         with self.connect() as db:
             if not db.execute("SELECT 1 FROM item_lists WHERE id=?", (list_id,)).fetchone():
                 raise ValueError("unknown item list")
@@ -344,46 +342,25 @@ class SQLiteCatalogStorage:
                 )
             ]
 
-    def export(self, *, max_records=10000, max_bytes=64000000):
+    def export(self):
         """One native read snapshot; raw JSON text and sequence watermarks survive."""
-        from .catalog_snapshot import COLUMNS, KEYS, SCHEMA, budgets, encode, validate
+        from .catalog_snapshot import COLUMNS, KEYS, SCHEMA, validate
 
-        budgets(max_records, max_bytes)
         with self.connect() as db:
             db.execute("BEGIN")
-            count = sum(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in COLUMNS)
-            if count > max_records:
-                raise ValueError("catalog snapshot record budget exceeded")
-            # Avoid allocating oversized legacy cells before the JSON byte check.
-            raw_bytes = 0
-            for table, columns in COLUMNS.items():
-                sizes = "+".join(f"COALESCE(length(CAST({column} AS BLOB)),0)" for column in columns)
-                raw_bytes += db.execute(f"SELECT COALESCE(SUM({sizes}),0) FROM {table}").fetchone()[0]
-            if raw_bytes > max_bytes:
-                raise ValueError("catalog snapshot byte budget exceeded")
             tables = {}
-            used = 0
             for table, columns in COLUMNS.items():
-                rows = []
-                for row in db.execute(f"SELECT {','.join(columns)} FROM {table} ORDER BY {','.join(KEYS[table])}"):
-                    record = dict(row)
-                    used += len(encode(record))
-                    if used > max_bytes:
-                        raise ValueError("catalog snapshot byte budget exceeded")
-                    rows.append(record)
-                tables[table] = rows
+                tables[table] = [
+                    dict(row) for row in db.execute(f"SELECT {','.join(columns)} FROM {table} ORDER BY {','.join(KEYS[table])}")
+                ]
             sequence = db.execute("SELECT seq FROM sqlite_sequence WHERE name='item_feedback'").fetchone()
-            return validate(
-                {"schema": SCHEMA, "tables": tables, "feedback_sequence": sequence[0] if sequence else 0},
-                max_records=max_records,
-                max_bytes=max_bytes,
-            )
+            return validate({"schema": SCHEMA, "tables": tables, "feedback_sequence": sequence[0] if sequence else 0})
 
-    def restore(self, snapshot, *, max_records=10000, max_bytes=64000000):
+    def restore(self, snapshot):
         """Restore into a quiesced, empty catalog; never merge or drop evidence."""
         from .catalog_snapshot import COLUMNS, validate
 
-        snapshot = validate(snapshot, max_records=max_records, max_bytes=max_bytes)
+        snapshot = validate(snapshot)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             if any(db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() for table in COLUMNS):

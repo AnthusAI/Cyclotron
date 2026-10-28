@@ -10,7 +10,7 @@ import re
 import sqlite3
 
 from .catalog_archive import CatalogArchive
-from .catalog_snapshot import budgets, decode, encode
+from .catalog_snapshot import decode, encode
 from .learning_storage import ARTIFACTS
 
 SCHEMA = "cyclotron-runtime/v1"
@@ -99,12 +99,8 @@ def _insert(db, table, rows):
     )
 
 
-def validate(snapshot, *, max_records=10000, max_bytes=64000000):
-    budgets(max_records, max_bytes)
-    content = encode(snapshot)
-    if len(content) > max_bytes:
-        raise ValueError("runtime snapshot byte budget exceeded")
-    snapshot = decode(content)
+def validate(snapshot):
+    snapshot = decode(encode(snapshot))
     if (
         not isinstance(snapshot, dict)
         or set(snapshot) != {"schema", "tables", "present_tables"}
@@ -117,8 +113,6 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
     tables = snapshot["tables"]
     if any(not isinstance(rows, list) for rows in tables.values()):
         raise ValueError("invalid runtime rows")
-    if sum(map(len, tables.values())) > max_records:
-        raise ValueError("runtime snapshot record budget exceeded")
     for table, rows in tables.items():
         if rows and table not in present:
             raise ValueError("runtime rows require present table")
@@ -160,42 +154,24 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
     return snapshot
 
 
-def export_runtime(db, *, max_records=10000, max_bytes=64000000):
-    budgets(max_records, max_bytes)
+def export_runtime(db):
     if db.in_transaction:
         raise ValueError("runtime export requires no open native transaction")
     with db:
         db.execute("BEGIN")
         present = _schema(db)
-        if sum(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in present) > max_records:
-            raise ValueError("runtime snapshot record budget exceeded")
-        raw_bytes = 0
-        for table in present:
-            expression = "+".join(f"COALESCE(length(CAST({column} AS BLOB)),0)" for column in TABLES[table])
-            raw_bytes += db.execute(f"SELECT COALESCE(SUM({expression}),0) FROM {table}").fetchone()[0]
-        if raw_bytes > max_bytes:
-            raise ValueError("runtime snapshot byte budget exceeded")
         tables = {table: [] for table in TABLES}
-        used = 0
         for table in TABLES:
             if table not in present:
                 continue
             names = ("_rowid", *TABLES[table])
             for row in db.execute(f"SELECT rowid,{','.join(TABLES[table])} FROM {table} ORDER BY rowid"):
-                record = dict(zip(names, row))
-                used += len(encode(record))
-                if used > max_bytes:
-                    raise ValueError("runtime snapshot byte budget exceeded")
-                tables[table].append(record)
-        return validate(
-            {"schema": SCHEMA, "tables": tables, "present_tables": [table for table in TABLES if table in present]},
-            max_records=max_records,
-            max_bytes=max_bytes,
-        )
+                tables[table].append(dict(zip(names, row)))
+        return validate({"schema": SCHEMA, "tables": tables, "present_tables": [table for table in TABLES if table in present]})
 
 
-def restore_runtime(db, snapshot, *, max_records=10000, max_bytes=64000000):
-    snapshot = validate(snapshot, max_records=max_records, max_bytes=max_bytes)
+def restore_runtime(db, snapshot):
+    snapshot = validate(snapshot)
     if db.in_transaction:
         raise ValueError("runtime restore requires no open native transaction")
     with db:

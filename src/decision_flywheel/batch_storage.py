@@ -31,8 +31,7 @@ class StorageScope:
 
     def __post_init__(self):
         if any(
-            not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value)
-            for value in (self.account, self.workspace)
+            not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", value) for value in (self.account, self.workspace)
         ):
             raise ValueError("fixed account and workspace storage scope required")
 
@@ -63,7 +62,7 @@ class BatchStorage(Protocol):
     def pending_operations(self) -> list[tuple[int, str, str]]: ...
     def abandon_learning(self, fingerprint: str, owner: str) -> BatchRecord: ...
     def page(self, *, after: str | None = None, limit: int = 100) -> tuple[list[BatchRecord], str | None]: ...
-    def export(self, *, max_records: int = 10000) -> dict: ...
+    def export(self) -> dict: ...
     def restore(self, snapshot: dict) -> None: ...
     def close(self) -> None: ...
 
@@ -333,8 +332,8 @@ class SQLiteBatchStorage:
         return self.settle(fingerprint, owner, "interrupted", '{"learning_abandoned":true}')
 
     def page(self, *, after=None, limit=100):
-        if type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("bounded page required")
+        if type(limit) is not int or limit < 1:
+            raise ValueError("positive page size required")
         with self.lock:
             keys = [
                 row[0]
@@ -342,18 +341,10 @@ class SQLiteBatchStorage:
             ]
             return [self._get(key) for key in keys[:limit]], keys[limit - 1] if len(keys) > limit else None
 
-    def export(self, *, max_records=10000):
+    def export(self):
         """A SQLite snapshot; caller quiesces provider work before migrating."""
-        if type(max_records) is not int or max_records < 1:
-            raise ValueError("bounded export required")
         with self.lock, self.db:
             self.db.execute("BEGIN")
-            total = sum(
-                self.db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                for table in ("batches", "attempts", "batch_history")
-            )
-            if total > max_records:
-                raise ValueError("shared batch export budget exceeded")
             batches = [
                 [row[0], row[1], row[2], self._get(row[0]).generation, row[3], bool(row[4]), row[5]]
                 for row in self.db.execute("SELECT key,status,payload,owner,claimed,revision FROM batches ORDER BY key")

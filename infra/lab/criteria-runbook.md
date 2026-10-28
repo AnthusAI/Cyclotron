@@ -56,8 +56,7 @@ deployed, and the only stack change is the `PublicationTargets` parameter.
 7. **Usage and storage.** Standing runs have no lifetime request quota, per-day request quota or
    total item quota. The `shared-batches` ledger continues to record provider attempts and cached
    results, but does not gate future calls. A new run does not grant a second request budget. The
-   console and result journals retain their physical record/byte budgets; check current capacity
-   before changing a run with a large operational item list.
+   console and result journals have no record or byte budget either.
 
 ## Runbook
 

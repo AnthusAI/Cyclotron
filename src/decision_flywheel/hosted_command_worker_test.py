@@ -26,7 +26,7 @@ def setup():
 
     def make(domain, name):
         base = journal(client, name=name)
-        return S3Journal(base.payloads, domain, name, max_bytes=1000000, max_commits=10000)
+        return S3Journal(base.payloads, domain, name)
 
     def runtime(view, guard, check):
         return CyclotronRuntime(
@@ -34,7 +34,7 @@ def setup():
             None,
             model_factory=lambda config: (AuthorizedModel(model, guard), DisabledOptimizer()),
             sink_factory=lambda rid: CommandEventSink(view, rid, check),
-            storage_factory=lambda rid: S3WorkspaceStores(make("workspace", rid), journal_for=make, max_records=10000),
+            storage_factory=lambda rid: S3WorkspaceStores(make("workspace", rid), journal_for=make),
             execution_guard=guard,
         )
 

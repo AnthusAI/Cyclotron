@@ -11,7 +11,7 @@ from .s3_journal_test import journal
 def storage(j=None):
     from .s3_evaluation_storage import S3EvaluationStorage
 
-    s = S3EvaluationStorage(j or journal(name="evaluation"), max_records=1000)
+    s = S3EvaluationStorage(j or journal(name="evaluation"))
     s.initialize()
     s.acquire(str(uuid4()))
     return s
@@ -48,7 +48,7 @@ def test_another_evaluator_cannot_claim_the_same_plan_by_timeout_or_restarting()
     from .s3_runtime_storage import RuntimeOwnershipError
 
     s = storage()
-    other = S3EvaluationStorage(journal(s.journal.payloads.client, name="evaluation"), max_records=1000)
+    other = S3EvaluationStorage(journal(s.journal.payloads.client, name="evaluation"))
     other.initialize()
     with pytest.raises(RuntimeOwnershipError):
         other.acquire(str(uuid4()))
@@ -81,7 +81,7 @@ def test_real_frozen_evaluator_uses_s3_clock_trace_and_endpoint_ledgers_without_
     models = {side: Model() for side in endpoints}
 
     def batches(side):
-        result = S3BatchStorage(journal(s.journal.payloads.client, name="endpoint-" + side), max_records=1000)
+        result = S3BatchStorage(journal(s.journal.payloads.client, name="endpoint-" + side))
         result.initialize()
         return result
 

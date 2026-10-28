@@ -56,7 +56,6 @@ def test_existing_prepare_feedback_and_reopen_need_no_sqlite_or_files(monkeypatc
         return S3WorkspaceStores(
             journal(client, name="workspace-root"),
             journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
-            max_records=10000,
         )
 
     def forbidden(*args, **kwargs):
@@ -98,7 +97,6 @@ def test_missing_cloud_storage_cannot_fall_back_and_reopened_budget_is_absolute(
         return S3WorkspaceStores(
             journal(client, name="workspace-root"),
             journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
-            max_records=10000,
         )
 
     with pytest.raises(ValueError):
@@ -158,7 +156,6 @@ def test_s3_workspace_uses_frozen_accepted_priming_without_retrofit_or_partition
     stores = S3WorkspaceStores(
         journal(client, name="frozen-root"),
         journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
-        max_records=10000,
     )
 
     def forbidden(*args, **kwargs):

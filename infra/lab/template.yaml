@@ -52,11 +52,6 @@ Parameters:
     Type: String
     Default: jev-1.13.0
     AllowedPattern: '[A-Za-z0-9._-]{1,64}'
-  JournalMaxBytes:
-    Type: String
-    Default: '4194304'
-    AllowedPattern: '[1-9][0-9]{6,7}'
-    Description: Per-document byte budget for the S3 journals (CYCLOTRON_MAX_BYTES), 1 to 64 MiB. Temporary bridge until history moves to write-once records.
   LabVerifierEnabled:
     Type: String
     Default: 'false'
@@ -531,8 +526,6 @@ Resources:
             - Ref: AWS::NoValue
           CYCLOTRON_PREDICTION_MODEL:
             Ref: PredictionModel
-          CYCLOTRON_MAX_BYTES:
-            Ref: JournalMaxBytes
           CYCLOTRON_LAB_VERIFIER_ROLE_ARN:
             Fn::If:
             - HasLabVerifier
@@ -649,8 +642,6 @@ Resources:
             - Ref: AWS::NoValue
           CYCLOTRON_PREDICTION_MODEL:
             Ref: PredictionModel
-          CYCLOTRON_MAX_BYTES:
-            Ref: JournalMaxBytes
           CYCLOTRON_DECISION_EVENT_BUS_ARN:
             Ref: DecisionEventBusArn
       Tags:

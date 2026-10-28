@@ -46,11 +46,9 @@ def open_store(*, writable: bool):
                 return getattr(real, name)
             raise PermissionError(f"read-only wrapper refuses {name}")
 
-    payloads = S3Payloads(
-        real if writable else GetOnly(), BUCKET, AWS_ACCOUNT, StorageScope(account, "console"), max_bytes=4194304
-    )
-    journal = S3Journal(payloads, "console", "catalog", max_bytes=4194304, max_commits=1000000, create_only_initialization=True)
-    return S3ConsoleStorage(journal, max_records=10000)
+    payloads = S3Payloads(real if writable else GetOnly(), BUCKET, AWS_ACCOUNT, StorageScope(account, "console"))
+    journal = S3Journal(payloads, "console", "catalog", create_only_initialization=True)
+    return S3ConsoleStorage(journal)
 
 
 def build(store):

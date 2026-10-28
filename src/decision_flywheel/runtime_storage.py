@@ -99,13 +99,13 @@ class SQLiteRuntimeStateStorage:
 
     def history(self, limit=100):
         # Preserve the existing local history API; browser trace paging below
-        # remains bounded. A cloud aggregate-history budget is not selected here.
+        # pages by its own cursor.
         rows = self.db.execute("SELECT id,payload FROM runtime_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return tuple({**json.loads(payload), "event_id": identifier} for identifier, payload in reversed(rows))
 
     def trace_events(self, *, after_event_id=0, limit=100):
-        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("trace cursor must be nonnegative and page size between 1 and 1000")
+        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("trace cursor must be nonnegative and page size at least 1")
         rows = self.db.execute(
             "SELECT id,payload FROM runtime_events WHERE id>? ORDER BY id LIMIT ?", (after_event_id, limit)
         ).fetchall()
@@ -115,8 +115,8 @@ class SQLiteRuntimeStateStorage:
         }
 
     def event_payloads(self, kinds):
-        if not isinstance(kinds, tuple) or not 1 <= len(kinds) <= 100 or any(not isinstance(kind, str) for kind in kinds):
-            raise ValueError("explicit bounded event kinds required")
+        if not isinstance(kinds, tuple) or not kinds or any(not isinstance(kind, str) for kind in kinds):
+            raise ValueError("explicit event kinds required")
         query = (
             "SELECT payload FROM runtime_events WHERE json_extract(payload,'$.kind') IN ("
             + ",".join("?" for _ in kinds)
@@ -127,8 +127,8 @@ class SQLiteRuntimeStateStorage:
             yield row[0]
 
     def events_of(self, kinds):
-        if not isinstance(kinds, tuple) or not 1 <= len(kinds) <= 100 or any(not isinstance(kind, str) for kind in kinds):
-            raise ValueError("explicit bounded event kinds required")
+        if not isinstance(kinds, tuple) or not kinds or any(not isinstance(kind, str) for kind in kinds):
+            raise ValueError("explicit event kinds required")
         sql = (
             "SELECT id,payload FROM runtime_events WHERE json_extract(payload,'$.kind') IN ("
             + ",".join("?" for _ in kinds)
@@ -141,15 +141,15 @@ class SQLiteRuntimeStateStorage:
             0
         ]
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
+    def export_storage(self):
         from .runtime_snapshot import export_runtime
 
-        return export_runtime(self.db, max_records=max_records, max_bytes=max_bytes)
+        return export_runtime(self.db)
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
+    def restore_storage(self, snapshot):
         from .runtime_snapshot import restore_runtime
 
-        return restore_runtime(self.db, snapshot, max_records=max_records, max_bytes=max_bytes)
+        return restore_runtime(self.db, snapshot)
 
     def close(self):
         self.db.close()
