@@ -458,6 +458,38 @@ def test_a_conversion_whose_head_never_moved_leaves_the_v1_root_to_convert_on_th
     root.release()
 
 
+def test_a_conversion_writes_its_records_and_keyed_documents_concurrently_and_moves_the_head_last():
+    import threading
+    import time
+
+    from .s3_journal_test import ConditionalS3
+
+    client = ConditionalS3()
+    legacy = _v1_root(client)
+    real, lock, state = client.put_object, threading.Lock(), {"now": 0, "most": 0}
+
+    def overlapping(**request):
+        with lock:
+            state["now"] += 1
+            state["most"] = max(state["most"], state["now"])
+        time.sleep(0.005)  # long enough for concurrent writers to overlap
+        try:
+            return real(**request)
+        finally:
+            with lock:
+                state["now"] -= 1
+
+    client.put_object = overlapping
+    before = len(client.calls)
+    root = _reopened(client)
+    puts = [r["Key"] for kind, r in client.calls[before:] if kind == "put"]
+    assert state["most"] > 1
+    assert puts[-1] == legacy.head_key and puts.count(legacy.head_key) == 1
+    assert sum("/records/workspace/" in key for key in puts) == 3 + 3 + 2 + 2 + 1
+    assert sum("/keys/" in key for key in puts) == 3 + 2
+    root.release()
+
+
 def test_a_v1_root_whose_event_ids_are_not_one_to_n_is_refused_rather_than_renumbered():
     from .s3_embedded_storage import legacy_empty
     from .s3_journal_test import ConditionalS3

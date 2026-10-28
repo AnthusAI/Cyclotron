@@ -36,7 +36,7 @@ from uuid import uuid4
 
 from .journal import Journal, commit_with_contract, uuid
 from .keyed_records import keyed_documents_for, resolve
-from .record_lake import RECORDS_KEY, Coverage, FileRecordLake, S3RecordLake, coverage_in, with_coverage
+from .record_lake import RECORDS_KEY, Coverage, FileRecordLake, RecordConflict, S3RecordLake, coverage_in, with_coverage
 from .s3_batch_storage import S3BatchStorage, reply_lake_for
 from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, runtime_events_lake
 from .storage_errors import StorageMissing
@@ -341,6 +341,34 @@ class S3EmbeddedStorage:
         with self.transaction():
             return fn(self._transaction.get())
 
+    def _append(self, before, appends):
+        """Write every new record of every lake concurrently; return each lake's (coverage, refs).
+
+        Each record goes to the next free sequence after the lake's coverage, all at once. A repeated identical
+        record (a conversion or commit redone after its head never moved) is accepted where it stands. Only if a
+        different record holds one of those sequences does that lake fall back to ``RecordLake.append``, which
+        skips it. Nothing written here is visible until the head commit stores the returned coverage.
+        """
+        starts = {lake: coverage_in(before, self.lakes[lake]) for lake in appends}
+        tasks = [(lake, starts[lake].last + offset, value) for lake in appends for offset, value in enumerate(appends[lake], 1)]
+
+        def put(task):
+            lake, seq, value = task
+            try:
+                return self.lakes[lake].put(seq, value)
+            except RecordConflict:
+                return None
+
+        refs = dict(zip(((lake, seq) for lake, seq, _ in tasks), _parallel(put, tasks)))
+        result = {}
+        for lake, values in appends.items():
+            mine = [refs[(lake, starts[lake].last + offset)] for offset in range(1, len(values) + 1)]
+            if all(ref is not None for ref in mine):
+                result[lake] = (Coverage(starts[lake].last + len(values), starts[lake].skipped), mine)
+            else:
+                result[lake] = self.lakes[lake].append(starts[lake], values)
+        return result
+
     def _publish(self, record, pending, *, invalidate):
         """Records, then keyed entries, then one head commit. Nothing is visible before the head moves."""
         before = record.value
@@ -349,13 +377,10 @@ class S3EmbeddedStorage:
             stamp = {"nonce": str(uuid4()), "keys": sorted(f"{kind}/{key}" for kind, key in pending.keys)}
             appends["commits"] = appends.get("commits", []) + [stamp]
 
-        def append(lake):
-            return lake, self.lakes[lake].append(coverage_in(before, self.lakes[lake]), appends[lake])
-
         state = deepcopy(pending.head)
         state[RECORDS_KEY] = deepcopy(before.get(RECORDS_KEY) or {})
         written = {}
-        for lake, (coverage, refs) in _parallel(append, appends):
+        for lake, (coverage, refs) in self._append(before, appends).items():
             state = with_coverage(state, self.lakes[lake], coverage)
             written[lake] = refs
         documents = {}
@@ -439,10 +464,16 @@ class S3EmbeddedStorage:
         head["data"].update(meta=data["meta"], reviews=data["reviews"], learning=data["learning"])
         pending = _Pending(head)
         items = {}
-        for item_id, (held, fingerprint) in data["items"].items():
-            if not isinstance(held, dict):
-                stored = self.journal.payloads.put(held.encode())
-                held = {"digest": stored.digest, "length": stored.length}
+
+        def reference(held):
+            # Values held inline become content-addressed payloads (create-only, harmless if the head never moves).
+            if isinstance(held, dict):
+                return held
+            stored = self.journal.payloads.put(held.encode())
+            return {"digest": stored.digest, "length": stored.length}
+
+        refs = _parallel(reference, [held for held, _ in data["items"].values()])
+        for (item_id, (_, fingerprint)), held in zip(data["items"].items(), refs):
             pending.append("items", item_id)
             items[item_id] = {**_item_document(), "values": held, "fingerprint": fingerprint}
         for position, (identifier, item_id, fingerprint, state, payload) in enumerate(data["decisions"], start=1):
