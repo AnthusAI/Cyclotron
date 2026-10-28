@@ -11,7 +11,7 @@ _SPEC.loader.exec_module(check)
 
 
 REVIEWED_PENDING_PATHS = [
-    # The API's stage throttle (5 requests/s, burst 10): an arbitrary ceiling, removed.
+    # The stage throttle set to the account's own API Gateway quota (10000/s, burst 5000): no stage ceiling.
     "/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings",
 ]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
@@ -170,6 +170,8 @@ def test_the_worker_sweep_runs_once_a_minute_and_only_its_rule_may_invoke_the_wo
     assert permission["SourceArn"] == {"Fn::GetAtt": ["WorkerSweepSchedule", "Arn"]}
 
 
-def test_the_api_stage_sets_no_throttle_of_its_own():
+def test_the_api_stage_throttles_only_at_the_accounts_own_api_gateway_quota():
+    # A stage keeps its last throttle when the property is dropped, so it is set to the account quota.
     stage = check.load_template()["Resources"]["ConsoleApiApiGatewayDefaultStage"]["Properties"]
-    assert "DefaultRouteSettings" not in stage and "RouteSettings" not in stage
+    assert stage["DefaultRouteSettings"] == {"ThrottlingBurstLimit": 5000, "ThrottlingRateLimit": 10000}
+    assert "RouteSettings" not in stage

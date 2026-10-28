@@ -483,7 +483,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32
+        S3Key: cyclotron-console/backend/c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735
       FunctionName: cyclotron-console-bff
       Handler: decision_flywheel.cloud_entry.bff_handler
       MemorySize: 1024
@@ -601,7 +601,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/8bec7bd6680bcdb7a4cdda369832ac105ef299fb6bf504a9709761727985ee32
+        S3Key: cyclotron-console/backend/c8600ab9551d03ead13f05878c3bb4cc5e36acc7060d22c913b6dbebb0887735
       FunctionName: cyclotron-console-worker
       Handler: decision_flywheel.cloud_entry.worker_handler
       MemorySize: 1024
@@ -740,6 +740,9 @@ Resources:
   ConsoleApiApiGatewayDefaultStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 5000
+        ThrottlingRateLimit: 10000
       ApiId:
         Ref: ConsoleApi
       StageName: $default
