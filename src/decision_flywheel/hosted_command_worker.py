@@ -174,8 +174,8 @@ class HostedCommandWorker:
             uuid(message[key])
         # Retired re-sends carried an attempt count; such a message still delivers its job.
         attempt = message.get("attempt", 0)
-        if type(attempt) is not int or not 0 <= attempt <= 100000:
-            raise ValueError("delivery attempt must be a bounded count")
+        if type(attempt) is not int or attempt < 0:
+            raise ValueError("delivery attempt must be a non-negative count")
         store = await asyncio.to_thread(self.store_for_account, message["accountId"])
         job, actor = await asyncio.to_thread(store.command_envelope, message["jobId"])
         if actor.account_id != message["accountId"] or actor.run_id != message["runId"] or job["run_id"] != actor.run_id:

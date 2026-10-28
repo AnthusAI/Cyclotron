@@ -136,7 +136,7 @@ class CognitoTokenVerifier:
                 or identity["auth_time"] != auth_time
                 or not 0 <= time.time() - auth_time <= 300
                 or not isinstance(lineage, str)
-                or not 0 < len(lineage) <= 256
+                or not 0 < len(lineage)
                 or not lineage.isascii()
                 or not isinstance(identity.get("origin_jti"), str)
                 or not identity["origin_jti"].isascii()

@@ -86,9 +86,7 @@ class SigV4Transport:
             raise ValueError("unsupported accounts path")
 
         def valid_token(value):
-            return (
-                isinstance(value, str) and 0 < len(value) <= 16384 and not any(character in value for character in ("\r", "\n"))
-            )
+            return isinstance(value, str) and 0 < len(value) and not any(character in value for character in ("\r", "\n"))
 
         if (
             not challenge

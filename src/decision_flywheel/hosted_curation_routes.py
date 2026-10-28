@@ -337,7 +337,7 @@ class PrimingSurface:
         return refs
 
     def check_draft_id(self, identifier):
-        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 150 or NAMESPACED.match(identifier):
+        if not isinstance(identifier, str) or not identifier or NAMESPACED.match(identifier):
             raise CurationError(403, "outside_publication", "The import draft is outside the selected publication.")
         return identifier
 

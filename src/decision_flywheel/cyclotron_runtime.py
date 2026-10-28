@@ -245,8 +245,11 @@ class CyclotronRuntime:
         model, optimizer = self.model_factory(config)
         run = {"id": run_id, "config": dict(config)}
         observer = self.sink_factory(run_id)
-        # The sink appends a command's events together; execute() flushes, so a completed command never
-        # leaves a buffered trace behind.
+        configure_batch = getattr(observer, "set_batch_size", None)
+        if configure_batch is not None:
+            # A command's events are appended together when execute() flushes, so a completed command never
+            # leaves a buffered trace behind.
+            configure_batch(None)
         workspace = WorkspaceSession(
             self.store,
             run,

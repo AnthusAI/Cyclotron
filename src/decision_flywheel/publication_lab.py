@@ -490,7 +490,7 @@ class HTTPPublicationClient:
     def __init__(self, client, *, account_id=None, poll_timeout=30.0, poll_interval=0.25):
         self.client = client
         self.account_id = text(account_id, "account identity") if account_id is not None else None
-        if isinstance(poll_timeout, bool) or isinstance(poll_interval, bool) or not 0 < poll_interval <= poll_timeout <= 120:
+        if isinstance(poll_timeout, bool) or isinstance(poll_interval, bool) or not 0 < poll_interval <= poll_timeout:
             raise ValueError("bounded positive publication polling limits required")
         self.poll_timeout, self.poll_interval = poll_timeout, poll_interval
 

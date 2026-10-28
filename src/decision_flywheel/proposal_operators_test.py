@@ -400,7 +400,7 @@ def test_the_prompt_payload_carries_whole_stories_and_whole_parent_rubrics(tmp_p
     record(ledger, incumbent_id(wheel), {9})
     asyncio.run(ask_round(wheel, builder(wheel, training), {}, "rubric", sched.ideas(), training, (), ()))
     requests = wheel.optimizer.briefings[0]["operator_requests"]
-    assert len(requests["target"]["stories"]) == 20
+    assert len(requests["target"]["stories"]) == 30  # the configured sample, whole
     assert all(s["excerpt"] == " ".join(("long " * 2000).split()) for s in requests["target"]["stories"])
     assert all(len(p["rubric"]) >= len(huge.strip()) for p in requests["combine"]["parents"])
     assert len(json.dumps(requests)) > 60000
