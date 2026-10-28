@@ -731,12 +731,30 @@ def test_an_item_state_an_abandoned_commit_wrote_never_hides_the_state_that_comm
     assert fresh.unreviewed_items(run["id"]) == [] and fresh._item_row(fresh._read(), run["id"], "a")["reviewed"] == 1
 
 
-def test_decisions_run_for_a_principal_that_cannot_list_the_bucket():
-    from .catalog_cold_rows_test import NoListing
+def test_a_lookup_refused_with_access_denied_refuses_the_command_instead_of_creating_a_duplicate_job():
+    from .record_lake import RecordUnavailable
+    from .s3_journal_test import S3Error
 
-    client = NoListing()
-    s, run_id = standing(store(journal(client, name="console", create_only_initialization=True)))
-    ids = [decide(s, run_id, n) for n in range(1, 4)]
-    decide(s, run_id, 1, values={"text": "Changed"}, request="req-1-again")
-    assert s.command(run_id, "req-2", "publication", s.jobs(run_id)[2]["payload"])["id"] == ids[1]
-    assert [i["revision"] for i in s.items(run_id)] == [2, 1, 1]
+    s, run_id = standing()
+    first = decide(s, run_id, 1)
+    decide(s, run_id, 2)  # the first job has left the head; its request id is found only by its record
+    client = s.journal.payloads.client
+    s = store(journal(client, name="console"))  # a fresh process: nothing about these records is in memory
+    real = client.get_object
+
+    def denied(**request):
+        if "/records/catalog/" in request["Key"]:
+            raise S3Error("AccessDenied")
+        return real(**request)
+
+    client.get_object = denied
+    before = s.journal.read().value
+    payload = {"bindings": {"alpha": "1"}, "item": {"id": "item-1", "values": {"text": "Source 1"}}}
+    with pytest.raises(RecordUnavailable):
+        s.command(run_id, "req-1", "publication", payload)
+    with pytest.raises(RecordUnavailable):
+        s.command(run_id, "req-new", "publication", payload)
+    assert s.journal.read().value == before  # nothing accepted, so no second job for the same request
+    client.get_object = real
+    assert s.command(run_id, "req-1", "publication", payload)["id"] == first
+    assert [j["id"] for j in s.jobs(run_id)].count(first) == 1

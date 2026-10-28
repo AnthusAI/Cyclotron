@@ -26,13 +26,10 @@ from hashlib import sha256
 
 from .journal import decode, encode
 from .record_lake import SCHEMA as RECORD_SCHEMA
-from .record_lake import FileRecordLake, RecordConflict, RecordCorrupt, RecordUnavailable, S3RecordLake
-from .s3_transient import cause_name, log, read_with_one_retry
+from .record_lake import FileRecordLake, RecordConflict, RecordCorrupt, S3RecordLake
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
 
 DOMAIN = "catalog"
-# What S3 says about a key that holds nothing: NoSuchKey, or AccessDenied to a principal without ListBucket.
-_ABSENT = ("NoSuchKey", "AccessDenied")
 COLD_TABLES = ("web_jobs", "web_items", "list_item_revisions")
 TERMINAL = ("completed", "failed", "interrupted")
 
@@ -108,20 +105,11 @@ class ColdRows:
         """The stored bytes, or None when the key holds nothing.
 
         Lookups here ask about keys that may not exist yet (has this request been seen, does this item have a
-        newer state). The Lambda roles may get every object under ``records/`` but may not list the bucket, and
-        S3 answers such a principal's GET of a missing key with AccessDenied instead of NoSuchKey, so both mean
-        "no record" here. (A role that lost its read grant would also fail its head and payload reads, which
-        come first.) Any other failure is raised.
+        newer state), so they rely on S3 telling a missing key apart: the roles hold ListBucket on the books
+        bucket, so a missing key is NoSuchKey. Anything else, AccessDenied included, raises: a lookup that cannot
+        prove absence refuses rather than acting as if the row did not exist.
         """
-        if not isinstance(lake, S3RecordLake):
-            return lake._fetch(seq)
-        try:
-            return read_with_one_retry(lambda: lake._get(seq), "catalog record")
-        except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") in _ABSENT:
-                return None
-            log.warning("catalog record unavailable: %s", cause_name(error))
-            raise RecordUnavailable("catalog record unavailable", cause_name(error)) from None
+        return lake._fetch(seq)
 
     def put(self, kind, seq, value):
         """Create the record. True when it is (now) this value; False when a different value already holds the key."""

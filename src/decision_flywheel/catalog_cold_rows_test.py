@@ -23,8 +23,8 @@ def test_a_missing_record_reads_as_none_and_is_never_remembered_as_missing():
     assert rows.get(ColdRows.item("run", "x"), 1) == {"row": "later"}
 
 
-class NoListing(ConditionalS3):
-    """S3 as the Lambda roles see it: no ListBucket, so a missing key reads as AccessDenied."""
+class Denied(ConditionalS3):
+    """S3 refusing reads of missing keys with AccessDenied, as it does for a principal without ListBucket."""
 
     def get_object(self, **request):
         try:
@@ -35,9 +35,14 @@ class NoListing(ConditionalS3):
             raise
 
 
-def test_a_principal_that_cannot_list_the_bucket_still_tells_a_missing_record_from_a_present_one():
-    rows = ColdRows(journal(NoListing(), name="console").payloads)
-    assert rows.get(ColdRows.job("a"), 1) is None
+def test_access_denied_on_a_lookup_is_an_error_and_never_taken_for_a_missing_record():
+    import pytest
+
+    from .record_lake import RecordUnavailable
+
+    rows = ColdRows(journal(Denied(), name="console").payloads)
+    with pytest.raises(RecordUnavailable):
+        rows.get(ColdRows.job("a"), 1)
     rows.put(ColdRows.job("a"), 1, {"row": 1})
     assert ColdRows(rows.payloads).get(ColdRows.job("a"), 1) == {"row": 1}
 
