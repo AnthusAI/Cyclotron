@@ -43,3 +43,24 @@ def test_it_stays_within_its_serialized_byte_bound_and_skips_a_snapshot_larger_t
     tiny = CatalogSnapshotCache(maximum_serialized_bytes=record.reference.length - 1)
     tiny.put(small, record)
     assert len(tiny) == 0
+
+
+def test_a_claim_hold_follows_newer_records_that_still_show_the_claim_and_ends_with_the_first_that_does_not():
+    cache = CatalogSnapshotCache()
+    j = journal(name="console")
+    first = j.initialize({"running": True})
+    cache.hold(j, "run", "claim", first)
+    second = j.commit(first, {"running": True})
+    cache.observe(j, second, lambda value, claim: value["running"])
+    assert cache.held(j, "run") is second and cache.held(j, "other-run") is None
+    cache.observe(j, first, lambda value, claim: False)  # an older record never moves or ends a hold
+    assert cache.held(j, "run") is second
+    third = j.commit(second, {"running": False})
+    cache.observe(j, third, lambda value, claim: value["running"])
+    assert cache.held(j, "run") is None
+
+
+def test_it_remembers_each_legacy_index_by_the_digest_of_its_immutable_blob():
+    cache = CatalogSnapshotCache()
+    cache.remember_legacy("a" * 64, "index")
+    assert cache.legacy("a" * 64) == "index" and cache.legacy("b" * 64) is None

@@ -7,7 +7,8 @@ commit rewrites only the small head and costs the same on the first decision and
 
 A record is written only from state a head has already committed, before the commit that drops the row from
 the head. A key therefore names exactly one content: repeating the write is harmless, and a reader that does
-not find a row in the head it holds finds it here. Records live under ``<scope>/records/catalog/<kind>/``:
+not find a row in the head it holds finds it here. Records live under ``<scope>/records/catalog/<kind>/<seq>``,
+each kind named by a digest of the identity it stands for:
 
 - ``jobs-<run>/<n>``, ``job-<job id>/1`` and ``request-<digest>/1``: one finished job (row, actor, claim and
   its position ``n`` in the run), found by position, by id, or by its run and request id.
@@ -25,10 +26,13 @@ from hashlib import sha256
 
 from .journal import decode, encode
 from .record_lake import SCHEMA as RECORD_SCHEMA
-from .record_lake import FileRecordLake, RecordConflict, RecordCorrupt, S3RecordLake
+from .record_lake import FileRecordLake, RecordConflict, RecordCorrupt, RecordUnavailable, S3RecordLake
+from .s3_transient import cause_name, log, read_with_one_retry
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
 
 DOMAIN = "catalog"
+# What S3 says about a key that holds nothing: NoSuchKey, or AccessDenied to a principal without ListBucket.
+_ABSENT = ("NoSuchKey", "AccessDenied")
 COLD_TABLES = ("web_jobs", "web_items", "list_item_revisions")
 TERMINAL = ("completed", "failed", "interrupted")
 
@@ -82,7 +86,7 @@ class ColdRows:
         if (kind, seq) in self._seen:
             return self._seen[kind, seq]
         lake = self._lake(kind)
-        content = lake._fetch(seq)
+        content = self._fetch(lake, seq)
         if content is None:
             return None
         try:
@@ -98,6 +102,26 @@ class ColdRows:
             raise RecordCorrupt("catalog record envelope does not match its position") from None
         self._seen[kind, seq] = envelope["value"]
         return envelope["value"]
+
+    @staticmethod
+    def _fetch(lake, seq):
+        """The stored bytes, or None when the key holds nothing.
+
+        Lookups here ask about keys that may not exist yet (has this request been seen, does this item have a
+        newer state). The Lambda roles may get every object under ``records/`` but may not list the bucket, and
+        S3 answers such a principal's GET of a missing key with AccessDenied instead of NoSuchKey, so both mean
+        "no record" here. (A role that lost its read grant would also fail its head and payload reads, which
+        come first.) Any other failure is raised.
+        """
+        if not isinstance(lake, S3RecordLake):
+            return lake._fetch(seq)
+        try:
+            return read_with_one_retry(lambda: lake._get(seq), "catalog record")
+        except Exception as error:
+            if getattr(error, "response", {}).get("Error", {}).get("Code") in _ABSENT:
+                return None
+            log.warning("catalog record unavailable: %s", cause_name(error))
+            raise RecordUnavailable("catalog record unavailable", cause_name(error)) from None
 
     def put(self, kind, seq, value):
         """Create the record. True when it is (now) this value; False when a different value already holds the key."""

@@ -271,9 +271,7 @@ def migrated(value, reference):
         "claims": {k: v for k, v in value["claims"].items() if k in kept},
         "actors": {k: v for k, v in value["actors"].items() if k in kept},
         "cold": cold,
-        "legacy": None
-        if legacy is None
-        else {"digest": reference.digest, "length": reference.length, "shadow": sorted(kept)},
+        "legacy": None if legacy is None else {"digest": reference.digest, "length": reference.length, "shadow": sorted(kept)},
     }
     return result, legacy
 
@@ -397,7 +395,9 @@ class S3ConsoleStorage:
                     raise ValueError("invalid catalog item slot")
         legacy = value["legacy"]
         if legacy is not None and (
-            not isinstance(legacy, dict) or set(legacy) != {"digest", "length", "shadow"} or not isinstance(legacy["shadow"], list)
+            not isinstance(legacy, dict)
+            or set(legacy) != {"digest", "length", "shadow"}
+            or not isinstance(legacy["shadow"], list)
         ):
             raise ValueError("invalid legacy catalog reference")
 
@@ -445,6 +445,8 @@ class S3ConsoleStorage:
             self._validate(record.value)
             if cache is not None:
                 cache.put(self.journal, record)
+        if cache is not None:
+            cache.observe(self.journal, record, self._still_held)
         if self.phase_log is not None:
             self.phase_log("catalog_read", started, cache="hit" if reused else "miss")
         return record
@@ -688,7 +690,37 @@ class S3ConsoleStorage:
     def _commit(self, record, value):
         self._evict(record.value, value)
         self._validate(value)
-        return commit_with_contract(self.journal, record, value)
+        return self._committed(commit_with_contract(self.journal, record, value))
+
+    def _committed(self, record):
+        """Remember what this store just committed: the next read only revalidates the head."""
+        cache = self.snapshot_cache
+        if cache is not None:
+            cache.put(self.journal, record)
+            cache.observe(self.journal, record, self._still_held)
+        return record
+
+    # Claim holds (catalog_snapshot_cache.py) ------------------------------------------------------------
+    @staticmethod
+    def _still_held(value, claim):
+        job_id, owner, fence = claim
+        job = one(value, "web_jobs", id=job_id)
+        return job is not None and job["status"] == "running" and same_claim(value["claims"].get(job_id), owner, fence)
+
+    def _run_value(self, run_id):
+        """The value for a read of one run's own rows.
+
+        While this process holds a confirmed claim on the run's running job, only that holder can change the run's
+        rows, and every head this process reads or commits refreshes the hold. Such a read then uses the newest
+        record that showed the claim instead of reading the head again. Everything else reads the head.
+        """
+        held = None
+        if self._tx.get() is None and self.snapshot_cache is not None:
+            held = self.snapshot_cache.held(self.journal, run_id)
+        if held is None:
+            return self._read()
+        self._check_claim(held.value)
+        return held.value
 
     def _record(self):
         with self._request_lock:
@@ -763,10 +795,14 @@ class S3ConsoleStorage:
             raise ValueError("valid command fence required")
         if (job_id, owner, fence) not in self._granted:
             raise ValueError("command claim receipt not confirmed in this worker")
-        value = self._read()
+        record = self._load() if self._tx.get() is None else None
+        value = self._read() if record is None else record.value
+        self._check_claim(value)
         job = one(value, "web_jobs", id=job_id)
         if job is None or job["status"] != "running" or not same_claim(value["claims"].get(job_id), owner, fence):
             raise ValueError("stale command capability")
+        if record is not None and self.snapshot_cache is not None:
+            self.snapshot_cache.hold(self.journal, job["run_id"], (job_id, owner, fence), record)
         return _CommandView(self, (job_id, owner, fence), job["run_id"])
 
     def _mutate(self, fn):
@@ -1288,7 +1324,9 @@ class S3ConsoleStorage:
         return self._mutate(apply)
 
     def run(self, run_id):
-        row = clean(self._run(self._read(), run_id))
+        # Through a command view this read is the execution fence, so it always reads the head.
+        value = self._read() if self._claim.get() is not None else self._run_value(run_id)
+        row = clean(self._run(value, run_id))
         row["config"] = load_config(row["config"])
         return row
 
@@ -1500,11 +1538,11 @@ class S3ConsoleStorage:
         # verify it again; neither a queue delivery nor this record is a lease.
         with self.transaction():
             value = self._tx.get()
-            existing = self._request_entry(value, run_id, request_id)
-            if existing is not None and existing["actor"] is None:
-                raise ValueError("legacy command has no actor; cannot adopt it")
+            accepted = value["cold"]["rowids"]["web_jobs"]
             job = self.command(run_id, request_id, kind, payload)
             previous = self._job_entry(value, job["id"])["actor"]
+            if value["cold"]["rowids"]["web_jobs"] == accepted and previous is None:
+                raise ValueError("legacy command has no actor; cannot adopt it")
             provenance = asdict(actor)
             if previous is not None and previous != provenance:
                 raise ValueError("command already bound to another actor")
@@ -1526,8 +1564,8 @@ class S3ConsoleStorage:
         return job, self._parse_actor(actor)
 
     def command_actor(self, job_id, owner, fence):
-        self.for_command(job_id, owner, fence)
-        actor = self._read()["actors"].get(job_id)
+        view = self.for_command(job_id, owner, fence)
+        actor = self._run_value(view._run_id)["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
         return self._parse_actor(actor)
@@ -1737,13 +1775,14 @@ class S3ConsoleStorage:
                 self._validate(state)
 
             try:
-                commit_with_records(self.journal, current, [(self.results, [record(job)])], change)
+                committed, _ = commit_with_records(self.journal, current, [(self.results, [record(job)])], change)
             except StorageConflict:
                 continue
+            self._committed(committed)
             return
         raise ValueError("console contention limit reached; retry with same operation identity")
 
-    TERMINAL = ("completed", "failed", "interrupted")
+    TERMINAL = TERMINAL
 
     def _embedded_results(self, value):
         """(job row, raw text) of finished jobs whose result is still inside the catalog row."""
@@ -1900,7 +1939,7 @@ class S3ConsoleStorage:
         raise ValueError("cloud feedback recovery requires reviewed fenced worker composition")
 
     def current_item(self, run_id):
-        value = self._read()
+        value = self._run_value(run_id)
         self._run(value, run_id)
         row = next(
             (r for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"] and r["prediction"] is not None), None
@@ -1925,7 +1964,7 @@ class S3ConsoleStorage:
             self._mutate(apply)
 
     def items(self, run_id):
-        value = self._read()
+        value = self._run_value(run_id)
         self._run(value, run_id)
         return [self._payload(r["payload"]) for r in self._run_items(value, run_id)]
 
@@ -2014,7 +2053,7 @@ class S3ConsoleStorage:
         raise ValueError("console contention limit reached; retry with same operation identity")
 
     def unreviewed_items(self, run_id):
-        value = self._read()
+        value = self._run_value(run_id)
         self._run(value, run_id)
         return [self._payload(r["payload"]) for r in self._run_items(value, run_id) if not r["reviewed"]]
 

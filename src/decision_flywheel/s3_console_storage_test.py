@@ -436,7 +436,7 @@ def cached_store(client=None, cache=None, **options):
     from .s3_console_storage import S3ConsoleStorage
 
     j = journal(client, name="console")
-    result = S3ConsoleStorage(j, snapshot_cache=cache or CatalogSnapshotCache(), **options)
+    result = S3ConsoleStorage(j, snapshot_cache=CatalogSnapshotCache() if cache is None else cache, **options)
     result.initialize()
     return result
 
@@ -449,7 +449,7 @@ def test_it_reuses_a_decoded_catalog_while_the_head_is_unchanged_and_reloads_whe
     from .catalog_snapshot_cache import CatalogSnapshotCache
 
     cache = CatalogSnapshotCache()
-    writer = cached_store(cache=cache)
+    writer = cached_store()  # another process: its commits are not in this memory
     seed(writer)
     client = writer.journal.payloads.client
     reader = cached_store(client, cache)
@@ -535,3 +535,208 @@ def test_initializing_an_existing_catalog_without_verification_spends_only_the_a
     reopened.initialize(verify_existing=False)
     keys = [r["Key"] for kind, r in client.calls[mark:] if kind == "get"]
     assert len(keys) == 1 and keys[0].endswith("anchor.json")
+
+
+# --- constant-cost catalog: finished jobs, items and revisions leave the head --------------------------------
+
+
+def standing(s=None):
+    """A store with an operational list and a run that registers standing items into it, as the hosted worker does."""
+    s = s or store()
+    s.save_item_list("standing", "Standing")
+    s.save_item_list("priming", "Priming")
+    s.upsert_list_items("priming", [{"id": "primer", "occurred_at": "2026-01-01", "values": {"text": "Primer"}}])
+    run = s.create_run("Standing", "live", {"item_list_id": "standing"})
+    return s, run["id"]
+
+
+def decide(s, run_id, n, *, values=None, request=None):
+    """One decision: accept the command, claim it, register its item, finish it."""
+    item = {"id": f"item-{n}", "values": values or {"text": f"Source {n}"}}
+    job = s.command(run_id, request or f"req-{n}", "publication", {"bindings": {"alpha": "1"}, "item": item})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner, job_id=job["id"])
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    view.register_standing_item(run_id, item["id"], item["values"])
+    view.finish_command(claimed["id"], "completed", {"response": {"label": "yes", "n": n}})
+    return job["id"]
+
+
+def written(client, since):
+    puts = [r for kind, r in client.calls[since:] if kind == "put"]
+    gets = [r for kind, r in client.calls[since:] if kind == "get"]
+    return len(puts), len(gets), sum(len(r["Body"]) for r in puts)
+
+
+def test_the_bytes_a_catalog_writes_per_decision_do_not_depend_on_how_many_jobs_came_before():
+    s, run_id = standing()
+    client = s.journal.payloads.client
+    costs = {}
+    for n in range(1, 61):
+        mark = len(client.calls)
+        decide(s, run_id, n)
+        costs[n] = written(client, mark)
+    early, late = costs[10], costs[60]
+    assert early[:2] == late[:2]  # the same number of writes and reads
+    assert abs(late[2] - early[2]) < 64  # the same bytes, give or take the digits of a counter
+    head = len(s.journal.read().value["snapshot"]["tables"]["web_jobs"])
+    assert head == 1  # only the newest finished job, until the next commit moves it out
+
+
+def test_finished_jobs_items_and_revisions_still_list_and_serve_after_they_leave_the_head():
+    s, run_id = standing()
+    ids = [decide(s, run_id, n) for n in range(1, 6)]
+    reopened = store(journal(s.journal.payloads.client, name="console"))
+    assert [j["id"] for j in reopened.jobs(run_id)] == list(reversed(ids))
+    assert reopened.job_result(ids[0]) == {"response": {"label": "yes", "n": 1}}
+    assert reopened.queue_state(ids[0])["status"] == "completed"
+    # The same request id returns the same job; different content is refused.
+    again = reopened.command(run_id, "req-1", "publication", reopened.jobs(run_id)[-1]["payload"])
+    assert again["id"] == ids[0]
+    with pytest.raises(ValueError, match="different content"):
+        reopened.command(run_id, "req-1", "publication", {"bindings": {"alpha": "2"}, "item": {"id": "x", "values": {}}})
+    assert [i["id"] for i in reopened.items(run_id)] == [f"item-{n}" for n in range(1, 6)]
+    assert [i["id"] for i in reopened.snapshot_items("standing")] == [f"item-{n}" for n in range(1, 6)]
+    assert reopened.item_revision("standing", "item-3", 1)["values"] == {"text": "Source 3"}
+    assert {r["id"]: r["count"] for r in reopened.item_lists()} == {"standing": 5, "priming": 1}
+    assert reopened.export_storage()["tables"]["web_jobs"][0]["id"] == ids[0]
+
+
+def test_a_standing_item_registered_again_keeps_its_disjointness_and_its_newest_revision():
+    s, run_id = standing()
+    decide(s, run_id, 1)
+    decide(s, run_id, 2)
+    decide(s, run_id, 3)
+    decide(
+        s, run_id, 1, values={"text": "Changed"}, request="req-1-again"
+    )  # a new immutable revision of an item that left the head
+    decide(s, run_id, 4)
+    reopened = store(journal(s.journal.payloads.client, name="console"))
+    [item] = [i for i in reopened.items(run_id) if i["id"] == "item-1"]
+    assert item["values"] == {"text": "Changed"} and item["revision"] == 2
+    assert reopened.item_revision("standing", "item-1", 1)["values"] == {"text": "Source 1"}
+    with pytest.raises(ValueError, match="disjoint"):
+        job = s.command(run_id, "req-primer", "publication", {"bindings": {"alpha": "1"}, "item": {"id": "primer", "values": {}}})
+        owner = str(uuid4())
+        claimed = s.claim_command(owner=owner, job_id=job["id"])
+        s.for_command(claimed["id"], owner, claimed["claim_fence"]).register_standing_item(run_id, "primer", {"t": 1})
+
+
+def test_a_run_a_worker_ever_claimed_in_stays_worker_only_after_its_jobs_leave_the_head():
+    s, run_id = standing()
+    decide(s, run_id, 1)
+    decide(s, run_id, 2)
+    with pytest.raises(ValueError, match="command-bound"):
+        s.set_status(run_id, "paused")
+
+
+def old_catalog():
+    """A catalog in the whole-state (v2) layout production catalogs have today, with a running job and a review item."""
+    from .s3_console_storage import SCHEMA_V2
+
+    s, run_id = standing()
+    ids = [decide(s, run_id, n) for n in range(1, 4)]
+    live = s.create_run("Live", "live", {}, items=[{"id": "shown", "values": {"text": "Shown"}}])
+    s.update_item(live["id"], "shown", prediction={"label": "yes"})
+    running = s.command(run_id, "req-running", "publication", {"bindings": {"alpha": "1"}, "item": {"id": "r", "values": {}}})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner, job_id=running["id"])
+    value = s._read()
+    # Export refuses while a job runs, so assemble the same complete tables directly.
+    tables = {**value["snapshot"]["tables"]}
+    for table in ("web_jobs", "web_items", "list_item_revisions"):
+        tables[table] = s._all_rows(value, table)
+    claims = {job_id: {"owner": str(uuid4()), "fence": 1, "at": "2026-10-01T00:00:00+00:00"} for job_id in ids}
+    claims[running["id"]] = value["claims"][running["id"]]
+    old = {"schema": SCHEMA_V2, "snapshot": {**value["snapshot"], "tables": tables}, "claims": claims, "actors": {}}
+    j = journal(s.journal.payloads.client, name="old-catalog")
+    j.initialize(old)
+    return j, run_id, live["id"], ids, running["id"], (owner, claimed["claim_fence"])
+
+
+def test_an_old_whole_state_catalog_still_lists_and_serves_its_jobs_and_items_and_migrates_on_its_first_write():
+    from .s3_console_storage import S3ConsoleStorage, encoded
+
+    j, run_id, live_id, ids, running, (owner, fence) = old_catalog()
+    old_bytes = len(encoded(j.read().value))
+    s = S3ConsoleStorage(j)
+    # Reads before any write see the old catalog exactly.
+    assert [job["id"] for job in s.jobs(run_id)] == [running, *reversed(ids)]
+    assert s.job_result(ids[0]) == {"response": {"label": "yes", "n": 1}}
+    assert s.command_recovery(ids[0])["owner"] is not None and s.command_recovery(running)["status"] == "running"
+    assert s.current_item(live_id)["item"]["id"] == "shown"
+    assert [i["id"] for i in s.snapshot_items("standing")] == ["item-1", "item-2", "item-3"]
+    assert s.command(run_id, "req-2", "publication", s.jobs(run_id)[2]["payload"])["id"] == ids[1]
+    assert j.read().value["schema"] == "cyclotron-s3-console/v2"  # an idempotent retry writes nothing
+    # The first write migrates: the head names the old blob instead of carrying its rows.
+    s.save_item_list("later", "Later")
+    head = j.read().value
+    assert head["schema"] == "cyclotron-s3-console/v3" and head["legacy"]["shadow"] == [running]
+    assert [r["id"] for r in head["snapshot"]["tables"]["web_jobs"]] == [running]
+    assert len(encoded(head)) < old_bytes
+    # A fresh process reads the migrated catalog the same way, and the running job still finishes under its fence.
+    fresh = S3ConsoleStorage(journal(j.payloads.client, name="old-catalog"))
+    assert [job["id"] for job in fresh.jobs(run_id)] == [running, *reversed(ids)]
+    assert fresh.item_revision("standing", "item-2", 1)["values"] == {"text": "Source 2"}
+    s._granted.add((running, owner, fence))
+    s.finish_command(running, "completed", {"response": "done"}, owner=owner, fence=fence)
+    s.save_item_list("after", "After")  # the next commit moves the finished job out of the head
+    fresh = S3ConsoleStorage(journal(j.payloads.client, name="old-catalog"))
+    assert fresh.job_result(running) == {"response": "done"} and fresh.jobs(run_id)[0]["status"] == "completed"
+    assert j.read().value["snapshot"]["tables"]["web_jobs"] == []
+    new = decide(fresh, run_id, 9)
+    assert [job["id"] for job in fresh.jobs(run_id)][:2] == [new, running]
+    assert fresh.export_storage()["tables"]["web_jobs"][-1]["id"] == new
+
+
+def test_a_command_view_reuses_the_record_that_showed_its_claim_instead_of_rereading_the_head():
+    from .catalog_snapshot_cache import CatalogSnapshotCache
+
+    cache = CatalogSnapshotCache()
+    s, run_id = standing(cached_store(cache=cache))
+    client = s.journal.payloads.client
+    job = s.command(run_id, "req", "publication", {"bindings": {"alpha": "1"}, "item": {"id": "a", "values": {}}})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner, job_id=job["id"])
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    other = cached_store(client, cache)  # another store in the same process, as the binding check uses
+    mark = len(client.calls)
+    for _ in range(5):
+        other.run(run_id)
+        view.items(run_id)
+        view.current_item(run_id)
+    assert not [r for kind, r in client.calls[mark:] if kind == "get" and r["Key"].endswith("head.json")]
+    view.run(run_id)  # the execution fence itself always reads the head
+    assert [r for kind, r in client.calls[mark:] if kind == "get" and r["Key"].endswith("head.json")]
+    view.finish_command(claimed["id"], "completed", {"response": 1})
+    mark = len(client.calls)
+    other.run(run_id)  # the hold ended with the job
+    assert [r for kind, r in client.calls[mark:] if kind == "get" and r["Key"].endswith("head.json")]
+
+
+def test_an_item_state_an_abandoned_commit_wrote_never_hides_the_state_that_committed():
+    from .catalog_cold_rows import ColdRows
+
+    s = store()
+    run = s.create_run("Live", "live", {}, items=[{"id": "a", "values": {"text": "A"}}])
+    stale = s._item_row(s._read(), run["id"], "a")
+    # A writer that lost its commit had already written the item's committed state into the next slot ...
+    assert s._cold().put(ColdRows.item(run["id"], "a"), 1, {"row": stale, "ordinal": 1, "slot": 1})
+    s.update_item(run["id"], "a", reviewed=True)  # ... while the commit that won changed the item.
+    s.save_item_list("one", "One")  # this commit finds the slot taken, so the item keeps the head one commit longer
+    assert s._read()["cold"]["hot"]["web_items"]
+    s.save_item_list("two", "Two")
+    assert not s._read()["snapshot"]["tables"]["web_items"]
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    assert fresh.unreviewed_items(run["id"]) == [] and fresh._item_row(fresh._read(), run["id"], "a")["reviewed"] == 1
+
+
+def test_decisions_run_for_a_principal_that_cannot_list_the_bucket():
+    from .catalog_cold_rows_test import NoListing
+
+    client = NoListing()
+    s, run_id = standing(store(journal(client, name="console", create_only_initialization=True)))
+    ids = [decide(s, run_id, n) for n in range(1, 4)]
+    decide(s, run_id, 1, values={"text": "Changed"}, request="req-1-again")
+    assert s.command(run_id, "req-2", "publication", s.jobs(run_id)[2]["payload"])["id"] == ids[1]
+    assert [i["revision"] for i in s.items(run_id)] == [2, 1, 1]
