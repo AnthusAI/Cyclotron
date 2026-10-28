@@ -10,8 +10,10 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-# Nothing pending: the worker sweep is deployed.
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    # The API's stage throttle (5 requests/s, burst 10): an arbitrary ceiling, removed.
+    "/Resources/ConsoleApiApiGatewayDefaultStage/Properties/DefaultRouteSettings",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -166,3 +168,8 @@ def test_the_worker_sweep_runs_once_a_minute_and_only_its_rule_may_invoke_the_wo
     permission = resources["WorkerSweepPermission"]["Properties"]
     assert permission["Principal"] == "events.amazonaws.com"
     assert permission["SourceArn"] == {"Fn::GetAtt": ["WorkerSweepSchedule", "Arn"]}
+
+
+def test_the_api_stage_sets_no_throttle_of_its_own():
+    stage = check.load_template()["Resources"]["ConsoleApiApiGatewayDefaultStage"]["Properties"]
+    assert "DefaultRouteSettings" not in stage and "RouteSettings" not in stage
