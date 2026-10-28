@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_calibration_metrics
+from .concurrent_calls import call_serially
 from .feedback_trigger import PROTECTED_ASSIGNMENTS, LabelTransitionTrigger, learning_feedback
 from .flywheel import development_assignment
 from .models import Item, LabeledItem
@@ -98,7 +99,15 @@ def labeled_partitions(wheel, item_values_for: Callable, seed):
 
 
 async def decide_with_shared_context(
-    wheels, shared, target, partitions: Callable, *, now, checkpoint=None, labeled_only_partitions: Callable | None = None
+    wheels,
+    shared,
+    target,
+    partitions: Callable,
+    *,
+    now,
+    checkpoint=None,
+    labeled_only_partitions: Callable | None = None,
+    per_output: Callable | None = None,
 ):
     """Make one shared decision-model request and one decision per classifier.
 
@@ -106,7 +115,9 @@ async def decide_with_shared_context(
     cycle is left suspended, waiting for the review. Returns per-classifier
     ``DecisionResult`` values and the checkpoint's return value. A caller that
     can read labeled items alone passes ``labeled_only_partitions``, so the
-    common path skips the protected items.
+    common path skips the protected items. ``per_output`` runs a list of
+    independent per-classifier storage calls (``concurrent_calls``); by
+    default they run one after another.
     """
     training, configs = {}, {}
     for identifier, wheel in wheels.items():
@@ -160,16 +171,64 @@ async def decide_with_shared_context(
         wheel.reconcile_model_context(training[identifier])
     checkpointed = checkpoint() if checkpoint else None
     await shared.prepare(configs, target, training, now=now)
-    results = {}
+    return await _predict_each(wheels, target, training, now, per_output or call_serially), checkpointed
+
+
+async def _predict_each(wheels, target, training, now, per_output):
+    """One prediction per output from the prepared shared request, deterministically in output order.
+
+    Each output plans its prediction (no await), then every output's durable answer reservation is made
+    together through ``per_output`` (at once over stores that allow it), then each finishes in order. An
+    output whose plan or reservation fails ends its cycle with that error; every output that holds a
+    reservation still finishes, so none is left pending without its call. The first error is then raised.
+    """
+    cycles, plans, failures = {}, {}, {}
+    unopened = None
     for identifier, wheel in wheels.items():
-        cycle = wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
         try:
-            results[identifier] = await wheel.predict(target, training[identifier], now=now)
-            cycle.suspend()
+            cycle = wheel.resume_cycle(target) or wheel.cycle(target).__enter__()
         except Exception as error:
-            cycle.__exit__(type(error), error, None)
-            raise
-    return results, checkpointed
+            unopened = error
+            break
+        cycles[identifier] = cycle
+        try:
+            plans[identifier] = wheel.plan_prediction(target, training[identifier], now=now)
+        except Exception as error:
+            failures[identifier] = error
+            break  # As before: the outputs after a failed one do not start.
+
+    def reservation(answers):
+        def reserve():
+            try:
+                answers.reserve()
+                answers.reserved = True
+            except Exception as error:  # noqa: BLE001 - reported per output below
+                return error
+            return None
+
+        return reserve
+
+    reserving = [(identifier, plan.answers) for identifier, plan in plans.items() if plan.answers.reserve is not None]
+    for (identifier, _), error in zip(reserving, per_output([reservation(answers) for _, answers in reserving])):
+        if error is not None:
+            failures[identifier] = error
+    results = {}
+    for identifier, cycle in cycles.items():
+        error = failures.get(identifier)
+        if error is None:
+            try:
+                results[identifier] = await wheels[identifier].predict(
+                    target, training[identifier], now=now, plan=plans[identifier]
+                )
+                cycle.suspend()
+                continue
+            except Exception as failure:
+                error = failures[identifier] = failure
+        cycle.__exit__(type(error), error, None)
+    first = next((failures[identifier] for identifier in cycles if identifier in failures), unopened)
+    if first is not None:
+        raise first
+    return results
 
 
 async def learn_from_review(

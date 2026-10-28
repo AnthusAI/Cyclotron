@@ -40,6 +40,7 @@ from uuid import uuid4
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
+from .concurrent_calls import call_serially
 from .classifier_set import (
     ADDED,
     CLASSIFIER_SET_CHANGES_KEY,
@@ -269,6 +270,10 @@ class Cyclotron:
         self._created = saved is None
         if self.directory is not None:
             (self.directory / "classifiers").mkdir(exist_ok=True)
+        open_runtimes = getattr(self.storage, "open_classifier_runtimes", None)
+        if open_runtimes is not None:
+            # Acquire every output's runtime at once; each output then opens over its own.
+            open_runtimes([spec.id for spec in definition.classifiers])
         for spec in definition.classifiers:
             self._open_classifier(spec)
         install_sibling_checks(self.wheels, self.shared, self._partitions, definition.sibling_policy)
@@ -512,9 +517,8 @@ class Cyclotron:
         # Ownership is released even when closing an opened part fails, so a
         # failure part-way through opening never leaves a store owned.
         try:
-            for wheel in self.wheels.values():
-                wheel.close()
-            self.wheels = {}
+            wheels, self.wheels = list(self.wheels.values()), {}
+            self._per_output([wheel.close for wheel in wheels])
             if self.shared is not None:
                 self.shared.close()
                 self.shared = None
@@ -525,6 +529,23 @@ class Cyclotron:
             if self.lease is not None:
                 lease, self.lease = self.lease, None
                 lease.release()
+
+    def _per_output(self, calls):
+        """Independent per-output calls: at once over stores that allow it, otherwise one after another.
+
+        Every call runs even when one fails; the first failure in output order is then raised.
+        """
+        concurrently = getattr(self.storage, "run_concurrently", None)
+        return concurrently(calls) if concurrently is not None else call_serially(calls)
+
+    def flush(self) -> None:
+        """Publish what the stores hold in memory, keeping ownership, so an open engine can serve another call.
+
+        Call it inside ``execution`` so a guard runs first. A SQLite store commits as it goes: nothing to do.
+        """
+        flush = getattr(self.storage, "flush", None)
+        if flush is not None:
+            flush()
 
     @asynccontextmanager
     async def execution(self, *, execution_guard: ExecutionGuard | None = None):
@@ -761,6 +782,7 @@ class Cyclotron:
             self._partitions,
             now=datetime.now(timezone.utc),
             labeled_only_partitions=self._labeled_partitions,
+            per_output=self._per_output,
         )
         self._sync()
         decision_id = str(uuid4())
