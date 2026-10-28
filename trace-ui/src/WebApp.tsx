@@ -24,6 +24,7 @@ import {FeedbackControls} from './FeedbackControls'
 import {OptimizationStatus,latestOptimizationActivity} from './OptimizationStatus'
 import {MobileNavigation} from './MobileNavigation'
 import {navigationItems} from './navigation'
+import {LabDecisions} from './LabDecisions'
 export {TraceDetail} from './TraceDetail'
 
 type Run={cyclotronId?:string|null;eventCursor?:number;labelingAccess?:{allowed:boolean;reason:string|null};id:string;name:string;mode:string;status:string;createdAt:string;config:{input_mode?:string;cyclotron_id?:string;selection_policy?:{primary:string;secondary?:string};max_requests?:number;backfill_count?:number;classifiers?:MetricClassifier[]};counts:{cycles:number;predictions:number;labels:number;optimizations:number}}
@@ -33,7 +34,7 @@ const DETAILS_POLL_INTERVAL_MS=4000
 const DETAILS_POLL_BACKOFF_CAP_MS=30000
 const DETAILS='query($id:ID!){run(runId:$id){id name mode status createdAt config counts labelingAccess cyclotronId eventCursor} currentItem(runId:$id) jobs(runId:$id){id kind status result}}'
 const locationState=()=>new URLSearchParams(window.location.hash.slice(1))
-const routeSection=()=>{const value=locationState().get('section');return value==='classifiers'||value==='cyclotrons'?'cyclotrons':value==='items'?'items':'optimizations'}
+const routeSection=()=>{const value=locationState().get('section');return value==='classifiers'||value==='cyclotrons'?'cyclotrons':value==='items'?'items':value==='decisions'?'decisions':'optimizations'}
 function LabelCard(props:{current:CurrentItem;busy:boolean;readOnly?:boolean;onSubmit:(kind:string,payload:Record<string,unknown>)=>void;classifiers?:MetricClassifier[];events?:TraceEvent[];footer?:ReactNode}){
   if('classifiers' in props.current.prediction){
     const current=props.current as unknown as BatchItem
@@ -63,7 +64,7 @@ export function RunTimeline({runId,revision,classifierId}:{runId:string;revision
 
 export function WebApp(){
   const [commandIds]=useState(()=>new PendingCommandIds())
-  const [section,setSection]=useState<'cyclotrons'|'items'|'optimizations'>(routeSection)
+  const [section,setSection]=useState<'cyclotrons'|'items'|'optimizations'|'decisions'>(routeSection)
   const [runs,setRuns]=useState<Run[]>([]),[selected,setSelected]=useState(()=>locationState().get('run')??''),[run,setRun]=useState<Run|null>(null)
   const [current,setCurrent]=useState<CurrentItem|null>(null),[jobs,setJobs]=useState<Job[]>([]),[events,setEvents]=useState<TraceEvent[]>([])
   const [view,setView]=useState<'timeline'|'label'>(()=>locationState().get('view')==='label'?'label':'timeline'),[detail,setDetail]=useState<TraceEvent|null>(null),[revision,setRevision]=useState(0)
@@ -206,7 +207,7 @@ export function WebApp(){
   const recent=events.filter(event=>latestOptimizationActivity([event])||['decision-request','decision-response','human-feedback','cycle-metrics'].includes(String(event.payload.kind))).filter(event=>activityFilter==='all'||activityFilter==='optimizer'&&String(event.payload.kind).startsWith('optimizer-')||activityFilter==='decision'&&String(event.payload.kind).startsWith('decision-')).slice(-40).reverse()
   return <div data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
 <header data-testid="main-application-header" className="app-header flex items-center justify-between gap-2 border-b border-border bg-background px-2 py-1"><CyclotronBrand /><nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
-    {section!=='optimizations'?(section==='cyclotrons'?<CyclotronCatalog/>:<Catalog section="items" />):
+    {section!=='optimizations'?(section==='cyclotrons'?<CyclotronCatalog/>:section==='decisions'?<LabDecisions/>:<Catalog section="items" />):
     <div className="flex min-h-0 flex-1">
       <AppDrawer title="Run history" open={historyOpen} onOpenChange={setHistoryOpen}><div className="flex items-center justify-between"><p className="flex items-center gap-2 text-sm font-semibold"><History className="size-4" />Run history</p><Button variant="ghost" size="icon" aria-label="Refresh run history" onClick={()=>refresh().catch(e=>setError(e.message))}><RefreshCw /></Button></div><Button variant="outline" disabled={!capabilities.liveEnabled} onClick={()=>{setCreating(!creating);setHistoryOpen(false)}}><Plus />New run</Button>
         <Label htmlFor="history-search">Search run history</Label><Input id="history-search" value={historySearch} onChange={e=>setHistorySearch(e.target.value)} placeholder="Run name"/>

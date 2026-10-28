@@ -1994,6 +1994,78 @@ class S3ConsoleStorage:
         for entry in self._run_job_entries(value, run_id):
             yield self._job(value, entry["row"]) if results else decoded(entry["row"], "payload", "result")
 
+    # Read-only views by position, for observers that list a run page by page (lab_decisions.py) -------------
+    def run_job_count(self, run_id):
+        """How many jobs the run has accepted: positions ``1 .. count``, oldest first. Reads only the head."""
+        value = self._read()
+        self._run(value, run_id)
+        return value["cold"]["ordinals"]["web_jobs"].get(run_id, 0)
+
+    def run_job_at(self, run_id, n, *, results=True):
+        """The job at position ``n`` of the run (decoded), or None outside ``1 .. count``. One record read, plus
+        its result record when ``results`` and the result lives in the lake."""
+        value = self._read()
+        self._run(value, run_id)
+        entry = self._job_at(value, run_id, n)
+        if entry is None:
+            return None
+        return self._job(value, entry["row"]) if results else decoded(entry["row"], "payload", "result")
+
+    def job_position(self, job_id):
+        """``{"position", "job", "actor"}`` for one job id (decoded, with its result), or None for an unknown id."""
+        value = self._read()
+        entry = self._job_entry(value, job_id)
+        if entry is None:
+            return None
+        actor = entry.get("actor")
+        return {
+            "position": entry["ordinal"],
+            "job": self._job(value, entry["row"]),
+            "actor": None if actor is None else self._parse_actor(actor),
+        }
+
+    def queue_counts(self, run_id):
+        """``{"pending", "running"}``: the run's waiting jobs and whether one is running, from the head alone."""
+        value = self._read()
+        self._run(value, run_id)
+        first, last = queue_bounds(value, run_id)
+        return {"pending": max(last - first + 1, 0), "running": int(self._running(value, run_id) is not None)}
+
+    def item_revisions(self, list_id, item_id):
+        """Every revision of one item in one list, oldest first, each with its values read back. Reads only that
+        item's own records (one per revision)."""
+        value = self._read()
+        found, revision = [], 1
+        while True:
+            row = self._revision_row(value, list_id, item_id, revision)
+            if row is None:
+                return found
+            found.append(
+                {
+                    **self._payload(row["payload"]),
+                    "revision": row["revision"],
+                    "fingerprint": row["fingerprint"],
+                    "imported_at": row["imported_at"],
+                }
+            )
+            revision += 1
+
+    def item_label_records(self, list_id, item_id, item_revision):
+        """Every label ever given to one item revision, oldest first, each with ``retracted`` (True when a later
+        retraction withdrew it). ``item_labels`` gives only the current votes."""
+        value = self._read()
+        return [
+            {**clean(row), "retracted": self._retraction_of(value, row["request_id"]) is not None}
+            for row in self._item_labels(value, list_id, item_id, item_revision)
+        ]
+
+    def run_event_by_source(self, run_id, source_id):
+        """The run event recorded under ``source_id`` (decoded), or None. One keyed read."""
+        value = self._read()
+        self._run(value, run_id)
+        row = self._keyed(value, "web_events", ColdRows.event(run_id, source_id), run_id=run_id, source_id=source_id)
+        return None if row is None else decoded(row, "payload")
+
     def _unfinished(self, value, run_id):
         """The run's running and waiting jobs, oldest acceptance first. Reads every waiting job: diagnostics only."""
         running = self._running(value, run_id)

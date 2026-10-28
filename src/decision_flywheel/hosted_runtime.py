@@ -156,6 +156,8 @@ class HostedRuntime:
             install_machine_routes(app, self)
             from .hosted_curation_routes import install_curation_routes
             install_curation_routes(app, self)
+            from .lab_decisions import install_lab_decision_routes
+            install_lab_decision_routes(app, self)
         return app
     def _runtime(self,account_id,view,guard,check):
         owned={}
