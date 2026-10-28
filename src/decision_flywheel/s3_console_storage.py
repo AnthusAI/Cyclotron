@@ -33,6 +33,7 @@ from .record_lake import (
 from .run_storage import _UNSET
 from .storage_errors import CommandNotReady, StorageConflict
 from .storage_payloads import FilePayloads, S3Payloads
+from .value_records import externalized, resolved, same_values
 
 # Completed job results live in the record lake; the catalog row keeps only this small reference.
 RESULTS_DOMAIN, RESULTS_KIND = "console", "job-results"
@@ -564,7 +565,7 @@ class S3ConsoleStorage:
 
     def snapshot_items(self, list_id):
         return [
-            {**json.loads(r["payload"]), "revision": r["revision"], "fingerprint": r["fingerprint"]}
+            {**self._payload(r["payload"]), "revision": r["revision"], "fingerprint": r["fingerprint"]}
             for r in self._items(self._read(), list_id)
         ]
 
@@ -577,7 +578,7 @@ class S3ConsoleStorage:
         row = one(self._read(), "list_item_revisions", list_id=list_id, id=identifier, revision=revision)
         if row is None:
             raise ValueError("unknown item revision")
-        return json.loads(row["payload"])
+        return self._payload(row["payload"])
 
     @staticmethod
     def _latest_votes(value, list_id, item_id, item_revision):
@@ -978,9 +979,28 @@ class S3ConsoleStorage:
         self._run(value, run_id)
         return max((r["sequence"] for r in rows(value, "web_events", run_id=run_id)), default=0)
 
+    def _values(self, document):
+        """A stored item document with its values read back (an inline document is returned as is)."""
+        return resolved(self.journal.payloads, document)
+
+    def _payload(self, text):
+        return self._values(json.loads(text))
+
+    def _stored_command(self, payload):
+        """The command as the catalog keeps it: an item's values become a reference to their record."""
+        if isinstance(payload, dict) and isinstance(payload.get("item"), dict) and "values" in payload["item"]:
+            return {**payload, "item": externalized(self.journal.payloads, payload["item"])}
+        return payload
+
+    def _command_payload(self, raw):
+        payload = json.loads(raw)
+        if isinstance(payload, dict) and isinstance(payload.get("item"), dict):
+            return {**payload, "item": self._values(payload["item"])}
+        return payload
+
     def command(self, run_id, request_id, kind, payload):
         identifier = str(uuid4())
-        raw = encoded(payload)
+        raw = encoded(self._stored_command(payload))
         if not request_id or kind not in (
             "prepare",
             "label",
@@ -1003,7 +1023,7 @@ class S3ConsoleStorage:
                 )
             old = one(value, "web_jobs", run_id=run_id, request_id=request_id)
             if old:
-                if (old["kind"], old["payload"]) != (kind, raw):
+                if old["kind"] != kind or (old["payload"] != raw and self._command_payload(old["payload"]) != payload):
                     raise ValueError("command identity has different content")
                 return self._job(value, old)
             # Jobs queue in acceptance order (row order); a command is never refused because others are running or waiting.
@@ -1049,7 +1069,10 @@ class S3ConsoleStorage:
         actor = value["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
-        return self._job(value, job), self._parse_actor(actor)
+        job = self._job(value, job)
+        if isinstance(job["payload"], dict) and isinstance(job["payload"].get("item"), dict):
+            job = {**job, "payload": {**job["payload"], "item": self._values(job["payload"]["item"])}}
+        return job, self._parse_actor(actor)
 
     def command_actor(self, job_id, owner, fence):
         self.for_command(job_id, owner, fence)
@@ -1424,7 +1447,7 @@ class S3ConsoleStorage:
         row = next(
             (r for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"] and r["prediction"] is not None), None
         )
-        return {"item": json.loads(row["payload"]), "prediction": json.loads(row["prediction"])} if row else None
+        return {"item": self._payload(row["payload"]), "prediction": json.loads(row["prediction"])} if row else None
 
     def update_item(self, run_id, item_id, *, prediction=_UNSET, reviewed=_UNSET):
         if reviewed is not _UNSET and type(reviewed) is not bool:
@@ -1446,7 +1469,7 @@ class S3ConsoleStorage:
     def items(self, run_id):
         value = self._read()
         self._run(value, run_id)
-        return [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
+        return [self._payload(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
 
     def register_standing_item(self, run_id, item_id, values):
         """Atomically register a never-before-seen source (or a new immutable revision) for a standing run.
@@ -1471,10 +1494,13 @@ class S3ConsoleStorage:
             latest = max(
                 rows(value, "list_item_revisions", list_id=list_id, id=item_id), key=lambda r: r["revision"], default=None
             )
-            if latest and json.loads(latest["payload"]).get("values") == values:
+            if latest and same_values(json.loads(latest["payload"]), values):
                 revision = latest
             else:
-                payload = encoded({"id": item_id, "values": values, "occurred_at": timestamp(created)})
+                document = {"id": item_id, "values": values, "occurred_at": timestamp(created)}
+                # The row keeps only the reference; its fingerprint is of the stored row, which names the values' digest.
+                payload = encoded(externalized(self.journal.payloads, document))
+                fingerprint = sha256(payload.encode()).hexdigest()
                 revision = insert(
                     value,
                     "list_item_revisions",
@@ -1483,7 +1509,7 @@ class S3ConsoleStorage:
                         id=item_id,
                         revision=latest["revision"] + 1 if latest else 1,
                         occurred_at=timestamp(created),
-                        fingerprint=sha256(payload.encode()).hexdigest(),
+                        fingerprint=fingerprint,
                         payload=payload,
                         imported_at=created,
                     ),
@@ -1531,7 +1557,7 @@ class S3ConsoleStorage:
     def unreviewed_items(self, run_id):
         value = self._read()
         self._run(value, run_id)
-        return [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"]]
+        return [self._payload(r["payload"]) for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"]]
 
     # PrimingService uses this same domain transaction, including acceptance.
     def draft(self, identifier):

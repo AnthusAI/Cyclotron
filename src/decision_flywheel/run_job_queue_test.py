@@ -275,3 +275,22 @@ def test_a_reconcile_with_a_queue_url_wakes_the_next_job_at_once():
     s.finish_command(first["id"], "failed", {}, owner=claim["claim_owner"], fence=claim["claim_fence"])
     assert wake_head(Sqs(), "https://queue", s, "account-a", first["id"]) == second["id"]
     assert sent[0]["QueueUrl"] == "https://queue" and second["id"] in sent[0]["MessageBody"]
+
+
+def test_a_long_article_is_queued_with_only_a_reference_in_the_catalog_and_runs_with_its_full_text():
+    import json
+
+    def canonical_json_size(value):
+        return len(json.dumps(value, separators=(",", ":")))
+
+    s, run = store_with_run()
+    body = "paragraph " * 40_000  # about 400 KB
+    payload = {**PAYLOAD, "item": {"id": "hn-long", "values": {"title": "T", "body": body, "text": "T\n\n" + body}}}
+    before = canonical_json_size(s._read())
+    job = s.command(run["id"], "req-long", "publication", payload)
+    assert canonical_json_size(s._read()) - before < 4_000  # the catalog grew by a row and a reference, not the text
+    assert s.command(run["id"], "req-long", "publication", payload)["id"] == job["id"]  # the same request is the same job
+    with pytest.raises(ValueError):
+        s.command(run["id"], "req-long", "publication", {**payload, "item": {"id": "hn-long", "values": {"title": "U"}}})
+    stored = next(r for r in s._read()["snapshot"]["tables"]["web_jobs"] if r["id"] == job["id"])
+    assert body not in stored["payload"] and "valuesRef" in stored["payload"]

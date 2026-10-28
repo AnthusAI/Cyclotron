@@ -39,6 +39,19 @@ KEYS = {
 INTEGERS = {"revision", "sequence", "classifier_revision", "item_revision"}
 
 
+def _values_ref(payload):
+    """A revision whose values live in their own content-addressed record (value_records.REF)."""
+    ref = payload.get("valuesRef")
+    return (
+        "values" not in payload
+        and isinstance(ref, dict)
+        and set(ref) == {"digest", "length"}
+        and isinstance(ref["digest"], str)
+        and len(ref["digest"]) == 64
+        and type(ref["length"]) is int
+    )
+
+
 def encode(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
@@ -142,7 +155,7 @@ def validate(snapshot):
             or not isinstance(payload, dict)
             or payload.get("id") != row["id"]
             or payload.get("occurred_at") != row["occurred_at"]
-            or not isinstance(payload.get("values"), dict)
+            or not (isinstance(payload.get("values"), dict) or _values_ref(payload))
             or sha256(row["payload"].encode()).hexdigest() != row["fingerprint"]
         ):
             raise ValueError("invalid canonical item revision")

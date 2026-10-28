@@ -15,6 +15,7 @@ from .journal import Journal, commit_with_contract, uuid
 from .s3_batch_storage import S3BatchStorage, reply_lake_for
 from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, runtime_events_lake
 from .storage_errors import StorageMissing
+from .storage_payloads import PayloadRef
 
 
 def empty():
@@ -163,14 +164,23 @@ class S3EmbeddedStorage:
         self._write(lambda data: data["meta"].__setitem__(key, payload))
 
     def put_item(self, identifier, payload, fingerprint):
-        self._write(lambda data: data["items"].__setitem__(identifier, [payload, fingerprint]))
+        # The values are one content-addressed record; the journal keeps only its reference, so it does not grow with text.
+        stored = self.journal.payloads.put(payload.encode())
+        ref = {"digest": stored.digest, "length": stored.length}
+        self._write(lambda data: data["items"].__setitem__(identifier, [ref, fingerprint]))
+
+    def _item_text(self, held):
+        """An item row's values JSON: read from its record, or held inline by rows written before records."""
+        if isinstance(held, dict):
+            return self.journal.payloads.get(PayloadRef(self.journal.payloads.scope, held["digest"], held["length"])).decode()
+        return held
 
     def items(self):
-        return [(key, row[0]) for key, row in self._data()["items"].items()]
+        return [(key, self._item_text(row[0])) for key, row in self._data()["items"].items()]
 
     def item_values(self, identifier):
         row = self._data()["items"].get(identifier)
-        return row[0] if row else None
+        return self._item_text(row[0]) if row else None
 
     def insert_decision(self, row):
         def apply(data):

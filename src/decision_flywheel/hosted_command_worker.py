@@ -224,7 +224,8 @@ class HostedCommandWorker:
         else:
             runtime = self.runtime_for_command(effects, owned_guard, check)
         run = await asyncio.to_thread(effects.run, actor.run_id)
-        items = await asyncio.to_thread(effects.items, actor.run_id)
+        # A publication decision needs only its own item, so it never reads the run's whole item list.
+        items = [] if job["kind"] == "publication" else await asyncio.to_thread(effects.items, actor.run_id)
         shown = await asyncio.to_thread(effects.current_item, actor.run_id)
         session = None
         try:
