@@ -475,7 +475,12 @@ def status_snapshot(store, target, binding, publication):
     """Newest verified completed worker snapshot for this binding, or None. ``jobs`` lists newest first."""
     # A lake-backed store lists jobs without fetching results and fetches only the one that matches.
     fetch = getattr(store, "job_result", None)
-    for job in store.jobs(target.run_id, results=False) if fetch else store.jobs(target.run_id):
+    # A store that reads jobs one at a time stops at the newest match instead of listing the whole run.
+    newest = getattr(store, "iter_jobs", None)
+    listing = (
+        newest(target.run_id) if newest else store.jobs(target.run_id, results=False) if fetch else store.jobs(target.run_id)
+    )
+    for job in listing:
         payload = job["payload"]
         single = payload.get("publication") == publication and payload.get("bindingRevision") == binding.revision
         shared = is_shared_decision_command(job["kind"], payload) and payload["bindings"].get(publication) == binding.revision

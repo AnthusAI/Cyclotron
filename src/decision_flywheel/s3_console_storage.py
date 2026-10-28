@@ -15,6 +15,16 @@ from hashlib import sha256
 from threading import RLock
 from uuid import uuid4
 
+from .catalog_cold_rows import (
+    COLD_TABLES,
+    TERMINAL,
+    ColdRows,
+    Legacy,
+    is_evictable,
+    load_legacy,
+    partition,
+    row_key,
+)
 from .catalog_storage import encoded, timestamp
 from .console_snapshot import SCHEMA, SEQUENCES, TABLES
 from .console_snapshot import validate as validate_console
@@ -55,6 +65,9 @@ def result_ref(raw):
     return None
 
 
+# A transient key in a change being built: item rows brought into the head for an edit, with their prior content.
+_HYDRATED = "_hydrated"
+
 # The worker Lambda times out after 3 minutes (infra/lab/template.yaml); a claim older than this never finishes.
 STUCK_HEAD_MINUTES = 10
 
@@ -68,12 +81,35 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+SCHEMA_V2 = "cyclotron-s3-console/v2"
+SCHEMA_V3 = "cyclotron-s3-console/v3"
+
+
+def empty_cold():
+    """Counters and positions for the tables whose rows leave the head (catalog_cold_rows.py).
+
+    ``rowids`` and ``ordinals`` only ever grow: a row keeps its rowid (its place in table order) and its ordinal
+    (its position in its run or list) wherever it lives. ``hot`` holds the ordinal of each row still in the head
+    (an item also has its slot). ``distinct`` counts the item ids of each list; ``claimed`` names the runs a
+    worker has ever claimed a job in.
+    """
+    return {
+        "rowids": {t: 0 for t in COLD_TABLES},
+        "ordinals": {t: {} for t in COLD_TABLES},
+        "hot": {t: {} for t in COLD_TABLES},
+        "distinct": {},
+        "claimed": [],
+    }
+
+
 def initial():
     return {
-        "schema": "cyclotron-s3-console/v2",
+        "schema": SCHEMA_V3,
         "snapshot": {"schema": SCHEMA, "tables": {k: [] for k in TABLES}, "sequences": {k: 0 for k in SEQUENCES}},
         "claims": {},
         "actors": {},
+        "cold": empty_cold(),
+        "legacy": None,
     }
 
 
@@ -106,6 +142,19 @@ def decoded(row, *fields):
 
 def insert(value, domain, fields):
     records = value["snapshot"]["tables"][domain]
+    cold = value.get("cold")
+    if cold is not None and domain in COLD_TABLES:
+        cold["rowids"][domain] += 1
+        record = {"_rowid": cold["rowids"][domain], **fields}
+        if set(record) != set(TABLES[domain]) | {"_rowid"}:
+            raise ValueError("complete known domain record required")
+        part = partition(domain, record)
+        ordinal = cold["ordinals"][domain][part] = cold["ordinals"][domain].get(part, 0) + 1
+        cold["hot"][domain][row_key(domain, record)] = [ordinal, 1] if domain == "web_items" else ordinal
+        if domain == "list_item_revisions" and record["revision"] == 1:
+            cold["distinct"][part] = cold["distinct"].get(part, 0) + 1
+        records.append(record)
+        return record
     record = {"_rowid": max((r["_rowid"] for r in records), default=0) + 1, **fields}
     if domain in SEQUENCES:
         value["snapshot"]["sequences"][domain] += 1
@@ -115,6 +164,135 @@ def insert(value, domain, fields):
         raise ValueError("complete known domain record required")
     records.append(record)
     return record
+
+
+# Tables whose rows refer to item revisions that may live outside the head; the head checks them row by row.
+_REFERRING = ("list_item_revisions", "item_feedback", "item_predictions", "item_feedback_retractions")
+
+
+def validate_hot(snapshot):
+    """Validate a head snapshot: complete rows, with references only to what a head can see.
+
+    A head holds only some jobs, items and revisions, so the whole-catalog checks that join them (complete
+    revision history, feedback naming a revision) run on export. Writes check what they reference.
+    """
+    tables = snapshot.get("tables") if isinstance(snapshot, dict) else None
+    if not isinstance(tables, dict) or not all(isinstance(tables.get(t), list) for t in _REFERRING):
+        raise ValueError("complete native console tables required")
+    validate_console({**snapshot, "tables": {**tables, **{t: [] for t in _REFERRING}}})
+    from .console_snapshot import JSON_FIELDS, KEYS, NULLABLE
+
+    for table in _REFERRING:
+        identities = set()
+        for row in tables[table]:
+            if not isinstance(row, dict) or set(row) != set(TABLES[table]) | {"_rowid"} or type(row["_rowid"]) is not int:
+                raise ValueError("invalid console row columns")
+            for column in TABLES[table]:
+                cell = row[column]
+                if cell is None and (table, column) in NULLABLE:
+                    continue
+                if column in ("revision", "sequence", "classifier_revision", "item_revision"):
+                    if type(cell) is not int or cell < 1:
+                        raise ValueError("invalid native integer")
+                elif not isinstance(cell, str):
+                    raise ValueError("invalid native text")
+            key = tuple(row[c] for c in KEYS[table])
+            if key in identities:
+                raise ValueError("duplicate console identity")
+            identities.add(key)
+            for column in JSON_FIELDS.get(table, ()):
+                json.loads(row[column])
+        if table == "list_item_revisions":
+            for row in tables[table]:
+                payload = json.loads(row["payload"])
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("id") != row["id"]
+                    or payload.get("occurred_at") != row["occurred_at"]
+                    or sha256(row["payload"].encode()).hexdigest() != row["fingerprint"]
+                ):
+                    raise ValueError("invalid canonical item revision")
+    watermark = snapshot["sequences"]["item_feedback"]
+    if max((r["sequence"] for r in tables["item_feedback"]), default=0) > watermark:
+        raise ValueError("invalid native sequence watermark")
+    # Feedback, its retractions and the classifiers they name all stay in the head, so their links are checked here.
+    classifiers = {(r["id"], r["revision"]): r for r in tables["classifiers"]}
+    feedback = set()
+    for row in tables["item_feedback"]:
+        classifier = classifiers.get((row["classifier_id"], row["classifier_revision"]))
+        if classifier is None:
+            raise ValueError("feedback references unknown pinned revisions")
+        config = json.loads(classifier["config"])
+        DecisionTask(row["classifier_id"], tuple(c["label"] for c in config["classes"]), config["question"]).validate_label(
+            row["label"]
+        )
+        if row["request_id"] in feedback:
+            raise ValueError("duplicate feedback identity")
+        feedback.add(row["request_id"])
+    retracted = set()
+    for row in tables["item_feedback_retractions"]:
+        if row["feedback_request_id"] not in feedback or row["feedback_request_id"] in retracted:
+            raise ValueError("invalid feedback retraction")
+        retracted.add(row["feedback_request_id"])
+    return snapshot
+
+
+def adopt_snapshot(value, snapshot):
+    """Make every row of a complete snapshot a head row, with fresh counters; the next commit moves them out."""
+    value["snapshot"] = snapshot
+    cold = value["cold"] = empty_cold()
+    for table in COLD_TABLES:
+        for row in snapshot["tables"][table]:
+            cold["rowids"][table] = max(cold["rowids"][table], row["_rowid"])
+            part = partition(table, row)
+            ordinal = cold["ordinals"][table][part] = cold["ordinals"][table].get(part, 0) + 1
+            cold["hot"][table][row_key(table, row)] = [ordinal, 1] if table == "web_items" else ordinal
+            if table == "list_item_revisions" and row["revision"] == 1:
+                cold["distinct"][part] = cold["distinct"].get(part, 0) + 1
+
+
+def migrated(value, reference):
+    """A v2 whole-state catalog as a v3 head: its old blob becomes the read-only legacy layer.
+
+    Nothing is copied. The head keeps the rows that can still change (unfinished jobs with their claims and
+    actors, items waiting for review) and the counters; every other row stays readable in the immutable blob
+    the head names. The first write commits this head, so an old catalog never has to move its rows.
+    """
+    tables = value["snapshot"]["tables"]
+    cold = empty_cold()
+    for table in COLD_TABLES:
+        for row in tables[table]:
+            cold["rowids"][table] = max(cold["rowids"][table], row["_rowid"])
+            part = partition(table, row)
+            cold["ordinals"][table][part] = cold["ordinals"][table].get(part, 0) + 1
+    seen = set()
+    for row in tables["list_item_revisions"]:
+        if (row["list_id"], row["id"]) not in seen:
+            seen.add((row["list_id"], row["id"]))
+            cold["distinct"][row["list_id"]] = cold["distinct"].get(row["list_id"], 0) + 1
+    runs = {r["id"]: r["run_id"] for r in tables["web_jobs"]}
+    cold["claimed"] = sorted({runs[job_id] for job_id in value["claims"] if job_id in runs})
+    legacy = Legacy(value) if any(tables[t] for t in COLD_TABLES) else None
+    hot = {t: [] for t in COLD_TABLES}
+    for row in tables["web_jobs"]:
+        if row["status"] not in TERMINAL:
+            hot["web_jobs"].append(row)
+            cold["hot"]["web_jobs"][row["id"]] = legacy.jobs[row["id"]]["ordinal"]
+    for row in tables["web_items"]:
+        if not is_evictable("web_items", row):
+            hot["web_items"].append(row)
+            cold["hot"]["web_items"][row_key("web_items", row)] = [legacy.items[row["run_id"], row["id"]]["ordinal"], 1]
+    kept = {r["id"] for r in hot["web_jobs"]}
+    result = {
+        **{k: v for k, v in value.items() if k not in ("schema", "snapshot", "claims", "actors")},
+        "schema": SCHEMA_V3,
+        "snapshot": {**value["snapshot"], "tables": {**tables, **hot}},
+        "claims": {k: v for k, v in value["claims"].items() if k in kept},
+        "actors": {k: v for k, v in value["actors"].items() if k in kept},
+        "cold": cold,
+        "legacy": None if legacy is None else {"digest": reference.digest, "length": reference.length, "shadow": sorted(kept)},
+    }
+    return result, legacy
 
 
 def results_lake_for(journal):
@@ -165,6 +343,8 @@ class S3ConsoleStorage:
         self.phase_log = phase_log
         self._request_snapshot = None
         self._request_lock = RLock()
+        self._cold_rows = None
+        self._legacy_index = {}
 
     def release_request_snapshot(self):
         """Stop reusing one snapshot, for a store that outlives a single request."""
@@ -176,12 +356,13 @@ class S3ConsoleStorage:
         if (
             not isinstance(value, dict)
             or set(value) - {RECORDS_KEY} != set(initial())
-            or value["schema"] != "cyclotron-s3-console/v2"
+            or value["schema"] != SCHEMA_V3
             or not isinstance(value["claims"], dict)
             or not isinstance(value["actors"], dict)
         ):
             raise ValueError("invalid canonical console transaction")
-        validate_console(value["snapshot"])
+        validate_hot(value["snapshot"])
+        self._validate_cold(value)
         held = value.get(RECORDS_KEY, {})
         if not isinstance(held, dict) or set(held) - {RESULTS_LAKE}:
             raise ValueError("invalid record coverage")
@@ -212,6 +393,34 @@ class S3ConsoleStorage:
                 raise ValueError("queued actor run boundary refused")
 
     @staticmethod
+    def _validate_cold(value):
+        cold, tables = value["cold"], value["snapshot"]["tables"]
+        if not isinstance(cold, dict) or set(cold) != set(empty_cold()):
+            raise ValueError("invalid catalog counters")
+        for table in COLD_TABLES:
+            hot = cold["hot"][table]
+            keys = [row_key(table, r) for r in tables[table]]
+            if set(keys) != set(hot) or len(keys) != len(hot):
+                raise ValueError("catalog head rows and positions disagree")
+            order = [r["_rowid"] for r in tables[table]]
+            if order != sorted(order) or (order and order[-1] > cold["rowids"][table]):
+                raise ValueError("catalog head rows out of order")
+            for row in tables[table]:
+                held = hot[row_key(table, row)]
+                ordinal = held[0] if table == "web_items" else held
+                if type(ordinal) is not int or not 1 <= ordinal <= cold["ordinals"][table].get(partition(table, row), 0):
+                    raise ValueError("catalog row position outside its counter")
+                if table == "web_items" and (len(held) != 2 or type(held[1]) is not int or held[1] < 1):
+                    raise ValueError("invalid catalog item slot")
+        legacy = value["legacy"]
+        if legacy is not None and (
+            not isinstance(legacy, dict)
+            or set(legacy) != {"digest", "length", "shadow"}
+            or not isinstance(legacy["shadow"], list)
+        ):
+            raise ValueError("invalid legacy catalog reference")
+
+    @staticmethod
     def _parse_actor(actor):
         from .machine_access import MachineActor
         from .queued_account_authorization import QueuedActor
@@ -219,18 +428,27 @@ class S3ConsoleStorage:
         return MachineActor(**actor) if actor.get("kind") == "machine" else QueuedActor(**actor)
 
     @staticmethod
-    def _upgrade(value):
+    def _v2(value):
         if (
             isinstance(value, dict)
             and set(value) == {"schema", "snapshot", "claims"}
             and value["schema"] == "cyclotron-s3-console/v1"
         ):
-            return {**value, "schema": "cyclotron-s3-console/v2", "actors": {}}
+            return {**value, "schema": SCHEMA_V2, "actors": {}}
+        return value
+
+    def _upgrade(self, record):
+        """The record's value in the current layout. A whole-state (v1/v2) catalog keeps its blob as the legacy layer."""
+        value = self._v2(record.value)
+        if isinstance(value, dict) and value.get("schema") == SCHEMA_V2:
+            value, legacy = migrated(value, record.reference)
+            if legacy is not None:
+                self._remember_legacy(record.reference.digest, legacy)
         return value
 
     def initialize(self, *, verify_existing=True):
         if verify_existing:
-            self._validate(self._upgrade(self.journal.initialize(initial()).value))
+            self._validate(self._upgrade(self.journal.initialize(initial())))
         else:
             self.journal.initialize(initial(), read_existing=False)
 
@@ -242,13 +460,286 @@ class S3ConsoleStorage:
         record = self.journal.read(known=known) if known is not None else self.journal.read()
         reused = known is not None and record.value is known.value
         if not reused:
-            record = replace(record, value=self._upgrade(record.value))
+            record = replace(record, value=self._upgrade(record))
             self._validate(record.value)
             if cache is not None:
                 cache.put(self.journal, record)
+        if cache is not None:
+            cache.observe(self.journal, record, self._still_held)
         if self.phase_log is not None:
             self.phase_log("catalog_read", started, cache="hit" if reused else "miss")
         return record
+
+    # Rows outside the head (catalog_cold_rows.py) -------------------------------------------------------
+    def _cold(self):
+        if self._cold_rows is None:
+            self._cold_rows = ColdRows(self.journal.payloads)
+        return self._cold_rows
+
+    def _remember_legacy(self, digest, legacy):
+        self._legacy_index[digest] = legacy
+        remember = getattr(self.snapshot_cache, "remember_legacy", None)
+        if remember is not None:
+            remember(digest, legacy)
+
+    def _legacy(self, value):
+        held = value.get("legacy")
+        if held is None:
+            return None
+        found = self._legacy_index.get(held["digest"])
+        if found is None:
+            recall = getattr(self.snapshot_cache, "legacy", None)
+            found = recall(held["digest"]) if recall is not None else None
+        if found is None:
+            found = load_legacy(self.journal.payloads, held, self._v2)
+        self._remember_legacy(held["digest"], found)
+        return found
+
+    @staticmethod
+    def _hot_meta(value, table, row):
+        return value["cold"]["hot"][table][row_key(table, row)]
+
+    def _job_entry(self, value, job_id):
+        """One job wherever it lives: ``{"row", "ordinal", "actor", "claim"}``, or None for an unknown id."""
+        row = one(value, "web_jobs", id=job_id)
+        if row is not None:
+            return {
+                "row": row,
+                "ordinal": self._hot_meta(value, "web_jobs", row),
+                "actor": value["actors"].get(job_id),
+                "claim": value["claims"].get(job_id),
+            }
+        legacy = self._legacy(value)
+        if legacy is not None and job_id in legacy.jobs and job_id not in value["legacy"]["shadow"]:
+            return legacy.jobs[job_id]
+        if not isinstance(job_id, str):
+            return None
+        return self._cold().get(ColdRows.job(job_id), 1)
+
+    def _request_entry(self, value, run_id, request_id):
+        row = one(value, "web_jobs", run_id=run_id, request_id=request_id)
+        if row is not None:
+            return self._job_entry(value, row["id"])
+        legacy = self._legacy(value)
+        if legacy is not None and (run_id, request_id) in legacy.requests:
+            job_id = legacy.requests[run_id, request_id]
+            if job_id not in value["legacy"]["shadow"]:
+                return legacy.jobs[job_id]
+        return self._cold().get(ColdRows.request(run_id, request_id), 1)
+
+    def _run_job_entries(self, value, run_id):
+        """The run's jobs, newest first, read one at a time so a caller can stop early."""
+        hot = {self._hot_meta(value, "web_jobs", r): r["id"] for r in rows(value, "web_jobs", run_id=run_id)}
+        legacy = self._legacy(value)
+        for n in range(value["cold"]["ordinals"]["web_jobs"].get(run_id, 0), 0, -1):
+            if n in hot:
+                yield self._job_entry(value, hot[n])
+                continue
+            if legacy is not None and n <= legacy.job_counts.get(run_id, 0):
+                job_id = legacy.job_order[run_id, n]
+                if job_id not in value["legacy"]["shadow"]:
+                    yield legacy.jobs[job_id]
+                    continue
+            entry = self._cold().get(ColdRows.run_jobs(run_id), n)
+            if entry is None:
+                raise ValueError("catalog job record missing")
+            yield entry
+
+    def _item_entry(self, value, run_id, item_id):
+        """One run item wherever it lives: ``{"row", "ordinal", "slot"}``, or None."""
+        row = one(value, "web_items", run_id=run_id, id=item_id)
+        if row is not None:
+            ordinal, slot = self._hot_meta(value, "web_items", row)
+            return {"row": row, "ordinal": ordinal, "slot": slot}
+        found, slot, kind = None, 1, ColdRows.item(run_id, item_id)
+        while True:
+            entry = self._cold().get(kind, slot)
+            if entry is None:
+                break
+            found, slot = entry, slot + 1
+        if found is not None:
+            return found
+        legacy = self._legacy(value)
+        if legacy is not None and (run_id, item_id) in legacy.items:
+            return {**legacy.items[run_id, item_id], "slot": 0}
+        return None
+
+    def _item_row(self, value, run_id, item_id, *, for_update=False):
+        """The item's row. ``for_update`` brings a row from outside into this change's head, to edit in place."""
+        entry = self._item_entry(value, run_id, item_id)
+        if entry is None or not for_update or one(value, "web_items", run_id=run_id, id=item_id) is not None:
+            return None if entry is None else entry["row"]
+        row = deepcopy(entry["row"])
+        table = value["snapshot"]["tables"]["web_items"]
+        position = next((i for i, r in enumerate(table) if r["_rowid"] > row["_rowid"]), len(table))
+        table.insert(position, row)
+        key = row_key("web_items", row)
+        value["cold"]["hot"]["web_items"][key] = [entry["ordinal"], entry["slot"] + 1]
+        value.setdefault(_HYDRATED, {})[key] = deepcopy(row)
+        return row
+
+    def _run_items(self, value, run_id):
+        """The run's item rows in acceptance order."""
+        hot = {self._hot_meta(value, "web_items", r)[0]: r for r in rows(value, "web_items", run_id=run_id)}
+        legacy = self._legacy(value)
+        for n in range(1, value["cold"]["ordinals"]["web_items"].get(run_id, 0) + 1):
+            if n in hot:
+                yield hot[n]
+                continue
+            if legacy is not None and n <= legacy.item_counts.get(run_id, 0):
+                item_id = legacy.item_order[run_id, n]
+            else:
+                pointer = self._cold().get(ColdRows.run_items(run_id), n)
+                if pointer is None:
+                    raise ValueError("catalog item record missing")
+                item_id = pointer["id"]
+            yield self._item_entry(value, run_id, item_id)["row"]
+
+    def _revision_row(self, value, list_id, item_id, revision):
+        row = one(value, "list_item_revisions", list_id=list_id, id=item_id, revision=revision)
+        if row is not None:
+            return row
+        legacy = self._legacy(value)
+        if legacy is not None and (list_id, item_id, revision) in legacy.revisions:
+            return legacy.revisions[list_id, item_id, revision]["row"]
+        if type(revision) is not int or revision < 1 or not isinstance(list_id, str) or not isinstance(item_id, str):
+            return None
+        entry = self._cold().get(ColdRows.revision(list_id, item_id), revision)
+        return None if entry is None else entry["row"]
+
+    def _latest_revision(self, value, list_id, item_id):
+        """The newest revision row of one item in one list, or None. Reads only that item's own records."""
+        hot = rows(value, "list_item_revisions", list_id=list_id, id=item_id)
+        if hot:
+            return max(hot, key=lambda r: r["revision"])
+        legacy = self._legacy(value)
+        latest = legacy.latest.get((list_id, item_id), 0) if legacy is not None else 0
+        found = legacy.revisions[list_id, item_id, latest]["row"] if latest else None
+        kind = ColdRows.revision(list_id, item_id)
+        while True:
+            entry = self._cold().get(kind, latest + 1)
+            if entry is None:
+                return found
+            found, latest = entry["row"], latest + 1
+
+    def _list_revisions(self, value, list_id):
+        """Every revision row of the list in import order."""
+        hot = {self._hot_meta(value, "list_item_revisions", r): r for r in rows(value, "list_item_revisions", list_id=list_id)}
+        legacy = self._legacy(value)
+        for n in range(1, value["cold"]["ordinals"]["list_item_revisions"].get(list_id, 0) + 1):
+            if n in hot:
+                yield hot[n]
+            elif legacy is not None and n <= legacy.revision_counts.get(list_id, 0):
+                yield legacy.revisions[legacy.revision_order[list_id, n]]["row"]
+            else:
+                entry = self._cold().get(ColdRows.list_revisions(list_id), n)
+                if entry is None:
+                    raise ValueError("catalog revision record missing")
+                yield entry["row"]
+
+    def _all_rows(self, value, table):
+        """Every row of a table, wherever it lives, in table order. For export and audit, never a decision."""
+        if table == "web_jobs":
+            found = [e["row"] for run in rows(value, "web_runs") for e in self._run_job_entries(value, run["id"])]
+        elif table == "web_items":
+            found = [r for run in rows(value, "web_runs") for r in self._run_items(value, run["id"])]
+        else:
+            found = [r for lst in rows(value, "item_lists") for r in self._list_revisions(value, lst["id"])]
+        return sorted(found, key=lambda r: r["_rowid"])
+
+    @staticmethod
+    def _settle(value):
+        """Return rows brought in for an edit that did not change to where they came from."""
+        for key, original in value.pop(_HYDRATED, {}).items():
+            table = value["snapshot"]["tables"]["web_items"]
+            row = next((r for r in table if row_key("web_items", r) == key), None)
+            if row == original:
+                table.remove(row)
+                del value["cold"]["hot"]["web_items"][key]
+
+    def _evict(self, base, value):
+        """Move rows the base head committed and this change leaves alone out of the head, into their records.
+
+        Records are written before the commit that drops the rows, and only from committed state, so a key never
+        names two contents and a reader that misses a row in its head finds it in the records.
+        """
+        if base.get("schema") != SCHEMA_V3:
+            return
+        for table in COLD_TABLES:
+            current = {row_key(table, r): r for r in value["snapshot"]["tables"][table]}
+            for row in base["snapshot"]["tables"][table]:
+                key = row_key(table, row)
+                held = base["cold"]["hot"][table][key]
+                if not is_evictable(table, row) or current.get(key) != row or value["cold"]["hot"][table].get(key) != held:
+                    continue
+                if self._write_cold(base, table, row, held):
+                    value["snapshot"]["tables"][table].remove(current[key])
+                    del value["cold"]["hot"][table][key]
+                    if table == "web_jobs":
+                        value["claims"].pop(key, None)
+                        value["actors"].pop(key, None)
+                else:
+                    # An abandoned commit wrote an older state into this slot; this state takes the next one.
+                    value["cold"]["hot"][table][key] = [held[0], held[1] + 1]
+
+    def _write_cold(self, base, table, row, held):
+        """Write one committed row's records. False only when an item's slot holds another state."""
+        cold = self._cold()
+        if table == "web_jobs":
+            entry = {"row": row, "ordinal": held, "actor": base["actors"].get(row["id"]), "claim": base["claims"].get(row["id"])}
+            written = (
+                cold.put(ColdRows.run_jobs(row["run_id"]), held, entry)
+                and cold.put(ColdRows.job(row["id"]), 1, entry)
+                and cold.put(ColdRows.request(row["run_id"], row["request_id"]), 1, entry)
+            )
+        elif table == "web_items":
+            ordinal, slot = held
+            if not cold.put(ColdRows.item(row["run_id"], row["id"]), slot, {"row": row, "ordinal": ordinal, "slot": slot}):
+                return False
+            written = cold.put(ColdRows.run_items(row["run_id"]), ordinal, {"id": row["id"]})
+        else:
+            entry = {"row": row, "ordinal": held}
+            written = cold.put(ColdRows.revision(row["list_id"], row["id"]), row["revision"], entry) and cold.put(
+                ColdRows.list_revisions(row["list_id"]), held, entry
+            )
+        if not written:
+            raise ValueError("a catalog record already holds different committed content")
+        return True
+
+    def _commit(self, record, value):
+        self._evict(record.value, value)
+        self._validate(value)
+        return self._committed(commit_with_contract(self.journal, record, value))
+
+    def _committed(self, record):
+        """Remember what this store just committed: the next read only revalidates the head."""
+        cache = self.snapshot_cache
+        if cache is not None:
+            cache.put(self.journal, record)
+            cache.observe(self.journal, record, self._still_held)
+        return record
+
+    # Claim holds (catalog_snapshot_cache.py) ------------------------------------------------------------
+    @staticmethod
+    def _still_held(value, claim):
+        job_id, owner, fence = claim
+        job = one(value, "web_jobs", id=job_id)
+        return job is not None and job["status"] == "running" and same_claim(value["claims"].get(job_id), owner, fence)
+
+    def _run_value(self, run_id):
+        """The value for a read of one run's own rows.
+
+        While this process holds a confirmed claim on the run's running job, only that holder can change the run's
+        rows, and every head this process reads or commits refreshes the hold. Such a read then uses the newest
+        record that showed the claim instead of reading the head again. Everything else reads the head.
+        """
+        held = None
+        if self._tx.get() is None and self.snapshot_cache is not None:
+            held = self.snapshot_cache.held(self.journal, run_id)
+        if held is None:
+            return self._read()
+        self._check_claim(held.value)
+        return held.value
 
     def _record(self):
         with self._request_lock:
@@ -265,7 +756,11 @@ class S3ConsoleStorage:
             raise ValueError("stale command execution boundary")
 
     def _worker_write(self, value, run_id):
-        if self._claim.get() is not None or any(one(value, "web_jobs", id=key)["run_id"] == run_id for key in value["claims"]):
+        if (
+            self._claim.get() is not None
+            or run_id in value["cold"]["claimed"]
+            or any(one(value, "web_jobs", id=key)["run_id"] == run_id for key in value["claims"])
+        ):
             self._check_claim(value)
             claim = self._claim.get()
             if claim is None or one(value, "web_jobs", id=claim[0])["run_id"] != run_id:
@@ -308,10 +803,10 @@ class S3ConsoleStorage:
     def job_result(self, job_id):
         """One job's decoded result (fetched by reference if needed), or None while it has none."""
         value = self._read()
-        job = one(value, "web_jobs", id=job_id)
-        if job is None:
+        entry = self._job_entry(value, job_id)
+        if entry is None:
             raise ValueError("unknown command")
-        return self._job(value, job)["result"]
+        return self._job(value, entry["row"])["result"]
 
     def for_command(self, job_id, owner, fence):
         uuid(owner)
@@ -319,10 +814,14 @@ class S3ConsoleStorage:
             raise ValueError("valid command fence required")
         if (job_id, owner, fence) not in self._granted:
             raise ValueError("command claim receipt not confirmed in this worker")
-        value = self._read()
+        record = self._load() if self._tx.get() is None else None
+        value = self._read() if record is None else record.value
+        self._check_claim(value)
         job = one(value, "web_jobs", id=job_id)
         if job is None or job["status"] != "running" or not same_claim(value["claims"].get(job_id), owner, fence):
             raise ValueError("stale command capability")
+        if record is not None and self.snapshot_cache is not None:
+            self.snapshot_cache.hold(self.journal, job["run_id"], (job_id, owner, fence), record)
         return _CommandView(self, (job_id, owner, fence), job["run_id"])
 
     def _mutate(self, fn):
@@ -333,11 +832,12 @@ class S3ConsoleStorage:
             self._check_claim(record.value)
             value = deepcopy(record.value)
             result = fn(value)
+            self._settle(value)
             self._validate(value)
             if value == record.value:
                 return result
             try:
-                commit_with_contract(self.journal, record, value)
+                self._commit(record, value)
             except StorageConflict:
                 continue
             return result
@@ -353,9 +853,10 @@ class S3ConsoleStorage:
         token = self._tx.set(value)
         try:
             yield self
+            self._settle(value)
             self._validate(value)
             if value != record.value:
-                commit_with_contract(self.journal, record, value)
+                self._commit(record, value)
         finally:
             self._tx.reset(token)
 
@@ -366,7 +867,10 @@ class S3ConsoleStorage:
         value = self._read()
         if any(one(value, "web_jobs", id=key)["status"] == "running" for key in value["claims"]):
             raise ValueError("quiesce cloud command claims before portable export")
-        snapshot = value["snapshot"]
+        snapshot = {
+            **value["snapshot"],
+            "tables": {**value["snapshot"]["tables"], **{t: self._all_rows(value, t) for t in COLD_TABLES}},
+        }
         if any(result_ref(r["result"]) is not None for r in snapshot["tables"]["web_jobs"]):
             # A portable snapshot is self-contained: results come back embedded.
             jobs = [{**r, "result": self._result_text(value, r)} for r in snapshot["tables"]["web_jobs"]]
@@ -379,9 +883,9 @@ class S3ConsoleStorage:
             raise ValueError("reconcile native running jobs before cloud import")
 
         def apply(value):
-            if any(value["snapshot"]["tables"].values()) or value["claims"]:
+            if any(value["snapshot"]["tables"].values()) or value["claims"] or any(value["cold"]["rowids"].values()):
                 raise ValueError("console restore requires empty destination")
-            value["snapshot"] = snapshot
+            adopt_snapshot(value, snapshot)
 
         self._mutate(apply)
 
@@ -513,7 +1017,7 @@ class S3ConsoleStorage:
     def item_lists(self):
         value = self._read()
         return [
-            {**clean(r), "count": len({i["id"] for i in rows(value, "list_item_revisions", list_id=r["id"])})}
+            {**clean(r), "count": value["cold"]["distinct"].get(r["id"], 0)}
             for r in sorted(rows(value, "item_lists"), key=lambda r: (r["name"], r["id"]))
         ]
 
@@ -532,9 +1036,7 @@ class S3ConsoleStorage:
                 occurred = timestamp(item["occurred_at"])
                 payload = encoded({**item, "occurred_at": occurred})
                 fingerprint = sha256(payload.encode()).hexdigest()
-                old = max(
-                    rows(value, "list_item_revisions", list_id=list_id, id=item["id"]), key=lambda r: r["revision"], default=None
-                )
+                old = self._latest_revision(value, list_id, item["id"])
                 if old and old["fingerprint"] == fingerprint:
                     counts["unchanged"] += 1
                     continue
@@ -556,12 +1058,11 @@ class S3ConsoleStorage:
 
         return self._mutate(apply)
 
-    @staticmethod
-    def _items(value, list_id):
+    def _items(self, value, list_id):
         if not one(value, "item_lists", id=list_id):
             raise ValueError("unknown item list")
         latest = {}
-        for row in rows(value, "list_item_revisions", list_id=list_id):
+        for row in self._list_revisions(value, list_id):
             if row["id"] not in latest or row["revision"] > latest[row["id"]]["revision"]:
                 latest[row["id"]] = row
         return sorted(latest.values(), key=lambda r: (r["occurred_at"], r["id"]))
@@ -578,7 +1079,7 @@ class S3ConsoleStorage:
         return self.snapshot_items(list_id)[after : after + limit]
 
     def item_revision(self, list_id, identifier, revision):
-        row = one(self._read(), "list_item_revisions", list_id=list_id, id=identifier, revision=revision)
+        row = self._revision_row(self._read(), list_id, identifier, revision)
         if row is None:
             raise ValueError("unknown item revision")
         return self._payload(row["payload"])
@@ -608,7 +1109,7 @@ class S3ConsoleStorage:
             classifier = self._classifier(value, classifier_id, classifier_revision)
             config = json.loads(classifier["config"])
             DecisionTask(classifier_id, tuple(r["label"] for r in config["classes"]), config["question"]).validate_label(label)
-            if not one(value, "list_item_revisions", list_id=list_id, id=item_id, revision=item_revision):
+            if not self._revision_row(value, list_id, item_id, item_revision):
                 raise ValueError("unknown item revision")
             fields = dict(
                 classifier_id=classifier_id,
@@ -669,7 +1170,7 @@ class S3ConsoleStorage:
 
         def apply(value):
             self._worker_write(value, run_id)
-            if not one(value, "list_item_revisions", list_id=list_id, id=item_id, revision=item_revision):
+            if not self._revision_row(value, list_id, item_id, item_revision):
                 raise ValueError("unknown item revision")
             fields = dict(run_id=run_id, list_id=list_id, item_id=item_id, item_revision=item_revision)
             old = one(value, "item_predictions", **fields)
@@ -842,7 +1343,9 @@ class S3ConsoleStorage:
         return self._mutate(apply)
 
     def run(self, run_id):
-        row = clean(self._run(self._read(), run_id))
+        # Through a command view this read is the execution fence, so it always reads the head.
+        value = self._read() if self._claim.get() is not None else self._run_value(run_id)
+        row = clean(self._run(value, run_id))
         row["config"] = load_config(row["config"])
         return row
 
@@ -1024,7 +1527,8 @@ class S3ConsoleStorage:
                     if self._run(value, run_id)["mode"] == "live"
                     else "only live runs accept supported labeling commands"
                 )
-            old = one(value, "web_jobs", run_id=run_id, request_id=request_id)
+            found = self._request_entry(value, run_id, request_id)
+            old = found and found["row"]
             if old:
                 if old["kind"] != kind or (old["payload"] != raw and self._command_payload(old["payload"]) != payload):
                     raise ValueError("command identity has different content")
@@ -1053,23 +1557,24 @@ class S3ConsoleStorage:
         # verify it again; neither a queue delivery nor this record is a lease.
         with self.transaction():
             value = self._tx.get()
-            existing = one(value, "web_jobs", run_id=run_id, request_id=request_id)
-            if existing is not None and existing["id"] not in value["actors"]:
-                raise ValueError("legacy command has no actor; cannot adopt it")
+            accepted = value["cold"]["rowids"]["web_jobs"]
             job = self.command(run_id, request_id, kind, payload)
-            previous = value["actors"].get(job["id"])
+            previous = self._job_entry(value, job["id"])["actor"]
+            if value["cold"]["rowids"]["web_jobs"] == accepted and previous is None:
+                raise ValueError("legacy command has no actor; cannot adopt it")
             provenance = asdict(actor)
             if previous is not None and previous != provenance:
                 raise ValueError("command already bound to another actor")
-            value["actors"][job["id"]] = provenance
+            if previous is None:
+                value["actors"][job["id"]] = provenance
         return job
 
     def command_envelope(self, job_id):
         value = self._read()
-        job = one(value, "web_jobs", id=job_id)
-        if job is None:
+        entry = self._job_entry(value, job_id)
+        if entry is None:
             raise ValueError("unknown command")
-        actor = value["actors"].get(job_id)
+        job, actor = entry["row"], entry["actor"]
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
         job = self._job(value, job)
@@ -1078,8 +1583,8 @@ class S3ConsoleStorage:
         return job, self._parse_actor(actor)
 
     def command_actor(self, job_id, owner, fence):
-        self.for_command(job_id, owner, fence)
-        actor = self._read()["actors"].get(job_id)
+        view = self.for_command(job_id, owner, fence)
+        actor = self._run_value(view._run_id)["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
         return self._parse_actor(actor)
@@ -1087,17 +1592,17 @@ class S3ConsoleStorage:
     def command_recovery(self, job_id):
         # Operator diagnostic only: never a grant, claim reset or takeover.
         value = self._read()
-        job = one(value, "web_jobs", id=job_id)
-        if job is None:
+        entry = self._job_entry(value, job_id)
+        if entry is None:
             raise ValueError("unknown command")
-        claim = value["claims"].get(job_id, {})
+        job, claim = entry["row"], entry["claim"] or {}
         return {
             "jobId": job_id,
             "runId": job["run_id"],
             "status": job["status"],
             "owner": claim.get("owner"),
             "fence": claim.get("fence"),
-            "hasActor": job_id in value["actors"],
+            "hasActor": entry["actor"] is not None,
             "automaticTakeover": False,
             "claimedAt": claim.get("at"),
             "runQueue": [
@@ -1125,12 +1630,14 @@ class S3ConsoleStorage:
     def jobs(self, run_id, *, results=True):
         """Every job of the run, newest first. ``results=False`` skips the lake fetch: a lake-held result then shows as
         its small reference, and ``job_result(job_id)`` fetches the one result a caller needs."""
+        return list(self.iter_jobs(run_id, results=results))
+
+    def iter_jobs(self, run_id, *, results=False):
+        """The run's jobs newest first, read one at a time: a caller that wants the newest few stops early."""
         value = self._read()
         self._run(value, run_id)
-        newest = list(reversed(rows(value, "web_jobs", run_id=run_id)))
-        if results:
-            return [self._job(value, r) for r in newest]
-        return [decoded(r, "payload", "result") for r in newest]
+        for entry in self._run_job_entries(value, run_id):
+            yield self._job(value, entry["row"]) if results else decoded(entry["row"], "payload", "result")
 
     @staticmethod
     def _unfinished(value, run_id):
@@ -1162,9 +1669,10 @@ class S3ConsoleStorage:
     def queue_state(self, job_id):
         """Where one job stands in its run's queue: ``position`` counts unfinished jobs ahead of it (0 = next or running)."""
         value = self._read()
-        job = one(value, "web_jobs", id=job_id)
-        if job is None:
+        entry = self._job_entry(value, job_id)
+        if entry is None:
             raise ValueError("unknown command")
+        job = entry["row"]
         unfinished = self._unfinished(value, job["run_id"])
         ids = [r["id"] for r in unfinished]
         position = ids.index(job_id) if job_id in ids else None
@@ -1205,6 +1713,8 @@ class S3ConsoleStorage:
             previous = value["claims"].get(job["id"])
             fence = previous["fence"] + 1 if previous else 1
             value["claims"][job["id"]] = {"owner": owner, "fence": fence, "at": now()}
+            if job["run_id"] not in value["cold"]["claimed"]:
+                value["cold"]["claimed"] = sorted([*value["cold"]["claimed"], job["run_id"]])
             job["status"] = "running"
             return {**self._job(value, job), "claim_owner": owner, "claim_fence": fence}
 
@@ -1223,8 +1733,8 @@ class S3ConsoleStorage:
 
         def check(value):
             """The running job this completion may settle, or None when it already settled identically."""
-            job = one(value, "web_jobs", id=job_id)
-            claim = value["claims"].get(job_id)
+            entry = self._job_entry(value, job_id)
+            job, claim = (entry["row"], entry["claim"]) if entry is not None else (None, None)
             if job is None or not same_claim(claim, owner, fence):
                 raise ValueError("stale cloud command completion")
             if job["status"] == status and self._result_text(value, job) == raw:
@@ -1239,10 +1749,10 @@ class S3ConsoleStorage:
             job = one(value, "web_jobs", id=job_id)
             job["status"] = status
             job["result"] = stored
-            latest = rows(value, "web_jobs", run_id=job["run_id"])[-1]
+            latest = value["cold"]["hot"]["web_jobs"][job_id] == value["cold"]["ordinals"]["web_jobs"][job["run_id"]]
             run = self._run(value, job["run_id"])
             if (
-                latest["id"] == job_id
+                latest
                 and status == "completed"
                 and isinstance(result, dict)
                 and result.get("finished") is True
@@ -1278,18 +1788,20 @@ class S3ConsoleStorage:
             if job is None:
                 return
 
-            def change(state, refs):
+            def change(state, refs, base=current.value):
                 settle(state, reference(refs))
+                self._evict(base, state)
                 self._validate(state)
 
             try:
-                commit_with_records(self.journal, current, [(self.results, [record(job)])], change)
+                committed, _ = commit_with_records(self.journal, current, [(self.results, [record(job)])], change)
             except StorageConflict:
                 continue
+            self._committed(committed)
             return
         raise ValueError("console contention limit reached; retry with same operation identity")
 
-    TERMINAL = ("completed", "failed", "interrupted")
+    TERMINAL = TERMINAL
 
     def _embedded_results(self, value):
         """(job row, raw text) of finished jobs whose result is still inside the catalog row."""
@@ -1366,15 +1878,15 @@ class S3ConsoleStorage:
             return ResultsConverted(movable, refs[RESULTS_LAKE], record, committed)
         raise ValueError("console contention limit reached; retry")
 
-    @staticmethod
-    def _paid_outcome_evidence(value, job):
+    def _paid_outcome_evidence(self, value, job):
         """What the catalog records that points at a completed provider call for this job (empty means none)."""
         found = []
         if job["result"] is not None:
             found.append("the job has a recorded result")
         item_id = (json.loads(job["payload"]).get("item") or {}).get("id")
         if item_id is not None:
-            if any(r["prediction"] is not None for r in rows(value, "web_items", run_id=job["run_id"], id=item_id)):
+            item = self._item_row(value, job["run_id"], item_id)
+            if item is not None and item["prediction"] is not None:
                 found.append("the job's item has a displayed prediction")
             if rows(value, "item_predictions", run_id=job["run_id"], item_id=item_id):
                 found.append("the job's item has a retained prediction")
@@ -1412,9 +1924,10 @@ class S3ConsoleStorage:
         }
 
         def plan(value):
-            job = one(value, "web_jobs", id=job_id)
-            if job is None:
+            entry = self._job_entry(value, job_id)
+            if entry is None:
                 raise ValueError("unknown command")
+            job = entry["row"]
             if job["status"] != "running":
                 raise ValueError("only a running command can be reconciled")
             if not same_claim(value["claims"].get(job_id), owner, fence):
@@ -1445,7 +1958,7 @@ class S3ConsoleStorage:
         raise ValueError("cloud feedback recovery requires reviewed fenced worker composition")
 
     def current_item(self, run_id):
-        value = self._read()
+        value = self._run_value(run_id)
         self._run(value, run_id)
         row = next(
             (r for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"] and r["prediction"] is not None), None
@@ -1458,7 +1971,7 @@ class S3ConsoleStorage:
 
         def apply(value):
             self._worker_write(value, run_id)
-            row = one(value, "web_items", run_id=run_id, id=item_id)
+            row = self._item_row(value, run_id, item_id, for_update=True)
             if row is None:
                 raise ValueError("unknown item")
             if prediction is not _UNSET:
@@ -1470,9 +1983,9 @@ class S3ConsoleStorage:
             self._mutate(apply)
 
     def items(self, run_id):
-        value = self._read()
+        value = self._run_value(run_id)
         self._run(value, run_id)
-        return [self._payload(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
+        return [self._payload(r["payload"]) for r in self._run_items(value, run_id)]
 
     def register_standing_item(self, run_id, item_id, values):
         """Atomically register a never-before-seen source (or a new immutable revision) for a standing run.
@@ -1492,11 +2005,12 @@ class S3ConsoleStorage:
             list_id = load_config(self._run(value, run_id)["config"]).get("item_list_id")
             if not list_id or not one(value, "item_lists", id=list_id):
                 raise ValueError("standing run has no operational item list")
-            if any(r["list_id"] != list_id for r in rows(value, "list_item_revisions", id=item_id)):
+            if any(
+                other["id"] != list_id and self._latest_revision(value, other["id"], item_id) is not None
+                for other in rows(value, "item_lists")
+            ):
                 raise ValueError("source id belongs to a priming or evaluation list; operational items must be disjoint")
-            latest = max(
-                rows(value, "list_item_revisions", list_id=list_id, id=item_id), key=lambda r: r["revision"], default=None
-            )
+            latest = self._latest_revision(value, list_id, item_id)
             if latest and same_values(json.loads(latest["payload"]), values):
                 revision = latest
             else:
@@ -1517,7 +2031,7 @@ class S3ConsoleStorage:
                         imported_at=created,
                     ),
                 )
-            row = one(value, "web_items", run_id=run_id, id=item_id)
+            row = self._item_row(value, run_id, item_id, for_update=True)
             frozen = encoded(
                 {**json.loads(revision["payload"]), "revision": revision["revision"], "fingerprint": revision["fingerprint"]}
             )
@@ -1544,7 +2058,7 @@ class S3ConsoleStorage:
                     value = self._tx.get()
                     run = self._run(value, run_id)
                     list_id = load_config(run["config"]).get("item_list_id")
-                    if one(value, "web_items", run_id=run_id, id=item_id) is None:
+                    if self._item_row(value, run_id, item_id) is None:
                         raise ValueError("source was never submitted to this run")
                     vote = self.label_item(
                         classifier_id, classifier_revision, list_id, item_id, item_revision, label, comment, request_id
@@ -1558,9 +2072,9 @@ class S3ConsoleStorage:
         raise ValueError("console contention limit reached; retry with same operation identity")
 
     def unreviewed_items(self, run_id):
-        value = self._read()
+        value = self._run_value(run_id)
         self._run(value, run_id)
-        return [self._payload(r["payload"]) for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"]]
+        return [self._payload(r["payload"]) for r in self._run_items(value, run_id) if not r["reviewed"]]
 
     # PrimingService uses this same domain transaction, including acceptance.
     def draft(self, identifier):
@@ -1581,15 +2095,29 @@ class S3ConsoleStorage:
         return max((r["revision"] for r in rows(self._read(), "classifiers", id=identifier)), default=None)
 
     def item_exists(self, list_id, identifier):
-        return bool(rows(self._read(), "list_item_revisions", list_id=list_id, id=identifier))
+        return self._latest_revision(self._read(), list_id, identifier) is not None
 
     def insert_item(self, row):
-        self._mutate(lambda value: insert(value, "list_item_revisions", dict(zip(TABLES["list_item_revisions"], row))))
+        fields = dict(zip(TABLES["list_item_revisions"], row))
+
+        def apply(value):
+            # The head holds only some revisions, so the identity is checked against every one.
+            if self._revision_row(value, fields["list_id"], fields["id"], fields["revision"]) is not None:
+                raise ValueError("duplicate catalog record")
+            insert(value, "list_item_revisions", fields)
+
+        self._mutate(apply)
 
     def insert_feedback(self, row):
-        self._mutate(
-            lambda value: insert(value, "item_feedback", dict(sequence=0, **dict(zip(TABLES["item_feedback"][1:], row))))
-        )
+        fields = dict(sequence=0, **dict(zip(TABLES["item_feedback"][1:], row)))
+
+        def apply(value):
+            # The head holds only some revisions, so the revision a label pins is checked against every one.
+            if self._revision_row(value, fields["list_id"], fields["item_id"], fields["item_revision"]) is None:
+                raise ValueError("feedback references unknown pinned revisions")
+            insert(value, "item_feedback", fields)
+
+        self._mutate(apply)
 
     def accepted_records(self, list_id, classifiers):
         value = self._read()
@@ -1750,7 +2278,7 @@ class S3ConsoleStorage:
                 config.pop(key, None)
             if seed_supporting_questions:
                 config["seed_supporting_questions"] = seed_supporting_questions
-            items = [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=parent_run_id)]
+            items = [json.loads(r["payload"]) for r in self._run_items(value, parent_run_id)]
             inherited = {}
             for item in items:
                 votes = [
@@ -1921,7 +2449,7 @@ class _CommandView:
                         if job["kind"] != "undo" or fields is None:
                             raise ValueError("command does not authorize a catalog retraction")
                     classifier = next((c for c in config.get("classifiers", []) if c["id"] == fields["classifier_id"]), None)
-                    item = one(value, "web_items", run_id=self._run_id, id=fields["item_id"])
+                    item = self._store._item_row(value, self._run_id, fields["item_id"])
                     if (
                         classifier is None
                         or classifier["revision"] != fields["classifier_revision"]
