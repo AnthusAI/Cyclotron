@@ -195,13 +195,16 @@ class S3ConsoleStorage:
                 or not coverage.covers(ref["seq"])
             ):
                 raise ValueError("job result reference is not covered by the catalog")
+        # One index of jobs by id: looking each claim and actor up by scanning every job made this quadratic, and
+        # it ran on every uncached catalog read.
+        jobs = {r["id"]: r for r in value["snapshot"]["tables"]["web_jobs"]}
         for job_id, claim in value["claims"].items():
-            job = one(value, "web_jobs", id=job_id)
+            job = jobs.get(job_id)
             if job is None or set(claim) - {"at"} != {"owner", "fence"} or type(claim["fence"]) is not int or claim["fence"] < 1:
                 raise ValueError("invalid command claim")
             uuid(claim["owner"])
         for job_id, actor in value["actors"].items():
-            job = one(value, "web_jobs", id=job_id)
+            job = jobs.get(job_id)
             if not isinstance(actor, dict):
                 raise ValueError("invalid queued actor")
             parsed = self._parse_actor(actor)

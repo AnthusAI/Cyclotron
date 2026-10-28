@@ -312,3 +312,17 @@ def test_a_quick_job_after_a_slow_one_does_not_license_a_third_without_room_for_
     assert asyncio.run(worker.deliver({**refs, "jobId": jobs[0]["id"]}, remaining))["jobId"] == jobs[1]["id"]
     # 160 s are left after the quick job: room for twice it (20 s), but not twice the slow one (160 s).
     assert s.queue_state(jobs[2]["id"])["ready"]
+
+
+def test_validating_a_catalog_with_thousands_of_claimed_jobs_stays_linear():
+    import time
+
+    s, run = store_with_run()
+    value = s._read()
+    for n in range(4000):
+        job = {"_rowid": n + 1, "id": str(uuid4()), "run_id": run["id"], "request_id": f"r{n}", "kind": "publication"}
+        value["snapshot"]["tables"]["web_jobs"].append({**job, "payload": "{}", "status": "completed", "result": None})
+        value["claims"][job["id"]] = {"owner": str(uuid4()), "fence": 1}
+    started = time.monotonic()
+    s._validate(value)
+    assert time.monotonic() - started < 2.0  # one scan per claim over 4000 jobs (16 million row visits) took far longer
