@@ -10,7 +10,11 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    # The worker timeout moves from 180 s to Lambda's own maximum (900 s): a removal, then the new value.
+    "/Resources/WorkerFunction/Properties/Timeout",
+    "/Resources/WorkerFunction/Properties/Timeout",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -177,3 +181,9 @@ def test_the_api_stage_throttles_only_at_the_accounts_own_api_gateway_quota():
     stage = check.load_template()["Resources"]["ConsoleApiApiGatewayDefaultStage"]["Properties"]
     assert stage["DefaultRouteSettings"] == {"ThrottlingBurstLimit": 5000, "ThrottlingRateLimit": 10000}
     assert "RouteSettings" not in stage
+
+
+def test_the_worker_runs_for_lambdas_own_maximum_and_the_queue_hides_a_delivery_for_longer():
+    resources = check.load_template()["Resources"]
+    assert resources["WorkerFunction"]["Properties"]["Timeout"] == 900
+    assert resources["CommandQueue"]["Properties"]["VisibilityTimeout"] >= 900
