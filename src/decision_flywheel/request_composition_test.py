@@ -90,3 +90,29 @@ def test_every_prediction_records_how_its_request_was_composed(tmp_path):
     event = next(e for e in wheel.events_of(("prediction",)) if e["target_id"] == "big")
     assert event["request_composition"]["target_trimmed"] and event["request_composition"]["target_original_chars"] == 200_000
     wheel.close()
+
+
+def test_a_story_with_a_long_copy_of_its_text_in_another_field_still_fits_by_trimming_that_field_first():
+    story = "word " * 56_000
+    values = {"title": "A policy guide", "summary": "Short summary", "body": story[:-1000], "text": story}
+    for request in (
+        ClassifierConfig(TASK, rubric="Rubric").request(Item("t", values), []),
+        batch_request(
+            {"relevant": ClassifierConfig(TASK), "timely": ClassifierConfig(DecisionTask("timely", ("yes", "no"), "Timely?"))},
+            Item("t", values),
+            {"relevant": [], "timely": []},
+        )[0],
+    ):
+        composition, sent = request["composition"], request["state"]["target"]
+        assert composition["fits"] and request_bytes(request) <= DECISION_REQUEST_BYTES
+        assert composition["target_trimmed"] and composition["target_field"] == "text"
+        assert sent["title"] == "A policy guide" and sent["summary"] == "Short summary"
+        assert sent["body"] == "" and composition["trimmed_fields"] == {
+            "body": {"original_chars": len(story) - 1000, "sent_chars": 0}
+        }
+        assert story.startswith(sent["text"]) and composition["target_sent_chars"] == len(sent["text"]) > 60_000
+
+
+def test_an_untrimmed_request_records_no_trimmed_fields():
+    request, composition = ClassifierConfig(TASK).compose(Item("t", {"title": "T", "body": "B", "text": "A short story"}), [])
+    assert "trimmed_fields" not in composition and not composition["target_trimmed"]

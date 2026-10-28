@@ -564,6 +564,37 @@ def test_a_missing_provider_key_refuses_the_shared_receipt_with_the_single_recei
     asyncio.run(go())
 
 
+def test_a_decision_the_provider_rejects_fails_its_job_and_the_next_job_still_runs(identity, monkeypatch):
+    from .command_refusal import ProviderRejectedRequest
+
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    answer = model.classify_many
+
+    async def rejecting(configs, target, training, **kwargs):
+        if target.id == "too-big-story":
+            raise ProviderRejectedRequest(400, "req-provider-1")
+        return await answer(configs, target, training, **kwargs)
+
+    model.classify_many = rejecting
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            rejected = await http.post(
+                "/machine/decisions",
+                json=decisions_body(revisions("alpha", "beta"), new_item("too-big-story"), request_id="req-rejected-1"),
+            )
+            following = await http.post(
+                "/machine/decisions", json=decisions_body(revisions("alpha", "beta"), new_item(), request_id="req-following-1")
+            )
+            await drain(worker, sent)
+            receipt = await http.get(f"/machine/decisions/{rejected.json()['jobId']}")
+            assert receipt.status_code == 422 and receipt.json()["code"] == "provider_rejected"
+            assert "HTTP 400" in receipt.json()["message"]
+            assert (await http.get(f"/machine/decisions/{following.json()['jobId']}")).status_code == 200
+
+    asyncio.run(go())
+
+
 def test_a_single_publication_job_is_not_readable_through_the_shared_route_and_the_reverse(identity, monkeypatch):
     (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
 

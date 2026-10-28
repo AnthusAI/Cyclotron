@@ -12,11 +12,16 @@ and recorded with the request:
    first; whatever is dropped goes from the end of that order. With several
    classifiers the orders are interleaved, one example from each classifier in
    turn.
-4. If the request with no examples is still over, the end of the target's body
-   is trimmed until it fits.
+4. If the request with no examples is still over, another text field of the
+   target that is longer than the body that would fit beside it is cut back
+   from the end, longest first, just far enough for the whole body to fit (a
+   story's ``body`` is often a copy of the text the decision reads; a title is
+   left alone).
+5. If it is still over, the end of the target's body is trimmed until it fits.
 
 The returned ``composition`` names the size, the rule, the examples shown and
-available, and the target's original and sent body lengths. It is recorded with
+available, the target's original and sent body lengths, and (only when one was
+trimmed) each other field's original and sent lengths. It is recorded with
 every decision. When the composer dropped an example or trimmed the target, the
 composition is also part of the request, and so of its fingerprint; a request the
 composer left whole is reproduced exactly by its own content.
@@ -97,10 +102,30 @@ def fit(build, priority, target_values, body_field, available, *, budget=DECISIO
     shown = len(priority)
     if not fits(shown):
         shown = max(0, _largest(0, len(priority), fits))
-    trimmed = False
-    if not fits(shown) and isinstance(body, str):
-        length = _largest(0, len(body), lambda n: fits(0, {**target_values, body_field: body[:n]}))
-        sent_values = {**target_values, body_field: body[: max(0, length)]}
+    trimmed, trimmed_fields = False, {}
+    # Another text field longer than the body that would fit beside it is cut back first, longest first,
+    # just far enough for the whole body to fit (to nothing if need be).
+    others = sorted(
+        (field for field, value in target_values.items() if field != body_field and isinstance(value, str)),
+        key=lambda field: (-len(target_values[field]), field),
+    )
+    for field in others:
+        if fits(shown, sent_values):
+            break
+        value = target_values[field]
+        if isinstance(body, str):
+            room = _largest(0, len(body), lambda n, kept=sent_values: fits(0, {**kept, body_field: body[:n]}))
+            if room >= len(value):
+                break
+        length = max(
+            0, _largest(0, len(value), lambda n, kept=sent_values, name=field, text=value: fits(0, {**kept, name: text[:n]}))
+        )
+        sent_values = {**sent_values, field: value[:length]}
+        trimmed_fields[field] = {"original_chars": len(value), "sent_chars": length}
+        trimmed, shown = True, 0
+    if not fits(shown, sent_values) and isinstance(body, str):
+        length = _largest(0, len(body), lambda n: fits(0, {**sent_values, body_field: body[:n]}))
+        sent_values = {**sent_values, body_field: body[: max(0, length)]}
         trimmed, shown = True, 0
     request = build(set(priority[:shown]), sent_values)
     composition = {
@@ -114,5 +139,7 @@ def fit(build, priority, target_values, body_field, available, *, budget=DECISIO
         "target_original_chars": len(body) if isinstance(body, str) else None,
         "target_sent_chars": len(sent_values[body_field]) if isinstance(body, str) else None,
     }
+    if trimmed_fields:
+        composition["trimmed_fields"] = trimmed_fields
     composition["fits"] = composition["request_bytes"] <= budget
     return request, composition, set(priority[:shown])

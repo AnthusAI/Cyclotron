@@ -466,6 +466,7 @@ class PublicationCommandRuntime:
 
 REFUSAL_STATUS = {
     "provider_key_unavailable": 503,
+    "provider_rejected": 422,
     "source_refused": 409,
 }
 

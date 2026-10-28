@@ -271,3 +271,29 @@ def test_classify_many_puts_each_rubric_in_its_own_question_and_other_adapters_k
     assert all(".rubric" not in q["instructions"] for q in client.questions.values())
     assert a.request(TARGET, [])["state"]["rubric"] == "Rubric A"
     assert "state.rubric" in a.request(TARGET, [])["questions"]["decision"]["instructions"]
+
+
+class RejectingJevClient:
+    def __init__(self, status):
+        self.status = status
+
+    def system_one(self, **request):
+        error = RuntimeError("provider message that may echo the story text")
+        error.status, error.request_id = self.status, "req-provider-1"
+        raise error
+
+
+def test_a_request_jev_rejects_as_invalid_becomes_a_terminal_refusal_without_the_providers_message():
+    from ..command_refusal import CommandRefused, ProviderRejectedRequest
+
+    for status in (400, 422):
+        with pytest.raises(ProviderRejectedRequest) as refused:
+            asyncio.run(JevAdapter(RejectingJevClient(status)).decide(TASK, TARGET, []))
+        assert isinstance(refused.value, CommandRefused) and refused.value.code == "provider_rejected"
+        assert f"HTTP {status}" in refused.value.public_message and "req-provider-1" in refused.value.public_message
+        assert "story text" not in refused.value.public_message
+
+
+def test_a_transient_jev_failure_is_not_turned_into_a_refusal():
+    with pytest.raises(RuntimeError, match="story text"):
+        asyncio.run(JevAdapter(RejectingJevClient(503)).decide(TASK, TARGET, []))
