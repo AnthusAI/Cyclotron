@@ -10,6 +10,8 @@ snapshot (`aws cloudformation get-template --template-stage Original`), empty
 
 **No pending changes.**
 
+Previously: the whole decision request is fitted and a provider-rejected request fails its job (lab code fd94173, package sha256 `ea8d752478d86840ab7d60d41faa42c45efbb8bff2f9bf79f4bc99adc66a64ca`), deployed on 2026-10-28 with change set `fit-request-fd94173`. Code only; the snapshot was refreshed.
+
 Previously: decisions stop reading event history (lab code bf345f0, package sha256 `adb15079ad5cf43edc29611804c64882bdb246419b673b0901ce5dd14b2bc08c`), deployed on 2026-10-28 with change set `no-history-bf345f0`. Code only; the snapshot was refreshed.
 
 Previously: **3008 MB for both functions**, deployed on 2026-10-28 with change set `memory-3008`; the snapshot was refreshed. `/Resources/BffFunction/Properties/MemorySize` and
