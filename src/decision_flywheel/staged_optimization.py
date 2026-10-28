@@ -74,7 +74,7 @@ async def optimize_stage(
     *,
     protected,
     propensities,
-    limit=200,
+    limit=None,
     retry_interrupted=False,
     min_development_per_class=20,
     train_after_questions=True,
@@ -101,8 +101,8 @@ async def optimize_stage(
     controls = {"rubric": "rubric", "examples": "example_ids", "questions": "tasks"}
     if stage not in controls:
         raise ValueError("stage must be rubric, examples or questions")
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise ValueError("retrospective limit must be a positive integer")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("retrospective limit must be a positive integer, or None for every item")
     if type(max_example_trials) is not int or max_example_trials < 1:
         raise ValueError("example trial ceiling must be positive")
     if (

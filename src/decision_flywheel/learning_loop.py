@@ -147,7 +147,6 @@ async def decide_with_shared_context(
                     protected=protected,
                     propensities={r.item.id: recorded.get(r.item.id, 1.0) for r in train},
                     min_development_per_class=2,
-                    limit=200,
                     trigger="shared-context-change",
                 )
                 cycle.suspend()
@@ -258,7 +257,6 @@ async def learn_from_review(
             protected=protected,
             propensities={row.item.id: recorded.get(row.item.id, 1.0) for row in training},
             min_development_per_class=2,
-            limit=200,
             trigger="label-transitions" if stage == "rubric" else "feedback-cadence",
         )
         if result["status"] not in ("completed", "waiting"):

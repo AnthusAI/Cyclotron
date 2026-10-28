@@ -8,37 +8,46 @@ def test_recent_rubric_preference_decays_with_the_scarcest_class_not_the_majorit
     assert policy.recency_allowance({"yes": 20, "no": 100}) == 0.0
 
 
-def test_evaluation_caps_samples_and_reserves_slots_for_scarce_classes():
+def rows_of(count):
     from dataclasses import replace
 
-    from .flywheel_test import DEV, TASK
+    from .flywheel_test import DEV
 
-    rows = tuple(replace(DEV[i % len(DEV)], item=replace(DEV[i % len(DEV)].item, id=str(i))) for i in range(500))
-    selected = EvaluationPolicy().select(rows, TASK.labels)
-    assert len(selected) == 200
+    return tuple(replace(DEV[i % len(DEV)], item=replace(DEV[i % len(DEV)].item, id=str(i))) for i in range(count))
+
+
+def test_evaluation_uses_every_one_of_500_development_items_by_default():
+    from .flywheel_test import TASK
+
+    assert len(EvaluationPolicy().select(rows_of(500), TASK.labels)) == 500
+    assert EvaluationPolicy().manifest()["selection"] == "all"
+
+
+def test_an_explicit_operator_sample_reserves_slots_for_scarce_classes():
+    from .flywheel_test import TASK
+
+    selected = EvaluationPolicy(max_samples=200).select(rows_of(500), TASK.labels)
     assert len({row.item.id for row in selected}) == 200
     assert all(sum(row.label == label for row in selected) == 100 for label in TASK.labels)
+    assert EvaluationPolicy(max_samples=200).fingerprint != EvaluationPolicy().fingerprint
 
 
-def test_scoring_never_sends_more_than_the_configured_sample_limit(tmp_path):
+def test_scoring_sends_every_development_item_and_records_the_policy_and_its_fingerprint(tmp_path):
     import asyncio
-    from dataclasses import replace
     from datetime import datetime, timezone
 
     from .classifier_config import ClassifierConfig
     from .flywheel import DecisionFlywheel
-    from .flywheel_test import DEV, TASK, FakeModel
+    from .flywheel_test import TASK, FakeModel
     from .optimizer_agent import OptimizerAgent
 
-    rows = tuple(replace(DEV[i % len(DEV)], item=replace(DEV[i % len(DEV)].item, id=str(i))) for i in range(500))
     wheel = DecisionFlywheel(
         tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), OptimizerAgent(lambda _: None), max_requests=1000
     )
-    result = asyncio.run(wheel._score(wheel.active, rows, (), datetime.now(timezone.utc)))
-    assert result["count"] == 200
-    assert result["available_count"] == 500
-    assert result["sample_limit"] == 200
-    assert len([e for e in wheel.history() if e["kind"] == "decision-request"]) <= 200
+    result = asyncio.run(wheel._score(wheel.active, rows_of(500), (), datetime.now(timezone.utc)))
+    assert result["count"] == result["available_count"] == 500
+    assert result["sample_limit"] is None
+    assert result["evaluation_policy_fingerprint"] == wheel.evaluation_policy.fingerprint
     wheel.close()
 
 

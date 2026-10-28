@@ -85,14 +85,14 @@ def _question_means(config, rows, batches):
 
 @track_answer_dependencies
 async def measure_example_swaps(
-    wheel, training, development, *, protected, propensities, preferred_ids=(), max_trials=8, limit=200
+    wheel, training, development, *, protected, propensities, preferred_ids=(), max_trials=8, limit=None
 ):
     """Measure but never fit or promote. Persist progress and reuse exact requests."""
     wheel._validate_partitions(training, development, protected, propensities)
     wheel.reconcile_feedback(training, development=development)
     wheel.reconcile_model_context(training)
-    if type(limit) is not int or limit < 1:
-        raise ValueError("matched evaluation sample limit must be a positive integer")
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError("matched evaluation sample limit must be a positive integer, or None for every item")
     baseline = wheel.active
     swaps = plan_swaps(baseline.config, training, preferred_ids=preferred_ids, max_trials=max_trials)
     rows = wheel.evaluation_policy.select(development, baseline.config.task.labels)[:limit]
