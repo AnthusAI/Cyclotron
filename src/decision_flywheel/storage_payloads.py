@@ -55,21 +55,19 @@ class Payloads(Protocol):
 
 
 class _Payloads:
-    def __init__(self, scope, max_bytes):
-        if not isinstance(scope, StorageScope) or type(max_bytes) is not int or max_bytes < 1:
-            raise ValueError("fixed scope and explicit positive byte budget required")
-        self.scope, self.max_bytes = scope, max_bytes
+    def __init__(self, scope):
+        if not isinstance(scope, StorageScope):
+            raise ValueError("fixed storage scope required")
+        self.scope = scope
 
     def _reference(self, content):
-        if not isinstance(content, bytes) or len(content) > self.max_bytes:
-            raise ValueError("payload exceeds configured byte budget")
+        if not isinstance(content, bytes):
+            raise ValueError("payload bytes required")
         return PayloadRef(self.scope, sha256(content).hexdigest(), len(content))
 
     def _check(self, reference):
         if not isinstance(reference, PayloadRef) or reference.scope != self.scope:
             raise PermissionError("payload scope refused")
-        if reference.length > self.max_bytes:
-            raise ValueError("payload exceeds configured byte budget")
 
     def _verified(self, content, reference):
         if len(content) != reference.length or sha256(content).hexdigest() != reference.digest:
@@ -80,8 +78,8 @@ class _Payloads:
 class FilePayloads(_Payloads):
     """Trusted local root and cooperating writers; byte-identical export layout."""
 
-    def __init__(self, root, scope, *, max_bytes):
-        super().__init__(scope, max_bytes)
+    def __init__(self, root, scope):
+        super().__init__(scope)
         self.root = Path(root)
         self.directory = self.root / scope.account / scope.workspace / "payloads"
 
@@ -128,8 +126,8 @@ class S3Payloads(_Payloads):
     dispatch permission or authoritative DynamoDB counter is introduced here.
     """
 
-    def __init__(self, client, bucket, owner, scope, *, max_bytes):
-        super().__init__(scope, max_bytes)
+    def __init__(self, client, bucket, owner, scope):
+        super().__init__(scope)
         if (
             not isinstance(bucket, str)
             or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", bucket)

@@ -79,9 +79,10 @@ def test_trace_pages_follow_a_stable_cursor_and_reject_bad_bounds(storage):
     assert [event["event_id"] for event in second_page["events"]] == [4]
     exhausted = storage.trace_events(after_event_id=second_page["cursor"], limit=3)
     assert exhausted == {"events": [], "cursor": 4}
-    for bad_cursor, bad_limit in ((-1, 10), (0, 0), (0, 1001), ("0", 10), (0, "10")):
+    for bad_cursor, bad_limit in ((-1, 10), (0, 0), ("0", 10), (0, "10")):
         with pytest.raises(ValueError):
             storage.trace_events(after_event_id=bad_cursor, limit=bad_limit)
+    assert [event["event_id"] for event in storage.trace_events(limit=5000)["events"]] == [1, 2, 3, 4]
 
 
 def test_events_can_be_read_by_explicit_kind_in_order(storage):
@@ -94,12 +95,19 @@ def test_events_can_be_read_by_explicit_kind_in_order(storage):
     assert storage.events_of(("absent",)) == ()
 
 
-def test_event_kind_filters_must_be_a_bounded_tuple_of_text(storage):
-    for bad_kinds in ((), ["prediction"], (1,), tuple(str(number) for number in range(101))):
+def test_event_kind_filters_must_be_a_nonempty_tuple_of_text(storage):
+    for bad_kinds in ((), ["prediction"], (1,)):
         with pytest.raises(ValueError):
             list(storage.event_payloads(bad_kinds))
         with pytest.raises(ValueError):
             storage.events_of(bad_kinds)
+
+
+def test_an_event_kind_filter_longer_than_the_old_hundred_kind_ceiling_is_served(storage):
+    storage.append_event('{"kind":"prediction","n":1}')
+    kinds = ("prediction", *(f"kind-{number}" for number in range(150)))
+    assert [json.loads(payload)["n"] for payload in storage.event_payloads(kinds)] == [1]
+    assert [event["event_id"] for event in storage.events_of(kinds)] == [1]
 
 
 def test_the_next_cycle_number_follows_the_highest_recorded_cycle(storage):

@@ -26,7 +26,7 @@ def sqlite_wheel(tmp_path):
 
 
 def s3_wheel(tmp_path):
-    stores = S3RuntimeStores(journal(name="classifier-active-labels"), max_records=10000)
+    stores = S3RuntimeStores(journal(name="classifier-active-labels"))
     stores.initialize()
     stores.acquire(str(uuid4()))
     return DecisionFlywheel(None, ClassifierConfig(TASK), FakeModel(), None, storage=stores)

@@ -86,9 +86,7 @@ class SigV4Transport:
             raise ValueError("unsupported accounts path")
 
         def valid_token(value):
-            return (
-                isinstance(value, str) and 0 < len(value) <= 16384 and not any(character in value for character in ("\r", "\n"))
-            )
+            return isinstance(value, str) and 0 < len(value) and not any(character in value for character in ("\r", "\n"))
 
         if (
             not challenge
@@ -176,8 +174,8 @@ class AccountsClient:
         if identifier.version != 4:
             raise ValueError("account creation requires a UUIDv4 idempotency key")
         key = str(identifier)
-        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 200:
-            raise ValueError("account name required (maximum 200 characters)")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("account name required")
         result = self.transport("POST", "/v1/accounts", human_token, {"name": name.strip()}, key)
         if not isinstance(result.get("account"), dict):
             raise ProspectusUnavailable("invalid account service response")

@@ -38,8 +38,8 @@ class S3:
 def payloads(request, tmp_path):
     scope = StorageScope("account-a", "workspace-a")
     if request.param == "filesystem":
-        return FilePayloads(tmp_path, scope, max_bytes=1024)
-    return S3Payloads(S3(), "synthetic-bucket", "111111111111", scope, max_bytes=1024)
+        return FilePayloads(tmp_path, scope)
+    return S3Payloads(S3(), "synthetic-bucket", "111111111111", scope)
 
 
 def test_raw_bytes_survive_reopen_and_identical_publication_is_idempotent(payloads):
@@ -47,9 +47,9 @@ def test_raw_bytes_survive_reopen_and_identical_publication_is_idempotent(payloa
     first = payloads.put(content)
     assert payloads.put(content) == first and payloads.get(first) == content
     if isinstance(payloads, FilePayloads):
-        reopened = FilePayloads(payloads.root, payloads.scope, max_bytes=1024)
+        reopened = FilePayloads(payloads.root, payloads.scope)
     else:
-        reopened = S3Payloads(payloads.client, payloads.bucket, payloads.owner, payloads.scope, max_bytes=1024)
+        reopened = S3Payloads(payloads.client, payloads.bucket, payloads.owner, payloads.scope)
     assert reopened.get(first) == content
 
 
@@ -65,9 +65,17 @@ def test_foreign_workspace_reference_is_denied_before_any_payload_read(payloads)
         assert len(payloads.client.calls) == before
 
 
-def test_oversized_input_fails_before_publication(payloads):
+def test_a_payload_larger_than_the_old_byte_budget_publishes_and_verifies(payloads):
+    # These adapters were opened with a 1,024-byte budget; payload adapters take none now.
+    large = b"x" * (5 * 1024 * 1024)
+    reference = payloads.put(large)
+    assert reference.length == len(large) and payloads.get(reference) == large
+    assert not hasattr(payloads, "max_bytes")
+
+
+def test_non_bytes_input_fails_before_publication(payloads):
     with pytest.raises(ValueError):
-        payloads.put(b"x" * 1025)
+        payloads.put("text, not bytes")
 
 
 def test_changed_bytes_under_an_existing_digest_fail_closed(payloads):
@@ -84,7 +92,7 @@ def test_changed_bytes_under_an_existing_digest_fail_closed(payloads):
 
 def test_lost_s3_response_can_retry_identical_immutable_bytes():
     client = S3()
-    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", StorageScope("a", "w"), max_bytes=100)
+    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", StorageScope("a", "w"))
     client.lose_response = True
     with pytest.raises(PayloadUncertain):
         payloads.put(b"exact raw bytes")
@@ -95,7 +103,7 @@ def test_lost_s3_response_can_retry_identical_immutable_bytes():
 
 def test_s3_stream_is_bounded_even_when_content_length_lies():
     client = S3()
-    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", StorageScope("a", "w"), max_bytes=100)
+    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", StorageScope("a", "w"))
     reference = payloads.put(b"123")
 
     class Body(BytesIO):
@@ -117,7 +125,7 @@ def test_invalid_fixed_configuration_is_rejected_without_an_sdk_call():
     with pytest.raises(ValueError):
         PayloadRef(scope, None, 0)
     with pytest.raises(ValueError):
-        S3Payloads(S3(), "synthetic-bucket", None, scope, max_bytes=100)
+        S3Payloads(S3(), "synthetic-bucket", None, scope)
 
 
 class FlakyS3(S3):
@@ -144,7 +152,7 @@ class ClientError(Exception):
 def flaky(error, failures):
     scope = StorageScope("account-a", "workspace-a")
     client = FlakyS3(error, failures)
-    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope, max_bytes=1024)
+    payloads = S3Payloads(client, "synthetic-bucket", "111111111111", scope)
     return payloads, payloads.put(b"{}"), client
 
 
@@ -182,7 +190,7 @@ def test_a_permanent_s3_get_failure_is_not_retried_and_is_typed(quick):
 
 
 def test_a_corrupt_payload_is_never_retried(quick):
-    payloads = S3Payloads(S3(), "synthetic-bucket", "111111111111", StorageScope("account-a", "workspace-a"), max_bytes=1024)
+    payloads = S3Payloads(S3(), "synthetic-bucket", "111111111111", StorageScope("account-a", "workspace-a"))
     reference = payloads.put(b"{}")
     payloads.client.objects[payloads._key(reference.digest)] = b"[]"
     with pytest.raises(PayloadCorrupt):
@@ -195,7 +203,7 @@ def test_a_filesystem_failure_keeps_its_class_name(tmp_path):
 
     from .storage_payloads import PayloadUnavailable
 
-    files = FilePayloads(tmp_path, StorageScope("account-a", "workspace-a"), max_bytes=1024)
+    files = FilePayloads(tmp_path, StorageScope("account-a", "workspace-a"))
     reference = replace(files.put(b"{}"), digest="0" * 64)
     with pytest.raises(PayloadUnavailable) as raised:
         files.get(reference)

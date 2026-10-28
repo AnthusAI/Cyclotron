@@ -315,7 +315,7 @@ def test_a_lost_http_review_acknowledgement_reuses_the_actual_committed_label(tm
     run(scenario())
 
 
-def test_http_boundary_rejects_cross_origin_malformed_operations_and_oversized_inputs(tmp_path):
+def test_http_boundary_rejects_cross_origin_and_malformed_operations(tmp_path):
     async def scenario():
         model = OfflineModel()
         with Cyclotron.open(tmp_path / "engine", DEFINITION, model) as engine:
@@ -326,7 +326,6 @@ def test_http_boundary_rejects_cross_origin_malformed_operations_and_oversized_i
                 body = {"contractVersion": "cyclotron-publication/v1", "operation": "status", "payload": {}}
                 assert (await http.post(path, json=body, headers={"Origin": "https://untrusted.invalid"})).status_code == 403
                 assert (await http.post(path, json={**body, "operation": {}})).status_code == 400
-                assert (await http.post(path, content=b" " * 2_000_001)).status_code == 413
                 assert model.calls == 0
 
     run(scenario())
@@ -385,12 +384,12 @@ def test_optional_review_explanation_uses_existing_native_normalization_and_surv
 
 
 @pytest.mark.parametrize("mode", ["embedded", "remote"])
-def test_optional_explanation_still_requires_configured_label_and_bounded_text(tmp_path, mode):
+def test_optional_explanation_still_requires_configured_label_and_text(tmp_path, mode):
     async def scenario():
         async with clients(tmp_path / "engine", mode, OfflineModel()) as (client, lab):
             c = client["threat-intelligence"]
             decision = await c.command("threat-intelligence", "decide", {"item": ITEM, "bindingRevision": "binding-1"})
-            for value in (False, 0, [], {}, "x" * 4001):
+            for value in (False, 0, [], {}):
                 with pytest.raises(PublicationError):
                     await c.command("threat-intelligence", "review", review_payload(decision, explanation=value))
             for value in (None, "", "  ", "unknown"):
@@ -401,5 +400,18 @@ def test_optional_explanation_still_requires_configured_label_and_bounded_text(t
             with pytest.raises(PublicationError):
                 await c.command("threat-intelligence", "review", payload)
             assert lab.engine.labels() == []
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("mode", ["embedded", "remote"])
+def test_a_review_request_over_two_megabytes_with_its_long_explanation_is_recorded_whole(tmp_path, mode):
+    async def scenario():
+        async with clients(tmp_path / "engine", mode, OfflineModel()) as (client, lab):
+            c = client["threat-intelligence"]
+            decision = await c.command("threat-intelligence", "decide", {"item": ITEM, "bindingRevision": "binding-1"})
+            explanation = "Because " + "x" * 2_500_000
+            await c.command("threat-intelligence", "review", review_payload(decision, explanation=explanation))
+            assert [label["explanation"] for label in lab.engine.labels()] == [explanation]
 
     run(scenario())

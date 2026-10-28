@@ -117,9 +117,9 @@ def test_actual_hosted_graphql_queue_worker_and_event_page_keep_original_tenant_
         assert access not in str(sent)
 
 
-def test_the_journal_byte_budget_defaults_to_four_mebibytes_and_can_be_raised_within_a_hard_ceiling():
+def test_the_hosted_config_has_no_journal_byte_record_or_commit_budget_and_ignores_the_old_variable():
+    from dataclasses import fields
     from .hosted_runtime import HostedConfig
-    assert HostedConfig.from_environment(complete_environment()).max_bytes==4194304
-    assert HostedConfig.from_environment(complete_environment()|{'CYCLOTRON_MAX_BYTES':'16777216'}).max_bytes==16777216
-    for bad in ('4MiB','0','1048575','67108865','-1',' 16777216'):
-        with pytest.raises(ValueError):HostedConfig.from_environment(complete_environment()|{'CYCLOTRON_MAX_BYTES':bad})
+    assert not {'max_bytes','max_records','max_commits'} & {field.name for field in fields(HostedConfig)}
+    for leftover in ('4MiB','1','99999999999'):
+        HostedConfig.from_environment(complete_environment()|{'CYCLOTRON_MAX_BYTES':leftover})

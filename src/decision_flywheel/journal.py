@@ -69,7 +69,6 @@ class JournalRecord:
 @runtime_checkable
 class Journal(Protocol):
     namespace: str
-    max_bytes: int
     boundary: object
 
     def exists(self) -> bool: ...
@@ -85,22 +84,13 @@ class CanonicalJournal:
     the payload adapter that stores immutable transactions.
     """
 
-    def __init__(self, payloads, domain, name, *, max_bytes, max_commits, create_only_initialization=False):
-        if any(not isinstance(v, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", v) for v in (domain, name)):
+    def __init__(self, payloads, domain, name, *, create_only_initialization=False):
+        if any(not isinstance(v, str) or not re.fullmatch(r"[a-zA-Z0-9_-]+", v) for v in (domain, name)):
             raise ValueError("fixed domain and run namespace required")
-        if (
-            type(max_bytes) is not int
-            or not 1 <= max_bytes <= payloads.max_bytes
-            or type(max_commits) is not int
-            or not 1 <= max_commits < 2**63
-        ):
-            raise ValueError("explicit positive journal byte and commit budgets required")
         if type(create_only_initialization) is not bool:
             raise ValueError("explicit creation mode required")
         self.create_only_initialization = create_only_initialization
         self.payloads = payloads
-        self.max_bytes = max_bytes
-        self.max_commits = max_commits
         self.namespace = f"{payloads.scope.key}/{domain}/{name}"
         prefix = f"{payloads.scope.key}/coordination/{domain}/{name}"
         self.head_key = prefix + "/head.json"
@@ -153,8 +143,6 @@ class CanonicalJournal:
             "value": value,
         }
         content = encode(transaction)
-        if len(content) > self.max_bytes or revision > self.max_commits:
-            raise JournalLimit("canonical journal budget exceeded; no truncation")
         try:
             reference = self.payloads.put(content)
         except Exception:
@@ -180,9 +168,8 @@ class CanonicalJournal:
             return self.read() if read_existing else None
         if self._get(self.head_key, missing=True, creation_probe=self.create_only_initialization) is not None:
             raise JournalUnavailable("head exists without namespace anchor; operator reconciliation required")
-        # Enforce size before creating a namespace that would need reconciliation.
-        if len(encode(value)) + 1024 > self.max_bytes:
-            raise JournalLimit("canonical journal byte budget exceeded")
+        # Prove the value is canonical JSON before creating a namespace that would need reconciliation.
+        encode(value)
         anchor = str(uuid4())
         try:
             self._put(self.anchor_key, {"schema": "cyclotron-s3-anchor/v1", "namespace": self.namespace, "anchor": anchor})
@@ -208,15 +195,13 @@ class CanonicalJournal:
                 or head["namespace"] != self.namespace
                 or head["anchor"] != anchor
                 or type(head["revision"]) is not int
-                or not 1 <= head["revision"] <= self.max_commits
+                or head["revision"] < 1
             ):
                 raise ValueError()
             uuid(head["commit"])
             if set(head["state"]) != {"digest", "length"}:
                 raise ValueError()
             ref = PayloadRef(self.payloads.scope, head["state"]["digest"], head["state"]["length"])
-            if ref.length > self.max_bytes:
-                raise ValueError()
             if (
                 known is not None
                 and known.namespace == self.namespace
@@ -271,7 +256,7 @@ class CanonicalJournal:
 def commit_with_contract(journal, expected, value, *, invalidate=None, invalidate_on_conflict=False):
     """The one commit path for every journal-backed adapter.
 
-    Conflict, uncertain and limit outcomes always surface as the shared storage
+    Conflict and uncertain outcomes always surface as the shared storage
     exception family. The caller's invalidate hook runs before an uncertain
     outcome (and optionally a conflict) propagates, so no handle keeps serving
     memory that may be stale. Retrying a conflict stays the caller's decision.

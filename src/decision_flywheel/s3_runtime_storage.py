@@ -1,4 +1,4 @@
-"""Named core runtime repositories over a bounded canonical S3 transaction.
+"""Named core runtime repositories over a canonical S3 transaction.
 
 An explicit owner holds this classifier until release. There is no timeout-based
 steal: an uncertain/crashed holder needs reconciliation. Every read and CAS
@@ -21,7 +21,6 @@ from .active_labels import (
 from .journal import Journal, commit_with_contract, decode, uuid
 from .learning_storage import ARTIFACTS, artifact_table
 from .record_lake import (
-    MAX_SKIPPED,
     RECORDS_KEY,
     Coverage,
     FileRecordLake,
@@ -31,7 +30,7 @@ from .record_lake import (
     commit_with_records,
     coverage_in,
 )
-from .storage_errors import StorageConflict, StorageLimit
+from .storage_errors import StorageConflict
 from .storage_payloads import FilePayloads, S3Payloads
 
 
@@ -66,13 +65,13 @@ def events_kind(journal):
     return "events-" + journal.namespace.rsplit("/", 1)[-1]
 
 
-def runtime_events_lake(journal, *, max_record_bytes=None):
+def runtime_events_lake(journal):
     """The events lake of one runtime journal, on its payload adapter (and so its scope, bucket and owner)."""
-    payloads, budget, kind = journal.payloads, max_record_bytes or journal.max_bytes, events_kind(journal)
+    payloads, kind = journal.payloads, events_kind(journal)
     if isinstance(payloads, S3Payloads):
-        return S3RecordLake(payloads, EVENTS_DOMAIN, kind, max_record_bytes=budget)
+        return S3RecordLake(payloads, EVENTS_DOMAIN, kind)
     if isinstance(payloads, FilePayloads):
-        return FileRecordLake(payloads, EVENTS_DOMAIN, kind, max_record_bytes=budget)
+        return FileRecordLake(payloads, EVENTS_DOMAIN, kind)
     raise ValueError("an S3 or file payload adapter is required for the runtime events lake")
 
 
@@ -96,15 +95,9 @@ def json_text(value):
 class S3RuntimeStores:
     requires_durable_optimizer = True
 
-    def __init__(self, journal, *, max_records, max_conflicts=8, cache_owned=False, coalesce_events=None, events_lake=None):
-        if (
-            not isinstance(journal, Journal)
-            or type(max_records) is not int
-            or max_records < 1
-            or type(max_conflicts) is not int
-            or not 1 <= max_conflicts <= 100
-        ):
-            raise ValueError("canonical journal and bounded records/conflicts required")
+    def __init__(self, journal, *, max_conflicts=8, cache_owned=False, coalesce_events=None, events_lake=None):
+        if not isinstance(journal, Journal) or type(max_conflicts) is not int or max_conflicts < 1:
+            raise ValueError("canonical journal and a positive conflict retry count required")
         if events_lake is not None and (
             not isinstance(events_lake, Records)
             or events_lake.name != f"{EVENTS_DOMAIN}/{events_kind(journal)}"
@@ -120,7 +113,6 @@ class S3RuntimeStores:
         self._held = []  # events appended but not yet published, oldest first (coalescing only)
         self._staged = None  # the events the commit being built will write
         self.journal = journal
-        self.max_records = max_records
         self.max_conflicts = max_conflicts
         self.authority = None
         self.poisoned = False
@@ -169,9 +161,6 @@ class S3RuntimeStores:
             or any(not isinstance(v, dict) for v in data["artifacts"].values())
         ):
             raise ValueError("invalid learning kinds")
-        count = sum(len(data[k]) for k in (*DICT_FIELDS, *LIST_FIELDS)) + sum(map(len, data["artifacts"].values()))
-        if count > self.max_records:
-            raise StorageLimit("canonical runtime record budget exceeded; no truncation")
 
     def initialize(self):
         self._validate(self.journal.initialize(empty()).value)
@@ -350,18 +339,11 @@ class S3RuntimeStores:
         embedded = len(view.legacy)
         return EventAudit(record, rows[:embedded], rows[embedded:], view.coverage)
 
-    @staticmethod
-    def _check_rehoming(audit):
-        # Every sequence the lake used so far ends up skipped, covered or not, so ``last`` is what the budget counts.
-        if audit.embedded and audit.coverage.last > MAX_SKIPPED:
-            raise ValueError("too many records already in the lake to place the embedded events before them")
-
     def preview_events_conversion(self, audit):
         """(the document as it would stand after the conversion, bytes of the records it would write).
 
         Nothing is written. Exact unless a sequence turns out to be occupied when the pages are created.
         """
-        self._check_rehoming(audit)
         rows = audit.embedded + audit.stored
         mark = None if CYCLE_MARK_KEY in audit.record.value["data"]["state"] else json.dumps(_highest_cycle(rows))
         state = deepcopy(audit.record.value)
@@ -393,7 +375,6 @@ class S3RuntimeStores:
                 return None
             if [i for i, _ in audit.embedded] != list(range(1, len(audit.embedded) + 1)):
                 raise ValueError("embedded event ids are not 1..n; refusing to renumber them")
-            self._check_rehoming(audit)
             rows = audit.embedded + audit.stored
             history = [payload for _, payload in rows]
             before = audit.record.value
@@ -608,8 +589,8 @@ class _State(_View):
         return tuple({**json.loads(payload), "event_id": identifier} for identifier, payload in rows)
 
     def trace_events(self, *, after_event_id=0, limit=100):
-        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("bounded trace page required")
+        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("a non-negative trace cursor and positive page size required")
         rows = list(self._view().rows(after_event_id, limit))
         return {
             "events": [{**json.loads(payload), "event_id": identifier} for identifier, payload in rows],
@@ -618,8 +599,8 @@ class _State(_View):
 
     @staticmethod
     def _kinds(kinds):
-        if not isinstance(kinds, tuple) or not 1 <= len(kinds) <= 100 or any(not isinstance(k, str) for k in kinds):
-            raise ValueError("bounded event kinds required")
+        if not isinstance(kinds, tuple) or not kinds or any(not isinstance(k, str) for k in kinds):
+            raise ValueError("explicit event kinds required")
 
     def event_payloads(self, kinds):
         self._kinds(kinds)

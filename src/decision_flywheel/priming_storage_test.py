@@ -169,8 +169,8 @@ def test_explicit_legacy_manifest_reader_upgrades_known_v1_bytes(tmp_path, domai
         publish = CatalogArchive.publish
 
     scope = StorageScope("synthetic", "priming")
-    payloads = FilePayloads(tmp_path / "payloads", scope, max_bytes=64000000)
-    options = {"max_records": 10000, "max_bytes": 64000000}
+    payloads = FilePayloads(tmp_path / "payloads", scope)
+    options = {}
     published = OldWriter(payloads, scope, **options).publish(old)
     reader = legacy_type(payloads, scope, **options)
     assert reader.read(published.manifest) == new

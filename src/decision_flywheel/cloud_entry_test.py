@@ -195,5 +195,22 @@ def test_the_scheduled_sweep_runs_outside_sqs_with_the_invocations_remaining_tim
     context = SimpleNamespace(get_remaining_time_in_millis=lambda: 175000)
     assert cloud_entry.worker_handler(event, context) == {"sweep": {"account": ["completed"]}}
     assert seen == [175.0]
-    with pytest.raises(ValueError):  # anything else still needs a bounded SQS batch
+    with pytest.raises(ValueError):  # anything else still needs an SQS batch
         cloud_entry.worker_handler({"source": "aws.events"}, context)
+
+
+def test_a_batch_of_twenty_five_deliveries_with_large_bodies_and_long_ids_is_processed_whole(monkeypatch):
+    from . import cloud_entry
+
+    seen = []
+
+    class Worker:
+        async def process(self, message, remaining=None):
+            seen.append(len(message["note"]))
+
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", SimpleNamespace(worker=lambda: Worker()))
+    body = json.dumps({"accountId": str(uuid4()), "runId": str(uuid4()), "jobId": str(uuid4()), "note": "x" * 10_000})
+    event = {"Records": [{"messageId": f"m{n}-" + "i" * 300, "body": body} for n in range(25)]}
+    context = SimpleNamespace(get_remaining_time_in_millis=lambda: 170000)
+    assert cloud_entry.worker_handler(event, context) == {"batchItemFailures": []}
+    assert seen == [10_000] * 25

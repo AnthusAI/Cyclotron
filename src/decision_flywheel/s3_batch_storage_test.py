@@ -13,7 +13,7 @@ from .s3_journal_test import journal
 def store(j=None, **options):
     from .s3_batch_storage import S3BatchStorage
 
-    result = S3BatchStorage(j or journal(), max_records=1000, **options)
+    result = S3BatchStorage(j or journal(), **options)
     result.initialize()
     return result
 
@@ -142,18 +142,17 @@ def test_learning_abandonment_retains_attempt_history_and_cannot_remove_a_siblin
     assert s.get("f" * 64).status == "pending"
 
 
-def test_record_limits_corrupt_state_and_missing_head_fail_closed():
+def test_more_ledger_records_than_the_old_budget_commit_and_a_missing_head_fails_closed():
     from .s3_batch_storage import S3BatchStorage
     from .s3_journal import JournalUnavailable
 
     j = journal()
-    s = S3BatchStorage(j, max_records=2)
+    s = S3BatchStorage(j)
     s.initialize()
-    s.reserve("1" * 64, 2, str(uuid4()))
-    before = j.read().revision
-    with pytest.raises(ValueError):
-        s.reserve("2" * 64, 2, str(uuid4()))
-    assert j.read().revision == before and s.requests() == 1
+    # The old record budget refused the second request here; there is no record budget now.
+    for character in "123456789":
+        s.reserve(character * 64, 100, str(uuid4()))
+    assert s.requests() == 9 and len(S3BatchStorage(j).export()["batches"]) == 9
     del j.payloads.client.objects[j.head_key]
     with pytest.raises(JournalUnavailable):
         s.initialize()
@@ -235,11 +234,11 @@ def reply_lake(kind, j, tmp_path=None, memory=None, ledger="run-a"):
     from .record_lake import FileRecordLake, MemoryRecordLake, S3RecordLake
     from .storage_payloads import FilePayloads
 
-    options = dict(domain="shared-batches", kind=f"replies-{ledger}", max_record_bytes=200000)
+    options = dict(domain="shared-batches", kind=f"replies-{ledger}")
     if kind == "memory":
         return MemoryRecordLake(j.boundary[0], store=memory, **options)
     if kind == "file":
-        return FileRecordLake(FilePayloads(tmp_path, j.boundary[0], max_bytes=1000000), **options)
+        return FileRecordLake(FilePayloads(tmp_path, j.boundary[0]), **options)
     return S3RecordLake(j.payloads, **options)
 
 
@@ -254,7 +253,7 @@ def lake_world(request, tmp_path):
     class World:
         def open(self, name="run-a", **options):
             j = journal(client, name=name)
-            s = S3BatchStorage(j, max_records=1000, replies=reply_lake(request.param, j, tmp_path, memory, name), **options)
+            s = S3BatchStorage(j, replies=reply_lake(request.param, j, tmp_path, memory, name), **options)
             s.initialize()
             return s
 
@@ -306,7 +305,7 @@ def test_journal_bytes_per_paid_request_no_longer_depend_on_the_reply(lake_world
             paid(storage, f"{index:064x}", reply_text(size, marker=chr(97 + index % 26)))
         return (journal_bytes(storage) - base) / count
 
-    embedded = S3BatchStorage(journal(name="embedded"), max_records=1000)
+    embedded = S3BatchStorage(journal(name="embedded"))
     embedded.initialize()
     before = grow(embedded, 23000)
     small, large = lake_world.open("small"), lake_world.open("large")
@@ -514,16 +513,16 @@ def test_a_failed_reply_write_embeds_the_paid_reply_instead_of_dropping_it(lake_
     assert again.journal.read().value["batches"][0][2] == '{"paid":true}'  # embedded, legacy form
 
 
-def test_an_oversized_reply_is_embedded_not_lost(lake_world):
-    from .s3_batch_storage import S3BatchStorage
+def test_a_reply_larger_than_the_old_four_mib_reply_budget_goes_to_the_lake_and_reads_back(lake_world):
+    from . import s3_batch_storage
 
-    j = journal(lake_world.client, name="small-lake")
-    from .record_lake import S3RecordLake
-
-    s = S3BatchStorage(j, max_records=1000, replies=S3RecordLake(j.payloads, "shared-batches", "tiny", max_record_bytes=100))
-    s.initialize()
-    paid(s, "a" * 64, reply_text(5000))
-    assert s.get("a" * 64).payload == reply_text(5000) and isinstance(s.journal.read().value["batches"][0][2], str)
+    assert not hasattr(s3_batch_storage, "REPLY_RECORD_BYTES")
+    s = lake_world.open()
+    large = reply_text(5 * 1024 * 1024)
+    paid(s, "a" * 64, large)
+    held = s.journal.read().value["batches"][0][2]
+    assert isinstance(held, dict) and held["length"] == len(large.encode())
+    assert lake_world.open().get("a" * 64).payload == large
 
 
 def test_a_missing_or_altered_reply_record_fails_closed_and_never_looks_unpaid(lake_world):
@@ -560,7 +559,7 @@ def test_legacy_embedded_replies_still_read_and_new_ones_join_them_in_the_lake(l
     from .s3_batch_storage import S3BatchStorage
 
     j = journal(lake_world.client)
-    legacy = S3BatchStorage(j, max_records=1000)
+    legacy = S3BatchStorage(j)
     legacy.initialize()
     old = paid(legacy, "a" * 64, '{"old":true}')
     upgraded = lake_world.open()
@@ -579,7 +578,7 @@ def test_legacy_embedded_replies_still_read_and_new_ones_join_them_in_the_lake(l
     assert upgraded.reserve("b" * 64, 5, replay_owner, policy="refresh").payload == '{"new":true}'
     assert upgraded.export()["history"][-1][4] == '{"new":true}'
     # a ledger that cites reply records cannot be opened without a lake
-    blind = S3BatchStorage(journal(lake_world.client), max_records=1000)
+    blind = S3BatchStorage(journal(lake_world.client))
     with pytest.raises(ValueError, match="lake"):
         blind.requests()
 
@@ -592,7 +591,7 @@ def test_export_and_restore_round_trip_through_the_lake_and_match_the_embedded_f
     s.reserve("a" * 64, 5, str(uuid4()), policy="refresh")
     paid(s, "b" * 64, '{"v":2}')
     snapshot = s.export()
-    embedded = S3BatchStorage(journal(name="plain"), max_records=1000)
+    embedded = S3BatchStorage(journal(name="plain"))
     embedded.initialize()
     embedded.restore(snapshot)
     assert embedded.export() == snapshot
@@ -629,8 +628,7 @@ def test_a_lake_must_belong_to_the_journals_scope():
     with pytest.raises(ValueError):
         S3BatchStorage(
             journal(),
-            max_records=10,
-            replies=MemoryRecordLake(StorageScope("other", "scope"), "shared-batches", "replies", max_record_bytes=1000),
+            replies=MemoryRecordLake(StorageScope("other", "scope"), "shared-batches", "replies"),
         )
     with pytest.raises(ValueError):
-        S3BatchStorage(journal(), max_records=10, replies=object())
+        S3BatchStorage(journal(), replies=object())

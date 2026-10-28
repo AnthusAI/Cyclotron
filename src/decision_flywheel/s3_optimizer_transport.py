@@ -18,9 +18,7 @@ from .s3_batch_storage import S3BatchStorage
 
 
 class S3OptimizerTransport:
-    def __init__(
-        self, transport, storage, *, identity, max_calls, max_request_bytes, max_reply_bytes, redact=(), execution_guard=None
-    ):
+    def __init__(self, transport, storage, *, identity, max_calls, redact=(), execution_guard=None):
         if not isinstance(storage, S3BatchStorage):
             raise ValueError("canonical S3 optimizer budget required")
         if (
@@ -30,8 +28,8 @@ class S3OptimizerTransport:
             or any(not isinstance(identity[k], str) or not identity[k].strip() for k in ("provider", "model"))
         ):
             raise ValueError("explicit complete optimizer transport identity required")
-        if any(type(v) is not int or v < 1 for v in (max_calls, max_request_bytes, max_reply_bytes)):
-            raise ValueError("explicit optimizer call/request/reply budgets required")
+        if type(max_calls) is not int or max_calls < 1:
+            raise ValueError("explicit optimizer call budget required")
         if getattr(transport, "model", identity["model"]) != identity["model"]:
             raise ValueError("optimizer identity differs from configured provider model")
         if execution_guard is not None and not callable(execution_guard):
@@ -42,8 +40,6 @@ class S3OptimizerTransport:
         self.identity = decode(encode(identity))
         self.max_calls = max_calls
         self.model = identity["model"]
-        self.max_request_bytes = max_request_bytes
-        self.max_reply_bytes = max_reply_bytes
         self.redact = tuple(redact)
         candidate = getattr(transport, "acomplete", None)
         if not inspect.iscoroutinefunction(candidate):
@@ -69,8 +65,6 @@ class S3OptimizerTransport:
             self.storage,
             identity=self.identity,
             max_calls=self.max_calls,
-            max_request_bytes=self.max_request_bytes,
-            max_reply_bytes=self.max_reply_bytes,
             redact=self.redact,
             execution_guard=guard,
         )
@@ -87,15 +81,13 @@ class S3OptimizerTransport:
     def calls(self):
         return self.storage.requests()
 
-    def _safe(self, content, maximum):
-        if len(content) > maximum:
-            raise ValueError("optimizer request/reply exceeds byte budget")
+    def _safe(self, content):
         if any(secret and secret.encode() in content for secret in self.redact):
             raise ValueError("optimizer request/reply contains a credential")
 
     def _begin(self, messages):
         content = encode({"transport": self.identity, "messages": messages})
-        self._safe(content, self.max_request_bytes)
+        self._safe(content)
         if not isinstance(messages, list) or any(
             not isinstance(row, dict) or not isinstance(row.get("role"), str) or not isinstance(row.get("content"), str)
             for row in messages
@@ -112,7 +104,7 @@ class S3OptimizerTransport:
         if not isinstance(reply, OptimizerReply):
             raise ValueError("optimizer transport must return OptimizerReply")
         raw = encode(asdict(reply))
-        self._safe(raw, self.max_reply_bytes)
+        self._safe(raw)
         # Transport/serialization/settlement exceptions leave the claimed request
         # protected. The caller cannot automatically repay an uncertain outcome.
         self.storage.settle(claim[0], claim[1], "complete", raw.decode())

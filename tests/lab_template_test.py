@@ -10,7 +10,11 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    "/Parameters/JournalMaxBytes",
+    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_MAX_BYTES",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -32,6 +36,11 @@ def test_the_retired_request_cap_is_gone_from_the_template_and_the_deployed_snap
     for document in (check.load_template(), check.load_snapshot()):
         assert "PredictionMaxRequests" not in json.dumps(document)
         assert "CYCLOTRON_PREDICTION_MAX_REQUESTS" not in json.dumps(document)
+
+
+def test_the_journal_byte_budget_is_gone_from_the_template():
+    document = json.dumps(check.load_template())
+    assert "JournalMaxBytes" not in document and "CYCLOTRON_MAX_BYTES" not in document
 
 
 def test_pending_changes_are_each_described_in_the_reviewer_note():

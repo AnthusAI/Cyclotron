@@ -39,6 +39,19 @@ KEYS = {
 INTEGERS = {"revision", "sequence", "classifier_revision", "item_revision"}
 
 
+def _values_ref(payload):
+    """A revision whose values live in their own content-addressed record (value_records.REF)."""
+    ref = payload.get("valuesRef")
+    return (
+        "values" not in payload
+        and isinstance(ref, dict)
+        and set(ref) == {"digest", "length"}
+        and isinstance(ref["digest"], str)
+        and len(ref["digest"]) == 64
+        and type(ref["length"]) is int
+    )
+
+
 def encode(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
@@ -51,18 +64,9 @@ def decode(value):
     return json.loads(value, parse_constant=_invalid_constant)
 
 
-def budgets(max_records, max_bytes):
-    if type(max_records) is not int or max_records < 1 or type(max_bytes) is not int or max_bytes < 1:
-        raise ValueError("explicit positive record and byte budgets required")
-
-
-def validate(snapshot, *, max_records=10000, max_bytes=64000000):
+def validate(snapshot):
     """Validate and copy before any destination mutation; retain JSON text as text."""
-    budgets(max_records, max_bytes)
-    content = encode(snapshot)
-    if len(content) > max_bytes:
-        raise ValueError("catalog snapshot byte budget exceeded")
-    snapshot = decode(content)
+    snapshot = decode(encode(snapshot))
     if isinstance(snapshot, dict) and snapshot.get("schema") == "cyclotron-catalog/v1":
         if not isinstance(snapshot.get("tables"), dict) or set(snapshot["tables"]) != set(COLUMNS) - {"priming_drafts"}:
             raise ValueError("complete legacy catalog tables required")
@@ -77,8 +81,8 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
     tables = snapshot["tables"]
     if not isinstance(tables, dict) or set(tables) != set(COLUMNS):
         raise ValueError("complete catalog tables required")
-    if not all(isinstance(rows, list) for rows in tables.values()) or sum(map(len, tables.values())) > max_records:
-        raise ValueError("catalog snapshot record budget exceeded")
+    if not all(isinstance(rows, list) for rows in tables.values()):
+        raise ValueError("catalog snapshot tables must be lists")
     for table, columns in COLUMNS.items():
         seen = set()
         for row in tables[table]:
@@ -87,7 +91,7 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
             for name, value in row.items():
                 if name in INTEGERS:
                     if type(value) is not int or not 1 <= value < 2**63:
-                        raise ValueError("bounded positive catalog revision/sequence required")
+                        raise ValueError("positive 64-bit catalog revision/sequence required")
                 elif not isinstance(value, str) or not value and name != "comment":
                     raise ValueError("catalog text field required")
             if "name" in row and not row["name"].strip():
@@ -151,7 +155,7 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
             or not isinstance(payload, dict)
             or payload.get("id") != row["id"]
             or payload.get("occurred_at") != row["occurred_at"]
-            or not isinstance(payload.get("values"), dict)
+            or not (isinstance(payload.get("values"), dict) or _values_ref(payload))
             or sha256(row["payload"].encode()).hexdigest() != row["fingerprint"]
         ):
             raise ValueError("invalid canonical item revision")

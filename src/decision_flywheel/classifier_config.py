@@ -104,23 +104,36 @@ class ClassifierConfig:
             pool[row.item.id] = row
         return pool
 
-    def request(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None) -> dict:
+    def eligible_examples(self, target: Item, training: Sequence[LabeledItem]) -> list[tuple[str, dict, str, int]]:
+        """Configured examples that may accompany ``target``, as (id, compact example, label, recency), in display order.
+
+        A target never appears among its own examples, by id or by normalized text.
+        """
+        from .request_composition import compact_example
+
         self.task.validate_target(target)
         pool = self._pool(training)
-        examples = []
+        recency = {row.item.id: index for index, row in enumerate(training)}
+        rows = []
         for key in self.example_ids:
             if key not in pool:
                 raise ValueError("active example is missing from eligible training")
             row = pool[key]
             if key == target.id or _normalized_text(row.item, self.task) == _normalized_text(target, self.task):
                 continue
-            examples.append({**dict(row.item.values), "label": self.task.validate_label(row.label), **dict(row.context)})
-        state = {"target": dict(target.values), "rubric": self.rubric, "examples": examples}
+            label = self.task.validate_label(row.label)
+            rows.append((key, compact_example(row, label), label, recency[key]))
+        return rows
+
+    def state(self, target_values: Mapping[str, object], examples: Sequence[dict], *, now: datetime | None = None) -> dict:
+        state = {"target": dict(target_values), "rubric": self.rubric, "examples": list(examples)}
         if "current_datetime" in self.dynamic_elements:
             if now is None or now.tzinfo is None or now.utcoffset() is None:
                 raise ValueError("current_datetime requires an explicit timezone-aware instant")
             state["current_datetime"] = now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return state
 
+    def questions(self) -> dict:
         def question(task, main=False):
             suffix = " Use state.rubric as the human's decision criteria." if main else ""
             return {
@@ -131,7 +144,24 @@ class ClassifierConfig:
                 "options": list(task.labels),
             }
 
-        return {
-            "state": state,
-            "questions": {"decision": question(self.task, True), **{task.name: question(task) for task in self.tasks}},
-        }
+        return {"decision": question(self.task, True), **{task.name: question(task) for task in self.tasks}}
+
+    def request(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None) -> dict:
+        """The decision request, fitted to ``DECISION_REQUEST_BYTES`` (see ``request_composition``)."""
+        return self.compose(target, training, now=now)[0]
+
+    def compose(self, target: Item, training: Sequence[LabeledItem], *, now: datetime | None = None) -> tuple[dict, dict]:
+        """(request, composition). The request carries its composition when the composer altered it."""
+        from .request_composition import altered, fit, keep_order
+
+        rows = self.eligible_examples(target, training)
+        questions = self.questions()
+        self.state(target.values, (), now=now)  # validate the instant before composing
+
+        def build(kept, values):
+            examples = [example for key, example, _, _ in rows if key in kept]
+            return {"state": self.state(values, examples, now=now), "questions": questions}
+
+        priority = keep_order([(key, label, recency) for key, _, label, recency in rows], self.task.labels)
+        request, composition, _ = fit(build, priority, dict(target.values), self.task.input_field, len(rows))
+        return ({**request, "composition": composition} if altered(composition) else request), composition

@@ -361,8 +361,8 @@ the journal is lake-backed and verified; the tool has no undo. See "What rollbac
 
 1. Dry run again: every line is `nothing-to-convert` and shows the new `state` size (the 2026-10-22 projection: each runtime
    about 46 KB, the ledger about 45 KB, the catalog about 0.9 MB, down from 3.6, 3.1 and 2.5 MB).
-2. Those `state` sizes are what each journal's next write rewrites. Each is far below `CYCLOTRON_MAX_BYTES` (16 MiB) and the
-   catalog's 0.9 MB is mostly rows that stay by design (items, lists, classifiers).
+2. Those `state` sizes are what each journal's next write rewrites. There is no journal byte budget any more (the old
+   `CYCLOTRON_MAX_BYTES` is gone), and the catalog's 0.9 MB is mostly rows that stay by design (items, lists, classifiers).
 
 ### 6. Resume
 

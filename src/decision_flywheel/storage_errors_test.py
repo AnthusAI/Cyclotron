@@ -13,7 +13,6 @@ def open_stores(client):
 
     return S3CyclotronStores(
         journal(client, name="root"),
-        max_records=10000,
         journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
     )
 
@@ -54,7 +53,7 @@ def test_releasing_the_composition_closes_every_runtime_it_opened():
 def embedded_adapter(client):
     from .s3_embedded_storage import S3EmbeddedStorage
 
-    root = S3EmbeddedStorage(journal(client, name="contract-embedded"), max_records=1000)
+    root = S3EmbeddedStorage(journal(client, name="contract-embedded"))
     root.initialize()
     root.acquire(str(uuid4()))
     return root, lambda number: root.put_meta("key", str(number))
@@ -63,7 +62,7 @@ def embedded_adapter(client):
 def runtime_adapter(client):
     from .s3_runtime_storage import S3RuntimeStores
 
-    runtime = S3RuntimeStores(journal(client, name="contract-runtime"), max_records=1000)
+    runtime = S3RuntimeStores(journal(client, name="contract-runtime"))
     runtime.initialize()
     runtime.acquire(str(uuid4()))
     return runtime, lambda number: runtime.runtime_storage.put_state("key", str(number))
@@ -72,7 +71,7 @@ def runtime_adapter(client):
 def review_adapter(client):
     from .s3_review_storage import S3ReviewStorage
 
-    review = S3ReviewStorage(journal(client, name="contract-review"), max_records=1000)
+    review = S3ReviewStorage(journal(client, name="contract-review"))
     review.initialize()
     return review, lambda number: review.bind_study({f"key-{number}": str(number)})
 
@@ -80,7 +79,7 @@ def review_adapter(client):
 def console_adapter(client):
     from .s3_console_storage import S3ConsoleStorage
 
-    console = S3ConsoleStorage(journal(client, name="contract-console"), max_records=1000)
+    console = S3ConsoleStorage(journal(client, name="contract-console"))
     console.initialize()
     return console, lambda number: console.save_item_list(f"list-{number}", "List")
 
@@ -151,14 +150,15 @@ def test_a_missing_decision_fingerprint_raises_storage_missing_in_both_adapters(
             storage.decision_fingerprint("absent")
 
 
-def test_an_exceeded_record_budget_raises_storage_limit():
+def test_no_storage_adapter_raises_storage_limit_for_size_or_count_any_more():
     from .s3_embedded_storage import S3EmbeddedStorage
-    from .storage_errors import StorageLimit
 
-    root = S3EmbeddedStorage(journal(name="budget"), max_records=1)
+    # This root used to hold one record, so the second write raised StorageLimit.
+    root = S3EmbeddedStorage(journal(name="budget"))
     root.initialize()
     root.acquire(str(uuid4()))
-    with pytest.raises(StorageLimit):
-        with root.transaction():
-            root.put_meta("first", "1")
-            root.put_meta("second", "2")
+    with root.transaction():
+        root.put_meta("first", "1")
+        root.put_meta("second", "x" * (5 * 1024 * 1024))
+    assert root.meta("second") == ("x" * (5 * 1024 * 1024),)
+    root.release()

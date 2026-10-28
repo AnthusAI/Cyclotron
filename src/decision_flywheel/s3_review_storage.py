@@ -6,8 +6,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 
-from .journal import Journal, commit_with_contract, encode
-from .storage_errors import StorageLimit
+from .journal import Journal, commit_with_contract
 
 COLUMNS = {
     "study_metadata": ("key", "value"),
@@ -44,14 +43,13 @@ def append(value, table, row):
 
 
 class S3ReviewStorage:
-    def __init__(self, journal, *, max_records):
-        if not isinstance(journal, Journal) or type(max_records) is not int or max_records < 1:
-            raise ValueError("canonical journal and reviewer record budget required")
+    def __init__(self, journal):
+        if not isinstance(journal, Journal):
+            raise ValueError("canonical reviewer journal required")
         self.journal = journal
-        self.max_records = max_records
         self._tx = ContextVar("s3_review_transaction", default=None)
 
-    def _validate(self, value, *, max_records=None, max_bytes=None):
+    def _validate(self, value):
         if (
             not isinstance(value, dict)
             or set(value) != set(empty())
@@ -62,12 +60,8 @@ class S3ReviewStorage:
         ):
             raise ValueError("invalid complete reviewer snapshot")
         tables = value["tables"]
-        if any(not isinstance(r, list) for r in tables.values()) or sum(map(len, tables.values())) > min(
-            self.max_records, max_records or self.max_records
-        ):
-            raise StorageLimit("review source record budget exceeded")
-        if len(encode(value)) > min(self.journal.max_bytes, max_bytes or self.journal.max_bytes):
-            raise StorageLimit("review source byte budget exceeded")
+        if any(not isinstance(r, list) for r in tables.values()):
+            raise ValueError("reviewer tables must be lists")
         for table, columns in COLUMNS.items():
             ordinals, ids = set(), set()
             for row in tables[table]:
@@ -242,18 +236,14 @@ class S3ReviewStorage:
     def close(self):
         pass
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
-        if type(max_records) is not int or max_records < 1 or type(max_bytes) is not int or max_bytes < 1:
-            raise ValueError("explicit positive export budgets required")
+    def export_storage(self):
         value = deepcopy(self._value())
-        self._validate(value, max_records=max_records, max_bytes=max_bytes)
+        self._validate(value)
         return value
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
-        if type(max_records) is not int or max_records < 1 or type(max_bytes) is not int or max_bytes < 1:
-            raise ValueError("explicit positive import budgets required")
+    def restore_storage(self, snapshot):
         snapshot = deepcopy(snapshot)
-        self._validate(snapshot, max_records=max_records, max_bytes=max_bytes)
+        self._validate(snapshot)
 
         def apply(value):
             if any(value["tables"].values()):

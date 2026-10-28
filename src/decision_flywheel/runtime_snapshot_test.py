@@ -1,5 +1,6 @@
 """Complete native runtime migration retains evidence, order and lazy schemas."""
 
+import json
 import sqlite3
 from copy import deepcopy
 
@@ -80,11 +81,11 @@ def test_immutable_runtime_archive_reuses_shared_payload_transport(tmp_path, bac
     snapshot = export_runtime(wheel.db)
     scope = StorageScope("account", "workspace")
     payloads = (
-        FilePayloads(tmp_path / "payloads", scope, max_bytes=64000000)
+        FilePayloads(tmp_path / "payloads", scope)
         if backend == "file"
-        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope, max_bytes=64000000)
+        else S3Payloads(S3(), "synthetic-bucket", "111111111111", scope)
     )
-    archive = RuntimeArchive(payloads, scope, max_records=1000, max_bytes=64000000)
+    archive = RuntimeArchive(payloads, scope)
     published = archive.publish(snapshot)
     assert archive.read(published.manifest) == snapshot
     wheel.close()
@@ -114,12 +115,8 @@ def test_invalid_runtime_import_fails_before_creating_or_writing_tables(tmp_path
     wheel.close()
 
 
-def test_unknown_or_changed_native_schema_and_read_budgets_fail_explicitly(tmp_path):
+def test_unknown_or_changed_native_schema_fails_explicitly(tmp_path):
     wheel = populated(tmp_path / "source.sqlite")
-    with pytest.raises(ValueError, match="record budget"):
-        export_runtime(wheel.db, max_records=1)
-    with pytest.raises(ValueError, match="byte budget"):
-        export_runtime(wheel.db, max_bytes=10)
     wheel.db.execute("CREATE TABLE future(id TEXT)")
     with pytest.raises(ValueError, match="schema"):
         export_runtime(wheel.db)
@@ -127,6 +124,21 @@ def test_unknown_or_changed_native_schema_and_read_budgets_fail_explicitly(tmp_p
     wheel.db.execute("ALTER TABLE control_ideas ADD COLUMN future TEXT")
     with pytest.raises(ValueError, match="schema"):
         export_runtime(wheel.db)
+    wheel.close()
+
+
+def test_a_runtime_larger_than_the_old_record_and_byte_budgets_exports_and_restores(tmp_path):
+    wheel = populated(tmp_path / "source.sqlite")
+    for n in range(20):
+        wheel._emit({"kind": "prediction", "cycle_number": n, "target_id": f"t{n}", "pad": "x" * (256 * 1024)})
+    snapshot = export_runtime(wheel.db)
+    assert len(json.dumps(snapshot)) > 5 * 1024 * 1024
+    restored = sqlite3.connect(tmp_path / "restored.sqlite")
+    restore_runtime(restored, snapshot)
+    assert export_runtime(restored) == snapshot
+    with pytest.raises(TypeError):
+        export_runtime(wheel.db, max_records=1)
+    restored.close()
     wheel.close()
 
 
@@ -190,7 +202,7 @@ def test_runtime_export_is_one_snapshot_while_another_process_updates_two_domain
     worker.start()
 
     def trace(sql):
-        if sql.startswith("SELECT COUNT(*)") and not start.is_set():
+        if sql.startswith("SELECT rowid") and not start.is_set():
             start.set()
             assert done.wait(5)
 

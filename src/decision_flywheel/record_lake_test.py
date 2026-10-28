@@ -32,9 +32,9 @@ def no_retry_pause(monkeypatch):
     monkeypatch.setattr(s3_transient, "RETRY_PAUSE_SECONDS", 0)
 
 
-def s3_lake(fake=None, kind="events", limit=2000):
+def s3_lake(fake=None, kind="events"):
     fake = fake or ListingS3()
-    return fake, S3RecordLake(s3_journal(fake).payloads, "runtime", kind, max_record_bytes=limit)
+    return fake, S3RecordLake(s3_journal(fake).payloads, "runtime", kind)
 
 
 def test_s3_records_live_under_the_scoped_records_prefix_and_are_written_create_only():
@@ -47,7 +47,7 @@ def test_s3_records_live_under_the_scoped_records_prefix_and_are_written_create_
 
 
 def test_the_file_layout_mirrors_the_s3_keys(tmp_path):
-    lake = FileRecordLake(FilePayloads(tmp_path, SCOPE, max_bytes=1000), "runtime", "events", max_record_bytes=2000)
+    lake = FileRecordLake(FilePayloads(tmp_path, SCOPE), "runtime", "events")
     lake.put(7, {"e": 1})
     assert (tmp_path / "account-a/workspace-a/records/runtime/events/000000000007.json").is_file()
 
@@ -135,7 +135,7 @@ def test_a_real_sdk_client_must_not_retry_hidden_writes():
     fake, lake = s3_lake()
     fake.meta = Meta()
     with pytest.raises(ValueError):
-        S3RecordLake(lake_payloads(fake), "runtime", "events", max_record_bytes=100)
+        S3RecordLake(lake_payloads(fake), "runtime", "events")
 
 
 def lake_payloads(fake):
@@ -143,13 +143,13 @@ def lake_payloads(fake):
 
 
 def test_non_json_values_are_refused():
-    lake = MemoryRecordLake(SCOPE, "runtime", "events", max_record_bytes=2000)
+    lake = MemoryRecordLake(SCOPE, "runtime", "events")
     with pytest.raises(ValueError):
         lake.put(1, {"x": float("nan")})
 
 
 def test_a_file_lake_ignores_leftover_temporary_files(tmp_path):
-    lake = FileRecordLake(FilePayloads(tmp_path, SCOPE, max_bytes=1000), "runtime", "events", max_record_bytes=2000)
+    lake = FileRecordLake(FilePayloads(tmp_path, SCOPE), "runtime", "events")
     lake.put(1, {"e": 1})
     (lake.directory / "tmp-leftover").write_bytes(b"half")
     assert lake.sequences() == [1]
@@ -180,8 +180,8 @@ def test_coverage_counts_only_unskipped_sequences_up_to_last():
 
 
 def test_coverage_for_each_lake_is_kept_apart_inside_one_control_state():
-    events = MemoryRecordLake(SCOPE, "runtime", "events", max_record_bytes=100)
-    answers = MemoryRecordLake(SCOPE, "runtime", "answers", max_record_bytes=100)
+    events = MemoryRecordLake(SCOPE, "runtime", "events")
+    answers = MemoryRecordLake(SCOPE, "runtime", "answers")
     state = with_coverage({"owner": "w1"}, events, Coverage(3))
     assert coverage_in(state, events) == Coverage(3) and coverage_in(state, answers) == Coverage()
     assert state["owner"] == "w1"
@@ -190,8 +190,8 @@ def test_coverage_for_each_lake_is_kept_apart_inside_one_control_state():
 def test_one_commit_can_cover_two_lakes_and_cite_their_records_in_the_small_state():
     fake = ListingS3()
     journal = s3_journal(fake)
-    events = S3RecordLake(journal.payloads, "runtime", "events", max_record_bytes=2000)
-    answers = S3RecordLake(journal.payloads, "runtime", "answers", max_record_bytes=2000)
+    events = S3RecordLake(journal.payloads, "runtime", "events")
+    answers = S3RecordLake(journal.payloads, "runtime", "answers")
     head = journal.initialize({"paid_calls": 0})
 
     def note(state, refs):
@@ -210,7 +210,7 @@ def test_one_commit_can_cover_two_lakes_and_cite_their_records_in_the_small_stat
 def test_a_state_that_is_not_an_object_cannot_carry_coverage():
     fake = ListingS3()
     journal = s3_journal(fake)
-    lake = S3RecordLake(journal.payloads, "runtime", "events", max_record_bytes=2000)
+    lake = S3RecordLake(journal.payloads, "runtime", "events")
     with pytest.raises(ValueError):
         commit_with_records(journal, journal.initialize([1, 2]), [(lake, [{"e": 1}])])
 

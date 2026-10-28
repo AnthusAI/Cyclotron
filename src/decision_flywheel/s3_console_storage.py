@@ -33,6 +33,7 @@ from .record_lake import (
 from .run_storage import _UNSET
 from .storage_errors import CommandNotReady, StorageConflict
 from .storage_payloads import FilePayloads, S3Payloads
+from .value_records import externalized, resolved, same_values
 
 # Completed job results live in the record lake; the catalog row keeps only this small reference.
 RESULTS_DOMAIN, RESULTS_KIND = "console", "job-results"
@@ -116,13 +117,13 @@ def insert(value, domain, fields):
     return record
 
 
-def results_lake_for(journal, *, max_record_bytes=None):
+def results_lake_for(journal):
     """The job-results lake that sits beside a catalog journal, on the same store."""
-    payloads, budget = journal.payloads, max_record_bytes or journal.max_bytes
+    payloads = journal.payloads
     if isinstance(payloads, S3Payloads):
-        return S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=budget)
+        return S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND)
     if isinstance(payloads, FilePayloads):
-        return FileRecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND, max_record_bytes=budget)
+        return FileRecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND)
     raise ValueError("an S3 or file payload adapter is required for the job-results lake")
 
 
@@ -139,7 +140,6 @@ class S3ConsoleStorage:
         self,
         journal,
         *,
-        max_records,
         max_conflicts=8,
         results=None,
         snapshot_cache=None,
@@ -148,16 +148,9 @@ class S3ConsoleStorage:
     ):
         if results is not None and (results.scope != getattr(journal, "boundary", (None,))[0] or results.name != RESULTS_LAKE):
             raise ValueError("job result lake must match the catalog scope and be console/job-results")
-        if (
-            not isinstance(journal, Journal)
-            or type(max_records) is not int
-            or max_records < 1
-            or type(max_conflicts) is not int
-            or not 1 <= max_conflicts <= 100
-        ):
-            raise ValueError("scoped canonical console journal and explicit limits required")
+        if not isinstance(journal, Journal) or type(max_conflicts) is not int or max_conflicts < 1:
+            raise ValueError("scoped canonical console journal and a positive conflict retry count required")
         self.journal = journal
-        self.max_records = max_records
         self.max_conflicts = max_conflicts
         # Without a lake, results stay embedded exactly as before. With one, new results go to the lake
         # and embedded ones keep reading.
@@ -188,7 +181,7 @@ class S3ConsoleStorage:
             or not isinstance(value["actors"], dict)
         ):
             raise ValueError("invalid canonical console transaction")
-        validate_console(value["snapshot"], max_records=self.max_records, max_bytes=self.journal.max_bytes)
+        validate_console(value["snapshot"])
         held = value.get(RECORDS_KEY, {})
         if not isinstance(held, dict) or set(held) - {RESULTS_LAKE}:
             raise ValueError("invalid record coverage")
@@ -202,8 +195,6 @@ class S3ConsoleStorage:
                 or not coverage.covers(ref["seq"])
             ):
                 raise ValueError("job result reference is not covered by the catalog")
-        if sum(map(len, value["snapshot"]["tables"].values())) + len(value["claims"]) + len(value["actors"]) > self.max_records:
-            raise ValueError("console record budget exceeded")
         for job_id, claim in value["claims"].items():
             job = one(value, "web_jobs", id=job_id)
             if job is None or set(claim) - {"at"} != {"owner", "fence"} or type(claim["fence"]) is not int or claim["fence"] < 1:
@@ -368,7 +359,7 @@ class S3ConsoleStorage:
     def close(self):
         pass
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
+    def export_storage(self):
         value = self._read()
         if any(one(value, "web_jobs", id=key)["status"] == "running" for key in value["claims"]):
             raise ValueError("quiesce cloud command claims before portable export")
@@ -377,16 +368,10 @@ class S3ConsoleStorage:
             # A portable snapshot is self-contained: results come back embedded.
             jobs = [{**r, "result": self._result_text(value, r)} for r in snapshot["tables"]["web_jobs"]]
             snapshot = {**snapshot, "tables": {**snapshot["tables"], "web_jobs": jobs}}
-        return deepcopy(
-            validate_console(
-                snapshot, max_records=min(max_records, self.max_records), max_bytes=min(max_bytes, self.journal.max_bytes)
-            )
-        )
+        return deepcopy(validate_console(snapshot))
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
-        snapshot = validate_console(
-            snapshot, max_records=min(max_records, self.max_records), max_bytes=min(max_bytes, self.journal.max_bytes)
-        )
+    def restore_storage(self, snapshot):
+        snapshot = validate_console(snapshot)
         if any(r["status"] == "running" for r in snapshot["tables"]["web_jobs"]):
             raise ValueError("reconcile native running jobs before cloud import")
 
@@ -530,8 +515,8 @@ class S3ConsoleStorage:
         ]
 
     def upsert_list_items(self, list_id, items):
-        if not 1 <= len(items) <= 200:
-            raise ValueError("upsert between one and 200 items")
+        if not items:
+            raise ValueError("upsert at least one item")
         created = now()
 
         def apply(value):
@@ -543,8 +528,6 @@ class S3ConsoleStorage:
                     raise ValueError("item identity and structured values required")
                 occurred = timestamp(item["occurred_at"])
                 payload = encoded({**item, "occurred_at": occurred})
-                if len(payload.encode()) > 4000000:
-                    raise ValueError("item exceeds size limit")
                 fingerprint = sha256(payload.encode()).hexdigest()
                 old = max(
                     rows(value, "list_item_revisions", list_id=list_id, id=item["id"]), key=lambda r: r["revision"], default=None
@@ -582,20 +565,20 @@ class S3ConsoleStorage:
 
     def snapshot_items(self, list_id):
         return [
-            {**json.loads(r["payload"]), "revision": r["revision"], "fingerprint": r["fingerprint"]}
+            {**self._payload(r["payload"]), "revision": r["revision"], "fingerprint": r["fingerprint"]}
             for r in self._items(self._read(), list_id)
         ]
 
     def list_items(self, list_id, *, after=0, limit=200):
-        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 200:
-            raise ValueError("item page must be bounded")
+        if type(after) is not int or after < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("a non-negative offset and positive page size required")
         return self.snapshot_items(list_id)[after : after + limit]
 
     def item_revision(self, list_id, identifier, revision):
         row = one(self._read(), "list_item_revisions", list_id=list_id, id=identifier, revision=revision)
         if row is None:
             raise ValueError("unknown item revision")
-        return json.loads(row["payload"])
+        return self._payload(row["payload"])
 
     @staticmethod
     def _latest_votes(value, list_id, item_id, item_revision):
@@ -938,8 +921,6 @@ class S3ConsoleStorage:
         if not source_id or not isinstance(payload, dict) or not payload.get("kind"):
             raise ValueError("event identity and kind required")
         raw = encoded(payload)
-        if len(raw.encode()) > 4000000:
-            raise ValueError("event exceeds size limit")
         existing = one(value, "web_events", run_id=run_id, source_id=source_id)
         if existing:
             if existing["payload"] != raw:
@@ -968,8 +949,8 @@ class S3ConsoleStorage:
         return self._mutate(apply)
 
     def append_batch(self, run_id, events):
-        if not 1 <= len(events) <= 200:
-            raise ValueError("ingest between one and 200 events")
+        if not events:
+            raise ValueError("ingest at least one event")
 
         def apply(value):
             self._worker_write(value, run_id)
@@ -982,8 +963,8 @@ class S3ConsoleStorage:
         return self.append_batch(run_id, [(source_id, payload)])[0]
 
     def events(self, run_id, *, after=0, limit=1000):
-        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("event page must be bounded")
+        if type(after) is not int or after < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("a non-negative cursor and positive page size required")
         value = self._read()
         self._run(value, run_id)
         return [decoded(r, "payload") for r in rows(value, "web_events", run_id=run_id) if r["sequence"] > after][:limit]
@@ -998,9 +979,28 @@ class S3ConsoleStorage:
         self._run(value, run_id)
         return max((r["sequence"] for r in rows(value, "web_events", run_id=run_id)), default=0)
 
+    def _values(self, document):
+        """A stored item document with its values read back (an inline document is returned as is)."""
+        return resolved(self.journal.payloads, document)
+
+    def _payload(self, text):
+        return self._values(json.loads(text))
+
+    def _stored_command(self, payload):
+        """The command as the catalog keeps it: an item's values become a reference to their record."""
+        if isinstance(payload, dict) and isinstance(payload.get("item"), dict) and "values" in payload["item"]:
+            return {**payload, "item": externalized(self.journal.payloads, payload["item"])}
+        return payload
+
+    def _command_payload(self, raw):
+        payload = json.loads(raw)
+        if isinstance(payload, dict) and isinstance(payload.get("item"), dict):
+            return {**payload, "item": self._values(payload["item"])}
+        return payload
+
     def command(self, run_id, request_id, kind, payload):
         identifier = str(uuid4())
-        raw = encoded(payload)
+        raw = encoded(self._stored_command(payload))
         if not request_id or kind not in (
             "prepare",
             "label",
@@ -1023,7 +1023,7 @@ class S3ConsoleStorage:
                 )
             old = one(value, "web_jobs", run_id=run_id, request_id=request_id)
             if old:
-                if (old["kind"], old["payload"]) != (kind, raw):
+                if old["kind"] != kind or (old["payload"] != raw and self._command_payload(old["payload"]) != payload):
                     raise ValueError("command identity has different content")
                 return self._job(value, old)
             # Jobs queue in acceptance order (row order); a command is never refused because others are running or waiting.
@@ -1069,7 +1069,10 @@ class S3ConsoleStorage:
         actor = value["actors"].get(job_id)
         if actor is None:
             raise ValueError("queued actor absent; legacy job cannot execute")
-        return self._job(value, job), self._parse_actor(actor)
+        job = self._job(value, job)
+        if isinstance(job["payload"], dict) and isinstance(job["payload"].get("item"), dict):
+            job = {**job, "payload": {**job["payload"], "item": self._values(job["payload"]["item"])}}
+        return job, self._parse_actor(actor)
 
     def command_actor(self, job_id, owner, fence):
         self.for_command(job_id, owner, fence)
@@ -1117,11 +1120,11 @@ class S3ConsoleStorage:
         return {"stuck": age > minutes, "runningMinutes": round(age, 1), "blockedJobs": waiting}
 
     def jobs(self, run_id, *, results=True):
-        """The run's 20 newest jobs. ``results=False`` skips the lake fetch: a lake-held result then shows as
+        """Every job of the run, newest first. ``results=False`` skips the lake fetch: a lake-held result then shows as
         its small reference, and ``job_result(job_id)`` fetches the one result a caller needs."""
         value = self._read()
         self._run(value, run_id)
-        newest = list(reversed(rows(value, "web_jobs", run_id=run_id)))[:20]
+        newest = list(reversed(rows(value, "web_jobs", run_id=run_id)))
         if results:
             return [self._job(value, r) for r in newest]
         return [decoded(r, "payload", "result") for r in newest]
@@ -1390,8 +1393,8 @@ class S3ConsoleStorage:
         uuid(owner)
         if type(fence) is not int or fence < 1 or status not in ("failed", "interrupted"):
             raise ValueError("owner, positive fence and a failed or interrupted target are required")
-        if not isinstance(reason, str) or not 8 <= len(reason.strip()) <= 500 or not isinstance(operator, str) or not operator:
-            raise ValueError("a reason (8 to 500 characters) and an operator identity are required")
+        if not isinstance(reason, str) or len(reason.strip()) < 8 or not isinstance(operator, str) or not operator:
+            raise ValueError("a reason (at least 8 characters) and an operator identity are required")
         audit = {
             "reconciliation": {
                 "jobId": job_id,
@@ -1444,7 +1447,7 @@ class S3ConsoleStorage:
         row = next(
             (r for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"] and r["prediction"] is not None), None
         )
-        return {"item": json.loads(row["payload"]), "prediction": json.loads(row["prediction"])} if row else None
+        return {"item": self._payload(row["payload"]), "prediction": json.loads(row["prediction"])} if row else None
 
     def update_item(self, run_id, item_id, *, prediction=_UNSET, reviewed=_UNSET):
         if reviewed is not _UNSET and type(reviewed) is not bool:
@@ -1466,7 +1469,7 @@ class S3ConsoleStorage:
     def items(self, run_id):
         value = self._read()
         self._run(value, run_id)
-        return [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
+        return [self._payload(r["payload"]) for r in rows(value, "web_items", run_id=run_id)]
 
     def register_standing_item(self, run_id, item_id, values):
         """Atomically register a never-before-seen source (or a new immutable revision) for a standing run.
@@ -1478,7 +1481,7 @@ class S3ConsoleStorage:
         if self._claim.get() is None:
             raise ValueError("standing registration requires a command-bound worker")
         if not isinstance(item_id, str) or not isinstance(values, dict):
-            raise ValueError("bounded standing item required")
+            raise ValueError("standing item identity and values required")
         created = now()
 
         def apply(value):
@@ -1491,10 +1494,13 @@ class S3ConsoleStorage:
             latest = max(
                 rows(value, "list_item_revisions", list_id=list_id, id=item_id), key=lambda r: r["revision"], default=None
             )
-            if latest and json.loads(latest["payload"]).get("values") == values:
+            if latest and same_values(json.loads(latest["payload"]), values):
                 revision = latest
             else:
-                payload = encoded({"id": item_id, "values": values, "occurred_at": timestamp(created)})
+                document = {"id": item_id, "values": values, "occurred_at": timestamp(created)}
+                # The row keeps only the reference; its fingerprint is of the stored row, which names the values' digest.
+                payload = encoded(externalized(self.journal.payloads, document))
+                fingerprint = sha256(payload.encode()).hexdigest()
                 revision = insert(
                     value,
                     "list_item_revisions",
@@ -1503,7 +1509,7 @@ class S3ConsoleStorage:
                         id=item_id,
                         revision=latest["revision"] + 1 if latest else 1,
                         occurred_at=timestamp(created),
-                        fingerprint=sha256(payload.encode()).hexdigest(),
+                        fingerprint=fingerprint,
                         payload=payload,
                         imported_at=created,
                     ),
@@ -1551,7 +1557,7 @@ class S3ConsoleStorage:
     def unreviewed_items(self, run_id):
         value = self._read()
         self._run(value, run_id)
-        return [json.loads(r["payload"]) for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"]]
+        return [self._payload(r["payload"]) for r in rows(value, "web_items", run_id=run_id) if not r["reviewed"]]
 
     # PrimingService uses this same domain transaction, including acceptance.
     def draft(self, identifier):

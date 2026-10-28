@@ -14,7 +14,8 @@ from uuid import uuid4
 from .journal import Journal, commit_with_contract, uuid
 from .s3_batch_storage import S3BatchStorage, reply_lake_for
 from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores, runtime_events_lake
-from .storage_errors import StorageLimit, StorageMissing
+from .storage_errors import StorageMissing
+from .storage_payloads import PayloadRef
 
 
 def empty():
@@ -36,11 +37,10 @@ def empty():
 
 
 class S3EmbeddedStorage:
-    def __init__(self, journal, *, max_records, cache_owned=False):
-        if not isinstance(journal, Journal) or type(max_records) is not int or max_records < 1:
-            raise ValueError("scoped journal and record budget required")
+    def __init__(self, journal, *, cache_owned=False):
+        if not isinstance(journal, Journal):
+            raise ValueError("scoped journal required")
         self.journal = journal
-        self.max_records = max_records
         self.authority = None
         self.poisoned = False
         self.cache_owned = cache_owned
@@ -59,8 +59,6 @@ class S3EmbeddedStorage:
             raise ValueError("complete embedded domains required")
         if any(not isinstance(data[k], dict if k in ("meta", "items") else list) for k in data):
             raise ValueError("invalid embedded records")
-        if sum(map(len, data.values())) > self.max_records:
-            raise StorageLimit("embedded record budget exceeded; no truncation")
 
     def initialize(self):
         self._validate(self.journal.initialize(empty()).value)
@@ -166,14 +164,23 @@ class S3EmbeddedStorage:
         self._write(lambda data: data["meta"].__setitem__(key, payload))
 
     def put_item(self, identifier, payload, fingerprint):
-        self._write(lambda data: data["items"].__setitem__(identifier, [payload, fingerprint]))
+        # The values are one content-addressed record; the journal keeps only its reference, so it does not grow with text.
+        stored = self.journal.payloads.put(payload.encode())
+        ref = {"digest": stored.digest, "length": stored.length}
+        self._write(lambda data: data["items"].__setitem__(identifier, [ref, fingerprint]))
+
+    def _item_text(self, held):
+        """An item row's values JSON: read from its record, or held inline by rows written before records."""
+        if isinstance(held, dict):
+            return self.journal.payloads.get(PayloadRef(self.journal.payloads.scope, held["digest"], held["length"])).decode()
+        return held
 
     def items(self):
-        return [(key, row[0]) for key, row in self._data()["items"].items()]
+        return [(key, self._item_text(row[0])) for key, row in self._data()["items"].items()]
 
     def item_values(self, identifier):
         row = self._data()["items"].get(identifier)
-        return row[0] if row else None
+        return self._item_text(row[0]) if row else None
 
     def insert_decision(self, row):
         def apply(data):
@@ -327,12 +334,11 @@ class S3CyclotronStores:
 
     requires_durable_optimizer = True
 
-    def __init__(self, root_journal, *, journal_for, max_records):
+    def __init__(self, root_journal, *, journal_for):
         if not callable(journal_for):
             raise ValueError("fixed scoped journal factory required")
-        self.root_storage = S3EmbeddedStorage(root_journal, max_records=max_records, cache_owned=True)
+        self.root_storage = S3EmbeddedStorage(root_journal, cache_owned=True)
         self.journal_for = journal_for
-        self.max_records = max_records
         self.owner = str(uuid4())
         self.lease = self
         self.batch_storage = None
@@ -352,7 +358,7 @@ class S3CyclotronStores:
         try:
             ledger = self._journal("shared", "ledger")
             # Raw provider replies are write-once records beside the ledger, not rows inside it.
-            self.batch_storage = S3BatchStorage(ledger, max_records=self.max_records, replies=reply_lake_for(ledger, "ledger"))
+            self.batch_storage = S3BatchStorage(ledger, replies=reply_lake_for(ledger, "ledger"))
             self.batch_storage.initialize()
         except BaseException:
             self.root_storage.release()
@@ -362,9 +368,7 @@ class S3CyclotronStores:
         if identifier in self.runtimes:
             raise ValueError("classifier runtime already opened")
         journal = self._journal("runtime", identifier)
-        runtime = S3RuntimeStores(
-            journal, max_records=self.max_records, cache_owned=True, events_lake=runtime_events_lake(journal)
-        )
+        runtime = S3RuntimeStores(journal, cache_owned=True, events_lake=runtime_events_lake(journal))
         runtime.initialize()
         runtime.acquire(self.owner)
         self.runtimes[identifier] = runtime

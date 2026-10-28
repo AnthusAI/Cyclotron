@@ -34,15 +34,15 @@ class Dynamo:
 
 def test_index_rebuilds_only_from_verified_canonical_bytes_and_pages_by_fixed_scope(tmp_path):
     scope = StorageScope("a", "w")
-    files = FilePayloads(tmp_path, scope, max_bytes=100)
+    files = FilePayloads(tmp_path, scope)
     references = sorted([files.put(value) for value in (b"one", b"two", b"three")], key=lambda ref: ref.digest)
     client = Dynamo()
     index = DynamoPayloadIndex(client, "synthetic-index", scope)
-    assert index.rebuild(files, references, max_records=3) == 3
+    assert index.rebuild(files, references) == 3
     page, cursor = index.page(limit=2)
     assert page == references[:2] and cursor == references[1].digest
     assert index.page(after=cursor, limit=2) == (references[2:], None)
-    assert index.rebuild(files, references, max_records=3) == 3
+    assert index.rebuild(files, references) == 3
     assert len(client.rows) == 3
     assert DynamoPayloadIndex(client, "synthetic-index", StorageScope("b", "w")).page() == ([], None)
     assert all(call.get("ConsistentRead") is False for call in client.calls if "Limit" in call)
@@ -50,13 +50,13 @@ def test_index_rebuilds_only_from_verified_canonical_bytes_and_pages_by_fixed_sc
 
 def test_missing_payload_cannot_be_published_as_a_verified_index_candidate(tmp_path):
     scope = StorageScope("a", "w")
-    files = FilePayloads(tmp_path, scope, max_bytes=100)
+    files = FilePayloads(tmp_path, scope)
     reference = files.put(b"exact")
     files._path(reference.digest).unlink()
     client = Dynamo()
     index = DynamoPayloadIndex(client, "synthetic-index", scope)
     with pytest.raises(PayloadUnavailable):
-        index.rebuild(files, [reference], max_records=1)
+        index.rebuild(files, [reference])
     assert client.calls == []
 
 
@@ -70,7 +70,7 @@ def test_index_discovery_is_untrusted_and_foreign_or_malformed_rows_fail_closed(
         with pytest.raises(ValueError):
             index.page(after=invalid)
     with pytest.raises(ValueError):
-        index.page(limit=1001)
+        index.page(limit=0)
     client.query = lambda **request: {"Items": [], "LastEvaluatedKey": {"PK": {"S": "b/w"}, "SK": {"S": "f" * 64}}}
     with pytest.raises(IndexCorrupt):
         index.page()
@@ -78,10 +78,10 @@ def test_index_discovery_is_untrusted_and_foreign_or_malformed_rows_fail_closed(
 
 def test_stale_index_candidate_does_not_authorize_or_hide_missing_canonical_bytes(tmp_path):
     scope = StorageScope("a", "w")
-    files = FilePayloads(tmp_path, scope, max_bytes=100)
+    files = FilePayloads(tmp_path, scope)
     reference = files.put(b"exact")
     index = DynamoPayloadIndex(Dynamo(), "synthetic-index", scope)
-    index.rebuild(files, [reference], max_records=1)
+    index.rebuild(files, [reference])
     files._path(reference.digest).unlink()
     candidates, _ = index.page()
     with pytest.raises(PayloadUnavailable):
@@ -89,14 +89,14 @@ def test_stale_index_candidate_does_not_authorize_or_hide_missing_canonical_byte
     assert not hasattr(index, "reserve") and not hasattr(index, "claim")
 
 
-def test_rebuild_budget_fails_explicitly_without_deleting_existing_candidates(tmp_path):
+def test_a_rebuild_takes_every_reference_with_no_count_budget(tmp_path):
     scope = StorageScope("a", "w")
-    files = FilePayloads(tmp_path, scope, max_bytes=100)
-    references = [files.put(value) for value in (b"one", b"two")]
+    files = FilePayloads(tmp_path, scope)
+    references = [files.put(f"value-{n}".encode()) for n in range(120)]
     index = DynamoPayloadIndex(Dynamo(), "synthetic-index", scope)
-    with pytest.raises(ValueError):
-        index.rebuild(files, references, max_records=1)
-    assert len(index.page()[0]) == 1  # Additive partial progress is safe to repeat.
+    assert index.rebuild(files, references) == 120
+    page, cursor = index.page(limit=5000)
+    assert len(page) == 120 and cursor is None
 
 
 def test_injected_real_sdk_serializes_the_bounded_dynamodb_query_without_network():

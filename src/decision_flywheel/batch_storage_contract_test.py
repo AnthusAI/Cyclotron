@@ -173,9 +173,15 @@ def test_pages_walk_requests_in_fingerprint_order_with_a_continuation(storage):
     assert [record.fingerprint for record in second_page] == ["c" * 64, "d" * 64]
     last_page, continuation = storage.page(after=continuation, limit=2)
     assert [record.fingerprint for record in last_page] == ["e" * 64] and continuation is None
-    for bad_limit in (0, 1001):
-        with pytest.raises(ValueError):
-            storage.page(limit=bad_limit)
+    with pytest.raises(ValueError):
+        storage.page(limit=0)
+
+
+def test_a_page_larger_than_the_old_thousand_row_ceiling_is_served(storage):
+    for character in "abc":
+        storage.reserve(character * 64, 10, str(uuid4()))
+    page, continuation = storage.page(limit=5000)
+    assert [record.fingerprint for record in page] == [c * 64 for c in "abc"] and continuation is None
 
 
 def test_state_survives_reopening_the_same_ledger(batch_backend):
@@ -198,7 +204,7 @@ def test_an_export_restores_into_an_empty_ledger_of_either_back_end(batch_backen
     storage.reserve(FIRST_REQUEST, 5, refresh_owner, policy="refresh")
     snapshot = storage.export()
     sqlite_target = SQLiteBatchStorage(tmp_path / "restored.sqlite3")
-    s3_target = S3BatchStorage(journal(ConditionalS3(), name="restored"), max_records=1000)
+    s3_target = S3BatchStorage(journal(ConditionalS3(), name="restored"))
     s3_target.initialize()
     for target in (sqlite_target, s3_target):
         target.restore(snapshot)
@@ -209,9 +215,11 @@ def test_an_export_restores_into_an_empty_ledger_of_either_back_end(batch_backen
     sqlite_target.close()
 
 
-def test_an_export_that_exceeds_its_record_budget_is_refused(storage):
+def test_an_export_holds_every_row_with_no_record_budget(storage):
     settle_request(storage, FIRST_REQUEST)
-    with pytest.raises(ValueError):
+    for character in "bcdef01234":
+        storage.reserve(character * 64, 100, str(uuid4()))
+    snapshot = storage.export()
+    assert len(snapshot["batches"]) == 11 and len(snapshot["attempts"]) == 11
+    with pytest.raises(TypeError):
         storage.export(max_records=1)
-    with pytest.raises(ValueError):
-        storage.export(max_records=0)

@@ -3,7 +3,7 @@
 import pytest
 
 from .batch_storage import StorageScope
-from .journal import Journal, JournalConflict, JournalLimit, JournalUnavailable
+from .journal import Journal, JournalConflict, JournalUnavailable
 from .s3_journal_test import ConditionalS3
 from .s3_journal_test import journal as s3_journal
 from .storage_contract_backends import local_file_journal
@@ -78,11 +78,28 @@ def test_a_head_without_an_anchor_is_reported_unavailable_not_absent(open_journa
         open_journal().exists()
 
 
-def test_explicit_byte_budget_refuses_oversized_values_without_mutation(open_journal):
+def test_a_journal_larger_than_the_old_four_mib_budget_initializes_commits_and_reads_back(open_journal):
+    large = "a" * (5 * 1024 * 1024)
+    opened = open_journal()
+    head = opened.initialize({"x": large})
+    record = opened.commit(head, {"x": large + "b"})
+    assert open_journal().read().value == {"x": large + "b"} and record.reference.length > 5 * 1024 * 1024
+
+
+def test_a_journal_has_no_byte_or_commit_budget_and_keeps_committing(open_journal):
+    opened = open_journal()
+    assert not hasattr(opened, "max_bytes") and not hasattr(opened, "max_commits")
+    record = opened.initialize({"n": 0})
+    for n in range(1, 151):
+        record = opened.commit(record, {"n": n})
+    assert open_journal().read().revision == 151
+
+
+def test_a_non_json_value_is_refused_without_mutation(open_journal):
     opened = open_journal()
     head = opened.initialize({"x": 1})
-    with pytest.raises(JournalLimit):
-        opened.commit(head, {"x": "a" * 1000001})
+    with pytest.raises(ValueError):
+        opened.commit(head, {"x": float("nan")})
     assert opened.read().value == {"x": 1}
 
 

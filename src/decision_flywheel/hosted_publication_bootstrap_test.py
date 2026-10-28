@@ -175,3 +175,16 @@ def test_bootstrap_rejects_stale_or_foreign_evidence_and_handles_uncertain_retri
             assert not model.calls and not sent
 
     asyncio.run(run())
+
+
+def test_a_bootstrap_request_over_sixty_four_kilobytes_with_a_long_run_name_creates_the_run(identity, monkeypatch):
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = offline(identity, monkeypatch)
+    body = {**request(), "name": "Synthetic long-named router " + "n" * 100_000}
+
+    async def run():
+        async with priming_client(app, config, cookie, session, account) as http:
+            created = await http.post("/publication-runs/bootstrap", json=body)
+            assert created.status_code == 201, created.text
+            assert len(store.runs()) == 1 and not sent and not model.calls
+
+    asyncio.run(run())

@@ -89,7 +89,7 @@ def test_revive_candidates_uses_only_labels_after_the_verdict():
     assert ledger.revive_candidates(min_items=20, min_mean=0.6) == []
 
 
-def test_summary_is_deterministic_capped_and_uses_idea_text():
+def test_summary_is_deterministic_and_carries_every_idea_its_whole_text_and_every_fixed_id():
     db, ledger = make()
     db.execute("CREATE TABLE control_ideas (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
     db.execute("INSERT INTO control_ideas VALUES ('a', ?)", (json.dumps({"rationale": "x" * 500}),))
@@ -97,12 +97,11 @@ def test_summary_is_deterministic_capped_and_uses_idea_text():
     ledger.record_evaluations("a", rows([1] * 10), "v")
     ledger.record_evaluations("b", rows([1] * 5 + [0] * 5), "v")
     ledger.record_verdict("b", "screened_out", "half right")
-    first = ledger.summary_for_optimizer(limit=5, incumbent_id="inc", max_item_ids=3)
-    assert first == ledger.summary_for_optimizer(limit=5, incumbent_id="inc", max_item_ids=3)
+    first = ledger.summary_for_optimizer(incumbent_id="inc")
+    assert first == ledger.summary_for_optimizer(incumbent_id="inc")
     assert [e["idea_id"] for e in first] == ["a", "b"]
-    assert len(first[0]["text"]) == 120 and len(first[0]["fixed"]) == 3 and first[0]["fixed_count"] == 10
+    assert len(first[0]["text"]) == 500 and len(first[0]["fixed"]) == 10 and first[0]["fixed_count"] == 10
     assert first[1]["last_verdict"] == {"verdict": "screened_out", "reason": "half right"}
-    assert len(ledger.summary_for_optimizer(limit=1, incumbent_id="inc")) == 1
     json.dumps(first)
 
 

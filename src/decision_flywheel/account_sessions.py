@@ -32,7 +32,7 @@ class OAuthConfig:
     def __post_init__(self):
         if not re.fullmatch(r"https://cognito-idp\.[a-z0-9-]+\.amazonaws\.com/[A-Za-z0-9_-]+", self.issuer):
             raise ValueError("a pinned Cognito issuer is required")
-        if not self.client_id or len(self.client_id) > 128:
+        if not self.client_id:
             raise ValueError("a dedicated console app client is required")
         auth = urlsplit(self.authorization_origin)
         if auth.scheme != "https" or not auth.hostname or auth.path or auth.query or auth.fragment or auth.username:
@@ -75,7 +75,7 @@ class CognitoTokenVerifier:
 
     def _verify(self, token, kind):
         try:
-            if not isinstance(token, str) or not token or len(token) > 16384:
+            if not isinstance(token, str) or not token:
                 raise SessionRejected("invalid session token")
             header = jwt.get_unverified_header(token)
             if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
@@ -136,7 +136,7 @@ class CognitoTokenVerifier:
                 or identity["auth_time"] != auth_time
                 or not 0 <= time.time() - auth_time <= 300
                 or not isinstance(lineage, str)
-                or not 0 < len(lineage) <= 256
+                or not 0 < len(lineage)
                 or not lineage.isascii()
                 or not isinstance(identity.get("origin_jti"), str)
                 or not identity["origin_jti"].isascii()
@@ -180,11 +180,10 @@ class OAuthSessions:
     cached. A future multi-process host must replace this store, not replicate it.
     """
 
-    def __init__(self, verifier, *, clock=time.time, max_age=3600, capacity=5000):
+    def __init__(self, verifier, *, clock=time.time, max_age=3600):
         self.verifier = verifier
         self.clock = clock
         self.max_age = max_age
-        self.capacity = capacity
         self.lock = RLock()
         self.pending = {}
         self.sessions = {}
@@ -197,8 +196,6 @@ class OAuthSessions:
     def begin(self, challenge=None):
         with self.lock:
             self._purge()
-            if len(self.pending) >= self.capacity:
-                raise SessionRejected("too many pending logins; try again later")
             expiry = min(self.clock() + 300, challenge.expires_at) if challenge else self.clock() + 300
             if expiry <= self.clock():
                 raise SessionRejected("identity challenge expired")
@@ -227,8 +224,6 @@ class OAuthSessions:
     def create(self, access_token, claims):
         with self.lock:
             self._purge()
-            if len(self.sessions) >= self.capacity:
-                raise SessionRejected("too many active sessions; try again later")
             identifier = secrets.token_urlsafe(48)
             session = ConsoleSession(
                 access_token, claims["sub"], min(float(claims["exp"]), self.clock() + self.max_age), secrets.token_urlsafe(32)

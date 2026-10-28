@@ -59,9 +59,9 @@ class QueuedAccountAuthorization:
                 or not re.fullmatch(r"[a-f0-9]{64}", actor.session_ref)
                 or actor.operation not in ("console:read", "console:write")
                 or not isinstance(actor.subject, str)
-                or not 1 <= len(actor.subject) <= 256
+                or not actor.subject
                 or not isinstance(actor.binding, str)
-                or not 1 <= len(actor.binding) <= 256
+                or not actor.binding
                 or not isinstance(actor.proof, str)
                 or not re.fullmatch(r"[a-f0-9]{64}", actor.proof)
             ):

@@ -29,9 +29,6 @@ from .cyclotron_runtime import CyclotronRuntime
 from .web_api import create_app
 
 
-MAX_JOURNAL_BYTES = 67108864  # hard ceiling for CYCLOTRON_MAX_BYTES
-
-
 @dataclass(frozen=True)
 class HostedConfig:
     issuer:str
@@ -47,9 +44,6 @@ class HostedConfig:
     central_endpoint:str
     allow_live:bool=False
     allow_insecure_loopback:bool=False
-    max_bytes:int=4194304
-    max_records:int=10000
-    max_commits:int=1000000
     lab_verifier_role_arn:str=''
     accounts_api_url:str=''
 
@@ -60,7 +54,7 @@ class HostedConfig:
         if not re.fullmatch(r'arn:aws:kms:'+re.escape(self.region)+':'+self.account+r':key/[a-f0-9-]{36}',self.session_key_arn):raise ValueError('exact regional session key ARN required')
         if not re.fullmatch(r'https://sqs\.'+re.escape(self.region)+r'\.amazonaws\.com/'+self.account+r'/[A-Za-z0-9_-]+',self.queue_url):raise ValueError('fixed account queue URL required')
         if not self.central_endpoint.startswith('https://'):raise ValueError('https central endpoint required')
-        if type(self.allow_live) is not bool or any(type(v) is not int or v<1 for v in (self.max_bytes,self.max_records,self.max_commits)):raise ValueError('explicit bounded host configuration required')
+        if type(self.allow_live) is not bool:raise ValueError('explicit live execution flag required')
 
     @classmethod
     def from_environment(cls,environment):
@@ -74,13 +68,6 @@ class HostedConfig:
         # Optional: both empty leaves the curation routes failing closed (503 authority_unavailable).
         values['lab_verifier_role_arn'] = environment.get('CYCLOTRON_LAB_VERIFIER_ROLE_ARN', '')
         values['accounts_api_url'] = environment.get('CYCLOTRON_ACCOUNTS_API_URL', '')
-        # Optional per-document byte budget for the S3 journals (default 4 MiB). A temporary bridge
-        # while history moves out into write-once records; bounded so a typo cannot remove the guard.
-        budget = environment.get('CYCLOTRON_MAX_BYTES', '')
-        if budget:
-            if not re.fullmatch(r'[1-9][0-9]{0,8}', budget) or not 1048576 <= int(budget) <= MAX_JOURNAL_BYTES:
-                raise ValueError('CYCLOTRON_MAX_BYTES must be a whole number of bytes between 1 MiB and 64 MiB')
-            values['max_bytes'] = int(budget)
         return cls(**values)
 
 
@@ -120,8 +107,8 @@ class HostedRuntime:
         self.catalog_cache=CatalogSnapshotCache()
 
     def _journal(self,bucket,scope,domain,name):
-        payloads=S3Payloads(self.s3,bucket,self.config.account,scope,max_bytes=self.config.max_bytes)
-        return S3Journal(payloads,domain,name,max_bytes=self.config.max_bytes,max_commits=self.config.max_commits,create_only_initialization=True)
+        payloads=S3Payloads(self.s3,bucket,self.config.account,scope)
+        return S3Journal(payloads,domain,name,create_only_initialization=True)
     def _auth_journal(self,kind,reference):
         return self._journal(self.config.auth_bucket,StorageScope('console-auth','sessions'),'oauth',kind+'-'+reference)
     def journal(self,account_id,domain,name):
@@ -130,8 +117,8 @@ class HostedRuntime:
     def console(self,account_id,*,initialize=False,request=False):
         journal=self.journal(account_id,'console','catalog')
         # Completed job results are write-once records under <account>/console/records/, not catalog rows.
-        results=S3RecordLake(journal.payloads,RESULTS_DOMAIN,RESULTS_KIND,max_record_bytes=self.config.max_bytes)
-        store=S3ConsoleStorage(journal,max_records=self.config.max_records,results=results,snapshot_cache=self.catalog_cache,
+        results=S3RecordLake(journal.payloads,RESULTS_DOMAIN,RESULTS_KIND)
+        store=S3ConsoleStorage(journal,results=results,snapshot_cache=self.catalog_cache,
             reuse_reads_within_request=request,phase_log=log_console_phase)
         if initialize:store.initialize(verify_existing=False)
         return store
@@ -178,7 +165,7 @@ class HostedRuntime:
         async def guarded():await asyncio.to_thread(check_owned)
         def storage(run_id):
             bundle=S3WorkspaceStores(self.journal(account_id,'workspace',run_id),
-                journal_for=lambda domain,name:self.journal(account_id,domain,name),max_records=self.config.max_records,execution_guard=check)
+                journal_for=lambda domain,name:self.journal(account_id,domain,name),execution_guard=check)
             owned['stores']=bundle
             return bundle
         def model(config):

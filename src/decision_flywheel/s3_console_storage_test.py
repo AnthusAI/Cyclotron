@@ -12,7 +12,7 @@ from .workspace_catalog_test import configuration
 def store(j=None):
     from .s3_console_storage import S3ConsoleStorage
 
-    result = S3ConsoleStorage(j or journal(name="console"), max_records=10000)
+    result = S3ConsoleStorage(j or journal(name="console"))
     result.initialize()
     return result
 
@@ -202,8 +202,10 @@ CONTRACTS = {
         "test_operating_limits_can_change_without_resetting_labels_or_classifier_configuration",
         "test_event_ingestion_is_idempotent_but_cannot_rewrite_a_committed_event",
         "test_run_history_and_cursor_survive_restart_without_mixing_runs",
-        "test_event_batches_roll_back_together_and_read_pages_are_bounded",
+        "test_event_batches_roll_back_together_and_a_page_must_hold_at_least_one_event",
+        "test_event_batches_and_events_past_the_old_count_and_size_caps_are_kept",
         "test_final_summary_is_persisted_without_rewriting_run_configuration",
+        "test_a_run_lists_every_job_newest_first_past_the_old_twenty_job_window",
     ],
 }
 
@@ -435,7 +437,7 @@ def cached_store(client=None, cache=None, **options):
     from .s3_console_storage import S3ConsoleStorage
 
     j = journal(client, name="console")
-    result = S3ConsoleStorage(j, max_records=10000, snapshot_cache=cache or CatalogSnapshotCache(), **options)
+    result = S3ConsoleStorage(j, snapshot_cache=cache or CatalogSnapshotCache(), **options)
     result.initialize()
     return result
 
@@ -529,7 +531,7 @@ def test_initializing_an_existing_catalog_without_verification_spends_only_the_a
     client = s.journal.payloads.client
     from .s3_console_storage import S3ConsoleStorage
 
-    reopened = S3ConsoleStorage(journal(client, name="console"), max_records=10000)
+    reopened = S3ConsoleStorage(journal(client, name="console"))
     mark = len(client.calls)
     reopened.initialize(verify_existing=False)
     keys = [r["Key"] for kind, r in client.calls[mark:] if kind == "get"]

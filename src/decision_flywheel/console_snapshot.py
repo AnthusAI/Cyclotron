@@ -9,7 +9,7 @@ from hashlib import sha256
 from .catalog_archive import CatalogArchive
 from .catalog_snapshot import COLUMNS as CATALOG_COLUMNS
 from .catalog_snapshot import KEYS as CATALOG_KEYS
-from .catalog_snapshot import budgets, decode, encode
+from .catalog_snapshot import decode, encode
 from .catalog_snapshot import validate as validate_catalog
 
 SCHEMA = "cyclotron-console/v2"
@@ -64,12 +64,8 @@ JSON_FIELDS = {
 }
 
 
-def validate(snapshot, *, max_records=10000, max_bytes=64000000):
-    budgets(max_records, max_bytes)
-    content = encode(snapshot)
-    if len(content) > max_bytes:
-        raise ValueError("console snapshot byte budget exceeded")
-    snapshot = decode(content)
+def validate(snapshot):
+    snapshot = decode(encode(snapshot))
     if isinstance(snapshot, dict) and snapshot.get("schema") == "cyclotron-console/v1":
         if not isinstance(snapshot.get("tables"), dict) or set(snapshot["tables"]) != set(TABLES) - {"priming_drafts"}:
             raise ValueError("complete legacy console tables required")
@@ -80,8 +76,6 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
     tables = snapshot["tables"]
     if not isinstance(tables, dict) or set(tables) != set(TABLES) or not all(isinstance(rows, list) for rows in tables.values()):
         raise ValueError("complete native console tables required")
-    if sum(map(len, tables.values())) > max_records:
-        raise ValueError("console snapshot record budget exceeded")
     for table, columns in TABLES.items():
         ordinals, identities = set(), set()
         for row in tables[table]:
@@ -127,8 +121,6 @@ def validate(snapshot, *, max_records=10000, max_bytes=64000000):
                 for table in CATALOG_COLUMNS
             },
         },
-        max_records=max_records,
-        max_bytes=max_bytes,
     )
     runs = {row["id"]: row for row in tables["web_runs"]}
     for row in runs.values():
@@ -230,40 +222,23 @@ def _schema(db):
             raise ValueError("unsupported native console schema columns")
 
 
-def export_console(connect, *, max_records=10000, max_bytes=64000000):
-    budgets(max_records, max_bytes)
+def export_console(connect):
     with connect() as db:
         db.execute("BEGIN")
         _schema(db)
-        if sum(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in TABLES) > max_records:
-            raise ValueError("console snapshot record budget exceeded")
-        raw_bytes = 0
-        for table, columns in TABLES.items():
-            expression = "+".join(f"COALESCE(length(CAST({column} AS BLOB)),0)" for column in columns)
-            raw_bytes += db.execute(f"SELECT COALESCE(SUM({expression}),0) FROM {table}").fetchone()[0]
-        if raw_bytes > max_bytes:
-            raise ValueError("console snapshot byte budget exceeded")
         tables = {}
-        used = 0
         for table, columns in TABLES.items():
-            rows = []
-            for row in db.execute(f"SELECT rowid AS _rowid,{','.join(columns)} FROM {table} ORDER BY rowid"):
-                record = dict(row)
-                used += len(encode(record))
-                if used > max_bytes:
-                    raise ValueError("console snapshot byte budget exceeded")
-                rows.append(record)
-            tables[table] = rows
+            tables[table] = [
+                dict(row) for row in db.execute(f"SELECT rowid AS _rowid,{','.join(columns)} FROM {table} ORDER BY rowid")
+            ]
         watermarks = dict(db.execute("SELECT name,seq FROM sqlite_sequence"))
         return validate(
-            {"schema": SCHEMA, "tables": tables, "sequences": {table: watermarks.get(table, 0) for table in SEQUENCES}},
-            max_records=max_records,
-            max_bytes=max_bytes,
+            {"schema": SCHEMA, "tables": tables, "sequences": {table: watermarks.get(table, 0) for table in SEQUENCES}}
         )
 
 
-def restore_console(connect, snapshot, *, max_records=10000, max_bytes=64000000):
-    snapshot = validate(snapshot, max_records=max_records, max_bytes=max_bytes)
+def restore_console(connect, snapshot):
+    snapshot = validate(snapshot)
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
         _schema(db)

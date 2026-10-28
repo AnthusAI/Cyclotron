@@ -1,4 +1,4 @@
-"""Shared bounded codec for known native source-store compositions.
+"""Shared codec for known native source-store compositions.
 
 Only caller-code-owned schema factories are accepted. No schema/SQL is imported
 from a snapshot; it contains raw records, ordinals and sequence watermarks only.
@@ -8,7 +8,7 @@ import math
 import re
 import sqlite3
 
-from .catalog_snapshot import budgets, decode, encode
+from .catalog_snapshot import decode, encode
 
 
 def normalize(sql):
@@ -89,12 +89,8 @@ class NativeDomainCodec:
             [tuple(row[name] for name in names) for row in rows],
         )
 
-    def validate(self, snapshot, *, max_records=10000, max_bytes=64000000):
-        budgets(max_records, max_bytes)
-        content = encode(snapshot)
-        if len(content) > max_bytes:
-            raise ValueError("domain snapshot byte budget exceeded")
-        snapshot = decode(content)
+    def validate(self, snapshot):
+        snapshot = decode(encode(snapshot))
         if (
             not isinstance(snapshot, dict)
             or set(snapshot) != {"schema", "tables", "metadata"}
@@ -109,8 +105,6 @@ class NativeDomainCodec:
         sequences = snapshot["metadata"]["sequences"]
         if any(not isinstance(rows, list) for rows in tables.values()):
             raise ValueError("invalid domain rows")
-        if sum(map(len, tables.values())) > max_records:
-            raise ValueError("domain snapshot record budget exceeded")
         for table, rows in tables.items():
             ordinals = set()
             for row in rows:
@@ -157,45 +151,29 @@ class NativeDomainCodec:
             scratch.close()
         return snapshot
 
-    def export(self, db, *, max_records=10000, max_bytes=64000000):
-        budgets(max_records, max_bytes)
+    def export(self, db):
         if db.in_transaction:
             raise ValueError("domain export requires no open native transaction")
         with db:
             db.execute("BEGIN")
             self._schema(db)
-            if sum(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in self.columns) > max_records:
-                raise ValueError("domain snapshot record budget exceeded")
-            size = 0
-            for table, columns in self.columns.items():
-                expression = "+".join(f"COALESCE(length(CAST({column} AS BLOB)),0)" for column in columns)
-                size += db.execute(f"SELECT COALESCE(SUM({expression}),0) FROM {table}").fetchone()[0]
-            if size > max_bytes:
-                raise ValueError("domain snapshot byte budget exceeded")
             tables = {}
-            used = 0
             for table, columns in self.columns.items():
-                rows = []
-                for row in db.execute(f"SELECT rowid,{','.join(columns)} FROM {table} ORDER BY rowid"):
-                    record = dict(zip(("_rowid", *columns), row))
-                    used += len(encode(record))
-                    if used > max_bytes:
-                        raise ValueError("domain snapshot byte budget exceeded")
-                    rows.append(record)
-                tables[table] = rows
+                tables[table] = [
+                    dict(zip(("_rowid", *columns), row))
+                    for row in db.execute(f"SELECT rowid,{','.join(columns)} FROM {table} ORDER BY rowid")
+                ]
             watermarks = dict(db.execute("SELECT name,seq FROM sqlite_sequence")) if self.sequences else {}
             return self.validate(
                 {
                     "schema": self.schema,
                     "tables": tables,
                     "metadata": {"sequences": {table: watermarks.get(table, 0) for table in self.sequences}},
-                },
-                max_records=max_records,
-                max_bytes=max_bytes,
+                }
             )
 
-    def restore(self, db, snapshot, *, max_records=10000, max_bytes=64000000):
-        snapshot = self.validate(snapshot, max_records=max_records, max_bytes=max_bytes)
+    def restore(self, db, snapshot):
+        snapshot = self.validate(snapshot)
         if db.in_transaction:
             raise ValueError("domain restore requires no open native transaction")
         with db:

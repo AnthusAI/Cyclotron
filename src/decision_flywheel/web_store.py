@@ -120,13 +120,13 @@ class WebStore(WorkspaceCatalog, Cyclotrons, CyclotronDefinitions):
     def unreviewed_items(self, run_id):
         return self.run_storage.unreviewed_items(run_id)
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
+    def export_storage(self):
         """Native composition migration; not a hosted authority selector."""
         from .console_snapshot import export_console
 
-        return export_console(self.connect, max_records=max_records, max_bytes=max_bytes)
+        return export_console(self.connect)
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
+    def restore_storage(self, snapshot):
         from .console_snapshot import restore_console
 
-        return restore_console(self.connect, snapshot, max_records=max_records, max_bytes=max_bytes)
+        return restore_console(self.connect, snapshot)

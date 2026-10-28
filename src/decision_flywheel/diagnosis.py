@@ -35,23 +35,17 @@ from .hypothesis_ledger import HypothesisLedger
 from .models import DecisionTask
 from .optimizer_agent import FeedbackBriefing
 
-STORY_CHARS = 400  # characters of story text shown to the optimizer
-EXPLANATION_CHARS = 300
-MAX_CELLS = 3  # error cells analysed per round, largest first
-MAX_HYPOTHESES = 4
 RETRIES = 1  # one corrective re-ask per invalid reply
 MIN_MATRIX = 20  # fewer current-version predictions than this: the matrix uses every recorded prediction
 MIN_ELEMENT_STORIES = 40  # element screening needs at least this many scored stories ...
 MIN_ELEMENT_CLASS = 8  # ... and at least this many of each class
 REDUNDANT_CORRELATION = 0.95  # an element this correlated with a kept one is not kept as well
-LIMITS = {"name": 60, "description": 500, "rule": 400, "patch": 500, "question": 300}
-NAME = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
-CAUSE_ID = re.compile(r"^[A-Za-z0-9_-]{1,24}$")
+NAME = re.compile(r"^[a-z][a-z0-9_]+$")
+CAUSE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def _clip(value, width):
-    text = " ".join(str(value).split())
-    return text if len(text) <= width else text[: width - 1] + "…"
+def _flat(value):
+    return " ".join(str(value).split())
 
 
 # -- 1. error summary ------------------------------------------------------------------------------------------------
@@ -235,7 +229,7 @@ def draw_samples(task, rows, predictions, cells, *, ways, size, contrast, seed):
 
 
 def show(wheel, rec):
-    """The prompt form of a story record: truncated text, labels, the revealed human explanation, probabilities."""
+    """The prompt form of a story record: its whole text, labels, the revealed human explanation, probabilities."""
     task, row = wheel.initial.task, rec["row"]
     values = dict(row.item.values)
     body = values.get(task.input_field)
@@ -244,22 +238,20 @@ def show(wheel, rec):
     explanation = row.context.get("human_feedback")
     return {
         "id": rec["id"],
-        "text": _clip(body, STORY_CHARS),
+        "text": _flat(body),
         "true_label": rec["true"],
         "answered": rec["answered"],
         "probabilities": {k: round(v, 3) for k, v in rec["probabilities"].items()},
-        "human_explanation": _clip(explanation, EXPLANATION_CHARS) if explanation else None,
+        "human_explanation": _flat(explanation) if explanation else None,
     }
 
 
 # -- 3. strict validation of optimizer replies ------------------------------------------------------------------------
 
 
-def _string(value, field, limit):
+def _string(value, field):
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} must be a non-empty string")
-    if len(value) > limit:
-        raise ValueError(f"{field} is longer than {limit} characters")
     return value.strip()
 
 
@@ -283,21 +275,21 @@ def validate_diagnosis(reply, shown_error_ids):
     if not isinstance(reply, dict) or set(reply) != {"hypotheses"}:
         raise ValueError('reply must be {"hypotheses": [...]}')
     items = reply["hypotheses"]
-    if not isinstance(items, list) or not 1 <= len(items) <= MAX_HYPOTHESES:
-        raise ValueError(f"hypotheses must be a list of 1 to {MAX_HYPOTHESES} objects")
+    if not isinstance(items, list) or not items:
+        raise ValueError("hypotheses must be a non-empty list of objects")
     names, out = set(), []
     for item in items:
         if not isinstance(item, dict) or set(item) != {"name", "description", "proposed_rule", "evidence_story_ids"}:
             raise ValueError("each hypothesis needs exactly name, description, proposed_rule and evidence_story_ids")
-        name = _string(item["name"], "name", LIMITS["name"])
+        name = _string(item["name"], "name")
         if name.lower() in names:
             raise ValueError("hypothesis names must be unique")
         names.add(name.lower())
         out.append(
             {
                 "name": name,
-                "description": _string(item["description"], "description", LIMITS["description"]),
-                "proposed_rule": _string(item["proposed_rule"], "proposed_rule", LIMITS["rule"]),
+                "description": _string(item["description"], "description"),
+                "proposed_rule": _string(item["proposed_rule"], "proposed_rule"),
                 "evidence_story_ids": _ids(item["evidence_story_ids"], "evidence_story_ids", shown_error_ids, minimum=1),
             }
         )
@@ -310,13 +302,13 @@ def _element(value, field):
     name = value["name"]
     if not isinstance(name, str) or not NAME.match(name):
         raise ValueError(f"{field}.name must be lowercase letters, digits and underscores, starting with a letter")
-    return {"name": name, "question": _string(value["question"], f"{field}.question", LIMITS["question"])}
+    return {"name": name, "question": _string(value["question"], f"{field}.question")}
 
 
 def validate_reconcile(reply, *, errors_by_cell, contrast_ids, max_causes, max_elements, taken_elements=()):
     """The reconciled causes. ``errors_by_cell`` maps cell key -> ids of errors shown (in any independent sample) for
     that cell; ``contrast_ids`` are the contrast ids shown. Rejects: unknown fields or cell, ids that were not shown or
-    are not errors of the cause's own cell, duplicate cause ids or names, over-length text, an empty patch, a bad
+    are not errors of the cause's own cell, duplicate cause ids or names, an empty patch, a bad
     candidate element, conflicting element names. -> {"causes": [...], "generic_elements": [...]}."""
     if not isinstance(reply, dict) or not {"causes"} <= set(reply) <= {"causes", "generic_elements"}:
         raise ValueError('reply must be {"causes": [...], "generic_elements": [...]}')
@@ -348,7 +340,7 @@ def validate_reconcile(reply, *, errors_by_cell, contrast_ids, max_causes, max_e
         cid = cause["id"]
         if not isinstance(cid, str) or not CAUSE_ID.match(cid) or cid in ids:
             raise ValueError("cause ids must be unique short strings")
-        name = _string(cause["name"], "name", LIMITS["name"])
+        name = _string(cause["name"], "name")
         if name.lower() in names:
             raise ValueError("cause names must be unique")
         if cause["cell"] not in errors_by_cell:
@@ -365,12 +357,12 @@ def validate_reconcile(reply, *, errors_by_cell, contrast_ids, max_causes, max_e
                 "id": cid,
                 "name": name,
                 "cell": cause["cell"],
-                "description": _string(cause["description"], "description", LIMITS["description"]),
+                "description": _string(cause["description"], "description"),
                 "evidence_story_ids": _ids(
                     cause["evidence_story_ids"], "evidence_story_ids", errors_by_cell[cause["cell"]], minimum=1
                 ),
-                "proposed_rule": _string(cause["proposed_rule"], "proposed_rule", LIMITS["rule"]),
-                "patch": _string(cause["patch"], "patch", LIMITS["patch"]),
+                "proposed_rule": _string(cause["proposed_rule"], "proposed_rule"),
+                "patch": _string(cause["patch"], "patch"),
                 "must_keep_story_ids": _ids(cause["must_keep_story_ids"], "must_keep_story_ids", contrast_ids, minimum=0),
                 "confirmed": cause["confirmed"],
                 "candidate_element": element,
@@ -729,6 +721,16 @@ def seed_for(wheel, round_number):
     return int(_hash({"task": wheel.initial.task.fingerprint, "diagnosis": round_number})[:12], 16)
 
 
+def _sample_name(index):
+    """A, B, C ... Z, then AA, AB ...: a name for every independent sample, however many there are."""
+    name = ""
+    index += 1
+    while index:
+        index, rest = divmod(index - 1, 26)
+        name = chr(65 + rest) + name
+    return name
+
+
 def optimizer_calls_planned(config, cells):
     """Calls a round makes when every reply is valid at once: independent diagnoses per cell plus one reconcile."""
     return config.independent * cells + 1
@@ -787,7 +789,7 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
         "jev_calls": 0,
     }
     rows = visible_rows(training, development, protected, task)
-    cells = [c for c in summary["cells"] if c["errors"] >= config.min_cell][:MAX_CELLS]
+    cells = [c for c in summary["cells"] if c["errors"] >= config.min_cell]
     cells = [
         c
         for c in cells
@@ -837,13 +839,12 @@ async def run_diagnosis(wheel, training, development, protected, *, now=None):
                 shown = {r["id"] for r in errors}
                 current = {
                     "diagnosis_phase": "independent",
-                    "sample": "ABCD"[index],
+                    "sample": _sample_name(index),
                     "cell": cell,
                     "confusion_summary": summary["text"],
                     "incumbent_rubric": wheel.active.config.rubric,
                     "errors": [show(wheel, r) for r in errors],
                     "contrast": [show(wheel, r) for label in task.labels for r in samples["contrast"][index][label]],
-                    "max_hypotheses": MAX_HYPOTHESES,
                 }
                 diagnoses[cell["key"]].append(await asker.ask(current, lambda reply, s=shown: validate_diagnosis(reply, s)))
         usable = [c for c in cells if any(d for d in diagnoses[c["key"]])]
@@ -1011,12 +1012,12 @@ def validate_addresses(value, known):
     return list(value)
 
 
-def diagnosis_digest(ledger, limit=10):
+def diagnosis_digest(ledger):
     """What the optimizer digest carries across rounds: how each cause's fixes fared, and the screened elements."""
     out = {}
     outcomes = ledger.cause_outcomes()
     if outcomes:
-        out["cause_outcomes"] = dict(list(outcomes.items())[-limit:])
+        out["cause_outcomes"] = dict(outcomes)
     rows = ledger.element_evaluations()
     if rows:
         pick = lambda r: {
@@ -1027,7 +1028,7 @@ def diagnosis_digest(ledger, limit=10):
             "round": r["round"],
         }
         out["elements"] = {
-            "kept": [pick(r) for r in rows if r["kept"]][-limit:],
-            "failed": [pick(r) for r in rows if not r["kept"]][-limit:],
+            "kept": [pick(r) for r in rows if r["kept"]],
+            "failed": [pick(r) for r in rows if not r["kept"]],
         }
     return out

@@ -20,7 +20,6 @@ def test_actual_embedded_decide_review_reopen_and_priming_use_no_sqlite_or_files
     def stores():
         return S3CyclotronStores(
             journal(client, name="embedded-root"),
-            max_records=10000,
             journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
         )
 
@@ -56,19 +55,38 @@ def test_actual_embedded_decide_review_reopen_and_priming_use_no_sqlite_or_files
         assert retracted_again.priming_additions()[0]["retractions"][0]["retracted_by"] == "editor-2"
 
 
-def test_root_transaction_keeps_cursor_and_derived_evidence_atomic_on_size_failure():
+def test_root_transaction_keeps_cursor_and_derived_evidence_atomic_on_failure():
     from .s3_embedded_storage import S3EmbeddedStorage
 
-    root = S3EmbeddedStorage(journal(name="root"), max_records=2)
+    class Interrupted(Exception):
+        pass
+
+    root = S3EmbeddedStorage(journal(name="root"))
     root.initialize()
     root.acquire(str(uuid4()))
-    with pytest.raises(ValueError):
+    with pytest.raises(Interrupted):
         with root.transaction():
             root.insert_review("review", "decision", "classifier", '{"human":"exact"}')
             root.append_event('{"kind":"review"}')
             root.put_meta("cursor:classifier", "8")
+            raise Interrupted()
     assert root.meta("cursor:classifier") is None and root.events(0, 100) == []
     assert root.review("review") is None
+    root.release()
+
+
+def test_root_records_past_the_old_record_budget_commit_together():
+    from .s3_embedded_storage import S3EmbeddedStorage
+
+    root = S3EmbeddedStorage(journal(name="root"))
+    root.initialize()
+    root.acquire(str(uuid4()))
+    with root.transaction():
+        root.insert_review("review", "decision", "classifier", '{"human":"exact"}')
+        root.append_event('{"kind":"review","pad":"' + "x" * (5 * 1024 * 1024) + '"}')
+        root.put_meta("cursor:classifier", "8")
+    assert root.meta("cursor:classifier") == ("8",) and len(root.events(0, 100)) == 1
+    assert root.review("review") is not None
     root.release()
 
 
@@ -82,7 +100,6 @@ def test_cloud_guard_denial_precedes_all_operation_s3_access_and_budget_is_absol
     def stores():
         return S3CyclotronStores(
             journal(client, name="root"),
-            max_records=10000,
             journal_for=lambda domain, name: journal(client, name=domain + "-" + name),
         )
 
@@ -110,7 +127,7 @@ def test_uncertain_root_commit_prevents_duplicate_derivation_until_a_fresh_owner
     from .s3_runtime_storage import RuntimeOwnershipError
 
     j = journal(name="root")
-    root = S3EmbeddedStorage(j, max_records=100)
+    root = S3EmbeddedStorage(j)
     root.initialize()
     root.acquire(str(uuid4()))
     j.payloads.client.lose = lambda key: key == j.head_key
@@ -123,7 +140,7 @@ def test_uncertain_root_commit_prevents_duplicate_derivation_until_a_fresh_owner
         root.events(0, 100)
     assert len(j.payloads.client.calls) == before
     root.release()
-    restored = S3EmbeddedStorage(journal(j.payloads.client, name="root"), max_records=100)
+    restored = S3EmbeddedStorage(journal(j.payloads.client, name="root"))
     restored.initialize()
     restored.acquire(str(uuid4()))
     assert restored.meta("cursor:classifier") == ("8",)
@@ -141,7 +158,7 @@ def test_owned_snapshot_refresh_detects_operator_fence_change_before_operation_s
 
     client = ConditionalS3()
     composition = S3CyclotronStores(
-        journal(client, name="root"), max_records=1000, journal_for=lambda domain, name: journal(client, name=domain + "-" + name)
+        journal(client, name="root"), journal_for=lambda domain, name: journal(client, name=domain + "-" + name)
     )
     model = Model()
     engine = Cyclotron.open(None, DEFINITION, model, storage=composition)
@@ -169,7 +186,7 @@ def test_one_item_can_be_read_without_listing_every_item():
     from .s3_embedded_storage import S3EmbeddedStorage
     from .s3_journal_test import journal
 
-    storage = S3EmbeddedStorage(journal(name="root-item-lookup"), max_records=1000)
+    storage = S3EmbeddedStorage(journal(name="root-item-lookup"))
     storage.initialize()
     storage.acquire(str(uuid4()))
     with storage.transaction():

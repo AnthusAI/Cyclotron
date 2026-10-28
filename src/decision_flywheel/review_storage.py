@@ -20,8 +20,8 @@ class ReviewStorage(Protocol):
     def append_presentation(self, row: tuple) -> None: ...
     def append_action(self, row: tuple) -> None: ...
     def close(self) -> None: ...
-    def export_storage(self, *, max_records=10000, max_bytes=64000000) -> dict: ...
-    def restore_storage(self, snapshot: dict, *, max_records=10000, max_bytes=64000000) -> None: ...
+    def export_storage(self) -> dict: ...
+    def restore_storage(self, snapshot: dict) -> None: ...
 
 
 class SQLiteReviewStorage:
@@ -178,12 +178,12 @@ class SQLiteReviewStorage:
                 row,
             )
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
+    def export_storage(self):
         from .domain_snapshots import review_codec
 
-        return review_codec().export(self.db, max_records=max_records, max_bytes=max_bytes)
+        return review_codec().export(self.db)
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
+    def restore_storage(self, snapshot):
         from .domain_snapshots import review_codec
 
-        return review_codec().restore(self.db, snapshot, max_records=max_records, max_bytes=max_bytes)
+        return review_codec().restore(self.db, snapshot)

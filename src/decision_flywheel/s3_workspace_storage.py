@@ -14,11 +14,11 @@ from .s3_runtime_storage import S3RuntimeStores, runtime_events_lake
 
 
 class S3WorkspaceStores:
-    def __init__(self, root_journal, *, journal_for, max_records, execution_guard=None):
+    def __init__(self, root_journal, *, journal_for, execution_guard=None):
         if not callable(journal_for):
             raise ValueError("fixed scoped journal factory required")
-        self.root = S3EmbeddedStorage(root_journal, max_records=max_records, cache_owned=True)
-        self.journal_for, self.max_records = journal_for, max_records
+        self.root = S3EmbeddedStorage(root_journal, cache_owned=True)
+        self.journal_for = journal_for
         self.execution_guard = execution_guard
         self.owner = str(uuid4())
         self.runtimes = {}
@@ -46,7 +46,7 @@ class S3WorkspaceStores:
                 self.root.put_meta("workspace-config", raw)
             ledger = self._journal("shared-batches", self.name)
             # Raw provider replies are write-once records beside the ledger, not rows inside it.
-            self.shared = S3BatchStorage(ledger, max_records=self.max_records, replies=reply_lake_for(ledger, self.name))
+            self.shared = S3BatchStorage(ledger, replies=reply_lake_for(ledger, self.name))
             self.shared.initialize()
         except BaseException:
             self.close()
@@ -58,9 +58,7 @@ class S3WorkspaceStores:
         if identifier not in self.runtimes:
             name = sha256((self.name + "\0" + identifier).encode()).hexdigest()
             journal = self._journal("runtime", name)
-            runtime = S3RuntimeStores(
-                journal, max_records=self.max_records, cache_owned=True, events_lake=runtime_events_lake(journal)
-            )
+            runtime = S3RuntimeStores(journal, cache_owned=True, events_lake=runtime_events_lake(journal))
             runtime.initialize()
             self.runtimes[identifier] = runtime
             runtime.acquire(self.owner)

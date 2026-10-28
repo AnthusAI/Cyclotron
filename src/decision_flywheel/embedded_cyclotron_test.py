@@ -226,6 +226,11 @@ def test_subscribe_pages_committed_events_with_a_cursor_that_survives_restart(tm
         assert cyclotron.subscribe(after=rest["cursor"])["events"] == []
 
 
+def test_subscribe_returns_a_page_larger_than_a_thousand_events_when_asked(tmp_path):
+    with Cyclotron.open(tmp_path / "c", DEFINITION, Model()) as cyclotron:
+        assert cyclotron.subscribe(after=0, limit=1_000_000)["events"] == []
+
+
 def test_a_store_refuses_a_different_definition(tmp_path):
     Cyclotron.open(tmp_path / "c", DEFINITION, Model()).close()
     changed = CyclotronDefinition("papyrus-relevance", (RELEVANT,), seed="other-seed")

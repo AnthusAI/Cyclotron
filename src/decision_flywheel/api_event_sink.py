@@ -7,16 +7,16 @@ QUERY = """mutation Ingest($run: ID!, $events: [TraceInput!]!) {
 
 class GraphQLTraceSink:
     def __init__(self, endpoint, run_id, *, token=None, transport=None, namespace="engine", batch_size=1):
-        if type(batch_size) is not int or not 1 <= batch_size <= 200:
-            raise ValueError("trace batch size must be between one and 200")
+        if type(batch_size) is not int or batch_size < 1:
+            raise ValueError("trace batch size must be a positive integer")
         self.endpoint, self.run_id, self.token, self.transport = endpoint, run_id, token, transport
         self.namespace = namespace
         self.batch_size, self.pending = batch_size, []
 
     def set_batch_size(self, batch_size):
-        """Opt into bounded delivery before an observer starts emitting."""
-        if type(batch_size) is not int or not 1 <= batch_size <= 200:
-            raise ValueError("trace batch size must be between one and 200")
+        """Opt into batched delivery before an observer starts emitting; ``None`` buffers until ``flush``."""
+        if batch_size is not None and (type(batch_size) is not int or batch_size < 1):
+            raise ValueError("trace batch size must be a positive integer or None")
         if self.pending:
             raise ValueError("flush trace events before changing their batch size")
         self.batch_size = batch_size
@@ -28,9 +28,9 @@ class GraphQLTraceSink:
         return self.ingest(f"{self.namespace}:{event['event_id']}", event)
 
     def ingest(self, source_id, event):
-        if self.batch_size > 1:
+        if self.batch_size is None or self.batch_size > 1:
             self.pending.append({"sourceId": source_id, "payload": event})
-            if len(self.pending) >= self.batch_size:
+            if self.batch_size is not None and len(self.pending) >= self.batch_size:
                 return self.flush()
             return None
         return self._ingest([{"sourceId": source_id, "payload": event}])[0]

@@ -41,7 +41,6 @@ def sessions(client=None, cipher=None, clock=None):
             journal_for=lambda kind, ref: journal(client, name=kind + "-" + ref),
             cipher=cipher,
             clock=clock or (lambda: 1000),
-            capacity=5,
             max_age=100,
         ),
         client,
@@ -96,7 +95,7 @@ def test_session_person_selection_persist_and_stale_writer_cannot_resurrect_logo
     assert fresh.get(identifier) is None
 
 
-def test_session_expiry_quota_and_wrong_browser_proof_fail_closed():
+def test_session_expiry_and_wrong_browser_proof_fail_closed_with_no_login_count_ceiling():
     clock = [1000]
     s, client, cipher = sessions(clock=lambda: clock[0])
     pending = s.begin()
@@ -108,10 +107,7 @@ def test_session_expiry_quota_and_wrong_browser_proof_fail_closed():
     clock[0] = 1011
     assert s.get(identifier) is None
     clock[0] = 1400
-    for _ in range(5):
-        s.begin()
-    with pytest.raises(SessionRejected):
-        s.begin()
+    assert len({s.begin().state for _ in range(50)}) == 50
 
 
 def test_uncertain_consume_never_grants_oauth_exchange_permission():
@@ -184,6 +180,8 @@ def test_kms_envelope_binds_exact_key_application_kind_and_session_reference():
     with pytest.raises(Exception):
         cipher.decrypt("session", ref, damaged)
     assert kms.calls[0]["EncryptionContext"]["purpose"] == "oauth-session"
+    large = b"synthetic-jwt-" + b"j" * 100_000
+    assert cipher.decrypt("session", ref, cipher.encrypt("session", ref, large)) == large
 
 
 def test_missing_session_is_signed_out_but_corrupt_or_unavailable_canonical_state_is_not():

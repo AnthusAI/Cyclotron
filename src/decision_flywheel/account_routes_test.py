@@ -434,7 +434,30 @@ def test_http_event_pages_pin_account_bound_cursor_and_reauthorize_every_request
         assert client.get(url, params={"account": account_id, "after": -1}).status_code == 422
 
 
-def test_http_event_page_outage_returns_no_private_events_and_enforces_response_budget(hosted):
+def test_http_event_page_returns_any_requested_page_size_beyond_the_store_page(hosted):
+    client, gateway, state, account_id = hosted
+    with client:
+        sign_in(client, state)
+        session = client.get("/api/session").json()
+        headers = {
+            "Origin": "https://console.example.test",
+            "X-CSRF-Token": session["csrfToken"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert client.post("/api/accounts", json={"name": "Events"}, headers=headers).status_code == 201
+        store = state["stores"][account_id]
+        run = store.runs()[0]
+        for start in range(0, 2500, 100):  # the store's own ingest batch size is not under test here
+            store.append_batch(run["id"], [(f"e{n}", {"kind": "synthetic", "n": n}) for n in range(start, start + 100)])
+        url = f"/api/runs/{run['id']}/events"
+        page = client.get(url, params={"account": account_id, "limit": 2400})
+        assert page.status_code == 200
+        assert [event["payload"].get("n") for event in page.json()["events"] if "n" in event["payload"]] == list(range(2400))
+        rest = client.get(url, params={"account": account_id, "limit": 1_000_000}).json()["events"]
+        assert len([event for event in rest if "n" in event["payload"]]) == 2500
+
+
+def test_http_event_page_returns_a_megabyte_event_whole_and_an_outage_returns_no_private_events(hosted):
     client, gateway, state, account_id = hosted
     with client:
         sign_in(client, state)
@@ -449,7 +472,9 @@ def test_http_event_page_outage_returns_no_private_events_and_enforces_response_
         run = store.runs()[0]
         store.append_event(run["id"], "large", {"kind": "synthetic", "text": "x" * 1048576})
         url = f"/api/runs/{run['id']}/events"
-        assert client.get(url, params={"account": account_id}).status_code == 413
+        whole = client.get(url, params={"account": account_id})
+        assert whole.status_code == 200
+        assert [event["payload"]["text"] for event in whole.json()["events"] if event["sourceId"] == "large"] == ["x" * 1048576]
 
         def outage(*args, **kwargs):
             raise ProspectusUnavailable("synthetic unavailable")
@@ -546,7 +571,7 @@ def test_listing_outage_never_reuses_a_previous_success_or_calls_me_as_fallback(
         dict(auth_time=9999999999),
         dict(origin_jti=""),
         dict(origin_jti=None),
-        dict(origin_jti="x" * 257),
+        dict(origin_jti="non-ascii-é"),
     ],
 )
 def test_listing_optimization_rejects_malformed_or_future_session_binding_locally(hosted, identity, changes):

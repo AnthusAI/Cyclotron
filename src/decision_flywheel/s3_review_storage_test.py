@@ -13,7 +13,7 @@ from .s3_journal_test import journal
 def storage(j=None):
     from .s3_review_storage import S3ReviewStorage
 
-    s = S3ReviewStorage(j or journal(name="review"), max_records=1000)
+    s = S3ReviewStorage(j or journal(name="review"))
     s.initialize()
     return s
 
@@ -88,7 +88,7 @@ def test_native_review_migration_roundtrips_raw_records_without_sqlite_cloud_val
     assert target.articles() == []
 
 
-def test_conflicting_study_bind_rolls_back_new_metadata_and_limit_rejection_keeps_source_empty():
+def test_conflicting_study_bind_rolls_back_new_metadata_and_a_source_past_the_old_record_budget_binds():
     from .s3_review_storage import S3ReviewStorage
 
     s = storage()
@@ -96,8 +96,8 @@ def test_conflicting_study_bind_rolls_back_new_metadata_and_limit_rejection_keep
     with pytest.raises(ValueError):
         s.bind_study({"study_seed": "new", "rolling_audit_rate": "0.9"})
     assert s.export_storage()["tables"]["study_metadata"] == [{"_rowid": 1, "key": "rolling_audit_rate", "value": "0.2"}]
-    limited = S3ReviewStorage(journal(s.journal.payloads.client, name="tiny-review"), max_records=1)
-    limited.initialize()
-    with pytest.raises(ValueError):
-        limited.bind_study({"seed": "one", "another": "two"})
-    assert limited.export_storage()["tables"]["study_metadata"] == []
+    # This source used to hold one record, so binding two keys was refused.
+    unlimited = S3ReviewStorage(journal(s.journal.payloads.client, name="tiny-review"))
+    unlimited.initialize()
+    unlimited.bind_study({"seed": "one", "another": "two", "large": "x" * (5 * 1024 * 1024)})
+    assert len(unlimited.export_storage()["tables"]["study_metadata"]) == 3

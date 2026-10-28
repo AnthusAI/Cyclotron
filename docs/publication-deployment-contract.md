@@ -49,7 +49,7 @@ Operations:
   identity from the verified actor, checks the displayed prediction pin and
   binding, and namespaces request identities by account/publication/actor. It
   normalizes an omitted/null explanation to an empty string before dispatch and
-  rejects supplied non-text or explanations over 4000 characters. Supplied strings
+  rejects supplied non-text; an explanation of any length is accepted. Supplied strings
   pass unchanged to the native SDK, whose existing normalization trims outer
   whitespace and stores absent/blank explanations as `None`. No rationale is invented.
   It delegates idempotency/corrections/learning to the SDK. A changed normalized
@@ -59,15 +59,16 @@ Operations:
   monitoring components. Snapshot metadata includes only bound output questions,
   class labels and positive label configuration.
 - `history`: `{}`. Current SDK decision rows and active human reviews, projected
-  to bound outputs. A limit of 200 rows fails explicitly rather than truncating;
-  scalable bounded history depends on the storage owner's facade conversion.
+  to bound outputs. Every row is returned; there is no row limit.
 - `events`: `{after, limit}`. Existing stable SDK event cursor, with predictions,
   labels, corrections and classifier lifecycle events scoped to bound outputs.
   The returned source cursor advances even when sibling events are filtered out.
   Use this audit stream for original and corrected explanations; `history` is an
   active-review view, not a replacement for the audit stream.
 
-Requests/responses are bounded to 2 MB. Errors and lost transport acknowledgements
+The contract sets no request or response size limit; only the hosting platform's own
+limits (for example API Gateway and Lambda payload limits) apply, and they surface as the
+platform's errors. Errors and lost transport acknowledgements
 remain explicit. Callers retry only with the same unchanged identity/payload;
 provider ambiguity must never cause an automatic paid replay. Existing SDK
 revision and evaluation-partition firewalls remain authoritative.
@@ -218,19 +219,18 @@ Reconciliation failures carry `code: reconciliation_required` through HTTP. The
 remote client preserves that state and never describes an ambiguous dispatch as
 a confirmed refusal or automatically retries it.
 
-### Capacity guard after recovery
+### Record reads after recovery
 
-Record publication checks the prospective native catalog rows, including revision,
-fingerprint and serialized list overhead, against aggregate record/byte budgets
-**before writing**. An unchanged content-addressed retry fits the same membership
-and remains readable at the exact budget boundary. The injected catalog remains
-the only physical store; this adds no adapter or distributed reservation.
+Record publication has no record or byte budget. Before writing, it reads and
+validates every stored record, so an unreadable record still stops the write. An
+unchanged content-addressed retry adopts the same membership. The injected catalog
+remains the only physical store; this adds no adapter or distributed reservation.
 
 Before native steering dispatch, the single-owner gateway checks room for both
-intent and completion rows and a conservative bounded result allowance. The
-configurable `max_result_bytes` defaults to 64,000, bounded by the overall 2 MB
-contract limit. Results exceeding that declared allowance are never truncated or
-acknowledged as complete; they leave an explicit reconciliation state. Pending
+intent and completion rows. There is no steering command or result size limit: a
+result of any size is recorded whole, and only the catalog's own storage budget can
+refuse it; such a result is never truncated or acknowledged as complete and leaves
+an explicit reconciliation state. Pending
 and completed receipt lookup still precede dispatch, so receipt recovery does not
 need new execution capacity or another evaluation. This is local single-owner
 preflight, not a substitute for the pending cloud coordinator decision.
@@ -291,7 +291,7 @@ and (POST) `X-Papyrus-Binding`. Every success echoes the three pins (binding is 
 binding revision) with `Cache-Control: no-store`. Errors are `{"error", "code"}`.
 
 Per request, in this order and failing closed: bearer present (`401 bearer_required`); pins
-present and the account a UUID (`400 pins_required`); JSON body at most 4 MB (`413`, `415`, `400`);
+present and the account a UUID (`400 pins_required`); a JSON body of any size (`415`, `400`);
 the account service re-verifies the token for the needed operation through the injected
 `runtime.curation_authority(token, account, operation)` (unknown token `401 bearer_invalid`,
 no role, revoked or viewer write `403 access_refused`, service down `503 authority_unavailable`);
@@ -318,7 +318,8 @@ target without `modelIdentity`, has `priming: null`). Priming runs on the accoun
 `S3ConsoleStorage` through a publication-scoped view (`s3-cloud-storage.md`, "Hosted priming").
 There is no hosted transformer: a `transform` command is `400 no_hosted_transformer`.
 A different list, classifier set or draft identity is `403 outside_publication`, refused before
-storage is read; a file over about 1 MB (or the catalog journal budget) is `413` with nothing saved.
+storage is read; there is no import size limit, and a file beyond the catalog journal budget is
+`413 storage_limit` with nothing saved.
 
 Accepting is also applying. After `accept` commits the human-labelled examples, the same request
 opens the shared cyclotron's priming context with no model and no optimizer (the existing

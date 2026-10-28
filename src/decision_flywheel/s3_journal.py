@@ -1,4 +1,4 @@
-"""Bounded canonical S3 transactions; DynamoDB is never involved in authority.
+"""Canonical S3 transactions; DynamoDB is never involved in authority.
 
 A small conditional head publishes one immutable value+parent record. No SQL,
 provider call or caller callback runs inside the CAS primitive. The journal
@@ -13,7 +13,7 @@ from .storage_payloads import S3Payloads
 
 
 class S3Journal(CanonicalJournal):
-    def __init__(self, payloads, domain, name, *, max_bytes, max_commits, create_only_initialization=False):
+    def __init__(self, payloads, domain, name, *, create_only_initialization=False):
         if not isinstance(payloads, S3Payloads):
             raise ValueError("injected scoped S3 payload adapter required")
         # Hidden SDK retries can turn a lost successful PUT into a later 412.
@@ -29,8 +29,6 @@ class S3Journal(CanonicalJournal):
             payloads,
             domain,
             name,
-            max_bytes=max_bytes,
-            max_commits=max_commits,
             create_only_initialization=create_only_initialization,
         )
         self.boundary = (payloads.scope, payloads.bucket, payloads.owner)
@@ -44,7 +42,7 @@ class S3Journal(CanonicalJournal):
             stream = response["Body"]
             length = response["ContentLength"]
             etag = response["ETag"]
-            if type(length) is not int or not 0 < length <= 8192 or not isinstance(etag, str) or not etag or len(etag) > 1024:
+            if type(length) is not int or length < 1 or not isinstance(etag, str) or not etag:
                 raise ValueError("invalid coordination object")
             content = stream.read(length + 1)
             if len(content) != length:

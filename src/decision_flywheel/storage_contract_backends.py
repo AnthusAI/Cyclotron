@@ -18,8 +18,8 @@ LAKE_BACKENDS = {"memory-lake": "s3", "s3-lake": "s3", "file-lake": "file-journa
 
 
 def local_file_journal(directory, name, scope=None):
-    payloads = FilePayloads(directory, scope or StorageScope("account-a", "workspace-a"), max_bytes=1000000)
-    return LocalFileJournal(payloads, "shared-batches", name, max_bytes=1000000, max_commits=100)
+    payloads = FilePayloads(directory, scope or StorageScope("account-a", "workspace-a"))
+    return LocalFileJournal(payloads, "shared-batches", name)
 
 
 class StorageBackend:
@@ -71,7 +71,7 @@ class EmbeddedBackend(StorageBackend):
             return SQLiteEmbeddedStorage(self.directory / "embedded.sqlite3")
         from .s3_embedded_storage import S3EmbeddedStorage
 
-        storage = S3EmbeddedStorage(self.journal_named("contract-embedded"), max_records=1000)
+        storage = S3EmbeddedStorage(self.journal_named("contract-embedded"))
         storage.initialize()
         storage.acquire(str(uuid4()))
         return storage
@@ -95,12 +95,10 @@ class RuntimeBackend(StorageBackend):
         journal = self.journal_named("contract-runtime")
         lake = None
         if self.backend_name == "memory-lake":
-            lake = MemoryRecordLake(
-                journal.boundary[0], "runtime", events_kind(journal), max_record_bytes=1000000, store=self.memory_records
-            )
+            lake = MemoryRecordLake(journal.boundary[0], "runtime", events_kind(journal), store=self.memory_records)
         elif self.backend_name in LAKE_BACKENDS:
             lake = runtime_events_lake(journal)
-        stores = S3RuntimeStores(journal, max_records=1000, events_lake=lake)
+        stores = S3RuntimeStores(journal, events_lake=lake)
         stores.initialize()
         stores.acquire(str(uuid4()))
         return stores.runtime_storage
@@ -114,7 +112,7 @@ class ReviewBackend(StorageBackend):
             return SQLiteReviewStorage(self.directory / "review.sqlite3")
         from .s3_review_storage import S3ReviewStorage
 
-        storage = S3ReviewStorage(self.journal_named("contract-review"), max_records=1000)
+        storage = S3ReviewStorage(self.journal_named("contract-review"))
         storage.initialize()
         return storage
 
@@ -127,7 +125,7 @@ class EvaluationBackend(StorageBackend):
             return SQLiteEvaluationStorage(self.directory / "evaluation.sqlite3")
         from .s3_evaluation_storage import S3EvaluationStorage
 
-        storage = S3EvaluationStorage(self.journal_named("contract-evaluation"), max_records=1000)
+        storage = S3EvaluationStorage(self.journal_named("contract-evaluation"))
         storage.initialize()
         storage.acquire(str(uuid4()))
         return storage
@@ -154,7 +152,7 @@ class BatchBackend(StorageBackend):
     def lake_for(self, journal):
         from .record_lake import FileRecordLake, MemoryRecordLake, S3RecordLake
 
-        kind = dict(domain="shared-batches", kind="replies", max_record_bytes=100000)
+        kind = dict(domain="shared-batches", kind="replies")
         if self.lake_name == "memory-lake":
             return MemoryRecordLake(journal.boundary[0], store=self.memory_lake, **kind)
         if self.lake_name == "file-lake":
@@ -169,6 +167,6 @@ class BatchBackend(StorageBackend):
         from .s3_batch_storage import S3BatchStorage
 
         journal = self.journal_named("contract-batch")
-        storage = S3BatchStorage(journal, max_records=1000, replies=self.lake_for(journal))
+        storage = S3BatchStorage(journal, replies=self.lake_for(journal))
         storage.initialize()
         return storage

@@ -110,7 +110,7 @@ class Backend:
             return WebStore(self.tmp_path / "priming.sqlite3")
         from .s3_console_storage import S3ConsoleStorage
 
-        store = S3ConsoleStorage(journal(self.client, name="console"), max_records=10000)
+        store = S3ConsoleStorage(journal(self.client, name="console"))
         store.initialize()
         return store
 
@@ -250,14 +250,15 @@ def test_the_latest_vote_wins_and_a_retraction_does_not_revive_an_older_vote(bac
     service.close()
 
 
-def test_a_draft_over_the_size_limit_is_refused_and_nothing_is_stored(backend):
+def test_the_priming_service_sets_no_size_limit_of_its_own_on_a_nine_megabyte_draft(backend):
     host = backend.seeded()
     service = PrimingService(host, storage=host.priming_storage)
-    with pytest.raises(ValueError, match="size limit"):
+    try:
         service.start_file("draft", "examples", refs(), "json", "A" * 9_000_000)
-    with pytest.raises(ValueError, match="unknown import draft"):
-        service.get("draft")
-    assert preview(service)["status"] == "preview"
+    except ValueError as error:
+        # Only the S3 console snapshot's own storage budget may still refuse it; that budget is not the engine's.
+        assert backend.name == "s3" and "size limit" not in str(error)
+    assert preview(service, "second")["status"] == "preview"
     service.close()
 
 
@@ -302,3 +303,18 @@ def test_accepted_evidence_and_drafts_survive_reopening(backend):
     assert len(reopened.priming_storage.accepted_records("examples", classifiers_of(reopened))) == 1
     service.close()
     again.close()
+
+
+def test_a_nine_megabyte_priming_draft_is_kept_by_s3_storage_with_no_journal_budget(tmp_path):
+    # The S3 catalog journal used to refuse anything past its 4 MiB budget; it has no budget now.
+    backend = Backend("s3", tmp_path)
+    host = backend.seeded()
+    service = PrimingService(host, storage=host.priming_storage)
+    preview(service)
+    draft = json.loads(host.draft("draft"))
+    draft["padding"] = "x" * (9 * 1024 * 1024)
+    host.put_draft("draft", json.dumps(draft))
+    reopened = backend.open()
+    assert json.loads(reopened.draft("draft"))["padding"] == "x" * (9 * 1024 * 1024)
+    assert reopened.journal.read().reference.length > 9 * 1024 * 1024
+    service.close()

@@ -36,9 +36,7 @@ def freeze_run(runtime, account, session, body):
         runtime.accounts.authorize(current.access_token, account, current.person_id, "console:write")
 
     check()
-    store = S3ConsoleStorage(
-        _GuardedJournal(runtime.journal(account, "console", "catalog"), check), max_records=runtime.config.max_records
-    )
+    store = S3ConsoleStorage(_GuardedJournal(runtime.journal(account, "console", "catalog"), check))
     signature = sha256(encode([account, body["name"], body["config"]])).hexdigest()
     with store.transaction():
         # Retry checks precede latest resolution: a later catalog revision must
@@ -110,8 +108,6 @@ def install_bootstrap_route(app, runtime):
     @app.post("/api/publication-runs/bootstrap")
     async def bootstrap(request: Request):
         raw = await request.body()
-        if len(raw) > 65536:
-            raise HTTPException(413, "bounded bootstrap request required")
         try:
             body = json.loads(raw)
             account = uuid(request.headers.get("X-Cyclotron-Account"))
@@ -120,15 +116,12 @@ def install_bootstrap_route(app, runtime):
                 or set(body) != {"contractVersion", "requestId", "name", "config"}
                 or body["contractVersion"] != CONTRACT
                 or not isinstance(body["name"], str)
-                or not 1 <= len(body["name"].strip()) <= 200
+                or not body["name"].strip()
                 or not isinstance(body["config"], dict)
                 or set(body["config"]) != {"cyclotron_id", "cyclotron_definition_revision", "item_list_id"}
                 or type(body["config"]["cyclotron_definition_revision"]) is not int
                 or body["config"]["cyclotron_definition_revision"] < 1
-                or any(
-                    not isinstance(body["config"][k], str) or not 1 <= len(body["config"][k]) <= 200
-                    for k in ("cyclotron_id", "item_list_id")
-                )
+                or any(not isinstance(body["config"][k], str) or not body["config"][k] for k in ("cyclotron_id", "item_list_id"))
             ):
                 raise ValueError()
             uuid(body["requestId"])

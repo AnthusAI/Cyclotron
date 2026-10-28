@@ -11,7 +11,7 @@ from .s3_journal_test import journal
 def stores(j=None):
     from .s3_runtime_storage import S3RuntimeStores
 
-    result = S3RuntimeStores(j or journal(name="classifier-a"), max_records=10000)
+    result = S3RuntimeStores(j or journal(name="classifier-a"))
     result.initialize()
     result.acquire(str(uuid4()))
     return result
@@ -23,15 +23,13 @@ def cloud_agent(s):
     from .s3_optimizer_transport import S3OptimizerTransport
 
     complete = agent([])
-    ledger = S3BatchStorage(journal(s.journal.payloads.client, name="optimizer-budget"), max_records=1000)
+    ledger = S3BatchStorage(journal(s.journal.payloads.client, name="optimizer-budget"))
     ledger.initialize()
     complete.complete = S3OptimizerTransport(
         complete.complete,
         ledger,
         identity={"provider": "synthetic", "model": "fake-optimizer"},
         max_calls=20,
-        max_request_bytes=1000000,
-        max_reply_bytes=1000000,
     )
     return complete
 
@@ -41,7 +39,7 @@ def test_runtime_owner_is_exclusive_releases_explicitly_and_fences_the_old_handl
 
     first = stores()
     j = journal(first.journal.payloads.client, name="classifier-a")
-    other = S3RuntimeStores(j, max_records=10000)
+    other = S3RuntimeStores(j)
     other.initialize()
     with pytest.raises(RuntimeOwnershipError):
         other.acquire(str(uuid4()))
@@ -113,7 +111,7 @@ def test_unknown_acquire_outcome_does_not_grant_runtime_execution():
     from .s3_runtime_storage import RuntimeOwnershipError, S3RuntimeStores
 
     j = journal(name="classifier-a")
-    s = S3RuntimeStores(j, max_records=10000)
+    s = S3RuntimeStores(j)
     s.initialize()
     j.payloads.client.lose = lambda key: key == j.head_key
     with pytest.raises(JournalUncertain):
@@ -158,21 +156,22 @@ def test_hypothesis_diagnosis_and_shadow_records_retain_native_policy_inputs():
     s.close()
 
 
-def test_runtime_size_limit_does_not_partially_commit_learning_aliases():
+def test_learning_aliases_past_the_old_runtime_record_budget_commit_together():
     from .s3_runtime_storage import S3RuntimeStores
 
+    # This runtime used to hold at most two records, so the alias below was refused.
     j = journal(name="small")
-    s = S3RuntimeStores(j, max_records=2)
+    s = S3RuntimeStores(j)
     s.initialize()
     s.acquire(str(uuid4()))
     learn = s.learning_storage
     learn.begin("rubric", "old", '{"pending_evaluation":true}')
     learn.complete("rubric", "old", '{"pending_evaluation":true}')
     learn.begin("rubric", "new", "{}")
-    with pytest.raises(ValueError, match="record budget"):
-        learn.complete("rubric", "new", '{"done":true}', aliases=("extra",), clear_pending_key="old")
-    assert learn.artifact("rubric", "new") == ("pending", "{}")
-    assert learn.artifact("rubric", "old") == ("complete", '{"pending_evaluation":true}')
+    learn.complete("rubric", "new", '{"done":true}', aliases=("extra",), clear_pending_key="old")
+    assert learn.artifact("rubric", "new") == ("complete", '{"done":true}')
+    assert learn.artifact("rubric", "extra") == ("complete", '{"done":true}')
+    assert j.read().revision == s.journal.read().revision
     s.close()
 
 
@@ -200,7 +199,7 @@ def test_uncertain_runtime_commit_poisoning_prevents_followup_exception_cleanup_
 def owned_stores(client=None, name="classifier-a", **options):
     from .s3_runtime_storage import S3RuntimeStores
 
-    result = S3RuntimeStores(journal(client, name=name), max_records=10000, cache_owned=True, **options)
+    result = S3RuntimeStores(journal(client, name=name), cache_owned=True, **options)
     result.initialize()
     result.acquire(str(uuid4()))
     return result
@@ -334,7 +333,7 @@ def publication_jobs(coalesce):
 def owned_stores_reopen(client, name, coalesce):
     from .s3_runtime_storage import S3RuntimeStores
 
-    result = S3RuntimeStores(journal(client, name=name), max_records=10000, cache_owned=True, coalesce_events=coalesce)
+    result = S3RuntimeStores(journal(client, name=name), cache_owned=True, coalesce_events=coalesce)
     result.acquire(str(uuid4()))
     return result
 

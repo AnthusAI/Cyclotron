@@ -31,19 +31,20 @@ class AuthorizedModel:
 
 
 class CommandEventSink:
-    def __init__(self, view, run_id, check, *, batch_size=100):
+    def __init__(self, view, run_id, check, *, batch_size=None):
         self.view, self.run_id, self.check = view, run_id, check
         self.pending = []
         self.set_batch_size(batch_size)
 
     def set_batch_size(self, value):
-        if type(value) is not int or not 1 <= value <= 200 or self.pending:
-            raise ValueError("bounded empty event buffer required")
+        """``None`` (the default) appends a command's events together when it flushes; a number flushes that often."""
+        if (value is not None and (type(value) is not int or value < 1)) or self.pending:
+            raise ValueError("a positive batch size or None, and an empty event buffer, required")
         self.batch_size = value
 
     def ingest(self, source_id, event):
         self.pending.append((source_id, event))
-        if len(self.pending) >= self.batch_size:
+        if self.batch_size is not None and len(self.pending) >= self.batch_size:
             self.flush()
 
     def flush(self):
@@ -173,8 +174,8 @@ class HostedCommandWorker:
             uuid(message[key])
         # Retired re-sends carried an attempt count; such a message still delivers its job.
         attempt = message.get("attempt", 0)
-        if type(attempt) is not int or not 0 <= attempt <= 100000:
-            raise ValueError("delivery attempt must be a bounded count")
+        if type(attempt) is not int or attempt < 0:
+            raise ValueError("delivery attempt must be a non-negative count")
         store = await asyncio.to_thread(self.store_for_account, message["accountId"])
         job, actor = await asyncio.to_thread(store.command_envelope, message["jobId"])
         if actor.account_id != message["accountId"] or actor.run_id != message["runId"] or job["run_id"] != actor.run_id:
@@ -224,7 +225,8 @@ class HostedCommandWorker:
         else:
             runtime = self.runtime_for_command(effects, owned_guard, check)
         run = await asyncio.to_thread(effects.run, actor.run_id)
-        items = await asyncio.to_thread(effects.items, actor.run_id)
+        # A publication decision needs only its own item, so it never reads the run's whole item list.
+        items = [] if job["kind"] == "publication" else await asyncio.to_thread(effects.items, actor.run_id)
         shown = await asyncio.to_thread(effects.current_item, actor.run_id)
         session = None
         try:

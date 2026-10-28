@@ -35,13 +35,13 @@ from .publication_lab import CONTRACT
 from .standing_publications import validate_item
 from .storage_errors import StorageMissing, StorageUncertain
 
-REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{8,128}")
+REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{8,}")
 FEEDBACK_KEYS = {"bindingRevision", "itemId", "itemRevision", "output", "label", "editor"}
 
 
-def _text(value, name, limit, *, required=True):
-    if not isinstance(value, str) or (required and not value.strip()) or len(value) > limit:
-        raise HTTPException(400, f"{name} must be bounded text")
+def _text(value, name, *, required=True):
+    if not isinstance(value, str) or (required and not value.strip()):
+        raise HTTPException(400, f"{name} must be text")
     return value
 
 
@@ -67,8 +67,6 @@ def install_machine_routes(app, runtime):
     async def operation(publication: str, request: Request):
         role, session, account, target, binding = resolve(request, publication)
         content = await request.body()
-        if len(content) > 65536:
-            raise HTTPException(413, "bounded publication request required")
         try:
             body = json.loads(content)
             name = body["operation"]
@@ -140,10 +138,10 @@ def install_machine_routes(app, runtime):
             editor = payload["editor"]
             if not isinstance(editor, dict) or set(editor) != {"site", "subject"}:
                 raise HTTPException(400, "asserted editor requires site and subject")
-            site, subject = _text(editor["site"], "editor site", 100), _text(editor["subject"], "editor subject", 200)
-            item_id = _text(payload["itemId"], "item id", 200)
-            output, label = _text(payload["output"], "output", 200), _text(payload["label"], "label", 200)
-            comment = _text(payload.get("comment", ""), "comment", 4000, required=False)
+            site, subject = _text(editor["site"], "editor site"), _text(editor["subject"], "editor subject")
+            item_id = _text(payload["itemId"], "item id")
+            output, label = _text(payload["output"], "output"), _text(payload["label"], "label")
+            comment = _text(payload.get("comment", ""), "comment", required=False)
             revision = payload["itemRevision"]
             if type(revision) is not int or revision < 1:
                 raise HTTPException(400, "item revision must be a positive integer")
@@ -238,8 +236,6 @@ def install_machine_routes(app, runtime):
     async def decisions(request: Request):
         role, session, account = resolve_account(request)
         content = await request.body()
-        if len(content) > 65536:
-            raise HTTPException(413, "bounded publication request required")
         try:
             body = json.loads(content)
             payload = body["payload"]
@@ -251,7 +247,7 @@ def install_machine_routes(app, runtime):
                 or not isinstance(payload, dict)
                 or set(payload) != {"bindings", "item"}
                 or not isinstance(payload["bindings"], dict)
-                or not 1 <= len(payload["bindings"]) <= 100
+                or not payload["bindings"]
                 or any(not isinstance(k, str) or not isinstance(v, str) for k, v in payload["bindings"].items())
             ):
                 raise ValueError()

@@ -59,22 +59,22 @@ class EmbeddedStorage(Protocol):
 class SQLiteEmbeddedSnapshots:
     """Native snapshot migration needs SQLite tables, so it is not part of the cross-backend protocol."""
 
-    def export_storage(self, *, max_records=10000, max_bytes=64000000):
+    def export_storage(self):
         from .domain_snapshots import embedded_codec
 
-        return embedded_codec().export(self.db, max_records=max_records, max_bytes=max_bytes)
+        return embedded_codec().export(self.db)
 
-    def restore_storage(self, snapshot, *, max_records=10000, max_bytes=64000000):
+    def restore_storage(self, snapshot):
         from .domain_snapshots import embedded_codec
 
         if snapshot.get("schema") == "cyclotron-embedded-root/v1":
             from copy import deepcopy
 
-            snapshot = deepcopy(embedded_codec(1).validate(snapshot, max_records=max_records, max_bytes=max_bytes))
+            snapshot = deepcopy(embedded_codec(1).validate(snapshot))
             snapshot["schema"] = "cyclotron-embedded-root/v2"
             for row in snapshot["tables"]["learning_queue"]:
                 row["superseded"] = 0
-        return embedded_codec().restore(self.db, snapshot, max_records=max_records, max_bytes=max_bytes)
+        return embedded_codec().restore(self.db, snapshot)
 
 
 class SQLiteEmbeddedStorage(SQLiteEmbeddedSnapshots):

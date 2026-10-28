@@ -83,8 +83,10 @@ def rank_question(classes, options, rows, *, propensities=None):
 
 
 def select_window(training, classes, limit):
+    if limit is None:
+        return tuple(training)
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise ValueError("retrospective limit must be a positive integer")
+        raise ValueError("retrospective limit must be a positive integer, or None for every item")
     selected = list(training[-limit:])
     # Caller supplies chronological order. Walk backward for scarce classes,
     # replacing the oldest surplus-class record without expanding the ceiling.
@@ -104,7 +106,7 @@ def select_window(training, classes, limit):
 
 
 @track_answer_dependencies
-async def measure_questions(wheel, training, questions, *, protected, propensities, limit=200, retry_interrupted=False):
+async def measure_questions(wheel, training, questions, *, protected, propensities, limit=None, retry_interrupted=False):
     wheel._validate_partitions(training, (), protected, propensities)
     window = select_window(training, wheel.initial.task.labels, limit)
     if not window:

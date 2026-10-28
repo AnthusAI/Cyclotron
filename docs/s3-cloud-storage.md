@@ -10,10 +10,10 @@ FileLease/local store, or silently fill a missing repository with native storage
 `S3Journal` publishes immutable transaction records through `S3Payloads`, then
 conditionally advances a small canonical S3 head. Every transaction retains its
 parent reference, revision, unique commit, namespace and immutable initialization
-anchor. There is no DynamoDB read on an authoritative path. Byte, record, commit
-and contention limits are explicit host configuration; evidence is never pruned
-or truncated to fit them. This is a bounded per-run/per-classifier design, not an
-account-wide document or a SQL-emulation service.
+anchor. There is no DynamoDB read on an authoritative path. There is no byte,
+record or commit budget; only the contention retry count is host configuration,
+and evidence is never pruned or truncated. This is a per-run/per-classifier design,
+not an account-wide document or a SQL-emulation service.
 
 `S3BatchStorage` implements the complete shared-request domain: one CAS reserves
 the charged attempt, budget slot, owner and generation; a separate successful CAS
@@ -87,12 +87,11 @@ AWS references: [conditional writes](https://docs.aws.amazon.com/AmazonS3/latest
 ## Concrete tradeoffs and remaining work
 
 Each active run/classifier has one head and therefore serializes its own writes.
-A transaction writes a full bounded immutable domain value, then advances a head;
-this amplifies bytes and S3 operations as history grows. Failed CAS attempts can
-leave safe orphan immutable objects. Reaching explicit limits stops work and
-requires a reviewed continuation/compaction protocol; it never erases history or
-starts a fresh budget. Production sizing, retention, repair tooling and service
-latency need an actual bounded cloud trial. DDB indexing cannot remove this
+A transaction writes a full immutable domain value, then advances a head;
+this amplifies bytes and S3 operations as history grows, which is why history moves
+into write-once record lakes. Failed CAS attempts can leave safe orphan immutable
+objects. Nothing erases history or starts a fresh budget. Production sizing,
+retention, repair tooling and service latency need an actual cloud trial. DDB indexing cannot remove this
 coordination requirement or authorize an operation.
 
 Root/shared/classifier initialization and ownership span multiple S3 objects.
@@ -126,8 +125,8 @@ journal stays, but shrinks to a small control state, and history leaves it.
 **Layout.** `<account>/<workspace>/records/<domain>/<kind>/<sequence, 12 digits>.json`, for example
 `.../records/runtime/events/000000000993.json`. The fixed `records` segment lets the bucket policy
 demand `If-None-Match: *` for the whole prefix, as it already does for `payloads/` and `anchor.json`.
-Each page is a JSON envelope (schema, namespace, sequence, value). It is size-bounded per record
-(`max_record_bytes`, explicit at construction), not per collection. A page whose envelope does not
+Each page is a JSON envelope (schema, namespace, sequence, value). There is no per-record byte budget
+and no limit on how many orphaned sequences a writer skips. A page whose envelope does not
 match its position is corrupt and is refused, so a copied page never passes as another.
 
 **Ordering: sequence numbers covered by the control state, not ULIDs.** The control state holds, per
@@ -229,8 +228,7 @@ checks, journal by journal, that every moved record is byte for byte what it was
 - **What moves.** Runtime events (each runtime journal), raw replies (each shared-batches ledger, current and
   superseded rows) and finished job results (the catalog). Events keep their ids and order: the embedded events
   (ids 1..n) become the lake's first records. Lake events written between the deploy and the conversion are
-  copied after them and their old sequences marked skipped, up to the 64-skip budget; beyond that the journal
-  is reported as a problem and left alone (convert before new events are written). A result whose stored text is
+  copied after them and their old sequences marked skipped, however many there are. A result whose stored text is
   not canonical JSON stays embedded and is listed.
 - **Ownership, as the worker does it.** `--apply` takes the workspace root (which guards the ledger and runtimes
   under it) and each runtime's owner and fence. Anything owned by someone else is skipped and reported `busy`;
@@ -313,10 +311,9 @@ classifier revision and every active definition advancement commit in one S3 CAS
 run inputs and definition pins commit together. Complete v2 native console
 snapshots import/export through pure record validation with no SQLite connection.
 
-The console value is bounded per authorized workspace. This initial adapter
-rewrites its complete bounded record value per transaction, including history.
-It is not a scalable unbounded account database: saturation stops with an error.
-The same explicit head-contention/write-amplification and continuation limitations
+The console value is per authorized workspace. This initial adapter rewrites its
+complete record value per transaction, including history, with no record or byte
+budget; that write amplification, not a cap, is what bounds its practical size. The same explicit head-contention/write-amplification and continuation limitations
 apply. Sharded immutable record manifests are the proposed next scaling step;
 DDB must remain an index and cannot become their activation authority.
 
@@ -366,9 +363,8 @@ The bearer curation routes (`/api/newsroom/curation/priming`, see
 - the view exposes one configured list (`priming.listId` in the trusted publication target)
   and only the binding's classifier revisions; any other list, classifier or draft id is
   refused before a storage read;
-- slice 1 caps one import at about 1 MB. Drafts, accepted items and votes share the account's
-  single catalog journal (4 MiB by default, `max_records` 10000), so a large import can also be
-  refused by the journal budget. Both refusals leave the catalog unchanged (`413`).
+- an import has no size limit of its own. Drafts, accepted items and votes share the account's single
+  catalog journal, which has no record or byte budget.
 
 `accept` is idempotent: repeating the same acceptance returns the accepted draft and inserts
 nothing; a different acceptance of the same draft is refused. The same behaviours run on
@@ -399,8 +395,9 @@ separate canonical S3 batch ledger and absolute paid-call ceiling. Each intentio
 call is a fresh generation, preserving repeated-prompt search behavior. A pending
 or uncertain generation blocks another call with that request fingerprint;
 cancellation or a lost dispatch receipt never authorizes automatic repayment.
-Raw replies/usage/tool calls persist in S3. Transport/model/settings identity,
-request/reply byte budgets and credential redactions are explicit host inputs.
+Raw replies/usage/tool calls persist in S3. Transport/model/settings identity, the
+paid-call ceiling and credential redactions are explicit host inputs; requests and
+replies have no byte budget.
 Provider SDK retries must remain disabled; this wrapper meters invocations and
 cannot detect undisclosed physical retries inside an arbitrary custom callable.
 The existing built-in provider setup already configures its retry policy.

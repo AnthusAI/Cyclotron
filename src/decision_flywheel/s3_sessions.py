@@ -29,7 +29,7 @@ class KMSSessionCipher:
     def __init__(self, client, key_arn, *, application):
         if not re.fullmatch(r"arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]{36}", key_arn):
             raise ValueError("exact KMS key ARN required")
-        if not isinstance(application, str) or not re.fullmatch(r"[a-z0-9-]{1,64}", application):
+        if not isinstance(application, str) or not re.fullmatch(r"[a-z0-9-]+", application):
             raise ValueError("fixed application context required")
         self.client, self.key_arn, self.application = client, key_arn, application
 
@@ -40,8 +40,6 @@ class KMSSessionCipher:
 
     def encrypt(self, kind, reference, content):
         context = self._context(kind, reference)
-        if len(content) > 32768:
-            raise ValueError("session too large")
         result = self.client.generate_data_key(KeyId=self.key_arn, KeySpec="AES_256", EncryptionContext=context)
         if result.get("KeyId") != self.key_arn or len(result["Plaintext"]) != 32:
             raise ValueError("unexpected session encryption key")
@@ -56,55 +54,29 @@ class KMSSessionCipher:
         context = self._context(kind, reference)
         if set(envelope) != {"key", "nonce", "body"}:
             raise ValueError("invalid envelope")
-        values = {
-            key: base64.b64decode(value, validate=True)
-            for key, value in envelope.items()
-            if isinstance(value, str) and len(value) <= 65536
-        }
-        if set(values) != set(envelope) or len(values["nonce"]) != 12 or len(values["key"]) > 6144:
+        values = {key: base64.b64decode(value, validate=True) for key, value in envelope.items() if isinstance(value, str)}
+        if set(values) != set(envelope) or len(values["nonce"]) != 12:
             raise ValueError("invalid envelope")
         result = self.client.decrypt(KeyId=self.key_arn, CiphertextBlob=values["key"], EncryptionContext=context)
         if result.get("KeyId") != self.key_arn or len(result["Plaintext"]) != 32:
             raise ValueError("unexpected session encryption key")
-        content = AESGCM(result["Plaintext"]).decrypt(values["nonce"], values["body"], encode(context))
-        if len(content) > 32768:
-            raise ValueError("session too large")
-        return content
+        return AESGCM(result["Plaintext"]).decrypt(values["nonce"], values["body"], encode(context))
 
 
 class S3OAuthSessions:
-    def __init__(self, verifier, *, journal_for, cipher, clock=time.time, max_age=3600, capacity=5000):
-        if type(capacity) is not int or not 1 <= capacity <= 5000 or not 0 < max_age <= 3600:
-            raise ValueError("bounded session limits required")
+    def __init__(self, verifier, *, journal_for, cipher, clock=time.time, max_age=3600):
+        if not 0 < max_age <= 3600:
+            raise ValueError("a session lifetime of at most one hour is required")
         self.verifier, self._journal, self.cipher = verifier, journal_for, cipher
-        self.clock, self.max_age, self.capacity = clock, max_age, capacity
+        self.clock, self.max_age = clock, max_age
 
     @staticmethod
     def reference(identifier):
-        if not isinstance(identifier, str) or not identifier.isascii() or not 1 <= len(identifier) <= 256:
+        if not isinstance(identifier, str) or not identifier.isascii() or not identifier:
             raise SessionRejected("invalid session reference")
         return digest(identifier)
 
-    def _reserve(self, kind, reference, expiry):
-        quota = self._journal("quota", digest(kind))
-        for _ in range(8):
-            record = quota.initialize({"schema": "oauth-quota/v1", "entries": {}})
-            value = record.value
-            if set(value) != {"schema", "entries"} or value["schema"] != "oauth-quota/v1":
-                raise ValueError("invalid quota")
-            entries = {key: exp for key, exp in value["entries"].items() if exp > self.clock()}
-            if len(entries) >= self.capacity:
-                raise SessionRejected("session capacity reached; try later")
-            entries[reference] = expiry
-            try:
-                quota.commit(record, {"schema": "oauth-quota/v1", "entries": entries})
-                return
-            except JournalConflict:
-                continue
-        raise SessionStoreUnavailable("session store busy")
-
     def _new(self, kind, reference, expiry, payload):
-        self._reserve(kind, reference, expiry)
         value = {
             "schema": "oauth-record/v1",
             "kind": kind,

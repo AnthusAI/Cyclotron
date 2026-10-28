@@ -185,10 +185,8 @@ def test_private_binding_fields_and_reused_mapping_revisions_are_refused(tmp_pat
         )
 
 
-@pytest.mark.parametrize("budget", ["records", "bytes"])
-def test_capacity_failure_does_not_acknowledge_an_unreadable_record(tmp_path, budget):
-    from .publication_records import canonical
-
+def test_records_past_the_old_count_and_byte_budgets_are_kept_and_read_back(tmp_path):
+    # The old ceilings were 1,000 records and 2,000,000 bytes per record and per discovery.
     store, records, source, binding = setup_records(tmp_path)
     prepared = records.prepare(
         PublicationBinding("publication-a", ("intel",), "binding-1"),
@@ -196,12 +194,8 @@ def test_capacity_failure_does_not_acknowledge_an_unreadable_record(tmp_path, bu
         {"sourceRef": source.to_json(), "bindingRef": binding.to_json()},
     )
     first = records.freeze("decision-1", "2026-01-02T00:00:00Z", prepared, prediction=PREDICTION)
-    if budget == "records":
-        records.max_records = 1
-    else:
-        records.max_bytes = len(canonical(store.snapshot_items("publication-records")).encode())
+    large = records.put("fixture", {"text": "x" * 3_000_000}, "2026-01-02T00:00:01Z")
     assert records.freeze("decision-1", "2026-01-02T00:00:00Z", prepared, prediction=PREDICTION) == first
-    with pytest.raises(ValueError, match="budget"):
-        records.put("fixture", {"must": "not be acknowledged"}, "2026-01-02T00:00:01Z")
-    assert len(store.snapshot_items("publication-records")) == 1
+    assert len(store.snapshot_items("publication-records")) == 2 and large.startswith("publication-")
     assert records.context(first["contextId"], "publication-a", "decision-1") == first
+    assert not hasattr(records, "max_records") and not hasattr(records, "max_bytes")

@@ -84,7 +84,7 @@ def evaluation_codec():
 class DomainArchive(CatalogArchive):
     """Reuse fixed-scope immutable records/manifests, with a known native codec."""
 
-    def __init__(self, codec, payloads, scope, *, max_records, max_bytes):
+    def __init__(self, codec, payloads, scope):
         if not isinstance(codec, NativeDomainCodec):
             raise ValueError("known native codec required")
         self.codec = codec
@@ -95,7 +95,7 @@ class DomainArchive(CatalogArchive):
         self.metadata_field = "nativeMetadata"
         self.snapshot_metadata_field = "metadata"
         self.validator = codec.validate
-        super().__init__(payloads, scope, max_records=max_records, max_bytes=max_bytes)
+        super().__init__(payloads, scope)
 
     def _check_metadata(self, value):
         if not isinstance(value, dict) or set(value) != {"sequences"} or not isinstance(value["sequences"], dict):

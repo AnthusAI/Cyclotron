@@ -12,8 +12,8 @@ def encode_priming(examples, tasks, *, redact=()):
         raise ValueError("priming maps known classifier ids to labeled examples")
     output = {}
     for cid, rows in examples.items():
-        if not isinstance(rows, (list, tuple)) or len(rows) > 200:
-            raise ValueError("priming is bounded to 200 examples per classifier")
+        if not isinstance(rows, (list, tuple)):
+            raise ValueError("priming maps each classifier to a list of labeled examples")
         seen = set()
         output[cid] = []
         for row in rows:
@@ -32,8 +32,8 @@ def encode_priming(examples, tasks, *, redact=()):
             seen.add(row.item.id)
             output[cid].append(asdict(row))
     data = encoded(output)
-    if len(data.encode()) > 4_000_000 or any(secret and secret in data for secret in redact):
-        raise ValueError("priming exceeds size limit or contains a credential")
+    if any(secret and secret in data for secret in redact):
+        raise ValueError("priming contains a credential")
     return json.loads(data)
 
 

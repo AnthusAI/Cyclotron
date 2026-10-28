@@ -216,14 +216,12 @@ def test_lost_settlement_acknowledgement_recovers_receipt_without_another_execut
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("budget", ["records", "bytes"])
-def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path, budget):
+def test_receipts_past_the_old_record_and_byte_budgets_still_let_steering_dispatch(tmp_path):
     async def scenario():
         _, records, _, binding_ref = setup_records(tmp_path)
-        if budget == "records":
-            records.max_records = 1
-        else:
-            records.max_bytes = 20_000
+        # More than the old one-record and 20,000-byte ceilings these specs once set.
+        records.put("fixture", {"text": "x" * 30_000}, "2026-01-02T00:00:00Z")
+        records.put("fixture", {"text": "y" * 30_000}, "2026-01-02T00:00:01Z")
 
         class Evaluator:
             output_id = "intel"
@@ -248,8 +246,44 @@ def test_insufficient_receipt_capacity_refuses_steering_before_dispatch(tmp_path
             "explanation": "Human request.",
         }
         gateway = PublicationSteering(records, {"intel": evaluator}, owner_lock=asyncio.Lock(), allow_evaluation=True)
-        with pytest.raises(PublicationError, match="nothing dispatched"):
-            await gateway.command(actor, binding, payload)
-        assert evaluator.calls == 0 and records.records() == []
+        await gateway.command(actor, binding, payload)
+        assert evaluator.calls == 1
+        assert sorted(row["kind"] for row in records.records()) == [
+            "fixture",
+            "fixture",
+            "steering-complete",
+            "steering-pending",
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_a_steering_result_of_two_hundred_kilobytes_is_recorded_whole(tmp_path):
+    async def scenario():
+        _, records, _, binding_ref = setup_records(tmp_path)
+        records.max_bytes = 10_000_000  # the catalog budget is configuration, not a steering limit
+
+        class Evaluator:
+            output_id = "intel"
+            active_fingerprint = "active-1"
+
+            async def execute(self, *args):
+                return {"report": "r" * 200_000}
+
+        binding = PublicationBinding("publication-a", ("intel",), "binding-1")
+        actor = PublicationActor("account-a", "editor-a", frozenset({("publication-a", "steer"), ("publication-a", "read")}))
+        payload = {
+            "bindingRevision": "binding-1",
+            "bindingRef": binding_ref.to_json(),
+            "classifier": "intel",
+            "requestId": "large-result",
+            "expectedFingerprint": "active-1",
+            "action": "evaluate",
+            "proposal": {"rubric": "Draft " + "d" * 100_000},
+            "explanation": "Human request.",
+        }
+        gateway = PublicationSteering(records, {"intel": Evaluator()}, owner_lock=asyncio.Lock(), allow_evaluation=True)
+        receipt = await gateway.command(actor, binding, payload)
+        assert receipt["result"] == {"report": "r" * 200_000}
 
     asyncio.run(scenario())

@@ -16,15 +16,13 @@ from .storage_payloads import FilePayloads
 
 
 class LocalFileJournal(CanonicalJournal):
-    def __init__(self, payloads, domain, name, *, max_bytes, max_commits, create_only_initialization=False):
+    def __init__(self, payloads, domain, name, *, create_only_initialization=False):
         if not isinstance(payloads, FilePayloads):
             raise ValueError("injected scoped file payload adapter required")
         super().__init__(
             payloads,
             domain,
             name,
-            max_bytes=max_bytes,
-            max_commits=max_commits,
             create_only_initialization=create_only_initialization,
         )
         self.boundary = (payloads.scope, str(payloads.root))
@@ -40,10 +38,10 @@ class LocalFileJournal(CanonicalJournal):
     def _read_current(self, key):
         try:
             with open(self._path(key), "rb") as stream:
-                content = stream.read(8193)
+                content = stream.read()
         except FileNotFoundError:
             return None
-        if not 0 < len(content) <= 8192:
+        if not content:
             raise ValueError("invalid coordination object")
         return content
 

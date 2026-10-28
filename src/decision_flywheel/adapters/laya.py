@@ -97,7 +97,6 @@ class LayaAdapter:
         *,
         now=None,
         event_sink=None,
-        max_request_bytes=32000,
         share_supporting_questions=False,
     ):
         """Transport scoped context, without promising in-context effectiveness."""
@@ -108,7 +107,6 @@ class LayaAdapter:
             target,
             training,
             now=now,
-            max_request_bytes=max_request_bytes,
             share_questions=share_supporting_questions,
         )
         questions = {

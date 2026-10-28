@@ -23,7 +23,6 @@ from .trace_artifact import render_trace
 
 
 LOOPBACK_HOSTS = ('127.0.0.1', '::1')
-DEFAULT_MAXIMUM_EVENT_SUBSCRIBERS = 64
 PRIMING_PAYLOAD_KEYS = {
     'file': {'identifier', 'list_id', 'refs', 'kind', 'content'},
     'transform': {'identifier', 'list_id', 'refs', 'transformer_id', 'inputs'},
@@ -58,19 +57,6 @@ def error_message_is_safe_to_expose(error) -> bool:
     except ImportError:
         return False
     return isinstance(original, (AccountAccessDenied, ProspectusUnavailable))
-
-
-class EventSubscriberLimit:
-    def __init__(self, maximum):
-        self.maximum, self.active = maximum, 0
-
-    def acquire(self):
-        if self.active >= self.maximum:
-            raise ValueError('too many live event subscribers; try again later')
-        self.active += 1
-
-    def release(self):
-        self.active -= 1
 
 
 @strawberry.type
@@ -418,17 +404,12 @@ class Subscription:
     @strawberry.subscription
     async def run_events(self, info: strawberry.Info, run_id: strawberry.ID, after: int = 0) -> AsyncGenerator[TraceEvent, None]:
         cursor = after
-        subscribers = info.context['event_subscribers']
-        subscribers.acquire()
-        try:
-            while True:
-                rows = await call(info, 'events', str(run_id), after=cursor)
-                for row in rows:
-                    cursor = row['sequence']
-                    yield event_type(row)
-                await asyncio.sleep(.2)
-        finally:
-            subscribers.release()
+        while True:
+            rows = await call(info, 'events', str(run_id), after=cursor)
+            for row in rows:
+                cursor = row['sequence']
+                yield event_type(row)
+            await asyncio.sleep(.2)
 
 
 def agreed_live_authority(*services):
@@ -472,7 +453,7 @@ schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscrip
 
 
 def create_app(store, *, service=None, token=None, redact=(), allow_unauthenticated_lan=False, account_access=None, priming=None, held_out=None, public_origin=None, event_transport="websocket",
-               trusted_loopback_hosts=None, maximum_event_subscribers=DEFAULT_MAXIMUM_EVENT_SUBSCRIBERS):
+               trusted_loopback_hosts=None):
     if event_transport not in ("websocket","poll"):raise ValueError("explicit supported event transport required")
     if account_access and priming is not None:
         raise ValueError('hosted account access cannot use a global priming service')
@@ -480,7 +461,6 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
         raise ValueError('hosted account access cannot use a global held-out service')
     shared_live_authority = agreed_live_authority(service, held_out, priming)
     loopback_hosts = tuple(LOOPBACK_HOSTS if trusted_loopback_hosts is None else trusted_loopback_hosts)
-    event_subscribers = EventSubscriberLimit(maximum_event_subscribers)
     def held_out_service():
         if held_out is None:
             raise ValueError('held-out reports are not configured for this workspace')
@@ -582,8 +562,7 @@ def create_app(store, *, service=None, token=None, redact=(), allow_unauthentica
             raise HTTPException(403, 'access refused')
         return {'store':None if account_access else store,'service':service,'redact':redact,
             'account_access':account_access,'connection':connection,'priming_service':priming_service,
-            'held_out_service':held_out_service,'allow_live':shared_live_authority,
-            'event_subscribers':event_subscribers}
+            'held_out_service':held_out_service,'allow_live':shared_live_authority}
 
     app.include_router(GraphQLRouter(schema, context_getter=context, graphql_ide=None,
         allow_queries_via_get=False, subscription_protocols=('graphql-transport-ws',)), prefix='/graphql')

@@ -557,12 +557,12 @@ def test_the_optimizer_digest_carries_forward_records_and_only_revealed_stories(
     run(drive(wheel, 0, 50, unlabeled=frozenset({sid(7), sid(8)})))
     digest = ShadowEvaluator(wheel).optimizer_digest()
     rows = digest["hypothesis_ledger"]
-    assert rows and len(rows) <= 10
+    assert rows
     for row in rows:
         assert {"items_tested", "accuracy", "fixed_count", "broke_count", "last_verdict", "shadow_status"} <= set(row)
-        assert len(row["fixed"]) <= 5 and len(row["broke"]) <= 5
+        assert len(row["fixed"]) == row["fixed_count"] and len(row["broke"]) == row["broke_count"]
         assert not {sid(7), sid(8)} & set(row["fixed"] + row["broke"])
-    assert all(s not in (sid(7), sid(8)) for s in digest["stubborn_items"]) and len(digest["stubborn_items"]) <= 20
+    assert all(s not in (sid(7), sid(8)) for s in digest["stubborn_items"])
     from .idea_screening import optimizer_context
 
     context = optimizer_context(wheel, HypothesisLedger(wheel.db), list(ControlScheduler(wheel).ideas()), set())
