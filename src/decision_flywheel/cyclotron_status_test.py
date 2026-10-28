@@ -383,3 +383,55 @@ def test_a_saved_status_fold_gives_the_same_snapshot_as_folding_every_event():
         resumed.feed(event)
     assert resumed.status(positive_label=LABELS[0], **fixed) == whole.status(positive_label=LABELS[0], **fixed)
     assert build(events, now=now) == whole.status(positive_label=LABELS[0], **fixed)
+
+
+FIXED = dict(cyclotron_id="papyrus-relevance", classifier="relevant", fingerprint="v-one", positive_label=LABELS[0])
+
+
+def test_a_fold_saved_whole_before_rows_existed_resumes_with_the_same_snapshot():
+    from datetime import datetime, timezone
+
+    from .cyclotron_status import StatusFold, VersionTracker
+
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    a, b = prediction("a", "include", 0.9), prediction("b", "exclude", 0.2)
+    events = [a, b, review("a", "exclude", feedback_id="fa")]
+    later = [review("b", "exclude", feedback_id="fb"), review("b", "exclude", feedback_id="fb", action="retracted")]
+    saved = {  # what the earlier fold saved after ``events``
+        "labels": list(LABELS),
+        "versions": VersionTracker().to_json(),
+        "shown": {"a": ["include", a["probabilities"]], "b": ["exclude", b["probabilities"]]},
+        "reviews": {"a": ["exclude", "include", a["probabilities"], "fa"]},
+        "order": ["a"],
+        "awaiting": ["b"],
+        "latest_review": {"a": "fa"},
+        "stale_since": "2026-10-09T11:00:00+00:00",
+    }
+    resumed = StatusFold.from_json(saved)
+    for event in later:
+        resumed.feed(event)
+    assert resumed.status(now=now, **FIXED) == build(events + later, now=now)
+
+
+def test_a_fold_kept_in_keyed_rows_with_only_its_window_recalls_an_older_review_when_one_is_retracted():
+    from datetime import datetime, timezone
+
+    from .cyclotron_status import FoldRows, StatusFold
+
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    store = {}
+    events = []
+    for n in range(8):
+        events += [prediction(f"i{n}", "include", 0.9), review(f"i{n}", LABELS[n % 2], feedback_id=f"f{n}")]
+    first = StatusFold(LABELS, rows=FoldRows(store.get))
+    for event in events:
+        first.feed(event)
+    first.status(window=3, now=now, **FIXED)
+    store.update(first.rows.changes())
+    summary, versions, recent = first.summary(), first.versions.to_json(), first.recent[-3:]  # what is saved
+    resumed = StatusFold.restore(summary, versions, recent, FoldRows(store.get))
+    later = [review("i7", "include", feedback_id="f7", action="retracted"), review("i6", "exclude", feedback_id="f6b")]
+    for event in later:
+        resumed.feed(event)
+    assert resumed.status(window=3, now=now, **FIXED) == build(events + later, window=3, now=now)
+    assert resumed.status(window=6, now=now, **FIXED) == build(events + later, window=6, now=now)
