@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from .batch_storage import StorageScope
+from .batch_storage import SQLiteBatchStorage, StorageScope
 from .journal import encode
 from .record_lake import MemoryRecordLake, coverage_in
 from .record_lake_contract_test import ListingS3
@@ -105,8 +105,8 @@ class World:
         self.run_id = run["id"]
         for n in range(jobs):
             self.finish_job(catalog, f"r{n}", {"response": {"label": "yes", "n": n, "pad": "x" * 300}, "finished": False})
-        ledger = self.ledger()
-        ledger.initialize()
+        # The ledger in its old whole-state layout with replies embedded, as today's code no longer writes it.
+        ledger = SQLiteBatchStorage(":memory:")
         self.fingerprints = []
         for n in range(replies):
             fp, owner = f"{n:064x}", str(uuid4())
@@ -115,6 +115,8 @@ class World:
             ledger.settle(fp, owner, "complete", json.dumps({"reply": n, "text": "雪" + "x" * 500}))
             self.fingerprints.append(fp)
         ledger.reserve(self.fingerprints[0], 100, str(uuid4()), policy="refresh")  # a history row too
+        self.account.journal("shared-batches", self.ledger_name).initialize(ledger.export())
+        ledger.close()
         runtime = self.runtime()
         runtime.initialize()
         runtime.acquire(str(uuid4()))

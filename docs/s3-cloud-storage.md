@@ -290,6 +290,34 @@ own batch ledger is not wired to a lake yet.
 23,930 bytes (reply embedded) to about 343 bytes (reference, attempt row, coverage), and no longer depends
 on the reply size.
 
+### Constant-cost shared-batch ledger (`cyclotron-shared-batches/v2`)
+
+The reference rows above still grew with every request, and every commit rewrote all of them. In the v2
+layout what one decision writes to the ledger does not depend on how many came before it.
+
+- **Head:** two counters (`attempts`, `superseded`), the generations still in flight (`held`: pending
+  requests, and a settled one only while its record could not be written) and lake coverage. A finished
+  request leaves the head.
+- **Batch records:** each finished generation is one create-only record found by key,
+  `records/shared-batches/batches-<ledger>/batch-<fingerprint>-<generation>.json`. A cache hit or an
+  idempotent retry is a GET by key; a reader walks only that one request's own generations.
+- **Owner hints:** `owner-<owner>.json` names an operation's request, verified against that request's
+  generations, so reusing an owner for another request is still refused.
+- **Attempts:** one record per attempt in the `attempts-<ledger>` lake (ordered, covered by the head), so
+  `export()` reads every attempt by GET without list permission.
+- **Two commits per paid request:** `reserve(..., claim=True)` reserves and claims in one commit and
+  `claim` then confirms without a write; `settle` is the second. Plain `reserve` then `claim` still works.
+- **Missing keys without ListBucket:** S3 answers AccessDenied for a key nobody wrote. A handle treats that
+  as "absent" only after it has created and read back a `readable.json` sentinel in the same prefix, so a
+  real permission failure fails closed (no reservation, no dispatch).
+- **Old ledgers:** a v1 ledger reads exactly as before and is migrated by its first write, in one commit:
+  every attempt, owner hint and finished generation is written as a record (repeats are harmless), then the
+  head becomes v2. `export()` keeps the v1 snapshot shape, so SQLite and S3 still compare equal.
+
+Measured with the hosted probe (one combined decision, local fakes): ledger state commits went from 3 per
+decision at 22,750 bytes (decision 20) and 63,436 bytes (decision 60) to 2 per decision at about 1,560 bytes
+at both.
+
 ## Verification at the initial S3 SDK checkpoint
 
 107 focused cloud SDK/native SDK/guard/learning-window/priming tests pass. The
