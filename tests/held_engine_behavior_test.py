@@ -99,9 +99,7 @@ def fence_out(store, run_id, how, worker):
 
 
 @pytest.mark.parametrize("how", ["reconciled", "revoked"])
-def test_a_fenced_out_job_releases_the_held_engine_before_any_model_call_and_the_next_job_opens_fresh(
-    identity, monkeypatch, how
-):
+def test_a_fenced_out_job_releases_the_held_engine_before_any_model_call_and_the_next_job_opens_fresh(identity, monkeypatch, how):
     (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
     run_id = targets[0].run_id
     counts = ownership_counts(monkeypatch)

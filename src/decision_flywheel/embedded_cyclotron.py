@@ -40,7 +40,6 @@ from uuid import uuid4
 
 from .calibration_history import REVIEW_BINDING_EVENT_KINDS, reviewed_prediction_bindings
 from .classifier_config import ClassifierConfig
-from .concurrent_calls import call_serially
 from .classifier_set import (
     ADDED,
     CLASSIFIER_SET_CHANGES_KEY,
@@ -53,6 +52,7 @@ from .classifier_set import (
     stale_definition_error,
     stored_classifier_set_changes,
 )
+from .concurrent_calls import call_serially
 from .cyclotron_status import (
     CyclotronOverview,
     CyclotronStatus,

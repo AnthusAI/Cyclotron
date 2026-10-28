@@ -15,7 +15,9 @@ from decision_flywheel.s3_runtime_storage import RuntimeOwnershipError
 OUTPUTS = ("gamma", "alpha", "beta")
 DEFINITION = CyclotronDefinition(
     "parallel-outputs",
-    tuple(ClassifierSpec(name, ("include", "exclude"), f"Does this belong in {name}?", positive_label="include") for name in OUTPUTS),
+    tuple(
+        ClassifierSpec(name, ("include", "exclude"), f"Does this belong in {name}?", positive_label="include") for name in OUTPUTS
+    ),
     seed="parallel-seed",
 )
 
