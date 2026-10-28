@@ -134,7 +134,12 @@ class KeyedDocuments:
                 etag = self._create(path, content) if document is None else self._replace(path, content, document.etag)
                 return Document(etag, entries)
             except KeyedConflict:
+                refused = document
                 document = self.load(kind, key)
+                # A refusal is worth a retry only if the document really moved; otherwise storage disagrees with
+                # itself and every retry would be refused the same way.
+                if (document is None) if refused is None else (document is not None and document.etag == refused.etag):
+                    raise KeyedUnavailable("conditional write refused but the document did not change") from None
 
 
 class S3KeyedDocuments(KeyedDocuments):
