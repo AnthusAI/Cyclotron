@@ -278,7 +278,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/6710747c8c7ce81a146f13192de4b60b8091125c2733192b2619255d13150b0a"
+          "S3Key": "cyclotron-console/backend/dea0678dce114efc5a5128faa295c8b64b0fc225389b5977c94e8ac160a36b87"
         },
         "Environment": {
           "Variables": {
@@ -966,7 +966,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/6710747c8c7ce81a146f13192de4b60b8091125c2733192b2619255d13150b0a"
+          "S3Key": "cyclotron-console/backend/dea0678dce114efc5a5128faa295c8b64b0fc225389b5977c94e8ac160a36b87"
         },
         "Environment": {
           "Variables": {
@@ -1067,7 +1067,7 @@
             }
           }
         ],
-        "Timeout": 180
+        "Timeout": 900
       },
       "Type": "AWS::Lambda::Function"
     },

@@ -8,7 +8,12 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: the worker timeout at Lambda's maximum.** `/Resources/WorkerFunction/Properties/Timeout`
+**Pending: 3008 MB for both functions.** `/Resources/BffFunction/Properties/MemorySize` and
+`/Resources/WorkerFunction/Properties/MemorySize` are removed, then added back as 3008 in place of 1024.
+Lambda allots CPU in proportion to memory. At 1024 MB, an uncached catalog read took a median of 6.2 s,
+against 0.87 s for the same read on a laptop, and a decision job does many such reads.
+
+Previously: the worker timeout at Lambda's maximum (900 s) was deployed on 2026-10-28 with change sets `timeout-6f1493b` and `validate-9d44290`; the snapshot was refreshed. Before that:  `/Resources/WorkerFunction/Properties/Timeout`
 is removed, then added back as 900 (Lambda's own maximum) in place of 180. On 2026-10-28 at 03:51Z a
 worker invocation that drained two jobs was cut off mid-job by the 180 s timeout. The job kept its
 running claim, and 107 jobs waited behind it until an operator reconciled it. The command queue's
