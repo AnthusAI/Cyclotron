@@ -3,12 +3,21 @@
   "operations": [
     {
       "op": "remove",
-      "path": "/Resources/WorkerFunction/Properties/Timeout"
+      "path": "/Resources/BffFunction/Properties/MemorySize"
     },
     {
       "op": "add",
-      "path": "/Resources/WorkerFunction/Properties/Timeout",
-      "value": 900
+      "path": "/Resources/BffFunction/Properties/MemorySize",
+      "value": 3008
+    },
+    {
+      "op": "remove",
+      "path": "/Resources/WorkerFunction/Properties/MemorySize"
+    },
+    {
+      "op": "add",
+      "path": "/Resources/WorkerFunction/Properties/MemorySize",
+      "value": 3008
     }
   ]
 }
