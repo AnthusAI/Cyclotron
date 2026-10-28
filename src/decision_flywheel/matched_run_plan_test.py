@@ -134,7 +134,9 @@ def test_checkpoints_without_a_recorded_event_boundary_cannot_be_guessed():
 def shared_targets(count):
     before, after = source("before"), source("after")
     for endpoint in (before, after):
-        endpoint["items"] = [{"id": str(i), "revision": 1, "fingerprint": str(i), "values": {"text": str(i)}} for i in range(count)]
+        endpoint["items"] = [
+            {"id": str(i), "revision": 1, "fingerprint": str(i), "values": {"text": str(i)}} for i in range(count)
+        ]
         endpoint["events"] = [
             {
                 "sequence": i + 1,

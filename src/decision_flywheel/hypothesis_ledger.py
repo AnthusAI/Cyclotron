@@ -367,9 +367,7 @@ class HypothesisLedger:
                     rec["choices"].append(choice)
         return out
 
-    def error_records(
-        self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None
-    ):
+    def error_records(self, *, stubborn_min_ideas=3, incumbent_id=None, exclude_items=frozenset(), context_version=None):
         """Stories to aim at: first those every tried idea gets wrong (stubborn), then the incumbent's newest errors.
         Each row is {item_id, label, choice, kind}; ``choice`` is the wrong answer given."""
         rows, seen = [], set()

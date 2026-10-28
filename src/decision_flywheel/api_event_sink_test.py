@@ -61,8 +61,7 @@ def test_a_trace_sink_delivers_500_buffered_events_in_one_ordered_request():
         "run",
         batch_size=500,
         transport=lambda body: (
-            calls.append(body)
-            or {"data": {"ingestEvents": [{"sequence": n} for n in range(len(body["variables"]["events"]))]}}
+            calls.append(body) or {"data": {"ingestEvents": [{"sequence": n} for n in range(len(body["variables"]["events"]))]}}
         ),
     )
     for n in range(500):

@@ -18,9 +18,7 @@ from .s3_batch_storage import S3BatchStorage
 
 
 class S3OptimizerTransport:
-    def __init__(
-        self, transport, storage, *, identity, max_calls, redact=(), execution_guard=None
-    ):
+    def __init__(self, transport, storage, *, identity, max_calls, redact=(), execution_guard=None):
         if not isinstance(storage, S3BatchStorage):
             raise ValueError("canonical S3 optimizer budget required")
         if (

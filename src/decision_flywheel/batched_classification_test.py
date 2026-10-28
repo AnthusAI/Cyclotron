@@ -3,8 +3,6 @@
 import asyncio
 from types import SimpleNamespace
 
-import pytest
-
 from .adapters.jev import JevAdapter
 from .classifier_config import ClassifierConfig
 from .models import DecisionTask, Item, LabeledItem

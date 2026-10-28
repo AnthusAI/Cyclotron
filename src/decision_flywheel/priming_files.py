@@ -14,6 +14,7 @@ from .models import DecisionTask, Item
 
 XLSX_LAST_ROW = 1_048_576  # the spreadsheet format's own last row, not a Cyclotron limit
 
+
 def checked_schema(schema):
     if not isinstance(schema, dict) or schema.get("type") != "object":
         raise ValueError("item values schema must describe an object")
