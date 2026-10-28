@@ -131,10 +131,10 @@ def test_checkpoints_without_a_recorded_event_boundary_cannot_be_guessed():
         plan_matched_runs(before, after)
 
 
-def test_comparison_caps_the_shared_target_set_at_two_hundred():
+def shared_targets(count):
     before, after = source("before"), source("after")
     for endpoint in (before, after):
-        endpoint["items"] = [{"id": str(i), "revision": 1, "fingerprint": str(i), "values": {"text": str(i)}} for i in range(240)]
+        endpoint["items"] = [{"id": str(i), "revision": 1, "fingerprint": str(i), "values": {"text": str(i)}} for i in range(count)]
         endpoint["events"] = [
             {
                 "sequence": i + 1,
@@ -146,7 +146,16 @@ def test_comparison_caps_the_shared_target_set_at_two_hundred():
                     "feedback": {"item_id": str(i), "final_answer_value": "yes" if i % 2 else "no"},
                 },
             }
-            for i in range(240)
+            for i in range(count)
         ]
-    plan = plan_matched_runs(before, after)
+    return before, after
+
+
+def test_the_default_comparison_window_takes_two_hundred_shared_targets():
+    plan = plan_matched_runs(*shared_targets(240))
     assert plan["sample_count"] == 200 and plan["class_counts"]["topic"] == {"yes": 100, "no": 100}
+
+
+def test_a_comparison_window_of_500_takes_all_500_shared_targets():
+    plan = plan_matched_runs(*shared_targets(500), limit=500)
+    assert plan["sample_count"] == 500 and plan["class_counts"]["topic"] == {"yes": 250, "no": 250}

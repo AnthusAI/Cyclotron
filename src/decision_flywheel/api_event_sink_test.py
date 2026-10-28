@@ -52,3 +52,20 @@ def test_buffered_sink_preserves_event_order_and_uses_one_bounded_ingestion_requ
     assert len(calls) == 1
     assert [row["sourceId"] for row in calls[0]["variables"]["events"]] == ["first", "second", "third"]
     assert [row["payload"]["source"] for row in calls[0]["variables"]["events"]] == ["first", "second", "third"]
+
+
+def test_a_trace_sink_delivers_500_buffered_events_in_one_ordered_request():
+    calls = []
+    sink = GraphQLTraceSink(
+        "unused",
+        "run",
+        batch_size=500,
+        transport=lambda body: (
+            calls.append(body)
+            or {"data": {"ingestEvents": [{"sequence": n} for n in range(len(body["variables"]["events"]))]}}
+        ),
+    )
+    for n in range(500):
+        sink.ingest(f"engine:{n}", {"kind": "cycle-metrics", "n": n})
+    assert len(calls) == 1
+    assert [row["payload"]["n"] for row in calls[0]["variables"]["events"]] == list(range(500))

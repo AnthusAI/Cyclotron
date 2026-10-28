@@ -347,3 +347,13 @@ def test_retracting_for_an_unknown_classifier_is_refused_and_records_nothing(tmp
                 engine.retract_priming_examples({"relevant": ["synthetic-prime"], "unknown": ["x"]}, retracted_by="editor-1")
             )
         assert engine.priming_retractions() == [] and engine.status().primed_examples == 1
+
+
+def test_priming_encodes_all_500_examples_of_a_classifier():
+    from .models import DecisionTask
+    from .priming_context import decode_priming, encode_priming
+
+    task = DecisionTask("relevant", ("include", "exclude"), "Include it?")
+    rows = [LabeledItem(Item(f"prime-{n}", {"text": f"Synthetic reference {n}"}), "include") for n in range(500)]
+    encoded = encode_priming({"relevant": rows}, {"relevant": task})
+    assert [row.item.id for row in decode_priming(encoded)["relevant"]] == [f"prime-{n}" for n in range(500)]

@@ -7,8 +7,8 @@ from .rolling_metrics import recent_reviewed_metrics
 
 
 def compare_outputs(classes, records, *, limit=200, scope="reviewed-pre-vote"):
-    if type(limit) is not int or not 1 <= limit <= 200:
-        raise ValueError("comparison window must be between one and 200")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("comparison window must be a positive integer")
     if scope not in ("reviewed-pre-vote", "protected-matched", "replay-oracle"):
         raise ValueError("unknown output comparison scope")
     classes = tuple(classes)

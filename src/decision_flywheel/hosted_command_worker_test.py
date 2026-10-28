@@ -155,3 +155,18 @@ def test_unknown_claim_receipt_cannot_be_recovered_by_redelivery():
     with pytest.raises(CommandReconciliationRequired):
         asyncio.run(worker.process(message))
     assert model.calls == 0
+
+
+def test_a_command_event_sink_holds_500_events_and_appends_them_as_one_batch():
+    from .hosted_command_worker import CommandEventSink
+
+    appended = []
+
+    class View:
+        def append_batch(self, run_id, rows):
+            appended.append((run_id, rows))
+
+    sink = CommandEventSink(View(), "run", lambda: None, batch_size=500)
+    for n in range(500):
+        sink.ingest(f"engine:{n}", {"n": n})
+    assert len(appended) == 1 and [event["n"] for _, event in appended[0][1]] == list(range(500))

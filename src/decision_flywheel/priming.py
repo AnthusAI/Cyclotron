@@ -14,7 +14,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from .catalog_storage import encoded
-from .priming_files import MAX_BYTES, checked_schema, read_rows, template, validate_rows
+from .priming_files import checked_schema, read_rows, template, validate_rows
 
 
 def fingerprint(value):
@@ -70,8 +70,6 @@ class PrimingService:
 
     def safe(self, value):
         data = encoded(value)
-        if len(data.encode()) > MAX_BYTES * 2:
-            raise ValueError("import exceeds size limit")
         if any(secret and secret in data for secret in self.redact):
             raise ValueError("import contains a credential")
         return json.loads(data)
@@ -79,7 +77,7 @@ class PrimingService:
     def contract(self, list_id, refs):
         if list_id not in {row["id"] for row in self.store.item_lists()}:
             raise ValueError("unknown item list")
-        if not isinstance(refs, list) or not refs or len(refs) > 20 or len({row["id"] for row in refs}) != len(refs):
+        if not isinstance(refs, list) or not refs or len({row["id"] for row in refs}) != len(refs):
             raise ValueError("choose distinct classifier revisions")
         classifiers = [self.store.classifier(row["id"], row["revision"]) for row in refs]
         schema = self.schemas.get(list_id)
@@ -124,7 +122,7 @@ class PrimingService:
             return self._read(db, identifier)
 
     def _begin(self, identifier, contract, source):
-        if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 200:
+        if not isinstance(identifier, str) or not identifier.strip():
             raise ValueError("bounded draft identity required")
         signature = fingerprint({"contract": contract, "source": source})
         with self.storage.transaction() as db:
@@ -201,8 +199,6 @@ class PrimingService:
             content = bytearray()
             for chunk in response.iter_bytes():
                 content.extend(chunk)
-                if len(content) > MAX_BYTES:
-                    raise ValueError("transformer response exceeds size limit")
         return self.safe(json.loads(content))
 
     def _inputs(self, fields, inputs):
@@ -249,13 +245,13 @@ class PrimingService:
         with self.storage.transaction() as db:
             current = self._read(db, draft["id"])
             job = result.get("job_id")
-            if current["status"] == "cancelled" and not current["job_id"] and isinstance(job, str) and 0 < len(job) <= 200:
+            if current["status"] == "cancelled" and not current["job_id"] and isinstance(job, str) and job:
                 current.update(job_id=job, remote_cancel="pending")
                 self._write(db, current)
             if current["status"] in ("cancelled", "accepted") or current["version"] != draft["version"]:
                 return current
             if job is not None:
-                if not isinstance(job, str) or not job or len(job) > 200:
+                if not isinstance(job, str) or not job:
                     raise ValueError("invalid transformer job identity")
                 if current["job_id"] and current["job_id"] != job:
                     raise ValueError("transformer changed job identity")
@@ -315,7 +311,7 @@ class PrimingService:
                 if draft["version"] != version or draft["status"] not in ("preview", "clarification", "invalid", "failed"):
                     raise ValueError("stale or closed preview")
                 self._inputs(fields, inputs if draft["status"] == "clarification" else {**draft["source"]["inputs"], **inputs})
-                if not request_id or len(request_id) > 200:
+                if not request_id:
                     raise ValueError("bounded feedback identity required")
                 draft["actions"][request_id] = action
                 draft["feedback"].append(action)
@@ -404,8 +400,6 @@ class PrimingService:
                     },
                 }
                 data = encoded(self.safe(item))
-                if len(data.encode()) > MAX_BYTES:
-                    raise ValueError("item exceeds size limit")
                 db.insert_item((contract["list_id"], item["id"], 1, item["occurred_at"], fingerprint(item), data, now))
                 for classifier in classifiers:
                     cid = classifier["id"]

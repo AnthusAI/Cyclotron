@@ -91,8 +91,8 @@ async def measure_example_swaps(
     wheel._validate_partitions(training, development, protected, propensities)
     wheel.reconcile_feedback(training, development=development)
     wheel.reconcile_model_context(training)
-    if type(limit) is not int or not 1 <= limit <= 200:
-        raise ValueError("matched evaluation sample limit must be between 1 and 200")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("matched evaluation sample limit must be a positive integer")
     baseline = wheel.active
     swaps = plan_swaps(baseline.config, training, preferred_ids=preferred_ids, max_trials=max_trials)
     rows = wheel.evaluation_policy.select(development, baseline.config.task.labels)[:limit]
