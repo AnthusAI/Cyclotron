@@ -200,11 +200,12 @@ owner, the fence, the paid-answer rows and a two-number coverage for the pages.
 item's status row, and each of a decision's five commits rewrote all of it. Now the head carries only counters,
 the reservations still pending and references, and a decision commits once while it decides.
 
-- **Keyed tries** (`keyed_trie.py`). Settled answers (`answers`), the answer history (`answer-history`), each
-  item's unfinished cycles (`cycles`) and the status fold's rows (`status`) are hash tries of content-addressed
-  nodes (16 entries at most). The head names each root. Changing a key rewrites the nodes on its path, about
-  log16 of the keys; a lookup reads the same path. Absence is proved by the trie, so nothing GETs an object that
-  might not exist (the Lambda roles have no `ListBucket`, which would make a missing key look forbidden).
+- **One document per key** (`keyed_records.py`, shared with the workspace). Settled answers (`answers`), the
+  answer history (`answer-history`), each item's unfinished cycles (`cycles`) and the status fold's rows
+  (`status`) are `<runtime coordination prefix>/keys/<kind>/<sha256(key)>.json`, found with one GET and written
+  with an ETag-conditional PUT. An entry is stamped with the sequence of the commit's chunk record and counts only
+  once the head covers it. `NoSuchKey` means absent (the roles hold `s3:ListBucket`); any other failure, AccessDenied
+  included, fails closed. A commit that changes keys but publishes no events still writes a (empty) chunk.
 - **Values by reference.** Every other domain (rounds, learning artifacts, evaluations, ...) and every state value
   is one content-addressed payload, rewritten only when it changes. The cycle high-water mark stays inline.
 - **One event record per commit.** A commit's events are one chunk record `{"first": id, "events": [...]}`. The
@@ -216,7 +217,7 @@ the reservations still pending and references, and a decision commits once while
   is the one they were made on (one head GET) and poisons the handle if it moved. A crash before the release
   leaves the reservation pending, which needs explicit retry, exactly as a crash during the call does.
 - **Old heads.** A `v1` head reads as it is and converts on its first write (usually the acquire): completed answers,
-  history and the cycle index move into their tries; earlier event records stay where they are. The status fold
+  history and the cycle index move into keyed documents; earlier event records stay where they are. The status fold
   saved whole moves into rows on the next status step. Old code refuses a `v2` head, so do not roll back past it.
 
 **First caller: catalog job results (S2c).** `S3ConsoleStorage(journal, results=lake)` writes each finished

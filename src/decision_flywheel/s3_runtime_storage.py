@@ -9,14 +9,15 @@ not depend on how many came before it:
 
 - The head keeps the owner and fence, counters, the answer reservations still pending, the events lake
   coverage, and a reference for everything else.
-- Answers, answer history, each item's unfinished cycles and other per-key state live in keyed tries
-  (``keyed_trie.py``): content-addressed nodes, of which a change rewrites only the path to its key.
+- Answers, answer history, each item's unfinished cycles and other per-key state are one keyed document per
+  key (``keyed_records.py``), found with one GET. An entry counts only once the head covers the commit's
+  chunk record, so a commit whose head never moved leaves nothing visible.
 - Every other domain and every state value is one content-addressed payload, rewritten only when it
   changes. A commit that leaves it alone carries its reference.
 - The events a commit publishes are ONE lake record (a chunk) holding them in order, not one per event.
 
 A ``v1`` head (the whole runtime inline, one lake record per event) is read as it is and converted on its
-first write: its rows move into the tries and its earlier event records stay where they are, ahead of the
+first write: its rows move into keyed documents and its earlier event records stay where they are, ahead of the
 chunks, with the same ids.
 """
 
@@ -26,6 +27,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
+from hashlib import sha256
 
 from .active_labels import (
     ACTIVE_LABELS_STATE_KEY,
@@ -37,7 +39,7 @@ from .active_labels import (
 )
 from .cycles import CYCLE_EVENT_KINDS, note_cycle_event, unfinished_cycles_from
 from .journal import CanonicalJournal, Journal, commit_with_contract, decode, encode, uuid
-from .keyed_trie import KeyedTrie, ref_of
+from .keyed_records import keyed_documents_for, resolve
 from .learning_storage import ARTIFACTS, artifact_table
 from .record_lake import (
     RECORDS_KEY,
@@ -75,7 +77,7 @@ EVENTS_DOMAIN = "runtime"
 # The highest cycle number seen, kept in the small control state so numbering a cycle never scans history.
 CYCLE_MARK_KEY = "cycle-number-high-water"
 # Where a v1 head kept every item's unfinished cycles: {item_id: [[cycle_id, cycle_number, reason, failed], ...]}.
-# v2 keeps each item's rows in the ``cycles`` trie instead.
+# v2 keeps each item's rows in its own ``cycles`` keyed document instead.
 CYCLE_INDEX_KEY = "unfinished-cycles"
 PAGE = 100  # records fetched together; one page is also the most a reader holds beyond what it was asked for
 READ_WORKERS = 8
@@ -85,8 +87,8 @@ SCHEMA_V1 = "cyclotron-s3-runtime/v1"
 SCHEMA = "cyclotron-s3-runtime/v2"
 ANSWERS, HISTORY, CYCLES = "answers", "answer-history", "cycles"
 RESERVED_MAPS = (ANSWERS, HISTORY, CYCLES)
-# Domains held in the head itself: the pending answer reservations (completed answers live in a trie), the
-# events embedded by the oldest format, and the answer history a v1 head held (v2 keeps it in a trie).
+# Domains held in the head itself: the pending answer reservations (settled answers are keyed documents), the
+# events embedded by the oldest format, and the answer history a v1 head held (v2 keeps it by key).
 INLINE_DOMAINS = ("answers", "events", "answer_history")
 REF_DOMAINS = tuple(k for k in (*DICT_FIELDS, *LIST_FIELDS, "artifacts") if k not in (*INLINE_DOMAINS, "state"))
 INLINE_STATE = (CYCLE_MARK_KEY,)  # the storage's own one-number summary stays in the head
@@ -106,6 +108,11 @@ def runtime_events_lake(journal):
     if isinstance(payloads, FilePayloads):
         return FileRecordLake(payloads, EVENTS_DOMAIN, kind)
     raise ValueError("an S3 or file payload adapter is required for the runtime events lake")
+
+
+def ref_of(content):
+    """``[digest, length]`` of content-addressed bytes, the form a head stores."""
+    return [sha256(content).hexdigest(), len(content)]
 
 
 def _empty_data():
@@ -172,7 +179,10 @@ class S3RuntimeStores:
         self._held = []  # events appended but not yet published, oldest first (coalescing only)
         self._staged = None  # the events the commit being built will write
         self.journal = journal
-        self.trie = KeyedTrie(journal.payloads)
+        # One document per key beside the journal. Its entries count only under the head's lake coverage, so
+        # keyed state needs the events lake; a handle without one keeps keyed state inline in the head.
+        self.keyed_documents = keyed_documents_for(journal) if events_lake is not None else None
+        self._documents = {}  # (kind, key) -> Document or None, as last read or written by this handle
         self._blobs = {}  # digest -> bytes of content-addressed values read or written; they never change
         self._seen = None  # the last head read, so an unchanged head is not decoded again
         self.max_conflicts = max_conflicts
@@ -253,16 +263,18 @@ class S3RuntimeStores:
         if any(not isinstance(v, str) and not _is_ref(v) for v in value["data"]["state"].values()):
             raise ValueError("invalid runtime state")
         if value["data"]["answer_history"] or any(r[0] != "pending" for r in value["data"]["answers"].values()):
-            raise ValueError("completed answers and answer history live in their tries")
-        if not isinstance(maps, dict) or any(not isinstance(k, str) or not _is_ref(r) for k, r in maps.items()):
-            raise ValueError("invalid runtime tries")
+            raise ValueError("completed answers and answer history live by key")
+        if not isinstance(maps, dict) or any(
+            not isinstance(rows, dict) or any(not isinstance(v, str) for v in rows.values()) for rows in maps.values()
+        ):
+            raise ValueError("invalid inline keyed state")
         if not isinstance(counters, dict) or set(counters) != set(COUNTERS) or type(counters["cycles_indexed"]) is not bool:
             raise ValueError("invalid runtime counters")
         if any(type(counters[k]) is not int or counters[k] < 0 for k in ("answer_history", "answer_mark")):
             raise ValueError("invalid runtime counters")
 
     def _validate(self, value):
-        """A working value: every domain resolved, tries as root plus the changes not yet written."""
+        """A working value: every domain resolved, keyed state as inline rows plus the changes not yet written."""
         if not isinstance(value, dict) or value.get("schema") != SCHEMA:
             raise ValueError("invalid canonical runtime")
         self._check_common(value, {"schema", "owner", "fence", "ordinal", "data", "maps", "counters"})
@@ -271,12 +283,12 @@ class S3RuntimeStores:
         maps = value["maps"]
         if not isinstance(maps, dict) or any(
             not isinstance(m, dict)
-            or set(m) != {"root", "changes"}
-            or (m["root"] is not None and not _is_ref(m["root"]))
+            or set(m) != {"inline", "changes"}
+            or not isinstance(m["inline"], dict)
             or not isinstance(m["changes"], dict)
             for m in maps.values()
         ):
-            raise ValueError("invalid runtime tries")
+            raise ValueError("invalid runtime keyed state")
         if not isinstance(value["counters"], dict) or set(value["counters"]) != set(COUNTERS):
             raise ValueError("invalid runtime counters")
 
@@ -309,30 +321,26 @@ class S3RuntimeStores:
             data["answers"] = {k: r for k, r in answers.items() if r[0] == "pending"}
             done = {k: _text(r) for k, r in answers.items() if r[0] != "pending"}
             if done:
-                maps[ANSWERS] = {"root": None, "changes": done}
+                maps[ANSWERS] = {"inline": {}, "changes": done}
             counters["answer_mark"] = max((r[2] for r in answers.values()), default=0)
             history, data["answer_history"] = data["answer_history"], []
             if history:
-                maps[HISTORY] = {"root": None, "changes": {str(r[0]): _text(r) for r in history}}
+                maps[HISTORY] = {"inline": {}, "changes": {str(r[0]): _text(r) for r in history}}
             counters["answer_history"] = max((r[0] for r in history), default=0)
             if self.events_lake is not None and CYCLE_INDEX_KEY in data["state"]:
                 index = json.loads(data["state"].pop(CYCLE_INDEX_KEY))
                 if index:
-                    maps[CYCLES] = {"root": None, "changes": {item: _text(rows) for item, rows in index.items()}}
+                    maps[CYCLES] = {"inline": {}, "changes": {item: _text(rows) for item, rows in index.items()}}
                 counters["cycles_indexed"] = True
         else:
             refs = list(stored["refs"].values()) + [v for v in data["state"].values() if _is_ref(v)]
-            # Every lookup starts at a trie's root, so the roots a decision looks up come in the same parallel
-            # round as the values (the answer history is only appended to, never looked up while deciding).
-            roots = [ref for name, ref in stored["maps"].items() if name != HISTORY and ref[0] not in self.trie.nodes]
-            self._get_blobs(refs + roots)
-            self.trie.preload({ref[0]: self._blobs[ref[0]] for ref in roots})
+            self._get_blobs(refs)
             for domain, ref in stored["refs"].items():
                 data[domain] = decode(self._blobs[ref[0]])
             for key, held in data["state"].items():
                 if _is_ref(held):
                     data["state"][key] = self._blobs[held[0]].decode()
-            maps = {name: {"root": list(ref), "changes": {}} for name, ref in stored["maps"].items()}
+            maps = {name: {"inline": dict(rows), "changes": {}} for name, rows in stored["maps"].items()}
             counters = dict(stored["counters"])
         value["data"], value["maps"], value["counters"] = data, maps, counters
         self._validate(value)
@@ -343,6 +351,8 @@ class S3RuntimeStores:
         if seen is not None and (seen.record.revision, seen.record.commit_id) == (record.revision, record.commit_id):
             head = _Head(record, seen.value)
         else:
+            # A head this handle did not just commit may come with keyed documents it has not read.
+            self._documents = {}
             head = _Head(record, self._materialize(record.value))
         self._seen = head
         return head
@@ -388,10 +398,15 @@ class S3RuntimeStores:
                 data[domain] = deepcopy(held)
         maps = {}
         for name, held in value["maps"].items():
-            root, written = self.trie.update(held["root"], held["changes"]) if held["changes"] else (held["root"], {})
-            blobs.update(written)
-            if root is not None:
-                maps[name] = root
+            rows = dict(held["inline"])
+            for key, text in held["changes"].items():
+                # With the lake the change goes to the key's document, so the head must not keep an older copy.
+                if text is None or self.keyed_documents is not None:
+                    rows.pop(key, None)
+                else:
+                    rows[key] = text
+            if rows:
+                maps[name] = rows
         stored = {k: value[k] for k in ("schema", "owner", "fence", "ordinal")}
         for key in (RECORDS_KEY, "chunks"):
             if key in value:
@@ -411,10 +426,10 @@ class S3RuntimeStores:
         self._blobs.update(blobs)
 
     def _settled(self, value, committed):
-        """The working value of a head just committed from ``value``: tries at their new roots, nothing pending."""
+        """The working value of a head just committed from ``value``: keyed changes written, nothing pending."""
         stored = committed.value
         for name in value["maps"]:
-            value["maps"][name] = {"root": stored["maps"].get(name), "changes": {}}
+            value["maps"][name] = {"inline": dict(stored["maps"].get(name, {})), "changes": {}}
         for key in (RECORDS_KEY, "chunks"):
             if key in stored:
                 value[key] = deepcopy(stored[key])
@@ -476,11 +491,21 @@ class S3RuntimeStores:
     def _commit(self, head, value, staged):
         stored, blobs = self._store(value, head)
         self._publish(blobs)
-        if not staged:
+        keyed = (
+            [(name, key, text) for name, held in value["maps"].items() for key, text in held["changes"].items()]
+            if self.keyed_documents is not None
+            else []
+        )
+        if not staged and not keyed:
             return self._settled(value, commit_with_contract(self.journal, head.record, stored, invalidate=self._poison))
         chunks = value.get("chunks")
         first = _Events(self, value).last_id + 1
-        chunk = {"first": first, "events": list(staged)}
+        # The chunk names the keyed changes it stamps (their digest). A retry of the identical commit adopts the
+        # identical record at the same sequence, as before; an attempt with other changes can never reuse an
+        # abandoned attempt's sequence, so entries stamped with it never become covered.
+        changes = sha256(encode(sorted([name, key, text] for name, key, text in keyed))).hexdigest()
+        chunk = {"first": first, "events": list(staged), "commit": changes}
+        before = coverage_in(value, self.events_lake)
 
         def settle(state, refs):
             # The new coverage is already in ``state``; everything else is the change the caller built.
@@ -493,8 +518,13 @@ class S3RuntimeStores:
 
         # Write the chunk first (harmless if abandoned), then flip the head once: the record counts only
         # together with the control change it belongs to.
+        def documents(refs):
+            # After the chunk is written and before the head moves: each key's document gains an entry stamped
+            # with the chunk's sequence, which counts only once the head covers it.
+            self._store_keyed(keyed, before, refs[self._lake_name][0].seq)
+
         committed, refs = commit_with_records(
-            self.journal, head.record, [(self.events_lake, [chunk])], settle, invalidate=self._poison
+            self.journal, head.record, [(self.events_lake, [chunk])], settle, invalidate=self._poison, check=documents
         )
         self._remember(refs[self._lake_name][0].seq, chunk)
         return self._settled(value, committed)
@@ -588,27 +618,52 @@ class S3RuntimeStores:
             self._working = None
             self._held = []
 
-    # Tries -------------------------------------------------------------------
+    # Keyed state ---------------------------------------------------------------
+    def _document(self, name, key):
+        if (name, key) not in self._documents:
+            self._documents[(name, key)] = self.keyed_documents.load(name, key)
+        return self._documents[(name, key)]
+
+    def _load_documents(self, pairs):
+        """Read the documents not yet held, together (one GET each; a missing key reads as absent)."""
+        missing = list(dict.fromkeys(pair for pair in pairs if pair not in self._documents))
+        load = lambda pair: self.keyed_documents.load(*pair)  # noqa: E731
+        if len(missing) > 1:
+            with ThreadPoolExecutor(min(READ_WORKERS, len(missing))) as pool:
+                found = list(pool.map(load, missing))
+        else:
+            found = [load(pair) for pair in missing]
+        self._documents.update(zip(missing, found))
+
+    def _store_keyed(self, changes, coverage, at):
+        self._load_documents([(name, key) for name, key, _ in changes])
+        write = (
+            lambda change: self.keyed_documents.store(  # noqa: E731
+                change[0], change[1], self._documents[change[:2]], coverage, at, change[2]
+            )
+        )
+        if len(changes) > 1:
+            with ThreadPoolExecutor(min(READ_WORKERS, len(changes))) as pool:
+                written = list(pool.map(write, changes))
+        else:
+            written = [write(change) for change in changes]
+        for (name, key, _), document in zip(changes, written):
+            self._documents[(name, key)] = document
+
     def _map_get(self, value, name, key):
         held = value["maps"].get(name)
-        if held is None:
-            return None
-        if key in held["changes"]:
+        if held is not None and key in held["changes"]:
             return held["changes"][key]
-        return self.trie.get(held["root"], key)
+        if self.keyed_documents is not None:
+            found = resolve(self._document(name, key), coverage_in(value, self.events_lake))
+            if found is not None:
+                return found
+        return held["inline"].get(key) if held is not None else None
 
     def _map_put(self, value, name, key, text):
         if self._map_get(value, name, key) == text:
             return
-        value["maps"].setdefault(name, {"root": None, "changes": {}})["changes"][key] = text
-
-    def map_items(self, name):
-        """Every (key, value) of one trie as this handle sees it. Reads the whole trie: audits and specs only."""
-        value = self._read_value()
-        held = value["maps"].get(name) or {"root": None, "changes": {}}
-        rows = dict(self.trie.items(held["root"]))
-        rows.update(held["changes"])
-        return {key: text for key, text in rows.items() if text is not None}
+        value["maps"].setdefault(name, {"inline": {}, "changes": {}})["changes"][key] = text
 
     # Event records -----------------------------------------------------------
     def _remember(self, seq, payload):
@@ -627,10 +682,10 @@ class S3RuntimeStores:
     def _chunk(payload):
         if (
             not isinstance(payload, dict)
-            or set(payload) != {"first", "events"}
+            or set(payload) != {"first", "events", "commit"}
             or type(payload["first"]) is not int
             or not isinstance(payload["events"], list)
-            or not payload["events"]
+            or not isinstance(payload["commit"], str)
             or any(not isinstance(p, str) for p in payload["events"])
         ):
             raise RecordCorrupt("runtime event chunk is not a list of raw JSON texts")
@@ -841,8 +896,8 @@ class _Events:
 
     def _locate(self, identifier):
         """The index of the chunk holding ``identifier`` (before < identifier <= stored_last)."""
-        if identifier == self.before + 1:
-            return 0  # the first chunk always starts right after the single-event records
+        if identifier == self.before + 1 and self._chunk_at(0)["events"]:
+            return 0  # the first chunk starts right after the single-event records (unless it holds none)
         first = lambda index: self._chunk_at(index)["first"]  # noqa: E731
         upper = self.chunks - 1
         if first(upper) <= identifier:
@@ -965,12 +1020,12 @@ class _State(_View):
         self.change(lambda data, value: data["state"].__setitem__(key, payload))
 
     def keyed(self, name, key):
-        """One value of a keyed trie this storage keeps for derived summaries, or None."""
+        """One keyed value this storage keeps for derived summaries, or None."""
         store = self.store
         return store._map_get(store._read_value(), name, key)
 
     def save_derived(self, states, maps=None):
-        """Save a derived summary: state values and keyed-trie changes (``None`` removes a key), together.
+        """Save a derived summary: state values and keyed changes (``None`` removes a key), together.
 
         A summary can always be rebuilt from the events it was folded from, and its cursor is saved with it,
         so an owning handle holds it and publishes it with the next durable change or at release.
@@ -980,7 +1035,7 @@ class _State(_View):
             json_text(payload)
         for name, changes in maps.items():
             if not isinstance(name, str) or name in RESERVED_MAPS or not name or not all(c.isalnum() or c == "-" for c in name):
-                raise ValueError("a derived trie needs its own plain name")
+                raise ValueError("derived keyed state needs its own plain name")
             for text in changes.values():
                 if text is not None:
                     json_text(text)
@@ -1094,7 +1149,7 @@ def _note_cycle(data, events, event):
 
 
 def _note_unfinished(store, value, events, event):
-    """Keep each item's unfinished cycles in the ``cycles`` trie; the first time, from every event so far."""
+    """Keep each item's unfinished cycles in its ``cycles`` document; the first time, from every event so far."""
     counters = value["counters"]
     if not counters["cycles_indexed"]:
         index = {}
@@ -1113,7 +1168,7 @@ def _note_unfinished(store, value, events, event):
 
 
 def _answer(store, value, key):
-    """An answer row: a pending reservation in the head, or a settled row in the ``answers`` trie."""
+    """An answer row: a pending reservation in the head, or a settled row in its ``answers`` document."""
     row = value["data"]["answers"].get(key)
     if row is not None:
         return row
@@ -1301,7 +1356,7 @@ class _Pending(_View):
         value = self.store._read_value()
         data = value["data"]
         marks = {kind: max((r[2] for r in self._rows(data, kind).values()), default=0) for kind in self.DOMAINS}
-        # Settled answers live in their trie; the head keeps the highest ordinal any answer row was given.
+        # Settled answers live by key; the head keeps the highest ordinal any answer row was given.
         # Ordinals only grow, so "a row newer than this mark" means the same as against the rows themselves.
         marks["runtime_answers"] = max(marks["runtime_answers"], value["counters"]["answer_mark"])
         return marks

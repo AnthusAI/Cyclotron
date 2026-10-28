@@ -85,7 +85,7 @@ def test_the_runtime_document_does_not_grow_with_decided_items_and_each_commit_w
             f"document after 30 items {embedded[-1]} -> {lake[-1]}"
         )
     assert per_item(embedded, 10, 29) > 20000  # every event used to be copied into the document
-    assert per_item(lake, 10, 29) < 2  # answers live in a trie; only the coverage numbers' digits can grow
+    assert per_item(lake, 10, 29) < 2  # answers live by key; only the coverage numbers' digits can grow
     assert lake[-1] < 3000 < embedded[-1] / 20
     assert sum(lake_written[10:]) < sum(embedded_written[10:]) / 20
     # Nothing was lost: every event is in the chunk of the commit that published it, one record per commit

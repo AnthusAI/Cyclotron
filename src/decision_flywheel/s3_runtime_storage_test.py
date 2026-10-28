@@ -302,7 +302,7 @@ def test_coalescing_can_be_switched_off_for_an_owning_handle():
 
 
 def journal_writes(client):
-    """(commits, bytes of every payload written: heads' states, trie nodes, values), at the S3 boundary."""
+    """(commits, bytes of every payload written: heads' states and values), at the S3 boundary."""
     heads = [r for kind, r in client.calls if kind == "put" and r["Key"].endswith("/head.json")]
     puts = [r for kind, r in client.calls if kind == "put" and "/payloads/" in r["Key"]]
     return len(heads), sum(len(r["Body"]) for r in puts)
@@ -408,19 +408,22 @@ def one_decision(client, n):
 
 
 def writes_of(client, start):
-    """(commits, chunk records, head-state bytes, other payload bytes) written since ``start``."""
+    """What one decision cost since ``start``: (commits, chunk records, keyed documents written, GETs) and
+    (head-state bytes, keyed-document bytes, other payload bytes)."""
     calls = [request for kind, request in client.calls[start:] if kind == "put"]
     payloads = [request["Body"] for request in calls if "/payloads/" in request["Key"]]
+    documents = [request["Body"] for request in calls if "/keys/" in request["Key"]]
     state = sum(len(body) for body in payloads if body.startswith(b'{"anchor"'))
-    return (
+    counts = (
         sum(request["Key"].endswith("/head.json") for request in calls),
         sum("/records/runtime/" in request["Key"] for request in calls),
-        state,
-        sum(len(body) for body in payloads) - state,
+        len(documents),
+        sum(kind == "get" for kind, _ in client.calls[start:]),
     )
+    return counts, (state, sum(map(len, documents)), sum(len(body) for body in payloads) - state)
 
 
-def test_a_decision_writes_the_same_head_bytes_after_a_long_history_and_one_commit_while_it_decides(capsys):
+def test_a_decision_reads_and_writes_the_same_after_a_long_history_and_commits_once_while_it_decides(capsys):
     from .s3_journal_test import ConditionalS3
 
     client = ConditionalS3()
@@ -431,16 +434,15 @@ def test_a_decision_writes_the_same_head_bytes_after_a_long_history_and_one_comm
         if n in (20, 400):
             seen[n] = writes_of(client, start)
     with capsys.disabled():
-        print(f"\nruntime writes per decision (commits, chunk records, head bytes, trie and value bytes): {seen}")
-    early, late = seen[20], seen[400]
+        print(f"\nper decision ((commits, chunks, keyed documents, GETs), (head, keyed, other bytes)): {seen}")
+    (early, early_bytes), (late, late_bytes) = seen[20], seen[400]
     # Acquire, the reservation (the one commit while deciding: it grants the paid call), and the release that
     # carries the completion, the events and the status summary. Each commit's events are one chunk record.
-    assert early[:2] == late[:2] == (3, 2)
-    # The head carries no rows, so it is the same size twenty times further on, but for the extra digits of
-    # its revision, fence, ordinal and lake positions.
-    assert abs(late[2] - early[2]) <= 3 * 12
-    # Answers, cycles and status rows are trie paths: twenty times the keys adds at most a level to each path.
-    assert late[3] <= early[3] + 3 * 2000
+    # The settled answer, the item's cycles and its status row are one document each, found by the same reads.
+    assert early == late and early[:3] == (3, 2, 3)
+    # Nothing written holds rows of earlier decisions, so the bytes are the same twenty times further on, but
+    # for the extra digits of revisions, fences, ordinals and lake positions.
+    assert all(abs(b - a) <= 3 * 12 for a, b in zip(early_bytes, late_bytes))
 
 
 def test_a_runtime_head_holds_no_answers_cycles_or_status_rows_however_many_items_it_decided():
@@ -458,9 +460,30 @@ def test_a_runtime_head_holds_no_answers_cycles_or_status_rows_however_many_item
     assert s.runtime_cache.answer("request-7")[0] == "complete"
     assert s.runtime_storage.unfinished_cycles("item-7")[0][0] == "cycle-7"
     assert s.runtime_storage.keyed("status", "row/item-7") is not None
-    assert len(s.map_items("answers")) == 60 and len(s.map_items("cycles")) == 60
+    assert s.runtime_cache.answer("request-60")[0] == "complete" and s.runtime_cache.answer("request-61") is None
     assert [e["kind"] for e in s.runtime_storage.history(2)] == ["prediction", "cycle-waiting-for-feedback"]
     s.close()
+
+
+def test_a_refused_keyed_read_fails_closed_instead_of_reading_as_a_new_request():
+    from .keyed_records import KeyedUnavailable
+    from .s3_journal_test import ConditionalS3, S3Error
+
+    client = ConditionalS3()
+    one_decision(client, 1)
+    s = lake_stores(client)
+    real = client.get_object
+
+    def refused(**request):
+        if "/keys/" in request["Key"]:
+            raise S3Error("AccessDenied")
+        return real(**request)
+
+    client.get_object = refused
+    with pytest.raises(KeyedUnavailable):
+        s.runtime_cache.answer("request-1")
+    with pytest.raises(KeyedUnavailable):
+        s.runtime_cache.answer("never-asked")  # only NoSuchKey means absent
 
 
 # --- Runtimes written by the previous layout ------------------------------------------------------------
@@ -508,7 +531,8 @@ def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_co
     events = old_format_runtime(client)
     s = lake_stores(client)  # acquiring is the first write
     stored = journal(client, name="classifier-a").read().value
-    assert stored["schema"] == "cyclotron-s3-runtime/v2" and set(stored["maps"]) == {"answers", "answer-history", "cycles"}
+    assert stored["schema"] == "cyclotron-s3-runtime/v2" and stored["maps"] == {}
+    assert sum("/keys/" in k for k in client.objects) == 3  # "done", history 1 and item-1's cycles, one each
     assert stored["data"]["answers"] == {"waiting": ["pending", None, 4]} and stored["data"]["answer_history"] == []
     assert "unfinished-cycles" not in stored["data"]["state"] and set(stored["refs"]) == {"rounds"}
 
@@ -519,7 +543,7 @@ def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_co
         assert s.runtime_cache.answer("waiting") == ("pending", None)
         assert s.pending_storage.pending() == [("runtime_answers", 4, "waiting")]
         assert s.pending_storage.marks()["runtime_answers"] == 4
-        assert s.map_items("answer-history") == {"1": '[1,"done","failed",null]'}
+        assert s.runtime_storage.keyed("answer-history", "1") == '[1,"done","failed",null]'
         assert s.runtime_storage.unfinished_cycles("item-1") == (("c-1", 1, "item-processing", False),)
         assert s.runtime_storage.unfinished_cycles("item-2") == ()
         assert s.runtime_storage.state("status-fold") == '{"cursor":4,"fold":{"old":true},"origin":"o"}'
@@ -533,9 +557,10 @@ def test_an_old_format_runtime_keeps_its_events_answers_cycles_and_status_and_co
     again = lake_stores(client)
     readable(again)
     assert [e["kind"] for e in again.runtime_storage.history(2)] == ["cycle-completed", "new"]
-    # The four old event records are untouched; the new event is one chunk after them.
+    # The four old event records are untouched. After them: the conversion's chunk (no events; it stamps the
+    # moved documents) and the chunk holding the new event.
     keys = sorted(k.rsplit("/", 1)[-1] for k in client.objects if "/records/runtime/" in k)
-    assert keys == [f"{n:012d}.json" for n in range(1, 6)]
+    assert keys == [f"{n:012d}.json" for n in range(1, 7)]
     again.close()
 
 

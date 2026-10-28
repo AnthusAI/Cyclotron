@@ -599,9 +599,9 @@ def status_from_events(
 
 
 STATUS_FOLD_KEY = "status-fold"
-# A runtime storage with keyed tries (``save_derived``) keeps the fold in parts, so a decision rewrites only
+# A runtime storage with keyed state (``save_derived``) keeps the fold in parts, so a decision rewrites only
 # what changed: the summary and cursor here, the version tracker and recent reviews in their own state values,
-# and the rows in the ``status`` trie under the fold's origin.
+# and each row as its own ``status`` keyed document under the fold's origin.
 STATUS_VERSIONS_KEY = "status-fold-versions"
 STATUS_RECENT_KEY = "status-fold-recent"
 STATUS_ROWS = "status"

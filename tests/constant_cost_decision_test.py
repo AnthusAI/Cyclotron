@@ -33,7 +33,7 @@ def _reads_of_one_decision(client, model, identifier):
     )
 
 
-def test_a_decision_after_a_long_history_reads_about_as_much_as_one_after_a_short_one():
+def test_a_decision_after_a_long_history_reads_no_more_than_one_after_a_short_one():
     client, model = ConditionalS3(), Model()
     for number in range(10):
         _reads_of_one_decision(client, model, f"early-{number}")
@@ -41,11 +41,7 @@ def test_a_decision_after_a_long_history_reads_about_as_much_as_one_after_a_shor
     for number in range(60):
         _reads_of_one_decision(client, model, f"later-{number}")
     late = _reads_of_one_decision(client, model, "probe-late")
-    assert late["event-record"] == early["event-record"] == 0
-    # Per-item and per-request state is found through keyed tries (the head no longer carries it), and a trie
-    # lookup reads one node per level: log16 of the keys held. Six times the history adds at most a level to a
-    # few lookups; it never adds a read per earlier decision.
-    assert early["other"] <= late["other"] <= early["other"] + 4
+    assert late == early
 
 
 def test_a_decision_never_reads_the_event_history():
