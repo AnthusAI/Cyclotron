@@ -44,6 +44,7 @@ import logging
 import os
 import re
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
@@ -90,6 +91,9 @@ STATUSES = ("pending", "complete", "failed", "interrupted")
 GENERATION_FIELDS = {"fingerprint", "generation", "owner", "ordinal", "supersedes", "status", "payload", "claimed", "revision"}
 ATTEMPT_FIELDS = ("ordinal", "fingerprint", "owner", "generation", "supersedes")
 RECORD_ERRORS = (RecordUncertain, RecordLimit, RecordConflict, RecordUnavailable)
+# How many of a migration's create-only record writes are in flight at once. This sets concurrency only, never
+# how much is migrated; it matches botocore's default connection pool so no connection is opened and discarded.
+MIGRATION_WORKERS = 10
 
 
 # --- create-only records found by key ------------------------------------------------------------------
@@ -657,21 +661,23 @@ class S3BatchStorage:
 
     # --- writing --------------------------------------------------------------------------------------------
 
-    def _externalize(self, held):
+    def _written_out(self, gen):
+        """Write one settled generation as its record; whether the head may now drop it."""
+        try:
+            stored = self.records.put(batch_key(gen["fingerprint"], gen["generation"]), gen)
+            if stored == gen or self._same_outcome(stored, gen):
+                self._written[gen["fingerprint"], gen["generation"]] = stored
+                return True
+            log.warning("a different record holds this generation; the head keeps it")
+        except RECORD_ERRORS as error:
+            log.warning("batch record not written (%s); the head keeps it", type(error).__name__)
+        return False
+
+    def _externalize(self, held, pool=None):
         """Write each settled generation as its record; return the generations the head must still hold."""
-        kept = []
-        for gen in held:
-            if gen["status"] != "pending":
-                try:
-                    stored = self.records.put(batch_key(gen["fingerprint"], gen["generation"]), gen)
-                    if stored == gen or self._same_outcome(stored, gen):
-                        self._written[gen["fingerprint"], gen["generation"]] = stored
-                        continue
-                    log.warning("a different record holds this generation; the head keeps it")
-                except RECORD_ERRORS as error:
-                    log.warning("batch record not written (%s); the head keeps it", type(error).__name__)
-            kept.append(gen)
-        return kept
+        settled = [gen for gen in held if gen["status"] != "pending"]
+        out = dict(zip(map(id, settled), (pool.map if pool else map)(self._written_out, settled)))
+        return [gen for gen in held if not out.get(id(gen), False)]
 
     @staticmethod
     def _same_outcome(stored, gen):
@@ -714,26 +720,42 @@ class S3BatchStorage:
         commit_with_records(self.journal, view.record, writes, apply)
 
     def _migrate(self, view):
-        """One commit: every attempt, owner and finished generation becomes a record; the head becomes v2."""
+        """One commit: every attempt, owner and finished generation becomes a record; the head becomes v2.
+
+        The records are independent create-only writes, so they go out concurrently; the head is committed
+        only after every one of them has been written (or, for a batch record, kept in the head). Records are
+        a pure function of the old ledger, so a rerun after an interruption repeats identical writes.
+        """
         gens = sorted(view.value["held"], key=lambda g: g["ordinal"])
+        attempts = [attempt_value(g) for g in gens]
+        start = coverage_in(view.value, self.attempts)
+        with ThreadPoolExecutor(MIGRATION_WORKERS) as pool:
+
+            def attempt(numbered):
+                try:
+                    self.attempts.put(*numbered)
+                    return True
+                except RecordConflict:
+                    return False
+
+            placed = list(pool.map(attempt, zip(range(start.last + 1, start.last + 1 + len(gens)), attempts)))
+            list(pool.map(self._hint_owner, gens))
+            held = self._externalize(gens, pool)
+        if all(placed):
+            coverage = Coverage(start.last + len(gens), start.skipped)
+        else:
+            # Another writer holds some of those sequences: place the attempts in order, skipping what is taken.
+            # Identical records already written are accepted again.
+            coverage, _ = self.attempts.append(start, attempts)
 
         def apply(state, refs):
-            for gen in gens:
-                self._hint_owner(gen)
-            records = state.get(RECORDS_KEY)
+            records = {**(state.get(RECORDS_KEY) or {}), self.attempts.name: coverage.to_json()}
             state.clear()
-            state.update(
-                schema=V2,
-                attempts=view.value["attempts"],
-                superseded=view.value["superseded"],
-                held=self._externalize(gens),
-            )
-            if records:
-                state[RECORDS_KEY] = records
+            state.update(schema=V2, attempts=view.value["attempts"], superseded=view.value["superseded"], held=held)
+            state[RECORDS_KEY] = records
             self._check_v2(state)
 
-        writes = [(self.attempts, [attempt_value(g) for g in gens])] if gens else []
-        commit_with_records(self.journal, view.record, writes, apply)
+        commit_with_records(self.journal, view.record, [], apply)
 
     def _write(self, plan, *, records_uncertain=True):
         """Run ``plan(view) -> (result, change)``; commit the change, migrating an old ledger first.

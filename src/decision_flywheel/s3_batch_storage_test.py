@@ -855,3 +855,79 @@ def test_an_old_format_ledger_answers_an_already_paid_request_from_its_record_th
     native = SQLiteBatchStorage(tmp_path / "compare.sqlite")
     native.restore(after)
     assert native.export() == after
+
+
+class SlowRecordsS3(ConditionalS3):
+    """Record writes take a moment outside the store lock, so concurrent writers overlap; the overlap is measured."""
+
+    def __init__(self):
+        super().__init__()
+        self.flight, self.widest, self.order, self.fail = 0, 0, [], None
+        self.gate = __import__("threading").Lock()
+
+    def put_object(self, **request):
+        import time
+
+        key = request["Key"]
+        if "/records/" not in key:
+            self.order.append(key)
+            return super().put_object(**request)
+        with self.gate:
+            self.flight += 1
+            self.widest = max(self.widest, self.flight)
+        try:
+            time.sleep(0.002)
+            if self.fail and self.fail(key):
+                self.fail = None
+                raise TimeoutError("synthetic interruption")
+            result = super().put_object(**request)
+            self.order.append(key)
+            return result
+        finally:
+            with self.gate:
+                self.flight -= 1
+
+
+def old_ledger_of(client, tmp_path, requests):
+    def history(native):
+        for index in range(requests):
+            owner = str(uuid4())
+            native.reserve(f"{index:064x}", None, owner, claim=True)
+            native.settle(f"{index:064x}", owner, "complete", json.dumps({"reply": index}))
+
+    return legacy_ledger(client, "ledger", history, tmp_path=tmp_path)
+
+
+def test_a_migration_writes_its_records_concurrently_and_commits_the_head_only_after_all_of_them(tmp_path):
+    from .s3_batch_storage import MIGRATION_WORKERS
+
+    client = SlowRecordsS3()
+    j = old_ledger_of(client, tmp_path, 60)
+    before = store(journal(client, name="ledger")).export()
+    client.order.clear()
+    s = store(journal(client, name="ledger"))
+    s.reserve("f" * 64, None, str(uuid4()), claim=True)  # the first write migrates
+    assert 1 < client.widest <= MIGRATION_WORKERS
+    migration = client.order[: client.order.index(j.head_key) + 1]
+    records = [k for k in migration if "/records/" in k]
+    assert len(records) == 3 * 60  # every attempt, owner and finished request, nothing left out
+    assert migration[-1] == j.head_key and all("/records/" in k for k in migration[:-2])  # then blob and head
+    assert s.export()["batches"][:60] == before["batches"] and s.journal.read().value["held"][0]["fingerprint"] == "f" * 64
+
+
+def test_a_migration_interrupted_midway_leaves_the_old_head_and_a_rerun_finishes_it_without_paying_again(tmp_path):
+    client, model = SlowRecordsS3(), Model()
+    j = old_ledger_of(client, tmp_path, 40)
+    old = j.read().value
+    before = store(journal(client, name="ledger")).export()
+    client.fail = lambda key: "/owner-" in key
+    with pytest.raises(BatchUncertain):
+        store(journal(client, name="ledger")).reserve("f" * 64, None, str(uuid4()), claim=True)
+    assert j.read().value == old  # nothing committed: the old ledger still decides
+    rerun = store(journal(client, name="ledger"))
+    owner = str(uuid4())
+    rerun.reserve("f" * 64, None, owner, claim=True)
+    assert rerun.claim("f" * 64, owner) and rerun.requests() == 41
+    assert rerun.journal.read().value["schema"] == "cyclotron-shared-batches/v2"
+    assert rerun.journal.read().value["records"]["shared-batches/attempts-ledger"] == {"last": 41, "skipped": []}
+    assert rerun.export()["batches"][:40] == before["batches"] and model.calls == 0
