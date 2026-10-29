@@ -3,7 +3,7 @@ import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 
 type Question={name:string;instructions:string;labels:string[]}
 type Checkpoint={payload:{classifiers:Record<string,{state:{config:{tasks?:Question[]}}}>}}
@@ -13,6 +13,7 @@ const SEPARATOR='\u0000'
 /** Make one of this version's supporting questions a classifier of a new version, after an explicit confirmation. */
 export function PromoteSupportingQuestion({runId,cyclotronName,nextRevision,onCreated,busy}:{
   runId:string;cyclotronName:string;nextRevision:number;onCreated:(runId:string)=>void;busy:boolean}){
+  const {graphql}=useWorkspaceTransport()
   const [choices,setChoices]=useState<Choice[]|null>(null),[selected,setSelected]=useState('')
   const [classifierId,setClassifierId]=useState(''),[classifierName,setClassifierName]=useState(''),[positive,setPositive]=useState('')
   const [confirming,setConfirming]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState('')

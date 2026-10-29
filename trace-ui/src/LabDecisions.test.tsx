@@ -2,6 +2,8 @@ import {afterEach,beforeEach,expect,test,vi} from 'vitest'
 import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import {LabDecisions} from './LabDecisions'
+import {WebApp} from './WebApp'
+import {WorkspaceTransportProvider} from './WorkspaceTransport'
 import type {DecisionRow,DecisionsPage,Health,ItemDetail,StandingRun} from './labApi'
 
 const RUN:StandingRun={runId:'run-1',name:'Anthus combined',publications:[{id:'anth-us',outputs:['anth-us']},{id:'shipped',outputs:['shipped']}],
@@ -41,7 +43,7 @@ beforeEach(()=>{
     return respond({detail:'unexpected'},404)
   }))
 })
-afterEach(()=>{cleanup();vi.unstubAllGlobals()})
+afterEach(()=>{cleanup();vi.unstubAllGlobals();window.history.replaceState(null,'','/')})
 
 test('the decisions view shows health tiles and the newest decisions with every output, routing and label status',async()=>{
   render(<LabDecisions/>)
@@ -123,4 +125,32 @@ test('an account without a standing run says so, and a refusal is shown rather t
   vi.stubGlobal('fetch',vi.fn(async()=>respond({authenticated:false})))
   render(<LabDecisions/>)
   expect(await screen.findByRole('alert')).toHaveTextContent('Sign in to the lab to see decisions.')
+})
+
+test('in the hosted lab the Decisions view reads the account selected in the header, not a session lookup',async()=>{
+  const lab:{url:string;account:string|undefined}[]=[],graphqlUrls:string[]=[]
+  vi.stubGlobal('fetch',vi.fn(async(input:string,init?:RequestInit)=>{
+    const url=new URL(input,'https://lab.test')
+    if(url.pathname==='/api/session')throw new Error('the hosted Decisions view must not look up the session account')
+    if(url.pathname==='/graphql'){
+      graphqlUrls.push(input)
+      const query=String(JSON.parse(String(init?.body)).query)
+      return respond({data:query.includes('capabilities')?{runs:[],capabilities:{liveEnabled:false,itemCount:0}}:{cyclotronDefinitions:[],classifiers:[],itemLists:[]}})
+    }
+    lab.push({url:url.pathname,account:(init?.headers as Record<string,string>|undefined)?.['X-Cyclotron-Account']})
+    if(url.pathname==='/api/lab/standing-runs')return respond([RUN])
+    if(url.pathname==='/api/lab/runs/run-1/health')return respond(HEALTH)
+    if(url.pathname==='/api/lab/runs/run-1/decisions')return respond(pages[''])
+    return respond({detail:'unexpected'},404)
+  }))
+  render(<WorkspaceTransportProvider accountId="beta"><WebApp embedded/></WorkspaceTransportProvider>)
+  await screen.findByText('A history you can inspect')
+  const navigation=screen.getByRole('navigation',{name:'Main navigation'})
+  fireEvent.click(within(navigation).getByRole('button',{name:'Decisions'}))
+  const list=await screen.findByRole('list',{name:'Decisions'})
+  await waitFor(()=>expect(within(list).getAllByRole('listitem')).toHaveLength(2))
+  expect(lab.map(request=>request.url)).toEqual(expect.arrayContaining(['/api/lab/standing-runs','/api/lab/runs/run-1/decisions']))
+  expect(lab.every(request=>request.account==='beta')).toBe(true)
+  expect(graphqlUrls.length).toBeGreaterThan(0)
+  expect(graphqlUrls.every(url=>new URL(url,'https://lab.test').searchParams.get('account')==='beta')).toBe(true)
 })

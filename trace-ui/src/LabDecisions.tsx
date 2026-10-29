@@ -8,6 +8,7 @@ import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {AppDrawer} from './AppDrawer'
 import {TraceDetail} from './TraceDetail'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {
   NO_FILTERS,filterQuery,labAccount,labGet,needsReview,percent,seconds,when,
   type DecisionFilters,type DecisionRow,type DecisionsPage,type Health,type ItemDetail,type OutputDecision,type StandingRun,type TraceRecord,
@@ -143,6 +144,8 @@ type Feed={rows:DecisionRow[];next:string|null;examined:{from:number;to:number}|
 const EMPTY:Feed={rows:[],next:null,examined:null,total:0,top:null}
 
 export function LabDecisions(){
+  // Hosted, the workspace transport carries the account chosen in the header; self-served, the lab resolves it.
+  const {accountId:hostedAccount}=useWorkspaceTransport()
   const [account,setAccount]=useState(''),[runs,setRuns]=useState<StandingRun[]|null>(null),[runId,setRunId]=useState('')
   const [filters,setFilters]=useState<DecisionFilters>(NO_FILTERS),[feed,setFeed]=useState<Feed>(EMPTY),[loading,setLoading]=useState(false)
   const [health,setHealth]=useState<Health|null>(null),[error,setError]=useState(''),[generation,setGeneration]=useState(0)
@@ -150,9 +153,9 @@ export function LabDecisions(){
   const sentinel=useRef<HTMLDivElement|null>(null),request=useRef(0)
   const run=runs?.find(r=>r.runId===runId)??null
   const names=Object.fromEntries((run?.outputs??[]).map(o=>[o.id,o.name]))
-  useEffect(()=>{let cancelled=false
-    labAccount().then(found=>{if(cancelled)return;setAccount(found);return labGet<StandingRun[]>(found,'standing-runs').then(list=>{if(!cancelled){setRuns(list);setRunId(previous=>previous||list[0]?.runId||'')}})}).catch(e=>{if(!cancelled)setError((e as Error).message)})
-    return()=>{cancelled=true}},[])
+  useEffect(()=>{let cancelled=false;
+    (hostedAccount?Promise.resolve(hostedAccount):labAccount()).then(found=>{if(cancelled)return;setAccount(found);return labGet<StandingRun[]>(found,'standing-runs').then(list=>{if(!cancelled){setRuns(list);setRunId(previous=>previous||list[0]?.runId||'')}})}).catch(e=>{if(!cancelled)setError((e as Error).message)})
+    return()=>{cancelled=true}},[hostedAccount])
   const load=useCallback(async(before:string|null,reset:boolean)=>{
     if(!account||!runId)return
     const ticket=reset?++request.current:request.current

@@ -1,0 +1,17 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm --prefix trace-ui ci
+    build:
+      commands:
+        - npm --prefix trace-ui run build
+        - node trace-ui/scripts/package-console.mjs
+  artifacts:
+    baseDirectory: trace-ui/console-dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - trace-ui/node_modules/**/*
