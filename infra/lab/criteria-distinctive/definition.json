@@ -1,0 +1,15 @@
+{
+  "schema": "cyclotron-lab-definition/v1",
+  "id": "distinctive-mark-relevance",
+  "name": "Distinctive Mark relevance",
+  "description": "Distinctive Mark's own screen of each discovered source, separate from the shared Anthus Cyclotron.",
+  "draft_description": "Draft. Distinctive Mark's own screen of each discovered source. Criteria await editor approval.",
+  "order": [
+    "distinctive-relevance"
+  ],
+  "settings_from": {
+    "id": "shared-source-relevance-r4",
+    "revision": 1
+  },
+  "supersedes": null
+}
