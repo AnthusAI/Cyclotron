@@ -278,7 +278,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/43bbe92432e311fc9a32833b906e3e34b0ea368fd4d590f8c795f655126b3078"
+          "S3Key": "cyclotron-console/backend/f81281d152bb34cc5e5c19a01d58da41ac5b36d18892b4cdaf4461156e6306ab"
         },
         "Environment": {
           "Variables": {
@@ -980,7 +980,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/43bbe92432e311fc9a32833b906e3e34b0ea368fd4d590f8c795f655126b3078"
+          "S3Key": "cyclotron-console/backend/f81281d152bb34cc5e5c19a01d58da41ac5b36d18892b4cdaf4461156e6306ab"
         },
         "Environment": {
           "Variables": {
