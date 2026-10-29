@@ -3,15 +3,17 @@ import {consoleAccounts} from './consoleSession'
 
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals()})
 
-test('an unanswered account request aborts and exposes a bounded retryable error',async()=>{
+test('a slow account request waits for the answer instead of giving up on a client timer',async()=>{
   vi.useFakeTimers()
-  const fetch=vi.fn((_path:string,options:RequestInit)=>new Promise<Response>((_resolve,reject)=>{
-    options.signal!.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')))
-  }))
+  let answer:(response:Response)=>void=()=>{}
+  const fetch=vi.fn((_path:string,options:RequestInit)=>{
+    expect(options.signal).toBeUndefined()
+    return new Promise<Response>(resolve=>{answer=resolve})
+  })
   vi.stubGlobal('fetch',fetch)
   const request=consoleAccounts.session()
-  const failed=expect(request).rejects.toThrow('Account service took too long. Try again.')
-  await vi.advanceTimersByTimeAsync(20000)
-  await failed
+  await vi.advanceTimersByTimeAsync(120000)
+  answer(new Response(JSON.stringify({authenticated:false,loginUrl:'/auth/login'}),{status:200}))
+  await expect(request).resolves.toEqual({authenticated:false,loginUrl:'/auth/login'})
   expect(fetch).toHaveBeenCalledTimes(1)
 })

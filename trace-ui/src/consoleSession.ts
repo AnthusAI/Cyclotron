@@ -11,22 +11,17 @@ export type ConsoleAccountsClient={
 }
 export class SignInExpired extends Error{}
 async function request<T>(path:string,options:RequestInit={}):Promise<T>{
-  const controller=new AbortController()
-  const timeout=setTimeout(()=>controller.abort(),20000)
+  // No client-side give-up timer: a slow answer is still the answer, and the gateway ends a stuck request itself.
   const started=performance.now()
   let status:number|'unavailable'='unavailable'
   try{
-  const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,signal:controller.signal})
+  const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options})
   status=response.status
   if(response.status===401)throw new SignInExpired('Sign-in expired. Sign in again.')
   const body=await response.json().catch(()=>({}))
   if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:'The account request failed. Try again.')
   return body as T
-  }catch(error){
-    if(controller.signal.aborted)throw new Error('Account service took too long. Try again.')
-    throw error
   }finally{
-    clearTimeout(timeout)
     console.debug('cyclotron-account-request '+JSON.stringify({path,status,durationMs:Math.round(performance.now()-started)}))
   }
 }

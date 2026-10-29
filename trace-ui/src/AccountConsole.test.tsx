@@ -181,11 +181,11 @@ test('account switching consumes the verified response without a duplicate sessi
 
 test('an uncertain switch hides the old workspace and retries state without repeating the mutation',async()=>{
   const client=clientFor({...signedIn,selectedAccountId:'alpha',canWrite:true})
-  vi.mocked(client.select).mockRejectedValue(new Error('Account service took too long. Try again.'))
+  vi.mocked(client.select).mockRejectedValue(new Error('The account request failed. Try again.'))
   render(<AccountConsole client={client}/> )
   await screen.findByText('Existing console workspace')
   fireEvent.change(screen.getByRole('combobox',{name:'Account'}),{target:{value:'beta'}})
-  expect(await screen.findByRole('alert')).toHaveTextContent('took too long')
+  expect(await screen.findByRole('alert')).toHaveTextContent('The account request failed')
   expect(screen.queryByText('Existing console workspace')).toBeNull()
   fireEvent.click(screen.getByRole('button',{name:'Try again'}))
   expect(await screen.findByText('Existing console workspace')).toBeVisible()
