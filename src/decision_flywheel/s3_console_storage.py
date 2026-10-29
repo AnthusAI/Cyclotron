@@ -31,6 +31,7 @@ from .catalog_storage import encoded, timestamp
 from .console_snapshot import SCHEMA, SEQUENCES, TABLES
 from .console_snapshot import validate as validate_console
 from .cyclotrons import load_config
+from .decision_kinds import DECISION_KINDS, same_kind
 from .journal import Journal, commit_with_contract, decode, encode, uuid
 from .models import DecisionTask
 from .record_lake import (
@@ -1870,7 +1871,7 @@ class S3ConsoleStorage:
             "undo",
             "optimize",
             "replay-next",
-            "publication",
+            *DECISION_KINDS,
         ):
             raise ValueError("only live runs accept supported labeling commands")
 
@@ -1885,7 +1886,9 @@ class S3ConsoleStorage:
             found = self._request_entry(value, run_id, request_id)
             old = found and found["row"]
             if old:
-                if old["kind"] != kind or (old["payload"] != raw and self._command_payload(old["payload"]) != payload):
+                if not same_kind(old["kind"], kind) or (
+                    old["payload"] != raw and self._command_payload(old["payload"]) != payload
+                ):
                     raise ValueError("command identity has different content")
                 return self._job(value, old)
             # Jobs queue in acceptance order (row order); a command is never refused because others are running or waiting.

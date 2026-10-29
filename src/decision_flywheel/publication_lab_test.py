@@ -415,3 +415,25 @@ def test_a_review_request_over_two_megabytes_with_its_long_explanation_is_record
             assert [label["explanation"] for label in lab.engine.labels()] == [explanation]
 
     run(scenario())
+
+
+def test_the_decision_contract_names_a_binding_where_the_publication_contract_names_a_publication():
+    from .publication_lab import CONTRACT, DECISION_CONTRACT, in_contract
+
+    body = {"contractVersion": CONTRACT, "publicationId": "alpha", "publications": {"beta": {"publicationId": "beta"}}}
+    assert in_contract(CONTRACT, body) is body
+    assert in_contract(DECISION_CONTRACT, body) == {
+        "contractVersion": DECISION_CONTRACT,
+        "bindingId": "alpha",
+        "decisions": {"beta": {"bindingId": "beta"}},
+    }
+    with pytest.raises(ValueError):
+        in_contract("cyclotron-other/v1", body)
+
+
+def test_the_neutral_names_are_the_same_classes_as_the_publication_names():
+    from . import publication_lab as lab
+
+    assert lab.Binding is lab.PublicationBinding and lab.DecisionLab is lab.PublicationLab
+    assert lab.CallerActor is lab.PublicationActor and lab.HTTPDecisionClient is lab.HTTPPublicationClient
+    assert lab.Binding("alpha", ("alpha",), "r1").binding_id == "alpha"

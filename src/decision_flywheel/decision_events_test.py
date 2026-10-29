@@ -110,3 +110,20 @@ def test_failed_entries_are_logged_and_do_not_raise():
     client = FakeEvents(response={"FailedEntryCount": 1, "Entries": [{"ErrorCode": "x"}]})
     DecisionEventNotifier(client, BUS, log=logs.append).notify(job, actor, "completed")
     assert json.loads(logs[0]) == {"event": "decision_event_failed_entries", "failedEntryCount": 1}
+
+
+def test_a_decision_asked_for_in_the_decision_contract_rings_in_it_naming_its_bindings():
+    client = FakeEvents()
+    payload = {
+        "bindings": {"alpha": "r1"},
+        "item": {"id": "hn-1", "values": {"text": "x"}},
+        "contractVersion": "cyclotron-decision/v1",
+    }
+    for kind in ("decision", "publication"):
+        job, actor = machine_job(kind, payload)
+        DecisionEventNotifier(client, BUS).notify(job, actor, "completed")
+    details = [json.loads(call["Entries"][0]["Detail"]) for call in client.calls]
+    assert len(details) == 2
+    for detail in details:
+        assert detail["contractVersion"] == "cyclotron-decision/v1"
+        assert detail["bindings"] == ["alpha"] and "publications" not in detail

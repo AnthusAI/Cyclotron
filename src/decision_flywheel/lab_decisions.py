@@ -34,6 +34,7 @@ from threading import Lock
 
 from fastapi import HTTPException, Request
 
+from .decision_kinds import is_decision
 from .hosted_publications import configured_targets
 from .journal import uuid
 from .machine_access import MachineActor
@@ -78,7 +79,7 @@ def delivered(job):
     ``{"decisionId", "decidedAt", "itemId", "itemRevision", "itemFingerprint", "outputs"}``; ``outputs`` maps
     each output id to its publication, label, confidence, probabilities, version and review routing.
     """
-    if job.get("kind") != "publication" or job.get("status") != "completed":
+    if not is_decision(job.get("kind")) or job.get("status") != "completed":
         return None
     payload = job.get("payload")
     if not isinstance(payload, dict) or not isinstance(payload.get("item"), dict):
@@ -240,7 +241,7 @@ class RunReader:
         if known is None:
             row = self.store.run_job_at(self.run_id, n, results=False)
             payload = row["payload"] if isinstance(row["payload"], dict) else {}
-            decision = row["kind"] == "publication" and row["status"] == "completed" and isinstance(payload.get("item"), dict)
+            decision = is_decision(row["kind"]) and row["status"] == "completed" and isinstance(payload.get("item"), dict)
             known = {"status": row["status"], "decision": decision}
         if timed and known["decision"] and "at" not in known:
             found = delivered(self.job(n))

@@ -46,7 +46,7 @@ reviewed change.
 | `BffRole` | IAM | `cyclotron-console-bff-runtime`. See below. |
 | `WorkerRole` | IAM | `cyclotron-console-worker-runtime`. See below. |
 | `LabVerifierRole` | IAM | `cyclotron-lab-verifier` (pending, see below). Assumed by the BFF to verify editor tokens against the central accounts API. |
-| `MachineInvokerRole` | IAM, conditional | `cyclotron-machine-invoker`, only if `MachineCallerRoleArn` is non-empty. Assumable by that one role ARN (session max 1 h); may `execute-api:Invoke` only `POST /machine/publications/*/operations` and `GET /machine/publications/*/commands/*` on this API. |
+| `MachineInvokerRole` | IAM, conditional | `cyclotron-machine-invoker`, only if `MachineCallerRoleArn` is non-empty. Assumable by that one role ARN (session max 1 h); may `execute-api:Invoke` only the machine routes on this API: `POST /machine/bindings/*/operations`, `GET /machine/bindings/*/commands/*`, their `/machine/publications/` equivalents, `POST /machine/decisions` and `GET /machine/decisions/*`. |
 
 Secrets Manager: not a resource of this stack. `WorkerRole` may read
 `secretsmanager:GetSecretValue` on `cyclotron/providers/openai-??????` (the
@@ -93,7 +93,7 @@ template matches. Changing any is a reviewed change:
 | `FederationReviewId` | Review id recorded as the `FederationReview` Lambda tag; only the one reviewed value is allowed. |
 | `ExecutionPairReviewId` | Same, for the `ExecutionPairReview` tag. |
 | `MachineCallerRoleArn` | Exact IAM role ARN allowed to assume `cyclotron-machine-invoker`. Empty creates no machine role and no `CYCLOTRON_MACHINE_PRINCIPALS`. |
-| `PublicationTargets` | Reviewed `CYCLOTRON_PUBLICATION_TARGETS` JSON (up to 3000 chars): which accounts, runs, model identities and publication bindings the hosted service may run. Standing targets have no lifetime/daily request or item quota. Empty leaves the variable unset. |
+| `StandingRuns` | Reviewed `CYCLOTRON_STANDING_RUNS` JSON: which accounts, runs, model identities and bindings (`bindingId`) the hosted service may run. Standing targets have no lifetime/daily request or item quota. Empty leaves the variable unset. |
 | `AllowLive` | `CYCLOTRON_ALLOW_LIVE`. `true` permits live provider calls; default `false`. The stack description still says "live providers disabled". |
 | `PredictionModel` | `CYCLOTRON_PREDICTION_MODEL`, default `jev-1.13.0`. |
 | `LabVerifierEnabled` | `'true'` or `'false'`, default `'false'` (pending). When `true` the BFF gets `CYCLOTRON_LAB_VERIFIER_ROLE_ARN` and `CYCLOTRON_ACCOUNTS_API_URL`; `false` leaves both unset. |

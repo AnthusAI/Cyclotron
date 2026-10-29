@@ -796,3 +796,99 @@ def test_feedback_with_a_long_comment_and_long_editor_identity_is_recorded_whole
             assert recorded.json()["asserted"]["editor"]["subject"] == subject
 
     asyncio.run(go())
+
+
+DECISION = "cyclotron-decision/v1"
+
+
+def test_the_binding_routes_decide_poll_and_report_status_in_the_decision_contract(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            url = "/machine/bindings/alpha/operations"
+            decide_body = {**body("decide", {"bindingRevision": "binding-one", "item": new_item()}, "req-bind-0001")}
+            # Each route speaks one contract: the publication contract is refused on a binding route.
+            assert (await http.post(url, json=decide_body)).status_code == 400
+            posted = await http.post(url, json={**decide_body, "contractVersion": DECISION})
+            assert posted.status_code == 202, posted.text
+            accepted = posted.json()
+            assert accepted["contractVersion"] == DECISION and accepted["bindingId"] == "alpha"
+            assert "publicationId" not in accepted
+            await drain(worker, sent)
+            done = await http.get(f"/machine/bindings/alpha/commands/{accepted['jobId']}")
+            assert done.status_code == 200, done.text
+            receipt = done.json()
+            assert receipt["contractVersion"] == DECISION and receipt["bindingId"] == "alpha"
+            assert set(receipt["decision"]["classifiers"]) == {"alpha"}
+            # The same job read through the publication route is the publication contract's receipt.
+            legacy = (await http.get(f"/machine/publications/alpha/commands/{accepted['jobId']}")).json()
+            assert legacy["contractVersion"] == CONTRACT and legacy["publicationId"] == "alpha"
+            assert {k: v for k, v in receipt.items() if k not in ("contractVersion", "bindingId")} == {
+                k: v for k, v in legacy.items() if k not in ("contractVersion", "publicationId")
+            }
+            status = await http.post(url, json={"contractVersion": DECISION, "operation": "status", "payload": {}})
+            assert status.status_code == 200 and status.json()["bindingId"] == "alpha"
+
+    asyncio.run(go())
+
+
+def test_decision_contract_feedback_names_the_caller_and_reviewer_and_is_stored_as_the_publication_contract_stores_it(
+    identity, monkeypatch
+):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    run_id = targets[0].run_id
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            await decide(http, worker, sent, new_item())
+            url = "/machine/bindings/alpha/operations"
+            payload = {k: v for k, v in feedback_payload().items() if k != "editor"} | {
+                "caller": "anth-us",
+                "reviewer": "editor-17",
+            }
+            sent_body = {"contractVersion": DECISION, "operation": "feedback", "payload": payload, "requestId": "fb-bind-0001"}
+            first = await http.post(url, json=sent_body)
+            assert first.status_code == 200, first.text
+            value = first.json()
+            assert value["contractVersion"] == DECISION and value["bindingId"] == "alpha"
+            assert value["asserted"] == {"machine": ROLE, "caller": "anth-us", "reviewer": "editor-17"}
+            # The decision contract has no editor field, and the publication contract no caller or reviewer.
+            editor = {**sent_body, "payload": feedback_payload(), "requestId": "fb-bind-0002"}
+            assert (await http.post(url, json=editor)).status_code == 400
+            mixed = {**sent_body, "contractVersion": CONTRACT, "requestId": "fb-bind-0003"}
+            assert (await http.post("/machine/publications/alpha/operations", json=mixed)).status_code == 400
+
+    asyncio.run(go())
+    events = [e["payload"] for e in store.all_events(run_id) if e["payload"]["kind"] == "publication-machine-feedback"]
+    assert len(events) == 1
+    assert events[0]["editor"] == {"site": "anth-us", "subject": "editor-17", "asserted": True}
+
+
+def test_a_shared_decision_asked_for_in_the_decision_contract_is_answered_in_it(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            asked = {**decisions_body(revisions("alpha", "beta"), new_item(), "req-dec-0001"), "contractVersion": DECISION}
+            posted = await http.post("/machine/decisions", json=asked)
+            assert posted.status_code == 202, posted.text
+            assert posted.json()["contractVersion"] == DECISION
+            pending = await http.get(f"/machine/decisions/{posted.json()['jobId']}")
+            assert pending.status_code == 202 and pending.json()["contractVersion"] == DECISION
+            await drain(worker, sent)
+            receipt = (await http.get(f"/machine/decisions/{posted.json()['jobId']}")).json()
+            assert receipt["contractVersion"] == DECISION and "publications" not in receipt
+            assert set(receipt["decisions"]) == {"alpha", "beta"}
+            for name, row in receipt["decisions"].items():
+                assert row["contractVersion"] == DECISION and row["bindingId"] == name
+            # The same request id in the other contract is a different request, not a replay.
+            again = await http.post("/machine/decisions", json={**asked, "contractVersion": CONTRACT})
+            assert again.status_code == 409 and again.json()["code"] == "request_conflict"
+            legacy = await http.post("/machine/decisions", json=decisions_body(revisions("alpha"), new_item(), "req-dec-0002"))
+            await drain(worker, sent)
+            old = (await http.get(f"/machine/decisions/{legacy.json()['jobId']}")).json()
+            assert old["contractVersion"] == CONTRACT and set(old["publications"]) == {"alpha"}
+            assert len(model.calls) == 1
+
+    asyncio.run(go())

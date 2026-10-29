@@ -36,11 +36,10 @@ Parameters:
     Default: ''
     AllowedPattern: ^$|arn:aws:events:[a-z0-9-]+:[0-9]{12}:event-bus/[A-Za-z0-9._-]{1,256}
     Description: Exact EventBridge bus ARN that receives one Decision Ready doorbell per finished machine decision; empty publishes nothing
-  PublicationTargets:
+  StandingRuns:
     Type: String
     Default: ''
-    MaxLength: 3000
-    Description: Reviewed CYCLOTRON_PUBLICATION_TARGETS JSON; empty leaves the variable unset
+    Description: Reviewed CYCLOTRON_STANDING_RUNS JSON; empty leaves the variable unset
   AllowLive:
     Type: String
     Default: 'false'
@@ -484,6 +483,8 @@ Resources:
             - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/publications/*/commands/*
             - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/decisions
             - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/decisions/*
+            - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/POST/machine/bindings/*/operations
+            - Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/$default/GET/machine/bindings/*/commands/*
   BffFunction:
     Type: AWS::Lambda::Function
     DependsOn: BffLogGroup
@@ -526,10 +527,10 @@ Resources:
           CYCLOTRON_CENTRAL_ENDPOINT: https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api
           CYCLOTRON_ALLOW_LIVE:
             Ref: AllowLive
-          CYCLOTRON_PUBLICATION_TARGETS:
+          CYCLOTRON_STANDING_RUNS:
             Fn::If:
             - HasTargets
-            - Ref: PublicationTargets
+            - Ref: StandingRuns
             - Ref: AWS::NoValue
           CYCLOTRON_MACHINE_PRINCIPALS:
             Fn::If:
@@ -642,10 +643,10 @@ Resources:
           CYCLOTRON_CENTRAL_ENDPOINT: https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api
           CYCLOTRON_ALLOW_LIVE:
             Ref: AllowLive
-          CYCLOTRON_PUBLICATION_TARGETS:
+          CYCLOTRON_STANDING_RUNS:
             Fn::If:
             - HasTargets
-            - Ref: PublicationTargets
+            - Ref: StandingRuns
             - Ref: AWS::NoValue
           CYCLOTRON_MACHINE_PRINCIPALS:
             Fn::If:
@@ -789,7 +790,7 @@ Conditions:
   HasTargets:
     Fn::Not:
     - Fn::Equals:
-      - Ref: PublicationTargets
+      - Ref: StandingRuns
       - ''
   HasLabVerifier:
     Fn::Equals:

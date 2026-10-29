@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from .application_runtime import RuntimeCommand
 from .command_refusal import CommandRefused
+from .decision_kinds import WRITTEN, is_decision
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .hosted_command_worker import AuthorizedModel, HeldEngine, no_job_guard
 from .journal import encode, uuid
@@ -22,7 +23,15 @@ from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
 from .priming_context import catalog_priming, decode_priming
 from .prospectus_accounts import AccountAccessDenied, ProspectusUnavailable, VerifiedAccountSession
-from .publication_lab import CONTRACT, PublicationActor, PublicationBinding, PublicationLab, criteria_fingerprint
+from .publication_lab import (
+    CONTRACT,
+    DECISION_CONTRACT,
+    PublicationActor,
+    PublicationBinding,
+    PublicationLab,
+    criteria_fingerprint,
+    in_contract,
+)
 from .s3_embedded_storage import S3CyclotronStores
 from .s3_runtime_storage import RuntimeOwnershipError
 from .standing_publications import validate_item
@@ -31,6 +40,8 @@ from .storage_errors import StorageConflict, StorageUncertain
 
 @dataclass(frozen=True)
 class PublicationTarget:
+    """One reviewed standing run (or a non-standing publication run) and the bindings it decides for."""
+
     account_id: str
     run_id: str
     bindings: tuple[PublicationBinding, ...]
@@ -62,10 +73,23 @@ class PublicationTarget:
             raise ValueError("standing must be a boolean")
 
 
+# The neutral name; the publication name is kept until every caller has moved.
+StandingRunConfig = PublicationTarget
+
+STANDING_RUNS = "CYCLOTRON_STANDING_RUNS"
+LEGACY_TARGETS = "CYCLOTRON_PUBLICATION_TARGETS"
+
+
 def targets_from_environment(environment):
-    raw = environment.get("CYCLOTRON_PUBLICATION_TARGETS")
+    """The reviewed standing runs, from ``CYCLOTRON_STANDING_RUNS`` (bindings named by ``bindingId``) or the
+    older ``CYCLOTRON_PUBLICATION_TARGETS`` (``publicationId``). Setting both is refused: one would be ignored."""
+    if STANDING_RUNS in environment and LEGACY_TARGETS in environment:
+        raise ValueError(f"set {STANDING_RUNS} or {LEGACY_TARGETS}, not both")
+    name = STANDING_RUNS if STANDING_RUNS in environment else LEGACY_TARGETS
+    raw = environment.get(name)
     if raw is None:
         return None
+    key = "bindingId" if name == STANDING_RUNS else "publicationId"
     try:
         values = json.loads(raw)
         if not isinstance(values, list) or not values:
@@ -88,8 +112,8 @@ def targets_from_environment(environment):
             for row in target["bindings"]:
                 if (
                     not isinstance(row, dict)
-                    or not {"publicationId", "outputs", "revision"} <= set(row)
-                    or set(row) - {"publicationId", "outputs", "revision", "priming"}
+                    or not {key, "outputs", "revision"} <= set(row)
+                    or set(row) - {key, "outputs", "revision", "priming"}
                     or not isinstance(row["outputs"], list)
                 ):
                     raise ValueError()
@@ -103,7 +127,7 @@ def targets_from_environment(environment):
                     raise ValueError()
                 bindings.append(
                     PublicationBinding(
-                        row["publicationId"],
+                        row[key],
                         tuple(row["outputs"]),
                         row["revision"],
                         priming["listId"] if priming else None,
@@ -177,7 +201,7 @@ def envelope(target, binding, config):
 def is_priming_command(kind, payload):
     """Host-owned data-only dispatch rule; never a caller-supplied live bypass."""
     return (
-        kind == "publication"
+        is_decision(kind)
         and isinstance(payload, dict)
         and set(payload) == {"publication", "bindingRevision", "priming"}
         and isinstance(payload["priming"], dict)
@@ -193,9 +217,10 @@ def is_priming_command(kind, payload):
 def is_shared_decision_command(kind, payload):
     """One decision for several publications of a standing target; the stored job payload shape."""
     return (
-        kind == "publication"
+        is_decision(kind)
         and isinstance(payload, dict)
-        and set(payload) == {"bindings", "item"}
+        and set(payload) in ({"bindings", "item"}, {"bindings", "item", "contractVersion"})
+        and payload.get("contractVersion", DECISION_CONTRACT) == DECISION_CONTRACT
         and isinstance(payload["bindings"], dict)
         and bool(payload["bindings"])
         and all(isinstance(k, str) and isinstance(v, str) for k, v in payload["bindings"].items())
@@ -281,7 +306,7 @@ class PublicationCommandRuntime:
         priming = is_priming_command(kind, payload)
         machine = isinstance(self.actor, MachineActor)
         shared = is_shared_decision_command(kind, payload)
-        if not priming and not shared and (kind != "publication" or set(payload) != {"publication", "bindingRevision", "item"}):
+        if not priming and not shared and (not is_decision(kind) or set(payload) != {"publication", "bindingRevision", "item"}):
             raise ValueError("supported publication prediction command required")
         if shared and not machine:
             raise AccountAccessDenied("only machine callers may decide for several publications")
@@ -525,7 +550,7 @@ def status_snapshot(store, target, binding, publication):
         payload = job["payload"]
         single = payload.get("publication") == publication and payload.get("bindingRevision") == binding.revision
         shared = is_shared_decision_command(job["kind"], payload) and payload["bindings"].get(publication) == binding.revision
-        if job["kind"] == "publication" and job["status"] == "completed" and (single or shared):
+        if is_decision(job["kind"]) and job["status"] == "completed" and (single or shared):
             result = fetch(job["id"]) if fetch else job["result"]
             return result["statusSnapshots"][publication] if shared else result["statusSnapshot"]
     return None
@@ -556,10 +581,11 @@ def queue_fields(store, job):
     return {"queued": state["queued"], "queuePosition": state["position"]}
 
 
-def receipt_response(job, meta, queue=None):
-    """Durable job state as a publication receipt; refusals carry their public code, never details."""
+def receipt_response(job, meta, queue=None, contract=CONTRACT):
+    """Durable job state as a receipt in the caller's contract; refusals carry their public code, never details."""
     if job["status"] == "completed":
-        return job["result"]["response"]
+        return in_contract(contract, job["result"]["response"])
+    meta = in_contract(contract, meta)
     if job["status"] in ("pending", "running"):
         return JSONResponse({**meta, "jobId": job["id"], "status": job["status"], **(queue or {})}, status_code=202)
     refusal = (job.get("result") or {}).get("refusal") if job["status"] == "failed" else None
@@ -587,14 +613,26 @@ def install_publication_routes(app, runtime):
         return session, target, binding, store, meta
 
     # The lab's CDN forwards /api/* to this service but not /publications/*, so signed-in browsers on the
-    # lab's public address use the /api/ paths; both run the same handler and checks.
+    # lab's public address use the /api/ paths; both run the same handler and checks. The binding paths
+    # run them too, in the decision contract.
     @app.post("/publications/{publication}/operations")
     @app.post("/api/publications/{publication}/operations")
     async def operation(publication: str, request: Request):
+        return await operate(publication, request, CONTRACT)
+
+    @app.post("/api/bindings/{binding}/operations")
+    async def binding_operation(binding: str, request: Request):
+        return await operate(binding, request, DECISION_CONTRACT)
+
+    def answer(contract, body, status_code=200):
+        body = in_contract(contract, body)
+        return body if status_code == 200 else JSONResponse(body, status_code=status_code)
+
+    async def operate(publication, request, contract):
         content = await request.body()
         try:
             body = json.loads(content)
-            if set(body) != {"contractVersion", "operation", "payload"} or body["contractVersion"] != CONTRACT:
+            if set(body) != {"contractVersion", "operation", "payload"} or body["contractVersion"] != contract:
                 raise ValueError()
             payload = body["payload"]
             if not isinstance(payload, dict):
@@ -606,11 +644,11 @@ def install_publication_routes(app, runtime):
             if payload:
                 raise HTTPException(400, "status takes an empty payload")
             if meta.get("pendingOutputs"):
-                return meta
+                return answer(contract, meta)
             snapshot = await asyncio.to_thread(status_snapshot, store, target, binding, publication)
             if snapshot is None:
                 raise HTTPException(503, "no verified publication status snapshot yet")
-            return snapshot
+            return answer(contract, snapshot)
         priming = body["operation"] == "prime"
         if body["operation"] not in ("decide", "prime"):
             raise HTTPException(503, "only publication prediction is activated; feedback is not applied")
@@ -647,15 +685,22 @@ def install_publication_routes(app, runtime):
         )
         try:
             job = await runtime.workspace(target.account_id).service.submit_command(
-                verified, target.run_id, identity, "publication", command
+                verified, target.run_id, identity, WRITTEN, command
             )
         except QUEUE_REFUSALS as error:
             return queue_refusal(error, meta)
-        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
+        return answer(contract, {**meta, "jobId": job["id"], "status": job["status"]}, 202)
 
     @app.get("/publications/{publication}/commands/{job_id}")
     @app.get("/api/publications/{publication}/commands/{job_id}")
     async def receipt(publication: str, job_id: str, request: Request):
+        return await poll(publication, job_id, request, CONTRACT)
+
+    @app.get("/api/bindings/{binding}/commands/{job_id}")
+    async def binding_receipt(binding: str, job_id: str, request: Request):
+        return await poll(binding, job_id, request, DECISION_CONTRACT)
+
+    async def poll(publication, job_id, request, contract):
         _, target, binding, store, meta = await access(request, publication, "console:read")
         try:
             uuid(job_id)
@@ -664,9 +709,9 @@ def install_publication_routes(app, runtime):
             raise HTTPException(404, "unknown publication command") from None
         if (
             job["run_id"] != target.run_id
-            or job["kind"] != "publication"
+            or not is_decision(job["kind"])
             or job["payload"].get("publication") != publication
             or job["payload"].get("bindingRevision") != binding.revision
         ):
             raise HTTPException(404, "unknown publication command")
-        return receipt_response(job, meta, await asyncio.to_thread(queue_fields, store, job))
+        return receipt_response(job, meta, await asyncio.to_thread(queue_fields, store, job), contract)

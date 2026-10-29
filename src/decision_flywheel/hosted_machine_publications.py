@@ -1,9 +1,13 @@
 """Machine routes for standing publication targets (SigV4 service principals, no human session).
 
-``POST /machine/publications/{publication}/operations`` accepts ``decide``, ``status`` and ``feedback``.
-``GET  /machine/publications/{publication}/commands/{jobId}`` polls a queued ``decide``.
-``POST /machine/decisions`` queues one ``decide`` answering several publications of a standing target.
-``GET  /machine/decisions/{jobId}`` polls it and returns every requested publication's projection.
+``POST /machine/bindings/{binding}/operations`` accepts ``decide``, ``status`` and ``feedback``.
+``GET  /machine/bindings/{binding}/commands/{jobId}`` polls a queued ``decide``.
+``POST /machine/decisions`` queues one ``decide`` answering several bindings of a standing target.
+``GET  /machine/decisions/{jobId}`` polls it and returns every requested binding's projection.
+
+The binding routes speak the decision contract (``cyclotron-decision/v1``). The publication routes
+(``/machine/publications/{publication}/…``) run the same handlers in the publication contract, and
+``/machine/decisions`` answers in whichever of the two its request named.
 
 The caller identity comes only from the API Gateway IAM context. Account and run are derived from the
 trusted target configuration; the account header must merely select a configured target. A machine
@@ -18,10 +22,12 @@ from hashlib import sha256
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from .decision_kinds import WRITTEN, is_decision
 from .hosted_publications import (
     QUEUE_REFUSALS,
     configured_targets,
     envelope,
+    is_shared_decision_command,
     queue_fields,
     queue_refusal,
     receipt_response,
@@ -31,12 +37,14 @@ from .hosted_publications import (
 from .journal import uuid
 from .machine_access import MachineActor, MachineDenied, verified_caller
 from .prospectus_accounts import AccountAccessDenied
-from .publication_lab import CONTRACT
+from .publication_lab import CONTRACT, CONTRACTS, DECISION_CONTRACT, in_contract
 from .standing_publications import validate_item
 from .storage_errors import StorageMissing, StorageUncertain
 
 REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{8,}")
-FEEDBACK_KEYS = {"bindingRevision", "itemId", "itemRevision", "output", "label", "editor"}
+FEEDBACK_KEYS = {"bindingRevision", "itemId", "itemRevision", "output", "label"}
+# Who reviewed: the publication contract's ``editor: {site, subject}``, or the decision contract's caller and reviewer.
+REVIEWER_KEYS = {CONTRACT: {"editor"}, DECISION_CONTRACT: {"caller", "reviewer"}}
 
 
 def _text(value, name, *, required=True):
@@ -65,6 +73,17 @@ def install_machine_routes(app, runtime):
 
     @app.post("/machine/publications/{publication}/operations")
     async def operation(publication: str, request: Request):
+        return await operate(publication, request, CONTRACT)
+
+    @app.post("/machine/bindings/{binding}/operations")
+    async def binding_operation(binding: str, request: Request):
+        return await operate(binding, request, DECISION_CONTRACT)
+
+    def answer(contract, body, status_code=200):
+        body = in_contract(contract, body)
+        return body if status_code == 200 else JSONResponse(body, status_code=status_code)
+
+    async def operate(publication, request, contract):
         role, session, account, target, binding = resolve(request, publication)
         content = await request.body()
         try:
@@ -75,7 +94,7 @@ def install_machine_routes(app, runtime):
                 keys.add("requestId")
             if (
                 set(body) != keys
-                or body["contractVersion"] != CONTRACT
+                or body["contractVersion"] != contract
                 or name not in ("decide", "status", "feedback")
                 or not isinstance(body["payload"], dict)
             ):
@@ -95,15 +114,18 @@ def install_machine_routes(app, runtime):
             if payload:
                 raise HTTPException(400, "status takes an empty payload")
             if meta.get("pendingOutputs"):
-                return meta
+                return answer(contract, meta)
             snapshot = await asyncio.to_thread(status_snapshot, store, target, binding, publication)
             if snapshot is None:
                 raise HTTPException(503, "no verified publication status snapshot yet")
-            return snapshot
+            return answer(contract, snapshot)
         if meta.get("pendingOutputs"):
             raise HTTPException(409, "publication criteria are pending")
         if name == "feedback":
-            return await feedback(role, session, account, target, binding, run, store, body["requestId"], payload)
+            return answer(
+                contract,
+                await feedback(role, session, account, target, binding, run, store, body["requestId"], payload, contract),
+            )
         if not runtime.config.allow_live:
             raise HTTPException(503, "live publication predictions are disabled")
         if set(payload) != {"bindingRevision", "item"} or payload["bindingRevision"] != binding.revision:
@@ -119,26 +141,30 @@ def install_machine_routes(app, runtime):
         )
         try:
             job = await runtime.workspace(account).service.submit_machine_command(
-                actor, "machine:" + body["requestId"], "publication", command
+                actor, "machine:" + body["requestId"], WRITTEN, command
             )
         except AccountAccessDenied:
             raise HTTPException(403, "machine access refused") from None
         except QUEUE_REFUSALS as error:
             return queue_refusal(error, meta)
         except ValueError as exc:
-            return JSONResponse({**meta, "code": "request_conflict", "message": str(exc)}, status_code=409)
-        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
+            return answer(contract, {**meta, "code": "request_conflict", "message": str(exc)}, 409)
+        return answer(contract, {**meta, "jobId": job["id"], "status": job["status"]}, 202)
 
-    async def feedback(role, session, account, target, binding, run, store, request_id, payload):
+    async def feedback(role, session, account, target, binding, run, store, request_id, payload, contract):
         try:
-            if not (set(payload) == FEEDBACK_KEYS or set(payload) == FEEDBACK_KEYS | {"comment"}):
+            fields = FEEDBACK_KEYS | REVIEWER_KEYS[contract]
+            if not (set(payload) == fields or set(payload) == fields | {"comment"}):
                 raise HTTPException(400, "feedback payload fields are fixed")
             if payload["bindingRevision"] != binding.revision:
                 raise HTTPException(409, "publication binding changed")
-            editor = payload["editor"]
-            if not isinstance(editor, dict) or set(editor) != {"site", "subject"}:
-                raise HTTPException(400, "asserted editor requires site and subject")
-            site, subject = _text(editor["site"], "editor site"), _text(editor["subject"], "editor subject")
+            if contract == DECISION_CONTRACT:
+                site, subject = _text(payload["caller"], "caller"), _text(payload["reviewer"], "reviewer")
+            else:
+                editor = payload["editor"]
+                if not isinstance(editor, dict) or set(editor) != {"site", "subject"}:
+                    raise HTTPException(400, "asserted editor requires site and subject")
+                site, subject = _text(editor["site"], "editor site"), _text(editor["subject"], "editor subject")
             item_id = _text(payload["itemId"], "item id")
             output, label = _text(payload["output"], "output"), _text(payload["label"], "label")
             comment = _text(payload.get("comment", ""), "comment", required=False)
@@ -162,6 +188,7 @@ def install_machine_routes(app, runtime):
                 "classifierId": output,
                 "classifierRevision": classifier["revision"],
                 "machine": {"principal": role, "session": session},
+                # Stored under Papyrus's field names whichever contract the caller spoke; history keeps one shape.
                 "editor": {"site": site, "subject": subject, "asserted": True},
                 "requestId": request_id,
             }
@@ -195,11 +222,20 @@ def install_machine_routes(app, runtime):
             "itemRevision": revision,
             "label": vote["label"],
             "recordedAs": "human-label",
-            "asserted": {"machine": role, "editor": {"site": site, "subject": subject}},
+            "asserted": {"machine": role, "caller": site, "reviewer": subject}
+            if contract == DECISION_CONTRACT
+            else {"machine": role, "editor": {"site": site, "subject": subject}},
         }
 
     @app.get("/machine/publications/{publication}/commands/{job_id}")
     async def receipt(publication: str, job_id: str, request: Request):
+        return await poll(publication, job_id, request, CONTRACT)
+
+    @app.get("/machine/bindings/{binding}/commands/{job_id}")
+    async def binding_receipt(binding: str, job_id: str, request: Request):
+        return await poll(binding, job_id, request, DECISION_CONTRACT)
+
+    async def poll(publication, job_id, request, contract):
         _, _, account, target, binding = resolve(request, publication)
         store = runtime.console(account)
         try:
@@ -211,12 +247,14 @@ def install_machine_routes(app, runtime):
         if (
             not isinstance(actor, MachineActor)
             or job["run_id"] != target.run_id
-            or job["kind"] != "publication"
+            or not is_decision(job["kind"])
             or job["payload"].get("publication") != publication
             or job["payload"].get("bindingRevision") != binding.revision
         ):
             raise HTTPException(404, "unknown publication command")
-        return receipt_response(job, envelope(target, binding, run["config"]), await asyncio.to_thread(queue_fields, store, job))
+        return receipt_response(
+            job, envelope(target, binding, run["config"]), await asyncio.to_thread(queue_fields, store, job), contract
+        )
 
     def resolve_account(request):
         try:
@@ -229,8 +267,8 @@ def install_machine_routes(app, runtime):
             raise HTTPException(400, "explicit account pin required") from None
         return role, session, account
 
-    def decisions_meta(account, target, bindings):
-        return {"contractVersion": CONTRACT, "accountId": account, "runId": target.run_id, "bindings": bindings}
+    def decisions_meta(account, target, bindings, contract):
+        return {"contractVersion": contract, "accountId": account, "runId": target.run_id, "bindings": bindings}
 
     @app.post("/machine/decisions")
     async def decisions(request: Request):
@@ -241,7 +279,7 @@ def install_machine_routes(app, runtime):
             payload = body["payload"]
             if (
                 set(body) != {"contractVersion", "requestId", "payload"}
-                or body["contractVersion"] != CONTRACT
+                or body["contractVersion"] not in CONTRACTS
                 or not isinstance(body["requestId"], str)
                 or not REQUEST_ID.fullmatch(body["requestId"])
                 or not isinstance(payload, dict)
@@ -253,7 +291,7 @@ def install_machine_routes(app, runtime):
                 raise ValueError()
         except (ValueError, TypeError, KeyError):
             raise HTTPException(400, "publication contract with a machine request id required") from None
-        bindings = payload["bindings"]
+        bindings, contract = payload["bindings"], body["contractVersion"]
         standing = [t for t in configured_targets(runtime) if t.account_id == account and t.standing]
         if not standing:
             raise HTTPException(403, "machine access refused")
@@ -268,7 +306,7 @@ def install_machine_routes(app, runtime):
             raise HTTPException(409, "standing run unavailable") from None
         if any(known[name].revision != revision for name, revision in bindings.items()):
             raise HTTPException(409, "publication binding changed")
-        meta = decisions_meta(account, target, bindings)
+        meta = decisions_meta(account, target, bindings, contract)
         if any(set(known[name].outputs) & set(target.pending_outputs) for name in bindings):
             raise HTTPException(409, "publication criteria are pending")
         if not runtime.config.allow_live:
@@ -281,20 +319,22 @@ def install_machine_routes(app, runtime):
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
         command = {"bindings": bindings, "item": {"id": item_id, "values": values}}
+        if contract == DECISION_CONTRACT:
+            command["contractVersion"] = contract  # The receipt and its doorbell answer in it.
         actor = MachineActor(
             role, session, account, target.run_id, await asyncio.to_thread(runtime.binding, account, target.run_id)
         )
         try:
             job = await runtime.workspace(account).service.submit_machine_command(
-                actor, "machine:" + body["requestId"], "publication", command
+                actor, "machine:" + body["requestId"], WRITTEN, command
             )
         except AccountAccessDenied:
             raise HTTPException(403, "machine access refused") from None
         except QUEUE_REFUSALS as error:
             return queue_refusal(error, meta)
         except ValueError as exc:
-            return JSONResponse({**meta, "code": "request_conflict", "message": str(exc)}, status_code=409)
-        return JSONResponse({**meta, "jobId": job["id"], "status": job["status"]}, status_code=202)
+            return answer(contract, {**meta, "code": "request_conflict", "message": str(exc)}, 409)
+        return answer(contract, {**meta, "jobId": job["id"], "status": job["status"]}, 202)
 
     @app.get("/machine/decisions/{job_id}")
     async def decisions_receipt(job_id: str, request: Request):
@@ -311,17 +351,20 @@ def install_machine_routes(app, runtime):
             target is None
             or not target.standing
             or not isinstance(actor, MachineActor)
-            or job["kind"] != "publication"
-            or set(payload) != {"bindings", "item"}
+            or not is_shared_decision_command(job["kind"], payload)
         ):
             raise HTTPException(404, "unknown publication decision")
-        meta = decisions_meta(account, target, payload["bindings"])
+        contract = payload.get("contractVersion", CONTRACT)
+        meta = decisions_meta(account, target, payload["bindings"], contract)
         if job["status"] == "completed":
-            return {
-                "contractVersion": CONTRACT,
-                "accountId": account,
-                "runId": target.run_id,
-                "jobId": job["id"],
-                **job["result"]["response"],
-            }
-        return receipt_response(job, meta, await asyncio.to_thread(queue_fields, store, job))
+            return in_contract(
+                contract,
+                {
+                    "contractVersion": CONTRACT,
+                    "accountId": account,
+                    "runId": target.run_id,
+                    "jobId": job["id"],
+                    **job["result"]["response"],
+                },
+            )
+        return receipt_response(job, meta, await asyncio.to_thread(queue_fields, store, job), contract)

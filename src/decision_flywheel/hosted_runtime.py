@@ -199,7 +199,8 @@ class HostedRuntime:
             return
         from .hosted_publications import configured_targets
         reserved = any(t.account_id == account_id and t.run_id == run_id for t in configured_targets(self))
-        if (reserved and kind != 'publication') or (kind == 'publication' and not reserved):
+        from .decision_kinds import is_decision
+        if reserved != is_decision(kind):
             raise ValueError('configured publication runs require their scoped prediction path; feedback is not activated')
 
     def worker(self):

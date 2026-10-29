@@ -53,6 +53,35 @@ def test_the_bootstrap_is_also_served_under_api_with_the_same_identity_and_recei
     asyncio.run(run())
 
 
+def test_the_standing_runs_bootstrap_speaks_the_decision_contract_and_replays_the_same_run(identity, monkeypatch):
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = offline(identity, monkeypatch)
+    body = request()
+
+    async def run():
+        async with priming_client(app, config, cookie, session, account) as http:
+            assert (await http.post("/api/standing-runs/bootstrap", json=body)).status_code == 400
+            created = await http.post("/api/standing-runs/bootstrap", json={**body, "contractVersion": "cyclotron-decision/v1"})
+            assert created.status_code == 201, created.text
+            receipt = created.json()
+            assert receipt["contractVersion"] == "cyclotron-decision/v1" and receipt["createdBy"] == session.person_id
+            # The same request id on the publication path is the same frozen run, answered in its own contract.
+            again = await http.post("/api/publication-runs/bootstrap", json=body)
+            assert again.status_code == 200
+            assert again.json() == {**receipt, "contractVersion": "cyclotron-publication/v1"}
+            assert len(store.runs()) == 1 and not sent and not model.calls
+
+    asyncio.run(run())
+
+
+def test_a_run_frozen_under_either_bootstrap_key_is_recognised():
+    from .hosted_publication_bootstrap import bootstrap_of
+
+    record = {"requestId": "r", "fingerprint": "f", "createdBy": "p"}
+    assert bootstrap_of({"publication_bootstrap": record}) == record
+    assert bootstrap_of({"standing_bootstrap": record}) == record
+    assert bootstrap_of({}) == {}
+
+
 def test_empty_account_bootstraps_one_frozen_run_and_can_prime_with_live_execution_disabled(identity, monkeypatch):
     bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = offline(identity, monkeypatch)
     body = request()

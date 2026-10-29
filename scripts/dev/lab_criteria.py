@@ -39,7 +39,7 @@ def open_store(*, writable: bool):
 
     account = os.environ.get("CYCLOTRON_LAB_ACCOUNT_ID")
     if not account:
-        raise SystemExit("set CYCLOTRON_LAB_ACCOUNT_ID to the lab account scope id (see the stack's PublicationTargets)")
+        raise SystemExit("set CYCLOTRON_LAB_ACCOUNT_ID to the lab account scope id (see the stack's StandingRuns)")
     real = boto3.client("s3", region_name="us-east-1", config=Config(retries={"total_max_attempts": 1}))
 
     class GetOnly:

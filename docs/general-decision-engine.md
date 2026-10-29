@@ -61,7 +61,8 @@ without knowing what a publication is.
 | env `CYCLOTRON_PUBLICATION_TARGETS`, stack parameter `PublicationTargets`; JSON key `publicationId` | `CYCLOTRON_STANDING_RUNS`, `StandingRuns`; `bindingId` (plus optional `name`) | the loader reads either, and refuses both at once; the stack moves in one change set |
 | `/machine/publications/{publication}/operations`, `…/commands/{job_id}`; `/api/publications/{publication}/…` | `/machine/bindings/{binding}/operations`, `…/commands/{job_id}`; `/api/bindings/{binding}/…` | old paths routed to the same handlers until Papyrus has moved; IAM grants both |
 | `/api/publication-runs/bootstrap`, config key `publication_bootstrap`, record kind `publication-bootstrap` | `/api/standing-runs/bootstrap`, `standing_bootstrap`, `standing-bootstrap` | old route kept; stored runs keep their frozen config (never rewritten: the workspace binding is its hash) and are read under either key |
-| stored job kind `publication`; record kind `publication-record`; event field `publications` | `decision`; `decision-record`; `bindings` | dual read forever for stored rows; new rows use the new kind; no rewrite of history |
+| stored job kind `publication`; event field `publications` | `decision`; `bindings` | dual read forever for stored rows; new rows use the new kind; no rewrite of history |
+| embedded record schema `cyclotron-publication-record/v1` | unchanged | a record's id is a hash of its content, so a new schema name would store a second copy of every record already written; it keeps its name |
 | lab API `standing-runs` field `publications`, per-output `publication` | `bindings` (with `name`), per-output `binding` | the lab UI is the only reader; both ship together |
 | error copy "publication binding changed", "output is not part of this publication binding", "publication contract" | "binding changed", "output is not part of this binding", "decision contract" | copy only |
 
@@ -98,8 +99,8 @@ standing run (or bindings on a shared one) in the same configuration, and none o
    retired-word check. Ships on its own.
 2. **Neutral names beside the old ones.** The new contract id, routes, bootstrap route, configuration key and
    stack parameter, with every old name still accepted. New stored rows use the `decision` kinds; reads accept
-   both. Python aliases for the renamed classes. Docs (`hosted-publications.md`,
-   `publication-deployment-contract.md`) become `standing-runs.md` and `decision-contract.md`, with a
+   both. Python aliases for the renamed classes. Docs (`standing-runs.md`,
+   `decision-contract.md`) become `standing-runs.md` and `decision-contract.md`, with a
    Papyrus section.
 3. **Papyrus moves** to the new routes, contract id, `bindingId` and the `caller`/`reviewer` feedback shape. This
    is a Papyrus PR; Cyclotron changes nothing.
