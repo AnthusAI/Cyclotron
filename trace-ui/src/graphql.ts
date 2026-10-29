@@ -1,14 +1,32 @@
 export type TraceEvent={sequence:number;sourceId:string;payload:Record<string,unknown>}
+export class WorkspaceAuthenticationRequired extends Error{}
 
-export async function graphql<T>(query:string,variables:Record<string,unknown>={}):Promise<T>{
-  const response=await fetch('/graphql',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,variables})})
-  if(response.status===401)throw new Error('Authentication required')
-  const body=await response.json()
-  if(!response.ok||body.errors)throw new Error(body.errors?.[0]?.message||'The API request failed')
-  return body.data as T
+export function workspaceUrl(path:string,accountId?:string){
+  if(!accountId)return path
+  const url=new URL(path,window.location.origin)
+  url.searchParams.set('account',accountId)
+  return url.pathname+url.search+url.hash
 }
 
-export function subscribeEvents(runId:string,after:number,onEvent:(event:TraceEvent)=>void,onStatus:(status:string)=>void){
+export async function graphql<T>(query:string,variables:Record<string,unknown>={},accountId?:string):Promise<T>{
+  const started=performance.now()
+  let status:number|'unavailable'='unavailable',successful=false
+  try{
+  const response=await fetch(workspaceUrl('/graphql',accountId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,variables})})
+  status=response.status
+  if(response.status===401)throw new WorkspaceAuthenticationRequired('Authentication required')
+  const body=await response.json()
+  if(!response.ok||body.errors)throw new Error(body.errors?.[0]?.message||'The API request failed')
+  successful=true
+  return body.data as T
+  }finally{
+    // Fixed endpoint and timing only; never emit query, variables, account IDs,
+    // response content or private error messages to browser diagnostics.
+    console.debug('cyclotron-workspace-request '+JSON.stringify({path:'/graphql',status,successful,durationMs:Math.round(performance.now()-started)}))
+  }
+}
+
+export function subscribeEvents(runId:string,after:number,onEvent:(event:TraceEvent)=>void,onStatus:(status:string)=>void,accountId?:string){
   let closed=false,socket:WebSocket|undefined,timer:ReturnType<typeof setTimeout>|undefined,handshakeTimer:ReturnType<typeof setTimeout>|undefined,cursor=after
   const reconnect=()=>{
     if(closed||timer)return
@@ -18,7 +36,7 @@ export function subscribeEvents(runId:string,after:number,onEvent:(event:TraceEv
   const connect=()=>{
     if(closed)return
     let connection:WebSocket
-    try{connection=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/graphql`,'graphql-transport-ws')}
+    try{connection=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}${workspaceUrl('/graphql',accountId)}`,'graphql-transport-ws')}
     catch{reconnect();return}
     socket=connection
     let acknowledged=false

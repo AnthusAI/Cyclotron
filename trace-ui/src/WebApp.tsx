@@ -6,7 +6,8 @@ import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import {LabelCard as LegacyLabelCard,type CurrentItem} from './LabelCard'
-import {graphql,subscribeEvents,type TraceEvent} from './graphql'
+import type {TraceEvent} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {Catalog} from './Catalog'
 import {AppDrawer} from './AppDrawer'
 import {CyclotronCatalog} from './CyclotronCatalog'
@@ -53,8 +54,9 @@ function RunWorkspaceSkeleton(){
 
 
 export function RunTimeline({runId,revision,classifierId}:{runId:string;revision:number|string;classifierId?:string}){
+  const {url:workspaceUrl}=useWorkspaceTransport()
   const [loading,setLoading]=useState(true)
-  const url=`/runs/${runId}/timeline?revision=${encodeURIComponent(revision)}${classifierId?`&classifier_id=${encodeURIComponent(classifierId)}`:''}`
+  const url=workspaceUrl(`/runs/${runId}/timeline?revision=${encodeURIComponent(revision)}${classifierId?`&classifier_id=${encodeURIComponent(classifierId)}`:''}`)
   useEffect(()=>setLoading(true),[url])
   return <div className="relative flex min-h-0 flex-1">
     <iframe key={url} title="Run timeline and event inspector" src={url} onLoad={()=>setLoading(false)} className="absolute inset-0 h-full w-full rounded-lg border-0" />
@@ -62,9 +64,11 @@ export function RunTimeline({runId,revision,classifierId}:{runId:string;revision
   </div>
 }
 
-export function WebApp(){
+export function WebApp({embedded=false}:{embedded?:boolean}={}){
+  const {graphql,subscribeEvents}=useWorkspaceTransport()
   const [commandIds]=useState(()=>new PendingCommandIds())
   const [section,setSection]=useState<'cyclotrons'|'items'|'optimizations'|'decisions'>(routeSection)
+  const [initialLoading,setInitialLoading]=useState(true)
   const [runs,setRuns]=useState<Run[]>([]),[selected,setSelected]=useState(()=>locationState().get('run')??''),[run,setRun]=useState<Run|null>(null)
   const [current,setCurrent]=useState<CurrentItem|null>(null),[jobs,setJobs]=useState<Job[]>([]),[events,setEvents]=useState<TraceEvent[]>([])
   const [view,setView]=useState<'timeline'|'label'>(()=>locationState().get('view')==='label'?'label':'timeline'),[detail,setDetail]=useState<TraceEvent|null>(null),[revision,setRevision]=useState(0)
@@ -100,13 +104,13 @@ export function WebApp(){
     setSessionCyclotron(previous=>previous||value.cyclotronDefinitions?.[0]?.id||'')
     setItemList(previous=>previous||value.itemLists[0]?.id||'')
     setClassifierIds(previous=>previous.length?previous:value.classifiers.slice(0,1).map(classifier=>classifier.id))
-  }).catch(e=>setError(e.message))},[creating,historyOpen,setError])
+  }).catch(e=>setError(e.message))},[creating,historyOpen,setError,graphql])
   const refresh=useCallback(async()=>{
     const result=await graphql<{runs:Run[];capabilities:{liveEnabled:boolean;itemCount:number}}>(RUNS)
     setRuns(result.runs);setCapabilities(result.capabilities)
     setSelected(previous=>result.runs.some(run=>run.id===previous)?previous:
       (result.runs.find(run=>run.counts.optimizations>0)??result.runs[0])?.id??'')
-  },[])
+  },[graphql])
   useEffect(()=>{
     const route=new URLSearchParams(window.location.hash.slice(1))
     if(invalidTimelineClassifier)setTimelineClassifier('')
@@ -114,13 +118,13 @@ export function WebApp(){
     if(timelineClassifier&&!invalidTimelineClassifier)route.set('classifier',timelineClassifier)
     else route.delete('classifier')
     const hash=`#${route}`
-    if((selected||section!=='optimizations')&&window.location.hash!==hash){
+    if((selected||section!=='optimizations'||window.location.hash)&&window.location.hash!==hash){
       if(firstRoute.current||invalidTimelineClassifier)window.history.replaceState(null,'',hash)
       else window.history.pushState(null,'',hash)
     }
     firstRoute.current=false
   },[selected,view,section,timelineClassifier,invalidTimelineClassifier])
-  useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh,setError])
+  useEffect(()=>{let active=true;refresh().catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setInitialLoading(false)});return()=>{active=false}},[refresh,setError])
   useEffect(()=>{
     if(!selected||section!=='optimizations'){setRun(null);return}
     let cancelled=false,unsubscribe:(()=>void)|undefined
@@ -164,7 +168,7 @@ export function WebApp(){
     document.addEventListener('visibilitychange',resumeWhenVisible)
     void pollDetails()
     return ()=>{cancelled=true;refreshDetails.current=()=>{};unsubscribe?.();clearTimeout(pollTimer);document.removeEventListener('visibilitychange',resumeWhenVisible)}
-  },[selected,section,view,setError])
+  },[selected,section,view,setError,graphql,subscribeEvents])
   const submittedJob=jobs.find(job=>job.id===submission?.jobId)
   const awaitingLabels=submission?.runId===selected&&!submission.unconfirmed&&
     (!submittedJob||['pending','running'].includes(submittedJob.status))
@@ -205,8 +209,8 @@ export function WebApp(){
     }catch(e){setError((e as Error).message)}finally{setSending(false)}
   }
   const recent=events.filter(event=>latestOptimizationActivity([event])||['decision-request','decision-response','human-feedback','cycle-metrics'].includes(String(event.payload.kind))).filter(event=>activityFilter==='all'||activityFilter==='optimizer'&&String(event.payload.kind).startsWith('optimizer-')||activityFilter==='decision'&&String(event.payload.kind).startsWith('decision-')).slice(-40).reverse()
-  return <div data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
-<header data-testid="main-application-header" className="app-header flex items-center justify-between gap-2 border-b border-border bg-background px-2 py-1"><CyclotronBrand /><nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
+  return <div data-embedded={embedded||undefined} data-labeling-view={view==='label'&&section==='optimizations'} className="app-shell bg-background text-foreground">
+<header data-testid="main-application-header" className="app-header flex items-center justify-between gap-2 border-b border-border bg-background px-2 py-1">{embedded?null:<CyclotronBrand />}<nav aria-label="Main navigation" className="hidden gap-1 sm:flex">{navigationItems.map(item=><Button key={item.id} variant={section===item.id?'secondary':'ghost'} onClick={()=>setSection(item.id)}>{item.label}</Button>)}</nav><MobileNavigation section={section} onNavigate={setSection}/></header>
     {section!=='optimizations'?(section==='cyclotrons'?<CyclotronCatalog/>:section==='decisions'?<LabDecisions/>:<Catalog section="items" />):
     <div className="flex min-h-0 flex-1">
       <AppDrawer title="Run history" open={historyOpen} onOpenChange={setHistoryOpen}><div className="flex items-center justify-between"><p className="flex items-center gap-2 text-sm font-semibold"><History className="size-4" />Run history</p><Button variant="ghost" size="icon" aria-label="Refresh run history" onClick={()=>refresh().catch(e=>setError(e.message))}><RefreshCw /></Button></div><Button variant="outline" disabled={!capabilities.liveEnabled} onClick={()=>{setCreating(!creating);setHistoryOpen(false)}}><Plus />New run</Button>
@@ -236,7 +240,7 @@ export function WebApp(){
         {view==='label'&&run.config.classifiers?.length?<FeedbackControls key={run.id} runId={run.id} classifiers={run.config.classifiers} events={events} jobs={jobs} busy={labelingDisabled} replay={run.config.input_mode==='replay'} onSubmit={submit} onResume={resumeFeedback}/>:null}
           {run.config.input_mode==='comparison'?<MatchedComparisonResult key={run.id} runId={run.id} status={jobs[0]?.status??run.status} result={jobs.find(job=>job.kind==='matched-evaluate'&&job.status==='completed')?.result as ComparisonResult|undefined} />:view==='timeline'?<RunTimeline key={selected} runId={selected} revision={run.config.input_mode==='replay'?(jobs.find(job=>job.kind==='replay-next'&&job.status==='completed')?.id??revision):revision} classifierId={resolvedTimelineClassifier||undefined} />:
           <div data-labeling-content className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]"><section className="space-y-3"><div className="flex flex-wrap gap-2">{run.status!=='completed'||current?<Button disabled={labelingDisabled} onClick={()=>submit('prepare')}>{current?'Refresh prediction':'Prepare next item'}</Button>:null}{!run.config.classifiers?.length?<Button variant="outline" disabled={labelingDisabled} onClick={()=>submit('undo')}><Undo2 />Undo last review</Button>:null}</div>{current?<LabelCard key={current.prediction.presentation_id} current={current} busy={busy} readOnly={run.labelingAccess?.allowed===false} onSubmit={submit} classifiers={run.config.classifiers} events={events} footer={submission?.runId===selected?<SubmissionFeedback submission={submission} jobs={jobs} compact />:run.config.backfill_count && run.counts.cycles<=run.config.backfill_count?<p className="text-xs text-muted-foreground">Historical item {run.counts.cycles} of {run.config.backfill_count} · Provide missing labels</p>:null} />:<Card><CardContent className="space-y-3">{run.status==='completed'?<><h2 className="text-lg font-semibold">Session complete</h2><p className="text-sm text-muted-foreground">All items in this run have been reviewed. Inspect the timeline or start another run from history.</p></>:<p className="text-sm text-muted-foreground">{busy?'Processing this cycle. Events stream on the right.':'Prepare an item to get its prediction before review.'}</p>}{submission?.runId===selected?<SubmissionFeedback submission={submission} jobs={jobs}/>:null}</CardContent></Card>}{jobs[0]?.status==='failed'||jobs[0]?.status==='interrupted'?<p role="alert" className="text-sm text-destructive">Last command {jobs[0].status}. State retained; no automatic paid retry.</p>:null}</section><AppDrawer title="Optimizer activity" side="right" open={activityOpen} onOpenChange={setActivityOpen}><div className="flex items-center gap-2 text-sm font-semibold"><Activity className="size-4" />Live engine activity</div><Label htmlFor="activity-type">Activity type</Label><NativeSelect id="activity-type" value={activityFilter} onChange={e=>{setActivityFilter(e.target.value);setDetail(null)}}><NativeSelectOption value="all">All activity</NativeSelectOption><NativeSelectOption value="optimizer">Optimizer calls</NativeSelectOption><NativeSelectOption value="decision">Decision calls</NativeSelectOption></NativeSelect>{!detail?recent.map(event=><button key={event.sequence} onClick={()=>setDetail(event)} className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-left text-xs"><span className="capitalize">{String(event.payload.kind).replaceAll('-',' ')}</span><span className="font-mono text-muted-foreground">{String(event.payload.cycle_number??'')}</span></button>):null}{detail?<><Button variant="outline" onClick={()=>setDetail(null)}>Back to activity</Button><ExchangeDetail event={detail} events={events} /></>:<p className="text-xs text-muted-foreground">Select a streamed model request or response to inspect its exact content.</p>}</AppDrawer></div>}
-        </>:selected?<RunWorkspaceSkeleton/>:<div className="flex flex-1 items-center justify-center"><div className="max-w-sm text-center"><h1 className="text-xl font-semibold">A history you can inspect</h1><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a recorded run, or start a new review session. Every optimization exchange is stored by the API.</p></div></div>}
+        </>:selected?<RunWorkspaceSkeleton/>:initialLoading?<div role="status" aria-busy="true" className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Loading workspace…</div>:error?null:<div className="flex flex-1 items-center justify-center"><div className="max-w-sm text-center"><h1 className="text-xl font-semibold">A history you can inspect</h1><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a recorded run, or start a new review session. Every optimization exchange is stored by the API.</p></div></div>}
       </main>
     </div>}
   </div>

@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react'
 import {AppDrawer} from './AppDrawer'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 
 type Answer={label:string;probabilities?:Record<string,number>|null}
 type Trace={endpoint:string;target_id:string;item:Record<string,unknown>;labels:Record<string,string>;
@@ -15,6 +15,7 @@ function Fields({values}:{values:Record<string,unknown>}){
 }
 
 export function MatchedItemTrace({runId,eventId,onClose}:{runId:string;eventId:number;onClose:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [trace,setTrace]=useState<Trace|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('')
   useEffect(()=>{
     let cancelled=false
@@ -22,7 +23,7 @@ export function MatchedItemTrace({runId,eventId,onClose}:{runId:string;eventId:n
       .then(result=>{if(!cancelled){setTrace(result.matchedEvaluationTarget);setLoading(false)}})
       .catch(e=>{if(!cancelled){setError((e as Error).message);setLoading(false)}})
     return()=>{cancelled=true}
-  },[runId,eventId])
+  },[runId,eventId,graphql])
   return <AppDrawer title="Comparison item trace" side="right" open onOpenChange={open=>{if(!open)onClose()}}>
     {error?<p role="alert">{error}</p>:loading?<p role="status">Loading recorded item exchange…</p>:!trace?<p>No item trace was recorded at this point. No request has been reconstructed or re-run.</p>:<>
       <p className="text-sm font-semibold capitalize">{trace.endpoint} · {trace.target_id}</p>

@@ -561,6 +561,43 @@ test('the activity drawer can isolate optimizer exchanges from later decision tr
   expect(screen.getByText('Keep knowledge-base articles')).toBeVisible()
 })
 
+
+test('an embedded workspace shows loading until its first verified run read finishes',async()=>{
+  let complete!:(value:unknown)=>void
+  vi.mocked(graphql).mockImplementation(()=>new Promise(resolve=>{complete=resolve}))
+  render(<WebApp embedded/> )
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…')
+  expect(screen.queryByText('A history you can inspect')).toBeNull()
+  await act(async()=>complete({runs:[],capabilities:{liveEnabled:false,itemCount:0}}))
+  expect(await screen.findByText('A history you can inspect')).toBeVisible()
+  expect(screen.queryByText('Loading workspace…')).toBeNull()
+})
+
+test('a failed initial workspace read shows an error rather than claiming empty history',async()=>{
+  vi.mocked(graphql).mockRejectedValue(new Error('Workspace access unavailable'))
+  render(<WebApp embedded/> )
+  expect(await screen.findByRole('alert')).toHaveTextContent('Workspace access unavailable')
+  expect(screen.queryByText('A history you can inspect')).toBeNull()
+  expect(screen.queryByText('Loading workspace…')).toBeNull()
+})
+
+
+test('returning to empty optimization history records the section for reload and back navigation',async()=>{
+  vi.mocked(graphql).mockImplementation(async query=>query.includes('capabilities')
+    ?{runs:[],capabilities:{liveEnabled:false,itemCount:0}}
+    :{cyclotronDefinitions:[],classifiers:[],itemLists:[]})
+  render(<WebApp embedded/> )
+  await screen.findByText('A history you can inspect')
+  fireEvent.click(screen.getByRole('button',{name:'Cyclotrons'}))
+  await waitFor(()=>expect(window.location.hash).toContain('section=cyclotrons'))
+  fireEvent.click(screen.getByRole('button',{name:'Optimizations'}))
+  await screen.findByText('A history you can inspect')
+  await waitFor(()=>expect(window.location.hash).toContain('section=optimizations'))
+  window.history.replaceState(null,'','#run=&view=timeline&section=cyclotrons')
+  fireEvent(window,new PopStateEvent('popstate'))
+  expect(await screen.findByRole('heading',{name:'Cyclotrons'})).toBeVisible()
+})
+
 function detailsRequestCount(){return vi.mocked(graphql).mock.calls.filter(([query])=>String(query).includes('currentItem(')).length}
 function setDocumentHidden(hidden:boolean){
   Object.defineProperty(document,'hidden',{configurable:true,get:()=>hidden})

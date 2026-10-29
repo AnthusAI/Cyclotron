@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react'
 import {AppDrawer} from './AppDrawer'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import type {ClassifierDefinition} from './ClassifierHistory'
 import type {Definition} from './CyclotronEditor'
 
@@ -23,12 +23,13 @@ function MemberVersion({label,definition,position}:{label:string;definition:Clas
 }
 
 export function CyclotronComparison({cyclotronId,beforeRevision,afterRevision,onClose}:{cyclotronId:string;beforeRevision:number;afterRevision:number;onClose:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [value,setValue]=useState<Comparison|null>(null),[error,setError]=useState('')
   useEffect(()=>{
     let cancelled=false;setValue(null);setError('')
     graphql<{cyclotronDefinitionComparison:Comparison}>('query($id:ID!,$before:Int!,$after:Int!){cyclotronDefinitionComparison(cyclotronId:$id,beforeRevision:$before,afterRevision:$after)}',{id:cyclotronId,before:beforeRevision,after:afterRevision}).then(result=>{if(!cancelled)setValue(result.cyclotronDefinitionComparison)}).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[cyclotronId,beforeRevision,afterRevision])
+  },[cyclotronId,beforeRevision,afterRevision,graphql])
   return <AppDrawer title="Compare cyclotron definitions" side="right" open onOpenChange={open=>{if(!open)onClose()}}>
     <p className="font-semibold">Active revision {beforeRevision} → inspected revision {afterRevision}</p>
     <p className="text-xs text-muted-foreground">Definition changes, not a performance comparison. Inspecting makes no model calls and changes no active definitions or runs.</p>

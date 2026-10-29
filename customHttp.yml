@@ -1,0 +1,19 @@
+customHeaders:
+  - pattern: '/auth/**'
+    headers:
+      - key: Cache-Control
+        value: no-store
+      - key: Referrer-Policy
+        value: no-referrer
+  - pattern: '/api/**'
+    headers:
+      - key: Cache-Control
+        value: no-store
+  - pattern: '/graphql'
+    headers:
+      - key: Cache-Control
+        value: no-store
+  - pattern: '/runs/**'
+    headers:
+      - key: Cache-Control
+        value: no-store

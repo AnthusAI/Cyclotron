@@ -3,7 +3,7 @@ import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {Card,CardHeader,CardTitle,CardContent,CardFooter} from '@/components/ui/card'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {requestId} from './requestId'
 import {NewClassifier} from './NewClassifier'
 import {CyclotronSettings,validCyclotronSettings} from './CyclotronSettings'
@@ -11,6 +11,7 @@ import {CyclotronSettings,validCyclotronSettings} from './CyclotronSettings'
 export type Definition={id:string;name:string;revision:number;classifiers:{id:string;revision:number}[];settings?:Record<string,unknown>}
 export type CatalogClassifier={id:string;name:string;revision:number}
 export function CyclotronEditor({definition,classifiers,onSaved,onCancel}:{definition?:Definition;classifiers:CatalogClassifier[];onSaved:(value:Definition)=>void;onCancel:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [name,setName]=useState(definition?.name??'')
   const [identifier]=useState(()=>definition?.id??requestId())
   const [members,setMembers]=useState(definition?.classifiers??[])

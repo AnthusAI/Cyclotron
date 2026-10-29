@@ -5,7 +5,7 @@ import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {Card,CardHeader,CardTitle,CardContent,CardFooter} from '@/components/ui/card'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {requestId} from './requestId'
 import {ClassifierHistory,type ClassifierDefinition} from './ClassifierHistory'
 import {ClassifierImpact} from './ClassifierImpact'
@@ -17,6 +17,7 @@ type Vote={classifier_id:string;classifier_revision:number;label:string;comment:
 type ItemResult={run_id:string;run_name:string;payload:{classifiers:Record<string,{label:string;confidence:number;name?:string}>}}
 
 function ClassifierLabel({classifier,item,listId,previous,onSaved}:{classifier:Classifier;item:ListItem;listId:string;previous?:Vote;onSaved:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [label,setLabel]=useState(previous?.label??''),[comment,setComment]=useState(previous?.comment??'')
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false)
   const save=async()=>{
@@ -35,6 +36,7 @@ function ClassifierLabel({classifier,item,listId,previous,onSaved}:{classifier:C
 }
 
 export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,onChanged}:{section:'classifiers'|'items';cyclotronId?:string;cyclotronRevision?:number;readOnly?:boolean;onChanged?:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [classifiers,setClassifiers]=useState<Classifier[]>([]),[lists,setLists]=useState<ItemList[]>([])
   const [selectedList,setSelectedList]=useState(''),[items,setItems]=useState<ListItem[]>([]),[item,setItem]=useState<ListItem|null>(null),[votes,setVotes]=useState<Vote[]>([])
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState<Classifier|null>(null),[creating,setCreating]=useState(false)
@@ -52,13 +54,13 @@ export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,on
     const members=cyclotronId?await graphql<{cyclotronClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){cyclotronClassifiers(cyclotronId:$id,revision:$revision)}',{id:cyclotronId,revision:cyclotronRevision??null}):null
     setClassifiers(members?.cyclotronClassifiers??result.classifiers);setLists(result.itemLists);onChanged?.()
   }
-  useEffect(()=>{let cancelled=false;Promise.all([graphql<{classifiers:Classifier[];itemLists:ItemList[]}>('{classifiers itemLists}'),cyclotronId?graphql<{cyclotronClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){cyclotronClassifiers(cyclotronId:$id,revision:$revision)}',{id:cyclotronId,revision:cyclotronRevision??null}):Promise.resolve(null)]).then(([result,members])=>{if(!cancelled){setClassifiers(members?.cyclotronClassifiers??result.classifiers);setLists(result.itemLists)}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[cyclotronId,cyclotronRevision])
+  useEffect(()=>{let cancelled=false;Promise.all([graphql<{classifiers:Classifier[];itemLists:ItemList[]}>('{classifiers itemLists}'),cyclotronId?graphql<{cyclotronClassifiers:Classifier[]}>('query($id:ID!,$revision:Int){cyclotronClassifiers(cyclotronId:$id,revision:$revision)}',{id:cyclotronId,revision:cyclotronRevision??null}):Promise.resolve(null)]).then(([result,members])=>{if(!cancelled){setClassifiers(members?.cyclotronClassifiers??result.classifiers);setLists(result.itemLists)}}).catch(e=>{if(!cancelled)setError(e.message)});return()=>{cancelled=true}},[cyclotronId,cyclotronRevision,graphql])
   useEffect(()=>{
     if(!selectedList)return
     let cancelled=false;setItems([]);setItem(null)
     graphql<{listItems:ListItem[]}>('query($list:ID!,$after:Int!){listItems(listId:$list,after:$after)}',{list:selectedList,after:page*200}).then(result=>{if(!cancelled)setItems(result.listItems)}).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[selectedList,page])
+  },[selectedList,page,graphql])
   const loadVotes=async()=>{
     if(!item)return
     const result=await graphql<{itemLabels:Vote[]}>('query($list:ID!,$item:String!,$revision:Int!){itemLabels(listId:$list,itemId:$item,itemRevision:$revision)}',{list:selectedList,item:item.id,revision:item.revision})
@@ -70,7 +72,7 @@ export function Catalog({section,cyclotronId,cyclotronRevision,readOnly=false,on
     graphql<{itemLabels:Vote[]}>('query($list:ID!,$item:String!,$revision:Int!){itemLabels(listId:$list,itemId:$item,itemRevision:$revision)}',{list:selectedList,item:item.id,revision:item.revision}).then(result=>{if(!cancelled)setVotes(result.itemLabels)}).catch(e=>{if(!cancelled)setError(e.message)})
     graphql<{itemResults:ItemResult[]}>('query($list:ID!,$item:String!,$revision:Int!){itemResults(listId:$list,itemId:$item,itemRevision:$revision)}',{list:selectedList,item:item.id,revision:item.revision}).then(result=>{if(!cancelled)setResults(result.itemResults??[])}).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[item,selectedList])
+  },[item,selectedList,graphql])
   const saveClassifier=async()=>{
     setBusy(true);setError('')
     try{

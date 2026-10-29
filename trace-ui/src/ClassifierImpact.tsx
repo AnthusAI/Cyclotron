@@ -1,8 +1,9 @@
 import {useEffect,useState} from 'react'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import type {Definition} from './CyclotronEditor'
 
 export function ClassifierImpact({classifierId}:{classifierId:string}){
+  const {graphql}=useWorkspaceTransport()
   const [cards,setCards]=useState<Definition[]|null>(null),[error,setError]=useState('')
   useEffect(()=>{
     let cancelled=false
@@ -10,7 +11,7 @@ export function ClassifierImpact({classifierId}:{classifierId:string}){
       if(!cancelled)setCards(result.cyclotronDefinitions.filter(card=>card.classifiers.some(ref=>ref.id===classifierId)))
     }).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[classifierId])
+  },[classifierId,graphql])
   return <section aria-label="Classifier change impact" className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
     <h3 className="font-semibold">Affected cyclotrons</h3>
     {error?<p role="alert">Could not load affected cyclotrons: {error}</p>:cards===null?<p role="status">Checking cyclotron membership…</p>:cards.length?<>

@@ -1,18 +1,19 @@
 import {useEffect,useState} from 'react'
 import {AppDrawer} from './AppDrawer'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {Button} from '@/components/ui/button'
 import {Label} from '@/components/ui/label'
 import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 
 export type ClassifierDefinition={id:string;name:string;revision:number;created_at?:string;fingerprint?:string;config:{question:string;classes:{label:string;role?:string}[];[key:string]:unknown}}
 export function ClassifierHistory({classifier,onClose,onEdit}:{classifier:ClassifierDefinition;onClose:()=>void;onEdit?:(value:ClassifierDefinition)=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [versions,setVersions]=useState<ClassifierDefinition[]>([]),[revision,setRevision]=useState(classifier.revision),[error,setError]=useState('')
   useEffect(()=>{
     let cancelled=false
     graphql<{classifierVersions:ClassifierDefinition[]}>('query($id:ID!){classifierVersions(classifierId:$id)}',{id:classifier.id}).then(result=>{if(!cancelled)setVersions(result.classifierVersions)}).catch(e=>{if(!cancelled)setError(e.message)})
     return()=>{cancelled=true}
-  },[classifier.id])
+  },[classifier.id,graphql])
   const inspected=versions.find(row=>row.revision===revision)
   return <AppDrawer title="Classifier history" side="right" open onOpenChange={open=>{if(!open)onClose()}} footer={onEdit?<Button variant="outline" disabled={!inspected} onClick={()=>{if(inspected)onEdit(inspected)}}>Edit from this revision</Button>:undefined}>
     <p className="font-semibold">{classifier.name}</p>

@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import {AppDrawer} from './AppDrawer'
-import {graphql} from './graphql'
+import {useWorkspaceTransport} from './workspaceTransportContext'
 import {requestId} from './requestId'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
@@ -9,6 +9,7 @@ import {NativeSelect,NativeSelectOption} from '@/components/ui/native-select'
 import type {CatalogClassifier} from './CyclotronEditor'
 
 export function NewClassifier({onSaved,onCancel}:{onSaved:(classifier:CatalogClassifier)=>void;onCancel:()=>void}){
+  const {graphql}=useWorkspaceTransport()
   const [name,setName]=useState(''),[question,setQuestion]=useState(''),[classes,setClasses]=useState(''),[positive,setPositive]=useState('')
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
   const [identifier]=useState(requestId)
