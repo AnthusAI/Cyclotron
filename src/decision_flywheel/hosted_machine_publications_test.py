@@ -474,7 +474,7 @@ def test_one_request_for_three_publications_makes_one_job_and_one_model_request_
                 assert row["publicationId"] == name and set(row["decision"]["classifiers"]) == {name}
                 assert row["source"]["id"] == "hn-1"
             assert len(model.calls) == 1
-            assert len([j for j in store.jobs(run_id) if j["kind"] == "publication"]) == 1
+            assert len([j for j in store.jobs(run_id) if j["kind"] == "decision"]) == 1
             same = await http.post("/machine/decisions", json=decisions_body(revisions("alpha", "beta", "gamma"), new_item()))
             assert same.status_code == 202 and same.json()["jobId"] == accepted["jobId"]
             changed = await http.post(
@@ -512,7 +512,7 @@ def test_a_mismatched_revision_or_unknown_publication_gives_409_and_creates_no_j
                 assert refused.status_code == 409 and "binding changed" in refused.text
             empty = await http.post("/machine/decisions", json=decisions_body({}, new_item()))
             assert empty.status_code == 400
-            assert not sent and not [j for j in store.jobs(targets[0].run_id) if j["kind"] == "publication"]
+            assert not sent and not [j for j in store.jobs(targets[0].run_id) if j["kind"] == "decision"]
 
     asyncio.run(go())
 
@@ -618,7 +618,7 @@ def test_worker_jobs_per_story_drop_from_the_publication_count_to_one(identity, 
     run_id = targets[0].run_id
 
     def jobs():
-        return len([j for j in store.jobs(run_id) if j["kind"] == "publication"])
+        return len([j for j in store.jobs(run_id) if j["kind"] == "decision"])
 
     async def go():
         async with client(wrapped, config, account) as http:

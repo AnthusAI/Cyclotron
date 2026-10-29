@@ -30,10 +30,10 @@ contract, so a caller always knows which shape comes back.
 The loader reads `CYCLOTRON_STANDING_RUNS` or `CYCLOTRON_PUBLICATION_TARGETS` and refuses both at once. Each
 takes its own binding key. The lab stack sets only `CYCLOTRON_STANDING_RUNS`.
 
-Stored rows are never rewritten. Every reader accepts a decision job of kind `decision` or `publication`, and a
-request id replayed across the two names the same job; a run frozen by the bootstrap is read whether it records
-the bootstrap under `standing_bootstrap` or `publication_bootstrap`. New rows still get the publication names
-until every worker reads both (`decision_kinds.WRITTEN`, `hosted_publication_bootstrap.WRITTEN_KEY`). Feedback events keep their stored shape (`publication-machine-feedback`, with
+Stored rows are never rewritten. New decision jobs are stored under kind `decision`, and those written earlier
+keep kind `publication`; every reader accepts both, and a request id replayed across the two names the same
+job. A run frozen by the bootstrap records it under `standing_bootstrap` (event kind `standing-bootstrap`) or,
+if older, `publication_bootstrap`; both are read. Feedback events keep their stored shape (`publication-machine-feedback`, with
 `editor: {site, subject}`) whichever contract the caller spoke.
 
 The Python names follow: `Binding`, `CallerActor`, `DecisionLab`, `EmbeddedDecisionClient`,

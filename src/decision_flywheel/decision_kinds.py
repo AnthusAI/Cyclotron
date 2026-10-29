@@ -4,8 +4,8 @@ were written with, and every reader accepts both. History is never rewritten."""
 DECISION = "decision"
 LEGACY_DECISION = "publication"
 DECISION_KINDS = (DECISION, LEGACY_DECISION)
-# The kind new decision jobs are stored under. It stays the publication kind until every worker reads both.
-WRITTEN = LEGACY_DECISION
+# The kind new decision jobs are stored under. Every deployed worker reads both.
+WRITTEN = DECISION
 
 
 def is_decision(kind):
