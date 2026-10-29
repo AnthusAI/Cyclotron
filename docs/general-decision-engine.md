@@ -1,6 +1,6 @@
 # Cyclotron is a general decision engine: bindings, not publications
 
-Status: **design for review** (2026-10-29). Nothing here is built.
+Status: **accepted** (Ryan, 2026-10-29), with the proposals on the three questions below. Step 1 is in progress.
 
 ## Why
 
@@ -117,7 +117,7 @@ it.
 - One label still belongs to one binding's output (Ryan, 2026-10-29). In the new words: a review sent on one
   binding trains and measures only that binding's outputs.
 
-## Open questions for Ryan
+## Decisions on the open questions (Ryan, 2026-10-29: the proposals)
 
 1. **"Binding" in the UI.** The code says binding. In the lab, should people see "binding", or just the
    display name ("Decides for Anth.us")? Proposal: show display names, and call the concept "binding" only on
