@@ -8,6 +8,8 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
+Previously: the lab speaks of bindings and callers, not publications and newsrooms (step 1 of docs/general-decision-engine.md; lab code 5f5c781, package sha256 `c8f66bdd8690f828cd3468cc2f9bbec305cefded91f136d18d8bc407a5cf7562`), deployed on 2026-10-29 with change set `lab-bindings-5f5c781`. Code only; the snapshot was refreshed.
+
 Previously: the Cyclotrons list shows which cyclotron each standing run decides with and folds the rest away; standing-runs names each run's pinned cyclotron definition (lab code 696a1c4, package sha256 `f81281d152bb34cc5e5c19a01d58da41ac5b36d18892b4cdaf4461156e6306ab`), deployed on 2026-10-29 with change set `tidy-cyclotrons-696a1c4`. Code only; the snapshot was refreshed. Earlier the same day, change set `distinctive-target-bec52c70` changed only the `PublicationTargets` parameter (adding the Distinctive Mark standing run bec52c70), so the template and snapshot were unchanged.
 
 Previously: a run's jobs are its unfinished ones and its newest finished one, so the lab's run page loads for the standing run (lab code e34b22b, package sha256 `43bbe92432e311fc9a32833b906e3e34b0ea368fd4d590f8c795f655126b3078`), deployed on 2026-10-29 with change set `active-jobs-e34b22b` at 10:45Z. Code only; the snapshot was refreshed.
