@@ -14,6 +14,20 @@ def encode(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def newest_through_finished(jobs):
+    """A run's unfinished jobs and its newest finished one, from its jobs newest first.
+
+    Jobs start in acceptance order, so the unfinished jobs are the newest. Reading stops at the first finished job,
+    so the cost follows the queue, never the run's history (a standing run holds thousands of jobs).
+    """
+    found = []
+    for job in jobs:
+        found.append(job)
+        if job["status"] not in ("pending", "running"):
+            break
+    return found
+
+
 class RunStorage(Protocol):
     """Backend owns command eligibility, claims and command/run settlement."""
 
@@ -35,6 +49,7 @@ class RunStorage(Protocol):
     def command(self, run_id, request_id, kind, payload): ...
     def resume_feedback_command(self, run_id, job_id): ...
     def jobs(self, run_id): ...
+    def active_jobs(self, run_id): ...
     def claim_command(self): ...
     def finish_command(self, job_id, status, result): ...
     def recover_interrupted(self): ...
@@ -334,6 +349,12 @@ class SQLiteRunStorage:
         self.run(run_id)
         with self.connect() as db:
             return [self._job(r) for r in db.execute("SELECT * FROM web_jobs WHERE run_id=? ORDER BY rowid DESC", (run_id,))]
+
+    def active_jobs(self, run_id):
+        with self.connect() as db:
+            return newest_through_finished(
+                self._job(r) for r in db.execute("SELECT * FROM web_jobs WHERE run_id=? ORDER BY rowid DESC", (run_id,))
+            )
 
     def claim_command(self):
         with self.connect() as db:

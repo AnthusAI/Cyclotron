@@ -375,3 +375,18 @@ def test_a_hundred_live_event_subscribers_all_receive_the_committed_event(tmp_pa
         return results
     results = asyncio.run(attempt())
     assert all(not result.errors and result.data['runEvents']['sequence'] for result in results)
+
+
+def test_a_runs_jobs_are_its_unfinished_ones_and_its_newest_finished_one_however_long_its_history(tmp_path):
+    store=WebStore(tmp_path/'db')
+    run=store.create_run('Standing','live',{})
+    finished=[store.command(run['id'],f'request-{n}','prepare',{}) for n in range(3)]
+    for job in finished:
+        store.claim_command()
+        store.finish_command(job['id'],'completed',{'n':job['id']})
+    waiting=store.command(run['id'],'request-3','prepare',{})
+    query='query($id:ID!){jobs(runId:$id){id status result}}'
+    result=TestClient(create_app(store)).post('/graphql',json={'query':query,'variables':{'id':run['id']}}).json()
+    assert 'errors' not in result
+    assert [(j['id'],j['status']) for j in result['data']['jobs']]==[(waiting['id'],'pending'),(finished[-1]['id'],'completed')]
+    assert result['data']['jobs'][1]['result']=={'n':finished[-1]['id']}

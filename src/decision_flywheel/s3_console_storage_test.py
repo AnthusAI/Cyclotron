@@ -986,6 +986,22 @@ def test_an_observer_reads_a_runs_jobs_by_position_and_its_queue_from_the_head_a
     assert fresh.item_revisions("standing", "never") == []
 
 
+def test_the_active_jobs_are_the_unfinished_ones_and_the_newest_finished_one_read_without_the_runs_history():
+    s, run_id = standing()
+    ids = [decide(s, run_id, n) for n in range(1, 5)]
+    item = {"id": "w", "values": {"text": "W"}}
+    waiting = s.command(run_id, "req-waiting", "publication", {"bindings": {"alpha": "1"}, "item": item})
+    s.save_item_list("later", "Later")  # moves every finished job out of the head
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    read = []
+    job_at = fresh._job_at
+    fresh._job_at = lambda value, run, n: read.append(n) or job_at(value, run, n)
+    active = fresh.active_jobs(run_id)
+    assert [(j["id"], j["status"]) for j in active] == [(waiting["id"], "pending"), (ids[-1], "completed")]
+    assert active[1]["result"] == {"response": {"label": "yes", "n": 4}}
+    assert read == [5, 4]  # the waiting job and the newest finished one; the older history is never read
+
+
 def test_an_observer_sees_every_label_an_item_revision_was_given_with_retractions_and_finds_run_events_by_source():
     s, run_id = labelled(2, 0)
     s.label_item("topic", 1, "priming", "p0", 1, "sport", "Changed my mind", "label-0-again")
