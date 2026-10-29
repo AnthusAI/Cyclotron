@@ -157,7 +157,7 @@ it('creates a classifier inside a cyclotron draft and pins the returned revision
   expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('createRun'))).toBe(false)
 })
 
-it('shows the cyclotrons a standing publication run decides with, and folds the rest away',async()=>{
+it('shows the cyclotrons a standing run decides with, and folds the ones not in use away',async()=>{
   vi.mocked(graphql).mockImplementation(async()=>({cyclotronDefinitions:[
     {id:'shared-r3',name:'Shared source relevance',revision:2,classifiers:[]},
     {id:'shared-r4',name:'Shared source relevance',revision:1,classifiers:[]},
@@ -176,7 +176,7 @@ it('shows the cyclotrons a standing publication run decides with, and folds the 
   render(<WorkspaceContext.Provider value={transport as never}><CyclotronCatalog/></WorkspaceContext.Provider>)
   expect(await screen.findByText('Decides for anth-us, shipped · Standing shared run')).toBeVisible()
   expect(screen.getByText('Decides for distinctive · Standing Distinctive run · pinned to revision 1')).toBeVisible()
-  const folded=screen.getByText('Not used by a standing publication run (1)').closest('details')!
+  const folded=screen.getByText('Not in use (1)').closest('details')!
   expect(folded).not.toHaveAttribute('open')
   expect(folded).toHaveTextContent('Shared source relevance')
   vi.unstubAllGlobals()
@@ -187,7 +187,7 @@ it('a local workspace lists every cyclotron without asking for standing runs',as
   vi.mocked(graphql).mockResolvedValue({cyclotronDefinitions:[{id:'a',name:'Only cyclotron',revision:1,classifiers:[]}],classifiers:[]})
   render(<CyclotronCatalog/>)
   expect(await screen.findByText('Only cyclotron')).toBeVisible()
-  expect(screen.queryByText(/Not used by a standing publication run/)).toBeNull()
+  expect(screen.queryByText(/Not in use/)).toBeNull()
   expect(fetch).not.toHaveBeenCalled()
   vi.unstubAllGlobals()
 })
