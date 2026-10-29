@@ -363,6 +363,18 @@ def test_the_routes_need_a_signed_in_reader_of_the_account_and_a_configured_stan
     assert standing["outputs"][0]["classes"] == ["include", "exclude"]
 
 
+def test_a_standing_run_names_the_cyclotron_definition_it_is_pinned_to(identity, monkeypatch):
+    lab = Lab(identity, monkeypatch)
+
+    async def go():
+        async with lab.browser() as http:
+            return (await http.get("/api/lab/standing-runs")).json()
+
+    [standing] = run(go())
+    pin = lab.store.run_cyclotron_definition(lab.run_id)
+    assert standing["cyclotron"] == {"id": "shared", "revision": 1} == {"id": pin["id"], "revision": pin["revision"]}
+
+
 def test_reading_decisions_details_and_health_writes_nothing(identity, monkeypatch):
     lab = Lab(identity, monkeypatch)
 

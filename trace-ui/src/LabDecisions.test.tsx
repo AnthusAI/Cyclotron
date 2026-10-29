@@ -6,7 +6,7 @@ import {WebApp} from './WebApp'
 import {WorkspaceTransportProvider} from './WorkspaceTransport'
 import type {DecisionRow,DecisionsPage,Health,ItemDetail,StandingRun} from './labApi'
 
-const RUN:StandingRun={runId:'run-1',name:'Anthus combined',publications:[{id:'anth-us',outputs:['anth-us']},{id:'shipped',outputs:['shipped']}],
+const RUN:StandingRun={runId:'run-1',name:'Anthus combined',cyclotron:{id:'shared',revision:1},publications:[{id:'anth-us',outputs:['anth-us']},{id:'shipped',outputs:['shipped']}],
   outputs:[{id:'anth-us',name:'Anthus',question:'Relevant?',classes:['include','exclude']},{id:'shipped',name:'Shipped',question:'Shipped?',classes:['include','exclude']}]}
 const review={selected:true,reason:'program',propensity:1,detail:'Sampled at the 100% review rate.'}
 const row=(n:number,extra:Partial<DecisionRow>={}):DecisionRow=>({position:n,jobId:`job-${n}`,decisionId:`decision-${n}`,decidedAt:`2026-10-28T10:00:0${n}Z`,

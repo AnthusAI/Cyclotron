@@ -3,6 +3,7 @@ import {expect,it,vi,afterEach} from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import {CyclotronCatalog} from './CyclotronCatalog'
 import {graphql} from './graphql'
+import {WorkspaceContext} from './workspaceTransportContext'
 vi.mock('./graphql',()=>({graphql:vi.fn()}))
 afterEach(()=>{cleanup();vi.clearAllMocks();window.history.replaceState(null,'','/')})
 
@@ -154,4 +155,39 @@ it('creates a classifier inside a cyclotron draft and pins the returned revision
   await screen.findByRole('button',{name:'New cyclotron'})
   expect(vi.mocked(graphql).mock.calls.find(([q])=>q.includes('saveCyclotronDefinition'))?.[1]?.classifiers).toEqual([{id:'topic',revision:1}])
   expect(vi.mocked(graphql).mock.calls.some(([q])=>q.includes('createRun'))).toBe(false)
+})
+
+it('shows the cyclotrons a standing publication run decides with, and folds the rest away',async()=>{
+  vi.mocked(graphql).mockImplementation(async()=>({cyclotronDefinitions:[
+    {id:'shared-r3',name:'Shared source relevance',revision:2,classifiers:[]},
+    {id:'shared-r4',name:'Shared source relevance',revision:1,classifiers:[]},
+    {id:'distinctive',name:'Distinctive Mark relevance',revision:2,classifiers:[]},
+  ],classifiers:[]}))
+  const runs=[
+    {runId:'run-shared',name:'Standing shared run',cyclotron:{id:'shared-r4',revision:1},publications:[{id:'anth-us',outputs:[]},{id:'shipped',outputs:[]}],outputs:[]},
+    {runId:'run-dm',name:'Standing Distinctive run',cyclotron:{id:'distinctive',revision:1},publications:[{id:'distinctive',outputs:[]}],outputs:[]},
+  ]
+  const fetch=vi.fn(async(input:string,init?:RequestInit)=>{
+    expect(input).toBe('/api/lab/standing-runs');expect((init?.headers as Record<string,string>)['X-Cyclotron-Account']).toBe('acct')
+    return new Response(JSON.stringify(runs),{status:200,headers:{'Content-Type':'application/json'}})
+  })
+  vi.stubGlobal('fetch',fetch)
+  const transport={graphql:(q:string,v?:Record<string,unknown>)=>graphql(q,v),subscribeEvents:()=>()=>{},url:(p:string)=>p,accountId:'acct'}
+  render(<WorkspaceContext.Provider value={transport as never}><CyclotronCatalog/></WorkspaceContext.Provider>)
+  expect(await screen.findByText('Decides for anth-us, shipped · Standing shared run')).toBeVisible()
+  expect(screen.getByText('Decides for distinctive · Standing Distinctive run · pinned to revision 1')).toBeVisible()
+  const folded=screen.getByText('Not used by a standing publication run (1)').closest('details')!
+  expect(folded).not.toHaveAttribute('open')
+  expect(folded).toHaveTextContent('Shared source relevance')
+  vi.unstubAllGlobals()
+})
+
+it('a local workspace lists every cyclotron without asking for standing runs',async()=>{
+  const fetch=vi.fn();vi.stubGlobal('fetch',fetch)
+  vi.mocked(graphql).mockResolvedValue({cyclotronDefinitions:[{id:'a',name:'Only cyclotron',revision:1,classifiers:[]}],classifiers:[]})
+  render(<CyclotronCatalog/>)
+  expect(await screen.findByText('Only cyclotron')).toBeVisible()
+  expect(screen.queryByText(/Not used by a standing publication run/)).toBeNull()
+  expect(fetch).not.toHaveBeenCalled()
+  vi.unstubAllGlobals()
 })
