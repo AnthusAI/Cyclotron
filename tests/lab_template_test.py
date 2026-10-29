@@ -10,10 +10,7 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = [
-    # The lab's decision detail reads the output runtimes (heads, keyed documents); read-only, never a write.
-    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 

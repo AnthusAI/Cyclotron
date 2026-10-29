@@ -8,11 +8,7 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-**Pending: read-only access to the runtime journals for the BFF role.** One statement is appended to
-`/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-`: `s3:GetObject` (no PutObject) on
-`*/console/coordination/runtime/*`. The lab's decision detail reads each output's runtime head and keyed
-documents to show the exact decision request and response; it never writes them, and the worker remains the
-only role that can write a runtime.
+Previously: the lab's decisions list, item detail and health, with read-only access to the runtime journals for the BFF role (lab code 67c36ed, package sha256 `9b871015220620d062e6116523b1fde5da7c53b51d2b12e780902fbb4adcd4f9`), deployed on 2026-10-29 with change set `lab-decisions-67c36ed` at 01:15Z; the snapshot was refreshed. One statement was appended to `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-`: `s3:GetObject` (no PutObject) on `*/console/coordination/runtime/*`, so the decision detail can read each output's runtime head and keyed documents; the worker remains the only role that can write a runtime.
 
 Previously: a dropped S3 connection is classified and an uncertain keyed write is retried once (lab code 041c9d3, package sha256 `3f8b4752a51e5ad047483067e020b1f4938fdf7996b02b9dbc02c263cf5f3831`), deployed on 2026-10-28 with change set `dropped-conn-041c9d3` at 20:36Z. Code only; the snapshot was refreshed.
 
