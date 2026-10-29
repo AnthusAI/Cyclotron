@@ -540,7 +540,7 @@ export function PendingItem({itemId,decision,onReview}:{itemId:string;decision:C
     itemId={itemId}
     decision={{decisionId:decision.decisionId,label:result.label,confidence:result.confidence,
                classes:['include','exclude'],version:result.version}}
-    question={classifier==='relevant'?'Is this relevant to the publication?':classifier}
+    question={classifier==='relevant'?'Is this relevant to our readers?':classifier}
     reviewReason={decision.review.selected?decision.review.detail:undefined}
     positiveLabel="include"
     reasons={reasons}

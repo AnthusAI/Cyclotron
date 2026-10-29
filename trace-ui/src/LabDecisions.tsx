@@ -65,7 +65,7 @@ function Filters({run,filters,onChange}:{run:StandingRun;filters:DecisionFilters
       {active?<Button size="sm" variant="ghost" onClick={()=>onChange(NO_FILTERS)}><X/>Clear filters</Button>:null}
     </div>
     {open?<div className="grid grid-cols-1 gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div className="space-y-1"><Label htmlFor="filter-output">Publication output</Label><NativeSelect id="filter-output" className="w-full" value={filters.output} onChange={event=>onChange({...filters,output:event.target.value,label:''})}><NativeSelectOption value="">Any output</NativeSelectOption>{run.outputs.map(o=><NativeSelectOption key={o.id} value={o.id}>{o.name}</NativeSelectOption>)}</NativeSelect></div>
+      <div className="space-y-1"><Label htmlFor="filter-output">Output</Label><NativeSelect id="filter-output" className="w-full" value={filters.output} onChange={event=>onChange({...filters,output:event.target.value,label:''})}><NativeSelectOption value="">Any output</NativeSelectOption>{run.outputs.map(o=><NativeSelectOption key={o.id} value={o.id}>{o.name}</NativeSelectOption>)}</NativeSelect></div>
       <div className="space-y-1"><Label htmlFor="filter-label">Label</Label><NativeSelect id="filter-label" className="w-full" value={filters.label} onChange={set('label')}><NativeSelectOption value="">Any label</NativeSelectOption>{classes.map(c=><NativeSelectOption key={c} value={c}>{c}</NativeSelectOption>)}</NativeSelect></div>
       <div className="space-y-1"><Label htmlFor="filter-min">Confidence from (%)</Label><Input id="filter-min" type="number" inputMode="numeric" min={0} max={100} value={filters.minConfidence} onChange={set('minConfidence')}/></div>
       <div className="space-y-1"><Label htmlFor="filter-max">Confidence to (%)</Label><Input id="filter-max" type="number" inputMode="numeric" min={0} max={100} value={filters.maxConfidence} onChange={set('maxConfidence')}/></div>
@@ -115,7 +115,7 @@ export function ItemDetailView({detail}:{detail:ItemDetail}){
         <CardContent className="space-y-2 px-3 text-xs">
           <Probabilities value={output.probabilities}/>
           <p className="text-muted-foreground">{output.review.detail||(output.review.selected?'Routed to review.':'Not routed to review.')}{output.review.propensity!=null?` Propensity ${percent(output.review.propensity)}.`:''}</p>
-          <p className="text-muted-foreground">Model {output.model??'not recorded'} · version {output.version??'—'}{output.publication?` · publication ${output.publication}`:''}</p>
+          <p className="text-muted-foreground">Model {output.model??'not recorded'} · version {output.version??'—'}{output.binding?` · for ${output.binding}`:''}</p>
           {output.composition?<p className="text-muted-foreground">Request: {String(output.composition.examples_shown??'—')} of {String(output.composition.examples_available??'—')} examples shown{output.composition.target_trimmed?' · target trimmed to fit':''}</p>:null}
           {output.composition?<details className="disclosure"><summary>Request composition</summary><pre>{JSON.stringify(output.composition,null,2)}</pre></details>:null}
         </CardContent></Card>)}
@@ -133,7 +133,7 @@ export function ItemDetailView({detail}:{detail:ItemDetail}){
       <h3 className="text-sm font-semibold">Labels</h3>
       {detail.labels.length?<ul className="space-y-1">{detail.labels.map(label=><li key={label.requestId} className="rounded-md border border-border p-2 text-xs">
         <p className="flex flex-wrap items-center gap-2"><strong className="font-medium">{detail.decision.outputs[label.output]?.name??label.output}</strong><Badge variant="secondary">{label.label}</Badge>{label.retracted?<Badge variant="outline">Retracted</Badge>:null}{label.itemRevision!==current?<Badge variant="outline">Given on revision {label.itemRevision}</Badge>:null}</p>
-        <p className="mt-1 text-muted-foreground">{label.source.kind==='newsroom'?`${label.source.editor??'An editor'} at ${label.source.site??'a newsroom'}${label.source.asserted?' (asserted by the site)':''}`:'Lab'} · {when(label.createdAt)}</p>
+        <p className="mt-1 text-muted-foreground">{label.source.kind==='caller'?`${label.source.reviewer??'A reviewer'} at ${label.source.caller??'the caller'}${label.source.asserted?' (asserted by the caller)':''}`:'Lab'} · {when(label.createdAt)}</p>
         {label.comment?<p className="mt-1 whitespace-pre-wrap break-words">{label.comment}</p>:null}
       </li>)}</ul>:<p className="text-xs text-muted-foreground">No labels yet for this item.</p>}
     </section>

@@ -106,7 +106,7 @@ def test_decisions_appear_newest_first_with_every_outputs_label_confidence_routi
     }
     assert set(newest["outputs"]) == set(OUTPUTS)
     alpha = newest["outputs"]["alpha"]
-    assert alpha["label"] == "include" and alpha["confidence"] == pytest.approx(0.7) and alpha["publication"] == "alpha"
+    assert alpha["label"] == "include" and alpha["confidence"] == pytest.approx(0.7) and alpha["binding"] == "alpha"
     assert alpha["review"]["selected"] is True and alpha["humanLabel"] is None
     assert page["decisions"][1]["outputs"]["beta"]["label"] == "exclude"
     times = [row["decidedAt"] for row in page["decisions"]]
@@ -251,10 +251,10 @@ def test_an_item_detail_carries_its_revisions_every_outputs_decision_the_exact_e
     assert label["output"] == "alpha" and label["itemRevision"] == 2 and label["label"] == "include"
     assert label["comment"] == "Kept after the edit." and label["retracted"] is False and label["createdAt"]
     assert label["source"] == {
-        "kind": "newsroom",
-        "publication": "alpha",
-        "site": "anth-us",
-        "editor": "editor-17",
+        "kind": "caller",
+        "binding": "alpha",
+        "caller": "anth-us",
+        "reviewer": "editor-17",
         "asserted": True,
         "principal": "arn:aws:iam::222222222222:role/synthetic-invoker",
     }
@@ -363,7 +363,7 @@ def test_the_routes_need_a_signed_in_reader_of_the_account_and_a_configured_stan
     assert standing["outputs"][0]["classes"] == ["include", "exclude"]
 
 
-def test_a_standing_run_names_the_cyclotron_definition_it_is_pinned_to(identity, monkeypatch):
+def test_a_standing_run_names_the_cyclotron_definition_it_is_pinned_to_and_its_bindings(identity, monkeypatch):
     lab = Lab(identity, monkeypatch)
 
     async def go():
@@ -373,6 +373,9 @@ def test_a_standing_run_names_the_cyclotron_definition_it_is_pinned_to(identity,
     [standing] = run(go())
     pin = lab.store.run_cyclotron_definition(lab.run_id)
     assert standing["cyclotron"] == {"id": "shared", "revision": 1} == {"id": pin["id"], "revision": pin["revision"]}
+    # Each binding is a named consumer of some outputs: a site, an inbox, a sales team. No publication fields.
+    assert standing["bindings"] == [{"id": b.publication_id, "outputs": list(b.outputs)} for b in lab.targets[0].bindings]
+    assert "publications" not in standing
 
 
 def test_reading_decisions_details_and_health_writes_nothing(identity, monkeypatch):
