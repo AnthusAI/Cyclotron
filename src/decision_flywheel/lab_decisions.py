@@ -601,10 +601,13 @@ def install_lab_decision_routes(app, runtime):
                 continue
             run = await asyncio.to_thread(load_run, store, target.run_id)
             classifiers = run_outputs(run)
+            # The cyclotron definition the run is pinned to, so the catalog can show which cyclotrons are in use.
+            pin = await asyncio.to_thread(store.run_cyclotron_definition, target.run_id)
             result.append(
                 {
                     "runId": target.run_id,
                     "name": run["name"],
+                    "cyclotron": {"id": pin["id"], "revision": pin["revision"]} if pin else None,
                     "publications": [{"id": b.publication_id, "outputs": list(b.outputs)} for b in target.bindings],
                     "outputs": [
                         {

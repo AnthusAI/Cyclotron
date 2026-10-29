@@ -39,3 +39,15 @@ allow:
     kind: "Bitcoin WIF private key (base58check)"
     reason: "base64 embedded font data in the rebuilt vendored trace-ui bundle, same false positive as the 2026-10-21 override; approved by Ryan 2026-10-29"
     added: 2026-10-29
+  - id: "b634031060d6956b"
+    rule: "leftblock-wif-key"
+    file: "src/decision_flywheel/vendor/trace-ui/viewer.css"
+    kind: "Bitcoin WIF private key (base58check)"
+    reason: "base64 embedded font data in the rebuilt vendored trace-ui bundle, byte-identical to the fonts approved earlier today; approved by Ryan 2026-10-29"
+    added: 2026-10-29
+  - id: "8acfab6f021ec651"
+    rule: "leftblock-wif-key"
+    file: "src/decision_flywheel/vendor/trace-ui/web.css"
+    kind: "Bitcoin WIF private key (base58check)"
+    reason: "base64 embedded font data in the rebuilt vendored trace-ui bundle, byte-identical to the fonts approved earlier today; approved by Ryan 2026-10-29"
+    added: 2026-10-29
