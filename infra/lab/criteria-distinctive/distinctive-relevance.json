@@ -1,0 +1,38 @@
+{
+  "schema": "cyclotron-lab-criteria/v1",
+  "classifier": {
+    "id": "distinctive-relevance",
+    "name": "Distinctive Mark relevance"
+  },
+  "labels": [
+    {
+      "label": "include",
+      "role": "positive"
+    },
+    {
+      "label": "exclude",
+      "role": "negative"
+    }
+  ],
+  "rubric": "",
+  "previous": null,
+  "question": "Should this source become a reference for Distinctive Mark, which reports and explains United States trademark law as it is practiced at the Trademark Trial and Appeal Board, in USPTO examination and in the federal courts, for practitioners and for the business owners who choose, file and keep their marks? Include a source only if it passes all four coverage tests: (1) US relevance: it affects US registration, examination, enforcement or maintenance, or a US owner's decisions; a foreign development qualifies only through the Madrid Protocol, USPTO rules for foreign-domiciled applicants, filings abroad against US brands, or a change a US filer or owner must act on; (2) primary source: it is, or links, the opinion, rule, notice, docket or filing (press coverage alone qualifies only as a labeled Wire item); (3) consequence: a filer, owner or practitioner can be told what to do or watch; (4) not advice: it can be explained without assuming a reader's own facts. Give extra weight to empirical and data-driven work about trademarks: academic studies, USPTO data releases and statistics, datasets, and ML or AI tools used by or on the trademark system. Also in scope: brands crossing the border (foreign businesses entering the US, Madrid designations into the US, section 44 filings, identification of goods and services under US practice, declarations of use and maintenance deadlines, marketplace brand programs requiring a US filing, Customs recordation, solicitation scams aimed at foreign registrants, US brands squatted abroad), and developments at IMPI, INPI (Brazil, Argentina, France), SIC, INAPI, EUIPO, the CJEU and WIPO only for their US consequences. Trademark news involving celebrities or well-known brands is in scope whenever it is about a trademark (a filing, an opposition or cancellation, a dispute, a ruling or an enforcement campaign), even when it teaches no doctrine. Exclude: fear-mongering, search-engine filler, mockery of losing parties, anything not about trademarks, and any source from a competing publication such as ipwatchdog.com.",
+  "doctrine": {
+    "summary": "Distinctive Mark publication doctrine: mission and coverage-test policy from the publication's records (papyrus editorial context --publication distinctive, relayed 2026-10-28). One change by Ryan (2026-10-29), for Distinctive Mark only: trademark news involving celebrities or well-known brands is in scope even when it teaches no doctrine; the general Papyrus rule against celebrity pulp does not apply to this site's trademark coverage.",
+    "sources": [
+      {
+        "kind": "production-records",
+        "note": "Papyrus production editorial context for the distinctive site (mission, policy)"
+      },
+      {
+        "kind": "decision",
+        "note": "Ryan, 2026-10-29: celebrity and brand trademark news is in scope for Distinctive Mark"
+      }
+    ]
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-29"
+  }
+}
