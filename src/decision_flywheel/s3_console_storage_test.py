@@ -960,3 +960,49 @@ def test_a_lookup_refused_with_access_denied_refuses_the_command_instead_of_crea
     client.get_object = real
     assert s.command(run_id, "req-1", "publication", payload)["id"] == first
     assert [j["id"] for j in s.jobs(run_id)].count(first) == 1
+
+
+def test_an_observer_reads_a_runs_jobs_by_position_and_its_queue_from_the_head_after_they_leave_it():
+    s, run_id = standing()
+    ids = [decide(s, run_id, n) for n in range(4)]
+    decide(s, run_id, 1, values={"text": "Source 1, edited"}, request="req-1-edit")
+    item = {"id": "w", "values": {"text": "W"}}
+    waiting = s.command(run_id, "req-waiting", "publication", {"bindings": {"alpha": "1"}, "item": item})
+    s.save_item_list("later", "Later")  # moves every finished job out of the head
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    assert fresh.run_job_count(run_id) == 6
+    assert [fresh.run_job_at(run_id, n)["id"] for n in range(1, 5)] == ids
+    assert fresh.run_job_at(run_id, 3)["result"] == {"response": {"label": "yes", "n": 2}}
+    assert fresh.run_job_at(run_id, 6, results=False)["status"] == "pending"
+    assert fresh.run_job_at(run_id, 7) is None and fresh.run_job_at(run_id, 0) is None
+    assert fresh.queue_counts(run_id) == {"pending": 1, "running": 0}
+    found = fresh.job_position(waiting["id"])
+    assert found["position"] == 6 and found["job"]["status"] == "pending"
+    assert fresh.job_position(str(uuid4())) is None
+    assert [(r["revision"], r["values"]["text"]) for r in fresh.item_revisions("standing", "item-1")] == [
+        (1, "Source 1"),
+        (2, "Source 1, edited"),
+    ]
+    assert fresh.item_revisions("standing", "never") == []
+
+
+def test_an_observer_sees_every_label_an_item_revision_was_given_with_retractions_and_finds_run_events_by_source():
+    s, run_id = labelled(2, 0)
+    s.label_item("topic", 1, "priming", "p0", 1, "sport", "Changed my mind", "label-0-again")
+    s.retract_item_label("label-0-again", "undo-0")
+    job = s.command(run_id, "req", "publication", {"bindings": {"alpha": "1"}, "item": {"id": "a", "values": {}}})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner, job_id=job["id"])
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    view.append_event(run_id, "source-x", {"kind": "step", "n": 1})
+    view.finish_command(claimed["id"], "completed", {"response": 1})
+    s.save_item_list("later", "Later")  # moves labels, retractions and events out of the head
+    fresh = store(journal(s.journal.payloads.client, name="console"))
+    history = fresh.item_label_records("priming", "p0", 1)
+    assert [(r["request_id"], r["label"], r["retracted"]) for r in history] == [
+        ("label-0", "science", False),
+        ("label-0-again", "sport", True),
+    ]
+    assert fresh.item_labels("priming", "p0", 1) == []  # the current votes: the newest was withdrawn
+    assert fresh.run_event_by_source(run_id, "source-x")["payload"] == {"kind": "step", "n": 1}
+    assert fresh.run_event_by_source(run_id, "source-y") is None

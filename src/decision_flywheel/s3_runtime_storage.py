@@ -215,6 +215,7 @@ class S3RuntimeStores:
         self._background = None
         self._blobs = {}  # digest -> bytes of content-addressed values read or written; they never change
         self._seen = None  # the last head read, so an unchanged head is not decoded again
+        self._observed = None  # the last head ``observed_events`` read (read-only observers)
         self.max_conflicts = max_conflicts
         self.authority = None
         self.poisoned = False
@@ -885,6 +886,27 @@ class S3RuntimeStores:
         rows = list(view.rows())
         embedded = len(view.legacy)
         return EventAudit(record, rows[:embedded], rows[embedded:], view.coverage)
+
+    def observed_events(self, *, after_event_id=0, limit=100, same_head=False):
+        """Read-only, whoever owns the runtime: published events above ``after_event_id``, oldest first.
+
+        For observers that never write, such as the lab's decision detail. No ownership is checked or taken, and
+        events another handle still holds unpublished are not seen. Reads the head and the records holding the
+        requested events (``trace_events`` without the owner check); ``same_head`` reuses the head this handle
+        observed last, so a reader that searches the log reads it once. ``last`` is the newest published id.
+        """
+        if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or limit < 1:
+            raise ValueError("a non-negative trace cursor and positive page size required")
+        record = self._observed if same_head else None
+        if record is None:
+            record = self._observed = self.journal.read()
+        self._check_stored(record.value)
+        view = _Events(self, record.value, ())
+        rows = list(view.rows(after_event_id, limit))
+        return {
+            "events": [{**json.loads(payload), "event_id": identifier} for identifier, payload in rows],
+            "last": view.last_id,
+        }
 
     def preview_events_conversion(self, audit):
         """(the document as it would stand after the conversion, bytes of the records it would write).

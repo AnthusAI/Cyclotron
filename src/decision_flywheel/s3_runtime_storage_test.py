@@ -739,3 +739,30 @@ def test_an_old_format_runtime_reads_without_any_write_before_it_is_owned():
     audit = S3RuntimeStores(j, events_lake=runtime_events_lake(j)).audit_events()
     assert audit.record.value["schema"] == "cyclotron-s3-runtime/v1"
     assert [p for _, p in audit.stored] == events and audit.embedded == []
+
+
+def test_an_observer_reads_published_events_by_id_while_another_handle_owns_the_runtime_and_writes_nothing():
+    import json
+
+    from .s3_journal_test import ConditionalS3
+    from .s3_runtime_storage import S3RuntimeStores, runtime_events_lake
+
+    client = ConditionalS3()
+    owner = lake_stores(client)
+    for n in range(1, 6):
+        owner.runtime_storage.append_event(json.dumps({"kind": "step", "n": n}))
+        owner.flush()  # one chunk per publication, as each job's flush
+    owner.runtime_storage.append_event(json.dumps({"kind": "held"}))  # not yet published
+    j = journal(client, name="classifier-a")
+    observer = S3RuntimeStores(j, events_lake=runtime_events_lake(j))
+    puts = sum(1 for kind, _ in client.calls if kind == "put")
+    page = observer.observed_events(after_event_id=2, limit=2)
+    assert [(e["event_id"], e["n"]) for e in page["events"]] == [(3, 3), (4, 4)] and page["last"] == 5
+    every = observer.observed_events(after_event_id=0, limit=100, same_head=True)["events"]
+    assert [e["kind"] for e in every] == ["step"] * 5
+    assert sum(1 for kind, _ in client.calls if kind == "put") == puts
+    owner.runtime_storage.append_event(json.dumps({"kind": "after"}))  # the owner still owns and writes
+    owner.close()
+    assert [e["kind"] for e in observer.observed_events(after_event_id=5, limit=10)["events"]] == ["held", "after"]
+    with pytest.raises(ValueError):
+        observer.observed_events(after_event_id=-1, limit=1)

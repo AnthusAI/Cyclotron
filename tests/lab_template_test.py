@@ -10,7 +10,10 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    # The lab's decision detail reads the output runtimes (heads, keyed documents); read-only, never a write.
+    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
@@ -198,3 +201,19 @@ def test_the_worker_runs_for_lambdas_own_maximum_and_the_queue_hides_a_delivery_
     resources = check.load_template()["Resources"]
     assert resources["WorkerFunction"]["Properties"]["Timeout"] == 900
     assert resources["CommandQueue"]["Properties"]["VisibilityTimeout"] >= 900
+
+
+def test_the_bff_may_read_but_never_write_the_output_runtimes():
+    resources = check.load_template()["Resources"]
+    runtime = "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*"
+    found = {}
+    for name in ("BffRole", "WorkerRole"):
+        for policy in resources[name]["Properties"]["Policies"]:
+            for statement in _statements(policy["PolicyDocument"]["Statement"]):
+                resource = statement.get("Resource")
+                listed = resource if isinstance(resource, list) else [resource]
+                if any(isinstance(r, dict) and r.get("Fn::Sub") == runtime for r in listed):
+                    actions = statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
+                    found.setdefault(name, set()).update(actions)
+    assert found["BffRole"] == {"s3:GetObject"}
+    assert "s3:PutObject" in found["WorkerRole"]
