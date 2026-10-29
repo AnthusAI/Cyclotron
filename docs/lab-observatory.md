@@ -78,6 +78,11 @@ A new revision can come from three places:
 - Every publication then fetches the new revision and the new decision and updates its Reference, so all six
   sites get the corrected content, not just the one where the fix happened.
 
+**A label belongs to one site's output.** Decided by Ryan on 2026-10-29: a vote cast for a publication counts
+only for that publication's classifier. An Anth.us vote trains and measures Anth.us's output and never another
+site's, even when the item is shared and every site decided it in the same request. The shared central item
+lets each site's raters see and rate the same story; it does not share their judgments.
+
 **Labels across revisions.** A label applies to the revision it was given on. When content changes, earlier
 labels are kept and shown, but are marked as given on revision N. Whether they still count toward training
 and alignment is a policy decision (open question 2).
