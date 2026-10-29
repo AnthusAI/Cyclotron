@@ -2,6 +2,10 @@
 
     AWS_PROFILE=cyclotron-production CYCLOTRON_LAB_ACCOUNT_ID=<account scope id> python scripts/dev/lab_criteria.py plan
 
+Each criteria directory is one cyclotron: its classifier files and its ``definition.json``. The shared Anthus
+Cyclotron is ``infra/lab/criteria`` (the default); a publication with its own cyclotron has its own directory,
+named with ``--directory`` (for example ``infra/lab/criteria-distinctive``).
+
 `plan` reads the live catalog through a get-only S3 wrapper (get_object, list_objects_v2,
 head_object; a single attempt) and prints what a deploy would do. It never writes.
 
@@ -51,11 +55,11 @@ def open_store(*, writable: bool):
     return S3ConsoleStorage(journal)
 
 
-def build(store):
+def build(store, directory=DIRECTORY):
     from decision_flywheel.classifier_criteria import load_definition, load_directory, plan_classifiers, plan_definition
 
-    criteria = load_directory(DIRECTORY, relative_to=ROOT)
-    definition = load_definition(DIRECTORY)
+    criteria = load_directory(directory, relative_to=ROOT)
+    definition = load_definition(directory)
     steps = plan_classifiers(store, criteria)
     return criteria, steps, plan_definition(store, criteria, steps, definition)
 
@@ -78,11 +82,12 @@ def main(argv=None) -> int:
     parser.add_argument("command", choices=["plan", "apply"])
     parser.add_argument("--apply", action="store_true", help="required with the apply command")
     parser.add_argument("--approved-by", help="who approved running this change (recorded in the output only)")
+    parser.add_argument("--directory", type=Path, default=DIRECTORY, help="the cyclotron's criteria directory")
     args = parser.parse_args(argv)
     if args.command == "apply" and not (args.apply and args.approved_by):
         parser.error("apply needs --apply and --approved-by NAME")
     store = open_store(writable=args.command == "apply")
-    criteria, steps, definition_step = build(store)
+    criteria, steps, definition_step = build(store, ROOT / args.directory)
     print(json.dumps(report(steps, definition_step), indent=2))
     if args.command == "plan":
         drift = any(s.action == "drift" for s in steps)
