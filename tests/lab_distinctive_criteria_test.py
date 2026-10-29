@@ -42,6 +42,11 @@ def test_celebrity_and_brand_trademark_news_is_in_scope_for_distinctive_mark_by_
     assert any("2026-10-29" in source.get("note", "") for source in criteria.doctrine["sources"])
 
 
+def test_ryan_approved_the_question_on_2026_10_29():
+    (criteria,), _ = committed()
+    assert criteria.approval == {"status": "approved", "approved_by": "Ryan", "approved_on": "2026-10-29"}
+
+
 def test_once_approved_a_deploy_creates_the_classifier_and_its_own_definition_with_the_shared_model_settings():
     criteria, definition = committed()
     approved = tuple(

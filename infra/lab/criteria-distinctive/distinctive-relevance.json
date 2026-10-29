@@ -31,8 +31,8 @@
     ]
   },
   "approval": {
-    "status": "pending",
-    "approved_by": null,
-    "approved_on": null
+    "status": "approved",
+    "approved_by": "Ryan",
+    "approved_on": "2026-10-29"
   }
 }
