@@ -603,7 +603,7 @@ is idempotent and applies the examples to the publication's cyclotron so the nex
 uses them. Refusals use stable codes (`bearer_required`, `bearer_invalid`, `access_refused`,
 `authority_unavailable`, `account_changed`, `outside_publication`,
 `storage_limit`, `firewall_overlap`, `auto_prime_failed`, `operation_unavailable`).
-See `publication-deployment-contract.md` for the full contract.
+See `decision-contract.md` for the full contract.
 
 ## Operational notes
 

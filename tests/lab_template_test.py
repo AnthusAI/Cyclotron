@@ -10,7 +10,18 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    "/Parameters/PublicationTargets",
+    "/Parameters/StandingRuns",
+    "/Conditions/HasTargets",
+    "/Conditions/HasTargets",
+    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PUBLICATION_TARGETS",
+    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_STANDING_RUNS",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PUBLICATION_TARGETS",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_STANDING_RUNS",
+    "/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+    "/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 

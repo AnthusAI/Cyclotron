@@ -18,6 +18,9 @@ from uuid import UUID
 from .models import Item
 
 CONTRACT = "cyclotron-publication/v1"
+# The neutral name for the same operations. A caller speaks one of the two, and is answered in it.
+DECISION_CONTRACT = "cyclotron-decision/v1"
+CONTRACTS = (CONTRACT, DECISION_CONTRACT)
 CAPABILITIES = {
     "decide": "decide",
     "review": "review",
@@ -32,6 +35,25 @@ CAPABILITIES = {
 def criteria_fingerprint(question):
     """sha256 of the exact criteria question: a vote carries to a later binding revision only while this is unchanged."""
     return hashlib.sha256(question.encode()).hexdigest()
+
+
+def in_contract(contract, body):
+    """``body`` as the caller's contract says it: the decision contract names a binding where the publication
+    contract names a publication (``bindingId`` for ``publicationId``, ``decisions`` for ``publications``)."""
+    if contract == CONTRACT or not isinstance(body, dict):
+        return body
+    if contract != DECISION_CONTRACT:
+        raise ValueError("unknown decision contract")
+    result = {}
+    for key, value in body.items():
+        if key == "contractVersion" and value == CONTRACT:
+            value = DECISION_CONTRACT
+        elif key == "publicationId":
+            key = "bindingId"
+        elif key == "publications" and isinstance(value, dict):
+            key, value = "decisions", {name: in_contract(contract, row) for name, row in value.items()}
+        result[key] = value
+    return result
 
 
 class PublicationError(ValueError):
@@ -65,6 +87,10 @@ class PublicationBinding:
             raise ValueError("publication needs distinct output identities")
         for output in self.outputs:
             text(output, "output identity")
+
+    @property
+    def binding_id(self):
+        return self.publication_id
 
 
 @dataclass(frozen=True)
@@ -661,3 +687,15 @@ def _create_publication_http(*, lab=None, authorize=None, resolve_access=None, r
             )
 
     return app
+
+
+# Neutral names for the classes above; the publication names are kept until every caller has moved.
+Binding = PublicationBinding
+CallerActor = PublicationActor
+DecisionLab = PublicationLab
+DecisionError = PublicationError
+DecisionAccess = PublicationAccess
+EmbeddedDecisionClient = EmbeddedPublicationClient
+HTTPDecisionClient = HTTPPublicationClient
+create_decision_host = create_publication_host
+create_decision_app = create_publication_app

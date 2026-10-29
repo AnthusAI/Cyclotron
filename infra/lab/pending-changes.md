@@ -8,6 +8,27 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
+Pending: neutral names beside the old ones (step 2 of docs/general-decision-engine.md). The stack parameter
+`PublicationTargets` becomes `StandingRuns`, and both functions read `CYCLOTRON_STANDING_RUNS` in place of
+`CYCLOTRON_PUBLICATION_TARGETS` (the same runs, each binding named by `bindingId` rather than `publicationId`);
+the `HasTargets` condition is re-added referring to the new parameter. The change set must pass `StandingRuns`
+explicitly, converted from the live `PublicationTargets` value, since a renamed parameter has no previous value.
+`StandingRuns` has no `MaxLength`; CloudFormation's own parameter size limit still applies. The machine invoker
+role gains `execute-api:Invoke` on `POST /machine/bindings/*/operations` and `GET /machine/bindings/*/commands/*`;
+its publication and decision grants are unchanged. Ten operations in `pending-changes.json`.
+The operations, in order:
+
+- `remove` `/Parameters/PublicationTargets`
+- `add` `/Parameters/StandingRuns`
+- `remove` `/Conditions/HasTargets`
+- `add` `/Conditions/HasTargets`
+- `remove` `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PUBLICATION_TARGETS`
+- `add` `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_STANDING_RUNS`
+- `remove` `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PUBLICATION_TARGETS`
+- `add` `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_STANDING_RUNS`
+- `add` `/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-`
+- `add` `/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-`
+
 Previously: the lab speaks of bindings and callers, not publications and newsrooms (step 1 of docs/general-decision-engine.md; lab code 5f5c781, package sha256 `c8f66bdd8690f828cd3468cc2f9bbec305cefded91f136d18d8bc407a5cf7562`), deployed on 2026-10-29 with change set `lab-bindings-5f5c781`. Code only; the snapshot was refreshed.
 
 Previously: the Cyclotrons list shows which cyclotron each standing run decides with and folds the rest away; standing-runs names each run's pinned cyclotron definition (lab code 696a1c4, package sha256 `f81281d152bb34cc5e5c19a01d58da41ac5b36d18892b4cdaf4461156e6306ab`), deployed on 2026-10-29 with change set `tidy-cyclotrons-696a1c4`. Code only; the snapshot was refreshed. Earlier the same day, change set `distinctive-target-bec52c70` changed only the `PublicationTargets` parameter (adding the Distinctive Mark standing run bec52c70), so the template and snapshot were unchanged.

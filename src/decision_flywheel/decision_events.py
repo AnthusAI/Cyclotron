@@ -7,6 +7,7 @@ Delivery is at-least-once and best effort: publishing never fails or delays the 
 import json
 
 CONTRACT = "cyclotron-publication/v1"
+DECISION_CONTRACT = "cyclotron-decision/v1"
 SOURCE = "cyclotron.lab"
 DETAIL_TYPE = "Decision Ready"
 BUS_VARIABLE = "CYCLOTRON_DECISION_EVENT_BUS_ARN"
@@ -14,14 +15,15 @@ STATUSES = {"completed": "complete", "failed": "failed"}
 
 
 def is_machine_decision(job, actor):
+    from .decision_kinds import is_decision
     from .machine_access import MachineActor
 
     payload = job.get("payload")
     return (
         isinstance(actor, MachineActor)
-        and job.get("kind") == "publication"
+        and is_decision(job.get("kind"))
         and isinstance(payload, dict)
-        and set(payload) == {"bindings", "item"}
+        and set(payload) in ({"bindings", "item"}, {"bindings", "item", "contractVersion"})
     )
 
 
@@ -37,14 +39,16 @@ class DecisionEventNotifier:
 
     def detail(self, job, actor, status):
         request_id = job.get("request_id") or ""
+        # The decision contract names the bindings it decided for; the publication contract calls them publications.
+        contract = job["payload"].get("contractVersion", CONTRACT)
         return {
-            "contractVersion": CONTRACT,
+            "contractVersion": contract,
             "accountId": actor.account_id,
             "runId": job["run_id"],
             "jobId": job["id"],
             "requestId": request_id.removeprefix("machine:"),
             "itemId": job["payload"]["item"]["id"],
-            "publications": sorted(job["payload"]["bindings"]),
+            "bindings" if contract == DECISION_CONTRACT else "publications": sorted(job["payload"]["bindings"]),
             "status": STATUSES[status],
         }
 

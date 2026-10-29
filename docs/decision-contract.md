@@ -1,4 +1,11 @@
-# Publication contract: embedded and remote integration slice
+# Decision contract: embedded and remote integration slice
+
+The decision contract is `cyclotron-decision/v1`. It has the same operations as `cyclotron-publication/v1`, the
+name this document uses throughout, and names a binding where that contract names a publication
+(`bindingId` for `publicationId`); [standing runs](standing-runs.md#contract-routes-and-configuration) lists
+every difference. The hosted service speaks both. The embedded classes below also go by neutral names
+(`DecisionLab`, `Binding`, `CallerActor`, `EmbeddedDecisionClient`, `HTTPDecisionClient`,
+`create_decision_app`), and the embedded HTTP host still speaks the publication contract.
 
 `publication_lab.py` supplies `cyclotron-publication/v1` over an **injected,
 already-open Cyclotron facade**. It owns no storage adapter, provider factory,
@@ -113,9 +120,9 @@ boundaries are mocked; a network guard forbids outbound connections. Optional
 priming and its distinct extraction feedback remain intact. No synthetic model
 is installed in production configuration.
 
-Tracking: remote `decision-flywheel-ed9c78a5-64da-46c0-8369-aac47e91f6ce`, embedded
-`decision-flywheel-046a06ad-f064-4907-96e1-b6e5941d0938`, shared milestone
-`decision-flywheel-a16042c9-7357-42d1-a8ca-08387b8931bf`. Ryan authorized local
+Tracking: remote `decision-flywheel-ed9c78a5`, embedded
+`decision-flywheel-046a06ad`, shared milestone
+`decision-flywheel-a16042c9`. Ryan authorized local
 implementation after the initial planning hold; later publication/merge/rollout
 work is coordinated through the release owner. This contract does not itself
 activate a production endpoint, fake classifier, account mapping or data migration.

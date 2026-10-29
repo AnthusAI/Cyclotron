@@ -9,6 +9,7 @@ import time
 from uuid import uuid4
 
 from .command_refusal import CommandRefused
+from .decision_kinds import is_decision
 from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
 from .storage_errors import CommandNotReady
@@ -291,7 +292,7 @@ class HostedCommandWorker:
 
         await owned_guard()  # After confirmed execution ownership, before opening operation state.
         effects = _Effects(view, check)
-        if job["kind"] == "publication":
+        if is_decision(job["kind"]):
             if self.publication_runtime_for_command is None:
                 raise ValueError("publication worker composition is unavailable")
             runtime = self.publication_runtime_for_command(effects, owned_guard, check, actor)
@@ -301,7 +302,7 @@ class HostedCommandWorker:
             runtime = self.runtime_for_command(effects, owned_guard, check)
         run = await asyncio.to_thread(effects.run, actor.run_id)
         # A publication decision needs only its own item, so it never reads the run's whole item list.
-        items = [] if job["kind"] == "publication" else await asyncio.to_thread(effects.items, actor.run_id)
+        items = [] if is_decision(job["kind"]) else await asyncio.to_thread(effects.items, actor.run_id)
         shown = await asyncio.to_thread(effects.current_item, actor.run_id)
         session = None
         try:

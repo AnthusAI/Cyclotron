@@ -10,7 +10,7 @@ committed files are exactly what a deploy applies.
 
 Every step that writes needs Ryan's explicit approval. Agents run only the read-only steps.
 No Lambda package is needed: the code path (`save_classifier`, bootstrap, priming) is already
-deployed, and the only stack change is the `PublicationTargets` parameter.
+deployed, and the only stack change is the `StandingRuns` parameter.
 
 ## What the code does today (verified by reading the code and the live catalog)
 
@@ -24,7 +24,7 @@ deployed, and the only stack change is the `PublicationTargets` parameter.
    machine workspace binding is a hash of it. So a changed question needs a new run **and a new
    cyclotron id**. That is the "definition versions" limitation, ticket ade3088c (open, P2):
    until Cyclotron.open accepts a new definition revision for an existing store, the supported
-   path is a successor run (`docs/hosted-publications.md`, Capacity: "plan a successor run").
+   path is a successor run (`docs/standing-runs.md`, Capacity: "plan a successor run").
 2. **`save_classifier` has side effects beyond the new row.** It rolls every active cyclotron
    definition that contains the classifier to a new definition revision and activates it. The live
    run stays pinned to definition revision 1 (`run_cyclotron_definitions`), so decisions are
@@ -37,7 +37,7 @@ deployed, and the only stack change is the `PublicationTargets` parameter.
    revisions". Re-importing the same items is refused ("item already exists; use the catalog
    correction workflow"), so editors relabel the existing priming items under revision 2 with
    `labelItem`. Revision 1 labels are never silently reused for a changed question.
-4. **Bindings.** `PublicationTargets` bindings carry an opaque `revision` ("1"). A request with a
+4. **Bindings.** `StandingRuns` bindings carry an opaque `revision` ("1"). A request with a
    different `bindingRevision` is refused (409 "publication binding changed"). The Papyrus router
    holds one `cyclotron.runId` and one `cyclotron.bindingRevision` for all publications
    (`CONFIG#router`), so all five bindings (including `data-parade` and `pilobol-us`) move together.
@@ -68,7 +68,7 @@ being referenced.
 `AWS_PROFILE=cyclotron-production CYCLOTRON_LAB_ACCOUNT_ID=<LAB_ACCOUNT_ID> python scripts/dev/lab_criteria.py plan`: expect `save` for the four
 classifiers (anth-us, p-apyr-us and threat-intelligence at revision 2, `data-parade-relevance` and `pilobol-us-relevance` new at revision 1)
 and `define shared-source-relevance-r2` (revisions 2/2/2/1/1), and no `drift`. Save the
-current stack parameter `PublicationTargets` (`aws cloudformation describe-stacks`, read-only) and the
+current stack parameter `StandingRuns` (`aws cloudformation describe-stacks`, read-only) and the
 Papyrus `CONFIG#router` item as the rollback copies. Get the old run's request usage. Editors/Ryan: confirm who
 will relabel priming (11 `prime-p-apyr-us`, 12 `prime-threat-intelligence`, 14 `prime-anth-us`; Data Parade has no priming list yet).
 Editors and router: no change. Rollback: nothing to undo.
@@ -92,17 +92,17 @@ The receipt gives `runId`. Verify: the run's `classifiers` are the three revisio
 `criteria.approval` (Ryan, 2026-10-22; Data Parade 2026-10-23); `cyclotron_definition_revision` is 1; item count equals
 `hn-operational`. Retrying the same `requestId` returns the same run. Rollback: leave the run unreferenced.
 
-**4. Repoint the target (CloudFormation parameter only).** Change `PublicationTargets` to the JSON below, via a change
+**4. Repoint the target (CloudFormation parameter only).** Change `StandingRuns` to the JSON below, via a change
 set (`sam deploy --no-execute-changeset`), review that only the `BffFunction`/`WorkerFunction` environment changes
 and nothing is replaced, get Ryan's approval, execute.
 
 ```json
 [ {"accountId":"<LAB_ACCOUNT_ID>","runId":"<NEW_RUN_ID>","modelIdentity":"jev:jev-1.13.0","standing":true,
-  "bindings":[{"publicationId":"anth-us","outputs":["anth-us-relevance"],"revision":"2","priming":{"listId":"prime-anth-us"}},
-  {"publicationId":"p-apyr-us","outputs":["p-apyr-us-relevance"],"revision":"2","priming":{"listId":"prime-p-apyr-us"}},
-  {"publicationId":"threat-intelligence","outputs":["threat-intelligence-relevance"],"revision":"2","priming":{"listId":"prime-threat-intelligence"}},
-  {"publicationId":"data-parade","outputs":["data-parade-relevance"],"revision":"2"},
-  {"publicationId":"pilobol-us","outputs":["pilobol-us-relevance"],"revision":"2"}]}]
+  "bindings":[{"bindingId":"anth-us","outputs":["anth-us-relevance"],"revision":"2","priming":{"listId":"prime-anth-us"}},
+  {"bindingId":"p-apyr-us","outputs":["p-apyr-us-relevance"],"revision":"2","priming":{"listId":"prime-p-apyr-us"}},
+  {"bindingId":"threat-intelligence","outputs":["threat-intelligence-relevance"],"revision":"2","priming":{"listId":"prime-threat-intelligence"}},
+  {"bindingId":"data-parade","outputs":["data-parade-relevance"],"revision":"2"},
+  {"bindingId":"pilobol-us","outputs":["pilobol-us-relevance"],"revision":"2"}]}]
 ```
 
 (Only p-apyr-us has `priming` today; adding it to the other two is optional and Ryan's call.) Effects: the old
@@ -110,7 +110,7 @@ run stops being a target; anything addressed to it or to binding "1" is refused.
 Papyrus sites that pin `X-Papyrus-Binding` must be updated to "2" or their curation calls answer 409
 `account_changed`. Verify: `status` for each publication answers with `bindingRevision: "2"` (503 "no verified
 snapshot yet" until the first decision is normal); a `prime` response envelope shows the new question text.
-Rollback: restore the saved `PublicationTargets` value (same change-set process); the old run is untouched.
+Rollback: restore the saved `StandingRuns` value (same change-set process); the old run is untouched.
 
 **5. Relabel and prime.** Editors label each priming item under revision 2 (`labelItem` with `classifier_revision: 2`),
 then run `prime` (or the curation `accept`) for each binding with priming. Verify `primedExamples` per classifier

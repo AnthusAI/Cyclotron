@@ -12,13 +12,23 @@ from .cyclotron_runtime import CyclotronRuntime
 from .hosted_publications import _GuardedJournal
 from .journal import encode, uuid
 from .prospectus_accounts import AccountAccessDenied
-from .publication_lab import CONTRACT
+from .publication_lab import CONTRACT, DECISION_CONTRACT, in_contract
 from .s3_console_storage import S3ConsoleStorage
 from .storage_errors import StorageConflict, StorageMissing, StorageUncertain
+
+# Where a frozen run records the bootstrap request that made it. Stored runs are never rewritten (the workspace
+# binding is a hash of the config), so both keys are read; ``WRITTEN_KEY`` is the one new runs get.
+BOOTSTRAP_KEYS = ("standing_bootstrap", "publication_bootstrap")
+WRITTEN_KEY = "publication_bootstrap"
+WRITTEN_KIND = "publication-bootstrap"
 
 
 class BootstrapConflict(ValueError):
     pass
+
+
+def bootstrap_of(config):
+    return next((config[key] for key in BOOTSTRAP_KEYS if key in config), {})
 
 
 def freeze_run(runtime, account, session, body):
@@ -42,7 +52,7 @@ def freeze_run(runtime, account, session, body):
         # Retry checks precede latest resolution: a later catalog revision must
         # never turn an uncertain successful request into a second frozen run.
         for run in store.runs():
-            bootstrap = run["config"].get("publication_bootstrap", {})
+            bootstrap = bootstrap_of(run["config"])
             if bootstrap.get("requestId") == body["requestId"]:
                 if bootstrap.get("fingerprint") != signature or bootstrap.get("createdBy") != session.person_id:
                     raise BootstrapConflict("bootstrap request identity has different content or person")
@@ -62,7 +72,7 @@ def freeze_run(runtime, account, session, body):
             store, None, model_factory=unavailable, sink_factory=unavailable, storage_factory=unavailable
         )
         frozen, items = normalizer.normalize_run_config({**config, "max_requests": 1, "max_optimizer_calls": 1})
-        frozen["publication_bootstrap"] = {
+        frozen[WRITTEN_KEY] = {
             "requestId": body["requestId"],
             "fingerprint": signature,
             "createdBy": session.person_id,
@@ -76,9 +86,9 @@ def freeze_run(runtime, account, session, body):
             items=items,
             initial_events=[
                 (
-                    "publication-bootstrap:" + body["requestId"],
+                    WRITTEN_KIND + ":" + body["requestId"],
                     {
-                        "kind": "publication-bootstrap",
+                        "kind": WRITTEN_KIND,
                         "accountId": account,
                         "createdBy": session.person_id,
                         "requestId": body["requestId"],
@@ -95,7 +105,7 @@ def receipt(account, run):
         "contractVersion": CONTRACT,
         "accountId": account,
         "runId": run["id"],
-        "createdBy": run["config"]["publication_bootstrap"]["createdBy"],
+        "createdBy": bootstrap_of(run["config"])["createdBy"],
         "configFingerprint": sha256(encode(run["config"])).hexdigest(),
         "definitionRevision": run["config"]["cyclotron_definition_revision"],
     }
@@ -103,10 +113,18 @@ def receipt(account, run):
 
 def install_bootstrap_route(app, runtime):
     # The lab's CDN forwards /api/* to this service but not /publication-runs/*, so the same handler is also
-    # served under /api/ for signed-in browsers that reach the lab through its public address.
+    # served under /api/ for signed-in browsers that reach the lab through its public address. The standing-runs
+    # path runs it in the decision contract.
     @app.post("/publication-runs/bootstrap")
     @app.post("/api/publication-runs/bootstrap")
     async def bootstrap(request: Request):
+        return await freeze(request, CONTRACT)
+
+    @app.post("/api/standing-runs/bootstrap")
+    async def standing_bootstrap(request: Request):
+        return await freeze(request, DECISION_CONTRACT)
+
+    async def freeze(request, contract):
         raw = await request.body()
         try:
             body = json.loads(raw)
@@ -114,7 +132,7 @@ def install_bootstrap_route(app, runtime):
             if (
                 not isinstance(body, dict)
                 or set(body) != {"contractVersion", "requestId", "name", "config"}
-                or body["contractVersion"] != CONTRACT
+                or body["contractVersion"] != contract
                 or not isinstance(body["name"], str)
                 or not body["name"].strip()
                 or not isinstance(body["config"], dict)
@@ -138,4 +156,4 @@ def install_bootstrap_route(app, runtime):
             raise HTTPException(503, "bootstrap outcome uncertain; retry only the same request identity") from None
         except ValueError:
             raise HTTPException(400, "canonical bootstrap configuration refused") from None
-        return JSONResponse(result, status_code=201 if created else 200)
+        return JSONResponse(in_contract(contract, result), status_code=201 if created else 200)

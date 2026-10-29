@@ -408,7 +408,7 @@ that refuses any transformer call, so hosted priming is file import only. There 
 fallback.
 
 The bearer curation routes (`/api/newsroom/curation/priming`, see
-`publication-deployment-contract.md`) wrap that storage in a publication-scoped view:
+`decision-contract.md`) wrap that storage in a publication-scoped view:
 
 - draft identities are stored under `pub-<32 hex>:`, a digest of account and publication, so
   two publications never share or collide on a draft name; an identity that already looks

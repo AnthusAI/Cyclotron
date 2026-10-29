@@ -206,6 +206,37 @@ def test_publication_operations_and_receipts_are_also_served_under_api(identity,
     asyncio.run(run())
 
 
+def test_binding_operations_and_receipts_are_served_under_api_in_the_decision_contract(identity, monkeypatch):
+    bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = setup(identity, monkeypatch)
+    pub = PUBS[0]
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url=config.public_origin,
+            cookies={"__Host-cyclotron-session": cookie},
+            headers={"Origin": config.public_origin, "X-CSRF-Token": session.csrf_token, "X-Cyclotron-Account": account},
+        ) as http:
+            asked = {"operation": "decide", "payload": {"bindingRevision": "binding-one", "item": ITEM}}
+            refused = await http.post(
+                f"/api/bindings/{pub}/operations", json={"contractVersion": "cyclotron-publication/v1", **asked}
+            )
+            assert refused.status_code == 400
+            response = await http.post(
+                f"/api/bindings/{pub}/operations", json={"contractVersion": "cyclotron-decision/v1", **asked}
+            )
+            assert response.status_code == 202, response.text
+            assert response.json()["contractVersion"] == "cyclotron-decision/v1" and response.json()["bindingId"] == pub
+            await worker.worker().process(sent.pop(0))
+            receipt = await http.get(f"/api/bindings/{pub}/commands/{response.json()['jobId']}")
+            assert receipt.status_code == 200, receipt.text
+            value = receipt.json()
+            assert value["contractVersion"] == "cyclotron-decision/v1" and value["bindingId"] == pub
+            assert "publicationId" not in value and value["decision"]["classifiers"]
+
+    asyncio.run(run())
+
+
 def test_fifth_publication_waits_for_criteria_without_joining_the_shared_model_request(identity, monkeypatch):
     bff, worker, model, store, config, account, cookie, session, state, sent, targets, app = setup(identity, monkeypatch)
     target = targets[0]
@@ -277,6 +308,25 @@ def test_pending_configuration_declares_five_outputs_without_inventing_a_classif
     for pending in (["undeclared"], ["epsilon", "epsilon"], "epsilon"):
         with pytest.raises(ValueError, match="configuration"):
             targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps([{**raw[0], "pendingOutputs": pending}])})
+
+
+def test_standing_runs_name_their_bindings_by_binding_id_and_read_the_same_as_the_publication_targets():
+    run = {"accountId": str(uuid4()), "runId": str(uuid4()), "standing": True}
+    standing = [{**run, "bindings": [{"bindingId": "alpha", "outputs": ["alpha"], "revision": "r1"}]}]
+    legacy = [{**run, "bindings": [{"publicationId": "alpha", "outputs": ["alpha"], "revision": "r1"}]}]
+    new = targets_from_environment({"CYCLOTRON_STANDING_RUNS": json.dumps(standing)})
+    assert new == targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps(legacy)})
+    assert new[0].bindings[0].binding_id == "alpha" and new[0].standing
+    # Each variable takes its own key, and setting both is refused rather than quietly ignoring one.
+    with pytest.raises(ValueError, match="configuration"):
+        targets_from_environment({"CYCLOTRON_STANDING_RUNS": json.dumps(legacy)})
+    with pytest.raises(ValueError, match="configuration"):
+        targets_from_environment({"CYCLOTRON_PUBLICATION_TARGETS": json.dumps(standing)})
+    with pytest.raises(ValueError, match="not both"):
+        targets_from_environment(
+            {"CYCLOTRON_STANDING_RUNS": json.dumps(standing), "CYCLOTRON_PUBLICATION_TARGETS": json.dumps(legacy)}
+        )
+    assert targets_from_environment({}) is None
 
 
 def test_pending_criteria_cannot_be_silently_replaced_by_a_runnable_classifier(identity, monkeypatch):

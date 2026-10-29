@@ -1,4 +1,61 @@
-# Hosted publication prediction and priming composition
+# Standing runs: hosted decisions and priming
+
+A **standing run** is a long-lived run that decides each item a caller sends and learns from the reviews that
+come back. It decides for one or more **bindings**: named consumers of some of its outputs at a pinned revision
+(a publication, a support inbox, a sales team). Nothing below is specific to one kind of caller; Papyrus is
+the first, and [its section](#papyrus-the-first-caller) lists what is Papyrus's own.
+
+## Contract, routes and configuration
+
+Every operation is served under a neutral name and, until every caller has moved, under its older publication
+name. Both run the same handler and checks, and each answers in the contract it was asked in.
+
+| Neutral (decision contract) | Older (publication contract) |
+|---|---|
+| contract `cyclotron-decision/v1` | `cyclotron-publication/v1` |
+| `POST /machine/bindings/{binding}/operations` | `POST /machine/publications/{publication}/operations` |
+| `GET /machine/bindings/{binding}/commands/{jobId}` | `GET /machine/publications/{publication}/commands/{jobId}` |
+| `POST /api/bindings/{binding}/operations`, `GET /api/bindings/{binding}/commands/{jobId}` | `/api/publications/…` and `/publications/…` |
+| `POST /api/standing-runs/bootstrap` | `/api/publication-runs/bootstrap`, `/publication-runs/bootstrap` |
+| env `CYCLOTRON_STANDING_RUNS`, stack parameter `StandingRuns`, binding key `bindingId` | env `CYCLOTRON_PUBLICATION_TARGETS`, binding key `publicationId` |
+| response `bindingId`; a shared decision's projections under `decisions` | `publicationId`; projections under `publications` |
+| feedback names `caller` and `reviewer` | feedback names `editor: {site, subject}` |
+| doorbell lists `bindings` | doorbell lists `publications` |
+
+`POST /machine/decisions` takes either contract and answers in it, and so do its receipt and its Decision Ready
+doorbell. The same request id sent in the other contract is a different request (409 `request_conflict`), not
+a replay. A binding route refuses the publication contract and a publication route refuses the decision
+contract, so a caller always knows which shape comes back.
+
+The loader reads `CYCLOTRON_STANDING_RUNS` or `CYCLOTRON_PUBLICATION_TARGETS` and refuses both at once. Each
+takes its own binding key. The lab stack sets only `CYCLOTRON_STANDING_RUNS`.
+
+Stored rows are never rewritten. Every reader accepts a decision job of kind `decision` or `publication`, and a
+request id replayed across the two names the same job; a run frozen by the bootstrap is read whether it records
+the bootstrap under `standing_bootstrap` or `publication_bootstrap`. New rows still get the publication names
+until every worker reads both (`decision_kinds.WRITTEN`, `hosted_publication_bootstrap.WRITTEN_KEY`). Feedback events keep their stored shape (`publication-machine-feedback`, with
+`editor: {site, subject}`) whichever contract the caller spoke.
+
+The Python names follow: `Binding`, `CallerActor`, `DecisionLab`, `EmbeddedDecisionClient`,
+`HTTPDecisionClient`, `create_decision_host`, `create_decision_app` (in `publication_lab`) and
+`StandingRunConfig` (in `hosted_publications`) are the same classes as their publication names, which stay
+until the old names retire.
+
+## Papyrus, the first caller
+
+Papyrus decides relevance for publications, so a Papyrus binding is a publication and its caller is a
+Papyrus site. These parts are Papyrus's own and say so:
+
+* **Review source.** A Papyrus editor's review arrives as feedback naming the site (`caller`) and the editor
+  (`reviewer`); the publication contract's `editor: {site, subject}` maps onto the same fields.
+* **Site credentials.** `VerifiedSiteCredential` and `prospectus_site_credentials.py` verify a credential that
+  a Papyrus site forwards; Prospectus is the verifier.
+* **Curation route.** `POST /api/lab/publication` belongs to Papyrus and keeps its path.
+
+Papyrus still calls the publication routes and contract. Moving it to the neutral names is step 3 of
+[the generalization](general-decision-engine.md); Cyclotron changes nothing for that step.
+
+## How the hosted service is composed
 
 This source change connects the existing publication SDK to the existing hosted
 console BFF, durable command queue, original human session authorization, worker,
@@ -38,8 +95,9 @@ The existing required `CYCLOTRON_*` host configuration still applies. These
 additional ordinary application settings are parsed without creating resources:
 
 * `CYCLOTRON_ALLOW_LIVE`: exactly `true` or `false`, default `false`.
-* `CYCLOTRON_PUBLICATION_TARGETS`: JSON list of
-  `{"accountId":"<existing UUID>","runId":"<existing UUID>","bindings":[{"publicationId":"<name>","outputs":["<classifier>"],"revision":"<reviewed revision>"}]}`.
+* `CYCLOTRON_STANDING_RUNS`: JSON list of
+  `{"accountId":"<existing UUID>","runId":"<existing UUID>","bindings":[{"bindingId":"<name>","outputs":["<classifier>"],"revision":"<reviewed revision>"}]}`.
+  The older `CYCLOTRON_PUBLICATION_TARGETS` takes the same list with `publicationId` in place of `bindingId`.
 * `CYCLOTRON_PREDICTION_MODEL`: explicit reviewed Jev model identity.
   Frozen run provider and model must match it; automatic run priming is rejected and
   the optimizer is disabled. There is no request cap: hosted publication runs never pass a request limit to the engine. Existing provider credentials are resolved lazily
@@ -71,7 +129,7 @@ remains Papyrus's responsibility.
 
 ## Accepted human priming without provider execution
 
-The existing account-scoped GraphQL `primingCommand(file)` and `primingCommand(accept)` intake validates explicit human labels and optional reasons against selected classifier revisions. Both are pure data operations; on the console session path acceptance alone does not apply examples to an engine (the `prime` operation does). The bearer curation routes accept and then apply in one request (see `publication-deployment-contract.md`, "Bearer curation routes"). Unspecified labels stay outside that output's priming import. No prior prediction, synthetic decision or retrospective review is fabricated.
+The existing account-scoped GraphQL `primingCommand(file)` and `primingCommand(accept)` intake validates explicit human labels and optional reasons against selected classifier revisions. Both are pure data operations; on the console session path acceptance alone does not apply examples to an engine (the `prime` operation does). The bearer curation routes accept and then apply in one request (see `decision-contract.md`, "Bearer curation routes"). Unspecified labels stay outside that output's priming import. No prior prediction, synthetic decision or retrospective review is fabricated.
 
 After acceptance, an authenticated same-origin request may submit:
 
@@ -160,7 +218,7 @@ The queued authority is a `MachineActor` (kind `machine`) bound to the target's 
 
 HTTP APIs cannot carry a resource policy, so a principal in another AWS account cannot be authorized by this API alone. The caller therefore assumes a role in the Cyclotron account:
 
-* Cyclotron account: `MachineInvokerRole` (trust: the single caller role ARN, parameter `MachineCallerRoleArn`; permission: `execute-api:Invoke` on `.../POST/machine/publications/*` and `.../GET/machine/publications/*` of this API only). `CYCLOTRON_MACHINE_PRINCIPALS` lists this invoker role ARN.
+* Cyclotron account: `MachineInvokerRole` (trust: the single caller role ARN, parameter `MachineCallerRoleArn`; permission: `execute-api:Invoke` on the machine binding, publication and decision routes of this API only). `CYCLOTRON_MACHINE_PRINCIPALS` lists this invoker role ARN.
 * Caller account: the caller role's identity policy allows `sts:AssumeRole` on that invoker role ARN only, then signs requests (service `execute-api`, region `us-east-1`) with the returned credentials and a fixed role session name that identifies the service.
 * API Gateway: route `ANY /machine/{proxy+}` with `AWS_IAM`; the default proxy route is unchanged.
 
