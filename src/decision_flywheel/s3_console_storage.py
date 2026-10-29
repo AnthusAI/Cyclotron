@@ -42,7 +42,7 @@ from .record_lake import (
     coverage_in,
     with_coverage,
 )
-from .run_storage import _UNSET
+from .run_storage import _UNSET, newest_through_finished
 from .storage_errors import CommandNotReady, StorageConflict
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
 from .value_records import externalized, resolved, same_values
@@ -1986,6 +1986,10 @@ class S3ConsoleStorage:
         """Every job of the run, newest first. ``results=False`` skips the lake fetch: a lake-held result then shows as
         its small reference, and ``job_result(job_id)`` fetches the one result a caller needs."""
         return list(self.iter_jobs(run_id, results=results))
+
+    def active_jobs(self, run_id):
+        """The run's unfinished jobs and its newest finished one (run_storage.newest_through_finished)."""
+        return newest_through_finished(self.iter_jobs(run_id, results=True))
 
     def iter_jobs(self, run_id, *, results=False):
         """The run's jobs newest first, read one at a time: a caller that wants the newest few stops early."""

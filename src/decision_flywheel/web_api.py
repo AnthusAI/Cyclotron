@@ -230,7 +230,9 @@ class Query:
 
     @strawberry.field
     async def jobs(self, info: strawberry.Info, run_id: strawberry.ID) -> list[Job]:
-        return [Job(id=r['id'],kind=r['kind'],status=r['status'],result=r['result']) for r in await call(info, 'jobs', str(run_id))]
+        """The run's unfinished jobs and its newest finished one, newest first: what a run page shows (busy, the last
+        command's outcome). Its cost follows the queue, not the run's history, which grows by a job per decision."""
+        return [Job(id=r['id'],kind=r['kind'],status=r['status'],result=r['result']) for r in await call(info, 'active_jobs', str(run_id))]
 
 
 @strawberry.type

@@ -99,6 +99,9 @@ class WebStore(WorkspaceCatalog, Cyclotrons, CyclotronDefinitions):
     def jobs(self, run_id):
         return self.run_storage.jobs(run_id)
 
+    def active_jobs(self, run_id):
+        return self.run_storage.active_jobs(run_id)
+
     def claim_command(self):
         return self.run_storage.claim_command()
 

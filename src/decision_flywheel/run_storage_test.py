@@ -72,3 +72,19 @@ def test_concurrent_event_and_summary_retries_return_one_durable_result(tmp_path
         first, second = pool.map(complete, (0, 1))
     assert first == second
     assert [event["source_id"] for event in source.all_events(run["id"])] == ["same-source", "run:completed"]
+
+
+def test_the_active_jobs_are_the_unfinished_ones_and_the_newest_finished_one(tmp_path):
+    store = WebStore(tmp_path / "web.sqlite")
+    run = store.create_run("Synthetic", "live", {})
+    older, newer = (store.command(run["id"], f"request-{n}", "prepare", {}) for n in range(2))
+    for job in (older, newer):
+        store.claim_command()
+        store.finish_command(job["id"], "completed", {"n": job["id"]})
+    running, waiting = (store.command(run["id"], f"request-{n}", "prepare", {}) for n in range(2, 4))
+    store.claim_command()
+    assert [(j["id"], j["status"]) for j in store.active_jobs(run["id"])] == [
+        (waiting["id"], "pending"),
+        (running["id"], "running"),
+        (newer["id"], "completed"),
+    ]
