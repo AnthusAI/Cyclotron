@@ -14,6 +14,8 @@ snapshot (`aws cloudformation get-template --template-stage Original`), empty
 documents to show the exact decision request and response; it never writes them, and the worker remains the
 only role that can write a runtime.
 
+Previously: a dropped S3 connection is classified and an uncertain keyed write is retried once (lab code 041c9d3, package sha256 `3f8b4752a51e5ad047483067e020b1f4938fdf7996b02b9dbc02c263cf5f3831`), deployed on 2026-10-28 with change set `dropped-conn-041c9d3` at 20:36Z. Code only; the snapshot was refreshed.
+
 Previously: fewer S3 calls in sequence per decision (lab code c977e86, package sha256 `96954c94ccd0e70de286d549fe5328093004851349f9bf6b923526f6ec7d04c7`), deployed on 2026-10-28 with change set `serial-c977e86` at 19:54Z. Code only; the snapshot was refreshed.
 
 Previously: constant-cost storage (lab code 8b825ed, package sha256 `8546da09724174429bc350c9f1da63b005d913f83c3fb47b8aa62df67513606d`), deployed on 2026-10-28 with change set `storage-8b825ed` at 16:10Z, after change set `books-list-8b825ed` at 16:08Z deployed list access on the books bucket for the BFF and worker roles. One statement is appended to
