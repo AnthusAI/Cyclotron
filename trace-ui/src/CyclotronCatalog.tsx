@@ -57,7 +57,7 @@ export function CyclotronCatalog(){
   const uses=(id:string)=>(standing??[]).filter(run=>run.cyclotron?.id===id)
   const inUse=cards.filter(row=>uses(row.id).length),unused=cards.filter(row=>!uses(row.id).length)
   const cardFor=(row:Definition)=><Card key={row.id}><CardHeader><CardTitle>{row.name}</CardTitle><p className="text-xs text-muted-foreground">Revision {row.revision}</p>
-    {uses(row.id).map(run=><p key={run.runId} className="flex items-start gap-1.5 text-xs"><CircleCheck aria-hidden className="mt-px size-3.5 shrink-0 text-emerald-600"/><span>Decides for {run.publications.map(p=>p.id).join(', ')} · {run.name}{run.cyclotron&&run.cyclotron.revision!==row.revision?` · pinned to revision ${run.cyclotron.revision}`:''}</span></p>)}
+    {uses(row.id).map(run=><p key={run.runId} className="flex items-start gap-1.5 text-xs"><CircleCheck aria-hidden className="mt-px size-3.5 shrink-0 text-emerald-600"/><span>Decides for {run.bindings.map(b=>b.id).join(', ')} · {run.name}{run.cyclotron&&run.cyclotron.revision!==row.revision?` · pinned to revision ${run.cyclotron.revision}`:''}</span></p>)}
   </CardHeader><CardContent><ul className="mb-4 space-y-1 text-sm">{row.classifiers.map(ref=><li key={ref.id}>{names[`${ref.id}:${ref.revision}`]??ref.id} · classifier revision {ref.revision}</li>)}</ul><Button onClick={()=>setSelected(row.id)}>View classifiers</Button></CardContent></Card>
   const readOnly=inspected!==null&&inspected!==card?.revision
   const historyResolved=history?.cyclotronId===selected

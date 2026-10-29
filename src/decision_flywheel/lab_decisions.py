@@ -93,7 +93,7 @@ def delivered(job):
     else:
         return None
     found = {"outputs": {}, "itemRevision": None, "itemFingerprint": None}
-    for publication, projection in projections.items():
+    for binding, projection in projections.items():
         decision = projection.get("decision")
         if not isinstance(decision, dict):
             continue
@@ -104,7 +104,7 @@ def delivered(job):
         review = decision.get("review") or {}
         for output, result in (decision.get("classifiers") or {}).items():
             found["outputs"][output] = {
-                "publication": publication,
+                "binding": binding,
                 "label": result.get("label"),
                 "confidence": result.get("confidence"),
                 "probabilities": result.get("probabilities"),
@@ -450,18 +450,19 @@ def output_trace(runtime, account, cyclotron_id, output, item_id, decided):
 
 # Item detail -----------------------------------------------------------------------------------------------
 def label_source(store, run_id, row):
-    """Who gave a label, where the catalog knows: a newsroom editor through Papyrus, or the catalog alone."""
+    """Who gave a label, where the catalog knows: a reviewer at the caller (Papyrus, say), or the lab."""
     event = None
     if row["request_id"].startswith("machine-feedback:"):
         event = store.run_event_by_source(run_id, "machine-feedback:" + row["request_id"])
     payload = (event or {}).get("payload") or {}
     if payload.get("kind") == "publication-machine-feedback":
+        # Stored feedback events keep Papyrus's field names (publicationId, editor.site, editor.subject).
         editor = payload.get("editor") or {}
         return {
-            "kind": "newsroom",
-            "publication": payload.get("publicationId"),
-            "site": editor.get("site"),
-            "editor": editor.get("subject"),
+            "kind": "caller",
+            "binding": payload.get("publicationId"),
+            "caller": editor.get("site"),
+            "reviewer": editor.get("subject"),
             "asserted": bool(editor.get("asserted")),
             "principal": (payload.get("machine") or {}).get("principal"),
         }
@@ -608,7 +609,7 @@ def install_lab_decision_routes(app, runtime):
                     "runId": target.run_id,
                     "name": run["name"],
                     "cyclotron": {"id": pin["id"], "revision": pin["revision"]} if pin else None,
-                    "publications": [{"id": b.publication_id, "outputs": list(b.outputs)} for b in target.bindings],
+                    "bindings": [{"id": b.publication_id, "outputs": list(b.outputs)} for b in target.bindings],
                     "outputs": [
                         {
                             "id": cid,

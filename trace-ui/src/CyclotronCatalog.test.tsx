@@ -164,8 +164,8 @@ it('shows the cyclotrons a standing run decides with, and folds the ones not in 
     {id:'distinctive',name:'Distinctive Mark relevance',revision:2,classifiers:[]},
   ],classifiers:[]}))
   const runs=[
-    {runId:'run-shared',name:'Standing shared run',cyclotron:{id:'shared-r4',revision:1},publications:[{id:'anth-us',outputs:[]},{id:'shipped',outputs:[]}],outputs:[]},
-    {runId:'run-dm',name:'Standing Distinctive run',cyclotron:{id:'distinctive',revision:1},publications:[{id:'distinctive',outputs:[]}],outputs:[]},
+    {runId:'run-shared',name:'Standing shared run',cyclotron:{id:'shared-r4',revision:1},bindings:[{id:'anth-us',outputs:[]},{id:'shipped',outputs:[]}],outputs:[]},
+    {runId:'run-dm',name:'Standing Distinctive run',cyclotron:{id:'distinctive',revision:1},bindings:[{id:'distinctive',outputs:[]}],outputs:[]},
   ]
   const fetch=vi.fn(async(input:string,init?:RequestInit)=>{
     expect(input).toBe('/api/lab/standing-runs');expect((init?.headers as Record<string,string>)['X-Cyclotron-Account']).toBe('acct')

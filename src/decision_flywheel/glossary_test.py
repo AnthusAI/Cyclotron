@@ -29,6 +29,13 @@ RETIRED = (
     "final answer",
     "classifier question",
     "classifier questions",
+    # Cyclotron is a general decision engine: a run serves bindings, not publications (docs/general-decision-engine.md).
+    "publication",
+    "publications",
+    "newsroom",
+    "newsrooms",
+    "site",
+    "sites",
 )
 RETIRED_WORD = re.compile(r"\b(" + "|".join(RETIRED) + r")\b", re.IGNORECASE)
 

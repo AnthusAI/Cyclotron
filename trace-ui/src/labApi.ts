@@ -1,15 +1,15 @@
 /** The lab's read-only decisions API for a standing run (src/decision_flywheel/lab_decisions.py). */
 
 export type ReviewRouting={selected:boolean|null;reason:string|null;propensity:number|null;detail:string|null}
-export type OutputDecision={publication:string|null;label:string|null;confidence:number|null;probabilities:Record<string,number>|null;version:number|null;review:ReviewRouting;humanLabel?:string|null}
+export type OutputDecision={binding:string|null;label:string|null;confidence:number|null;probabilities:Record<string,number>|null;version:number|null;review:ReviewRouting;humanLabel?:string|null}
 export type DecisionRow={position:number;jobId:string;decisionId:string;decidedAt:string;item:{id:string;revision:number|null;fingerprint:string|null;title?:string;url?:string;source?:string};outputs:Record<string,OutputDecision>}
 export type DecisionsPage={runId:string;decisions:DecisionRow[];examined:{from:number;to:number};next:string|null;total:number}
 export type StandingOutput={id:string;name:string;question:string|null;classes:string[]}
-export type StandingRun={runId:string;name:string;cyclotron:{id:string;revision:number}|null;publications:{id:string;outputs:string[]}[];outputs:StandingOutput[]}
+export type StandingRun={runId:string;name:string;cyclotron:{id:string;revision:number}|null;bindings:{id:string;outputs:string[]}[];outputs:StandingOutput[]}
 export type Health={runId:string;generatedAt:string;decisions:{lastHour:number;lastDay:number};secondsBetweenDecisions:{window:string;samples:number;median:number|null;p90:number|null};queue:{pending:number;running:number};failed:{lastDay:number};latestPosition:number}
 export type TraceRecord=Record<string,unknown>&{event_id?:number;kind?:string;created_at?:string}
 export type ItemOutput=OutputDecision&{name:string;model:string|null;composition:Record<string,unknown>|null;prediction:TraceRecord|null;exchange:string|null}
-export type LabelRecord={output:string;classifierRevision:number;itemRevision:number;label:string;comment:string;createdAt:string;retracted:boolean;requestId:string;source:{kind:'newsroom';publication:string|null;site:string|null;editor:string|null;asserted:boolean;principal:string|null}|{kind:'lab'}}
+export type LabelRecord={output:string;classifierRevision:number;itemRevision:number;label:string;comment:string;createdAt:string;retracted:boolean;requestId:string;source:{kind:'caller';binding:string|null;caller:string|null;reviewer:string|null;asserted:boolean;principal:string|null}|{kind:'lab'}}
 export type Revision={revision:number;fingerprint:string;occurredAt:string|null;importedAt:string|null;values:Record<string,unknown>;provenance:null|{kind:string;principal?:string;session?:string;personId?:string;requestId:string;jobId:string}}
 export type ItemDetail={runId:string;item:{id:string;revision:number|null;values:Record<string,unknown>};revisions:Revision[];decision:{jobId:string;position:number;decisionId:string;decidedAt:string;itemRevision:number|null;outputs:Record<string,ItemOutput>};exchanges:Record<string,{request:TraceRecord|null;response:TraceRecord|null;outputs:string[]}>;labels:LabelRecord[]}
 

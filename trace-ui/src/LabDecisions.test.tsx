@@ -6,13 +6,13 @@ import {WebApp} from './WebApp'
 import {WorkspaceTransportProvider} from './WorkspaceTransport'
 import type {DecisionRow,DecisionsPage,Health,ItemDetail,StandingRun} from './labApi'
 
-const RUN:StandingRun={runId:'run-1',name:'Anthus combined',cyclotron:{id:'shared',revision:1},publications:[{id:'anth-us',outputs:['anth-us']},{id:'shipped',outputs:['shipped']}],
+const RUN:StandingRun={runId:'run-1',name:'Anthus combined',cyclotron:{id:'shared',revision:1},bindings:[{id:'anth-us',outputs:['anth-us']},{id:'shipped',outputs:['shipped']}],
   outputs:[{id:'anth-us',name:'Anthus',question:'Relevant?',classes:['include','exclude']},{id:'shipped',name:'Shipped',question:'Shipped?',classes:['include','exclude']}]}
 const review={selected:true,reason:'program',propensity:1,detail:'Sampled at the 100% review rate.'}
 const row=(n:number,extra:Partial<DecisionRow>={}):DecisionRow=>({position:n,jobId:`job-${n}`,decisionId:`decision-${n}`,decidedAt:`2026-10-28T10:00:0${n}Z`,
   item:{id:`story-${n}`,revision:1,fingerprint:'f',title:`Story ${n}`,source:'feed-a'},
-  outputs:{'anth-us':{publication:'anth-us',label:'include',confidence:.8,probabilities:{include:.8,exclude:.2},version:1,review,humanLabel:null},
-    shipped:{publication:'shipped',label:'exclude',confidence:.6,probabilities:{include:.4,exclude:.6},version:1,review:{...review,selected:false},humanLabel:'exclude'}},...extra})
+  outputs:{'anth-us':{binding:'anth-us',label:'include',confidence:.8,probabilities:{include:.8,exclude:.2},version:1,review,humanLabel:null},
+    shipped:{binding:'shipped',label:'exclude',confidence:.6,probabilities:{include:.4,exclude:.6},version:1,review:{...review,selected:false},humanLabel:'exclude'}},...extra})
 const HEALTH:Health={runId:'run-1',generatedAt:'2026-10-28T10:00:10Z',decisions:{lastHour:42,lastDay:2035},secondsBetweenDecisions:{window:'last hour',samples:41,median:4.2,p90:7.9},queue:{pending:3,running:1},failed:{lastDay:2},latestPosition:4}
 const DETAIL:ItemDetail={runId:'run-1',item:{id:'story-4',revision:2,values:{title:'Story 4',url:'https://example.test/story-4',summary:'A short summary.',text:'The full text.',source:'feed-a'}},
   revisions:[{revision:1,fingerprint:'a',occurredAt:null,importedAt:'2026-10-27T10:00:00Z',values:{title:'Story 4',text:'Landing page'},provenance:null},
@@ -21,7 +21,7 @@ const DETAIL:ItemDetail={runId:'run-1',item:{id:'story-4',revision:2,values:{tit
     'anth-us':{...row(4).outputs['anth-us'],name:'Anthus',model:'jev-1.13.0',composition:{examples_shown:12,examples_available:40,target_trimmed:true},prediction:null,exchange:'shared-1'},
     shipped:{...row(4).outputs.shipped,name:'Shipped',model:'jev-1.13.0',composition:null,prediction:null,exchange:'shared-1'}}},
   exchanges:{'shared-1':{request:{kind:'decision-request',event_id:7,state:{target:{text:'Exact request target text'}}},response:{kind:'decision-response',event_id:8,answers:{q:'Exact model answer'}},outputs:['anth-us','shipped']}},
-  labels:[{output:'shipped',classifierRevision:1,itemRevision:1,label:'exclude',comment:'Not shipped yet.',createdAt:'2026-10-27T11:00:00Z',retracted:false,requestId:'machine-feedback:x',source:{kind:'newsroom',publication:'shipped',site:'shipped',editor:'editor-17',asserted:true,principal:'arn'}}]}
+  labels:[{output:'shipped',classifierRevision:1,itemRevision:1,label:'exclude',comment:'Not shipped yet.',createdAt:'2026-10-27T11:00:00Z',retracted:false,requestId:'machine-feedback:x',source:{kind:'caller',binding:'shipped',caller:'shipped',reviewer:'editor-17',asserted:true,principal:'arn'}}]}
 
 let pages:Record<string,DecisionsPage>,calls:string[]
 function respond(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}})}
@@ -77,7 +77,7 @@ test('filters are sent to the server and reload the list from the newest decisio
   render(<LabDecisions/>)
   await screen.findByRole('list',{name:'Decisions'})
   fireEvent.click(screen.getByRole('button',{name:'Filters'}))
-  fireEvent.change(screen.getByLabelText('Publication output'),{target:{value:'shipped'}})
+  fireEvent.change(screen.getByLabelText('Output'),{target:{value:'shipped'}})
   fireEvent.change(screen.getByLabelText('Label'),{target:{value:'exclude'}})
   fireEvent.change(screen.getByLabelText('Human label'),{target:{value:'false'}})
   fireEvent.change(screen.getByLabelText('Confidence from (%)'),{target:{value:'50'}})

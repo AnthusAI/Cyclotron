@@ -30,7 +30,7 @@ test('requests pin the account in a header and surface the server\'s refusal',as
 })
 
 test('an output needs review while it is routed to review and has no human label',()=>{
-  const output={publication:'a',label:'include',confidence:.6,probabilities:null,version:1,review:{selected:true,reason:'program',propensity:1,detail:''}}
+  const output={binding:'a',label:'include',confidence:.6,probabilities:null,version:1,review:{selected:true,reason:'program',propensity:1,detail:''}}
   expect(needsReview(output)).toBe(true)
   expect(needsReview({...output,humanLabel:'include'})).toBe(false)
   expect(needsReview({...output,review:{...output.review,selected:false}})).toBe(false)

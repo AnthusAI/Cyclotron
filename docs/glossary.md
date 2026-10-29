@@ -31,6 +31,10 @@ marketing site, and the docs. This page is the source of truth.
 | A numbered state of a cyclotron | version | revision, edition |
 | The labels kept back for testing | held-out | development, audit, evaluation set |
 | The numbers | accuracy, precision, recall, calibration | Brier and ECE on detail pages only |
+| A long-lived run that decides each item a caller sends, and learns from the reviews that come back | standing run | publication run |
+| One named consumer of some of a standing run's outputs: a site, an inbox, a sales team | binding | publication (as generic) |
+| The application that sends items and reviews on a binding's behalf | caller | site, host app (as generic) |
+| Where a label came from | review source: lab or caller | newsroom |
 
 Rules behind the table:
 
@@ -45,12 +49,16 @@ Rules behind the table:
 - Nothing about versions says accepted or rejected, because reject is a
   label in the editorial example.
 - "Score" is reserved for Primus, where a scorecard produces scores.
+- Cyclotron is a general decision engine. News sites, email filtering and lead scoring are all bindings
+  on standing runs, so the lab never says publication, newsroom or site. Those words stay inside the
+  Papyrus integration (docs/general-decision-engine.md).
 
 ## How it applies in code
 
 Phase 1 changed user-visible strings only: the console UI and the marketing
 site. `src/decision_flywheel/glossary_test.py` scans trace-ui copy for retired
-words (scorecard, vote, votes, voting, rationale, labeling, annotator).
+words (scorecard, vote, votes, voting, rationale, labeling, annotator,
+publication, newsroom, site).
 Strings that must keep one go in `docs/glossary-allowlist.txt`.
 
 Identifier renames follow in later phases, each merged green. Until then these
