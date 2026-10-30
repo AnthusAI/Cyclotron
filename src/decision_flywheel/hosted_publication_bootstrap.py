@@ -19,8 +19,8 @@ from .storage_errors import StorageConflict, StorageMissing, StorageUncertain
 # Where a frozen run records the bootstrap request that made it. Stored runs are never rewritten (the workspace
 # binding is a hash of the config), so both keys are read; ``WRITTEN_KEY`` is the one new runs get.
 BOOTSTRAP_KEYS = ("standing_bootstrap", "publication_bootstrap")
-WRITTEN_KEY = "publication_bootstrap"
-WRITTEN_KIND = "publication-bootstrap"
+WRITTEN_KEY = "standing_bootstrap"
+WRITTEN_KIND = "standing-bootstrap"
 
 
 class BootstrapConflict(ValueError):

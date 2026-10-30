@@ -217,3 +217,9 @@ def test_a_bootstrap_request_over_sixty_four_kilobytes_with_a_long_run_name_crea
             assert len(store.runs()) == 1 and not sent and not model.calls
 
     asyncio.run(run())
+
+
+def test_a_new_frozen_run_records_its_bootstrap_under_the_standing_key():
+    from .hosted_publication_bootstrap import WRITTEN_KEY, WRITTEN_KIND
+
+    assert (WRITTEN_KEY, WRITTEN_KIND) == ("standing_bootstrap", "standing-bootstrap")
