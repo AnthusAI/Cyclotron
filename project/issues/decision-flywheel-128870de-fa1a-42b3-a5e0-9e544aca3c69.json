@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-128870de-fa1a-42b3-a5e0-9e544aca3c69",
+  "title": "Install and select independent Cyclotron CLI lab and account contexts",
+  "description": "Requested by Ryan for Claude through Kanbus (2026-10-30). This filing authorizes issue records only; implementation and any live identity/backend changes are subsequent work. No production login, deployment, IAM changes, secrets in chat, or direct message to Claude. Dot must operate from cloud/headless Linux without a Mac or AWS CLI. Optional shared auth libraries must not combine the two CLI products. Write executable behavioral specifications before implementation; use fake providers/stores in automated tests, and separately record any approved live evidence.\n\nAs a lab operator, I want a dedicated Cyclotron executable that targets one explicitly authorized lab/account at a time.\n\nAcceptance: install and execute on clean Linux without Papyrus, a Mac or AWS CLI; document entry point, supported API operations, machine-readable output and exit codes. Discover/validate approved HTTPS lab metadata and bind issuer/client/audience/endpoint/account; ambiguous context requires explicit selection. Multiple labs and accounts retain independent session bindings. Local selection does not grant authority: server rechecks identity, current membership and operation/resource scope, including queued work. Reject endpoint substitution, revoked membership and cross-lab credential reuse. Preserve existing embedded/Papyrus integration APIs; reuse shared auth libraries only behind separate namespaces.\n\nFeature: Independent lab CLI\n  Scenario: Operate a selected lab\n    Given two configured labs and valid authority for one account in each\n    When I select a lab/account and run a protected operation\n    Then only that endpoint receives the matching credential and enforces its account permissions\n  Scenario: Missing authority\n    Given no grant to the selected account or a revoked grant\n    When a protected command is attempted\n    Then it is denied without another lab credential or AWS fallback\n\nReferences: pyproject.toml; docs/using-cyclotron.md; docs/decision-contract.md; docs/embedded-execution-authorization.md; src/decision_flywheel/publication_lab.py; queued_account_authorization.py. Define a fixture-driven read/write acceptance example before coding.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-63ef259b-cb52-4677-addf-16386ba35e18",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-30T09:28:52.286190Z",
+  "updated_at": "2026-10-30T09:28:52.286227Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6",
+    "name": "Cloud CLI issue filing"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
