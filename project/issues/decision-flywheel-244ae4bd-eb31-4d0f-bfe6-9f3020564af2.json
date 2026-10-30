@@ -22,10 +22,17 @@
       "text": "Plan (Claude, 2026-10-30), see docs/cli-remote-login.md: the same split-secret broker as Papyrus PPY-5a3624. The CLI keeps PKCE verifier V and poll secret P, POSTs /start (client, lab, S256(V), sha256(P), requester label), gets T, a matching code, https://lab.cyclotron.anth.us/cli/approve?t=T, a poll interval and ~10 min expiry. Approve redirects to Cognito with the transaction's challenge and redirect /cli/callback, state = T + cookie-bound nonce; the callback stores the code on T; /poll with T + P returns it once (conditional delete); the CLI exchanges it with V. The broker never holds a token. Live prerequisites, both needing Ryan's approval: the callback https://lab.cyclotron.anth.us/cli/callback on cyclotron-console-public (defined in the Prospectus repo), and the broker Lambda, function URL and DynamoDB table in the lab stack. A person must have signed in to the lab in a browser once (Prospectus enrollment).",
       "created_at": "2026-10-30T10:33:26.102867Z",
       "comment_type": "default"
+    },
+    {
+      "id": "d78a9038-08d8-49d8-8aff-8101e99afb85",
+      "author": "home",
+      "text": "Decided (Ryan, 2026-10-30): keep the throttling on both brokers (per-caller rate limits on /start and /poll, slow_down), and keep the best choices from both plans. The Papyrus plan now also takes this plan's additions (AnthusAI/Papyrus#882). See docs/cli-remote-login.md.",
+      "created_at": "2026-10-30T10:38:07.691817Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-30T09:28:52.340711Z",
-  "updated_at": "2026-10-30T10:33:26.103069Z",
+  "updated_at": "2026-10-30T10:38:07.692046Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",

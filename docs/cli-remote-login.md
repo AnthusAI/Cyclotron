@@ -1,7 +1,7 @@
 # Remote login for the Cyclotron CLI, without long-lived keys
 
-Status: **proposed** (2026-10-30), for Ryan's review. One question at the end needs his answer, and both live
-changes need his approval.
+Status: **proposed** (2026-10-30). Ryan decided the open question on 2026-10-30: both brokers throttle. The two
+live changes still need his approval.
 
 This plans three stories under the standalone CLI epic (63ef259b):
 
@@ -32,6 +32,17 @@ The same in both:
   agent on cloud machines (Ryan's decision for Papyrus). Each target has its own cross-platform lock.
 - **Renewal.** The same rules: three separate kinds of evidence, never replaying an uncertain mutation, and
   `invalid_grant` failing closed while network and 5xx errors keep the session.
+- **Throttling.** Both brokers rate-limit each caller on `/start` and `/poll`, and answer a CLI that polls too
+  fast with `slow_down`, which makes it wait longer (Ryan, 2026-10-30: keep the throttling on both).
+
+Ryan wants the best choices from both plans in one solution. These came from this plan and go into the Papyrus
+plan too:
+- The approval page asks the person to compare the matching code before approving. It does not only show it.
+- `/poll` hands the code over with a conditional delete, so two polls at once cannot both receive it.
+- A request that carries both a cookie and a bearer token is refused.
+- The CLI names its secure-store backend explicitly, so a library cannot choose a plaintext backend on its own.
+- The client's token settings are read and recorded with the plan, and again at release.
+- Logout says plainly that an access token the API has already accepted stays valid until it expires.
 
 Where they differ, and why:
 - **Where each starts.** Papyrus already has a CLI: `papyrus login` with the macOS Keychain and refresh
@@ -116,7 +127,7 @@ The lab answers with:
 - a transaction id T (128 random bits);
 - a matching code of eight characters from an unambiguous alphabet;
 - `https://lab.cyclotron.anth.us/cli/approve?t=T`;
-- an advised poll interval;
+- a poll interval;
 - an expiry about 10 minutes away.
 
 The CLI prints the URL and the matching code, and nothing else secret.
@@ -153,6 +164,8 @@ carries both a cookie and a bearer token.
 
 - The broker never holds a token. The code it holds for a few seconds needs V.
 - The URL cannot redeem anything without P.
+- `/start` and `/poll` are rate-limited per caller. A CLI that polls faster than the interval gets `slow_down`
+  and waits longer, as in RFC 8628.
 - Each transaction is single use, expires in about 10 minutes, and is bound to issuer, client and lab. A
   replayed, expired, denied or substituted transaction yields nothing; the Gherkin in 244ae4bd covers these
   cases.
@@ -237,10 +250,9 @@ Three reports, kept separate:
 The order: lab specs and code, then the CLI against a fake lab, then the two live changes after Ryan approves
 them, then the 24-hour run.
 
-## Question for Ryan
+## Decided
 
-**Rate limits, for both CLIs.** The Papyrus plan has per-caller rate limits on `/start` and `/poll`, and a
-bounded poll with `slow_down`. Ryan's standing rule for Cyclotron is no arbitrary limits or throttles of any
-kind. For the two to work the same way, one answer has to apply to both. Proposed: neither broker has a rate
-limit or a poll cap. Each transaction keeps its expiry of about 10 minutes, because that is how long an
-approval link is valid (a security lifetime, not a capacity limit). The poll interval is advice only.
+**Throttling, for both CLIs** (Ryan, 2026-10-30): "Keep the throttling on both, that's a good idea." Both brokers
+rate-limit each caller on `/start` and `/poll`, and send `slow_down` to a CLI that polls too fast. This protects a
+sign-in endpoint that needs no prior sign-in, so it is an exception to Cyclotron's rule against arbitrary limits.
+The rule still holds for the decision pipeline.
