@@ -50,6 +50,44 @@ def _get_json(url: str, headers: dict | None = None) -> tuple[int, dict]:
         raise CliError(f"The lab could not be reached ({type(error).__name__}); try again.") from None
 
 
+def _post_json(url: str, body: dict, headers: dict) -> tuple[int, dict]:
+    data = json.dumps(body).encode()
+    request = urllib.request.Request(url, data=data, method="POST", headers={"content-type": "application/json", **headers})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 - https origins only
+            return response.status, json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError as error:
+        try:
+            return error.code, json.loads(error.read() or b"{}")
+        except ValueError:
+            return error.code, {}
+    except (OSError, ValueError) as error:
+        raise CliError(f"The lab could not be reached ({type(error).__name__}); try again.") from None
+
+
+def enroller(lab: str, endpoint: str, *, post_json=_post_json):
+    """The enroll step: the lab enrolls this new login at Prospectus, as it does every browser sign-in."""
+
+    def enroll(tokens, transaction, enrollment):
+        from cli_login.remote import RemoteLoginError
+
+        if not enrollment:
+            raise RemoteLoginError("enrollment_missing", "The lab did not prepare this sign-in for enrollment; start again.")
+        status, answer = post_json(
+            endpoint,
+            {"transaction": transaction, "enrollment": enrollment},
+            {"Authorization": "Bearer " + tokens["access_token"], "X-Identity-Token": tokens["id_token"]},
+        )
+        if status != 200 or not answer.get("ok"):
+            raise RemoteLoginError(
+                str(answer.get("error") or "enrollment_refused"),
+                "The lab could not enroll this sign-in; start again.",
+                transient=status >= 500,
+            )
+
+    return enroll
+
+
 def discover(lab: str, *, get_json=_get_json):
     """The lab's sign-in settings, checked so that every endpoint belongs to this lab or its provider."""
     from cli_login.target import Target
@@ -62,6 +100,9 @@ def discover(lab: str, *, get_json=_get_json):
     callback = data.get("remote_callback_uri", "")
     if _origin(callback.rsplit("/cli/", 1)[0]) != lab:
         raise CliError("The lab's approval pages are on another site; refusing to sign in.")
+    enrollment = data.get("enrollment_endpoint")
+    if enrollment is not None and enrollment != lab + "/cli/enroll":
+        raise CliError("The lab's enrollment endpoint is on another site; refusing to sign in.")
     return Target(
         issuer=data["issuer"],
         client_id=data["client_id"],
@@ -73,7 +114,7 @@ def discover(lab: str, *, get_json=_get_json):
         callback_uri=callback,
         remote_callback_uri=callback,
         broker_endpoint=data["remote_login_endpoint"],
-    )
+    ), enrollment
 
 
 def open_session(target, **overrides):
@@ -82,7 +123,7 @@ def open_session(target, **overrides):
     return Session(target, login_command=LOGIN_COMMAND, api_token="access", authorization_scheme="Bearer", **overrides)
 
 
-def main(argv=None, *, out=print, get_json=_get_json, session_factory=open_session, remote=None) -> int:
+def main(argv=None, *, out=print, get_json=_get_json, post_json=_post_json, session_factory=open_session, remote=None) -> int:
     parser = argparse.ArgumentParser(prog="cyclotron", description="Sign in to a Cyclotron lab and check the session.")
     commands = parser.add_subparsers(dest="command", required=True)
     login = commands.add_parser("login", help="sign in; --remote approves the sign-in from another device")
@@ -102,12 +143,13 @@ def main(argv=None, *, out=print, get_json=_get_json, session_factory=open_sessi
         from cli_login.errors import AuthError
 
         lab = _origin(args.lab)
-        target = discover(lab, get_json=get_json)
+        target, enrollment = discover(lab, get_json=get_json)
         session = session_factory(target)
         if args.command == "login":
             if remote is None:
                 from cli_login.remote import remote_login as remote
-            remote(target, session.store_token_set, out=out, expected_email=args.expected_email, note=args.note)
+            enroll = enroller(lab, enrollment, post_json=post_json) if enrollment else None
+            remote(target, session.store_token_set, out=out, expected_email=args.expected_email, note=args.note, enroll=enroll)
             return 0
         if args.command == "status":
             out(json.dumps(session.status(), indent=2))
@@ -127,7 +169,7 @@ def main(argv=None, *, out=print, get_json=_get_json, session_factory=open_sessi
             )
         )
         return 0
-    except (CliError, AuthError) as error:
+    except (CliError, AuthError) as error:  # RemoteLoginError is an AuthError
         out(str(error))
         return 1
 
