@@ -62,7 +62,8 @@ class FakeSession:
 
 def test_discovery_becomes_a_target_bound_to_this_lab():
     get_json, _ = lab()
-    target = discover(LAB, get_json=get_json)
+    target, enrollment = discover(LAB, get_json=get_json)
+    assert enrollment is None
     assert target.api_endpoint == LAB and target.remote_callback_uri == LAB + "/cli/callback"
     assert target.namespace == "cyclotron-lab" and target.key == "lab.example.test"
     assert target.broker_endpoint == "https://broker.lambda-url.us-east-1.on.aws"
@@ -131,3 +132,49 @@ def test_a_lab_that_is_not_https_is_refused():
     printed = []
     assert main(["status", "--lab", "http://lab.example.test"], out=printed.append) == 1
     assert "https origin" in printed[0]
+
+
+def test_a_lab_that_enrolls_logins_gets_the_enroll_step():
+    get_json, _ = lab(DISCOVERY | {"enrollment_endpoint": LAB + "/cli/enroll"})
+    seen = {}
+
+    def remote(target, store, **kwargs):
+        seen.update(kwargs)
+
+    assert (
+        main(
+            ["login", "--remote", "--lab", LAB],
+            out=lambda _m: None,
+            get_json=get_json,
+            session_factory=FakeSession,
+            remote=remote,
+        )
+        == 0
+    )
+    assert callable(seen["enroll"])
+
+
+def test_the_enroll_step_sends_both_tokens_and_the_sealed_proof_and_refuses_on_failure():
+    from cli_login.remote import RemoteLoginError
+
+    from .cli import enroller
+
+    calls = []
+
+    def post_json(url, body, headers):
+        calls.append((url, body, headers))
+        return (200, {"ok": True, "personId": "p"}) if len(calls) == 1 else (401, {"error": "enrollment_refused"})
+
+    enroll = enroller(LAB, LAB + "/cli/enroll", post_json=post_json)
+    tokens = {"access_token": "access", "id_token": "identity"}
+    enroll(tokens, "transaction-1", "sealed")
+    assert calls[0] == (
+        LAB + "/cli/enroll",
+        {"transaction": "transaction-1", "enrollment": "sealed"},
+        {"Authorization": "Bearer access", "X-Identity-Token": "identity"},
+    )
+    with pytest.raises(RemoteLoginError) as raised:
+        enroll(tokens, "transaction-1", "sealed")
+    assert raised.value.code == "enrollment_refused"
+    with pytest.raises(RemoteLoginError):
+        enroll(tokens, "transaction-1", None)
