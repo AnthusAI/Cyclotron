@@ -8,6 +8,8 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
+Previously: new decision jobs and bootstrap records use the neutral kinds `decision` and `standing_bootstrap` (step 2 phase B; lab code e81d4b4, package sha256 `b078a563a4638fd2ce1c07cc59722c4f6448732ec046f9c768a916b8e1315b0a`), deployed on 2026-10-29 with change set `step2b-e81d4b4`. Code only; the snapshot was refreshed.
+
 Previously: neutral names beside the old ones (step 2 of docs/general-decision-engine.md; lab code 87193a0, package sha256 `9195ea8f5602cd6fe6b1998b0fb1ec7371a384426a1dedfe88d3e459a6f4352e`), deployed on 2026-10-29 with change set `step2a-87193a0`. The stack parameter `PublicationTargets` became `StandingRuns` (passed explicitly, converted from the live value with `publicationId` renamed to `bindingId`), both functions read `CYCLOTRON_STANDING_RUNS`, and the machine invoker role gained the two `/machine/bindings/*` grants; the snapshot was refreshed.
 
 Previously: the lab speaks of bindings and callers, not publications and newsrooms (step 1 of docs/general-decision-engine.md; lab code 5f5c781, package sha256 `c8f66bdd8690f828cd3468cc2f9bbec305cefded91f136d18d8bc407a5cf7562`), deployed on 2026-10-29 with change set `lab-bindings-5f5c781`. Code only; the snapshot was refreshed.
