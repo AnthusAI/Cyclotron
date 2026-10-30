@@ -30,12 +30,14 @@ web = ["decision-flywheel[priming]", "fastapi>=0.115,<1", "strawberry-graphql[fa
 priming = ["jsonschema>=4.23,<5", "openpyxl>=3.1,<4", "httpx>=0.27,<1"]
 accounts = ["decision-flywheel[web]", "botocore>=1.43,<2", "strawberry-graphql[fastapi]>=0.332,<1", "PyJWT[crypto]>=2.10,<3"]
 
-accounts-cloud = ["decision-flywheel[accounts,priming]", "mangum==0.19.0"]
+accounts-cloud = ["decision-flywheel[accounts,priming]", "mangum==0.19.0", "cli-login==0.2.0"]
+cli = ["cli-login==0.2.0"]
 
 [project.scripts]
 decision-flywheel-demo = "decision_flywheel.demo:main"
 decision-flywheel-review = "decision_flywheel.reviewer:main"
 decision-flywheel-web = "decision_flywheel.web_server:main"
+cyclotron = "decision_flywheel.cli:main"
 
 [tool.semantic_release]
 branch = "main"
