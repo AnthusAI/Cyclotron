@@ -1,8 +1,8 @@
 # One CLI login for every Anthus product
 
-Status: **proposed** (2026-10-30). Ryan, 2026-10-30, approved factoring the CLI login out: "It will be a new
-public repository in the AnthusAI organization." This design moves to that repository as its design document
-once it exists.
+Status: **proposed** (2026-10-30). Ryan approved factoring the CLI login out into a new public repository,
+[AnthusAI/cli-login](https://github.com/AnthusAI/cli-login). Its `docs/design.md` is now the design, and its
+board tracks the work. This page records why, and what it means for Cyclotron.
 
 ## Why
 
@@ -77,22 +77,16 @@ a publication; a Cyclotron binding is a lab with an account on top. The library 
 
 ### 2. The broker (one deployment per product deployment)
 
-The broker is a deployable unit: a Python Lambda function behind a function URL, a DynamoDB table with TTL, and
-a CloudFormation template.
+The broker is a Python Lambda function, a DynamoDB table with TTL, and a CloudFormation template.
+- **The CLI's routes.** The CLI calls the function URL directly for `POST /start` and `POST /poll`. Those two
+  routes are throttled per caller and answer `slow_down` (Ryan, 2026-10-30).
+- **The pages.** The product serves `/cli/approve` and `/cli/callback` on its own domain, with the library's
+  page handlers.
+- **The private steps.** The product's backend calls the broker's `describe`, `bind`, `complete` and `deny`
+  by invoking the Lambda with IAM, so only the product's own pages can attach a sign-in to a waiting CLI.
 
-- **What it serves.** `POST /start` and `POST /poll`, and the pages `/cli/approve` and `/cli/callback`.
-- **How it reaches the product's domain.** Each deployment routes `/cli/*` on its own domain to the broker,
-  through an Amplify reverse-proxy rewrite or a CloudFront behavior. The approval page then sits on the
-  product's domain, and its CSRF cookie belongs to that domain.
-- **Safety.** It throttles each caller on `/start` and `/poll` and sends `slow_down` (Ryan, 2026-10-30), hands
-  a code over exactly once with a conditional delete, and never holds a token.
-
-Papyrus sites are Amplify and TypeScript, and the Cyclotron lab is CloudFormation and Python. A broker that owns
-its own pages and is reached through a rewrite fits both, and any TypeScript product too.
-
-**To prove first:** that an Amplify rewrite passes the broker's `Set-Cookie` header and the caller's address
-through, on a Papyrus test site. If it does not, each product serves the two pages itself, using the page
-handlers from the library.
+The Papyrus session proposed this shape on 2026-10-30. It needs no reverse proxy, and the CSRF cookie belongs to
+the product's own domain.
 
 ### 3. The protocol and its conformance specs
 
@@ -116,7 +110,7 @@ the protocol and runs the same features.
 Each product still needs its own live changes, and each needs Ryan's approval:
 - a callback URL on its Cognito client;
 - its broker deployed;
-- the `/cli/*` route on its domain.
+- the two pages on its domain, and its backend's grant to invoke the broker.
 
 ## Versions and releases
 

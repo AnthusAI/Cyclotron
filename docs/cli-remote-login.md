@@ -110,11 +110,15 @@ Cognito has no RFC 8628 device flow. AWS's `--remote` has the person paste a cod
 pasting through chat is ruled out. So each lab gets a small broker that hands one authorization code to the one
 CLI that asked for it.
 
-The broker is the shared one ([shared-cli-auth.md](shared-cli-auth.md)), deployed once for the lab: its own
-Lambda function with a function URL and a DynamoDB table with TTL. Its `/start` and `/poll` need no sign-in. It
-also serves `/cli/approve` and `/cli/callback`, and `lab.cyclotron.anth.us/cli/*` is routed to it, so the person
-approves on the origin they already sign in on. The broker never holds a token. If the routing cannot pass the
-broker's cookie through, the lab's BFF serves the two pages instead, using the library's page handlers.
+The broker is the shared one ([AnthusAI/cli-login](https://github.com/AnthusAI/cli-login)), deployed once for
+the lab:
+- **The CLI's routes.** The CLI calls its function URL directly for `/start` and `/poll`, which are throttled
+  per caller.
+- **The pages.** The lab's BFF serves `/cli/approve` and `/cli/callback` on `https://lab.cyclotron.anth.us`
+  with the library's page handlers, so the person approves on the origin they already sign in on.
+- **The private steps.** The BFF invokes the broker's `describe`, `bind`, `complete` and `deny` with IAM.
+
+The broker never holds a token.
 
 ## The flow
 
@@ -248,7 +252,7 @@ Three reports, kept separate:
 | Prospectus | Add `https://lab.cyclotron.anth.us/cli/callback` to `cyclotron-console-public` | Ryan's approval; Prospectus deploy |
 | Shared repository | The library (stores, memory agent, locks, sign-in, remote login, renewal, logout), the broker with its pages, and the protocol specs ([shared-cli-auth.md](shared-cli-auth.md)) | A new public AnthusAI repository |
 | Lab BFF (`account_routes.py`) | The discovery keys, and bearer sessions on `/api/*` | Specs beside the modules; Gherkin from the stories |
-| Lab stack and front end | A broker deployment (its Lambda, function URL and DynamoDB table with TTL), and `/cli/*` on `lab.cyclotron.anth.us` routed to it | Ryan's approval; reviewed change set |
+| Lab stack | A broker deployment (its Lambda, function URL and DynamoDB table with TTL), the two pages in the BFF, and the BFF's grant to invoke the broker | Ryan's approval; reviewed change set |
 | New package `cyclotron` | `login [--remote]`, `use`, `status`, `whoami`, `logout` and `auth agent`, from the library, plus lab and account selection | Fixture-driven read/write example first (128870de) |
 
 The order:
