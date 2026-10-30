@@ -804,3 +804,27 @@ def test_a_mutation_whose_authority_is_lost_mid_request_is_not_reported_as_done(
             assert [operation for _, _, operation in host.authority.calls[-2:]] == ["console:write", "console:write"]
 
     run(scenario())
+
+
+def test_an_auto_prime_runs_as_a_decision_kind_command(identity, monkeypatch):
+    from . import hosted_curation_routes as routes
+
+    host = build(identity, monkeypatch)
+    kinds = []
+    real = routes.PublicationCommandRuntime.execute
+
+    async def recording(self, session, kind, *args, **kwargs):
+        kinds.append(kind)
+        return await real(self, session, kind, *args, **kwargs)
+
+    monkeypatch.setattr(routes.PublicationCommandRuntime, "execute", recording)
+
+    async def scenario():
+        async with host.client() as http:
+            draft = data(await import_file(http))
+            body = {"identifier": "draft-one", "version": draft["version"], "labels": None}
+            accepted = data(await command(http, "accept", body))
+            assert accepted["autoPrime"]["added"] == {"alpha": ["synthetic-human-example"]}
+            assert kinds == ["decision"]
+
+    run(scenario())

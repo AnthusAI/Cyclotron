@@ -34,6 +34,7 @@ from graphql.error import GraphQLError
 from strawberry.extensions import AddValidationRules
 from strawberry.scalars import JSON
 
+from .decision_kinds import WRITTEN
 from .hosted_publications import (
     BearerActor,
     PublicationCommandRuntime,
@@ -466,7 +467,7 @@ async def apply_priming(request):
     actor = BearerActor(request.account, request.credential.subject_id, reauthorize)
     commands = PublicationCommandRuntime(request.runtime, None, guard, lambda: None, actor)
     session = SimpleNamespace(run_id=request.target.run_id, config=config, close=lambda: None)
-    result = await commands.execute(session, "publication", command, None, config)
+    result = await commands.execute(session, WRITTEN, command, None, config)
     response = result.result["response"]
     return {"added": response["added"], "primedExamples": response["primedExamples"], "sourceFingerprint": fingerprint}
 
