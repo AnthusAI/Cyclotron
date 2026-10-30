@@ -10,5 +10,6 @@ Start here:
 - [Standing runs](standing-runs.md) and the [decision contract](decision-contract.md): how a hosted cyclotron is deployed and called.
 - [Cyclotron is a general decision engine](general-decision-engine.md): design for review, renaming the publication-specific contract, routes and lab copy to bindings and standing runs.
 - [Remote login for the Cyclotron CLI](cli-remote-login.md): plan for `cyclotron login --remote`, secure storage and renewal, working the same way as the Papyrus CLI.
+- [One CLI login for every Anthus product](shared-cli-auth.md): design for the shared login library and broker in a new public AnthusAI repository, used by Cyclotron, Papyrus, Auritus and later Chatticus.
 
 The sidebar lists every page.

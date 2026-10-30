@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-092df66c-3a73-4343-8d45-7d719d8dcc75",
+  "title": "Build the Cyclotron CLI login on the shared AnthusAI CLI login library and broker",
+  "description": "Ryan, 2026-10-30: the CLI login is factored out into a new public AnthusAI repository (design: docs/shared-cli-auth.md) used by Cyclotron, Papyrus, Auritus and later Chatticus. The Cyclotron CLI (128870de, 244ae4bd, f95dc70c) takes sign-in, remote login, secure stores, the memory agent, locks, renewal and logout from the released library, pinned to an exact version, under its own product namespace and client. The lab gets one deployment of the shared broker, with lab.cyclotron.anth.us/cli/* routed to it. Cyclotron's own work: lab and account selection, the lab's discovery keys, and bearer sessions on the lab API. Depends on the library's first release and Papyrus's code moving into it. Live changes (callback URL on cyclotron-console-public in Prospectus, the broker deployment, the /cli/* route) need Ryan's approval.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-63ef259b-cb52-4677-addf-16386ba35e18",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-30T10:44:39.687564Z",
+  "updated_at": "2026-10-30T10:44:39.687764Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

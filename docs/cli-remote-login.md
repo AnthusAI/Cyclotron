@@ -11,8 +11,10 @@ This plans three stories under the standalone CLI epic (63ef259b):
 
 Papyrus plans the same feature for its own CLI (PPY-5a3624, PPY-109943, PPY-829904). Ryan wants the two to
 work the same way, so this plan follows Papyrus's protocol, endpoint names, broker shape, storage order and
-renewal contract. The two CLIs still share no code: no auth library is shared between them, and neither reads
-the other's stored credentials.
+renewal contract. Since Ryan's decision of 2026-10-30, both CLIs build on one shared library and broker in a
+new public AnthusAI repository ([shared-cli-auth.md](shared-cli-auth.md)), which Auritus and Chatticus can use
+too. The products stay separate: each has its own key namespace, client, discovery data and sessions, and
+neither reads the other's stored credentials.
 
 ## Same as Papyrus, and where it differs
 
@@ -108,10 +110,11 @@ Cognito has no RFC 8628 device flow. AWS's `--remote` has the person paste a cod
 pasting through chat is ruled out. So each lab gets a small broker that hands one authorization code to the one
 CLI that asked for it.
 
-As in Papyrus, the broker is its own Lambda function with a function URL and a DynamoDB table with TTL, in the
-lab stack. Its `/start` and `/poll` need no sign-in. The lab's BFF serves `/cli/approve` and `/cli/callback` on
-`https://lab.cyclotron.anth.us`, the origin the person already signs in on, and passes the code to the broker.
-The broker never holds a token, and it runs no code that handles tokens.
+The broker is the shared one ([shared-cli-auth.md](shared-cli-auth.md)), deployed once for the lab: its own
+Lambda function with a function URL and a DynamoDB table with TTL. Its `/start` and `/poll` need no sign-in. It
+also serves `/cli/approve` and `/cli/callback`, and `lab.cyclotron.anth.us/cli/*` is routed to it, so the person
+approves on the origin they already sign in on. The broker never holds a token. If the routing cannot pass the
+broker's cookie through, the lab's BFF serves the two pages instead, using the library's page handlers.
 
 ## The flow
 
@@ -243,12 +246,17 @@ Three reports, kept separate:
 | Where | Change | Needs |
 |---|---|---|
 | Prospectus | Add `https://lab.cyclotron.anth.us/cli/callback` to `cyclotron-console-public` | Ryan's approval; Prospectus deploy |
-| Lab BFF (`account_routes.py`) | The `/cli/approve` and `/cli/callback` pages, the discovery keys, and bearer sessions on `/api/*` | Specs beside the modules; Gherkin from the stories |
-| Lab stack | The broker Lambda with its function URL (`/start`, `/poll`), a DynamoDB table with TTL, and the BFF's grant to hand a code to the broker | Ryan's approval; reviewed change set |
-| New package `cyclotron` | `login [--remote]`, `use`, `status`, `whoami`, `logout`, the storage backends and the memory agent | Fixture-driven read/write example first (128870de) |
+| Shared repository | The library (stores, memory agent, locks, sign-in, remote login, renewal, logout), the broker with its pages, and the protocol specs ([shared-cli-auth.md](shared-cli-auth.md)) | A new public AnthusAI repository |
+| Lab BFF (`account_routes.py`) | The discovery keys, and bearer sessions on `/api/*` | Specs beside the modules; Gherkin from the stories |
+| Lab stack and front end | A broker deployment (its Lambda, function URL and DynamoDB table with TTL), and `/cli/*` on `lab.cyclotron.anth.us` routed to it | Ryan's approval; reviewed change set |
+| New package `cyclotron` | `login [--remote]`, `use`, `status`, `whoami`, `logout` and `auth agent`, from the library, plus lab and account selection | Fixture-driven read/write example first (128870de) |
 
-The order: lab specs and code, then the CLI against a fake lab, then the two live changes after Ryan approves
-them, then the 24-hour run.
+The order:
+1. The library and broker are built in the shared repository, starting from Papyrus's existing code.
+2. The lab's bearer path and discovery keys.
+3. The CLI, tested against a fake lab.
+4. The live changes, once Ryan approves them.
+5. The 24-hour run.
 
 ## Decided
 
