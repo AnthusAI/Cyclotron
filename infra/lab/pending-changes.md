@@ -8,6 +8,8 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
+Previously: each CLI login is enrolled at Prospectus (cli-login 0.3.0; lab code 71d601f, package sha256 `12ad7b9fba857da79134ba3f01f5f438ad09a963f1742e30843e228fab17fe78`), deployed on 2026-10-30 with change set `cli-enroll-71d601f`. Code only; the snapshot was refreshed.
+
 Previously: remote CLI sign-in (AnthusAI/cli-login 0.2.0; docs/cli-remote-login.md), deployed on 2026-10-30 in two change sets. `cli-login-10b3aac` (lab code 10b3aac, package sha256 `507b97fc02dfa514a2eb46da6e4b8bbc0915bef8c4a0958d67357855d841d07c`) added the `CliBrokerArn` and `CliBrokerEndpoint` parameters, set to the `cyclotron-cli-broker` stack's function and URL, the `HasCliBroker` condition, the BFF's two broker settings and one `lambda:InvokeFunction` statement on that broker. `cli-session-fix-9f3920b` (lab code 9f3920b, package sha256 `c7002ebd1715165669ee2f743c363e5218aed4999870d4186c79e4bc2451469b`) was code only: a CLI's session is created before it is read. The snapshot was refreshed.
 
 Previously: new decision jobs and bootstrap records use the neutral kinds `decision` and `standing_bootstrap` (step 2 phase B; lab code e81d4b4, package sha256 `b078a563a4638fd2ce1c07cc59722c4f6448732ec046f9c768a916b8e1315b0a`), deployed on 2026-10-29 with change set `step2b-e81d4b4`. Code only; the snapshot was refreshed.
