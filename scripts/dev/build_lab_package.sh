@@ -22,11 +22,15 @@ LOCK=infra/lab/requirements.lock
 SHA="$(git rev-parse --verify "$COMMIT^{commit}")"
 rm -rf "$OUT/stage" "$OUT/lab.zip"
 mkdir -p "$OUT/stage"
+# The lock comes from the commit being packaged, never the working tree: a checkout on another commit would
+# otherwise install a different dependency closure than the code it packages.
+COMMIT_LOCK="$OUT/requirements.lock"
+git show "$SHA:$LOCK" > "$COMMIT_LOCK"
 
 "$PYTHON" -m pip install --quiet --disable-pip-version-check --no-deps \
   --platform manylinux_2_34_x86_64 --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 \
   --python-version 3.13 --implementation cp --no-compile \
-  --only-binary=:all: --target "$OUT/stage" -r "$LOCK"
+  --only-binary=:all: --target "$OUT/stage" -r "$COMMIT_LOCK"
 
 # The application is copied from the commit (no dist-info), without specs.
 git archive "$SHA" src/decision_flywheel LICENSE | tar -x -C "$OUT"

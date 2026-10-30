@@ -194,3 +194,45 @@ def test_missing_session_is_signed_out_but_corrupt_or_unavailable_canonical_stat
     client.objects.pop(key)
     with pytest.raises(SessionStoreUnavailable):
         s.get(cookie)
+
+
+class NoListS3(ConditionalS3):
+    """The deployed auth bucket: the BFF role may not list it, so reading a missing record is AccessDenied."""
+
+    def get_object(self, **request):
+        from .s3_journal_test import S3Error
+
+        if request["Key"] not in self.objects:
+            raise S3Error("AccessDenied")
+        return super().get_object(**request)
+
+
+def deployed_sessions():
+    """Sessions as the lab opens them: create-only journals over a bucket the role may not list."""
+    from .s3_sessions import S3OAuthSessions
+
+    client = NoListS3()
+    store = S3OAuthSessions(
+        None,
+        journal_for=lambda kind, ref: journal(client, name=kind + "-" + ref, create_only_initialization=True),
+        cipher=Cipher(),
+        clock=lambda: 1000,
+        max_age=100,
+    )
+    return store, client
+
+
+def test_a_bearer_session_is_adopted_without_reading_a_record_that_does_not_exist_yet():
+    store, _client = deployed_sessions()
+    claims = {"sub": "provider-subject", "exp": 9999999999}
+    first = store.adopt("cli." + "a" * 64, "access-token", claims)
+    again = store.adopt("cli." + "a" * 64, "access-token", claims)
+    assert first.session_ref == again.session_ref and again.csrf_token == first.csrf_token
+    assert store.get("cli." + "a" * 64).access_token == "access-token"
+
+
+def test_an_expired_bearer_token_is_rejected_before_any_storage_call():
+    store, client = deployed_sessions()
+    with pytest.raises(SessionRejected):
+        store.adopt("cli." + "b" * 64, "access-token", {"sub": "s", "exp": 1})
+    assert client.calls == []
