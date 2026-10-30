@@ -167,22 +167,20 @@ class S3OAuthSessions:
             raise SessionStoreUnavailable("session storage unavailable") from None
 
     def adopt(self, identifier, access_token, claims):
-        """The session for a bearer token under its fixed ``identifier``: the one already stored, or a new one.
+        """The session for a bearer token under its fixed ``identifier``: a new one, or the one already stored.
 
-        Two requests carrying the same new token race to create it; the loser reads the winner's record.
+        It creates first and reads only on a conflict. The BFF role may not list the auth bucket, so S3 answers a
+        read of a record that does not exist yet with AccessDenied rather than NoSuchKey; the browser sign-in
+        never reads before it creates, for the same reason. Two requests carrying the same new token race to
+        create it; the loser reads the winner's record.
         """
         reference = self.reference(identifier)
-        existing = self.get_ref(reference)
-        if existing is not None:
-            return existing
+        expiry = min(float(claims["exp"]), self.clock() + self.max_age)
+        if expiry <= self.clock():
+            raise SessionRejected("session expired")
+        session = ConsoleSession(access_token, claims["sub"], expiry, secrets.token_urlsafe(32), session_ref=reference)
         try:
-            expiry = min(float(claims["exp"]), self.clock() + self.max_age)
-            if expiry <= self.clock():
-                raise SessionRejected("session expired")
-            session = ConsoleSession(access_token, claims["sub"], expiry, secrets.token_urlsafe(32), session_ref=reference)
             record = self._new("session", reference, expiry, self._payload(session))
-            session.storage_revision = record.revision
-            return session
         except (SessionRejected, JournalConflict):
             current = self.get_ref(reference)
             if current is None:
@@ -192,6 +190,8 @@ class S3OAuthSessions:
             raise
         except Exception:
             raise SessionStoreUnavailable("session storage unavailable") from None
+        session.storage_revision = record.revision
+        return session
 
     @staticmethod
     def _payload(session):

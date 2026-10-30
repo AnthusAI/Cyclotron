@@ -129,22 +129,16 @@ class HostedAccounts:
     async def _bearer_session(self, identifier, token):
         """The server-side session for a CLI's access token. A new token must belong to a person already enrolled
         through a browser sign-in: the CLI cannot enroll anyone, because enrollment needs the signed identity
-        challenge."""
+        challenge. The session is created, or found, without reading a record that may not exist yet."""
         try:
             claims = await self._timed("token_verify", self.verifier.access, token)
-            session = await self._timed("session_read", self.sessions.get, identifier)
-            if session is not None:
-                return session if session.access_token == token and session.subject == claims["sub"] else None
-            person = None
-            if self.google_identity:
-                person = await asyncio.to_thread(self.google_identity.me, token)
-                if not person:
-                    return None
             session = await asyncio.to_thread(self.sessions.adopt, identifier, token, claims)
             if session.access_token != token or session.subject != claims["sub"]:
                 return None
-            if person is not None and session.person_id != person["id"]:
-                if session.person_id is not None:
+            if self.google_identity and session.person_id is None:
+                person = await asyncio.to_thread(self.google_identity.me, token)
+                if not person:
+                    await asyncio.to_thread(self.sessions.revoke, identifier)
                     return None
                 session.person_id = person["id"]
                 await asyncio.to_thread(self.sessions.save, session)
