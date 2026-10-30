@@ -1,0 +1,25 @@
+{
+  "id": "decision-flywheel-f95dc70c-0651-49f1-9e90-db0562d593f9",
+  "title": "Persist and renew isolated Cyclotron lab sessions across cloud processes",
+  "description": "Requested by Ryan for Claude through Kanbus (2026-10-30). This filing authorizes issue records only; implementation and any live identity/backend changes are subsequent work. No production login, deployment, IAM changes, secrets in chat, or direct message to Claude. Dot must operate from cloud/headless Linux without a Mac or AWS CLI. Optional shared auth libraries must not combine the two CLI products. Write executable behavioral specifications before implementation; use fake providers/stores in automated tests, and separately record any approved live evidence.\n\nAs a lab user, I want each selected lab/account session to survive process restarts securely and renew until expiry or revocation.\n\nAcceptance: usable secure storage on headless Linux with documented installation/unlock/runtime persistence, optional Windows secure-store implementation or an explicit remaining support gap, and macOS Keychain support where applicable. No plaintext fallback; unavailable/locked backends fail visibly. Keep nonsecret context metadata separate; partition credentials by product/lab/issuer/client/account/identity/endpoint. Atomic rotation and cross-platform interprocess locks prevent concurrent refresh/logout races and crash corruption; unrelated labs remain independent. Preserve valid state on transient network errors; confirmed invalid_grant ends only the affected session. Scope/grant rechecks and expiry fail closed, with no AWS or cross-lab fallback and no uncertain mutation replay.\n\nProvide login/status/whoami/logout semantics. Status redacts tokens and distinguishes cached metadata from remote authorization. Logout attempts local deletion and supported remote refresh-session revocation, reports partial/offline failures and actual access-token limitations, and does not imply global signout. Test renewal beyond 24 simulated hours and fresh processes; record configured limits and any approved real elapsed evidence separately.\n\nFeature: Renewable lab sessions\n  Scenario: Concurrent rotation\n    Given two cloud processes share a renewable lab session\n    When both need fresh access tokens\n    Then rotation is serialized safely and the latest secret remains usable\n  Scenario: Scoped logout\n    Given sessions for two labs\n    When one session is logged out while its network is unavailable\n    Then local deletion is attempted and unconfirmed remote revocation is reported\n    And the second lab remains signed in\n  Scenario: Locked backend\n    Given the secure backend is unavailable\n    When a command requires credential access\n    Then it fails with recovery guidance and no plaintext fallback\n\nReferences: src/decision_flywheel/account_sessions.py; account_routes.py; docs/embedded-execution-authorization.md. Papyrus PPY-109943 and PPY-829904 are useful contracts, not authority to read or share their stored tokens.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-63ef259b-cb52-4677-addf-16386ba35e18",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-30T09:28:52.394209Z",
+  "updated_at": "2026-10-30T09:28:52.394237Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "gpt-6",
+    "name": "Cloud CLI issue filing"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

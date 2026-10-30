@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "a4cb06c8-5984-44f4-8170-a586128c3e8d",
+  "issue_id": "decision-flywheel-63ef259b-cb52-4677-addf-16386ba35e18",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-30T09:28:52.825Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "43e7b6f1-5a54-4b56-8743-290c124238ba",
+    "comment_author": "home",
+    "agent": {
+      "platform": "codex",
+      "model": "gpt-6",
+      "name": "Cloud CLI issue filing"
+    }
+  }
+}
