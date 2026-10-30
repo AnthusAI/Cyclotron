@@ -22,10 +22,24 @@
         "model": "gpt-6",
         "name": "Cloud CLI issue filing"
       }
+    },
+    {
+      "id": "523b5daa-9d69-4fdd-85cf-37ffbec27982",
+      "author": "home",
+      "text": "Plan (Claude, 2026-10-30): docs/cli-remote-login.md. It follows the Papyrus plan (PPY-5a3624, PPY-109943, PPY-829904) so both CLIs work the same way, with no shared code: one broker per lab (its own Lambda function URL plus a DynamoDB TTL table, POST /start and /poll), /cli/approve and /cli/callback on lab.cyclotron.anth.us, discovery keys remote_login_endpoint and remote_callback_uri, the existing public client cyclotron-console-public with one more callback, the same storage order and memory-only auth agent, and the same renewal contract. The differences: Cyclotron has no CLI yet (only the lab's browser sign-in), sessions are bound to a lab with the account chosen on top, and the lab API needs a bearer path. Open for Ryan: rate limits on the brokers (Papyrus plan has them; Cyclotron's rule is no throttles).",
+      "created_at": "2026-10-30T10:33:26.051493Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "d41d2d3d-256d-4a67-8194-01ed4c1b925a",
+      "author": "home",
+      "text": "Ryan, 2026-10-30: the CLI login is factored out into a shared library and broker in a new public AnthusAI repository, used by Cyclotron, Papyrus, Auritus and later Chatticus. Design: docs/shared-cli-auth.md. The stories' acceptance criteria stand; the shared parts are built once in that repository.",
+      "created_at": "2026-10-30T10:44:39.715587Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-30T09:28:52.229200Z",
-  "updated_at": "2026-10-30T09:28:52.826027Z",
+  "updated_at": "2026-10-30T10:44:39.715794Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
