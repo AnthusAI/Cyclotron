@@ -1,6 +1,18 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Conditions": {
+    "HasCliBroker": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "CliBrokerArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
     "HasDecisionEventBus": {
       "Fn::Not": [
         {
@@ -110,6 +122,16 @@
       ],
       "Default": "false",
       "Description": "CYCLOTRON_ALLOW_LIVE",
+      "Type": "String"
+    },
+    "CliBrokerArn": {
+      "Default": "",
+      "Description": "The lab's cli-login broker function ARN (stack cyclotron-cli-broker); empty leaves remote CLI sign-in off",
+      "Type": "String"
+    },
+    "CliBrokerEndpoint": {
+      "Default": "",
+      "Description": "The broker's function URL, published to CLIs as remote_login_endpoint; set together with CliBrokerArn",
       "Type": "String"
     },
     "ConsoleAuthorizationOrigin": {
@@ -277,7 +299,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/b078a563a4638fd2ce1c07cc59722c4f6448732ec046f9c768a916b8e1315b0a"
+          "S3Key": "cyclotron-console/backend/c7002ebd1715165669ee2f743c363e5218aed4999870d4186c79e4bc2451469b"
         },
         "Environment": {
           "Variables": {
@@ -308,6 +330,28 @@
             "CYCLOTRON_CENTRAL_ENDPOINT": "https://bnh9mctvo9.execute-api.us-east-1.amazonaws.com/api",
             "CYCLOTRON_CLIENT_ID": {
               "Ref": "ConsoleClientId"
+            },
+            "CYCLOTRON_CLI_BROKER_ARN": {
+              "Fn::If": [
+                "HasCliBroker",
+                {
+                  "Ref": "CliBrokerArn"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            },
+            "CYCLOTRON_CLI_BROKER_ENDPOINT": {
+              "Fn::If": [
+                "HasCliBroker",
+                {
+                  "Ref": "CliBrokerEndpoint"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
             },
             "CYCLOTRON_ISSUER": {
               "Ref": "ConsoleIssuer"
@@ -601,6 +645,25 @@
                   "Resource": {
                     "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*"
                   }
+                },
+                {
+                  "Fn::If": [
+                    "HasCliBroker",
+                    {
+                      "Action": [
+                        "lambda:InvokeFunction"
+                      ],
+                      "Effect": "Allow",
+                      "Resource": [
+                        {
+                          "Ref": "CliBrokerArn"
+                        }
+                      ]
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
                 }
               ],
               "Version": "2012-10-17"
@@ -985,7 +1048,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/b078a563a4638fd2ce1c07cc59722c4f6448732ec046f9c768a916b8e1315b0a"
+          "S3Key": "cyclotron-console/backend/c7002ebd1715165669ee2f743c363e5218aed4999870d4186c79e4bc2451469b"
         },
         "Environment": {
           "Variables": {

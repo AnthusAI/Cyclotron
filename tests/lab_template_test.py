@@ -10,14 +10,7 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = [
-    "/Parameters/CliBrokerArn",
-    "/Parameters/CliBrokerEndpoint",
-    "/Conditions/HasCliBroker",
-    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_CLI_BROKER_ARN",
-    "/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_CLI_BROKER_ENDPOINT",
-    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
-]
+REVIEWED_PENDING_PATHS = []
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 
