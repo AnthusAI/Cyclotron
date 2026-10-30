@@ -8,26 +8,7 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-Pending: neutral names beside the old ones (step 2 of docs/general-decision-engine.md). The stack parameter
-`PublicationTargets` becomes `StandingRuns`, and both functions read `CYCLOTRON_STANDING_RUNS` in place of
-`CYCLOTRON_PUBLICATION_TARGETS` (the same runs, each binding named by `bindingId` rather than `publicationId`);
-the `HasTargets` condition is re-added referring to the new parameter. The change set must pass `StandingRuns`
-explicitly, converted from the live `PublicationTargets` value, since a renamed parameter has no previous value.
-`StandingRuns` has no `MaxLength`; CloudFormation's own parameter size limit still applies. The machine invoker
-role gains `execute-api:Invoke` on `POST /machine/bindings/*/operations` and `GET /machine/bindings/*/commands/*`;
-its publication and decision grants are unchanged. Ten operations in `pending-changes.json`.
-The operations, in order:
-
-- `remove` `/Parameters/PublicationTargets`
-- `add` `/Parameters/StandingRuns`
-- `remove` `/Conditions/HasTargets`
-- `add` `/Conditions/HasTargets`
-- `remove` `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_PUBLICATION_TARGETS`
-- `add` `/Resources/BffFunction/Properties/Environment/Variables/CYCLOTRON_STANDING_RUNS`
-- `remove` `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_PUBLICATION_TARGETS`
-- `add` `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_STANDING_RUNS`
-- `add` `/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-`
-- `add` `/Resources/MachineInvokerRole/Properties/Policies/0/PolicyDocument/Statement/0/Resource/-`
+Previously: neutral names beside the old ones (step 2 of docs/general-decision-engine.md; lab code 87193a0, package sha256 `9195ea8f5602cd6fe6b1998b0fb1ec7371a384426a1dedfe88d3e459a6f4352e`), deployed on 2026-10-29 with change set `step2a-87193a0`. The stack parameter `PublicationTargets` became `StandingRuns` (passed explicitly, converted from the live value with `publicationId` renamed to `bindingId`), both functions read `CYCLOTRON_STANDING_RUNS`, and the machine invoker role gained the two `/machine/bindings/*` grants; the snapshot was refreshed.
 
 Previously: the lab speaks of bindings and callers, not publications and newsrooms (step 1 of docs/general-decision-engine.md; lab code 5f5c781, package sha256 `c8f66bdd8690f828cd3468cc2f9bbec305cefded91f136d18d8bc407a5cf7562`), deployed on 2026-10-29 with change set `lab-bindings-5f5c781`. Code only; the snapshot was refreshed.
 
