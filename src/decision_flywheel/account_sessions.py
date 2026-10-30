@@ -232,6 +232,21 @@ class OAuthSessions:
             self.sessions[digest(identifier)] = session
             return identifier, session
 
+    def adopt(self, identifier, access_token, claims):
+        """The session for a bearer token under its fixed ``identifier``: the one already stored, or a new one."""
+        with self.lock:
+            self._purge()
+            reference = digest(identifier)
+            existing = self.sessions.get(reference)
+            if existing is not None:
+                return existing
+            session = ConsoleSession(
+                access_token, claims["sub"], min(float(claims["exp"]), self.clock() + self.max_age), secrets.token_urlsafe(32)
+            )
+            session.session_ref = reference
+            self.sessions[reference] = session
+            return session
+
     def get(self, identifier):
         with self.lock:
             self._purge()

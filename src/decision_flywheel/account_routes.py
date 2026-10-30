@@ -1,6 +1,7 @@
 """Same-origin OAuth and accounts BFF for the existing Python console."""
 
 import asyncio
+import hashlib
 import hmac
 import json
 import math
@@ -25,6 +26,22 @@ from .prospectus_accounts import (
 
 class AccountIdentityChanged(AccountAccessDenied):
     """Fresh account listing no longer proves the original enrolled person."""
+
+
+def bearer_token(connection):
+    """The CLI's access token from ``Authorization: Bearer``, or None when the request carries none."""
+    header = connection.headers.get("authorization")
+    if header is None:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token or not token.isascii() or " " in token.strip():
+        return ""
+    return token.strip()
+
+
+def bearer_identifier(token):
+    # A fixed identifier per token, so every request with the same token finds the same server-side session.
+    return "cli." + hashlib.sha256(token.encode()).hexdigest()
 
 
 class HostedAccounts:
@@ -59,9 +76,21 @@ class HostedAccounts:
             )
 
     async def _session_pending(self, connection, *, verify_person=True):
-        """Return the locally proven session and the still-owed person check, so a caller can overlap it with other work."""
-        identifier = connection.cookies.get(self.config.cookie_name)
-        session = await self._timed("session_read", self.sessions.get, identifier)
+        """Return the locally proven session and the still-owed person check, so a caller can overlap it with other work.
+
+        A CLI sends its own access token as ``Authorization: Bearer``. It is checked exactly like a browser
+        session's token and kept as a server-side session under a fixed identifier, so queued work re-checks it the
+        same way. A request may carry a cookie or a bearer token, never both.
+        """
+        token = bearer_token(connection)
+        if token is not None:
+            if not token or connection.cookies.get(self.config.cookie_name):
+                return None, None
+            identifier = bearer_identifier(token)
+            session = await self._bearer_session(identifier, token)
+        else:
+            identifier = connection.cookies.get(self.config.cookie_name)
+            session = await self._timed("session_read", self.sessions.get, identifier)
         if not session:
             return None, None
         try:
@@ -97,6 +126,32 @@ class HostedAccounts:
 
         return session, confirm_person
 
+    async def _bearer_session(self, identifier, token):
+        """The server-side session for a CLI's access token. A new token must belong to a person already enrolled
+        through a browser sign-in: the CLI cannot enroll anyone, because enrollment needs the signed identity
+        challenge."""
+        try:
+            claims = await self._timed("token_verify", self.verifier.access, token)
+            session = await self._timed("session_read", self.sessions.get, identifier)
+            if session is not None:
+                return session if session.access_token == token and session.subject == claims["sub"] else None
+            person = None
+            if self.google_identity:
+                person = await asyncio.to_thread(self.google_identity.me, token)
+                if not person:
+                    return None
+            session = await asyncio.to_thread(self.sessions.adopt, identifier, token, claims)
+            if session.access_token != token or session.subject != claims["sub"]:
+                return None
+            if person is not None and session.person_id != person["id"]:
+                if session.person_id is not None:
+                    return None
+                session.person_id = person["id"]
+                await asyncio.to_thread(self.sessions.save, session)
+            return session
+        except (SessionRejected, AccountAccessDenied):
+            return None
+
     async def _session(self, connection, *, verify_person=True):
         session, confirm_person = await self._session_pending(connection, verify_person=verify_person)
         if confirm_person is not None and not await confirm_person():
@@ -127,6 +182,9 @@ class HostedAccounts:
 
     async def _csrf(self, request, *, verify_person=True):
         session = await self._require(request, verify_person=verify_person)
+        if bearer_token(request):
+            # A bearer request carries no ambient credential: a cross-site page cannot make a browser send it.
+            return session
         csrf = request.headers.get("x-csrf-token", "")
         if (
             request.headers.get("origin") != self.config.public_origin

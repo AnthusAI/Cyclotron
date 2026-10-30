@@ -1,7 +1,40 @@
 # Remote login for the Cyclotron CLI, without long-lived keys
 
-Status: **proposed** (2026-10-30). Ryan decided the open question on 2026-10-30: both brokers throttle. The two
-live changes still need his approval.
+Status: **built, not yet live** (2026-10-30). The lab side, the `cyclotron` command and `cli-login` 0.2.0 are
+done. Going live needs four changes, each with Ryan's approval:
+- the broker stack;
+- the lab stack's broker settings;
+- the `/cli/*` rewrite on the lab's Amplify app;
+- the callback URL in Prospectus (AnthusAI/Prospectus#91).
+
+## Using it
+
+```bash
+pip install "decision-flywheel[cli]"            # brings cli-login, pinned
+cyclotron login --remote --as you@example.com   # prints an approval URL and a code; approve on any device
+cyclotron whoami                                # asks the lab who this session is
+cyclotron status                                # the local session, without tokens
+cyclotron logout                                # removes it and revokes the refresh token
+```
+
+`--lab` picks another lab (default `https://lab.cyclotron.anth.us`). `--as` refuses the session unless that person
+approves it, because whoever approves first owns the session. `--note` is shown on the approval page.
+
+The session lives in the most secure store the machine has, never as plain text. On a cloud machine with no
+keyring, start the memory-only agent first:
+
+```bash
+python -m cli_login.stores.agent serve --namespace cyclotron-lab --background
+```
+
+A session renews for 30 days, and then needs a new approval. One more condition: you must have signed in to the
+lab in a browser once, because Prospectus enrolls a person only through that first browser sign-in.
+
+How the lab checks a CLI:
+- It reads `Authorization: Bearer <access token>` and verifies the token exactly like a browser session's.
+- It keeps the token as a server-side session under a hash of the token, so queued work re-checks it the same way.
+- It refuses a request that carries both a cookie and a bearer token.
+- A bearer request needs no CSRF token, because nothing ambient sends it.
 
 This plans three stories under the standalone CLI epic (63ef259b):
 

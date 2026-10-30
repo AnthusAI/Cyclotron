@@ -46,6 +46,8 @@ class HostedConfig:
     allow_insecure_loopback:bool=False
     lab_verifier_role_arn:str=''
     accounts_api_url:str=''
+    cli_broker_arn:str=''
+    cli_broker_endpoint:str=''
 
     def __post_init__(self):
         OAuthConfig(self.issuer,self.client_id,self.authorization_origin,self.public_origin,allow_insecure_loopback=self.allow_insecure_loopback)
@@ -68,12 +70,16 @@ class HostedConfig:
         # Optional: both empty leaves the curation routes failing closed (503 authority_unavailable).
         values['lab_verifier_role_arn'] = environment.get('CYCLOTRON_LAB_VERIFIER_ROLE_ARN', '')
         values['accounts_api_url'] = environment.get('CYCLOTRON_ACCOUNTS_API_URL', '')
+        # Optional: both empty leaves remote CLI sign-in off (no /cli/* routes).
+        values['cli_broker_arn'] = environment.get('CYCLOTRON_CLI_BROKER_ARN', '')
+        values['cli_broker_endpoint'] = environment.get('CYCLOTRON_CLI_BROKER_ENDPOINT', '')
         return cls(**values)
 
 
 class HostedRuntime:
     def __init__(self,config,*,s3,kms=None,cipher=None,sqs=None,send=None,central=None,verifier=None,model_factory=None,open_cyclotron=None,publication_targets=None,machine_principals=(),curation_authority=None,sts=None,verifier_client=None,decision_events=None):
         self.config,self.s3=config,s3
+        self.cli_invoke=None  # the broker invoker; specs replace it, the deployed lab uses the BFF role's lambda client
         self.decision_events=decision_events
         self.open_cyclotron=open_cyclotron
         if config.allow_live and model_factory is None:raise ValueError('explicit authorized provider factory required for live execution')
@@ -148,6 +154,14 @@ class HostedRuntime:
         self.gateway.install(app)
         from .hosted_publication_bootstrap import install_bootstrap_route
         install_bootstrap_route(app, self)
+        from .cli_login_routes import CliLoginConfig, install_cli_login_routes, lambda_invoker
+        cli=CliLoginConfig.from_environment({'CYCLOTRON_CLI_BROKER_ARN':self.config.cli_broker_arn,'CYCLOTRON_CLI_BROKER_ENDPOINT':self.config.cli_broker_endpoint})
+        if cli is not None:
+            invoke=self.cli_invoke
+            if invoke is None:
+                import boto3
+                invoke=lambda_invoker(boto3.client('lambda',region_name=self.config.region),cli.broker_arn)
+            install_cli_login_routes(app, oauth, cli, invoke)
         if self.publication_targets is not None:
             from .hosted_publications import install_publication_routes, configured_targets
             configured_targets(self)

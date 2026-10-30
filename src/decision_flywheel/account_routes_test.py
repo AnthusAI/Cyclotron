@@ -865,3 +865,97 @@ def test_each_hosted_request_logs_its_route_template_and_duration_without_secret
         assert [entry["route"] for entry in requests] == ["/api/runs/{run_id}/events"]
         assert requests[0]["event"] == "console_phase" and isinstance(requests[0]["durationMs"], int)
         assert cookie not in output and token not in output and account_id not in output
+
+
+# --- CLI bearer sessions ------------------------------------------------------------------------------------------
+
+
+def bearer(token):
+    return {"Authorization": "Bearer " + token}
+
+
+def test_a_cli_access_token_is_a_session_for_an_enrolled_person(hosted, identity):
+    client, gateway, state, _ = hosted
+    _verifier, token = identity
+    _calls, person, _ = google_account_mode(gateway, state)
+    access = token()
+    with client:
+        first = client.get("/api/session", headers=bearer(access)).json()
+        assert first["authenticated"] is True and first["personId"] == person["id"]
+        again = client.get("/api/session", headers=bearer(access)).json()
+        assert again["csrfToken"] == first["csrfToken"]  # the same server-side session, found again
+        assert gateway.config.cookie_name not in client.cookies
+
+
+def test_a_cli_token_for_someone_never_enrolled_is_refused(hosted, identity):
+    client, gateway, state, _ = hosted
+    _verifier, token = identity
+    google_mode(gateway, state)
+    gateway.google_identity.me = lambda _token: None
+    with client:
+        assert client.get("/api/session", headers=bearer(token())).json()["authenticated"] is False
+
+
+@pytest.mark.parametrize("header", ["Basic abc", "Bearer ", "Bearer two words", "bearer"])
+def test_a_malformed_authorization_header_is_no_session(hosted, header):
+    client, gateway, state, _ = hosted
+    google_mode(gateway, state)
+    with client:
+        assert client.get("/api/session", headers={"Authorization": header}).json()["authenticated"] is False
+
+
+def test_a_request_with_both_a_cookie_and_a_bearer_token_is_refused(hosted, identity):
+    client, gateway, state, _ = hosted
+    _verifier, token = identity
+    google_mode(gateway, state)
+    with client:
+        sign_in(client, state)
+        assert client.get("/api/session").json()["authenticated"] is True
+        assert client.get("/api/session", headers=bearer(token())).json()["authenticated"] is False
+
+
+def test_an_expired_or_foreign_cli_token_is_refused(hosted, identity):
+    import time
+
+    client, gateway, state, _ = hosted
+    _verifier, token = identity
+    google_mode(gateway, state)
+    with client:
+        for invalid in (token(exp=int(time.time()) - 5), token(client_id="other"), token("id")):
+            assert client.get("/api/session", headers=bearer(invalid)).json()["authenticated"] is False
+
+
+def test_a_cli_mutation_needs_no_csrf_but_a_cookie_mutation_still_does(hosted, identity):
+    client, gateway, state, account_id = hosted
+    _verifier, token = identity
+    google_account_mode(gateway, state)
+    state["accounts"] = [
+        {
+            "id": account_id,
+            "name": "Lab",
+            "role": "owner",
+            "entitlement": {
+                "accountId": account_id,
+                "product": "cyclotron",
+                "status": "active",
+                "capabilities": ["console:read", "console:write"],
+            },
+        }
+    ]
+    with client:
+        selected = client.post("/api/accounts/select", json={"accountId": account_id}, headers=bearer(token()))
+        assert selected.status_code == 200 and selected.json()["selectedAccountId"] == account_id
+        sign_in(client, state)
+        assert client.post("/api/accounts/select", json={"accountId": account_id}).status_code == 403
+
+
+def test_each_cli_token_has_its_own_session(hosted, identity):
+    import time
+
+    client, gateway, state, _ = hosted
+    _verifier, token = identity
+    google_account_mode(gateway, state)
+    with client:
+        first = client.get("/api/session", headers=bearer(token())).json()["csrfToken"]
+        second = client.get("/api/session", headers=bearer(token(iat=int(time.time()) - 1))).json()["csrfToken"]
+        assert first != second
