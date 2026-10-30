@@ -161,7 +161,9 @@ class HostedRuntime:
             if invoke is None:
                 import boto3
                 invoke=lambda_invoker(boto3.client('lambda',region_name=self.config.region),cli.broker_arn)
-            install_cli_login_routes(app, oauth, cli, invoke)
+            from .cli_login_routes import CliEnrollment
+            enrollment=CliEnrollment(self.gateway,self.sessions.cipher) if self.identities is not None else None
+            install_cli_login_routes(app, oauth, cli, invoke, enrollment)
         if self.publication_targets is not None:
             from .hosted_publications import install_publication_routes, configured_targets
             configured_targets(self)

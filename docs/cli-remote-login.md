@@ -1,11 +1,19 @@
 # Remote login for the Cyclotron CLI, without long-lived keys
 
-Status: **built, not yet live** (2026-10-30). The lab side, the `cyclotron` command and `cli-login` 0.2.0 are
-done. Going live needs four changes, each with Ryan's approval:
-- the broker stack;
-- the lab stack's broker settings;
-- the `/cli/*` rewrite on the lab's Amplify app;
-- the callback URL in Prospectus (AnthusAI/Prospectus#91).
+Status: **live on the lab** (2026-10-30), with each CLI login enrolled at Prospectus.
+
+The first live test signed in end to end, but Prospectus refused the CLI's tokens with `reenrollment_required`.
+Prospectus enrolls each Cognito login, by its login time and lineage, through a signed identity challenge, and a
+browser sign-in does that in its callback. Ryan chose to enroll each CLI login the same way, using cli-login
+0.3.0's hooks:
+1. When the person approves, the lab asks Prospectus for a challenge, and the Google sign-in carries its nonce.
+2. The lab seals the challenge's proof with its session cipher, bound to that one transaction. The broker
+   carries the sealed string to the CLI, and neither can read it.
+3. Right after its code exchange, the CLI posts its two tokens and the sealed string to `/cli/enroll`. The lab
+   checks the tokens as strictly as the browser callback does, including the five-minute login window, and
+   resolves the person at Prospectus.
+4. Only then does the CLI store its session. Refreshes keep the login's lineage, so the session renews for 30
+   days without enrolling again.
 
 ## Using it
 
