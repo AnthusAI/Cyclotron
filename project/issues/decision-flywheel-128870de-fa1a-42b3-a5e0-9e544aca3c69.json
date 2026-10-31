@@ -17,10 +17,17 @@
       "text": "Plan (Claude, 2026-10-30), see docs/cli-remote-login.md: a new 'cyclotron' package and executable. A session is one person on one lab (pinned to issuer, client, authorization origin, API origin and the broker from the lab's discovery data); the account is non-secret context chosen with 'cyclotron use --lab --account' and checked by the lab on every call. An unclear context is refused, and a missing grant is denied with no fallback. The lab API gains a bearer path: verify the JWT, then the access-only Prospectus person lookup and account grants as for a browser session; a request carrying both a cookie and a bearer is refused.",
       "created_at": "2026-10-30T10:33:26.079825Z",
       "comment_type": "default"
+    },
+    {
+      "id": "890ddebb-4b23-4c94-957c-8a1fc8b41f9e",
+      "author": "home",
+      "text": "The --lab option selects the lab (default https://lab.cyclotron.anth.us). Not built yet: selecting an account; whoami reports selectedAccountId null. Still open.",
+      "created_at": "2026-10-31T13:12:49.558810Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-30T09:28:52.286190Z",
-  "updated_at": "2026-10-30T10:33:26.080045Z",
+  "updated_at": "2026-10-31T13:12:49.559414Z",
   "closed_at": null,
   "agent": {
     "platform": "codex",
