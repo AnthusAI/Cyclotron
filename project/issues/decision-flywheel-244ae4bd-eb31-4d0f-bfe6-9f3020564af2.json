@@ -3,7 +3,7 @@
   "title": "Approve remote Cyclotron CLI login through a scoped single-use transaction",
   "description": "Requested by Ryan for Claude through Kanbus (2026-10-30). This filing authorizes issue records only; implementation and any live identity/backend changes are subsequent work. No production login, deployment, IAM changes, secrets in chat, or direct message to Claude. Dot must operate from cloud/headless Linux without a Mac or AWS CLI. Optional shared auth libraries must not combine the two CLI products. Write executable behavioral specifications before implementation; use fake providers/stores in automated tests, and separately record any approved live evidence.\n\nAs a lab user, I want to approve a waiting cloud CLI using a URL on another device, with no secret or auth-code handoff through chat.\n\nAcceptance: explicit login waits with bounded polling and can be cancelled/denied/expire. Evaluate a secure broker or equivalent provider-supported handoff; Cognito User Pools must not be presumed to provide RFC 8628. Document trust boundaries, required backend endpoints and availability, issuer/audience validation, anti-CSRF/state, CLI possession proof, single-use redemption, short expiry, replay prevention, rate limits/backoff and cleanup. Approval displays requester and exact lab/account/scope, requires authenticated authorization, and cannot broaden grants. Redemption is bound to the originating CLI; a copied URL cannot redeem the session. Persist renewable material only through the secure lifecycle story; no secrets in logs, argv, environment, repositories or chat. Noninteractive commands never open a browser unexpectedly.\n\nFeature: Cross-device lab login\n  Scenario: Authorized approval\n    Given a cloud CLI requests a scoped lab/account login\n    When the authorized user opens its HTTPS URL on another device and approves\n    Then only that CLI receives the matching renewable session\n  Scenario: Malicious or stale handoff\n    Given a replayed, expired, denied or target-substituted transaction\n    When redemption is attempted\n    Then it yields no session\n\nReferences: src/decision_flywheel/account_routes.py; account_sessions.py and their tests; docs/decision-contract.md. Related existing signed-challenge story decision-flywheel-69e1e477-f42b-470f-a438-047de108e1e8; counterpart Papyrus PPY-5a3624d4-4f1a-4eee-9bb6-12e575ec3cad. Reuse reviewed security concepts without requiring the Papyrus CLI or assuming browser cookies are renewable native credentials.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -29,11 +29,18 @@
       "text": "Decided (Ryan, 2026-10-30): keep the throttling on both brokers (per-caller rate limits on /start and /poll, slow_down), and keep the best choices from both plans. The Papyrus plan now also takes this plan's additions (AnthusAI/Papyrus#882). See docs/cli-remote-login.md.",
       "created_at": "2026-10-30T10:38:07.691817Z",
       "comment_type": "default"
+    },
+    {
+      "id": "15867d98-0b82-46bb-ac14-92755a776e33",
+      "author": "home",
+      "text": "Live on the lab since 2026-10-30. cyclotron login --remote prints an approval URL and code; Ryan approved from his phone, the CLI enrolled the login at Prospectus (cli-login 0.3.0 hooks, POST /cli/enroll), and cyclotron whoami answered his person and three accounts. The broker (stack cyclotron-cli-broker) runs cli-login 0.3.0; it had been left on 0.2.0, which dropped the enrollment nonce until it was updated on 2026-10-30. Shipped in Decision-Flywheel #179 and #181; deploy record #180.",
+      "created_at": "2026-10-31T13:12:45.504877Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-10-30T09:28:52.340711Z",
-  "updated_at": "2026-10-30T10:38:07.692046Z",
-  "closed_at": null,
+  "updated_at": "2026-10-31T13:12:45.842417Z",
+  "closed_at": "2026-10-31T13:12:45.842378Z",
   "agent": {
     "platform": "codex",
     "model": "gpt-6",

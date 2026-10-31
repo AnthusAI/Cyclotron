@@ -3,7 +3,7 @@
   "title": "Persist and renew isolated Cyclotron lab sessions across cloud processes",
   "description": "Requested by Ryan for Claude through Kanbus (2026-10-30). This filing authorizes issue records only; implementation and any live identity/backend changes are subsequent work. No production login, deployment, IAM changes, secrets in chat, or direct message to Claude. Dot must operate from cloud/headless Linux without a Mac or AWS CLI. Optional shared auth libraries must not combine the two CLI products. Write executable behavioral specifications before implementation; use fake providers/stores in automated tests, and separately record any approved live evidence.\n\nAs a lab user, I want each selected lab/account session to survive process restarts securely and renew until expiry or revocation.\n\nAcceptance: usable secure storage on headless Linux with documented installation/unlock/runtime persistence, optional Windows secure-store implementation or an explicit remaining support gap, and macOS Keychain support where applicable. No plaintext fallback; unavailable/locked backends fail visibly. Keep nonsecret context metadata separate; partition credentials by product/lab/issuer/client/account/identity/endpoint. Atomic rotation and cross-platform interprocess locks prevent concurrent refresh/logout races and crash corruption; unrelated labs remain independent. Preserve valid state on transient network errors; confirmed invalid_grant ends only the affected session. Scope/grant rechecks and expiry fail closed, with no AWS or cross-lab fallback and no uncertain mutation replay.\n\nProvide login/status/whoami/logout semantics. Status redacts tokens and distinguishes cached metadata from remote authorization. Logout attempts local deletion and supported remote refresh-session revocation, reports partial/offline failures and actual access-token limitations, and does not imply global signout. Test renewal beyond 24 simulated hours and fresh processes; record configured limits and any approved real elapsed evidence separately.\n\nFeature: Renewable lab sessions\n  Scenario: Concurrent rotation\n    Given two cloud processes share a renewable lab session\n    When both need fresh access tokens\n    Then rotation is serialized safely and the latest secret remains usable\n  Scenario: Scoped logout\n    Given sessions for two labs\n    When one session is logged out while its network is unavailable\n    Then local deletion is attempted and unconfirmed remote revocation is reported\n    And the second lab remains signed in\n  Scenario: Locked backend\n    Given the secure backend is unavailable\n    When a command requires credential access\n    Then it fails with recovery guidance and no plaintext fallback\n\nReferences: src/decision_flywheel/account_sessions.py; account_routes.py; docs/embedded-execution-authorization.md. Papyrus PPY-109943 and PPY-829904 are useful contracts, not authority to read or share their stored tokens.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -17,11 +17,30 @@
       "text": "Plan (Claude, 2026-10-30), see docs/cli-remote-login.md: storage order as Papyrus PPY-109943 (macOS Keychain, Linux Secret Service, kernel keyring after probing, memory-only 'cyclotron auth agent' behind a 0600 socket, Windows Credential Manager with only the refresh token), fail-closed with no plaintext fallback; keys by product, lab, issuer, client and subject; one cross-platform lock per key. Client settings read 2026-10-30: access 60 min, refresh 30 days, rotation off, revocation on, so renewal works today and re-approval is due after 30 days. Logout revokes at /oauth2/revoke and reports failures; an access token the lab has seen stays valid up to 60 min. Evidence in three separate parts as PPY-829904.",
       "created_at": "2026-10-30T10:33:26.127591Z",
       "comment_type": "default"
+    },
+    {
+      "id": "1256f541-d75a-4228-94de-84156794764f",
+      "author": "home",
+      "text": "Partly proven live 2026-10-30: the session is stored in the memory agent (no keyring on the test machine) and the access token is held only in memory; logout revoked the refresh token remotely. Not yet proven: a renewal after the access token expires, across a fresh process. Keep open until that is checked live.",
+      "created_at": "2026-10-31T13:12:45.714104Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "611d02dd-9640-4ef1-ae5b-2d8928798473",
+      "author": "home",
+      "text": "Renewal proven live 2026-10-31: the remote session approved 2026-10-30 (memory agent store, no keyring) was 18.5 hours old, far past its one-hour access token. A fresh cyclotron process renewed it and whoami answered Ryan's person and three accounts, so the refresh kept the enrolled login's lineage. Logout with remote revocation was proven 2026-10-30. Done.",
+      "created_at": "2026-10-31T13:33:27.435448Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "claude-opus-5-5",
+        "name": "Cyclotron implementation"
+      }
     }
   ],
   "created_at": "2026-10-30T09:28:52.394209Z",
-  "updated_at": "2026-10-30T10:33:26.127808Z",
-  "closed_at": null,
+  "updated_at": "2026-10-31T13:33:27.586042Z",
+  "closed_at": "2026-10-31T13:33:27.585779Z",
   "agent": {
     "platform": "codex",
     "model": "gpt-6",

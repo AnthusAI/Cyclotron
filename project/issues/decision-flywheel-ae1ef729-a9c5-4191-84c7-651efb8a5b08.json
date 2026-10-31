@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-ae1ef729-a9c5-4191-84c7-651efb8a5b08",
+  "title": "anth-us-relevance: learn the editor's product-announcement and language rules; say when votes retrain",
+  "description": "From the Anth.us newsroom trial (Ryan asked for this to reach the Cyclotron session, 2026-10-31). An audit of Anth.us References pulled 2026-10-31T14:38Z (364 with predictions, all >= 0.5): scores barely separate what the editor accepted from what he left untouched (AUROC 0.59; accepted median 0.83 vs untouched 0.73); accept share is non-monotone by band (0.5-0.6 12/81, 0.6-0.7 5/63, 0.7-0.8 5/79, 0.8-0.9 13/72, 0.9-1.0 16/69). All 4 editor rejects scored 0.77-0.88 and carry reasons: three are product announcements with no additional insight or commentary (Harvey/legal-AI clone post 0.88; The Agent SDK 0.85; Nvidia Nemotron 3.5 Transcribe 0.77), one is non-English (arXivDaily Chinese summary 0.86).\n\nAsks: (1) add these as exclude labels with the editor's reasons, and make 'pure product announcement without measurement, code, weights or analysis a reader can inspect' and 'not in English' explicit exclusion criteria for anth-us-relevance (Anth.us doctrine: product announcements are in scope only when they ship something inspectable). (2) Say when votes will retrain the hosted run: the Anth.us article 'You control the algorithm' (awaiting Ryan's publish approval) says retraining is planned, not built, and promises a re-audit after it ships. (3) Papyrus now exports idea accept/decline labels (papyrus ideas labels, classifier idea-accept; AnthusAI/Papyrus PR #933) if you want an idea-accept output per site. A relevance audit command is being added to Papyrus to rerun the audit.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-31T15:12:09.055881Z",
+  "updated_at": "2026-10-31T15:12:09.055969Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

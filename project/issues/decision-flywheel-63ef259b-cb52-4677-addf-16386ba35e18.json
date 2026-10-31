@@ -3,7 +3,7 @@
   "title": "Standalone Cyclotron CLI for secure renewable access to multiple labs",
   "description": "Requested by Ryan for Claude through Kanbus (2026-10-30). This filing authorizes issue records only; implementation and any live identity/backend changes are subsequent work. No production login, deployment, IAM changes, secrets in chat, or direct message to Claude. Dot must operate from cloud/headless Linux without a Mac or AWS CLI. Optional shared auth libraries must not combine the two CLI products. Write executable behavioral specifications before implementation; use fake providers/stores in automated tests, and separately record any approved live evidence.\n\nAs an authorized lab user, I want a separately installed Cyclotron CLI with renewable login to multiple labs/accounts, so dot can operate labs from a cloud runtime independently of Papyrus.\n\nDefinition of done: separate executable/package and help; explicit lab/account selection; remote approval from another device; secure headless Linux credential persistence, macOS preservation where reused, and an assessed Windows support path; renewable sessions, scoped server authorization, logout/revocation and secret-safe diagnostics; documented install, commands, supported operations and tests. Papyrus may retain Cyclotron integration commands, but cannot be the required executable or credential authority. Share libraries only when useful, with separate product namespaces and bindings. No shared administrator token, inherited Papyrus authorization or default AWS credential requirement.\n\nCoordinate existing signed-login challenges in decision-flywheel-69e1e477-f42b-470f-a438-047de108e1e8, not a replacement for that work. References: docs/decision-contract.md; docs/embedded-execution-authorization.md; docs/using-cyclotron.md; src/decision_flywheel/account_routes.py; account_sessions.py; queued_account_authorization.py; publication_lab.py; lab_verifier.py. Counterpart: AnthusAI/Papyrus PPY-7c458d and its remote-login story. Implementation should inventory existing packaged entry points and lab APIs before selecting command names; acceptance requires a minimal authenticated lab read and a scoped protected operation, using fixtures before any approved live test.",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -36,11 +36,23 @@
       "text": "Ryan, 2026-10-30: the CLI login is factored out into a shared library and broker in a new public AnthusAI repository, used by Cyclotron, Papyrus, Auritus and later Chatticus. Design: docs/shared-cli-auth.md. The stories' acceptance criteria stand; the shared parts are built once in that repository.",
       "created_at": "2026-10-30T10:44:39.715587Z",
       "comment_type": "default"
+    },
+    {
+      "id": "6b70e27e-cd61-4264-b4b7-4bb7e842bfd4",
+      "author": "home",
+      "text": "All four stories done 2026-10-31: remote sign-in with per-login Prospectus enrollment, secure storage and live-proven renewal, logout with remote revocation, and lab/account selection, all on cli-login (DataParade-io/cli-login). Docs: docs/cli-remote-login.md.",
+      "created_at": "2026-10-31T14:00:04.831068Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "claude_code",
+        "model": "claude-opus-5-5",
+        "name": "Cyclotron implementation"
+      }
     }
   ],
   "created_at": "2026-10-30T09:28:52.229200Z",
-  "updated_at": "2026-10-30T10:44:39.715794Z",
-  "closed_at": null,
+  "updated_at": "2026-10-31T14:00:04.855428Z",
+  "closed_at": "2026-10-31T14:00:04.855402Z",
   "agent": {
     "platform": "codex",
     "model": "gpt-6",

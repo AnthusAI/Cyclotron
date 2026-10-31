@@ -20,13 +20,24 @@ browser sign-in does that in its callback. Ryan chose to enroll each CLI login t
 ```bash
 pip install "decision-flywheel[cli]"            # brings cli-login, pinned
 cyclotron login --remote --as you@example.com   # prints an approval URL and a code; approve on any device
-cyclotron whoami                                # asks the lab who this session is
+cyclotron whoami                                # asks the lab who this session is and which account it works in
+cyclotron accounts                              # the lab accounts you belong to, with your role in each
+cyclotron use "Data Parade"                     # choose the account to work in, by name or id
 cyclotron status                                # the local session, without tokens
 cyclotron logout                                # removes it and revokes the refresh token
 ```
 
 `--lab` picks another lab (default `https://lab.cyclotron.anth.us`). `--as` refuses the session unless that person
 approves it, because whoever approves first owns the session. `--note` is shown on the approval page.
+
+A person can belong to several lab accounts, and lab work always happens in one of them, as in the browser's
+account picker. `cyclotron use` chooses one; `cyclotron use --clear` forgets it. The choice is kept on this machine,
+per lab and per person, in `~/.config/cli-login/cyclotron-lab/selected-accounts.json` (readable only by you). It
+grants nothing by itself:
+- `use` asks the lab to select the account, and the lab checks your current access first.
+- Every renewed access token starts a new lab session with no account, so `whoami` selects the chosen account
+  again, and the lab checks again.
+- If your access has ended, the CLI forgets the choice and says so, with exit code 1.
 
 The session lives in the most secure store the machine has, never as plain text. On a cloud machine with no
 keyring, start the memory-only agent first:
