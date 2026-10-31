@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "e8b5bc15-d17d-4151-a4a2-f8fa7f5a5657",
+  "issue_id": "decision-flywheel-32c39c9e-88b0-4a3f-bbc7-6a9b64e41ae6",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-31T15:07:01.095Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "28fa4edf-bb20-48bf-b7e6-8d044308dc21",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "Cyclotron implementation"
+    }
+  }
+}
