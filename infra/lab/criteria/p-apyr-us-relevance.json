@@ -2,7 +2,7 @@
   "schema": "cyclotron-lab-criteria/v1",
   "classifier": {
     "id": "p-apyr-us-relevance",
-    "name": "Papyrus relevance"
+    "name": "Machines on Machines relevance"
   },
   "labels": [
     {
@@ -16,12 +16,12 @@
   ],
   "rubric": "",
   "previous": {
-    "revision": 1,
-    "question": "Should this source become a reference for Papyrus, an academic-first publication on information-systems capabilities? Include substantive research with methods and evidence on AI-assisted publishing and content management, natural-sounding generated writing, knowledge bases, corpus-wide analysis (topic modeling, trends, entity extraction), knowledge graph generation and curation, ontology and taxonomy. Exclude: product announcements, link-only web coverage, and general AI or mathematics stories outside those areas; a paper format or an AI mention alone is not enough."
+    "revision": 2,
+    "question": "Should this source become a reference for Papyrus's newspaper, Information about information systems, which explains how information systems work, change and fail for readers who build or depend on them? Include a source that explains or evidences how a specific information system works, changes or fails, whether an AI or machine-learning system, publishing or newsroom technology, or the history of information systems, and that leaves the reader something specific to check (a documented behavior, a measurable change, a primary source). Prefer primary documentation and inspectable evidence (papers, specifications, source code, official documentation, datasets); research, journalism and history a reader could cite are in scope. It must be traceable, with a stable link or identifier and clear provenance. Exclude: material that restates hype without an inspectable claim, and marketing, listicles and announcements with no technical substance."
   },
-  "question": "Should this source become a reference for Papyrus's newspaper, Information about information systems, which explains how information systems work, change and fail for readers who build or depend on them? Include a source that explains or evidences how a specific information system works, changes or fails, whether an AI or machine-learning system, publishing or newsroom technology, or the history of information systems, and that leaves the reader something specific to check (a documented behavior, a measurable change, a primary source). Prefer primary documentation and inspectable evidence (papers, specifications, source code, official documentation, datasets); research, journalism and history a reader could cite are in scope. It must be traceable, with a stable link or identifier and clear provenance. Exclude: material that restates hype without an inspectable claim, and marketing, listicles and announcements with no technical substance.",
+  "question": "Should this source become a reference for Machines on Machines, a newspaper of information about information systems, which explains how information systems work, change and fail for readers who build or depend on them? Include a source that explains or evidences how a specific information system works, changes or fails, whether an AI or machine-learning system, publishing or newsroom technology, or the history of information systems, and that leaves the reader something specific to check (a documented behavior, a measurable change, a primary source). Prefer primary documentation and inspectable evidence (papers, specifications, source code, official documentation, datasets); research, journalism and history a reader could cite are in scope. It must be traceable, with a stable link or identifier and clear provenance. Exclude: material that restates hype without an inspectable claim, and marketing, listicles and announcements with no technical substance.",
   "doctrine": {
-    "summary": "Approved p.apyr.us publication doctrine (mission 'Information about information systems', evidence policy). It is live in production as records and has no file in the p.apyr.us repo; the scratchpad copy below is the reviewed text.",
+    "summary": "The publication formerly published as Papyrus's newspaper on p.apyr.us is renamed Machines on Machines (Ryan, 2026-11-01), so it is not confused with the Papyrus CMS; its mission ('Information about information systems') and evidence policy are unchanged, and its knowledge base moves to the new Machines on Machines site. The approved doctrine is live in production as records and has no file in the p.apyr.us repo; the scratchpad copy below is the reviewed text.",
     "sources": [
       {
         "kind": "production-records",
@@ -52,6 +52,6 @@
   "approval": {
     "status": "approved",
     "approved_by": "Ryan",
-    "approved_on": "2026-10-22"
+    "approved_on": "2026-11-01"
   }
 }
