@@ -145,3 +145,27 @@ classifiers do not change. `plan` must show the others as `current`, `save` for 
 Shipped's priming items need relabelling under revision 2 before priming the shipped binding (the other bindings'
 labels carry over, and each binding is primed again on the new run). Bindings move to revision "4" together with the
 router's `bindingRevision`.
+
+## r5: Machines on Machines (prepared 2026-11-01, not applied)
+
+Papyrus's newspaper is renamed **Machines on Machines**, so the publication and the Papyrus CMS no longer share a
+name (Ryan, 2026-11-01). The mission is unchanged; the knowledge base is being ported to a new Papyrus site for the
+publication. Only `p-apyr-us-relevance` moves, to revision 3: its name becomes "Machines on Machines relevance" and its
+question names Machines on Machines instead of "Papyrus's newspaper"; the rest of the question is unchanged. The
+classifier id stays `p-apyr-us-relevance`, so its history and priming list (`prime-p-apyr-us`) stay where they are;
+the id is opaque and is not shown to editors.
+
+`plan` must show the other five as `current`, `save` for `p-apyr-us-relevance` at revision 3, and `define
+shared-source-relevance-r5` (2/3/2/1/1/2). Read-only `plan` against the live catalog showed exactly that on
+2026-11-01, with no drift.
+
+**Apply it together with the move to the new site**, so the six bindings and the router move once, not twice (Ryan's
+choice). Until then nothing in the lab changes. When the new site is ready:
+
+- The Machines on Machines binding in `StandingRuns` keeps output `p-apyr-us-relevance` and priming list
+  `prime-p-apyr-us`; its `bindingId` and the router's publication entry (AppSync endpoint, intake grant, corpus) name
+  the new site. Whether the `p-apyr-us` binding is retired or kept for the Papyrus CMS site is decided then.
+- A name change is still a new classifier revision, and votes are keyed `(classifier, revision)`, so the items in
+  `prime-p-apyr-us` are relabelled under revision 3 before the Machines on Machines binding is primed. The other
+  bindings' labels carry over; each is primed again on the new run.
+- Bindings move to revision "5" together with the router's `bindingRevision`, by steps 1 to 7 above.
