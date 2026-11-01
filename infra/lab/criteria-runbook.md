@@ -148,24 +148,32 @@ router's `bindingRevision`.
 
 ## r5: Machines on Machines (prepared 2026-11-01, not applied)
 
-Papyrus's newspaper is renamed **Machines on Machines**, so the publication and the Papyrus CMS no longer share a
-name (Ryan, 2026-11-01). The mission is unchanged; the knowledge base is being ported to a new Papyrus site for the
-publication. Only `p-apyr-us-relevance` moves, to revision 3: its name becomes "Machines on Machines relevance" and its
-question names Machines on Machines instead of "Papyrus's newspaper"; the rest of the question is unchanged. The
-classifier id stays `p-apyr-us-relevance`, so its history and priming list (`prime-p-apyr-us`) stay where they are;
-the id is opaque and is not shown to editors.
+Papyrus's newspaper is renamed **Machines on Machines** and moves from read.p.apyr.us to its own Papyrus site,
+`machines-on-machines` (machines-on-machines.anth.us), so the publication and the Papyrus CMS no longer share a name
+(Ryan, 2026-11-01). The mission is unchanged (Ryan, 2026-11-01).
 
-`plan` must show the other five as `current`, `save` for `p-apyr-us-relevance` at revision 3, and `define
-shared-source-relevance-r5` (2/3/2/1/1/2). Read-only `plan` against the live catalog showed exactly that on
-2026-11-01, with no drift.
+The publication gets a **new classifier, `machines-on-machines-relevance`**, revision 1, named "Machines on Machines
+relevance". Its question is `p-apyr-us-relevance` revision 2 with only the publication's name changed (checked against
+the live catalog). It is a new id, not revision 3 of the old one, because Papyrus defaults a publication's output and
+web-query criteria file to `<site>-relevance`, and the copied site keeps no `p-apyr-us` names. `p-apyr-us-relevance`
+stays in the catalog at revision 2 with its history; it has no criteria file and is in no successor definition.
 
-**Apply it together with the move to the new site**, so the six bindings and the router move once, not twice (Ryan's
-choice). Until then nothing in the lab changes. When the new site is ready:
+`plan` must show the other five as `current`, `save` for `machines-on-machines-relevance` ("no live classifier yet"),
+and `define shared-source-relevance-r5` (anth-us 2, machines-on-machines 1, threat-intelligence 2, data-parade 1,
+pilobol-us 1, shipped 2). Read-only `plan` against the live catalog showed exactly that on 2026-11-01.
 
-- The Machines on Machines binding in `StandingRuns` keeps output `p-apyr-us-relevance` and priming list
-  `prime-p-apyr-us`; its `bindingId` and the router's publication entry (AppSync endpoint, intake grant, corpus) name
-  the new site. Whether the `p-apyr-us` binding is retired or kept for the Papyrus CMS site is decided then.
-- A name change is still a new classifier revision, and votes are keyed `(classifier, revision)`, so the items in
-  `prime-p-apyr-us` are relabelled under revision 3 before the Machines on Machines binding is primed. The other
-  bindings' labels carry over; each is primed again on the new run.
-- Bindings move to revision "5" together with the router's `bindingRevision`, by steps 1 to 7 above.
+**Apply it together with the move to the new site**, so the bindings and the router move once (Ryan's choice). When
+the new site's backend and copied corpus are deployed:
+
+- `StandingRuns`: the `p-apyr-us` binding is replaced by `{"bindingId":"machines-on-machines","outputs":
+  ["machines-on-machines-relevance"],"revision":"5","priming":{"listId":"prime-p-apyr-us"}}`; the others move to "5".
+- The priming list keeps its id `prime-p-apyr-us` (re-importing its items under a new list id is refused). Its items
+  are labelled under `machines-on-machines-relevance` revision 1 before that binding is primed; the other bindings'
+  labels carry over, and each is primed again on the new run.
+- The Papyrus copy (`papyrus ops site copy`, Papyrus #974) keeps Reference ids, rewrites the SemanticRelation
+  classifier field to `machines-on-machines-relevance` and Papyrus's own publicationId, and copies Cyclotron
+  provenance blobs byte-identical (they truly name `p-apyr-us-relevance`, the `p-apyr-us` binding and its revision).
+  It skips the embedded `state.tar.gz`: the new site uses the hosted lab.
+- The router's `CONFIG#router` gains the `machines-on-machines` publication (AppSync endpoint, intake grant, corpus)
+  and drops `p-apyr-us`; `bindingRevision` becomes "5". p.apyr.us stays the Papyrus marketing site with no binding.
+- Then steps 1 to 7 above.

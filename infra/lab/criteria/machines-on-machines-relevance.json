@@ -1,7 +1,7 @@
 {
   "schema": "cyclotron-lab-criteria/v1",
   "classifier": {
-    "id": "p-apyr-us-relevance",
+    "id": "machines-on-machines-relevance",
     "name": "Machines on Machines relevance"
   },
   "labels": [
@@ -15,13 +15,10 @@
     }
   ],
   "rubric": "",
-  "previous": {
-    "revision": 2,
-    "question": "Should this source become a reference for Papyrus's newspaper, Information about information systems, which explains how information systems work, change and fail for readers who build or depend on them? Include a source that explains or evidences how a specific information system works, changes or fails, whether an AI or machine-learning system, publishing or newsroom technology, or the history of information systems, and that leaves the reader something specific to check (a documented behavior, a measurable change, a primary source). Prefer primary documentation and inspectable evidence (papers, specifications, source code, official documentation, datasets); research, journalism and history a reader could cite are in scope. It must be traceable, with a stable link or identifier and clear provenance. Exclude: material that restates hype without an inspectable claim, and marketing, listicles and announcements with no technical substance."
-  },
+  "previous": null,
   "question": "Should this source become a reference for Machines on Machines, a newspaper of information about information systems, which explains how information systems work, change and fail for readers who build or depend on them? Include a source that explains or evidences how a specific information system works, changes or fails, whether an AI or machine-learning system, publishing or newsroom technology, or the history of information systems, and that leaves the reader something specific to check (a documented behavior, a measurable change, a primary source). Prefer primary documentation and inspectable evidence (papers, specifications, source code, official documentation, datasets); research, journalism and history a reader could cite are in scope. It must be traceable, with a stable link or identifier and clear provenance. Exclude: material that restates hype without an inspectable claim, and marketing, listicles and announcements with no technical substance.",
   "doctrine": {
-    "summary": "The publication formerly published as Papyrus's newspaper on p.apyr.us is renamed Machines on Machines (Ryan, 2026-11-01), so it is not confused with the Papyrus CMS; its mission ('Information about information systems') and evidence policy are unchanged, and its knowledge base moves to the new Machines on Machines site. The approved doctrine is live in production as records and has no file in the p.apyr.us repo; the scratchpad copy below is the reviewed text.",
+    "summary": "The publication formerly published as Papyrus's newspaper on read.p.apyr.us is renamed Machines on Machines (Ryan, 2026-11-01) and moves to its own site, machines-on-machines.anth.us, so it is not confused with the Papyrus CMS. Its mission ('Information about information systems') and evidence policy are unchanged, and this question is p-apyr-us-relevance revision 2 with only the publication's name changed. It is a new classifier, not revision 3 of p-apyr-us-relevance, so its id matches the site id Papyrus defaults to (<site>-relevance). The approved doctrine is live in production as records; the scratchpad copy below is the reviewed text.",
     "sources": [
       {
         "kind": "production-records",

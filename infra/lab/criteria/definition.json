@@ -6,7 +6,7 @@
   "draft_description": "Draft. One shared screen of each discovered source against Anth.us, Machines on Machines, Threat Intelligence, Data Parade, Pilobolus and Shipped. Criteria are drafts awaiting editor approval.",
   "order": [
     "anth-us-relevance",
-    "p-apyr-us-relevance",
+    "machines-on-machines-relevance",
     "threat-intelligence-relevance",
     "data-parade-relevance",
     "pilobol-us-relevance",
