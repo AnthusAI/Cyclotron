@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-4ebc51e7-e2b8-44c0-b53c-3f2342394532",
+  "title": "Route Machines on Machines in the shared Cyclotron (r5 cutover)",
+  "description": "Machines on Machines (AnthusAI/Machines-on-Machines) replaces read.p.apyr.us as its own Papyrus site; the p-apyr-us corpus and knowledge base move there, and read.p.apyr.us redirects. Papyrus implementation builds the site; Cyclotron's part is the scoring and routing.\n\nPrepared: #185 (develop) renames p-apyr-us-relevance to 'Machines on Machines relevance' at revision 3 and defines shared-source-relevance-r5; infra/lab/criteria-runbook.md section r5. Ryan chose to apply it in the same cutover as the new site, so the six bindings and the router move once.\n\nOpen before applying:\n- The handoff (docs/handoff.md) says the doctrine will be rewritten for a broader AI/ML mission. #185 kept the old mission (Ryan, 2026-11-01). If the new doctrine is approved before the cutover, rewrite the revision 3 question from it and get Ryan's approval of the text.\n- Binding id: the site id / corpus key (suggested machines-on-machines). The binding keeps output p-apyr-us-relevance and priming list prime-p-apyr-us.\n- Whether the p-apyr-us binding is retired (p.apyr.us stays the Papyrus marketing site).\n\nAcceptance:\n- plan shows save only for p-apyr-us-relevance and define r5, no drift; Ryan approves each write step.\n- Successor run bootstrapped; StandingRuns change set reviewed and executed; bindings at revision 5 with the new binding id.\n- prime-p-apyr-us relabelled under revision 3 and primed; every other binding primed on the new run.\n- Papyrus router CONFIG#router points at the new run and binding revision 5 with the new publication; a dry-run sweep, then live; first receipts show bindingRevision 5 and the Machines on Machines classifier.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-11-01T16:24:26.396726Z",
+  "updated_at": "2026-11-01T16:24:28.749303Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "claude-opus-5-5",
+    "name": "Cyclotron session"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
