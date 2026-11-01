@@ -24,10 +24,17 @@
       "text": "Doctrine settled (Ryan, relayed by the Papyrus session, 2026-11-01): launch on the current mission; the revision 3 question in #185 ships as prepared (rename only).",
       "created_at": "2026-11-01T16:28:37.647824Z",
       "comment_type": "default"
+    },
+    {
+      "id": "a9f252af-e373-4b59-b87c-99f8196e3759",
+      "author": "home",
+      "text": "Classifier id is now machines-on-machines-relevance revision 1 (#186; p-apyr-us-relevance stays in the catalog unused). New site data API (Papyrus, 2026-11-01): AppSync lxyzo2l2pjftjdha7egy73wndu, endpoint https://vuagbw3fmvalta762m4zsacxce.appsync-api.us-east-1.amazonaws.com/graphql. Corpus id pending the data copy.",
+      "created_at": "2026-11-01T20:18:01.350935Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-11-01T16:24:26.396726Z",
-  "updated_at": "2026-11-01T16:28:37.648515Z",
+  "updated_at": "2026-11-01T20:18:01.351142Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
