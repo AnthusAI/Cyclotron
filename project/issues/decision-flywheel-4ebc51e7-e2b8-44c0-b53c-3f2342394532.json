@@ -10,9 +10,17 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "7c34e442-be9b-4da1-8ff8-04501a6f6881",
+      "author": "home",
+      "text": "Decided by Ryan (relayed by the Papyrus session, 2026-11-01): binding id and corpus key machines-on-machines; domain machines-on-machines.anth.us, console newsroom.machines-on-machines.anth.us; a new backend with a copy of the read.p.apyr.us data (papyrus ops site copy keeps Reference ids, so p-apyr-us training ids map one to one); sections unchanged. Doctrine still open. Waiting on Papyrus for the AppSync API id, endpoint and corpus id.",
+      "created_at": "2026-11-01T16:27:01.254313Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-11-01T16:24:26.396726Z",
-  "updated_at": "2026-11-01T16:24:28.749303Z",
+  "updated_at": "2026-11-01T16:27:01.254868Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
