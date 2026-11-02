@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .application_runtime import RuntimeCommand
+from .batch_storage import BatchInProgress
 from .command_refusal import CommandRefused
 from .decision_kinds import WRITTEN, is_decision
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
@@ -465,6 +466,15 @@ class PublicationCommandRuntime:
                             {"bindingRevision": binding.revision, "item": item},
                             execution_guard=fresh,
                         )
+                except BatchInProgress:
+                    # Raised while reserving the shared request, before any dispatch: another attempt at this exact
+                    # decision never finished, and only an operator can say what became of it. A terminal receipt
+                    # keeps the run free; leaving the job running would block every other item.
+                    raise CommandRefused(
+                        "source_refused",
+                        "an earlier attempt at this exact decision never finished and needs operator reconciliation; "
+                        "no provider call was made",
+                    ) from None
                 except RuntimeError as exc:
                     if "explicit retry required" in str(exc):
                         # Raised while reserving the shared request, before any dispatch: an earlier attempt at

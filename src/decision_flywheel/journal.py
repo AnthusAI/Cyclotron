@@ -206,6 +206,12 @@ class CanonicalJournal:
         etag = self._put(self.head_key, head)
         return JournalRecord(self.namespace, anchor, 1, commit_id, etag, reference, decode(encode(value)))
 
+    def read_if_created(self):
+        """The head's record, or None for a namespace nothing has created yet. Any other failure refuses."""
+        if self._get(self.head_key, missing=True, creation_probe=self.create_only_initialization) is None:
+            return None
+        return self.read()
+
     def read(self, known=None):
         """Read the head, and the state it names unless ``known`` is that very state.
 

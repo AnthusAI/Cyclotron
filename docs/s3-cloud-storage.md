@@ -282,7 +282,8 @@ ceiling check and the "dispatch claim" still change atomically in the small ledg
 call.
 
 **Layout.** One lake per ledger, `<account>/<workspace>/records/shared-batches/replies-<ledger>/<seq>.json`
-(`S3BatchStorage(..., replies=lake)`, wired in `S3WorkspaceStores` through `reply_lake_for`). A record holds
+(`S3BatchStorage(..., replies=lake)`, wired in `S3WorkspaceStores` through `reply_lake_for`). A ledger whose head
+already cites the lake its scope once shared stays on that lake, since its rows name sequences there. A record holds
 `{fingerprint, owner, generation, payload}` with the reply text byte for byte. The ledger row keeps
 `{seq, sha256, length}` in the payload slot instead of the text; every read checks the record against that
 note and that the ledger's coverage names the sequence (a missing or altered record is an error, never a

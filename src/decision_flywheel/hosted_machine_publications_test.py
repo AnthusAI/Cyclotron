@@ -14,6 +14,7 @@ from .hosted_publications import PublicationTarget
 from .hosted_publications_test import ITEM, PUBS, setup
 from .machine_access import MachineActor, MachineDenied
 from .provider_credentials import ProviderKeyUnavailable
+from .s3_batch_storage import S3BatchStorage
 
 ROLE = "arn:aws:iam::222222222222:role/synthetic-invoker"
 CALLER = "arn:aws:sts::222222222222:assumed-role/synthetic-invoker/papyrus-monitor"
@@ -386,6 +387,44 @@ def test_standing_targets_need_no_arbitrary_quota_configuration():
 
 def test_refusals_are_public_codes_only():
     assert CommandRefused("x", "y").code == "x"
+
+
+def test_an_item_with_an_unfinished_shared_request_is_refused_with_a_receipt_instead_of_wedging_the_run(identity, monkeypatch):
+    from .batch_storage import BatchInProgress
+
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    run_id = targets[0].run_id
+    calls = {"made": 0}
+    real = model.classify_many
+
+    async def counted(*args, **kwargs):
+        calls["made"] += 1
+        return await real(*args, **kwargs)
+
+    model.classify_many = counted
+    state = {"unfinished": True}
+    original = S3BatchStorage.reserve
+
+    def reserve(self, *args, **kwargs):
+        if state["unfinished"]:
+            raise BatchInProgress("shared request in progress; explicit reconciliation required")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(S3BatchStorage, "reserve", reserve)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 409 and receipt.json()["code"] == "source_refused"
+            assert "reconciliation" in receipt.json()["message"]
+            assert calls["made"] == 0
+            assert not any(j["status"] == "running" for j in store.jobs(run_id))
+            # The run is free: another item is decided normally.
+            state["unfinished"] = False
+            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
+            assert receipt.status_code == 200
+
+    asyncio.run(go())
 
 
 def test_an_item_whose_earlier_attempt_failed_is_refused_with_a_receipt_instead_of_wedging_the_run(identity, monkeypatch):

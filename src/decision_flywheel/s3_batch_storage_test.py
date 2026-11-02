@@ -1020,3 +1020,63 @@ def test_one_guarded_decision_reads_the_ledger_head_a_fixed_few_times_whatever_i
         assert model.calls == 1
     # One read for the call's lookups, then the reservation and the settlement each read the live head.
     assert spent == {3: 3, 6: 3}
+
+
+def test_ledgers_in_one_scope_get_their_own_reply_lakes_so_a_first_settle_walks_past_nothing():
+    from .s3_batch_storage import S3BatchStorage, reply_lake_for
+
+    client = ConditionalS3()
+    settled = []
+    for name in ("run-one", "run-two"):
+        j = journal(client, name=name)
+        lake = reply_lake_for(j, "ledger")
+        ledger = S3BatchStorage(j, replies=lake)
+        ledger.initialize()
+        owner = str(uuid4())
+        ledger.reserve("a" * 64, None, owner, claim=True)
+        ledger.settle("a" * 64, owner, "complete", json.dumps({"from": name}))
+        settled.append((lake.name, j.read().value["records"][lake.name]))
+        assert ledger.get("a" * 64).payload == json.dumps({"from": name})
+    assert settled == [
+        ("shared-batches/replies-run-one", {"last": 1, "skipped": []}),
+        ("shared-batches/replies-run-two", {"last": 1, "skipped": []}),
+    ]
+
+
+def test_a_ledger_that_cites_the_shared_reply_lake_keeps_reading_and_writing_it():
+    from .record_lake import S3RecordLake
+    from .s3_batch_storage import S3BatchStorage, reply_lake_for
+
+    client = ConditionalS3()
+    j = journal(client, name="older-run")
+    shared = S3RecordLake(j.payloads, "shared-batches", "replies-ledger")
+    ledger = S3BatchStorage(j, replies=shared)
+    ledger.initialize()
+    owner = str(uuid4())
+    ledger.reserve("a" * 64, None, owner, claim=True)
+    ledger.settle("a" * 64, owner, "complete", json.dumps({"from": "older"}))
+
+    reopened = journal(client, name="older-run")
+    lake = reply_lake_for(reopened, "ledger")
+    assert lake.name == shared.name
+    assert S3BatchStorage(reopened, replies=lake).get("a" * 64).payload == json.dumps({"from": "older"})
+
+
+def test_choosing_a_reply_lake_refuses_when_the_ledger_head_cannot_be_read():
+    from .journal import JournalUnavailable
+    from .s3_batch_storage import S3BatchStorage, reply_lake_for
+
+    client = ConditionalS3()
+    j = journal(client, name="run-one")
+    S3BatchStorage(j, replies=reply_lake_for(j, "ledger")).initialize()
+    reopened = journal(client, name="run-one")
+    real = client.get_object
+
+    def failing(**kwargs):
+        if kwargs["Key"] == reopened.head_key:
+            raise S3Error("SlowDown")
+        return real(**kwargs)
+
+    client.get_object = failing
+    with pytest.raises(JournalUnavailable):
+        reply_lake_for(reopened, "ledger")
