@@ -59,10 +59,17 @@
       "text": "Contention fix deployed. Three web-anth-us jobs on r5 (986eeb4f, 423e6fed, 80c7faca) had been refused with 'console contention limit reached': eight lost catalog writes in a row during item registration became a permanent source_refused. PR 187 removes the retry cap from the console, batch, runtime and evaluation stores and adds a growing random wait. Released to main at 52262f3. Package sha256 16811cd6b98ab22fa651f245c95ca0ba4dd4fff71441c60ef0867a83cb83465c deployed with change set contention-retry-52262f3 at 17:22 UTC on 2026-11-02 with Ryan's approval. Rollback package: 12ad7b9f. Snapshot refreshed in PR 188. Papyrus reopened the 3 routes with attempt 1 and they completed as 798df82c, 8ac5532e and 6f89a726. State at 19:04 UTC: 1119 completed, the same 5 failed, DLQ empty. Still open: CommandReconciliationRequired log lines (no visible harm, cause unconfirmed), the shared replies lake, BatchInProgress wedging the queue, Lambda timeouts leaving claims held, serial whole-run reads in bootstrap and curation accept, create_run head bloat. Votes and signed-in newsrooms on r5 are unverified from this side.",
       "created_at": "2026-11-02T19:07:09.637109Z",
       "comment_type": "default"
+    },
+    {
+      "id": "739b5800-c1ac-40f9-bcbd-bbb598031b6b",
+      "author": "home",
+      "text": "Second fix deployed. PR 189 gives each new ledger its own reply lake (ledgers already citing shared-batches/replies-ledger, including r5 and r4, stay on it) and ends BatchInProgress jobs with a source_refused receipt instead of leaving them running. Released to main at 71af1fb. Package sha256 ace21229b5d0953eacaba7412ac3b5b2d78e7494d5672d08e900203edf802de1 deployed with change set replies-lake-71af1fb at 20:51 UTC on 2026-11-02 with Ryan's approval. Rollback package: 16811cd6. Snapshot refreshed in PR 190. 15-minute watch clean; at 21:10 UTC r5 had 1389 completed, the same 5 failed, DLQ empty, no worker or BFF errors logged since the deploy. The new lake path has specs and a read-only production check of which lake is chosen, but no real new run has used it yet. Still open: Lambda timeouts leaving claims and engine owners held, serial whole-run reads in bootstrap and curation accept, create_run head bloat, no operator path for creating a run, cli-login double-submit, r5's shared-lake skipped list growing until the run is replaced. Votes and signed-in newsrooms on r5 are unverified from this side.",
+      "created_at": "2026-11-02T21:13:42.355616Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-11-01T16:24:26.396726Z",
-  "updated_at": "2026-11-02T19:07:09.637633Z",
+  "updated_at": "2026-11-02T21:13:42.356180Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
