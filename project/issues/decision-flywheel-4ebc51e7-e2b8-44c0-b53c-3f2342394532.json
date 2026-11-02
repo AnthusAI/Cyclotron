@@ -1,0 +1,71 @@
+{
+  "id": "decision-flywheel-4ebc51e7-e2b8-44c0-b53c-3f2342394532",
+  "title": "Route Machines on Machines in the shared Cyclotron (r5 cutover)",
+  "description": "Machines on Machines (AnthusAI/Machines-on-Machines) replaces read.p.apyr.us as its own Papyrus site; the p-apyr-us corpus and knowledge base move there, and read.p.apyr.us redirects. Papyrus implementation builds the site; Cyclotron's part is the scoring and routing.\n\nPrepared: #185 (develop) renames p-apyr-us-relevance to 'Machines on Machines relevance' at revision 3 and defines shared-source-relevance-r5; infra/lab/criteria-runbook.md section r5. Ryan chose to apply it in the same cutover as the new site, so the six bindings and the router move once.\n\nOpen before applying:\n- The handoff (docs/handoff.md) says the doctrine will be rewritten for a broader AI/ML mission. #185 kept the old mission (Ryan, 2026-11-01). If the new doctrine is approved before the cutover, rewrite the revision 3 question from it and get Ryan's approval of the text.\n- Binding id: the site id / corpus key (suggested machines-on-machines). The binding keeps output p-apyr-us-relevance and priming list prime-p-apyr-us.\n- Whether the p-apyr-us binding is retired (p.apyr.us stays the Papyrus marketing site).\n\nAcceptance:\n- plan shows save only for p-apyr-us-relevance and define r5, no drift; Ryan approves each write step.\n- Successor run bootstrapped; StandingRuns change set reviewed and executed; bindings at revision 5 with the new binding id.\n- prime-p-apyr-us relabelled under revision 3 and primed; every other binding primed on the new run.\n- Papyrus router CONFIG#router points at the new run and binding revision 5 with the new publication; a dry-run sweep, then live; first receipts show bindingRevision 5 and the Machines on Machines classifier.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7c34e442-be9b-4da1-8ff8-04501a6f6881",
+      "author": "home",
+      "text": "Decided by Ryan (relayed by the Papyrus session, 2026-11-01): binding id and corpus key machines-on-machines; domain machines-on-machines.anth.us, console newsroom.machines-on-machines.anth.us; a new backend with a copy of the read.p.apyr.us data (papyrus ops site copy keeps Reference ids, so p-apyr-us training ids map one to one); sections unchanged. Doctrine still open. Waiting on Papyrus for the AppSync API id, endpoint and corpus id.",
+      "created_at": "2026-11-01T16:27:01.254313Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "ca300937-1f89-4bf0-9fb5-f1902c3c2a4b",
+      "author": "home",
+      "text": "Doctrine settled (Ryan, relayed by the Papyrus session, 2026-11-01): launch on the current mission; the revision 3 question in #185 ships as prepared (rename only).",
+      "created_at": "2026-11-01T16:28:37.647824Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "a9f252af-e373-4b59-b87c-99f8196e3759",
+      "author": "home",
+      "text": "Classifier id is now machines-on-machines-relevance revision 1 (#186; p-apyr-us-relevance stays in the catalog unused). New site data API (Papyrus, 2026-11-01): AppSync lxyzo2l2pjftjdha7egy73wndu, endpoint https://vuagbw3fmvalta762m4zsacxce.appsync-api.us-east-1.amazonaws.com/graphql. Corpus id pending the data copy.",
+      "created_at": "2026-11-01T20:18:01.350935Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "5a4a92df-b7b7-41b3-b78f-4913c1cfebfa",
+      "author": "home",
+      "text": "r5 live config done 2026-11-02, routers still off pending Papyrus step 6. Run 405d7b6c-a41f-48a9-ae91-88a538b1e2b6 (shared-source-relevance-r5 rev 1, 6,748 frozen items, createdBy Ryan). Change set executed, only BFF and Worker updated: arn:aws:cloudformation:us-east-1:682849160744:changeSet/standing-runs-r5-machines-on-machines/3ab41ad0-fd01-40f1-9502-7ec070776450. Criteria commit 8613a21. Labels: 11 of 11 copied from p-apyr-us-relevance rev 2 to machines-on-machines-relevance rev 1. Primed: machines-on-machines 11, anth-us 14, threat-intelligence 12. Off-runbook, with Ryan's OK: the bootstrap and prime endpoints time out at the 28s BFF limit on this run size, so freeze_run and the curation priming code ran from a Mac under his verified CLI session; for priming, the firewall's id set came from the frozen item_revisions instead of store.items. Follow-ups: serial item reads in bootstrap and in priming_snapshot; human decide also reads the whole run; create_run with a large list leaves its rows in the head until the next commit.",
+      "created_at": "2026-11-02T11:29:10.036481Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "d40c967a-19de-4877-bc70-5889db86343b",
+      "author": "home",
+      "text": "r5 repair 2026-11-02, approved by Ryan in this session. Cause: all ledgers share one replies lake (replies-ledger, about 8,150 records); a new ledger's first settle steps past each one at about 110 ms and hit the 900s worker limit. Job ae9d38b9 (hn-50312408) timed out, leaving its running claim and 7 engine records owned by the dead invocation (7cfb79aa). Repair from a Mac: released the 7 owners, set the new ledger's coverage to last 8154 with 1..8153 skipped (seq 8154 is a foreign record it vouches for but never cites), reconciled ae9d38b9 as failed with command_recovery, woke the queue. Prior heads saved locally. Result: the other 9 queued jobs completed in about 50s. Open: the provider call for hn-50312408 may have been paid and needs an operator retry; the shared lake is not fixed in code, so any next new run repeats this.",
+      "created_at": "2026-11-02T12:37:06.697857Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "d364cf6d-8106-4f33-86ab-9b4cb5f73c07",
+      "author": "home",
+      "text": "Second repair 2026-11-02, approved by Ryan in this session. The router re-posted hn-50312408 as job ab42589a; it raised BatchInProgress on the orphaned, claimed shared request, which leaves a job running with its claim held and blocks the queue. Closed that request as interrupted/abandoned (fingerprint f94d187f), knowingly allowing one repeat model call despite the guard against repaying claimed requests, then reconciled ab42589a as failed and woke the queue. The 3 jobs behind it completed. Code fix list: per-ledger replies lake; BatchInProgress must end a job terminally; a worker timeout must not leave a claimed request needing a hand edit.",
+      "created_at": "2026-11-02T12:56:40.845321Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-11-01T16:24:26.396726Z",
+  "updated_at": "2026-11-02T12:56:40.845764Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "claude-opus-5-5",
+    "name": "Cyclotron session"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}
