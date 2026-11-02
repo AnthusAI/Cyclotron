@@ -76,6 +76,7 @@ from .record_lake import (
     coverage_in,
 )
 from .s3_transient import cause_name, error_code, read_with_one_retry
+from .storage_errors import conflict_attempts
 from .storage_payloads import FilePayloads, S3Payloads
 
 log = logging.getLogger(__name__)
@@ -479,7 +480,7 @@ class _View:
 
 
 class S3BatchStorage:
-    def __init__(self, journal, *, max_conflicts=8, replies=None, records=None, attempts=None):
+    def __init__(self, journal, *, replies=None, records=None, attempts=None):
         if not isinstance(journal, Journal):
             raise ValueError("canonical journal required")
         scope = journal.boundary[0]
@@ -491,11 +492,8 @@ class S3BatchStorage:
             raise ValueError("keyed batch records in the journal's scope required")
         if not isinstance(attempts, RecordLake) or attempts.scope != scope:
             raise ValueError("an attempt record lake in the journal's scope required")
-        if type(max_conflicts) is not int or max_conflicts < 1:
-            raise ValueError("a positive contention retry count required")
         self.replies, self.records, self.attempts = replies, records, attempts
         self.journal = journal
-        self.max_conflicts = max_conflicts
         self._view = None
         # Reads may reuse the head this handle last read or committed only while it is pinned (pin_reads) and
         # the view was taken since the latest pin. Writes always start from a fresh head read.
@@ -802,7 +800,7 @@ class S3BatchStorage:
         propagates; a successful dispatch claim is NEVER inferred from rereading after an uncertain PUT.
         """
         self._written = {}
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             view = self._state()
             result, change = plan(view)
             if change is None:
@@ -822,7 +820,6 @@ class S3BatchStorage:
                 raise BatchUncertain("S3 record write uncertain; nothing reserved, reconcile before dispatch") from None
             self._committed(view, committed)
             return result, True
-        raise BatchConflict("S3 run contention limit reached; retry operation with its same owner")
 
     @staticmethod
     def _replace(view, gen):
@@ -999,7 +996,7 @@ class S3BatchStorage:
         snapshot = deepcopy(snapshot)
         validate_snapshot(snapshot)
         restored = view_of_snapshot(snapshot)
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             view = self._state()
             if view.value["attempts"] or view.value["held"]:
                 raise BatchConflict("restore requires empty destination")
@@ -1011,7 +1008,6 @@ class S3BatchStorage:
                 continue
             except (JournalUncertain, RecordUncertain):
                 raise BatchUncertain("S3 transaction uncertain; reconcile before provider dispatch") from None
-        raise BatchConflict("S3 run contention limit reached; retry")
 
     # --- the one-time conversion of v1 ledgers whose replies are still embedded (record_lake_conversion) --
 
@@ -1057,7 +1053,7 @@ class S3BatchStorage:
         """
         if self.replies is None:
             raise ValueError("a reply record lake is required to convert embedded replies")
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             record = self.journal.read()
             self._check(record.value)
             slots = self._embedded_slots(record.value)
@@ -1084,7 +1080,6 @@ class S3BatchStorage:
             except JournalUncertain:
                 raise BatchUncertain("S3 transaction uncertain; reconcile before provider dispatch") from None
             return RepliesConverted(originals, refs[self.replies.name], record, committed)
-        raise BatchConflict("S3 run contention limit reached; retry")
 
     def close(self):
         pass  # Injected SDK clients belong to the host.
