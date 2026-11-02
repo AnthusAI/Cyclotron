@@ -2441,6 +2441,13 @@ class S3ConsoleStorage:
         self._run(value, run_id)
         return [self._payload(r["payload"]) for r in self._run_items(value, run_id)]
 
+    def run_item(self, run_id, item_id):
+        """One item of the run by id, or None, reading only that item's records."""
+        value = self._run_value(run_id)
+        self._run(value, run_id)
+        entry = self._item_entry(value, run_id, item_id)
+        return None if entry is None else self._payload(entry["row"]["payload"])
+
     def register_standing_item(self, run_id, item_id, values):
         """Atomically register a never-before-seen source (or a new immutable revision) for a standing run.
 

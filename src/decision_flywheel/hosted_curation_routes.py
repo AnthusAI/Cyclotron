@@ -38,6 +38,7 @@ from .decision_kinds import WRITTEN
 from .hosted_publications import (
     BearerActor,
     PublicationCommandRuntime,
+    RunItemIds,
     envelope,
     priming_snapshot,
     status_snapshot,
@@ -419,8 +420,9 @@ async def accept(s, payload):
     previewed = s.public_draft(await s.run(service.get, s.prefix + payload["identifier"]))
     # The evaluation firewall: an example may never also be an item this publication decides.
     store = request.runtime.console(request.account)
-    operational = {row["id"] for row in await s.run(store.items, request.target.run_id)}
-    if previewed["status"] != "accepted" and operational & {row["item"]["id"] for row in previewed["rows"]}:
+    operational = RunItemIds(store, request.target.run_id)
+    examples = {row["item"]["id"] for row in previewed["rows"]}
+    if previewed["status"] != "accepted" and await s.run(lambda: any(item_id in operational for item_id in examples)):
         raise CurationError(
             409, "firewall_overlap", "An imported example is also an item this publication decides; nothing was accepted."
         )
