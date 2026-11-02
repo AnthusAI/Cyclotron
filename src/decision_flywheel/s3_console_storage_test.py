@@ -1022,3 +1022,50 @@ def test_an_observer_sees_every_label_an_item_revision_was_given_with_retraction
     assert fresh.item_labels("priming", "p0", 1) == []  # the current votes: the newest was withdrawn
     assert fresh.run_event_by_source(run_id, "source-x")["payload"] == {"kind": "step", "n": 1}
     assert fresh.run_event_by_source(run_id, "source-y") is None
+
+
+def test_standing_registration_outlasts_any_number_of_lost_writes_instead_of_refusing(monkeypatch):
+    from .storage_errors import StorageConflict
+
+    monkeypatch.setattr("decision_flywheel.storage_errors.time.sleep", lambda seconds: None)
+    s = store()
+    s.save_item_list("live", "Live")
+    run_id = s.create_run("Live", "live", {"item_list_id": "live"})["id"]
+    s.command(run_id, "decide-once", "prepare", {})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner)
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    real, lost = s.journal.commit, []
+
+    def losing(expected, value):
+        if len(lost) < 50:
+            lost.append(1)
+            raise StorageConflict("a competing writer moved the head")
+        return real(expected, value)
+
+    monkeypatch.setattr(s.journal, "commit", losing)
+    registered = view.register_standing_item(run_id, "fresh", {"t": 1})
+    assert len(lost) == 50 and registered["id"] == "fresh" and registered["revision"] == 1
+
+
+def test_a_lost_claim_still_stops_a_retrying_write(monkeypatch):
+    from .storage_errors import StorageConflict
+
+    monkeypatch.setattr("decision_flywheel.storage_errors.time.sleep", lambda seconds: None)
+    s = store()
+    s.save_item_list("live", "Live")
+    run_id = s.create_run("Live", "live", {"item_list_id": "live"})["id"]
+    s.command(run_id, "decide-once", "prepare", {})
+    owner = str(uuid4())
+    claimed = s.claim_command(owner=owner)
+    view = s.for_command(claimed["id"], owner, claimed["claim_fence"])
+    real = s.journal.commit
+
+    def lose_then_finish(expected, value):
+        monkeypatch.setattr(s.journal, "commit", real)
+        s.for_command(claimed["id"], owner, claimed["claim_fence"]).finish_command(claimed["id"], "failed", {})
+        raise StorageConflict("a competing writer moved the head")
+
+    monkeypatch.setattr(s.journal, "commit", lose_then_finish)
+    with pytest.raises(ValueError, match="stale command execution boundary"):
+        view.register_standing_item(run_id, "fresh", {"t": 1})

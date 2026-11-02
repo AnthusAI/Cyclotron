@@ -46,7 +46,7 @@ keyring, start the memory-only agent first:
 python -m cli_login.stores.agent serve --namespace cyclotron-lab --background
 ```
 
-A session renews for 30 days, and then needs a new approval. One more condition: you must have signed in to the
+A session renews for 7 days, and then needs a new approval (Ryan's choice, 2026-10-31; the same window as the Papyrus sites' clients). One more condition: you must have signed in to the
 lab in a browser once, because Prospectus enrolls a person only through that first browser sign-in.
 
 How the lab checks a CLI:
@@ -132,7 +132,7 @@ These facts are taken from the code and from the live client settings (read on 2
   `ProspectusMembersCyclotronConsoleBrowser`). A change to the client is a Prospectus change and a Prospectus
   deploy.
 - **The client's settings.** It is a public client: no secret, the authorization-code flow with PKCE, and
-  `ALLOW_REFRESH_TOKEN_AUTH`. Access and ID tokens last 60 minutes and refresh tokens 30 days. Token
+  `ALLOW_REFRESH_TOKEN_AUTH`. Access and ID tokens last 60 minutes and refresh tokens 7 days (30 until 2026-10-31; tokens issued before then keep their 30 days). Token
   revocation is enabled, and refresh-token rotation is off. Its only callback is
   `https://lab.cyclotron.anth.us/auth/callback`.
 - **How a browser signs in.** The lab's BFF does the whole sign-in on the server (`account_routes.py`):
@@ -151,7 +151,7 @@ These facts are taken from the code and from the live client settings (read on 2
 Two things follow from these facts:
 
 - **The client already allows a renewable CLI.** A CLI that holds this client's own Cognito tokens can renew
-  for 30 days. The only change the client needs is a second callback URL.
+  for 7 days. The only change the client needs is a second callback URL.
 - **The lab can accept the CLI's tokens.** It can check a CLI's access token exactly as it checks a browser
   session's: verify the JWT, look the person up at Prospectus, then check the account grant. What it lacks is
   a way to receive a bearer token instead of a cookie.
@@ -276,7 +276,7 @@ How credentials are kept apart and protected:
 - **Renewal.** The CLI refreshes with the refresh token shortly before the access token expires, holding the
   key's lock. Rotation is off on this client today. The lock still serializes concurrent refreshes, so turning
   rotation on later cannot lose the newest refresh token.
-- **The 30-day limit.** Cognito does not extend a refresh token's 30 days when it is used. After 30 days the
+- **The 7-day limit.** Cognito does not extend a refresh token's 7 days when it is used. After 7 days the
   person approves again.
 - **No replays.** A mutation whose outcome is uncertain is never replayed. Lab mutations from the CLI carry a
   request id, and a retry reuses that id.

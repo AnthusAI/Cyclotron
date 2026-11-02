@@ -11,8 +11,8 @@ FileLease/local store, or silently fill a missing repository with native storage
 conditionally advances a small canonical S3 head. Every transaction retains its
 parent reference, revision, unique commit, namespace and immutable initialization
 anchor. There is no DynamoDB read on an authoritative path. There is no byte,
-record or commit budget; only the contention retry count is host configuration,
-and evidence is never pruned or truncated. This is a per-run/per-classifier design,
+record or commit budget, a write that loses to another writer retries until it
+lands, and evidence is never pruned or truncated. This is a per-run/per-classifier design,
 not an account-wide document or a SQL-emulation service.
 
 `S3BatchStorage` implements the complete shared-request domain: one CAS reserves

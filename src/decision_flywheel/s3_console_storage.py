@@ -44,7 +44,7 @@ from .record_lake import (
     with_coverage,
 )
 from .run_storage import _UNSET, newest_through_finished
-from .storage_errors import CommandNotReady, StorageConflict
+from .storage_errors import CommandNotReady, StorageConflict, conflict_attempts
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
 from .value_records import externalized, resolved, same_values
 
@@ -419,7 +419,6 @@ class S3ConsoleStorage:
         self,
         journal,
         *,
-        max_conflicts=8,
         results=None,
         snapshot_cache=None,
         reuse_reads_within_request=False,
@@ -427,10 +426,9 @@ class S3ConsoleStorage:
     ):
         if results is not None and (results.scope != getattr(journal, "boundary", (None,))[0] or results.name != RESULTS_LAKE):
             raise ValueError("job result lake must match the catalog scope and be console/job-results")
-        if not isinstance(journal, Journal) or type(max_conflicts) is not int or max_conflicts < 1:
-            raise ValueError("scoped canonical console journal and a positive conflict retry count required")
+        if not isinstance(journal, Journal):
+            raise ValueError("scoped canonical console journal required")
         self.journal = journal
-        self.max_conflicts = max_conflicts
         # Without a lake, results stay embedded exactly as before. With one, new results go to the lake
         # and embedded ones keep reading.
         self.results = results
@@ -1101,7 +1099,7 @@ class S3ConsoleStorage:
     def _mutate(self, fn):
         if self._tx.get() is not None:
             return fn(self._tx.get())
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             record = self._record()
             self._check_claim(record.value)
             value = deepcopy(record.value)
@@ -1115,7 +1113,6 @@ class S3ConsoleStorage:
             except StorageConflict:
                 continue
             return result
-        raise ValueError("console contention limit reached; retry with same operation identity")
 
     @contextmanager
     def transaction(self):
@@ -2232,7 +2229,7 @@ class S3ConsoleStorage:
             value[RECORDS_KEY] = with_coverage(value, self.results, coverage)[RECORDS_KEY]
             settle(value, reference({RESULTS_LAKE: refs}))
             return
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             current = self._record()
             self._check_claim(current.value)
             job = check(current.value)
@@ -2256,7 +2253,6 @@ class S3ConsoleStorage:
                 continue
             self._committed(replace(committed, value=whole))
             return
-        raise ValueError("console contention limit reached; retry with same operation identity")
 
     TERMINAL = TERMINAL
 
@@ -2310,7 +2306,7 @@ class S3ConsoleStorage:
         """
         if self.results is None:
             raise ValueError("a job-results lake is required to convert embedded results")
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             record, movable, _unmovable, running = self.audit_results()
             if running:
                 raise ValueError("jobs are running; convert when the catalog has none")
@@ -2336,7 +2332,6 @@ class S3ConsoleStorage:
             except StorageConflict:
                 continue
             return ResultsConverted(movable, refs[RESULTS_LAKE], record, committed)
-        raise ValueError("console contention limit reached; retry")
 
     def _paid_outcome_evidence(self, value, job):
         """What the catalog records that points at a completed provider call for this job (empty means none)."""
@@ -2511,7 +2506,7 @@ class S3ConsoleStorage:
         """
         if not isinstance(event, dict) or not event.get("kind") or not request_id:
             raise ValueError("feedback provenance and identity required")
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             try:
                 with self.transaction():
                     value = self._tx.get()
@@ -2528,7 +2523,6 @@ class S3ConsoleStorage:
                 return vote
             except StorageConflict:
                 continue
-        raise ValueError("console contention limit reached; retry with same operation identity")
 
     def unreviewed_items(self, run_id):
         value = self._run_value(run_id)

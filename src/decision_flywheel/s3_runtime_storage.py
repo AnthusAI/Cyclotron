@@ -52,7 +52,7 @@ from .record_lake import (
     commit_with_records,
     coverage_in,
 )
-from .storage_errors import StorageConflict
+from .storage_errors import StorageConflict, conflict_attempts
 from .storage_payloads import FilePayloads, PayloadRef, S3Payloads
 from .value_records import REF as VALUES_REF
 from .value_records import canonical
@@ -183,9 +183,9 @@ class _Head:
 class S3RuntimeStores:
     requires_durable_optimizer = True
 
-    def __init__(self, journal, *, max_conflicts=8, cache_owned=False, coalesce_events=None, events_lake=None):
-        if not isinstance(journal, Journal) or type(max_conflicts) is not int or max_conflicts < 1:
-            raise ValueError("canonical journal and a positive conflict retry count required")
+    def __init__(self, journal, *, cache_owned=False, coalesce_events=None, events_lake=None):
+        if not isinstance(journal, Journal):
+            raise ValueError("canonical journal required")
         if events_lake is not None and (
             not isinstance(events_lake, Records)
             or events_lake.name != f"{EVENTS_DOMAIN}/{events_kind(journal)}"
@@ -216,7 +216,6 @@ class S3RuntimeStores:
         self._blobs = {}  # digest -> bytes of content-addressed values read or written; they never change
         self._seen = None  # the last head read, so an unchanged head is not decoded again
         self._observed = None  # the last head ``observed_events`` read (read-only observers)
-        self.max_conflicts = max_conflicts
         self.authority = None
         self.poisoned = False
         self.cache_owned = cache_owned
@@ -572,7 +571,7 @@ class S3RuntimeStores:
         """``start``: a head to try first instead of reading one; its conditional write proves it current."""
         if self.poisoned and not recovery:
             raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             held = self._holding()
             head = (
                 start
@@ -617,7 +616,6 @@ class S3RuntimeStores:
                     raise RuntimeOwnershipError("runtime head moved while events were held; reopen/reconcile") from None
                 continue
             return result
-        raise RuntimeOwnershipError("runtime contention limit reached")
 
     def _poison(self):
         self.poisoned = True
@@ -936,7 +934,7 @@ class S3RuntimeStores:
         """
         if self.events_lake is None:
             raise ValueError("a runtime events lake is required to convert embedded events")
-        for _ in range(self.max_conflicts):
+        for _ in conflict_attempts():
             if self.poisoned:
                 raise RuntimeOwnershipError("uncertain runtime write; reopen/reconcile before continuing")
             audit = self.audit_events()
@@ -970,7 +968,6 @@ class S3RuntimeStores:
                 after=committed,
                 coverage=Coverage.from_json(committed.value[RECORDS_KEY][self._lake_name]),
             )
-        raise RuntimeOwnershipError("runtime contention limit reached")
 
     @staticmethod
     def ordinal(value):

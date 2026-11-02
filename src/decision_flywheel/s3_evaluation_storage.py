@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from .journal import Journal, commit_with_contract, decode, uuid
 from .s3_runtime_storage import RuntimeOwnershipError
-from .storage_errors import StorageConflict
+from .storage_errors import StorageConflict, conflict_attempts
 
 
 def empty():
@@ -71,7 +71,7 @@ class S3EvaluationStorage:
         self.poisoned = True
 
     def _change(self, fn, *, owned=True, recovery=False):
-        for _ in range(8):
+        for _ in conflict_attempts():
             record = self._record(owned=owned, recovery=recovery)
             value = deepcopy(record.value)
             result = fn(value)
@@ -83,7 +83,6 @@ class S3EvaluationStorage:
             except StorageConflict:
                 continue
             return result
-        raise RuntimeOwnershipError("evaluation contention limit reached")
 
     def acquire(self, owner):
         uuid(owner)
