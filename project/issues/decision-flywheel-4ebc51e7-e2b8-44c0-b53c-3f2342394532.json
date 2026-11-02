@@ -52,10 +52,17 @@
       "text": "Second repair 2026-11-02, approved by Ryan in this session. The router re-posted hn-50312408 as job ab42589a; it raised BatchInProgress on the orphaned, claimed shared request, which leaves a job running with its claim held and blocks the queue. Closed that request as interrupted/abandoned (fingerprint f94d187f), knowingly allowing one repeat model call despite the guard against repaying claimed requests, then reconciled ab42589a as failed and woke the queue. The 3 jobs behind it completed. Code fix list: per-ledger replies lake; BatchInProgress must end a job terminally; a worker timeout must not leave a claimed request needing a hand edit.",
       "created_at": "2026-11-02T12:56:40.845321Z",
       "comment_type": "default"
+    },
+    {
+      "id": "02935189-e6f6-49fc-bde8-4ee9f129ddfd",
+      "author": "home",
+      "text": "Contention fix deployed. Three web-anth-us jobs on r5 (986eeb4f, 423e6fed, 80c7faca) had been refused with 'console contention limit reached': eight lost catalog writes in a row during item registration became a permanent source_refused. PR 187 removes the retry cap from the console, batch, runtime and evaluation stores and adds a growing random wait. Released to main at 52262f3. Package sha256 16811cd6b98ab22fa651f245c95ca0ba4dd4fff71441c60ef0867a83cb83465c deployed with change set contention-retry-52262f3 at 17:22 UTC on 2026-11-02 with Ryan's approval. Rollback package: 12ad7b9f. Snapshot refreshed in PR 188. Papyrus reopened the 3 routes with attempt 1 and they completed as 798df82c, 8ac5532e and 6f89a726. State at 19:04 UTC: 1119 completed, the same 5 failed, DLQ empty. Still open: CommandReconciliationRequired log lines (no visible harm, cause unconfirmed), the shared replies lake, BatchInProgress wedging the queue, Lambda timeouts leaving claims held, serial whole-run reads in bootstrap and curation accept, create_run head bloat. Votes and signed-in newsrooms on r5 are unverified from this side.",
+      "created_at": "2026-11-02T19:07:09.637109Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-11-01T16:24:26.396726Z",
-  "updated_at": "2026-11-02T12:56:40.845764Z",
+  "updated_at": "2026-11-02T19:07:09.637633Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
