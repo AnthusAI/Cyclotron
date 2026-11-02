@@ -162,3 +162,15 @@ def test_no_storage_adapter_raises_storage_limit_for_size_or_count_any_more():
         root.put_meta("second", "x" * (5 * 1024 * 1024))
     assert root.meta("second") == ("x" * (5 * 1024 * 1024),)
     root.release()
+
+
+def test_conflict_attempts_never_run_out_and_back_off_between_tries():
+    from .storage_errors import conflict_attempts
+
+    waits = []
+    attempts = conflict_attempts(sleep=waits.append, jitter=lambda: 1.0)
+    for _ in range(100):
+        next(attempts)
+    assert len(waits) == 99  # the first try never waits
+    assert waits[0] < waits[1] < waits[2]
+    assert max(waits) == waits[-1]
