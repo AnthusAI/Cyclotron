@@ -45,10 +45,17 @@
       "text": "r5 repair 2026-11-02, approved by Ryan in this session. Cause: all ledgers share one replies lake (replies-ledger, about 8,150 records); a new ledger's first settle steps past each one at about 110 ms and hit the 900s worker limit. Job ae9d38b9 (hn-50312408) timed out, leaving its running claim and 7 engine records owned by the dead invocation (7cfb79aa). Repair from a Mac: released the 7 owners, set the new ledger's coverage to last 8154 with 1..8153 skipped (seq 8154 is a foreign record it vouches for but never cites), reconciled ae9d38b9 as failed with command_recovery, woke the queue. Prior heads saved locally. Result: the other 9 queued jobs completed in about 50s. Open: the provider call for hn-50312408 may have been paid and needs an operator retry; the shared lake is not fixed in code, so any next new run repeats this.",
       "created_at": "2026-11-02T12:37:06.697857Z",
       "comment_type": "default"
+    },
+    {
+      "id": "d364cf6d-8106-4f33-86ab-9b4cb5f73c07",
+      "author": "home",
+      "text": "Second repair 2026-11-02, approved by Ryan in this session. The router re-posted hn-50312408 as job ab42589a; it raised BatchInProgress on the orphaned, claimed shared request, which leaves a job running with its claim held and blocks the queue. Closed that request as interrupted/abandoned (fingerprint f94d187f), knowingly allowing one repeat model call despite the guard against repaying claimed requests, then reconciled ab42589a as failed and woke the queue. The 3 jobs behind it completed. Code fix list: per-ledger replies lake; BatchInProgress must end a job terminally; a worker timeout must not leave a claimed request needing a hand edit.",
+      "created_at": "2026-11-02T12:56:40.845321Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-11-01T16:24:26.396726Z",
-  "updated_at": "2026-11-02T12:37:06.698472Z",
+  "updated_at": "2026-11-02T12:56:40.845764Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
