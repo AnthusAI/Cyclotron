@@ -304,14 +304,22 @@ def attempts_lake_for(journal):
 def reply_lake_for(journal, ledger):
     """The reply lake that sits beside a ledger journal, on the same store, or None for an unknown store.
 
-    One lake per ledger (``replies-<ledger>``) so ledgers that share a scope never share a sequence.
+    Each ledger has its own lake, named like its attempts and batches, so a new ledger never walks past records
+    that belong to another. ``ledger`` names the lake that ledgers in a scope used to share (``replies-<ledger>``):
+    a ledger whose head already cites it stays on it, because its rows name sequences in that lake only.
     """
-    payloads, kind = getattr(journal, "payloads", None), f"replies-{ledger}"
+    payloads = getattr(journal, "payloads", None)
     if isinstance(payloads, S3Payloads):
-        return S3RecordLake(payloads, "shared-batches", kind)
-    if isinstance(payloads, FilePayloads):
-        return FileRecordLake(payloads, "shared-batches", kind)
-    return None
+        lake = S3RecordLake
+    elif isinstance(payloads, FilePayloads):
+        lake = FileRecordLake
+    else:
+        return None
+    shared = lake(payloads, "shared-batches", f"replies-{ledger}")
+    record = journal.read_if_created()
+    if record is not None and shared.name in (record.value.get(RECORDS_KEY) or {}):
+        return shared
+    return lake(payloads, "shared-batches", "replies-" + _ledger_name(journal))
 
 
 def reply_reference(seq, payload):
