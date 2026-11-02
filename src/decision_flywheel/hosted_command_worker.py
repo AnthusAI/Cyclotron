@@ -14,6 +14,12 @@ from .journal import uuid
 from .prospectus_accounts import AccountAccessDenied
 from .storage_errors import CommandNotReady
 
+# How long before the platform ends this invocation a decision stops, and whether a new one starts. Closing the
+# shared request, releasing the engine and writing the receipt are a handful of conditional writes.
+WRAP_UP_SECONDS = 60
+
+OUT_OF_TIME = "the worker ran out of time before this decision finished; a provider call may have been made, so it needs operator reconciliation"
+
 
 class CommandReconciliationRequired(RuntimeError):
     pass
@@ -196,7 +202,7 @@ class HostedCommandWorker:
         engines = HeldEngine(wait_while=wait_while)
         try:
             started = self.clock()
-            result = await self.process(message, engines=engines)
+            result = await self.process(message, engines=engines, remaining=remaining)
             self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
             while result["status"] in ("completed", "failed") and self._has_time(remaining):
                 store = await asyncio.to_thread(self.store_for_account, message["accountId"])
@@ -205,7 +211,7 @@ class HostedCommandWorker:
                     break
                 message = {"accountId": message["accountId"], "runId": message["runId"], "jobId": head["id"]}
                 started = self.clock()
-                result = await self.process(message, engines=engines)
+                result = await self.process(message, engines=engines, remaining=remaining)
                 self.longest_job_seconds = max(self.longest_job_seconds, self.clock() - started)
         except BaseException:
             engines.discard()
@@ -231,8 +237,11 @@ class HostedCommandWorker:
                 outcomes.append("error")
         return outcomes
 
-    async def process(self, message, *, engines=None):
+    async def process(self, message, *, engines=None, remaining=None):
         """Run one delivered job. ``engines`` (from ``deliver``) lets a publication job reuse an open engine.
+
+        ``remaining`` (seconds left in this invocation; None: no platform limit) stops a decision in time for it to
+        end with a receipt. A job the platform cut off would keep its running claim and hold its run's queue.
 
         Checks (authorization, command policy and the claim fence, read fresh each time) run before the
         claim, once the claim is confirmed, before each durable write, before any paid model call and at the
@@ -261,6 +270,8 @@ class HostedCommandWorker:
         # This is a read of queue order only, so it needs no authority.
         if job["status"] == "pending" and not (await asyncio.to_thread(store.queue_state, job["id"]))["ready"]:
             return {"status": "queued", "jobId": job["id"]}
+        if job["status"] == "pending" and remaining is not None and remaining() <= WRAP_UP_SECONDS:
+            return {"status": "queued", "jobId": job["id"]}  # Unclaimed: the sweep starts it with a fresh invocation.
         guard = self.authorization.guard(actor)
         await guard()
         if self.command_policy is not None:
@@ -308,9 +319,25 @@ class HostedCommandWorker:
         try:
             session = await asyncio.to_thread(runtime.open_session, actor.run_id, run["config"], items, shown)
             try:
-                result = await runtime.execute(
-                    session, job["kind"], job["payload"], shown, run["config"], request_id=job["request_id"]
+                # Only a decision stops: ending one is safe because its pending request refuses any repeat.
+                limit = remaining() - WRAP_UP_SECONDS if remaining is not None and is_decision(job["kind"]) else None
+                deadline = asyncio.timeout(limit)
+                async with deadline:
+                    result = await runtime.execute(
+                        session, job["kind"], job["payload"], shown, run["config"], request_id=job["request_id"]
+                    )
+            except TimeoutError:
+                if not deadline.expired():
+                    raise
+                print(f"decision_stopped_for_time remainingMs={int(remaining() * 1000)}")  # no job content
+                await asyncio.to_thread(
+                    effects.finish_command,
+                    job["id"],
+                    "failed",
+                    {"refusal": {"code": "source_refused", "message": OUT_OF_TIME}},
                 )
+                self._ring(job, actor, "failed")
+                return {"status": "failed", "jobId": job["id"], "code": "source_refused"}
             except CommandRefused as refusal:
                 # Refused before any provider dispatch: record a terminal, non-secret receipt (a checked write).
                 await asyncio.to_thread(
