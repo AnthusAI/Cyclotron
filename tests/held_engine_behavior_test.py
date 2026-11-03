@@ -187,6 +187,6 @@ def test_a_decision_job_checks_its_claim_only_where_it_matters(identity, monkeyp
     asyncio.run(go())
     # Each check reads the claim fence and authorization fresh: once the claim is confirmed, before registering
     # the item, before the decision's writes, before the paid model call, before the snapshots and the flush
-    # that ends the engine's writes, at the end, and before the receipt.
-    assert len(checks) == 7
+    # that ends the engine's writes, at the end, before filing the decision by item, and before the receipt.
+    assert len(checks) == 8
     assert len(model.calls) == 1

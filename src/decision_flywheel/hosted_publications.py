@@ -315,6 +315,25 @@ class PublicationCommandRuntime:
         # everything at its end, so the worker's receipt write (itself checked) needs no extra check.
         return SimpleNamespace(run_id=run_id, config=config, close=lambda: None, verified_at_end=True)
 
+    def record_decided(self, run_id, config, registration, result, shared):
+        """File what was decided under its item revision, the only way to find it later without reading the run.
+
+        The decision is already paid for and durable, so a failure here must not fail it. A later decision of the same
+        item revision keeps the first record. Losing authority still stops the job.
+        """
+        decisions = [row["decision"] for row in result["publications"].values()] if shared else [result["decision"]]
+        classifiers = {
+            cid: {"label": row["label"], "confidence": row.get("confidence")}
+            for d in decisions
+            for cid, row in d["classifiers"].items()
+        }
+        try:
+            self.view.record_item_prediction(
+                run_id, config["item_list_id"], registration["id"], registration["revision"], {"classifiers": classifiers}
+            )
+        except (ValueError, StorageConflict, StorageUncertain) as error:
+            print(f"decision_record_skipped {type(error).__name__}")  # class only: no job content
+
     async def execute(self, session, kind, payload, shown, config, *, request_id=None):
         priming = is_priming_command(kind, payload)
         machine = isinstance(self.actor, MachineActor)
@@ -547,6 +566,9 @@ class PublicationCommandRuntime:
         if holder is not self.engines:
             holder.close()
         await fresh()
+        if registration is not None:
+            # Last, so a worker lost before this leaves a job an operator can still reconcile.
+            await asyncio.to_thread(self.record_decided, session.run_id, config, registration, result, shared)
         if shared:
             return RuntimeCommand({"response": result, "statusSnapshots": snapshots})
         return RuntimeCommand({"response": result, "statusSnapshot": snapshots})
