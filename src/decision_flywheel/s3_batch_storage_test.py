@@ -1080,3 +1080,28 @@ def test_choosing_a_reply_lake_refuses_when_the_ledger_head_cannot_be_read():
     client.get_object = failing
     with pytest.raises(JournalUnavailable):
         reply_lake_for(reopened, "ledger")
+
+
+def test_only_a_failed_request_can_be_retried_and_the_retry_keeps_its_audit_and_history():
+    s = store()
+    fingerprint, other = "f" * 64, "e" * 64
+    owner = str(uuid4())
+    s.reserve(fingerprint, None, owner, claim=True)
+    with pytest.raises(BatchConflict):
+        s.authorize_retry(fingerprint, {"reason": "still pending"})
+    s.settle(fingerprint, owner, "failed")
+    assert s.failed_requests() == [fingerprint]
+    with pytest.raises(RuntimeError, match="explicit retry required"):
+        s.reserve(fingerprint, None, str(uuid4()))
+    authorized = s.authorize_retry(fingerprint, {"reason": "outage ended"})
+    assert authorized.status == "interrupted" and json.loads(authorized.payload) == {
+        "retry_authorized": {"reason": "outage ended"}
+    }
+    assert s.failed_requests() == []
+    with pytest.raises(BatchConflict):
+        s.authorize_retry(fingerprint, {"reason": "twice"})
+    repeated = s.reserve(fingerprint, None, str(uuid4()), claim=True)
+    assert (repeated.status, repeated.generation) == ("pending", 3)
+    assert s.requests() == 3
+    with pytest.raises(BatchConflict):
+        s.authorize_retry(other, {"reason": "never asked"})
