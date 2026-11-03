@@ -1069,3 +1069,14 @@ def test_a_lost_claim_still_stops_a_retrying_write(monkeypatch):
     monkeypatch.setattr(s.journal, "commit", lose_then_finish)
     with pytest.raises(ValueError, match="stale command execution boundary"):
         view.register_standing_item(run_id, "fresh", {"t": 1})
+
+
+def test_one_run_item_is_found_by_id_without_reading_the_run(monkeypatch):
+    s, run_id = standing()
+    decide(s, run_id, 1)
+    decide(s, run_id, 2)
+    monkeypatch.setattr(s, "_run_items", lambda *args: pytest.fail("read the run's whole item list"))
+    assert s.run_item(run_id, "item-2")["values"] == {"text": "Source 2"}
+    assert s.run_item(run_id, "never-sent") is None
+    with pytest.raises(ValueError):
+        s.run_item("not-a-run", "item-2")

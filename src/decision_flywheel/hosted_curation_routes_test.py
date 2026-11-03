@@ -707,6 +707,30 @@ def _ids(training):
     return found
 
 
+def whole_run_reads_refused(monkeypatch):
+    """A standing run grows without end, so nothing on the request path may read all of its items."""
+    from .s3_console_storage import S3ConsoleStorage
+
+    def refused(*args, **kwargs):
+        raise AssertionError("read the run's whole item list")
+
+    monkeypatch.setattr(S3ConsoleStorage, "_run_items", refused)
+
+
+def test_accepting_checks_the_firewall_without_reading_the_whole_run(identity, monkeypatch):
+    host = build(identity, monkeypatch)
+    whole_run_reads_refused(monkeypatch)
+
+    async def scenario():
+        async with host.client() as http:
+            draft = data(await import_file(http))
+            accepted = await command(http, "accept", {"identifier": "draft-one", "version": draft["version"], "labels": None})
+            assert data(accepted)["status"] == "accepted"
+            assert data(accepted)["autoPrime"]
+
+    run(scenario())
+
+
 def test_acceptance_is_refused_up_front_without_a_reviewed_model_identity(identity, monkeypatch):
     host = build(identity, monkeypatch)
     host.targets[0] = replace(host.targets[0], model_identity=None)
@@ -724,6 +748,7 @@ def test_acceptance_is_refused_up_front_without_a_reviewed_model_identity(identi
 
 def test_an_example_that_is_also_an_operational_item_is_refused_before_anything_is_accepted(identity, monkeypatch):
     host = build(identity, monkeypatch)
+    whole_run_reads_refused(monkeypatch)
 
     async def scenario():
         async with host.client() as http:
