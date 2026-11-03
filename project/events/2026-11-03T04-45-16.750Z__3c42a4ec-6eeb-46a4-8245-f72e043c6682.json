@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3c42a4ec-6eeb-46a4-8245-f72e043c6682",
+  "issue_id": "decision-flywheel-06b02a59-32bb-4c0b-9319-4c6a7bad2305",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:45:16.750Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Cut over: first deploy through the pipeline, then retire the runbook",
+    "description": "Prove it on a real, low-risk change: the workflow run names the package, change set and CodeSha256, and the live stack matches. Practice one rollback. Then rewrite the deploy runbook in infra/lab/README.md, and update the project notes that say to build from a worktree by hand.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+    "labels": []
+  }
+}

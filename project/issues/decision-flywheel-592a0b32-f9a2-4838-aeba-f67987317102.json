@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-592a0b32-f9a2-4838-aeba-f67987317102",
+  "title": "Build, verify and deploy the lab package from Actions",
+  "description": "A job after a green main: build with scripts/dev/build_lab_package.sh from that exact commit on a clean checkout, confirm cli_login is in the zip, upload by content hash with no overwrite, create the change set keeping previous parameters, then apply the approval decision. After execution compare CodeSha256 with the package and probe the API without credentials (POST /machine/bindings/anth-us/operations on the API Gateway endpoint expects 403; lab.cyclotron.anth.us is Amplify). Then check logs and the dead-letter queue, roll back to the previous package key on failure, and serialize deploys. A failed step must fail the run visibly. Specs need no network or credentials.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-11-03T04:45:16.674456Z",
+  "updated_at": "2026-11-03T04:45:16.674482Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

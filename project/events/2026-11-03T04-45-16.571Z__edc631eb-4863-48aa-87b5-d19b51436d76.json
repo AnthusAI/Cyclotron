@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "edc631eb-4863-48aa-87b5-d19b51436d76",
+  "issue_id": "decision-flywheel-3834f550-8d71-405a-a290-3eef560b23f2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:45:16.571Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Decide when a merge to main deploys without a person",
+    "description": "Ryan's call, first. Today every lab deploy needs his approval of the specific change set (infra/lab/README.md). Papyrus public sites have no approval step: merging to main deploys. He asked not to deploy manually, but the existing rule has not been explicitly retired. Recommendation: a green main deploys on its own when the change set changes only Lambda code, and it stops for his approval when it touches IAM, security resources, parameters or anything else. The workflow reads the change set and decides. Update the README rule to match whatever he decides.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+    "labels": []
+  }
+}

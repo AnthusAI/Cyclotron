@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d401ad4e-09ba-4cca-b3f7-6cfb7b56b1e1",
+  "issue_id": "decision-flywheel-086bf85b-ac4b-4f17-91a9-b3655079d727",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:45:16.648Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Create the GitHub OIDC provider and lab deploy role",
+    "description": "Needs Ryan's concrete approval: new IAM. The account lists no GitHub OIDC provider. Add a role such as cyclotron-lab-github-deploy trusting only AnthusAI/Cyclotron on refs/heads/main, with audience sts.amazonaws.com; check 'gh api repos/AnthusAI/Cyclotron/actions/oidc/customization/sub' because an immutable subject needs both forms (see Papyrus infra/amplify-app-shell/lib/site-config.ts). Allow only the stack's change-set calls, create-only upload under cyclotron-console/backend and templates, and the reads verification needs. Bring him the exact trust and permission policies. No stored keys. Account ids stay in repository variables, not Git.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+    "labels": []
+  }
+}

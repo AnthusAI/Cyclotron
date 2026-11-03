@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-98232ff5-4361-4f96-8bc4-b30d28b921b3",
+  "title": "Deploy the lab front end on merge",
+  "description": "The lab page is a manual Amplify app built from main via amplify.yml. Follow Papyrus: turn auto-build off where needed and start the Amplify job for the exact commit through OIDC with amplify:StartJob and GetJob only, after the backend it needs. Order matters when a front end depends on a new API. Check hosted mode before publishing.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-11-03T04:45:16.725273Z",
+  "updated_at": "2026-11-03T04:45:16.725291Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e119e80e-d9ed-4e95-a995-2294fed3072b",
+  "issue_id": "decision-flywheel-9470785f-e89e-444b-94e8-6da097411791",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:45:16.622Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Make GitHub Actions run the full merge gate",
+    "description": "release.yml runs make test and make check-diagrams, which skips slow specs and the trace-ui tests, build and bundle drift that make check covers, so CI can pass what the local gate fails. Run the full gate on pull requests and main without spending more than needed, and add branch protection on main requiring it (none exists today). Keep board-only changes from running the whole suite; Papyrus uses paths-ignore on project/**.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+    "labels": []
+  }
+}
