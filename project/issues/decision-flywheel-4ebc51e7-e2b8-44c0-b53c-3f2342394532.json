@@ -66,10 +66,17 @@
       "text": "Second fix deployed. PR 189 gives each new ledger its own reply lake (ledgers already citing shared-batches/replies-ledger, including r5 and r4, stay on it) and ends BatchInProgress jobs with a source_refused receipt instead of leaving them running. Released to main at 71af1fb. Package sha256 ace21229b5d0953eacaba7412ac3b5b2d78e7494d5672d08e900203edf802de1 deployed with change set replies-lake-71af1fb at 20:51 UTC on 2026-11-02 with Ryan's approval. Rollback package: 16811cd6. Snapshot refreshed in PR 190. 15-minute watch clean; at 21:10 UTC r5 had 1389 completed, the same 5 failed, DLQ empty, no worker or BFF errors logged since the deploy. The new lake path has specs and a read-only production check of which lake is chosen, but no real new run has used it yet. Still open: Lambda timeouts leaving claims and engine owners held, serial whole-run reads in bootstrap and curation accept, create_run head bloat, no operator path for creating a run, cli-login double-submit, r5's shared-lake skipped list growing until the run is replaced. Votes and signed-in newsrooms on r5 are unverified from this side.",
       "created_at": "2026-11-02T21:13:42.355616Z",
       "comment_type": "default"
+    },
+    {
+      "id": "284fb80c-7e7b-419a-9e81-5f650605b1b8",
+      "author": "home",
+      "text": "Deployed change set fixes-report-b674757 on 2026-11-03 at 13:02 UTC with Ryan's approval: package aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808 from main b674757, covering PRs 191-195. Both Lambdas match the package and an unauthenticated probe returned 403. The stuck-work watch on r5 was clean for 900 seconds, with no errors in worker or BFF logs and an empty DLQ. The 12 newest r5 decisions are all filed by item, with 0 decision_record_skipped log lines since the deploy. Report read live: Machines on Machines 52 votes, Anth.us 25, compared 0 on both because votes so far predate filing. Snapshot recorded in PR 196. Not exercised live: retry-failed --apply, and a provider_failed refusal. Rollback package: ace21229b5d0953eacaba7412ac3b5b2d78e7494d5672d08e900203edf802de1.",
+      "created_at": "2026-11-03T13:34:21.306833Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-11-01T16:24:26.396726Z",
-  "updated_at": "2026-11-02T21:13:42.356180Z",
+  "updated_at": "2026-11-03T13:34:21.307351Z",
   "closed_at": null,
   "agent": {
     "platform": "claude_code",
