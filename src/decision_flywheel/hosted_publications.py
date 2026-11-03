@@ -38,6 +38,8 @@ from .s3_runtime_storage import RuntimeOwnershipError
 from .standing_publications import validate_item
 from .storage_errors import StorageConflict, StorageUncertain
 
+PROVIDER_FAILED = "the decision model call failed, so no decision was returned; it needs an operator retry"
+
 
 @dataclass(frozen=True)
 class PublicationTarget:
@@ -228,6 +230,16 @@ def is_shared_decision_command(kind, payload):
     )
 
 
+class RunItemIds:
+    """Membership in a run's items by id, so a firewall check reads only the ids it asks about."""
+
+    def __init__(self, store, run_id):
+        self.store, self.run_id = store, run_id
+
+    def __contains__(self, item_id):
+        return self.store.run_item(self.run_id, item_id) is not None
+
+
 def priming_snapshot(store, target, binding, config, list_id):
     if not target.model_identity:
         raise ValueError("reviewed publication model identity required for priming")
@@ -239,7 +251,7 @@ def priming_snapshot(store, target, binding, config, list_id):
             raise ValueError("classifier revision changed; review the publication binding")
     if list_id not in {row["id"] for row in store.item_lists()}:
         raise ValueError("unknown accepted priming list")
-    examples = catalog_priming(store, list_id, classifiers, {row["id"] for row in store.items(target.run_id)}, storage=store)
+    examples = catalog_priming(store, list_id, classifiers, RunItemIds(store, target.run_id), storage=store)
     fingerprint = sha256(encode([target.model_identity, list_id, classifiers, examples])).hexdigest()
     return examples, fingerprint
 
@@ -507,7 +519,7 @@ class PublicationCommandRuntime:
         def open_engine():
             # The engine calls this model. Each job binds its own provider and guard to it while it runs;
             # between jobs it refuses every call.
-            bound = AuthorizedModel(model, no_job_guard)
+            bound = DecisionModel(model, no_job_guard)
             engine = Cyclotron.open(
                 None,
                 definition,
@@ -540,7 +552,26 @@ class PublicationCommandRuntime:
         return RuntimeCommand({"response": result, "statusSnapshot": snapshots})
 
 
+class DecisionModel(AuthorizedModel):
+    """A failed provider call ends its decision with a receipt, so it cannot hold its run's queue.
+
+    Only the call itself is covered: a refused guard (authority or claim lost) still fails closed. The shared
+    request is settled failed on the way out, so repeating this exact decision makes no second provider call.
+    """
+
+    async def classify_many(self, *args, **kwargs):
+        await self.guard()
+        try:
+            return await self.model.classify_many(*args, **kwargs)
+        except CommandRefused:
+            raise
+        except Exception as error:
+            print(f"decision_provider_failed {type(error).__name__}")  # class only: no job content or credentials
+            raise CommandRefused("provider_failed", PROVIDER_FAILED) from None
+
+
 REFUSAL_STATUS = {
+    "provider_failed": 409,
     "provider_key_unavailable": 503,
     "provider_rejected": 422,
     "source_refused": 409,
@@ -685,8 +716,8 @@ def install_publication_routes(app, runtime):
             item = payload["item"]
             if not isinstance(item, dict) or set(item) != {"id", "values"}:
                 raise HTTPException(400, "frozen structured source required")
-            items = await asyncio.to_thread(store.items, target.run_id)
-            if not any(row["id"] == item["id"] and row["values"] == item["values"] for row in items):
+            frozen = await asyncio.to_thread(store.run_item, target.run_id, item["id"])
+            if frozen is None or frozen["values"] != item["values"]:
                 raise HTTPException(409, "source does not match the canonical run input")
             command = {"publication": publication, **payload}
         identity = "publication:" + sha256(encode([target.account_id, target.run_id, command])).hexdigest()

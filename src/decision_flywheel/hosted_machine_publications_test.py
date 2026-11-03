@@ -10,7 +10,7 @@ import pytest
 
 from . import account_sessions_test
 from .command_refusal import CommandRefused
-from .hosted_publications import PublicationTarget
+from .hosted_publications import DecisionModel, PublicationTarget
 from .hosted_publications_test import ITEM, PUBS, setup
 from .machine_access import MachineActor, MachineDenied
 from .provider_credentials import ProviderKeyUnavailable
@@ -427,18 +427,21 @@ def test_an_item_with_an_unfinished_shared_request_is_refused_with_a_receipt_ins
     asyncio.run(go())
 
 
-def test_an_item_whose_earlier_attempt_failed_is_refused_with_a_receipt_instead_of_wedging_the_run(identity, monkeypatch):
+def test_a_decision_still_running_near_the_platform_limit_ends_with_a_receipt_and_frees_the_run(identity, monkeypatch):
+    from .hosted_command_worker import WRAP_UP_SECONDS
+
     (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
     run_id = targets[0].run_id
     real = model.classify_many
-    state = {"fail": True}
+    state = {"hang": True, "dispatched": 0}
 
-    async def flaky(*args, **kwargs):
-        if state["fail"]:
-            raise RuntimeError("synthetic provider failure after dispatch")
+    async def hanging(*args, **kwargs):
+        state["dispatched"] += 1
+        if state["hang"]:
+            await asyncio.Event().wait()
         return await real(*args, **kwargs)
 
-    model.classify_many = flaky
+    model.classify_many = hanging
 
     async def go():
         async with client(wrapped, config, account) as http:
@@ -447,31 +450,101 @@ def test_an_item_whose_earlier_attempt_failed_is_refused_with_a_receipt_instead_
                 json=body("decide", {"bindingRevision": "binding-one", "item": new_item("hn-1")}, "req-first-0001"),
             )
             assert first.status_code == 202
-            # A failure after dispatch stays fail-closed: the claimed job is left running for an operator.
-            with pytest.raises(RuntimeError):
-                await worker.worker().process(sent.pop(0))
-            state["fail"] = False
-            stuck = next(j for j in store.jobs(run_id) if j["status"] == "running")
-            claim = store.command_recovery(stuck["id"])
-            store.reconcile_command(
-                stuck["id"],
-                owner=claim["owner"],
-                fence=claim["fence"],
-                status="failed",
-                reason="synthetic failure, no prediction",
-                operator="test",
-                apply=True,
+            outcome = await worker.worker().process(sent.pop(0), lambda: WRAP_UP_SECONDS + 0.05)
+            assert outcome["status"] == "failed"
+            assert state["dispatched"] == 1
+            assert not any(j["status"] == "running" for j in store.jobs(run_id))
+            state["hang"] = False
+            # The same item again must not pay twice: its request may have reached the provider.
+            job, receipt = await decide(http, worker, sent, new_item("hn-1"), "req-second-0002")
+            assert receipt.status_code == 409 and receipt.json()["code"] == "source_refused"
+            assert "operator reconciliation" in receipt.json()["message"]
+            assert state["dispatched"] == 1
+            # The run is free and the engine owners are released: another item is decided normally.
+            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
+            assert receipt.status_code == 200
+            assert state["dispatched"] == 2
+
+    asyncio.run(go())
+
+
+def test_a_job_is_not_claimed_when_no_time_is_left_to_wrap_it_up(identity, monkeypatch):
+    from .hosted_command_worker import WRAP_UP_SECONDS
+
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    run_id = targets[0].run_id
+    calls = {"made": 0}
+    real = model.classify_many
+
+    async def counted(*args, **kwargs):
+        calls["made"] += 1
+        return await real(*args, **kwargs)
+
+    model.classify_many = counted
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            first = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "binding-one", "item": new_item("hn-1")}, "req-first-0001"),
             )
-            # The same item again hits the failed shared request: a recorded refusal, not a running job.
+            message = sent.pop(0)
+            outcome = await worker.worker().process(message, lambda: WRAP_UP_SECONDS)
+            assert outcome["status"] == "queued" and calls["made"] == 0
+            assert [j["status"] for j in store.jobs(run_id) if j["id"] == first.json()["jobId"]] == ["pending"]
+            # The scheduled sweep starts it later, with a fresh invocation's time.
+            outcome = await worker.worker().process(message)
+            assert outcome["status"] == "completed" and calls["made"] == 1
+
+    asyncio.run(go())
+
+
+def test_a_failed_provider_call_ends_with_a_receipt_frees_the_run_and_is_not_paid_for_twice(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    run_id = targets[0].run_id
+    real = model.classify_many
+    state = {"fail": True, "dispatched": 0}
+
+    async def flaky(*args, **kwargs):
+        if state["fail"]:
+            state["dispatched"] += 1
+            raise RuntimeError("synthetic provider failure after dispatch")
+        return await real(*args, **kwargs)
+
+    model.classify_many = flaky
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 409 and receipt.json()["code"] == "provider_failed"
+            assert "synthetic" not in receipt.json()["message"]
+            assert not any(j["status"] == "running" for j in store.jobs(run_id))
+            # The same item again hits the failed shared request: a recorded refusal and no second provider call.
+            state["fail"] = False
             job, receipt = await decide(http, worker, sent, new_item("hn-1"))
             assert receipt.status_code == 409 and receipt.json()["code"] == "source_refused"
             assert "operator retry" in receipt.json()["message"]
-            assert not any(j["status"] == "running" for j in store.jobs(run_id))
+            assert state["dispatched"] == 1
             # The run is free: another item is decided normally.
             _, receipt = await decide(http, worker, sent, new_item("hn-2"))
             assert receipt.status_code == 200
 
     asyncio.run(go())
+
+
+def test_a_refused_guard_is_not_mistaken_for_a_provider_failure():
+    calls = []
+
+    class Provider:
+        async def classify_many(self, *args, **kwargs):
+            calls.append(1)
+
+    async def refused():
+        raise PermissionError("authority or claim lost")
+
+    with pytest.raises(PermissionError):
+        asyncio.run(DecisionModel(Provider(), refused).classify_many())
+    assert calls == []
 
 
 def decisions_body(bindings, item, request_id="req-all-0001"):
