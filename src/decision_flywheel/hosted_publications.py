@@ -38,6 +38,8 @@ from .s3_runtime_storage import RuntimeOwnershipError
 from .standing_publications import validate_item
 from .storage_errors import StorageConflict, StorageUncertain
 
+PROVIDER_FAILED = "the decision model call failed, so no decision was returned; it needs an operator retry"
+
 
 @dataclass(frozen=True)
 class PublicationTarget:
@@ -517,7 +519,7 @@ class PublicationCommandRuntime:
         def open_engine():
             # The engine calls this model. Each job binds its own provider and guard to it while it runs;
             # between jobs it refuses every call.
-            bound = AuthorizedModel(model, no_job_guard)
+            bound = DecisionModel(model, no_job_guard)
             engine = Cyclotron.open(
                 None,
                 definition,
@@ -550,7 +552,26 @@ class PublicationCommandRuntime:
         return RuntimeCommand({"response": result, "statusSnapshot": snapshots})
 
 
+class DecisionModel(AuthorizedModel):
+    """A failed provider call ends its decision with a receipt, so it cannot hold its run's queue.
+
+    Only the call itself is covered: a refused guard (authority or claim lost) still fails closed. The shared
+    request is settled failed on the way out, so repeating this exact decision makes no second provider call.
+    """
+
+    async def classify_many(self, *args, **kwargs):
+        await self.guard()
+        try:
+            return await self.model.classify_many(*args, **kwargs)
+        except CommandRefused:
+            raise
+        except Exception as error:
+            print(f"decision_provider_failed {type(error).__name__}")  # class only: no job content or credentials
+            raise CommandRefused("provider_failed", PROVIDER_FAILED) from None
+
+
 REFUSAL_STATUS = {
+    "provider_failed": 409,
     "provider_key_unavailable": 503,
     "provider_rejected": 422,
     "source_refused": 409,

@@ -955,7 +955,8 @@ def test_each_cli_token_has_its_own_session(hosted, identity):
     client, gateway, state, _ = hosted
     _verifier, token = identity
     google_account_mode(gateway, state)
+    issued = int(time.time())
     with client:
-        first = client.get("/api/session", headers=bearer(token())).json()["csrfToken"]
-        second = client.get("/api/session", headers=bearer(token(iat=int(time.time()) - 1))).json()["csrfToken"]
+        first = client.get("/api/session", headers=bearer(token(iat=issued))).json()["csrfToken"]
+        second = client.get("/api/session", headers=bearer(token(iat=issued - 1))).json()["csrfToken"]
         assert first != second
