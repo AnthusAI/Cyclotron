@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bac6d521-1906-4745-94b9-0553dad4fdfe",
+  "issue_id": "decision-flywheel-2a48adbe-43d5-4016-b4c0-27dabda57187",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T17:03:34.210Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Papyrus asks: a shared source-kind classifier with no feedback yet",
+    "description": "From Papyrus (PPY-f8ff49), Ryan 2026-11-03. Papyrus wants each new Reference classified on two attributes: evidence level (primary, secondary, aggregation, unknown) and voice (reporting, analysis, opinion, advocacy, promotional, mixed, unknown). Questions: 1. Can a standing classifier run usefully with no human labels, using a decision model and a written definition of each class? 2. Can one classifier be shared across all Papyrus sites, since source kind is not site-specific, with corrections from any site as labels? 3. Two outputs on one item in one decide, or two classifiers? 4. What does Papyrus send and call, and when would it be available? Answer on this ticket; Ryan relays.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
