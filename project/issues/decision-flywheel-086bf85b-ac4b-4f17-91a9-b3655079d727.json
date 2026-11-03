@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-086bf85b-ac4b-4f17-91a9-b3655079d727",
+  "title": "Create the OIDC trigger role and the CDK pipeline stack",
+  "description": "Needs Ryan's concrete approval: new IAM. New CDK app infra/pipeline, modelled on Cyclotron-web's infra/lib/cyclotron-marketing-pipeline-stack.ts, defining stack CyclotronLabPipeline, separate from cyclotron-console. It holds: the GitHub OIDC provider (the account has none), a trigger role trusting only AnthusAI/Cyclotron on refs/heads/main with audience sts.amazonaws.com and permission only to start and read this one pipeline, the CodePipeline V2 with no push trigger, CodeBuild roles, and a CloudFormation service role with a permission boundary (see CyclotronMarketingExecutionBoundary). Check 'gh api repos/AnthusAI/Cyclotron/actions/oidc/customization/sub'; an immutable subject needs both forms (see Prospectus infra/github-deploy). A CodeStar connection must reach this repository; the existing cyclotron-web-github may need access granted in the GitHub app, which is Ryan's to do. Account ids stay in repository variables, not Git. Bring him the exact policies with the change set. Deployed by hand once.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-11-03T04:45:16.648680Z",
+  "updated_at": "2026-11-03T05:05:38.119547Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

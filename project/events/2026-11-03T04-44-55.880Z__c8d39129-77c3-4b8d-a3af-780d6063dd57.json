@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c8d39129-77c3-4b8d-a3af-780d6063dd57",
+  "issue_id": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:44:55.880Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Deploy the lab backend through CI/CD instead of by hand",
+    "description": "From Ryan, 2026-11-03. Verbatim: 'we also need to create a new Kanbus epic in this project for creating a DevOps CI/CD pipeline. Look at other projects like the Papyrus sites to see how we are using LeftBlock to ensure that we run CI locally so that we can avoid paying money to AWS to run our CI. We also lean on GitHub Actions to run CI and then trigger deployments in CodePiepeline or whatever if they succeed. You will need to set up something like that for this project so that we dont' need to deploy it manually.'\n\nWhat exists today: .github/workflows has release.yml (make test, diagrams, version release) and docs.yml. Nothing builds or deploys the backend; an agent follows the runbook in infra/lab/README.md. main has no branch protection. The AWS account lists no GitHub OIDC provider (checked 2026-11-03). The Amplify front end is a manual app built from main.\n\nWhat Papyrus does (docs/site-hosting.md, 'Deploy on merge to main'):\n- Public repositories: Actions minutes are free, so GitHub Actions is the CI, and a green push to main starts the deploy through GitHub OIDC with no stored keys. The role trusts only the repository's main branch and has only the permissions that deploy needs. Reusable example: .github/workflows/amplify-deploy.yml.\n- Private repositories: no Actions minutes, so the developer runs 'leftblock ci', which tests the exact commit on a clean tree and posts a leftblock/ci commit status. A short gate at the start of the AWS build refuses a commit without it.\n\nAnthusAI/Cyclotron is public, so the public model applies: Actions costs nothing, and CodeBuild or CodePipeline would add AWS cost for no gain. 'leftblock ci' is still useful as the fast local loop. Recommended shape: run the deploy in a GitHub Actions job, with no CodePipeline.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

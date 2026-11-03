@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "559fd973-afc3-469f-b9cf-ed87bc963cdd",
+  "issue_id": "decision-flywheel-200922e3-9acd-4bfa-9985-a4f3aee50f8c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:45:16.597Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Run CI locally with leftblock ci",
+    "description": "Add a .leftblock.yml ci.command of make check so 'leftblock ci' tests the exact commit on a clean tree, writes a receipt and posts the leftblock/ci status. The repository has only .leftblock-allow.yml today. Done: a run posts the status on a real commit. This is the fast local loop, not the only gate, because the repository is public.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+    "labels": []
+  }
+}

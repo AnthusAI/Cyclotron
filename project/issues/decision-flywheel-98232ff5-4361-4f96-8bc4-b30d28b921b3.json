@@ -1,0 +1,23 @@
+{
+  "id": "decision-flywheel-98232ff5-4361-4f96-8bc4-b30d28b921b3",
+  "title": "Pipeline stage: publish the lab front end to Amplify",
+  "description": "The lab page is Amplify app cyclotron-console: static, no repository connected, auto-build off, not in any stack. Add a stage after the backend verifies that builds with amplify.yml's commands (npm --prefix trace-ui ci, npm --prefix trace-ui run build, node trace-ui/scripts/package-console.mjs) and publishes the zip of trace-ui/console-dist with amplify create-deployment and start-deployment. Never publish the Lambda's vendored bundle; it is not hosted mode. Connecting a repository to the app is the alternative if this proves awkward. Check sign-in works after the first publish.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-11-03T04:45:16.725273Z",
+  "updated_at": "2026-11-03T05:05:38.169719Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

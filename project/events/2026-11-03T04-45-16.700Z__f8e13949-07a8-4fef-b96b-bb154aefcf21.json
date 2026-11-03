@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f8e13949-07a8-4fef-b96b-bb154aefcf21",
+  "issue_id": "decision-flywheel-d84ab407-38bc-48e7-853c-23a41b9c2646",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:45:16.700Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Stop needing a hand-made PR to record each deploy",
+    "description": "Each deploy today seds the package key into infra/lab/template.yaml and deployed-template.snapshot.json, then merges a snapshot PR so check_lab_template.py --live matches and main reaches develop. The pipeline must not depend on that. Options: make the package key a parameter, or have the workflow open the PR. Decide, and also carry main back to develop automatically.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-e2c4f22f-75b4-43f4-907d-e77185a1271d",
+    "labels": []
+  }
+}

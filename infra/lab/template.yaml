@@ -507,7 +507,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/ace21229b5d0953eacaba7412ac3b5b2d78e7494d5672d08e900203edf802de1
+        S3Key: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
       FunctionName: cyclotron-console-bff
       Handler: decision_flywheel.cloud_entry.bff_handler
       MemorySize: 3008
@@ -633,7 +633,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/ace21229b5d0953eacaba7412ac3b5b2d78e7494d5672d08e900203edf802de1
+        S3Key: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
       FunctionName: cyclotron-console-worker
       Handler: decision_flywheel.cloud_entry.worker_handler
       MemorySize: 3008
