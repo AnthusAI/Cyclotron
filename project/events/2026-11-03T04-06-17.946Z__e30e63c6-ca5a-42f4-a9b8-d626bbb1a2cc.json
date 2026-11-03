@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e30e63c6-ca5a-42f4-a9b8-d626bbb1a2cc",
+  "issue_id": "decision-flywheel-1f097164-17f2-4ce6-b966-158d48531907",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:06:17.946Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Trigger retraining on evidence of mistakes, per output",
+    "description": "Score each new human vote against the live prediction, per output. Retrain when accuracy on new votes is confidently below what the revision claimed (Wilson bound), or enough disagreements have built up since the last retrain; confident mistakes and votes with explanations count most. A vote agreeing with a confident prediction teaches little and must not trigger anything. The requirement adapts: a retrain that gained little raises it, one that gained a lot lowers it. No vote count, schedule, or fixed cap. A changed vote replaces the earlier label. Consider LabelTransitionTrigger in feedback_trigger.py as a starting point. Rubric optimization (LLM cost) and classifier refit (cheap) may trigger separately. Spend is reported per retrain.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+    "labels": []
+  }
+}

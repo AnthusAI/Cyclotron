@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d019e8b7-8094-478a-99e0-0d7db5e7a8e1",
+  "issue_id": "decision-flywheel-bc5dc5ab-11e5-4140-aa4f-49f801103436",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:06:17.917Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Answer: has a standing run ever retrained, and what would it take",
+    "description": "Reply on this issue, for Ryan and the Papyrus session. Do this first. 1. Has run 405d7b6c-a41f-48a9-ae91-88a538b1e2b6 or any standing run ever retrained, and when? 2. What exactly is off (settings, frozen run, routes), and what would turning it on change or risk? 3. Does training read only the latest label per item revision? catalog_storage.py item_labels suggests so; Papyrus router 5.73 re-sent about 37 votes with explanations under new requestIds, and later changes of mind arrive as new labels. 4. Label counts by output on the run now. 5. Anything needing Ryan's approval, such as change sets or provider spend.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+    "labels": []
+  }
+}

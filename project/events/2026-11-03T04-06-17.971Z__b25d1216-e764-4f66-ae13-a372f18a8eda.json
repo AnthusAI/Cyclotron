@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b25d1216-e764-4f66-ae13-a372f18a8eda",
+  "issue_id": "decision-flywheel-08d14011-bc19-4b29-9b70-22c220133986",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:06:17.971Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Promote automatically; early on accept unless clearly worse",
+    "description": "A revision that evaluates better on held-out recent votes is promoted automatically, logged and revertible. While samples cannot tell the versions apart, accept the new revision unless the evidence says it is clearly worse; once there is enough data, it must show improvement. Enough comes from the statistics, not a constant. staged_optimization.py already does this for the first rubric and provisional refinements; extend it to the classifier, whose min_development_per_class=20 in classifier_training.py holds promotion today, and to later rubric proposals held as 'waiting for adequate development class coverage'. Coverage is the real constraint: Anth.us has about 4 rejections in 75 votes. Keep the sibling check: a change must not quietly regress another output.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+    "labels": []
+  }
+}
