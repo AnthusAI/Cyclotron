@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "5736c5b0-d2e6-457e-bf4b-5d705ca1be3f",
+  "issue_id": "decision-flywheel-592a0b32-f9a2-4838-aeba-f67987317102",
+  "event_type": "field_updated",
+  "occurred_at": "2026-11-03T05:05:38.144Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Build, verify and deploy the lab package from Actions",
+        "to": "Pipeline stages: build, change set, approve, deploy, verify"
+      },
+      "description": {
+        "from": "A job after a green main: build with scripts/dev/build_lab_package.sh from that exact commit on a clean checkout, confirm cli_login is in the zip, upload by content hash with no overwrite, create the change set keeping previous parameters, then apply the approval decision. After execution compare CodeSha256 with the package and probe the API without credentials (POST /machine/bindings/anth-us/operations on the API Gateway endpoint expects 403; lab.cyclotron.anth.us is Amplify). Then check logs and the dead-letter queue, roll back to the previous package key on failure, and serialize deploys. A failed step must fail the run visibly. Specs need no network or credentials.",
+        "to": "After a green main, an Actions job starts the pipeline for that exact commit, skipping stale results as Apricity's scripts/deploy-amplify.sh does (including a release commit landing after CI). Stages: source at that commit; CodeBuild runs scripts/dev/build_lab_package.sh and confirms cli_login is in the zip; upload by content hash with no overwrite; create the change set keeping previous parameters; read it and either continue or wait at the native approval action, per the approval task; execute; compare CodeSha256; probe the API without credentials (POST /machine/bindings/anth-us/operations on the API Gateway endpoint expects 403; lab.cyclotron.anth.us is Amplify); check logs and the dead-letter queue; roll back to the previous package key on failure. Executions are serialized. No tests run in AWS. A failure must fail the Actions run visibly."
+      }
+    }
+  }
+}

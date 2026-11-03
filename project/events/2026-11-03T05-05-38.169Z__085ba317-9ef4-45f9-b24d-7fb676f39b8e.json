@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "085ba317-9ef4-45f9-b24d-7fb676f39b8e",
+  "issue_id": "decision-flywheel-98232ff5-4361-4f96-8bc4-b30d28b921b3",
+  "event_type": "field_updated",
+  "occurred_at": "2026-11-03T05:05:38.169Z",
+  "actor_id": "home",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Deploy the lab front end on merge",
+        "to": "Pipeline stage: publish the lab front end to Amplify"
+      },
+      "description": {
+        "from": "The lab page is a manual Amplify app built from main via amplify.yml. Follow Papyrus: turn auto-build off where needed and start the Amplify job for the exact commit through OIDC with amplify:StartJob and GetJob only, after the backend it needs. Order matters when a front end depends on a new API. Check hosted mode before publishing.",
+        "to": "The lab page is Amplify app cyclotron-console: static, no repository connected, auto-build off, not in any stack. Add a stage after the backend verifies that builds with amplify.yml's commands (npm --prefix trace-ui ci, npm --prefix trace-ui run build, node trace-ui/scripts/package-console.mjs) and publishes the zip of trace-ui/console-dist with amplify create-deployment and start-deployment. Never publish the Lambda's vendored bundle; it is not hosted mode. Connecting a repository to the app is the alternative if this proves awkward. Check sign-in works after the first publish."
+      }
+    }
+  }
+}
