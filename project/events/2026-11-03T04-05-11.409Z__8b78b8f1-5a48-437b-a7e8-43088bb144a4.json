@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8b78b8f1-5a48-437b-a7e8-43088bb144a4",
+  "issue_id": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:05:11.409Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Standing runs retrain when and only when it is worth doing",
+    "description": "From Ryan via the Papyrus session, 2026-11-02. Verbatim: 'find some way to trigger retraining when and only when it is worth doing. When we have collected enough new feedback for it to matter.' 'if the new model evaluates better then yes we should switch to it automatically. But in the beginning the samples sizes are not large enough for that restriction and we need to always accept the new revision even if it does not show an immediate improvement.'\n\nWhat the Papyrus session read, please correct it: docs/standing-runs.md says hosted runs are frozen, the optimizer is disabled, and training is not activated by these routes; feedback only stores a catalog label and an event. Run 405d7b6c-a41f-48a9-ae91-88a538b1e2b6 had 131 feedback receipts by 2026-11-03: anth-us 84, distinctive 29, machines-on-machines 18. Explanations arrive as comment since Papyrus router 5.73. Papyrus ticket: PPY-f5505e. No fixed caps or windows (Ryan's standing rule). The decision model stays Jev/Kev/Laya or open weights; LLM only as optimizer.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

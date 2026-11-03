@@ -547,6 +547,7 @@ python -m decision_flywheel.command_recovery reconcile --profile P --expect-aws-
     --as failed --reason "why" [--dlq-url URL] [--apply]
 ```
 
+* `retry-failed --run UUID --reason WHY [--fingerprint SHA256] [--apply]` lists the run's decisions whose provider call failed (the shared request's latest attempt is `failed`) and, with `--apply`, lets the next request for each call the provider again. It makes no provider call itself, and it reads every attempt in the run's ledger, so it can take minutes. A failed call may still have been billed, so this is an operator's choice. An old job's receipt does not change: the item must be sent again under a new request id. A request still `pending` is not covered.
 * `diagnose` is the read-only `command_recovery` evidence: status, claim owner and fence.
 * `reconcile` is a **dry run unless `--apply` is given**. It asserts the AWS account first.
 * The recorded owner and fence must match exactly (copy them from `diagnose`).

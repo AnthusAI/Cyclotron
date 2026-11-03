@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "df6b8dd6-4652-4c5c-bd3d-c2557f239d03",
+  "issue_id": "decision-flywheel-b5556ee5-79a6-402d-8d27-e132afe0efae",
+  "event_type": "issue_created",
+  "occurred_at": "2026-11-03T04:06:18.020Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Expose retraining state for the Papyrus monitoring page",
+    "description": "Papyrus is integrating monitoring and Ryan needs to see this process. Per output: votes since the last retrain, disagreements, how close the next retrain is and why, each retrain's before and after scores, whether it was promoted and why, and its cost. Offer it through the existing status path or agree a shape with the Papyrus session on PPY-f5505e.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+    "labels": []
+  }
+}

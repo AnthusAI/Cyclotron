@@ -1,0 +1,28 @@
+{
+  "id": "decision-flywheel-bc5dc5ab-11e5-4140-aa4f-49f801103436",
+  "title": "Answer: has a standing run ever retrained, and what would it take",
+  "description": "Reply on this issue, for Ryan and the Papyrus session. Do this first. 1. Has run 405d7b6c-a41f-48a9-ae91-88a538b1e2b6 or any standing run ever retrained, and when? 2. What exactly is off (settings, frozen run, routes), and what would turning it on change or risk? 3. Does training read only the latest label per item revision? catalog_storage.py item_labels suggests so; Papyrus router 5.73 re-sent about 37 votes with explanations under new requestIds, and later changes of mind arrive as new labels. 4. Label counts by output on the run now. 5. Anything needing Ryan's approval, such as change sets or provider spend.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "79a944af-fd43-44bf-9ed4-676eebae28e8",
+      "author": "home",
+      "text": "Answer from the Cyclotron session, 2026-11-03. Live values were read-only from the lab catalog and each run's newest status snapshot. Code was read at develop f544854.\n\n1. Has a standing run ever retrained?\nNo. All six standing runs show refits 0 on every output and alignment labels 0 (405d7b6c, bec52c70, f2425834, 6cb3c7c7, 8726360e, 566df5dc). Version 2 on anth-us, machines-on-machines and threat-intelligence is a `promoted` change, which I read as priming: on r5 the times match the priming on 2026-11-02 (14, 11 and 12 primed examples). No vote has ever reached a classifier on these runs.\n\n2. What is off, and what would turning it on change?\n- No route: machine feedback writes only a catalog label and a run event (`record_machine_feedback`). Hosted standing runs never call `review()`, `learn()` or `replay()`.\n- Worker refusal: `hosted_publications.py` refuses an enabled optimizer (\"baseline prediction requires optimizer disabled\"). This is code, not a setting, so a code change and a deploy are required.\n- Promotion floor: `min_development_per_class=20` in `classifier_training.py`. No output has 20 votes in both classes, so even with everything else on, the classifier would not promote today.\nRisks:\n- A vote can only be reviewed against a decision held by that run's engine. 59 of the Anth.us receipts were recorded on r4, so reaching them on r5 may need re-deciding those items, which `replay()` does with model calls.\n- Learning changes one output's version inside a shared request. That changes the request fingerprint, so siblings may stop reusing cached answers; not measured.\n- Learning takes place in the run's one-at-a-time queue unless deferred, so a long optimizer call could hold every site's decisions. Run it as its own job with `learning=\"deferred\"`.\n- Votes are editor-selected, not a random sample, so a score on them is not a held-out score. Evaluation items must stay disjoint from candidates.\n- I have not confirmed whether this needs a new run. I am planning no r6, and the Papyrus session asked to be told first if that changes.\n\n3. Does training read only the latest label?\nHosted training doesn't read labels at all today. The rule it should use exists: `item_labels` returns the highest-sequence vote per classifier, classifier revision, list, item and item revision, minus retracted ones.\n- 131 records reduce to 94 current votes. The 37 re-sent votes are superseded; none changed the label.\n- `item_label_records` returns every record, so a trainer must not use it. `replay()` also takes whatever it is given, in order, so the caller must pass current votes only.\n- Retracting the latest vote leaves no current vote; it does not fall back to the earlier one.\n- A new classifier revision or item revision starts a separate vote, so old votes need an explicit decision on whether they carry over. `criteriaFingerprint` is the existing check for that.\n\n4. Label counts\nCorrection to the epic: the 131 receipts are across runs, not all on 405d7b6c. r5 has 43 (anth-us 25, machines-on-machines 18); bec52c70 has 29 (distinctive); r4 f2425834 has 59 (anth-us).\nCurrent votes by output:\n- anth-us-relevance, revision 2: 60 (56 include, 4 exclude); 84 records\n- distinctive-relevance, revision 1: 16 (16 include, 0 exclude); 29 records\n- machines-on-machines-relevance, revision 1: 18 (7 include, 11 exclude); 18 records\n- threat-intelligence, data-parade, pilobol-us, shipped: none found\nThese counts cover items with machine feedback. Votes given only in the lab on other items were not enumerated.\nCoverage is the real constraint: Distinctive has no rejections and Anth.us has 4.\n\n5. What needs Ryan's approval\n- Each change set, as always.\n- Provider spend: the optimizer's LLM calls, plus any re-deciding of old items.\n- Which optimizer provider and model, and its credential. A new secret, schedule, queue or IAM permission needs his concrete approval.\n- Whether r4 votes count for r5 when they require paid re-decisions.\n- Replacing the fixed floor of 20 per class, in line with his no-fixed-limits rule.\n\nDependency: PRs 191, 192 and 193 are on main and not deployed. The hosted decision path also has no retry for a failed provider call, despite what the refusal message says. That decision is with Ryan and should land before retraining adds load to the queue.",
+      "created_at": "2026-11-03T04:13:05.237417Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-11-03T04:06:17.917092Z",
+  "updated_at": "2026-11-03T04:13:05.237710Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

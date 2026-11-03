@@ -1,0 +1,20 @@
+{
+  "id": "decision-flywheel-085b5fe8-07da-400b-b7e5-72a97ccab70c",
+  "title": "Turn retraining on for the shared standing run",
+  "description": "Enable the above on run 405d7b6c through the normal change-set process, after the Answer task. Bring Ryan the change set and risks. Editors' existing labels and comments count. Report the first retrain's before and after.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "decision-flywheel-1700b73d-d0e1-4f8b-8e87-f18bcc6f47bd",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-11-03T04:06:17.996200Z",
+  "updated_at": "2026-11-03T04:06:17.996217Z",
+  "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

@@ -3,18 +3,21 @@
 import asyncio
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
 
 from . import account_sessions_test
+from .command_recovery import main
 from .command_refusal import CommandRefused
 from .hosted_publications import DecisionModel, PublicationTarget
 from .hosted_publications_test import ITEM, PUBS, setup
 from .machine_access import MachineActor, MachineDenied
 from .provider_credentials import ProviderKeyUnavailable
 from .s3_batch_storage import S3BatchStorage
+from .s3_console_storage import S3ConsoleStorage
 
 ROLE = "arn:aws:iam::222222222222:role/synthetic-invoker"
 CALLER = "arn:aws:sts::222222222222:assumed-role/synthetic-invoker/papyrus-monitor"
@@ -369,6 +372,104 @@ def test_status_serves_the_last_completed_snapshot_for_machine_callers(identity,
     asyncio.run(go())
 
 
+def report_of(response, output):
+    assert response.status_code == 200, response.text
+    return response.json()["outputs"][output]
+
+
+def test_the_report_answers_before_any_decision_and_says_why_its_sections_are_empty(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    output = targets[0].bindings[0].outputs[0]
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            response = await http.post("/machine/publications/alpha/operations", json=body("report", {}))
+            report = report_of(response, output)
+            assert response.json()["schema"] == "cyclotron-classifier-report/v1"
+            assert response.json()["publicationId"] == "alpha"
+            assert report["learning"]["state"] == "not_active" and report["learning"]["refits"] is None
+            assert report["learning"]["unavailableReason"]
+            assert report["heldOut"] == {"accuracy": None, "reason": report["heldOut"]["reason"]} and report["heldOut"]["reason"]
+            assert report["model"]["weights"] is None and report["model"]["reason"]
+            assert report["agreementWithEditors"]["votes"] == 0
+            bad = await http.post("/machine/publications/alpha/operations", json=body("report", {}, "req-not-allowed"))
+            assert bad.status_code == 400
+            assert (await http.post("/machine/publications/alpha/operations", json=body("report", {"x": 1}))).status_code == 400
+
+    asyncio.run(go())
+
+
+def test_the_report_scores_current_votes_against_recorded_decisions_for_this_binding_only(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    alpha, beta = targets[0].bindings[0], targets[0].bindings[1]
+    output, sibling = alpha.outputs[0], beta.outputs[0]
+    url = "/machine/publications/alpha/operations"
+
+    async def vote(http, publication, binding_output, name, label, request_id):
+        return await http.post(
+            f"/machine/publications/{publication}/operations",
+            json=body(
+                "feedback",
+                {
+                    "bindingRevision": "binding-one",
+                    "itemId": name,
+                    "itemRevision": 1,
+                    "output": binding_output,
+                    "label": label,
+                    "editor": {"site": publication, "subject": "editor-1"},
+                },
+                request_id,
+            ),
+        )
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            _, first = await decide(http, worker, sent, new_item("hn-1"))
+            _, second = await decide(http, worker, sent, new_item("hn-2"))
+            labels = [
+                first.json()["decision"]["classifiers"][output]["label"],
+                second.json()["decision"]["classifiers"][output]["label"],
+            ]
+            other = next(
+                c["label"]
+                for c in store.run(targets[0].run_id)["config"]["classifiers"][0]["config"]["classes"]
+                if c["label"] != labels[1]
+            )
+            # Changing a vote replaces it: the first vote on hn-1 disagrees, the later one agrees.
+            assert (
+                await vote(http, "alpha", output, "hn-1", other if other != labels[0] else labels[1], "req-vote-0001")
+            ).status_code == 200
+            assert (await vote(http, "alpha", output, "hn-1", labels[0], "req-vote-0002")).status_code == 200
+            assert (await vote(http, "alpha", output, "hn-2", other, "req-vote-0003")).status_code == 200
+            assert (await vote(http, "beta", sibling, "hn-2", other, "req-vote-0004")).status_code == 200
+            response = await http.post(url, json=body("report", {}))
+            report = report_of(response, output)
+            assert set(response.json()["outputs"]) == set(alpha.outputs) and sibling not in response.text
+            agreement = report["agreementWithEditors"]
+            assert (agreement["votes"], agreement["compared"], agreement["agreed"]) == (2, 2, 1)
+            assert [row["classifierRevision"] for row in agreement["byClassifierRevision"]] and agreement["byDay"]
+            assert sum(report["counts"]["labels"].values()) == 2
+            assert report["learning"]["refits"] == 0 and report["counts"]["reviewedDecisions"] == 0
+
+    asyncio.run(go())
+
+
+def test_a_failure_to_file_a_decision_does_not_fail_the_paid_decision(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+
+    def refused(self, *args, **kwargs):
+        raise ValueError("displayed prediction is immutable")
+
+    monkeypatch.setattr(S3ConsoleStorage, "record_item_prediction", refused)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 200
+
+    asyncio.run(go())
+
+
 def test_a_machine_actor_cannot_be_forged_for_another_target_or_account():
     with pytest.raises(ValueError):
         MachineActor("arn:aws:iam::222222222222:role/*", "papyrus-monitor", str(uuid4()), str(uuid4()), "b")
@@ -528,6 +629,57 @@ def test_a_failed_provider_call_ends_with_a_receipt_frees_the_run_and_is_not_pai
             # The run is free: another item is decided normally.
             _, receipt = await decide(http, worker, sent, new_item("hn-2"))
             assert receipt.status_code == 200
+
+    asyncio.run(go())
+
+
+def test_after_an_operator_retry_a_failed_decision_is_made_by_sending_its_item_again(identity, monkeypatch, capsys):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    real = model.classify_many
+    state = {"fail": True, "dispatched": 0}
+
+    async def flaky(*args, **kwargs):
+        state["dispatched"] += 1
+        if state["fail"]:
+            raise RuntimeError("synthetic provider failure after dispatch")
+        return await real(*args, **kwargs)
+
+    model.classify_many = flaky
+
+    class Session:
+        def client(self, name):
+            if name == "s3":
+                return worker.s3
+            return SimpleNamespace(
+                get_caller_identity=lambda: {"Account": worker.config.account, "Arn": "arn:synthetic:operator"}
+            )
+
+    def recovery(*extra):
+        arguments = ["retry-failed", "--expect-aws-account", worker.config.account, "--books-bucket"]
+        arguments += [worker.config.books_bucket, "--cyclotron-account", account, "--run", targets[0].run_id]
+        return main([*arguments, "--reason", "provider outage ended", *extra], session=Session())
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.json()["code"] == "provider_failed"
+            state["fail"] = False
+            # A dry run changes nothing: the item is still refused, with no provider call.
+            assert recovery() == 0
+            assert "DRY RUN" in capsys.readouterr().out
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.json()["code"] == "source_refused" and state["dispatched"] == 1
+            # The operator's retry makes no provider call of its own; sending the item again does.
+            assert recovery("--apply") == 0
+            assert "APPLIED: 1 failed requests" in capsys.readouterr().out
+            assert state["dispatched"] == 1
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 200 and state["dispatched"] == 2
+            # Nothing is left to retry, and the decision is not paid for again.
+            assert recovery() == 0
+            assert "0 failed requests" in capsys.readouterr().out
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 200 and state["dispatched"] == 2
 
     asyncio.run(go())
 
