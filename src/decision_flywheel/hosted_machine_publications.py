@@ -1,6 +1,6 @@
 """Machine routes for standing publication targets (SigV4 service principals, no human session).
 
-``POST /machine/bindings/{binding}/operations`` accepts ``decide``, ``status`` and ``feedback``.
+``POST /machine/bindings/{binding}/operations`` accepts ``decide``, ``status``, ``report`` and ``feedback``.
 ``GET  /machine/bindings/{binding}/commands/{jobId}`` polls a queued ``decide``.
 ``POST /machine/decisions`` queues one ``decide`` answering several bindings of a standing target.
 ``GET  /machine/decisions/{jobId}`` polls it and returns every requested binding's projection.
@@ -22,6 +22,7 @@ from hashlib import sha256
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from .classifier_report import classifier_report
 from .decision_kinds import WRITTEN, is_decision
 from .hosted_publications import (
     QUEUE_REFUSALS,
@@ -41,6 +42,7 @@ from .publication_lab import CONTRACT, CONTRACTS, DECISION_CONTRACT, in_contract
 from .standing_publications import validate_item
 from .storage_errors import StorageMissing, StorageUncertain
 
+READS = ("status", "report")  # These take no request id and change nothing.
 REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{8,}")
 FEEDBACK_KEYS = {"bindingRevision", "itemId", "itemRevision", "output", "label"}
 # Who reviewed: the publication contract's ``editor: {site, subject}``, or the decision contract's caller and reviewer.
@@ -90,16 +92,16 @@ def install_machine_routes(app, runtime):
             body = json.loads(content)
             name = body["operation"]
             keys = {"contractVersion", "operation", "payload"}
-            if name != "status":
+            if name not in READS:
                 keys.add("requestId")
             if (
                 set(body) != keys
                 or body["contractVersion"] != contract
-                or name not in ("decide", "status", "feedback")
+                or name not in ("decide", "feedback", *READS)
                 or not isinstance(body["payload"], dict)
             ):
                 raise ValueError()
-            if name != "status" and (not isinstance(body["requestId"], str) or not REQUEST_ID.fullmatch(body["requestId"])):
+            if name not in READS and (not isinstance(body["requestId"], str) or not REQUEST_ID.fullmatch(body["requestId"])):
                 raise ValueError()
         except (ValueError, TypeError, KeyError):
             raise HTTPException(400, "publication contract with a machine request id required") from None
@@ -110,12 +112,14 @@ def install_machine_routes(app, runtime):
         except (ValueError, StorageMissing):
             raise HTTPException(409, "standing run unavailable") from None
         meta = envelope(target, binding, run["config"])
-        if name == "status":
+        if name in READS:
             if payload:
-                raise HTTPException(400, "status takes an empty payload")
+                raise HTTPException(400, f"{name} takes an empty payload")
             if meta.get("pendingOutputs"):
                 return answer(contract, meta)
             snapshot = await asyncio.to_thread(status_snapshot, store, target, binding, publication)
+            if name == "report":
+                return answer(contract, {**meta, **await asyncio.to_thread(classifier_report, store, run, binding, snapshot)})
             if snapshot is None:
                 raise HTTPException(503, "no verified publication status snapshot yet")
             return answer(contract, snapshot)
