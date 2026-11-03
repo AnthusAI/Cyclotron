@@ -48,6 +48,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
+from uuid import uuid4
 
 from .batch_storage import (
     BatchConflict,
@@ -371,6 +372,16 @@ def generation(fingerprint, number, owner, ordinal, supersedes, status, payload,
         "claimed": claimed,
         "revision": revision,
     }
+
+
+def may_repeat(payload):
+    """An interrupted request may run again when learning stopped it or an operator authorized a retry."""
+    if payload == ABANDONED:
+        return True
+    try:
+        return "retry_authorized" in json.loads(payload)
+    except (TypeError, ValueError):
+        return False
 
 
 def attempt_value(gen):
@@ -876,7 +887,7 @@ class S3BatchStorage:
                 row
                 and row["status"] != "complete"
                 and not retry_failed
-                and not (row["status"] == "interrupted" and row["payload"] == ABANDONED)
+                and not (row["status"] == "interrupted" and may_repeat(row["payload"]))
             ):
                 raise RuntimeError("explicit retry required for interrupted batch")
             attempts, superseded = view.value["attempts"], view.value["superseded"]
@@ -963,6 +974,35 @@ class S3BatchStorage:
                 raise BatchUncertain("claimed cloud request requires explicit provider reconciliation; never automatically repay")
             settled = {**row, "status": "interrupted", "payload": ABANDONED, "revision": row["revision"] + 1}
             return self._batch(settled), self._same(view, held=self._replace(view, settled))
+
+        return self._write(plan)[0]
+
+    def failed_requests(self):
+        """Requests whose latest attempt failed, oldest first. Reads every attempt: an operator's slow path."""
+        latest = {}
+        for gen in self._every_generation(self._state()):
+            if gen["fingerprint"] not in latest or gen["generation"] > latest[gen["fingerprint"]]["generation"]:
+                latest[gen["fingerprint"]] = gen
+        return [g["fingerprint"] for g in sorted(latest.values(), key=lambda g: g["ordinal"]) if g["status"] == "failed"]
+
+    def authorize_retry(self, fingerprint, audit):
+        """Let the next request for this failed decision call the provider again. This makes no provider call.
+
+        A settled generation is write-once, so the authorization is its own generation, kept in the audit
+        history and counted as an attempt like any other.
+        """
+        payload = json.dumps({"retry_authorized": audit}, sort_keys=True)
+
+        def plan(view):
+            row = self._current(view, fingerprint)
+            if not row or row["status"] != "failed":
+                raise BatchConflict("only a failed request can be retried")
+            attempts, superseded = view.value["attempts"] + 1, view.value["superseded"] + 1
+            revision = (row["revision"] or 0) + 1
+            fresh = generation(
+                fingerprint, row["generation"] + 1, str(uuid4()), attempts, superseded, "interrupted", payload, False, revision
+            )
+            return self._batch(fresh), _Change([*view.value["held"], fresh], attempts, superseded, attempt=fresh)
 
         return self._write(plan)[0]
 

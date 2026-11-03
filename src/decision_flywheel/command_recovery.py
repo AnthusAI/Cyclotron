@@ -6,6 +6,13 @@
       --books-bucket B --cyclotron-account UUID --job UUID --owner UUID --fence 1 --as failed \\
       --reason "why" [--dlq-url URL] [--apply]
 
+  python -m decision_flywheel.command_recovery retry-failed --profile P --expect-aws-account 123456789012 \\
+      --books-bucket B --cyclotron-account UUID --run UUID --reason "why" [--fingerprint SHA256] [--apply]
+
+`retry-failed` lists the run's decisions whose provider call failed, and with `--apply` lets the next request for
+each call the provider again. It makes no provider call itself; a decision is only paid for when its item is sent
+again. A failed call may still have been billed by the provider, so this is an operator's choice, never automatic.
+
 `reconcile` is a dry run unless `--apply` is given. It refuses unless the recorded owner and fence match, the
 job has no result, and nothing in the catalog points at a completed provider call. On apply it ends the job as
 `failed` or `interrupted`, with the audit record (who, when, why) stored as the job's result in the same catalog
@@ -16,9 +23,12 @@ worker's own rule is unchanged: it never takes over a running claim.
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
+from hashlib import sha256
 
 from .batch_storage import StorageScope
 from .record_lake import S3RecordLake
+from .s3_batch_storage import S3BatchStorage, reply_lake_for
 from .s3_console_storage import RESULTS_DOMAIN, RESULTS_KIND, S3ConsoleStorage
 from .s3_journal import S3Journal
 from .storage_payloads import S3Payloads
@@ -29,6 +39,33 @@ def open_store(s3, books_bucket, aws_account, cyclotron_account):
     journal = S3Journal(payloads, "console", "catalog")
     results = S3RecordLake(payloads, RESULTS_DOMAIN, RESULTS_KIND)
     return S3ConsoleStorage(journal, results=results)
+
+
+def decision_ledger(s3, books_bucket, aws_account, cyclotron_account, cyclotron_id):
+    """The shared-request ledger of a publication run's engine, named as ``S3CyclotronStores`` names it."""
+    payloads = S3Payloads(s3, books_bucket, aws_account, StorageScope(cyclotron_account, "console"))
+    root = S3Journal(payloads, "workspace", "publication-" + sha256(cyclotron_id.encode()).hexdigest())
+    name = sha256((root.namespace + "\0ledger").encode()).hexdigest()
+    journal = S3Journal(payloads, "shared-batches", name, create_only_initialization=True)
+    return S3BatchStorage(journal, replies=reply_lake_for(journal, "ledger"))
+
+
+def retry_failed(args, identity, s3, store):
+    ledger = decision_ledger(
+        s3, args.books_bucket, identity["Account"], args.cyclotron_account, store.run(args.run)["config"]["cyclotron_id"]
+    )
+    failed = ledger.failed_requests()
+    if args.fingerprint and args.fingerprint not in failed:
+        print("Refused: that request's latest attempt did not fail", file=sys.stderr)
+        return 1
+    chosen = [args.fingerprint] if args.fingerprint else failed
+    audit = {"operator": identity["Arn"], "reason": args.reason, "at": datetime.now(timezone.utc).isoformat()}
+    if args.apply:
+        for fingerprint in chosen:
+            ledger.authorize_retry(fingerprint, audit)
+    print(("APPLIED" if args.apply else "DRY RUN (nothing written; pass --apply)") + f": {len(chosen)} failed requests")
+    print("\n".join(chosen))
+    return 0
 
 
 def matching_dlq_messages(sqs, url, job_id, *, limit=100):
@@ -82,6 +119,8 @@ def run(args, *, session):
         return 2
     s3 = session.client("s3")
     store = open_store(s3, args.books_bucket, identity["Account"], args.cyclotron_account)
+    if args.command == "retry-failed":
+        return retry_failed(args, identity, s3, store)
     if args.command == "diagnose":
         print(json.dumps(store.command_recovery(args.job), indent=1))
         return 0
@@ -129,13 +168,15 @@ def aws_session(profile, region):
 
 def parser():
     p = argparse.ArgumentParser(prog="command_recovery", description=__doc__.split("\n\n")[0])
-    p.add_argument("command", choices=("diagnose", "reconcile"))
+    p.add_argument("command", choices=("diagnose", "reconcile", "retry-failed"))
     p.add_argument("--profile")
     p.add_argument("--region", default="us-east-1")
     p.add_argument("--expect-aws-account", required=True)
     p.add_argument("--books-bucket", required=True)
     p.add_argument("--cyclotron-account", required=True)
-    p.add_argument("--job", required=True)
+    p.add_argument("--job")
+    p.add_argument("--run", help="retry-failed: the publication run")
+    p.add_argument("--fingerprint", help="retry-failed: only this request")
     p.add_argument("--owner")
     p.add_argument("--fence", type=int)
     p.add_argument("--as", dest="as_status", choices=("failed", "interrupted"))
@@ -149,6 +190,10 @@ def parser():
 def main(argv=None, *, session=None):
     p = parser()
     args = p.parse_args(argv)
+    if args.command == "retry-failed" and not (args.run and args.reason):
+        p.error("retry-failed needs --run and --reason")
+    if args.command != "retry-failed" and not args.job:
+        p.error(f"{args.command} needs --job")
     if args.command == "reconcile" and not (args.owner and args.fence and args.as_status and args.reason):
         p.error("reconcile needs --owner, --fence, --as and --reason")
     if session is None:
