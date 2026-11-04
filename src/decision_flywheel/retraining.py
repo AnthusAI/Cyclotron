@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from uuid import uuid4
 
-from .decision_kinds import WRITTEN
+from .decision_kinds import WRITTEN, is_decision
 from .embedded_cyclotron import ClassifierSpec, CyclotronDefinition
 from .iteration_learning import IterationPlan, learn_iteration
 from .iteration_transfer import CURRENT_ITERATION
@@ -32,6 +32,8 @@ OPTIMIZER_MODEL = "gpt-6-luna"
 MODEL_CALL_SECONDS = 120
 OPTIMIZER_CALL_SECONDS = 300
 RETRY_AFTER_SECONDS = 900
+LOOKUP_SECONDS = 600  # Of a check's 900. The next check carries on from where this one stopped.
+LOOKUP_SAVE_EVERY = 500
 FEEDBACK = "publication-machine-feedback"
 
 
@@ -40,6 +42,7 @@ def empty_state():
         "schema": "cyclotron-retraining/v1",
         "cursor": 0,
         "votes": {},
+        "lookup": None,
         "seen": {},
         "requirement": {},
         "claimed": {},
@@ -98,6 +101,8 @@ def refresh_votes(store, run_id, list_id, state):
             votes.pop(item_id, None)
             continue
         latest = max(current, key=lambda row: row["sequence"])
+        known = votes.get(item_id, {})
+        same_revision = known.get("revision") == revision
         decided = None
         for result in store.item_results(list_id, item_id, revision):  # newest run first
             decided = result["payload"]["classifiers"].get(output)
@@ -107,9 +112,69 @@ def refresh_votes(store, run_id, list_id, state):
             "revision": revision,
             "label": latest["label"],
             "comment": latest["comment"] or "",
-            "decided": decided,
+            "decided": decided or (known.get("decided") if same_revision else None),
+            "lookedUp": same_revision and known.get("lookedUp", False),
         }
     return state
+
+
+def job_decisions(response):
+    """One finished decision job's item revision, when it recorded one, and each output's decision."""
+    rows = list(response["publications"].values()) if response.get("publications") else [response]
+    source = next((row["source"] for row in rows if row.get("source")), {})
+    decisions = {
+        output: {"label": decided["label"], "confidence": decided.get("confidence")}
+        for row in rows
+        for output, decided in (row.get("decision") or {}).get("classifiers", {}).items()
+    }
+    return source.get("revision"), decisions
+
+
+def look_up_older_decisions(store, run_id, state, *, deadline=None, clock=time.monotonic):
+    """Find the decisions behind votes on items decided before decisions were filed by item, in the run's job records.
+
+    The walk goes from the newest job to the oldest, so an item's first decision is the one that stands, as it does
+    when filed. Progress is saved along the way, and a check that runs out of time leaves the next one to carry on.
+    """
+    current = state.read().value
+    lookup = current["lookup"]
+    if lookup is None:
+        items = sorted(
+            {
+                item_id
+                for rows in current["votes"].values()
+                for item_id, row in rows.items()
+                if not row["decided"] and not row["lookedUp"]
+            }
+        )
+        if not items:
+            return
+        lookup = {"items": items, "position": store.run_job_count(run_id)}
+    wanted, position, found = set(lookup["items"]), lookup["position"], {}
+
+    def save(finished):
+        def apply(value):
+            for output, rows in value["votes"].items():
+                for item_id, row in rows.items():
+                    if item_id not in wanted:
+                        continue
+                    decided = found.get((item_id, row["revision"]), {}).get(output) or found.get((item_id, None), {}).get(output)
+                    row["decided"] = decided or row["decided"]
+                    row["lookedUp"] = row["lookedUp"] or finished
+            value["lookup"] = None if finished else {"items": lookup["items"], "position": position}
+
+        state.change(apply)
+
+    while position > 0 and (deadline is None or clock() < deadline):
+        job = store.run_job_at(run_id, position, results=False)
+        position -= 1
+        item_id = (job["payload"].get("item") or {}).get("id")
+        if item_id in wanted and job["status"] == "completed" and is_decision(job["kind"]):
+            revision, decisions = job_decisions((store.job_result(job["id"]) or {}).get("response") or {})
+            found.setdefault((item_id, revision), {}).update(decisions)
+        if position % LOOKUP_SAVE_EVERY == 0:
+            save(False)
+    save(position == 0)
 
 
 def due_outputs(state):
@@ -162,7 +227,7 @@ def may_start(state, now):
     return state["started"] is None or now >= state["started"] + RETRY_AFTER_SECONDS * 2 ** state["failures"]
 
 
-def check_run(runtime, target, ecs, settings, *, now=None):
+def check_run(runtime, target, ecs, settings, *, now=None, deadline=None):
     """One standing run's scheduled check. Paid work happens only in the task it may start."""
     now = time.time() if now is None else now
     store = runtime.console(target.account_id)
@@ -176,8 +241,12 @@ def check_run(runtime, target, ecs, settings, *, now=None):
     current = state.change(
         lambda value: (refresh_votes(store, target.run_id, config["item_list_id"], value), settle_adoption(store, value, now))
     )
+    look_up_older_decisions(store, target.run_id, state, deadline=deadline)
+    current = state.read().value
     decisions = due_outputs(current)
     due = sorted(output for output, row in decisions.items() if row["due"])
+    if current["lookup"] is not None:  # The first retrain should see every older mistake, not the ones found so far.
+        return {"due": due, "started": False, "outputs": decisions, "lookingUpOlderDecisions": True}
     if not due or not may_start(current, now):
         return {"due": due, "started": False, "outputs": decisions}
     running = ecs.list_tasks(cluster=settings["cluster"], startedBy=target.run_id, desiredStatus="RUNNING")["taskArns"]
@@ -215,7 +284,12 @@ def check_run(runtime, target, ecs, settings, *, now=None):
 def check_all(runtime, ecs, settings):
     from .hosted_publications import configured_targets
 
-    return {target.run_id: check_run(runtime, target, ecs, settings) for target in configured_targets(runtime) if target.standing}
+    deadline = time.monotonic() + LOOKUP_SECONDS
+    return {
+        target.run_id: check_run(runtime, target, ecs, settings, deadline=deadline)
+        for target in configured_targets(runtime)
+        if target.standing
+    }
 
 
 def settings_from_environment(environment):
