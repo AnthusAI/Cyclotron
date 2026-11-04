@@ -19,6 +19,7 @@ from .record_lake import (
 from .record_lake_contract_test import SCOPE, ListingS3
 from .s3_journal_test import S3Error
 from .s3_journal_test import journal as s3_journal
+from .s3_transient import failure_codes
 from .storage_payloads import FilePayloads
 
 
@@ -63,15 +64,35 @@ def test_covered_reads_use_only_gets_so_they_need_no_list_permission():
 def test_a_lost_create_response_is_repaired_by_repeating_the_identical_record():
     fake, lake = s3_lake()
     fake.lose = lambda key: True
-    with pytest.raises(RecordUncertain):
-        lake.put(1, {"e": 1})
     ref = lake.put(1, {"e": 1})
     assert ref.seq == 1 and lake.read(1) == {"e": 1}
 
 
+def test_a_create_that_fails_once_succeeds_on_the_one_repeat():
+    fake, lake = s3_lake()
+    fake.before = lambda request: (_ for _ in ()).throw(S3Error("SlowDown"))
+    assert lake.put(1, {"e": 1}).seq == 1 and lake.read(1) == {"e": 1}
+
+
+def test_a_create_that_keeps_failing_is_uncertain_and_names_its_s3_code():
+    fake, lake = s3_lake()
+
+    def refuse(**request):
+        raise S3Error("SlowDown")
+
+    fake.put_object = refuse
+    with pytest.raises(RecordUncertain) as failure:
+        lake.put(1, {"e": 1})
+    assert failure_codes(failure.value) == ["SlowDown"]
+
+
 def test_a_failed_create_that_is_not_a_conflict_is_uncertain_not_a_skip():
     fake, lake = s3_lake()
-    fake.before = lambda request: (_ for _ in ()).throw(S3Error("InternalError"))
+
+    def refuse(**request):
+        raise S3Error("InternalError")
+
+    fake.put_object = refuse
     with pytest.raises(RecordUncertain):
         lake.append(Coverage(), [{"e": 1}])
 
