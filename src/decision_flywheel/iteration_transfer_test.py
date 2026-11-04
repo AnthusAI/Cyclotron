@@ -39,12 +39,16 @@ def learned(path):
         pools = {"one": rows, "two": ()}
         wheel = engine.wheels["one"]
         async with engine.execution():
-            config = replace(
-                wheel.active.config, rubric="Learned rubric", example_ids=tuple(row.item.id for row in rows)
-            )
+            config = replace(wheel.active.config, rubric="Learned rubric", example_ids=tuple(row.item.id for row in rows))
             engine.shared.bind_context({"one": config, "two": engine.wheels["two"].active.config}, pools)
             candidate, _ = await fit_candidate(
-                wheel, config, rows, (), protected=(), propensities={r.item.id: 1.0 for r in rows}, validation_status="provisional"
+                wheel,
+                config,
+                rows,
+                (),
+                protected=(),
+                propensities={r.item.id: 1.0 for r in rows},
+                validation_status="provisional",
             )
             wheel._activate(candidate)
             record = iteration_record(

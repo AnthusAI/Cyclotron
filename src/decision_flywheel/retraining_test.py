@@ -150,7 +150,9 @@ def test_a_second_round_grows_from_the_first_and_learns_only_when_new_votes_are_
     ecs = Ecs()
     check_run(worker, target, ecs, SETTINGS)
     monkeypatch.undo()
-    first = retrain(worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path / "1")
+    first = retrain(
+        worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path / "1"
+    )
     while sent:
         asyncio.run(worker.worker().process(sent.pop(0)))
     assert check_run(worker, target, ecs, SETTINGS)["due"] == []
@@ -164,7 +166,9 @@ def test_a_second_round_grows_from_the_first_and_learns_only_when_new_votes_are_
     assert second_check["due"] == ["alpha"]
     state = RetrainingState(worker, account, target.run_id)
     state.change(lambda value: value.update(started=None))
-    second = retrain(worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path / "2")
+    second = retrain(
+        worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path / "2"
+    )
     while sent:
         asyncio.run(worker.worker().process(sent.pop(0)))
     check_run(worker, target, ecs, SETTINGS)

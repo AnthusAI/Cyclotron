@@ -390,7 +390,7 @@ def test_the_report_answers_before_any_decision_and_says_why_its_sections_are_em
             report = report_of(response, output)
             assert response.json()["schema"] == "cyclotron-classifier-report/v1"
             assert response.json()["publicationId"] == "alpha"
-            assert report["learning"]["state"] == "not_active" and report["learning"]["refits"] is None
+            assert report["learning"]["state"] == "waiting" and report["learning"]["refits"] is None
             assert report["learning"]["unavailableReason"]
             assert report["heldOut"] == {"accuracy": None, "reason": report["heldOut"]["reason"]} and report["heldOut"]["reason"]
             assert report["model"]["weights"] is None and report["model"]["reason"]

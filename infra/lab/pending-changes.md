@@ -8,6 +8,40 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
+## Pending: standing runs retrain themselves in the cloud
+
+New in the next deploy. The learning job cannot be a Lambda: it grows with votes and already takes about ten minutes
+at 52 votes, against Lambda's 15-minute limit. So it runs as a one-shot Fargate task.
+
+- `RetrainingSubnets` parameter, no default and passed at deploy: three public default-VPC subnets; the task needs outbound internet only.
+- `RetrainingCentralEndpoint` parameter, no default and passed at deploy: the same central API the worker names, which the shared configuration requires.
+- `RetrainingCluster`, `RetrainingLogGroup` (`/ecs/cyclotron-retraining`, 14 days).
+- `RetrainingTaskDefinition`: 1 vCPU, 4 GB, the public `public.ecr.aws/lambda/python:3.13` image. It adds no image repository: the task downloads the same package key as the worker and runs `decision_flywheel.retraining`.
+- `RetrainingExecutionRole`: writes that log group only.
+- `RetrainingTaskRole`: read and write on the console `payloads`, `records`, `coordination/console` and `coordination/optimizer` prefixes; read on `coordination/workspace` and on the code package; `sqs:SendMessage` on the command queue; read on the existing `cyclotron/providers/openai` secret. No access to runtime journals or the shared-decision ledger: only the worker can change the live store.
+- `RetrainingCheckSchedule`, `RetrainingCheckPermission`: every 15 minutes, invoke the worker with `{"operation":"retraining-check"}`.
+- `WorkerRole` gains three statements: `ecs:RunTask` on that task family in that cluster, `ecs:ListTasks` in that cluster, `iam:PassRole` on the two new roles to `ecs-tasks` only.
+- `WorkerFunction` gains `CYCLOTRON_RETRAIN_CLUSTER`, `_TASK_DEFINITION`, `_SUBNETS` and `_ROLE_ARN`. The last lets the worker accept adoption jobs queued by the task role. The BFF is not told it, so no API route accepts that role.
+- `BffRole` gains `s3:GetObject` on `coordination/optimizer`, read only, so the `report` route can show each site's retraining state.
+
+Paths added:
+
+- `/Parameters/RetrainingSubnets`
+- `/Parameters/RetrainingCentralEndpoint`
+- `/Resources/RetrainingCluster`
+- `/Resources/RetrainingLogGroup`
+- `/Resources/RetrainingExecutionRole`
+- `/Resources/RetrainingTaskRole`
+- `/Resources/RetrainingTaskDefinition`
+- `/Resources/RetrainingCheckSchedule`
+- `/Resources/RetrainingCheckPermission`
+- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-`
+- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_CLUSTER`
+- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_TASK_DEFINITION`
+- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_SUBNETS`
+- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_ROLE_ARN`
+- `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-`
+
 Previously: each CLI login is enrolled at Prospectus (cli-login 0.3.0; lab code 71d601f, package sha256 `12ad7b9fba857da79134ba3f01f5f438ad09a963f1742e30843e228fab17fe78`), deployed on 2026-10-30 with change set `cli-enroll-71d601f`. Code only; the snapshot was refreshed.
 
 Previously: remote CLI sign-in (AnthusAI/cli-login 0.2.0; docs/cli-remote-login.md), deployed on 2026-10-30 in two change sets. `cli-login-10b3aac` (lab code 10b3aac, package sha256 `507b97fc02dfa514a2eb46da6e4b8bbc0915bef8c4a0958d67357855d841d07c`) added the `CliBrokerArn` and `CliBrokerEndpoint` parameters, set to the `cyclotron-cli-broker` stack's function and URL, the `HasCliBroker` condition, the BFF's two broker settings and one `lambda:InvokeFunction` statement on that broker. `cli-session-fix-9f3920b` (lab code 9f3920b, package sha256 `c7002ebd1715165669ee2f743c363e5218aed4999870d4186c79e4bc2451469b`) was code only: a CLI's session is created before it is read. The snapshot was refreshed.

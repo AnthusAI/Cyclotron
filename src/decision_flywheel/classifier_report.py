@@ -12,7 +12,8 @@ from .lab_decisions import _parallel
 from .publication_lab import criteria_fingerprint
 
 SCHEMA = "cyclotron-classifier-report/v1"
-LEARNING_OFF = "standing runs do not train on votes yet; votes are stored and change no classifier"
+LEARNING_WAITING = "no retraining has been due yet; each site retrains when its votes are worth it"
+LEARNING_ON = "this site retrains in the cloud when its votes are worth it"
 NO_HELD_OUT = "standing runs do not produce held-out evaluations yet"
 NO_MODEL = "no machine-learning model has been fitted for this classifier"
 NO_SNAPSHOT = "no decision has completed for this binding yet"
@@ -71,7 +72,31 @@ def agreement(votes):
     }
 
 
-def output_report(definition, status, votes):
+def learning_state(retraining, output):
+    """What retraining knows about one output: how close the next retrain is, why, and how each round went."""
+    from .retraining import due_outputs
+
+    if retraining is None:
+        return {"state": "waiting", "reason": LEARNING_WAITING, "next": None, "rounds": []}
+    rounds = [
+        {
+            "id": row["id"],
+            "adoption": row.get("adoption"),
+            "acceptance": row["report"][output]["acceptance"],
+            "calls": row.get("calls"),
+        }
+        for row in retraining["history"]
+        if output in row.get("report", {})
+    ]
+    return {
+        "state": "active" if rounds else "waiting",
+        "reason": LEARNING_ON if rounds else LEARNING_WAITING,
+        "next": due_outputs(retraining).get(output),
+        "rounds": rounds,
+    }
+
+
+def output_report(definition, status, votes, retraining=None):
     config = definition["config"]
     labels = Counter(vote["label"] for vote in votes)
     cyclotron, pending = (status or {}).get("cyclotron") or {}, (status or {}).get("pending") or {}
@@ -86,8 +111,7 @@ def output_report(definition, status, votes):
             "classes": config["classes"],
         },
         "learning": {
-            "state": "not_active",
-            "reason": LEARNING_OFF,
+            **learning_state(retraining, definition["id"]),
             "version": cyclotron.get("version"),
             "refits": cyclotron.get("refits"),
             "lastChange": (status or {}).get("lastChange"),
@@ -106,8 +130,9 @@ def output_report(definition, status, votes):
     }
 
 
-def classifier_report(store, run, binding, snapshot):
-    """The report for every output of the binding. ``snapshot`` is its newest status snapshot, or None."""
+def classifier_report(store, run, binding, snapshot, retraining=None):
+    """The report for every output of the binding. ``snapshot`` is its newest status snapshot, or None;
+    ``retraining`` is the run's retraining state, or None before its first check."""
     list_id = run["config"].get("item_list_id")
     scored = _parallel(lambda vote: scored_vote(store, list_id, vote), binding_votes(store, run["id"], binding))
     statuses = (snapshot or {}).get("classifiers") or {}
@@ -118,7 +143,10 @@ def classifier_report(store, run, binding, snapshot):
         "scope": "votes recorded on this run",
         "outputs": {
             definition["id"]: output_report(
-                definition, statuses.get(definition["id"]), [v for v in scored if v and v["output"] == definition["id"]]
+                definition,
+                statuses.get(definition["id"]),
+                [v for v in scored if v and v["output"] == definition["id"]],
+                retraining,
             )
             for definition in run["config"]["classifiers"]
             if definition["id"] in binding.outputs

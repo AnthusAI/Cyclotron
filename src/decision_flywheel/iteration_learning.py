@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .candidate_fitting import fit_candidate
 from .embedded_cyclotron import Cyclotron
-from .flywheel import FittedClassifier, _restore, development_assignment
+from .flywheel import FittedClassifier, _normalized_text, _restore, development_assignment
 from .iteration_acceptance import accept_iteration
 from .iteration_transfer import iteration_record
 from .models import Item
@@ -47,6 +47,16 @@ async def _labels(wheel, version, rows, pool, now):
     return decided
 
 
+def _one_per_text(votes, task):
+    kept, texts = [], set()
+    for vote in votes:
+        text = _normalized_text(Item(vote.item_id, dict(vote.values)), task)
+        if text not in texts:
+            texts.add(text)
+            kept.append(vote)
+    return tuple(kept)
+
+
 def _examples(primed, rows):
     """The accepted examples plus these votes, where a vote replaces an earlier example of the same item."""
     voted = {row.item.id for row in rows}
@@ -65,16 +75,27 @@ async def _learn_site(engine, pools, output, votes, seed, now, report):
     wheel = engine.wheels[output]
     incoming = wheel.active
     primed = pools[output]
+    # Earlier iterations stored these votes as examples. They come back out, or evaluation votes would be seen in
+    # training; and one text voted twice under two identities counts once, since records must be disjoint by text.
+    task = wheel.initial.task
+    votes = _one_per_text(votes, task)
+    voted_texts = {_normalized_text(Item(vote.item_id, dict(vote.values)), task) for vote in votes}
+    voted_ids = {vote.item_id for vote in votes}
+    base = tuple(row for row in primed if row.item.id not in voted_ids and _normalized_text(row.item, task) not in voted_texts)
     examples, evaluation = split_votes(votes, seed)
     rows = labeled_examples(examples)
     scored = labeled_examples(evaluation)
     dev_seed = seed + ":optimizer-development"
     development = tuple(row for row in rows if development_assignment(dev_seed, row.item.id))
     held = {row.item.id for row in development}
-    training = _examples(primed, tuple(row for row in rows if row.item.id not in held))
-    pools[output] = training
+    training = _examples(base, tuple(row for row in rows if row.item.id not in held))
     _bind(engine, pools)
     before = await _labels(wheel, incoming, scored, primed, now)
+    allowed = {row.item.id for row in training}
+    narrowed = replace(incoming.config, example_ids=tuple(key for key in incoming.config.example_ids if key in allowed))
+    wheel._activate(FittedClassifier(narrowed, training_evidence=incoming.training_evidence))
+    pools[output] = training
+    _bind(engine, pools)
     wheel.set_optimizer_context(
         [row.context["human_feedback"] for row in (*training, *development) if row.context.get("human_feedback")],
         evaluation_context_exposed=False,
@@ -89,7 +110,7 @@ async def _learn_site(engine, pools, output, votes, seed, now, report):
         "rubric": (rubric.get("proposal") or {}).get("rubric", incoming.config.rubric),
         "tasks": (elements.get("proposal") or {}).get("tasks", [t.__dict__ for t in incoming.config.tasks]),
     }
-    fit_pool = _examples(primed, rows)
+    fit_pool = _examples(base, rows)
     config = incoming.config.apply({**proposal, "example_ids": [row.item.id for row in fit_pool]}, fit_pool)
     pools[output] = fit_pool
     engine.shared.bind_context({**{c: w.active.config for c, w in engine.wheels.items()}, output: config}, pools)
@@ -111,7 +132,7 @@ async def _learn_site(engine, pools, output, votes, seed, now, report):
         pools[output] = primed
         wheel._activate(replace(incoming, head=None, answer_dependencies=()))
         return None
-    everything = _examples(primed, labeled_examples(votes))
+    everything = _examples(base, labeled_examples(votes))
     pools[output] = everything
     config = incoming.config.apply({**proposal, "example_ids": [row.item.id for row in everything]}, everything)
     engine.shared.bind_context({**{c: w.active.config for c, w in engine.wheels.items()}, output: config}, pools)
@@ -126,7 +147,13 @@ async def learn_iteration(plan: IterationPlan, model, optimizer, directory) -> d
     """The adoptable record and what was learned. ``record`` is None when no site's new version was accepted."""
     primed = decode_priming(plan.priming)
     engine = Cyclotron.open(
-        Path(directory) / "store", plan.definition, model, optimizer, seed_rubrics=plan.rubrics, priming_examples=primed
+        Path(directory) / "store",
+        plan.definition,
+        model,
+        optimizer,
+        seed_rubrics=plan.rubrics,
+        priming_examples=primed,
+        max_requests=None,
     )
     report, adopted, siblings = {}, {}, {}
     now = datetime.now(timezone.utc)
@@ -144,7 +171,9 @@ async def learn_iteration(plan: IterationPlan, model, optimizer, directory) -> d
             before = {}
             for output, votes in plan.votes.items():
                 if output not in plan.due and votes:
-                    before[output] = await _labels(engine.wheels[output], engine.wheels[output].active, labeled_examples(votes), pools[output], now)
+                    before[output] = await _labels(
+                        engine.wheels[output], engine.wheels[output].active, labeled_examples(votes), pools[output], now
+                    )
             for output in plan.due:
                 rows = await _learn_site(engine, pools, output, plan.votes[output], plan.definition.seed, now, report)
                 if rows is not None:

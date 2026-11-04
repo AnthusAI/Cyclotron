@@ -10,7 +10,25 @@ check = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(check)
 
 
-REVIEWED_PENDING_PATHS = []
+REVIEWED_PENDING_PATHS = [
+    "/Parameters/RetrainingSubnets",
+    "/Parameters/RetrainingCentralEndpoint",
+    "/Resources/RetrainingCluster",
+    "/Resources/RetrainingLogGroup",
+    "/Resources/RetrainingExecutionRole",
+    "/Resources/RetrainingTaskRole",
+    "/Resources/RetrainingTaskDefinition",
+    "/Resources/RetrainingCheckSchedule",
+    "/Resources/RetrainingCheckPermission",
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
+    "/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_CLUSTER",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_TASK_DEFINITION",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_SUBNETS",
+    "/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_ROLE_ARN",
+    "/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-",
+]
 VERIFIER_ARN = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-lab-verifier"}
 
 

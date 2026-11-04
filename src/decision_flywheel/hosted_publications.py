@@ -364,7 +364,12 @@ class PublicationCommandRuntime:
         shared = is_shared_decision_command(kind, payload)
         if adopting and not machine:
             raise AccountAccessDenied("only the retraining task may adopt an iteration")
-        if not priming and not adopting and not shared and (not is_decision(kind) or set(payload) != {"publication", "bindingRevision", "item"}):
+        if (
+            not priming
+            and not adopting
+            and not shared
+            and (not is_decision(kind) or set(payload) != {"publication", "bindingRevision", "item"})
+        ):
             raise ValueError("supported publication prediction command required")
         if shared and not machine:
             raise AccountAccessDenied("only machine callers may decide for several publications")

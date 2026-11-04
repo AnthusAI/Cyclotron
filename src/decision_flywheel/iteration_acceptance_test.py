@@ -11,9 +11,7 @@ def votes(count, *, label="include"):
 def said(rows, *, right, wrong=0):
     """Labels that are right on the first ``right`` rows, wrong on the next ``wrong``, and right after that."""
     other = {"include": "exclude", "exclude": "include"}
-    return {
-        vote.item_id: other[vote.label] if right <= index < right + wrong else vote.label for index, vote in enumerate(rows)
-    }
+    return {vote.item_id: other[vote.label] if right <= index < right + wrong else vote.label for index, vote in enumerate(rows)}
 
 
 def test_the_sign_test_is_two_sided_and_certain_when_nothing_differs():

@@ -49,6 +49,12 @@ def empty_state():
     }
 
 
+def read_state(runtime, account_id, run_id):
+    """The run's state for reading, or None before its first check. Creates nothing."""
+    journal = runtime.journal(account_id, "optimizer", "retraining-" + run_id)
+    return journal.read().value if journal.exists() else None
+
+
 class RetrainingState:
     """One run's retraining state: a small journal in the optimizer domain, written with compare-and-set."""
 
@@ -199,9 +205,7 @@ def check_run(runtime, target, ecs, settings, *, now=None):
 def check_all(runtime, ecs, settings):
     from .hosted_publications import configured_targets
 
-    return {
-        target.run_id: check_run(runtime, target, ecs, settings) for target in configured_targets(runtime) if target.standing
-    }
+    return {target.run_id: check_run(runtime, target, ecs, settings) for target in configured_targets(runtime) if target.standing}
 
 
 def settings_from_environment(environment):

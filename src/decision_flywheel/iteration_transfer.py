@@ -13,7 +13,6 @@ from .flywheel import _restore
 from .journal import encode
 from .priming_context import decode_priming, encode_priming
 
-
 CURRENT_ITERATION = "current_iteration"
 
 
@@ -102,6 +101,8 @@ async def adopt_iteration(engine, record, *, execution_guard=None) -> dict:
         for cid, version in versions.items():
             wheel = engine.wheels[cid]
             wheel._activate(version)
-            wheel._emit({"kind": "iteration-accepted", "acceptance": record["acceptance"].get(cid), "version": version.fingerprint})
+            wheel._emit(
+                {"kind": "iteration-accepted", "acceptance": record["acceptance"].get(cid), "version": version.fingerprint}
+            )
         engine._sync()
     return {"adopted": True, "versions": {cid: version.fingerprint for cid, version in versions.items()}}
