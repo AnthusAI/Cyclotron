@@ -1,0 +1,32 @@
+# DRAFT: not part of template.yaml and not deployed. Needs Ryan's approval of these new resources and their change set.
+# The worker writes StuckRunMinutes on every sweep (embedded metric format), so the alarm needs no new IAM on the worker.
+# It fires when a run's head has been stuck, and when the metric goes missing because the sweep itself stopped.
+Parameters:
+  StuckRunAlertEmail:
+    Type: String
+    Description: Who hears about a stuck run. The subscription must be confirmed from this address.
+Resources:
+  StuckRunTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Protocol: email
+        Endpoint:
+          Ref: StuckRunAlertEmail
+  StuckRunAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: A run's head job has held its queue past the stuck limit, or the worker sweep stopped. See command_recovery in docs/s3-cloud-storage.md.
+      Namespace: Cyclotron/Lab
+      MetricName: StuckRunMinutes
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 5
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+      - Ref: StuckRunTopic
+      OKActions:
+      - Ref: StuckRunTopic

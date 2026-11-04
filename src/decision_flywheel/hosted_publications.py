@@ -19,6 +19,7 @@ from .command_refusal import CommandRefused
 from .decision_kinds import WRITTEN, is_decision
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .hosted_command_worker import AuthorizedModel, HeldEngine, no_job_guard
+from .iteration_transfer import IterationStale, adopt_iteration
 from .journal import encode, uuid
 from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
@@ -35,9 +36,13 @@ from .publication_lab import (
 )
 from .s3_embedded_storage import S3CyclotronStores
 from .s3_runtime_storage import RuntimeOwnershipError
+from .s3_transient import failure_codes
 from .standing_publications import validate_item
-from .storage_errors import StorageConflict, StorageUncertain
+from .storage_errors import ReservationUncertain, StorageConflict, StorageUncertain
+from .storage_payloads import PayloadRef
 
+STORAGE_FAILED = "storage failed while recording this decision, so none was returned; send the item again"
+ADOPTION_FAILED = "the iteration could not be adopted, so the live versions did not change"
 PROVIDER_FAILED = "the decision model call failed, so no decision was returned; it needs an operator retry"
 
 
@@ -201,6 +206,13 @@ def envelope(target, binding, config):
     return result
 
 
+def read_iteration(host, account_id, reference):
+    """The iteration record a queued adoption names, verified against its digest by the payload store."""
+    payloads = host.journal(account_id, "optimizer", "retraining").payloads
+    content = payloads.get(PayloadRef(payloads.scope, reference["digest"], reference["length"]))
+    return json.loads(content)
+
+
 def is_priming_command(kind, payload):
     """Host-owned data-only dispatch rule; never a caller-supplied live bypass."""
     return (
@@ -214,6 +226,18 @@ def is_priming_command(kind, payload):
         and bool(payload["priming"]["listId"])
         and isinstance(payload["priming"]["fingerprint"], str)
         and len(payload["priming"]["fingerprint"]) == 64
+    )
+
+
+def is_adoption_command(kind, payload):
+    """Host-owned data-only rule: make a stored iteration live. It reaches the queue only from the retraining task."""
+    return (
+        is_decision(kind)
+        and isinstance(payload, dict)
+        and set(payload) == {"publication", "bindingRevision", "iteration"}
+        and all(isinstance(payload[key], str) and payload[key] for key in ("publication", "bindingRevision"))
+        and isinstance(payload["iteration"], dict)
+        and set(payload["iteration"]) == {"id", "digest", "length"}
     )
 
 
@@ -336,9 +360,17 @@ class PublicationCommandRuntime:
 
     async def execute(self, session, kind, payload, shown, config, *, request_id=None):
         priming = is_priming_command(kind, payload)
+        adopting = is_adoption_command(kind, payload)
         machine = isinstance(self.actor, MachineActor)
         shared = is_shared_decision_command(kind, payload)
-        if not priming and not shared and (not is_decision(kind) or set(payload) != {"publication", "bindingRevision", "item"}):
+        if adopting and not machine:
+            raise AccountAccessDenied("only the retraining task may adopt an iteration")
+        if (
+            not priming
+            and not adopting
+            and not shared
+            and (not is_decision(kind) or set(payload) != {"publication", "bindingRevision", "item"})
+        ):
             raise ValueError("supported publication prediction command required")
         if shared and not machine:
             raise AccountAccessDenied("only machine callers may decide for several publications")
@@ -360,7 +392,9 @@ class PublicationCommandRuntime:
         target, binding = target_for(self.host, self.actor.account_id, publication)
         examples = None
         catalog = self.host.console(self.actor.account_id) if priming else None
-        if priming:
+        if adopting:
+            pass
+        elif priming:
             examples, fingerprint = priming_snapshot(catalog, target, binding, config, payload["priming"]["listId"])
             if fingerprint != payload["priming"]["fingerprint"]:
                 raise ValueError("accepted priming snapshot changed")
@@ -431,14 +465,16 @@ class PublicationCommandRuntime:
         envelope(target, binding, config)  # Validate all configured outputs before opening state.
         # The provider credential is resolved here, before any state is registered or any request is reserved.
         model, optimizer = (
-            (_PrimingModel(target.model_identity), DisabledOptimizer()) if priming else self.host.model_factory(config)
+            (_PrimingModel(target.model_identity), DisabledOptimizer())
+            if priming or adopting
+            else self.host.model_factory(config)
         )
         if target.model_identity is not None and model.model_identity != target.model_identity:
             raise ValueError("provider differs from reviewed publication model identity")
         if getattr(optimizer, "enabled", False):
             raise ValueError("baseline prediction requires optimizer disabled")
         registration = None
-        if target.standing and not priming:
+        if target.standing and not priming and not adopting:
             try:
                 item_id, values = validate_item(item, [spec.input_field for spec in specs])
                 registration = await asyncio.to_thread(self.view.register_standing_item, session.run_id, item_id, values)
@@ -464,7 +500,16 @@ class PublicationCommandRuntime:
         async def work(engine, kept):
             active_bindings = tuple(b for b in target.bindings if not set(b.outputs) & set(target.pending_outputs))
             lab = PublicationLab(engine, account_id=self.actor.account_id, bindings=active_bindings)
-            if priming:
+            if adopting:
+                try:
+                    record = await asyncio.to_thread(read_iteration, self.host, self.actor.account_id, payload["iteration"])
+                    adopted = await adopt_iteration(engine, record, execution_guard=fresh)
+                except (IterationStale, ValueError, RuntimeError, StorageConflict, StorageUncertain) as error:
+                    # A receipt keeps the run free: an adoption that cannot finish must not hold every decision.
+                    print(f"iteration_adoption_failed {type(error).__name__}")  # class only: no job content
+                    raise CommandRefused("reconciliation_required", ADOPTION_FAILED) from None
+                result = {**envelope(target, binding, config), "operation": "adopt-iteration", **adopted, "id": record["id"]}
+            elif priming:
                 applied = await engine.add_priming_examples(
                     decode_priming(examples), added_by=self.actor.person_id, execution_guard=fresh
                 )
@@ -497,6 +542,13 @@ class PublicationCommandRuntime:
                             {"bindingRevision": binding.revision, "item": item},
                             execution_guard=fresh,
                         )
+                except ReservationUncertain as error:
+                    # No new paid call follows, and one already made is settled in the shared ledger. A terminal receipt
+                    # keeps the run free; leaving the job running would block every other item until an operator
+                    # reconciled it.
+                    print(f"decision_reservation_failed codes={failure_codes(error)}")  # codes only: no job content
+                    # The code callers already treat as a job that ended: drop it and send the item again, once.
+                    raise CommandRefused("reconciliation_required", STORAGE_FAILED) from None
                 except BatchInProgress:
                     # Raised while reserving the shared request, before any dispatch: another attempt at this exact
                     # decision never finished, and only an operator can say what became of it. A terminal receipt
@@ -552,6 +604,7 @@ class PublicationCommandRuntime:
 
         # Everything an open engine is built from or answers to. Any difference opens a new one.
         key = (self.actor, target, name, sha256(encode(config)).hexdigest(), type(model), model.model_identity, type(optimizer))
+        # An adoption shares the invocation's holder: taking it under its own key releases a decision engine still held.
         holder = self.engines if self.engines is not None and target.standing and not priming else HeldEngine()
         try:
             held = await holder.take(key, open_engine, busy=(RuntimeOwnershipError,))

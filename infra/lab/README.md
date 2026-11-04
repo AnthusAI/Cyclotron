@@ -292,7 +292,7 @@ Rollback: an unused object in the assets bucket affects nothing; the live key `P
    Wait until the mapping is `Disabled` and the queue shows zero in-flight messages (a running job finishes first; the
    conversion dry run reports the catalog `busy` while a job runs). Tell the machine caller of
    `/machine/publications/*` to hold: that BFF route is the one other writer of runtime and ledger state.
-2. In `template.yaml` set `S3Key` of **both** `BffFunction` and `WorkerFunction` to the new key. `pending-changes.json`
+2. In `template.yaml` set `S3Key` of **both** `BffFunction` and `WorkerFunction`, and `CYCLOTRON_PACKAGE_KEY` of `RetrainingTaskDefinition`, to the new key. `pending-changes.json`
    already holds the three add-only operations (`*/records/*` create-only in `BooksBucketPolicy`; Get and Put on
    `*/console/records/*` for `BffRole` and `WorkerRole`). Run `scripts/dev/check_lab_template.sh`: it must show only the intended
    `S3Key` difference on the two functions (the deploy runbook's step 2) and nothing beyond the three pending operations.

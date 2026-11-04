@@ -885,6 +885,10 @@ class S3RuntimeStores:
         embedded = len(view.legacy)
         return EventAudit(record, rows[:embedded], rows[embedded:], view.coverage)
 
+    def observed_state(self, key):
+        """Read-only, whoever owns the runtime: one state value as last published, or None. No ownership is checked."""
+        return self._fresh().value["data"]["state"].get(key)
+
     def observed_events(self, *, after_event_id=0, limit=100, same_head=False):
         """Read-only, whoever owns the runtime: published events above ``after_event_id``, oldest first.
 

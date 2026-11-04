@@ -25,13 +25,14 @@ import copy
 import os
 import re
 import tempfile
+import time
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Protocol, runtime_checkable
 
 from .batch_storage import StorageScope
 from .journal import commit_with_contract, decode, encode
-from .s3_transient import cause_name, error_code, log, read_with_one_retry
+from .s3_transient import RETRY_PAUSE_SECONDS, cause_name, error_code, log, read_with_one_retry
 from .storage_errors import StorageConflict, StorageLimit, StorageUncertain
 from .storage_payloads import FilePayloads, S3Payloads
 
@@ -186,7 +187,14 @@ class RecordLake:
     def put(self, seq, value):
         """Create the record at ``seq``. Repeating the identical record succeeds; a different one conflicts."""
         content = self._encode(seq, value)
-        if not self._create(seq, content):
+        try:
+            created = self._create(seq, content)
+        except RecordUncertain:
+            # One more attempt rides out a dropped connection or a throttle. Should the lost attempt have landed,
+            # the repeat finds it and the comparison below adopts it.
+            time.sleep(RETRY_PAUSE_SECONDS)
+            created = self._create(seq, content)
+        if not created:
             existing = self._fetch(seq)
             if existing != content:
                 raise RecordConflict("a different record already holds this sequence")

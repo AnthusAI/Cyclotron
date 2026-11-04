@@ -26,6 +26,7 @@ from .feedback import FeedbackItem
 from .head import Calibration, HeadProvenance, LearnedHead, OutOfFoldPredictions
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent
+from .storage_errors import ReservationUncertain, StorageUncertain
 
 
 def _json(value):
@@ -920,7 +921,7 @@ class DecisionFlywheel:
         return SimpleNamespace(
             cached=None,
             # The reservation grants the paid call, so it is durable before the call is made.
-            reserve=lambda: self.runtime_cache.begin_answer(key, row),
+            reserve=lambda: self._reserve_answer(key, row),
             reserved=False,
             key=key,
             row=row,
@@ -928,6 +929,12 @@ class DecisionFlywheel:
             identity=identity,
             request=request,
         )
+
+    def _reserve_answer(self, key, row):
+        try:
+            self.runtime_cache.begin_answer(key, row)
+        except StorageUncertain as error:
+            raise ReservationUncertain("the reservation for this decision could not be written") from error
 
     @staticmethod
     def _features(config, batch):
@@ -1296,6 +1303,27 @@ class DecisionFlywheel:
             raise
 
     def promote_trial(self, trial_fingerprint, training, development):
+        saved, candidate = self._completed_trial(trial_fingerprint, training, development, require_improved=True)
+        self._activate(candidate)
+        self._emit({"kind": "promoted", **saved["result"], "promoted": True, "version": self.active.fingerprint})
+
+    def accept_trial(self, trial_fingerprint, training, development, *, acceptance):
+        """Activate a measured trial on the iteration rule, which does not need it to beat the incumbent on development."""
+        if not acceptance.get("accepted"):
+            raise ValueError("the iteration rule did not accept this trial")
+        saved, candidate = self._completed_trial(trial_fingerprint, training, development, require_improved=False)
+        self._activate(candidate)
+        self._emit(
+            {
+                "kind": "iteration-accepted",
+                "trial_fingerprint": trial_fingerprint,
+                "improved_on_development": bool(saved["result"].get("improved")),
+                "acceptance": acceptance,
+                "version": self.active.fingerprint,
+            }
+        )
+
+    def _completed_trial(self, trial_fingerprint, training, development, *, require_improved):
         row = self.runtime_cache.round(trial_fingerprint)
         if not row or row[0] != "complete":
             raise ValueError("trial is not complete")
@@ -1308,7 +1336,7 @@ class DecisionFlywheel:
         )
         if previous_policy != (asdict(self.selection_policy) if self.selection_policy else None):
             raise ValueError("selection policy changed; reevaluate the trial")
-        if not saved["result"].get("improved") or saved.get("baseline_version") != self.active.fingerprint:
+        if saved.get("baseline_version") != self.active.fingerprint or (require_improved and not saved["result"].get("improved")):
             raise ValueError("trial did not improve this incumbent")
         if saved.get("training_evidence") != self._evidence(training) or saved.get("development_evidence") != self._evidence(
             development
@@ -1322,8 +1350,7 @@ class DecisionFlywheel:
             raise ValueError("decision feature context changed; refit and reevaluate the trial")
         if not self.answer_dependencies_current(candidate.answer_dependencies):
             raise ValueError("decision answers changed; refit and reevaluate the trial")
-        self._activate(candidate)
-        self._emit({"kind": "promoted", **saved["result"], "promoted": True, "version": self.active.fingerprint})
+        return saved, candidate
 
     async def _score(self, classifier, development, training, now):
         available_count = len(development)

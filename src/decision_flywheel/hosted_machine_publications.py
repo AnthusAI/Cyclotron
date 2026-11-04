@@ -39,6 +39,7 @@ from .journal import uuid
 from .machine_access import MachineActor, MachineDenied, verified_caller
 from .prospectus_accounts import AccountAccessDenied
 from .publication_lab import CONTRACT, CONTRACTS, DECISION_CONTRACT, in_contract
+from .retraining import read_state
 from .standing_publications import validate_item
 from .storage_errors import StorageMissing, StorageUncertain
 
@@ -119,7 +120,9 @@ def install_machine_routes(app, runtime):
                 return answer(contract, meta)
             snapshot = await asyncio.to_thread(status_snapshot, store, target, binding, publication)
             if name == "report":
-                return answer(contract, {**meta, **await asyncio.to_thread(classifier_report, store, run, binding, snapshot)})
+                retraining = await asyncio.to_thread(read_state, runtime, account, target.run_id)
+                report = await asyncio.to_thread(classifier_report, store, run, binding, snapshot, retraining)
+                return answer(contract, {**meta, **report})
             if snapshot is None:
                 raise HTTPException(503, "no verified publication status snapshot yet")
             return answer(contract, snapshot)

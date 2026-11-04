@@ -177,6 +177,27 @@ def test_failed_delivery_logs_classes_and_locations_but_never_messages_or_payloa
     assert "secret" not in out and "private prompt" not in out and "provider said" not in out and body not in out
 
 
+def test_failed_delivery_logs_the_s3_code_along_the_cause_chain(monkeypatch, capsys):
+    from . import cloud_entry
+
+    class Refused(Exception):
+        response = {"Error": {"Code": "SlowDown"}}
+
+    class Worker:
+        async def process(self, message, remaining=None):
+            try:
+                raise Refused("a key and a url")
+            except Refused:
+                raise ValueError("uncertain") from None
+
+    monkeypatch.setattr(cloud_entry, "_cached_runtime", SimpleNamespace(worker=lambda: Worker()))
+    body = json.dumps({"accountId": str(uuid4()), "runId": str(uuid4()), "jobId": str(uuid4())})
+    cloud_entry.worker_handler({"Records": [{"messageId": "m1", "body": body}]}, SimpleNamespace())
+    out = capsys.readouterr().out
+    assert json.loads(out.strip().splitlines()[-1])["codes"] == ["SlowDown"]
+    assert "a key and a url" not in out
+
+
 def test_the_scheduled_sweep_runs_outside_sqs_with_the_invocations_remaining_time(monkeypatch):
     from . import cloud_entry
 

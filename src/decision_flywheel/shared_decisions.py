@@ -12,6 +12,7 @@ from .batched_classification import batch_request, output_shares
 from .classifier_config import ClassifiedAnswers
 from .decision_cache import CacheOptions
 from .models import DecisionResult
+from .storage_errors import ReservationUncertain, StorageUncertain
 
 
 def key(value):
@@ -112,9 +113,12 @@ class SharedDecisions:
         self.identity = fingerprint
         owner = str(uuid4())
         # Reserve and take the dispatch claim in one commit; the claim below confirms it without a write.
-        row = self.storage.reserve(
-            fingerprint, self.max_requests, owner, policy=options.policy, retry_failed=options.retry_failed, claim=True
-        )
+        try:
+            row = self.storage.reserve(
+                fingerprint, self.max_requests, owner, policy=options.policy, retry_failed=options.retry_failed, claim=True
+            )
+        except StorageUncertain as error:
+            raise ReservationUncertain("the reservation for this shared decision could not be written") from error
         generation = row.generation
         cached = row.status == "complete"
         if cached:

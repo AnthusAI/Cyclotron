@@ -1,6 +1,7 @@
 """A run accepts every command and runs them one at a time, in the order they were accepted."""
 
 import asyncio
+import json
 from uuid import uuid4
 
 import httpx
@@ -121,6 +122,26 @@ def test_a_delivery_starts_no_further_job_without_room_for_twice_the_last_one():
     refs = {"accountId": actor.account_id, "runId": run["id"]}
     assert asyncio.run(worker.deliver({**refs, "jobId": first["id"]}, lambda: 159))["jobId"] == first["id"]
     assert s.queue_state(second["id"])["ready"]  # left for the sweep
+
+
+def test_every_sweep_reports_how_long_a_run_has_been_stuck_for_an_alarm_to_read(monkeypatch, capsys):
+    s, run, auth, sessions, cookie, actor, state, model, worker = worker_setup()
+
+    def metric():
+        asyncio.run(worker.sweep(actor.account_id))
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if "StuckRunMinutes" in line]
+        assert len(lines) == 1
+        return lines[0]
+
+    assert metric()["StuckRunMinutes"] == 0
+    first = s.enqueue_authorized_command(run["id"], "first", "prepare", {}, actor)
+    s.claim_command(owner=str(uuid4()), job_id=first["id"])
+    s.enqueue_authorized_command(run["id"], "second", "prepare", {}, actor)
+    assert metric()["stuckJobs"] == []
+    monkeypatch.setattr("decision_flywheel.s3_console_storage.STUCK_HEAD_MINUTES", -1)
+    line = metric()
+    assert line["stuckJobs"] == [first["id"]] and line["blockedJobs"] == 1 and line["StuckRunMinutes"] >= 0
+    assert line["_aws"]["CloudWatchMetrics"][0]["Metrics"] == [{"Name": "StuckRunMinutes", "Unit": "None"}]
 
 
 def test_the_sweep_starts_each_runs_waiting_head_and_leaves_a_running_run_alone():
