@@ -731,7 +731,7 @@ Resources:
             Fn::Join:
             - ','
             - Ref: RetrainingSubnets
-          CYCLOTRON_RETRAIN_ROLE_ARN: &id003
+          CYCLOTRON_RETRAIN_ROLE_ARN:
             Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-retraining-task
       Tags:
       - Key: lambda:createdBy
@@ -856,7 +856,7 @@ Resources:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: cyclotron-retraining
-      Tags: &id002
+      Tags:
       - Key: Product
         Value: cyclotron
   RetrainingLogGroup:
@@ -868,7 +868,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: cyclotron-retraining-execution
-      AssumeRolePolicyDocument: &id001
+      AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
         - Effect: Allow
@@ -890,7 +890,13 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: cyclotron-retraining-task
-      AssumeRolePolicyDocument: *id001
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
       Policies:
       - PolicyName: cyclotron-retraining
         PolicyDocument:
@@ -936,7 +942,9 @@ Resources:
         Fn::GetAtt:
         - RetrainingTaskRole
         - Arn
-      Tags: *id002
+      Tags:
+      - Key: Product
+        Value: cyclotron
       ContainerDefinitions:
       - Name: retraining
         Image: public.ecr.aws/lambda/python:3.13
@@ -1004,7 +1012,8 @@ Resources:
         - Name: CYCLOTRON_PACKAGE_KEY
           Value: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
         - Name: CYCLOTRON_RETRAIN_ROLE_ARN
-          Value: *id003
+          Value:
+            Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-retraining-task
   RetrainingCheckSchedule:
     Type: AWS::Events::Rule
     Properties:
