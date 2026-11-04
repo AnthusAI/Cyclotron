@@ -44,6 +44,7 @@ def accept_iteration(
         "phase": phase,
         "totalVotes": total_votes,
         "compared": len(rows),
+        "candidateAgreed": sum(candidate[v.item_id] == v.label for v in rows),
         "candidateRight": candidate_right,
         "incomingRight": incoming_right,
         "p": p,

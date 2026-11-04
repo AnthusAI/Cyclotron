@@ -14,6 +14,9 @@ from .journal import encode
 from .priming_context import decode_priming, encode_priming
 
 
+CURRENT_ITERATION = "current_iteration"
+
+
 class IterationStale(RuntimeError):
     """The live store changed after this iteration began; it was learned from something no longer true."""
 
@@ -30,8 +33,14 @@ def version_record(wheel) -> dict:
     return {"classifier": json.loads(encode(asdict(active))), "answers": answers, "requests": requests}
 
 
-def iteration_record(engine, *, base, examples, acceptance) -> dict:
-    """What adopting needs: the versions it began from, the new versions, and the votes they decide with."""
+def current_iteration(engine) -> str | None:
+    """The id of the iteration this store decides with, or None before the first."""
+    stored = engine.root_storage.meta(CURRENT_ITERATION)
+    return stored[0] if stored else None
+
+
+def iteration_record(engine, *, identity, parent, base, examples, acceptance) -> dict:
+    """What adopting needs: the iteration it grew from, the new versions, and the votes they decide with."""
     tasks = {cid: spec.task for cid, spec in engine.specs.items()}
     versions = {cid: version_record(wheel) for cid, wheel in engine.wheels.items() if wheel.active.fingerprint != base[cid]}
     settled = {}
@@ -39,7 +48,8 @@ def iteration_record(engine, *, base, examples, acceptance) -> dict:
         for fingerprint, generation in version["requests"].items():
             settled[fingerprint] = {"generation": generation, "payload": engine.shared.storage.get(fingerprint).payload}
     return {
-        "base": dict(base),
+        "id": identity,
+        "parent": parent,
         "versions": versions,
         "requests": settled,
         "examples": encode_priming(dict(examples), tasks, redact=engine.priming_redaction),
@@ -70,11 +80,11 @@ async def adopt_iteration(engine, record, *, execution_guard=None) -> dict:
     """Make ``record`` the live versions, all at once or not at all. Adopting the same record again changes nothing."""
     versions = {cid: _restore(row["classifier"]) for cid, row in record["versions"].items()}
     async with engine._learn_lock, engine.execution(execution_guard=execution_guard):
-        if all(engine.wheels[cid].active.fingerprint == version.fingerprint for cid, version in versions.items()):
+        current = current_iteration(engine)
+        if current == record["id"]:
             return {"adopted": False, "versions": {cid: version.fingerprint for cid, version in versions.items()}}
-        moved = [cid for cid, fingerprint in record["base"].items() if engine.wheels[cid].active.fingerprint != fingerprint]
-        if moved:
-            raise IterationStale(f"these outputs changed while the iteration was learned: {sorted(moved)}")
+        if current != record["parent"]:
+            raise IterationStale("another iteration was adopted while this one was learned")
         for fingerprint, row in record["requests"].items():
             _import_request(engine.shared.storage, fingerprint, row["generation"], row["payload"])
         for cid, row in record["versions"].items():
@@ -86,7 +96,8 @@ async def adopt_iteration(engine, record, *, execution_guard=None) -> dict:
             replaced = {row["item"]["id"] for row in rows}
             merged[cid] = [row for row in merged.get(cid, ()) if row["item"]["id"] not in replaced] + list(rows)
         with engine.root_storage.transaction():
-            engine.root_storage.put_meta("priming_examples", encode(merged))
+            engine.root_storage.put_meta("priming_examples", encode(merged).decode())
+            engine.root_storage.put_meta(CURRENT_ITERATION, record["id"])
         engine.priming_examples = decode_priming(merged)
         for cid, version in versions.items():
             wheel = engine.wheels[cid]

@@ -47,7 +47,9 @@ def learned(path):
                 wheel, config, rows, (), protected=(), propensities={r.item.id: 1.0 for r in rows}, validation_status="provisional"
             )
             wheel._activate(candidate)
-            record = iteration_record(engine, base=base, examples={"one": rows}, acceptance={"one": {"accepted": True}})
+            record = iteration_record(
+                engine, identity="first", parent=None, base=base, examples={"one": rows}, acceptance={"one": {"accepted": True}}
+            )
         engine.close()
         return record, candidate
 
@@ -104,10 +106,10 @@ def test_adopting_the_same_iteration_again_changes_nothing(tmp_path):
     live.close()
 
 
-def test_a_store_that_moved_after_the_iteration_began_refuses_it_whole(tmp_path):
+def test_an_iteration_grown_from_another_parent_is_refused_whole(tmp_path):
     record, _ = learned(tmp_path / "learning")
     live = opened(tmp_path / "live")
-    record = {**record, "base": {**record["base"], "two": "something-else"}}
+    record = {**record, "parent": "an-iteration-this-store-never-adopted"}
     with pytest.raises(IterationStale):
         asyncio.run(adopt_iteration(live, record))
     assert live.wheels["one"].active.config.rubric != "Learned rubric"
