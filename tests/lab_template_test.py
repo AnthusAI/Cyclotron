@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 _PATH = Path(__file__).resolve().parents[1] / "scripts/dev/check_lab_template.py"
 _SPEC = importlib.util.spec_from_file_location("check_lab_template", _PATH)
@@ -38,6 +39,11 @@ def expected():
 
 def test_lab_template_equals_the_deployed_snapshot_plus_the_reviewed_pending_changes():
     assert check.diff_paths(check.load_template(), expected()) == []
+
+
+def test_the_lab_template_has_no_yaml_aliases_because_cloudformation_refuses_them():
+    events = yaml.parse(Path("infra/lab/template.yaml").read_text())
+    assert not any(isinstance(event, yaml.AliasEvent) for event in events)
 
 
 def test_pending_changes_are_exactly_the_reviewed_set():
