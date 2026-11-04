@@ -19,7 +19,7 @@ from .command_refusal import CommandRefused
 from .decision_kinds import WRITTEN, is_decision
 from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .hosted_command_worker import AuthorizedModel, HeldEngine, no_job_guard
-from .iteration_transfer import adopt_iteration
+from .iteration_transfer import IterationStale, adopt_iteration
 from .journal import encode, uuid
 from .machine_access import MachineActor
 from .optimizer_agent import DisabledOptimizer
@@ -42,6 +42,7 @@ from .storage_errors import ReservationUncertain, StorageConflict, StorageUncert
 from .storage_payloads import PayloadRef
 
 STORAGE_FAILED = "storage failed while recording this decision, so none was returned; send the item again"
+ADOPTION_FAILED = "the iteration could not be adopted, so the live versions did not change"
 PROVIDER_FAILED = "the decision model call failed, so no decision was returned; it needs an operator retry"
 
 
@@ -500,8 +501,13 @@ class PublicationCommandRuntime:
             active_bindings = tuple(b for b in target.bindings if not set(b.outputs) & set(target.pending_outputs))
             lab = PublicationLab(engine, account_id=self.actor.account_id, bindings=active_bindings)
             if adopting:
-                record = await asyncio.to_thread(read_iteration, self.host, self.actor.account_id, payload["iteration"])
-                adopted = await adopt_iteration(engine, record, execution_guard=fresh)
+                try:
+                    record = await asyncio.to_thread(read_iteration, self.host, self.actor.account_id, payload["iteration"])
+                    adopted = await adopt_iteration(engine, record, execution_guard=fresh)
+                except (IterationStale, ValueError, RuntimeError, StorageConflict, StorageUncertain) as error:
+                    # A receipt keeps the run free: an adoption that cannot finish must not hold every decision.
+                    print(f"iteration_adoption_failed {type(error).__name__}")  # class only: no job content
+                    raise CommandRefused("reconciliation_required", ADOPTION_FAILED) from None
                 result = {**envelope(target, binding, config), "operation": "adopt-iteration", **adopted, "id": record["id"]}
             elif priming:
                 applied = await engine.add_priming_examples(

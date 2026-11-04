@@ -6,7 +6,7 @@ votes, which decide acceptance. An accepted site is then fitted on all its votes
 refitted, because a sibling's new elements change what it sees. Sibling votes judge only that sibling.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,7 +29,8 @@ class IterationPlan:
     priming: dict  # Accepted examples per output, encoded: the store's priming plus earlier iterations' votes.
     votes: dict  # Each output's current votes.
     due: tuple  # The outputs whose votes are worth learning from now.
-    parent: dict | None = None  # The record this store decides with, or None before the first iteration.
+    parent: str | None = None  # The id of the iteration the live store decides with, or None before the first.
+    live: dict = field(default_factory=dict)  # Each output's live version as stored, so learning starts exactly there.
 
 
 def _bind(engine, pools):
@@ -70,10 +71,12 @@ async def _fit(wheel, config, pool):
     return candidate
 
 
-async def _learn_site(engine, pools, output, votes, seed, now, report):
-    """One due site's whole iteration. Returns its examples if accepted, or None with the version left as it was."""
+async def _learn_site(engine, pools, output, incoming, votes, seed, now, report):
+    """One due site's whole iteration. Returns its votes if accepted, or None with the version left as it was.
+
+    ``incoming`` is the live version, with its fitted classifier when it has one: that is what the new one must face.
+    """
     wheel = engine.wheels[output]
-    incoming = wheel.active
     primed = pools[output]
     # Earlier iterations stored these votes as examples. They come back out, or evaluation votes would be seen in
     # training; and one text voted twice under two identities counts once, since records must be disjoint by text.
@@ -105,7 +108,6 @@ async def _learn_site(engine, pools, output, votes, seed, now, report):
     rubric = await optimize_stage(wheel, "rubric", training, development, **stage)
     _bind(engine, pools)
     elements = await optimize_stage(wheel, "questions", training, development, train_after_questions=False, **stage)
-    wheel._activate(replace(incoming, head=None, answer_dependencies=()))
     proposal = {
         "rubric": (rubric.get("proposal") or {}).get("rubric", incoming.config.rubric),
         "tasks": (elements.get("proposal") or {}).get("tasks", [t.__dict__ for t in incoming.config.tasks]),
@@ -130,7 +132,7 @@ async def _learn_site(engine, pools, output, votes, seed, now, report):
     }
     if not acceptance["accepted"]:
         pools[output] = primed
-        wheel._activate(replace(incoming, head=None, answer_dependencies=()))
+        wheel._activate(FittedClassifier(incoming.config, training_evidence=incoming.training_evidence))
         return None
     everything = _examples(base, labeled_examples(votes))
     pools[output] = everything
@@ -141,6 +143,16 @@ async def _learn_site(engine, pools, output, votes, seed, now, report):
     report[output]["fittedClassifier"] = final.head is not None
     wheel._activate(final)
     return labeled_examples(votes)
+
+
+async def _refit_stale(engine, pools, fitted):
+    """Refit every classifier whose context moved: a site's new elements change what its siblings are shown."""
+    _bind(engine, pools)
+    for cid in sorted(fitted):
+        wheel = engine.wheels[cid]
+        head = wheel.active.head
+        if head is None or head.provenance.source_model_provenance != wheel.model_context(wheel.active.config, pools[cid]):
+            wheel._activate(await _fit(wheel, wheel.active.config, pools[cid]))
 
 
 async def learn_iteration(plan: IterationPlan, model, optimizer, directory) -> dict:
@@ -159,30 +171,29 @@ async def learn_iteration(plan: IterationPlan, model, optimizer, directory) -> d
     now = datetime.now(timezone.utc)
     try:
         pools = {cid: tuple(primed.get(cid, ())) for cid in engine.wheels}
-        fitted = set()
+        incoming = {}
         async with engine.execution():
-            for cid, row in ((plan.parent or {}).get("state") or {}).items():
-                restored = _restore(row["classifier"])
-                engine.wheels[cid]._activate(FittedClassifier(restored.config, training_evidence=restored.training_evidence))
-                if restored.head:
-                    fitted.add(cid)
+            for cid, wheel in engine.wheels.items():
+                incoming[cid] = _restore(plan.live[cid]) if cid in plan.live else wheel.active
+                wheel._activate(FittedClassifier(incoming[cid].config, training_evidence=incoming[cid].training_evidence))
             base = {cid: wheel.active.fingerprint for cid, wheel in engine.wheels.items()}
+            fitted = {cid for cid, version in incoming.items() if version.head}
             _bind(engine, pools)
             before = {}
             for output, votes in plan.votes.items():
                 if output not in plan.due and votes:
                     before[output] = await _labels(
-                        engine.wheels[output], engine.wheels[output].active, labeled_examples(votes), pools[output], now
+                        engine.wheels[output], incoming[output], labeled_examples(votes), pools[output], now
                     )
             for output in plan.due:
-                rows = await _learn_site(engine, pools, output, plan.votes[output], plan.definition.seed, now, report)
+                rows = await _learn_site(
+                    engine, pools, output, incoming[output], plan.votes[output], plan.definition.seed, now, report
+                )
                 if rows is not None:
                     adopted[output] = rows
             if not adopted:
                 return {"record": None, "report": report}
-            for cid in fitted - set(adopted):
-                _bind(engine, pools)
-                engine.wheels[cid]._activate(await _fit(engine.wheels[cid], engine.wheels[cid].active.config, pools[cid]))
+            await _refit_stale(engine, pools, fitted | set(adopted))
             _bind(engine, pools)
             for output, labels in before.items():
                 wheel = engine.wheels[output]
@@ -192,14 +203,14 @@ async def learn_iteration(plan: IterationPlan, model, optimizer, directory) -> d
             harmed = sorted(output for output, row in siblings.items() if not row["accepted"])
             if harmed:
                 return {"record": None, "report": report, "siblings": siblings, "reason": f"significantly worse for {harmed}"}
-            acceptance = {output: report[output]["acceptance"] for output in adopted}
             record = iteration_record(
                 engine,
                 identity=plan.identity,
-                parent=(plan.parent or {}).get("id"),
+                parent=plan.parent,
                 base=base,
-                examples=adopted,
-                acceptance=acceptance,
+                examples={output: pools[output] for output in adopted},
+                voted=[row.item.id for rows in adopted.values() for row in rows],
+                acceptance={output: report[output]["acceptance"] for output in adopted},
             )
     finally:
         engine.close()

@@ -14,7 +14,7 @@ from .optimizer_agent import OptimizerAgent
 from .retraining import Deadlined, RetrainingState, check_run, may_start, retrain
 
 identity = account_sessions_test.identity
-SETTINGS = {"cluster": "cluster", "task_definition": "task", "subnets": ["subnet-1"]}
+SETTINGS = {"cluster": "cluster", "task_definition": "task", "subnets": ["subnet-1"], "principal": ROLE}
 
 
 class SameProvider(Model):
@@ -94,9 +94,8 @@ def test_the_whole_loop_runs_in_the_cloud_from_votes_to_a_live_new_version(ident
     assert state["pending"] and state["failures"] == 0
     # The run's queue carries the adoption, which pays for nothing.
     calls = len(model.calls)
-    assert sent
-    while sent:
-        asyncio.run(worker.worker().process(sent.pop(0)))
+    assert not sent  # The sweep starts it: nothing here needs the queue's send permission.
+    asyncio.run(worker.worker().sweep())
     assert len(model.calls) == calls
     job = store.command_envelope(state["pending"]["jobId"])[0]
     assert job["status"] == "completed"
@@ -153,8 +152,7 @@ def test_a_second_round_grows_from_the_first_and_learns_only_when_new_votes_are_
     first = retrain(
         worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path / "1"
     )
-    while sent:
-        asyncio.run(worker.worker().process(sent.pop(0)))
+    asyncio.run(worker.worker().sweep())
     assert check_run(worker, target, ecs, SETTINGS)["due"] == []
 
     async def more():
@@ -169,9 +167,67 @@ def test_a_second_round_grows_from_the_first_and_learns_only_when_new_votes_are_
     second = retrain(
         worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path / "2"
     )
-    while sent:
-        asyncio.run(worker.worker().process(sent.pop(0)))
+    asyncio.run(worker.worker().sweep())
     check_run(worker, target, ecs, SETTINGS)
     value = state.read().value
     assert value["current"]["id"] == second["id"] != first["id"]
     assert [row["adoption"] for row in value["history"]] == ["completed", "completed"]
+
+
+def learned_and_queued(identity, monkeypatch, tmp_path):
+    parts = prepared(identity, monkeypatch, 24)
+    worker, _, _, _, _, target, *_ = parts
+    check_run(worker, target, Ecs(), SETTINGS)
+    monkeypatch.undo()
+    retrain(worker, target, model=SameProvider(), optimizer=OptimizerAgent(Luna()), principal=ROLE, directory=tmp_path)
+    return parts
+
+
+def test_a_voted_item_sent_again_after_adoption_is_decided_and_does_not_hold_the_queue(identity, monkeypatch, tmp_path):
+    worker, store, config, account, sent, target, wrapped, model = learned_and_queued(identity, monkeypatch, tmp_path)
+    asyncio.run(worker.worker().sweep())
+
+    async def resend():
+        async with client(wrapped, config, account) as http:
+            return await decide(http, worker, sent, {"id": "hn-1", "values": {"text": "yes story 1"}})
+
+    _, receipt = asyncio.run(resend())
+    assert receipt.status_code == 200, receipt.text
+    assert not any(job["status"] == "running" for job in store.jobs(target.run_id))
+
+
+def test_an_adoption_that_cannot_finish_ends_with_a_receipt_and_frees_the_run(identity, monkeypatch, tmp_path, capsys):
+    worker, store, _, account, _, target, *_ = learned_and_queued(identity, monkeypatch, tmp_path)
+    from . import hosted_publications
+
+    def broken(*args, **kwargs):
+        raise hosted_publications.IterationStale("another iteration was adopted")
+
+    monkeypatch.setattr(hosted_publications, "read_iteration", broken)
+    asyncio.run(worker.worker().sweep())
+    assert not any(job["status"] == "running" for job in store.jobs(target.run_id))
+    assert "iteration_adoption_failed IterationStale" in capsys.readouterr().out
+    check_run(worker, target, Ecs(), SETTINGS, now=1e12)
+    state = RetrainingState(worker, account, target.run_id).read().value
+    assert state["pending"] is None and state["failures"] == 1 and state["started"] == 1e12
+
+
+def test_a_task_lost_before_queueing_its_result_is_queued_by_the_next_check_once(identity, monkeypatch, tmp_path):
+    worker, store, _, account, _, target, *_ = learned_and_queued(identity, monkeypatch, tmp_path)
+    state = RetrainingState(worker, account, target.run_id)
+    job = state.read().value["pending"]["jobId"]
+    state.change(lambda value: value["pending"].update(jobId=None))
+    check_run(worker, target, Ecs(), SETTINGS)
+    assert state.read().value["pending"]["jobId"] == job
+    assert sum(row["id"] == job for row in store.jobs(target.run_id)) == 1
+
+
+def test_the_next_iteration_starts_from_the_live_store_even_if_the_state_is_behind(identity, monkeypatch, tmp_path):
+    worker, store, _, account, _, target, *_ = learned_and_queued(identity, monkeypatch, tmp_path)
+    asyncio.run(worker.worker().sweep())
+    from .retraining import live_store
+
+    state = RetrainingState(worker, account, target.run_id).read().value
+    _, parent, live = live_store(worker, account, store.run(target.run_id)["config"])
+    assert parent == state["pending"]["iteration"]["id"]
+    assert live["alpha"]["head"] is not None

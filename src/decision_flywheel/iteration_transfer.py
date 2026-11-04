@@ -9,6 +9,7 @@ import json
 from dataclasses import asdict
 from uuid import uuid4
 
+from .embedded_cyclotron import ITERATION_EXAMPLES
 from .flywheel import _restore
 from .journal import encode
 from .priming_context import decode_priming, encode_priming
@@ -38,8 +39,12 @@ def current_iteration(engine) -> str | None:
     return stored[0] if stored else None
 
 
-def iteration_record(engine, *, identity, parent, base, examples, acceptance) -> dict:
-    """What adopting needs: the iteration it grew from, the new versions, and the votes they decide with."""
+def iteration_record(engine, *, identity, parent, base, examples, voted, acceptance) -> dict:
+    """What adopting needs: the iteration it grew from, the new versions, and each new version's whole example pool.
+
+    The live store takes these pools as they are, because a fitted classifier names the exact context it was fitted in.
+    ``voted`` names the examples that are operational items, which may still be sent for a decision.
+    """
     tasks = {cid: spec.task for cid, spec in engine.specs.items()}
     versions = {cid: version_record(wheel) for cid, wheel in engine.wheels.items() if wheel.active.fingerprint != base[cid]}
     settled = {}
@@ -52,6 +57,7 @@ def iteration_record(engine, *, identity, parent, base, examples, acceptance) ->
         "versions": versions,
         "requests": settled,
         "examples": encode_priming(dict(examples), tasks, redact=engine.priming_redaction),
+        "voted": sorted(voted),
         "acceptance": dict(acceptance),
     }
 
@@ -90,13 +96,13 @@ async def adopt_iteration(engine, record, *, execution_guard=None) -> dict:
             for key, payload in row["answers"].items():
                 _import_answer(engine.wheels[cid].runtime_cache, key, payload)
         stored = engine.root_storage.meta("priming_examples")
-        merged = json.loads(stored[0]) if stored else {}
-        for cid, rows in record["examples"].items():
-            replaced = {row["item"]["id"] for row in rows}
-            merged[cid] = [row for row in merged.get(cid, ()) if row["item"]["id"] not in replaced] + list(rows)
+        merged = {**(json.loads(stored[0]) if stored else {}), **record["examples"]}
+        voted = engine.root_storage.meta(ITERATION_EXAMPLES)
+        decidable = set(json.loads(voted[0])) if voted else set()
+        decidable |= set(record["voted"])
         with engine.root_storage.transaction():
             engine.root_storage.put_meta("priming_examples", encode(merged).decode())
-            engine.root_storage.put_meta(CURRENT_ITERATION, record["id"])
+            engine.root_storage.put_meta(ITERATION_EXAMPLES, encode(sorted(decidable)).decode())
         engine.priming_examples = decode_priming(merged)
         for cid, version in versions.items():
             wheel = engine.wheels[cid]
@@ -104,5 +110,8 @@ async def adopt_iteration(engine, record, *, execution_guard=None) -> dict:
             wheel._emit(
                 {"kind": "iteration-accepted", "acceptance": record["acceptance"].get(cid), "version": version.fingerprint}
             )
+        # Last: a failure before this leaves the record adoptable again, and everything above repeats harmlessly.
+        with engine.root_storage.transaction():
+            engine.root_storage.put_meta(CURRENT_ITERATION, record["id"])
         engine._sync()
     return {"adopted": True, "versions": {cid: version.fingerprint for cid, version in versions.items()}}

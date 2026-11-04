@@ -910,16 +910,15 @@ Resources:
             Resource:
             - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/workspace/*
             - Fn::Sub: arn:${AWS::Partition}:s3:::cdk-hnb659fds-assets-682849160744-us-east-1/cyclotron-console/backend/*
-          - Effect: Allow
-            Action: sqs:SendMessage
-            Resource:
-              Fn::GetAtt:
-              - CommandQueue
-              - Arn
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*
           - Effect: Allow
             Action: secretsmanager:GetSecretValue
             Resource:
               Fn::Sub: arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-??????
+          - Effect: Allow
+            Action: s3:ListBucket
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
   RetrainingTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:

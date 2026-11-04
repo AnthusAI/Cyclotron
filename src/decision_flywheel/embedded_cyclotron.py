@@ -124,6 +124,9 @@ LEARNING_MODES = ("inline", "deferred")
 _NO_LABEL = object()  # review() was called without a single label
 
 
+ITERATION_EXAMPLES = "iteration_examples"
+
+
 class Cyclotron:
     """An embedded cyclotron backed by a directory of SQLite files."""
 
@@ -751,7 +754,11 @@ class Cyclotron:
     async def _decide(self, item: Item) -> Decision:
         if not isinstance(item, Item):
             raise ValueError("decide needs an Item")
-        if any(item.id == row.item.id for rows in self.priming_examples.values() for row in rows):
+        # A voted item that an iteration made an example is still operational: it may come back, and the context
+        # leaves a target out of its own examples.
+        voted = self.root_storage.meta(ITERATION_EXAMPLES)
+        decidable = set(json.loads(voted[0])) if voted else ()
+        if item.id not in decidable and any(item.id == row.item.id for rows in self.priming_examples.values() for row in rows):
             raise ValueError("priming items cannot be operational targets")
         self._batches = []
         for spec in self.definition.classifiers:

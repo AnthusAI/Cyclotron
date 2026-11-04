@@ -18,7 +18,9 @@ from uuid import uuid4
 from .decision_kinds import WRITTEN
 from .embedded_cyclotron import ClassifierSpec, CyclotronDefinition
 from .iteration_learning import IterationPlan, learn_iteration
+from .iteration_transfer import CURRENT_ITERATION
 from .journal import encode
+from .lab_decisions import runtime_reader
 from .machine_access import MachineActor
 from .optimizer_agent import OptimizerAgent
 from .retrain_trigger import STARTING_REQUIREMENT, LiveDecision, next_requirement, retrain_due
@@ -130,10 +132,10 @@ def due_outputs(state):
     return decisions
 
 
-def settle_adoption(store, state):
+def settle_adoption(store, state, now):
     """Move a finished adoption into the state: what it learned from no longer counts as new, and the bar adapts."""
     pending = state["pending"]
-    if pending is None:
+    if pending is None or pending["jobId"] is None:
         return
     job = store.command_envelope(pending["jobId"])[0]
     if job["status"] not in ("completed", "failed", "interrupted"):
@@ -141,6 +143,9 @@ def settle_adoption(store, state):
     state["pending"] = None
     state["history"].append({**pending["summary"], "adoption": job["status"], "at": datetime.now(timezone.utc).isoformat()})
     if job["status"] != "completed":
+        # Learning was paid for and did not land, so the next attempt waits like a failed task's.
+        state["failures"] += 1
+        state["started"] = now
         return
     state["current"] = pending["iteration"]
     for output, row in pending["learned"].items():
@@ -163,8 +168,13 @@ def check_run(runtime, target, ecs, settings, *, now=None):
     store = runtime.console(target.account_id)
     config = store.run(target.run_id)["config"]
     state = RetrainingState(runtime, target.account_id, target.run_id)
+    held = state.read().value["pending"]
+    if held is not None and held["jobId"] is None:
+        # The task stopped between storing its result and queueing it. Queueing again finds the same job.
+        job = submit_adoption(runtime, target, held["iteration"], principal=settings["principal"])
+        state.change(lambda value: value["pending"].update(jobId=job["id"]))
     current = state.change(
-        lambda value: (refresh_votes(store, target.run_id, config["item_list_id"], value), settle_adoption(store, value))
+        lambda value: (refresh_votes(store, target.run_id, config["item_list_id"], value), settle_adoption(store, value, now))
     )
     decisions = due_outputs(current)
     due = sorted(output for output, row in decisions.items() if row["due"])
@@ -213,6 +223,7 @@ def settings_from_environment(environment):
         "cluster": environment["CYCLOTRON_RETRAIN_CLUSTER"],
         "task_definition": environment["CYCLOTRON_RETRAIN_TASK_DEFINITION"],
         "subnets": environment["CYCLOTRON_RETRAIN_SUBNETS"].split(","),
+        "principal": environment["CYCLOTRON_RETRAIN_ROLE_ARN"],
     }
 
 
@@ -220,12 +231,13 @@ class Deadlined:
     """A decision model whose calls cannot hang: a dead connection fails the task instead of holding it open for hours."""
 
     def __init__(self, model, seconds):
-        self._model, self._seconds = model, seconds
+        self._model, self._seconds, self.requests = model, seconds, 0
 
     def __getattr__(self, name):
         return getattr(self._model, name)
 
     async def classify_many(self, *args, **kwargs):
+        self.requests += 1
         async with asyncio.timeout(self._seconds):
             return await self._model.classify_many(*args, **kwargs)
 
@@ -249,11 +261,16 @@ def definition_of(config):
     return CyclotronDefinition(config["cyclotron_id"], tuple(specs), seed=config["seed"]), rubrics
 
 
-def accepted_priming(runtime, account_id, cyclotron_id):
-    """The store's accepted examples, without taking ownership of it. A retraction has already removed its rows."""
-    name = "publication-" + sha256(cyclotron_id.encode()).hexdigest()
+def live_store(runtime, account_id, config):
+    """What the live store decides with, read without taking ownership: examples, current iteration, each output's version."""
+    name = "publication-" + sha256(config["cyclotron_id"].encode()).hexdigest()
     meta = runtime.journal(account_id, "workspace", name).read().value["data"]["meta"]
-    return json.loads(meta.get("priming_examples") or "{}")
+    versions = {}
+    for row in config["classifiers"]:
+        stored = runtime_reader(runtime, account_id, config["cyclotron_id"], row["id"]).observed_state("active")
+        if stored:
+            versions[row["id"]] = json.loads(stored)
+    return json.loads(meta.get("priming_examples") or "{}"), meta.get(CURRENT_ITERATION), versions
 
 
 def full_votes(store, list_id, state):
@@ -289,28 +306,27 @@ def _accuracy(acceptance):
     return None if not compared else acceptance.get("candidateAgreed", 0) / compared
 
 
-def queue_adoption(runtime, target, record, *, principal):
-    """Store the record and queue the job that makes it live, in its place among the run's decisions.
+def store_iteration(runtime, target, record):
+    """Keep the record, content-addressed, and return the reference a queued adoption names."""
+    reference = runtime.journal(target.account_id, "optimizer", "retraining").payloads.put(encode(record))
+    return {"id": record["id"], "digest": reference.digest, "length": reference.length}
 
-    Returns the job and the record's stored reference.
+
+def submit_adoption(runtime, target, iteration, *, principal):
+    """Queue the job that makes an iteration live, in its place among the run's decisions. Repeating finds the same job.
+
+    The scheduled sweep starts it when it reaches the head of the queue.
     """
-    payloads = runtime.journal(target.account_id, "optimizer", "retraining").payloads
-    reference = payloads.put(encode(record))
     binding = target.bindings[0]
     actor = MachineActor(
         principal, "retraining", target.account_id, target.run_id, runtime.binding(target.account_id, target.run_id)
     )
-    command = {
-        "publication": binding.publication_id,
-        "bindingRevision": binding.revision,
-        "iteration": {"id": record["id"], "digest": reference.digest, "length": reference.length},
-    }
-    service = runtime.workspace(target.account_id).service
-    job = asyncio.run(service.submit_machine_command(actor, "retrain:" + record["id"], WRITTEN, command))
-    return job, command["iteration"]
+    command = {"publication": binding.publication_id, "bindingRevision": binding.revision, "iteration": iteration}
+    store = runtime.console(target.account_id)
+    return store.enqueue_authorized_command(target.run_id, "retrain:" + iteration["id"], WRITTEN, command, actor)
 
 
-def retrain(runtime, target, *, model, optimizer, principal, directory):
+def retrain(runtime, target, *, model, optimizer, principal, directory, transport=None):
     """One task's whole job. Writes the result to the state, including when nothing was accepted."""
     store = runtime.console(target.account_id)
     config = store.run(target.run_id)["config"]
@@ -320,20 +336,16 @@ def retrain(runtime, target, *, model, optimizer, principal, directory):
     due = tuple(sorted(output for output, row in decisions.items() if row["due"]))
     votes = full_votes(store, config["item_list_id"], current)
     definition, rubrics = definition_of(config)
-    parent = None
-    if current["current"]:
-        reference = current["current"]
-        from .hosted_publications import read_iteration
-
-        parent = read_iteration(runtime, target.account_id, reference)
+    priming, parent, live = live_store(runtime, target.account_id, config)
     plan = IterationPlan(
         identity=str(uuid4()),
         definition=definition,
         rubrics=rubrics,
-        priming=accepted_priming(runtime, target.account_id, config["cyclotron_id"]),
+        priming=priming,
         votes={spec.id: votes.get(spec.id, ()) for spec in definition.classifiers},
         due=due,
         parent=parent,
+        live=live,
     )
     result = asyncio.run(learn_iteration(plan, model, optimizer, directory))
     summary = {
@@ -342,7 +354,7 @@ def retrain(runtime, target, *, model, optimizer, principal, directory):
         "report": result["report"],
         "siblings": result.get("siblings", {}),
         "reason": result.get("reason"),
-        "calls": {"decision": getattr(model, "requests", None), "optimizer": getattr(optimizer, "calls", None)},
+        "calls": {"decision": getattr(model, "requests", None), "optimizer": getattr(transport, "calls", None)},
     }
     print(json.dumps({"event": "retraining_learned", "run": target.run_id, "accepted": result["record"] is not None}))
     if result["record"] is None:
@@ -355,19 +367,16 @@ def retrain(runtime, target, *, model, optimizer, principal, directory):
 
         state.change(refused)
         return summary
-    record = {**result["record"], "state": {**((parent or {}).get("state") or {}), **result["record"]["versions"]}}
-    job, reference = queue_adoption(runtime, target, record, principal=principal)
-
-    def queued(value):
-        value["started"], value["failures"] = None, 0
-        value["pending"] = {
-            "jobId": job["id"],
-            "iteration": reference,
-            "learned": learned_summary(result, votes),
-            "summary": summary,
-        }
-
-    state.change(queued)
+    iteration = store_iteration(runtime, target, result["record"])
+    state.change(
+        lambda value: value.update(
+            started=None,
+            failures=0,
+            pending={"jobId": None, "iteration": iteration, "learned": learned_summary(result, votes), "summary": summary},
+        )
+    )
+    job = submit_adoption(runtime, target, iteration, principal=principal)
+    state.change(lambda value: value["pending"].update(jobId=job["id"]))
     return summary
 
 
@@ -397,6 +406,7 @@ def main():
             target,
             model=Deadlined(model, MODEL_CALL_SECONDS),
             optimizer=OptimizerAgent(transport),
+            transport=transport,
             principal=os.environ["CYCLOTRON_RETRAIN_ROLE_ARN"],
             directory=directory,
         )

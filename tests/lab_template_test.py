@@ -149,7 +149,16 @@ def _statements(statements):
             yield statement
 
 
-def test_only_the_bff_and_worker_may_list_the_books_bucket_and_nothing_else():
+def test_the_retraining_task_runs_the_same_package_as_the_worker():
+    resources = check.load_template()["Resources"]
+    container = resources["RetrainingTaskDefinition"]["Properties"]["ContainerDefinitions"][0]
+    values = {row["Name"]: row["Value"] for row in container["Environment"]}
+    code = resources["WorkerFunction"]["Properties"]["Code"]
+    assert values["CYCLOTRON_PACKAGE_KEY"] == code["S3Key"]
+    assert values["CYCLOTRON_PACKAGE_BUCKET"] == code["S3Bucket"]
+
+
+def test_only_the_bff_worker_and_retraining_task_may_list_the_books_bucket_and_nothing_else():
     resources = check.load_template()["Resources"]
     listed = {}
     for name, resource in resources.items():
@@ -161,7 +170,7 @@ def test_only_the_bff_and_worker_may_list_the_books_bucket_and_nothing_else():
                 if "s3:ListBucket" in actions:
                     listed.setdefault(name, []).append(statement["Resource"])
     bucket = {"Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"}
-    assert listed == {"BffRole": [bucket], "WorkerRole": [bucket]}
+    assert listed == {"BffRole": [bucket], "WorkerRole": [bucket], "RetrainingTaskRole": [bucket]}
 
 
 def test_only_the_bff_role_may_assume_the_verifier_and_the_worker_may_not():

@@ -6,6 +6,7 @@ from .embedded_cyclotron import ClassifierSpec, Cyclotron, CyclotronDefinition
 from .embedded_cyclotron_test import Model, item
 from .iteration_learning import IterationPlan, learn_iteration
 from .iteration_transfer import adopt_iteration
+from .journal import encode
 from .models import LabeledItem
 from .optimizer_agent import OptimizerAgent, OptimizerReply
 from .priming_context import decode_priming, encode_priming
@@ -123,3 +124,61 @@ def test_one_text_voted_under_two_identities_counts_once(tmp_path):
     result = asyncio.run(learn_iteration(plan(votes={"one": rows, "two": ()}), Model(), OptimizerAgent(Luna()), tmp_path))
     assert result["report"]["one"]["votes"] == 24
     assert result["record"] is not None
+
+
+def test_when_a_primed_store_accepts_two_sites_both_classifiers_survive_the_next_live_decision(tmp_path):
+    from dataclasses import asdict
+
+    both = {"one": votes(24), "two": votes(24, "two")}
+    live = Cyclotron.open(tmp_path / "live", definition(), Model(), max_requests=None)
+    asyncio.run(live.add_priming_examples(decode_priming(priming()), added_by="editor"))
+    current = {cid: json.loads(encode(asdict(wheel.active))) for cid, wheel in live.wheels.items()}
+    result = asyncio.run(
+        learn_iteration(
+            plan(votes=both, due=("one", "two"), live=current, priming=priming()),
+            Model(),
+            OptimizerAgent(Luna()),
+            tmp_path / "learn",
+        )
+    )
+    assert asyncio.run(adopt_iteration(live, result["record"]))["adopted"]
+    versions = {cid: wheel.active.fingerprint for cid, wheel in live.wheels.items()}
+    live.close()
+    model = Model()
+    reopened = Cyclotron.open(tmp_path / "live", definition(), model, max_requests=None)
+    asyncio.run(reopened.decide(item("brand-new", "yes brand new")))
+    assert model.calls == 1
+    assert {cid: wheel.active.fingerprint for cid, wheel in reopened.wheels.items()} == versions
+    assert all(wheel.active.head is not None for wheel in reopened.wheels.values())
+    reopened.close()
+
+
+def test_a_fitted_incoming_version_is_scored_with_its_classifier_not_its_raw_answers(tmp_path, monkeypatch):
+    from dataclasses import asdict
+
+    first = asyncio.run(learn_iteration(plan(), Model(), OptimizerAgent(Luna()), tmp_path / "one"))
+    live = Cyclotron.open(tmp_path / "live", definition(), Model(), priming_examples=decode_priming(priming()), max_requests=None)
+    asyncio.run(adopt_iteration(live, first["record"]))
+    current = {cid: json.loads(encode(asdict(wheel.active))) for cid, wheel in live.wheels.items()}
+    stored = json.loads(live.root_storage.meta("priming_examples")[0])
+    live.close()
+    predicted = []
+    from . import head as head_module
+
+    real = head_module.LearnedHead.predict
+
+    def counted(self, *args, **kwargs):
+        predicted.append(self)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(head_module.LearnedHead, "predict", counted)
+    second = asyncio.run(
+        learn_iteration(
+            plan(identity="second", parent="first", live=current, priming=stored),
+            Model(),
+            OptimizerAgent(Luna()),
+            tmp_path / "two",
+        )
+    )
+    assert second["record"]["parent"] == "first"
+    assert current["one"]["head"]["refitted_cyclotron_fingerprint"] in {h.refitted_cyclotron_fingerprint for h in predicted}

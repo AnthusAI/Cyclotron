@@ -52,7 +52,13 @@ def learned(path):
             )
             wheel._activate(candidate)
             record = iteration_record(
-                engine, identity="first", parent=None, base=base, examples={"one": rows}, acceptance={"one": {"accepted": True}}
+                engine,
+                identity="first",
+                parent=None,
+                base=base,
+                examples={"one": rows},
+                voted=[row.item.id for row in rows],
+                acceptance={"one": {"accepted": True}},
             )
         engine.close()
         return record, candidate
