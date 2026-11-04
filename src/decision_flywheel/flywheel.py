@@ -26,6 +26,7 @@ from .feedback import FeedbackItem
 from .head import Calibration, HeadProvenance, LearnedHead, OutOfFoldPredictions
 from .models import DecisionResult, DecisionTask, Item, LabeledItem
 from .optimizer_agent import FeedbackBriefing, OptimizerAgent
+from .storage_errors import ReservationUncertain, StorageUncertain
 
 
 def _json(value):
@@ -920,7 +921,7 @@ class DecisionFlywheel:
         return SimpleNamespace(
             cached=None,
             # The reservation grants the paid call, so it is durable before the call is made.
-            reserve=lambda: self.runtime_cache.begin_answer(key, row),
+            reserve=lambda: self._reserve_answer(key, row),
             reserved=False,
             key=key,
             row=row,
@@ -928,6 +929,12 @@ class DecisionFlywheel:
             identity=identity,
             request=request,
         )
+
+    def _reserve_answer(self, key, row):
+        try:
+            self.runtime_cache.begin_answer(key, row)
+        except StorageUncertain as error:
+            raise ReservationUncertain("the reservation for this decision could not be written") from error
 
     @staticmethod
     def _features(config, batch):

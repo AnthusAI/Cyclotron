@@ -226,6 +226,13 @@ Reconciliation failures carry `code: reconciliation_required` through HTTP. The
 remote client preserves that state and never describes an ambiguous dispatch as
 a confirmed refusal or automatically retries it.
 
+A decision whose answer reservation cannot be written ends with a failed receipt,
+`code: reconciliation_required` (HTTP 409) and `status: failed`, so one storage failure
+cannot hold its run's queue.
+No new paid call follows from it. A call already made is settled in the shared ledger,
+so sending the item again, under a new request id, reads that result instead of paying
+twice. Other uncertain writes still leave the job running for operator reconciliation.
+
 ### Record reads after recovery
 
 Record publication has no record or byte budget. Before writing, it reads and

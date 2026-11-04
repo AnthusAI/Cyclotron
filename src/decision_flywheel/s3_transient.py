@@ -56,6 +56,18 @@ def error_code(error):
     return (response.get("Error") or {}).get("Code") if isinstance(response, dict) else None
 
 
+def failure_codes(error):
+    """The S3 codes along an exception's cause chain. Codes name a failure kind; they hold no URL, key or credential."""
+    codes, seen, current = [], set(), error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = error_code(current)
+        if code is not None and str(code) not in codes:
+            codes.append(str(code))
+        current = current.__cause__ or current.__context__
+    return codes
+
+
 def is_transient(error):
     if isinstance(error, (TimeoutError, ConnectionError)):
         return True

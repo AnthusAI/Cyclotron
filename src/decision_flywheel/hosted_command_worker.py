@@ -5,6 +5,7 @@ never steals a running claim or repeats a paid request after uncertain delivery.
 """
 
 import asyncio
+import json
 import time
 from uuid import uuid4
 
@@ -35,6 +36,26 @@ class AuthorizedModel:
     async def classify_many(self, *args, **kwargs):
         await self.guard()
         return await self.model.classify_many(*args, **kwargs)
+
+
+def stuck_run_metric(stuck):
+    """One log line CloudWatch reads as a metric (embedded metric format), so an alarm needs no write permission.
+
+    Written on every sweep, zero included, so a missing value means the sweep itself stopped. Ids and counts only.
+    """
+    return json.dumps(
+        {
+            "_aws": {
+                "Timestamp": int(time.time() * 1000),
+                "CloudWatchMetrics": [
+                    {"Namespace": "Cyclotron/Lab", "Dimensions": [[]], "Metrics": [{"Name": "StuckRunMinutes", "Unit": "None"}]}
+                ],
+            },
+            "StuckRunMinutes": stuck[0]["runningMinutes"] if stuck else 0,
+            "stuckJobs": [row["id"] for row in stuck],
+            "blockedJobs": sum(row["blockedJobs"] for row in stuck),
+        }
+    )
 
 
 async def no_job_guard():
@@ -225,6 +246,7 @@ class HostedCommandWorker:
         A run whose head fails here is reported by class only and does not stop the other runs.
         """
         store = await asyncio.to_thread(self.store_for_account, account_id)
+        print(stuck_run_metric(await asyncio.to_thread(store.stuck_heads)))
         outcomes = []
         for head in await asyncio.to_thread(store.ready_heads):
             if not self._has_time(remaining):

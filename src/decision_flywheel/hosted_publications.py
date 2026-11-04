@@ -35,9 +35,11 @@ from .publication_lab import (
 )
 from .s3_embedded_storage import S3CyclotronStores
 from .s3_runtime_storage import RuntimeOwnershipError
+from .s3_transient import failure_codes
 from .standing_publications import validate_item
-from .storage_errors import StorageConflict, StorageUncertain
+from .storage_errors import ReservationUncertain, StorageConflict, StorageUncertain
 
+STORAGE_FAILED = "storage failed while recording this decision, so none was returned; send the item again"
 PROVIDER_FAILED = "the decision model call failed, so no decision was returned; it needs an operator retry"
 
 
@@ -497,6 +499,13 @@ class PublicationCommandRuntime:
                             {"bindingRevision": binding.revision, "item": item},
                             execution_guard=fresh,
                         )
+                except ReservationUncertain as error:
+                    # No new paid call follows, and one already made is settled in the shared ledger. A terminal receipt
+                    # keeps the run free; leaving the job running would block every other item until an operator
+                    # reconciled it.
+                    print(f"decision_reservation_failed codes={failure_codes(error)}")  # codes only: no job content
+                    # The code callers already treat as a job that ended: drop it and send the item again, once.
+                    raise CommandRefused("reconciliation_required", STORAGE_FAILED) from None
                 except BatchInProgress:
                     # Raised while reserving the shared request, before any dispatch: another attempt at this exact
                     # decision never finished, and only an operator can say what became of it. A terminal receipt
