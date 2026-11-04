@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import replace
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -9,9 +10,19 @@ import pytest
 from . import account_sessions_test
 from .embedded_cyclotron_test import Model
 from .hosted_machine_publications_test import ROLE, body, client, decide, fixture
+from .hosted_publications import PublicationCommandRuntime
 from .iteration_learning_test import Luna
 from .optimizer_agent import OptimizerAgent
-from .retraining import Deadlined, RetrainingState, check_run, may_start, retrain
+from .retraining import (
+    Deadlined,
+    RetrainingState,
+    check_run,
+    job_decisions,
+    look_up_older_decisions,
+    may_start,
+    refresh_votes,
+    retrain,
+)
 
 identity = account_sessions_test.identity
 SETTINGS = {"cluster": "cluster", "task_definition": "task", "subnets": ["subnet-1"], "principal": ROLE}
@@ -231,3 +242,124 @@ def test_the_next_iteration_starts_from_the_live_store_even_if_the_state_is_behi
     _, parent, live = live_store(worker, account, store.run(target.run_id)["config"])
     assert parent == state["pending"]["iteration"]["id"]
     assert live["alpha"]["head"] is not None
+
+
+def test_votes_on_decisions_made_before_filing_by_item_still_start_a_task(identity, monkeypatch):
+    monkeypatch.setattr(PublicationCommandRuntime, "record_decided", lambda *args: None)
+    worker, _, _, account, _, target, _, _ = prepared(identity, monkeypatch, 24)
+    ecs = Ecs()
+    check = check_run(worker, target, ecs, SETTINGS)
+    assert check["started"] and check["due"] == ["alpha"]
+    rows = RetrainingState(worker, account, target.run_id).read().value["votes"]["alpha"]
+    assert all(row["decided"] and row["lookedUp"] for row in rows.values())
+
+
+def test_no_task_starts_until_the_lookup_of_older_decisions_has_finished(identity, monkeypatch):
+    monkeypatch.setattr(PublicationCommandRuntime, "record_decided", lambda *args: None)
+    worker, *_, target, _, _ = prepared(identity, monkeypatch, 24)
+    ecs = Ecs()
+    waiting = check_run(worker, target, ecs, SETTINGS, deadline=float("-inf"))
+    assert waiting["lookingUpOlderDecisions"] and not waiting["started"] and ecs.started == []
+    assert check_run(worker, target, ecs, SETTINGS)["started"]
+
+
+def decision_job(item, label, *, revision=1):
+    decision = {"classifiers": {"alpha": {"label": label, "confidence": 0.9}}}
+    response = {"publications": {"alpha": {"decision": decision, "source": {"revision": revision}}}}
+    return {"id": f"{item}-{label}", "status": "completed", "kind": "predict", "payload": {"item": {"id": item}}}, response
+
+
+class Jobs:
+    """A run's job records, oldest first, counting how often they are walked."""
+
+    def __init__(self, *jobs):
+        self.jobs, self.walks = [job for job, _ in jobs], 0
+        self.responses = {job["id"]: {"response": response} for job, response in jobs}
+
+    def run_job_count(self, run_id):
+        self.walks += 1
+        return len(self.jobs)
+
+    def run_job_at(self, run_id, position, *, results):
+        return self.jobs[position - 1]
+
+    def job_result(self, job_id):
+        return self.responses[job_id]
+
+
+class Journal:
+    def __init__(self, votes):
+        self.value = {"votes": {"alpha": votes}, "lookup": None}
+
+    def read(self):
+        return SimpleNamespace(value=self.value)
+
+    def change(self, apply):
+        apply(self.value)
+
+
+def awaiting(*items, revision=1):
+    return {item: {"revision": revision, "label": "include", "decided": None, "lookedUp": False} for item in items}
+
+
+def test_an_items_first_decision_is_the_one_that_stands(monkeypatch):
+    monkeypatch.setattr("decision_flywheel.retraining.is_decision", lambda kind: True)
+    state = Journal(awaiting("a"))
+    look_up_older_decisions(Jobs(decision_job("a", "exclude"), decision_job("a", "include")), "run", state)
+    assert state.value["votes"]["alpha"]["a"]["decided"]["label"] == "exclude"
+
+
+def test_a_decision_of_another_revision_does_not_answer_for_the_vote(monkeypatch):
+    monkeypatch.setattr("decision_flywheel.retraining.is_decision", lambda kind: True)
+    state = Journal(awaiting("a", revision=2))
+    look_up_older_decisions(Jobs(decision_job("a", "exclude", revision=1)), "run", state)
+    row = state.value["votes"]["alpha"]["a"]
+    assert row["decided"] is None and row["lookedUp"]
+
+
+def test_an_item_with_no_decision_on_record_is_looked_up_only_once():
+    jobs, state = Jobs(), Journal(awaiting("gone"))
+    look_up_older_decisions(jobs, "run", state)
+    look_up_older_decisions(jobs, "run", state)
+    assert jobs.walks == 1
+
+
+def test_a_lookup_that_runs_out_of_time_carries_on_where_it_stopped(monkeypatch):
+    monkeypatch.setattr("decision_flywheel.retraining.is_decision", lambda kind: True)
+    jobs, state = Jobs(decision_job("a", "exclude"), decision_job("b", "exclude")), Journal(awaiting("a", "b"))
+    ticks = iter([0, 1])
+    look_up_older_decisions(jobs, "run", state, deadline=1, clock=lambda: next(ticks))
+    assert state.value["lookup"] == {"items": ["a", "b"], "position": 1}
+    assert state.value["votes"]["alpha"]["b"]["decided"] and not state.value["votes"]["alpha"]["a"]["decided"]
+    look_up_older_decisions(jobs, "run", state)
+    assert state.value["lookup"] is None and jobs.walks == 1
+    assert state.value["votes"]["alpha"]["a"]["decided"]
+
+
+def test_a_changed_vote_keeps_the_decision_that_was_looked_up():
+    class Store:
+        def events(self, run_id, *, after, limit):
+            row = {
+                "sequence": 1,
+                "payload": {"kind": "publication-machine-feedback", "output": "alpha", "itemId": "a", "itemRevision": 1},
+            }
+            return [row] if after == 0 else []
+
+        def item_labels(self, list_id, item_id, revision):
+            return [{"classifier_id": "alpha", "sequence": 2, "label": "exclude", "comment": None}]
+
+        def item_results(self, list_id, item_id, revision):
+            return []
+
+    decided = {"label": "include", "confidence": 0.9}
+    state = {"cursor": 0, "votes": {"alpha": {"a": {"revision": 1, "label": "include", "decided": decided, "lookedUp": True}}}}
+    row = refresh_votes(Store(), "run", "list", state)["votes"]["alpha"]["a"]
+    assert row["label"] == "exclude" and row["decided"] == decided and row["lookedUp"]
+
+
+def test_a_single_publication_decision_is_read_like_a_shared_one():
+    decision = {"classifiers": {"alpha": {"label": "include"}}}
+    assert job_decisions({"decision": decision, "source": {"revision": 3}}) == (
+        3,
+        {"alpha": {"label": "include", "confidence": None}},
+    )
