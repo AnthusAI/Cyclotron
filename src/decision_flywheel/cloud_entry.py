@@ -27,6 +27,9 @@ def runtime():
         from .machine_access import principals_from_environment
 
         principals = principals_from_environment(os.environ)
+        if os.environ.get("CYCLOTRON_RETRAIN_ROLE_ARN"):
+            # Only the worker and the retraining task are told this role, so only they accept the jobs it queues.
+            principals = (*(principals or ()), os.environ["CYCLOTRON_RETRAIN_ROLE_ARN"])
         if config.allow_live and targets is None:
             raise ValueError("live cloud execution requires reviewed publication targets")
         session = get_session()
@@ -134,11 +137,24 @@ def describe_failure(error, started, context=None):
     )
 
 
+def retraining_check():
+    """The scheduled look at each standing run's new votes. Paid work happens only in a task this may start."""
+    from botocore.session import get_session
+
+    from .retraining import check_all, settings_from_environment
+
+    host = runtime()
+    ecs = get_session().create_client("ecs", region_name=host.config.region)
+    return {"retraining": check_all(host, ecs, settings_from_environment(os.environ))}
+
+
 def is_schedule(event):
     return isinstance(event, dict) and event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event"
 
 
 def worker_handler(event, context):
+    if isinstance(event, dict) and event.get("operation") == "retraining-check":
+        return retraining_check()
     remaining = getattr(context, "get_remaining_time_in_millis", None)
     seconds = (lambda: remaining() / 1000) if callable(remaining) else None
     if is_schedule(event):

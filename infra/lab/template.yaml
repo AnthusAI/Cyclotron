@@ -66,6 +66,12 @@ Parameters:
     Type: String
     Default: ''
     Description: The broker's function URL, published to CLIs as remote_login_endpoint; set together with CliBrokerArn
+  RetrainingSubnets:
+    Type: CommaDelimitedList
+    Description: Public default-VPC subnets the retraining task runs in; it needs outbound internet only
+  RetrainingCentralEndpoint:
+    Type: String
+    Description: The central API the retraining task configuration names, passed at deploy; the task does not call it for its own work
 Outputs:
   BackendOrigin:
     Value:
@@ -275,6 +281,10 @@ Resources:
               Resource:
               - Ref: CliBrokerArn
             - Ref: AWS::NoValue
+          - Effect: Allow
+            Action: s3:GetObject
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*
   BffLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -372,6 +382,37 @@ Resources:
             Action: s3:ListBucket
             Resource:
               Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
+          - Effect: Allow
+            Action: ecs:RunTask
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/cyclotron-retraining:*
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::GetAtt:
+                  - RetrainingCluster
+                  - Arn
+          - Effect: Allow
+            Action: ecs:ListTasks
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::GetAtt:
+                  - RetrainingCluster
+                  - Arn
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource:
+            - Fn::GetAtt:
+              - RetrainingTaskRole
+              - Arn
+            - Fn::GetAtt:
+              - RetrainingExecutionRole
+              - Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
   WorkerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -683,6 +724,15 @@ Resources:
             Ref: PredictionModel
           CYCLOTRON_DECISION_EVENT_BUS_ARN:
             Ref: DecisionEventBusArn
+          CYCLOTRON_RETRAIN_CLUSTER:
+            Ref: RetrainingCluster
+          CYCLOTRON_RETRAIN_TASK_DEFINITION: cyclotron-retraining
+          CYCLOTRON_RETRAIN_SUBNETS:
+            Fn::Join:
+            - ','
+            - Ref: RetrainingSubnets
+          CYCLOTRON_RETRAIN_ROLE_ARN: &id003
+            Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-retraining-task
       Tags:
       - Key: lambda:createdBy
         Value: SAM
@@ -801,6 +851,183 @@ Resources:
       SourceArn:
         Fn::GetAtt:
         - WorkerSweepSchedule
+        - Arn
+  RetrainingCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: cyclotron-retraining
+      Tags: &id002
+      - Key: Product
+        Value: cyclotron
+  RetrainingLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/cyclotron-retraining
+      RetentionInDays: 14
+  RetrainingExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cyclotron-retraining-execution
+      AssumeRolePolicyDocument: &id001
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: write-logs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/cyclotron-retraining:*
+  RetrainingTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cyclotron-retraining-task
+      AssumeRolePolicyDocument: *id001
+      Policies:
+      - PolicyName: cyclotron-retraining
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*
+          - Effect: Allow
+            Action: s3:GetObject
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/workspace/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::cdk-hnb659fds-assets-682849160744-us-east-1/cyclotron-console/backend/*
+            - Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-??????
+          - Effect: Allow
+            Action: s3:ListBucket
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
+  RetrainingTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: cyclotron-retraining
+      RequiresCompatibilities:
+      - FARGATE
+      NetworkMode: awsvpc
+      Cpu: '1024'
+      Memory: '4096'
+      ExecutionRoleArn:
+        Fn::GetAtt:
+        - RetrainingExecutionRole
+        - Arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - RetrainingTaskRole
+        - Arn
+      Tags: *id002
+      ContainerDefinitions:
+      - Name: retraining
+        Image: public.ecr.aws/lambda/python:3.13
+        Essential: true
+        EntryPoint:
+        - python3
+        - -c
+        - import boto3,io,os,runpy,sys,zipfile;body=boto3.client('s3').get_object(Bucket=os.environ['CYCLOTRON_PACKAGE_BUCKET'],Key=os.environ['CYCLOTRON_PACKAGE_KEY'])['Body'].read();zipfile.ZipFile(io.BytesIO(body)).extractall('/tmp/package');sys.path.insert(0,'/tmp/package');runpy.run_module('decision_flywheel.retraining',run_name='__main__')
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: /ecs/cyclotron-retraining
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: retraining
+        Environment:
+        - Name: CYCLOTRON_ACCOUNT
+          Value:
+            Ref: AWS::AccountId
+        - Name: CYCLOTRON_ALLOW_LIVE
+          Value:
+            Ref: AllowLive
+        - Name: CYCLOTRON_AUTHORIZATION_ORIGIN
+          Value:
+            Ref: ConsoleAuthorizationOrigin
+        - Name: CYCLOTRON_AUTH_BUCKET
+          Value:
+            Ref: AuthBucket
+        - Name: CYCLOTRON_BOOKS_BUCKET
+          Value:
+            Ref: BooksBucket
+        - Name: CYCLOTRON_CENTRAL_ENDPOINT
+          Value:
+            Ref: RetrainingCentralEndpoint
+        - Name: CYCLOTRON_CLIENT_ID
+          Value:
+            Ref: ConsoleClientId
+        - Name: CYCLOTRON_ISSUER
+          Value:
+            Ref: ConsoleIssuer
+        - Name: CYCLOTRON_PREDICTION_MODEL
+          Value:
+            Ref: PredictionModel
+        - Name: CYCLOTRON_PUBLIC_ORIGIN
+          Value: https://lab.cyclotron.anth.us
+        - Name: CYCLOTRON_QUEUE_URL
+          Value:
+            Ref: CommandQueue
+        - Name: CYCLOTRON_REGION
+          Value:
+            Ref: AWS::Region
+        - Name: CYCLOTRON_SESSION_KEY_ARN
+          Value:
+            Fn::GetAtt:
+            - SessionEncryptionKey
+            - Arn
+        - Name: CYCLOTRON_STANDING_RUNS
+          Value:
+            Fn::If:
+            - HasTargets
+            - Ref: StandingRuns
+            - Ref: AWS::NoValue
+        - Name: CYCLOTRON_PACKAGE_BUCKET
+          Value: cdk-hnb659fds-assets-682849160744-us-east-1
+        - Name: CYCLOTRON_PACKAGE_KEY
+          Value: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
+        - Name: CYCLOTRON_RETRAIN_ROLE_ARN
+          Value: *id003
+  RetrainingCheckSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Every 15 minutes, look at each standing run's new votes and start retraining when they are worth it
+      ScheduleExpression: rate(15 minutes)
+      State: ENABLED
+      Targets:
+      - Id: retraining-check
+        Arn:
+          Fn::GetAtt:
+          - WorkerFunction
+          - Arn
+        Input: '{"operation":"retraining-check"}'
+  RetrainingCheckPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: WorkerFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - RetrainingCheckSchedule
         - Arn
 Conditions:
   HasDecisionEventBus:

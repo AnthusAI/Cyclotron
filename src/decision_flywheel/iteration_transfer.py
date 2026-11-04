@@ -1,0 +1,117 @@
+"""Move a finished iteration from the store it was learned in to the store that decides.
+
+An iteration is learned away from the live store, so decisions keep flowing while it runs. Adopting it needs no model:
+the record carries each fitted version and every answer it was fitted on, so the live store can check them as if it
+had asked itself. Nothing in a record is article text beyond the examples the version decides with.
+"""
+
+import json
+from dataclasses import asdict
+from uuid import uuid4
+
+from .embedded_cyclotron import ITERATION_EXAMPLES
+from .flywheel import _restore
+from .journal import encode
+from .priming_context import decode_priming, encode_priming
+
+CURRENT_ITERATION = "current_iteration"
+
+
+class IterationStale(RuntimeError):
+    """The live store changed after this iteration began; it was learned from something no longer true."""
+
+
+def version_record(wheel) -> dict:
+    """One output's active version with every answer it depends on."""
+    active = wheel.active
+    answers, requests = {}, {}
+    for dependency in active.answer_dependencies:
+        answers[dependency["request_fingerprint"]] = wheel.runtime_cache.answer(dependency["request_fingerprint"])[1]
+        provider = dependency.get("provider_dependency")
+        if provider is not None:
+            requests[provider["request_fingerprint"]] = provider["generation"]
+    return {"classifier": json.loads(encode(asdict(active))), "answers": answers, "requests": requests}
+
+
+def current_iteration(engine) -> str | None:
+    """The id of the iteration this store decides with, or None before the first."""
+    stored = engine.root_storage.meta(CURRENT_ITERATION)
+    return stored[0] if stored else None
+
+
+def iteration_record(engine, *, identity, parent, base, examples, voted, acceptance) -> dict:
+    """What adopting needs: the iteration it grew from, the new versions, and each new version's whole example pool.
+
+    The live store takes these pools as they are, because a fitted classifier names the exact context it was fitted in.
+    ``voted`` names the examples that are operational items, which may still be sent for a decision.
+    """
+    tasks = {cid: spec.task for cid, spec in engine.specs.items()}
+    versions = {cid: version_record(wheel) for cid, wheel in engine.wheels.items() if wheel.active.fingerprint != base[cid]}
+    settled = {}
+    for version in versions.values():
+        for fingerprint, generation in version["requests"].items():
+            settled[fingerprint] = {"generation": generation, "payload": engine.shared.storage.get(fingerprint).payload}
+    return {
+        "id": identity,
+        "parent": parent,
+        "versions": versions,
+        "requests": settled,
+        "examples": encode_priming(dict(examples), tasks, redact=engine.priming_redaction),
+        "voted": sorted(voted),
+        "acceptance": dict(acceptance),
+    }
+
+
+def _import_request(storage, fingerprint, generation, payload):
+    row = storage.get(fingerprint, payload=False)
+    if row is None:
+        owner = str(uuid4())
+        storage.reserve(fingerprint, None, owner, claim=True)
+        row = storage.settle(fingerprint, owner, "complete", payload)
+    if row.status != "complete" or row.generation != generation:
+        raise IterationStale("the live ledger holds a different answer for a request this iteration used")
+
+
+def _import_answer(cache, key, payload):
+    row = cache.answer(key)
+    if row is None:
+        cache.begin_answer(key, None)
+        cache.complete_answer(key, payload, previous=None)
+    elif row[0] != "complete" or json.loads(row[1]) != json.loads(payload):
+        raise IterationStale("the live store holds a different answer for a request this iteration used")
+
+
+async def adopt_iteration(engine, record, *, execution_guard=None) -> dict:
+    """Make ``record`` the live versions, all at once or not at all. Adopting the same record again changes nothing."""
+    versions = {cid: _restore(row["classifier"]) for cid, row in record["versions"].items()}
+    async with engine._learn_lock, engine.execution(execution_guard=execution_guard):
+        current = current_iteration(engine)
+        if current == record["id"]:
+            return {"adopted": False, "versions": {cid: version.fingerprint for cid, version in versions.items()}}
+        if current != record["parent"]:
+            raise IterationStale("another iteration was adopted while this one was learned")
+        for fingerprint, row in record["requests"].items():
+            _import_request(engine.shared.storage, fingerprint, row["generation"], row["payload"])
+        for cid, row in record["versions"].items():
+            for key, payload in row["answers"].items():
+                _import_answer(engine.wheels[cid].runtime_cache, key, payload)
+        stored = engine.root_storage.meta("priming_examples")
+        merged = {**(json.loads(stored[0]) if stored else {}), **record["examples"]}
+        voted = engine.root_storage.meta(ITERATION_EXAMPLES)
+        decidable = set(json.loads(voted[0])) if voted else set()
+        decidable |= set(record["voted"])
+        with engine.root_storage.transaction():
+            engine.root_storage.put_meta("priming_examples", encode(merged).decode())
+            engine.root_storage.put_meta(ITERATION_EXAMPLES, encode(sorted(decidable)).decode())
+        engine.priming_examples = decode_priming(merged)
+        for cid, version in versions.items():
+            wheel = engine.wheels[cid]
+            wheel._activate(version)
+            wheel._emit(
+                {"kind": "iteration-accepted", "acceptance": record["acceptance"].get(cid), "version": version.fingerprint}
+            )
+        # Last: a failure before this leaves the record adoptable again, and everything above repeats harmlessly.
+        with engine.root_storage.transaction():
+            engine.root_storage.put_meta(CURRENT_ITERATION, record["id"])
+        engine._sync()
+    return {"adopted": True, "versions": {cid: version.fingerprint for cid, version in versions.items()}}

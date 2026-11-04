@@ -154,6 +154,40 @@ def test_an_isolated_trial_can_be_measured_without_changing_the_shared_incumbent
     wheel.close()
 
 
+def test_the_iteration_rule_can_activate_a_trial_that_did_not_beat_the_incumbent(tmp_path):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]))
+    kwargs = dict(protected=(), propensities={r.item.id: 1.0 for r in TRAIN})
+    asyncio.run(wheel.improve(TRAIN, DEV, **kwargs))
+    before = wheel.active.fingerprint
+    trial = asyncio.run(
+        wheel.improve(
+            TRAIN, DEV, apply_promotion=False, candidate_proposal={"rationale": "same", "rubric": "A new rubric."}, **kwargs
+        )
+    )
+    assert trial["trial_fingerprint"]
+    assert not trial["improved"]
+    with pytest.raises(ValueError, match="did not improve"):
+        wheel.promote_trial(trial["trial_fingerprint"], TRAIN, DEV)
+    with pytest.raises(ValueError, match="did not accept"):
+        wheel.accept_trial(trial["trial_fingerprint"], TRAIN, DEV, acceptance={"accepted": False})
+    assert wheel.active.fingerprint == before
+    wheel.accept_trial(trial["trial_fingerprint"], TRAIN, DEV, acceptance={"accepted": True, "phase": "young"})
+    assert wheel.active.fingerprint != before
+    assert wheel.active.config.rubric == "A new rubric."
+    assert [e["acceptance"]["phase"] for e in wheel.events_of(("iteration-accepted",))] == ["young"]
+    wheel.close()
+
+
+def test_the_iteration_rule_cannot_activate_a_trial_measured_against_another_incumbent(tmp_path):
+    wheel = DecisionFlywheel(tmp_path / "wheel.sqlite", ClassifierConfig(TASK), FakeModel(), agent([]))
+    kwargs = dict(protected=(), propensities={r.item.id: 1.0 for r in TRAIN})
+    trial = asyncio.run(wheel.improve(TRAIN, DEV, apply_promotion=False, **kwargs))
+    wheel.promote_trial(trial["trial_fingerprint"], TRAIN, DEV)
+    with pytest.raises(ValueError, match="did not improve"):
+        wheel.accept_trial(trial["trial_fingerprint"], TRAIN, DEV, acceptance={"accepted": True})
+    wheel.close()
+
+
 @pytest.mark.parametrize("policy,promoted", [("equal_class", True), ("natural", False)])
 def test_promotion_uses_the_selected_score_even_when_the_two_views_disagree(tmp_path, policy, promoted):
     wheel = DecisionFlywheel(

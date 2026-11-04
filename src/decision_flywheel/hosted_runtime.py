@@ -207,8 +207,8 @@ class HostedRuntime:
             raise MachineDenied('machine workspace binding changed')
 
     def _data_command(self, kind, payload):
-        from .hosted_publications import is_priming_command
-        return is_priming_command(kind, payload)
+        from .hosted_publications import is_adoption_command,is_priming_command
+        return is_priming_command(kind, payload) or is_adoption_command(kind, payload)
 
     def _publication_command_policy(self, account_id, run_id, kind):
         if self.publication_targets is None:
