@@ -16,8 +16,11 @@ from .hosted_publications import DecisionModel, PublicationTarget
 from .hosted_publications_test import ITEM, PUBS, setup
 from .machine_access import MachineActor, MachineDenied
 from .provider_credentials import ProviderKeyUnavailable
+from .record_lake import RecordUncertain
 from .s3_batch_storage import S3BatchStorage
 from .s3_console_storage import S3ConsoleStorage
+from .s3_journal_test import S3Error
+from .s3_runtime_storage import _Cache
 
 ROLE = "arn:aws:iam::222222222222:role/synthetic-invoker"
 CALLER = "arn:aws:sts::222222222222:assumed-role/synthetic-invoker/papyrus-monitor"
@@ -629,6 +632,74 @@ def test_a_failed_provider_call_ends_with_a_receipt_frees_the_run_and_is_not_pai
             # The run is free: another item is decided normally.
             _, receipt = await decide(http, worker, sent, new_item("hn-2"))
             assert receipt.status_code == 200
+
+    asyncio.run(go())
+
+
+def test_a_reservation_that_cannot_be_written_ends_with_a_receipt_frees_the_run_and_is_not_paid_for_twice(
+    identity, monkeypatch, capsys
+):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    real_call, real_begin = model.classify_many, _Cache.begin_answer
+    state = {"fail": True, "dispatched": 0}
+
+    async def counted(*args, **kwargs):
+        state["dispatched"] += 1
+        return await real_call(*args, **kwargs)
+
+    def begin_answer(self, key, previous):
+        if state["fail"]:
+            error = RecordUncertain("S3 record write outcome uncertain; repeat the identical record")
+            error.__cause__ = S3Error("SlowDown")
+            raise error
+        return real_begin(self, key, previous)
+
+    model.classify_many = counted
+    monkeypatch.setattr(_Cache, "begin_answer", begin_answer)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 409 and receipt.json()["code"] == "reconciliation_required"
+            assert state["dispatched"] == 1
+            assert not any(j["status"] == "running" for j in store.jobs(targets[0].run_id))
+            assert "decision_reservation_failed codes=['SlowDown']" in capsys.readouterr().out
+            # The run is free, and once storage recovers the same item is decided from the result already paid for.
+            state["fail"] = False
+            _, receipt = await decide(http, worker, sent, new_item("hn-2"))
+            assert receipt.status_code == 200 and state["dispatched"] == 2
+            _, receipt = await decide(http, worker, sent, new_item("hn-1"))
+            assert receipt.status_code == 200 and state["dispatched"] == 2
+
+    asyncio.run(go())
+
+
+def test_a_failed_write_after_the_model_was_called_still_leaves_the_job_for_an_operator(identity, monkeypatch):
+    (bff, worker, model, store, config, account, *_, sent, targets, app), wrapped = fixture(identity, monkeypatch)
+    state = {"dispatched": 0}
+    real_call = model.classify_many
+
+    async def counted(*args, **kwargs):
+        state["dispatched"] += 1
+        return await real_call(*args, **kwargs)
+
+    def complete_answer(self, *args, **kwargs):
+        raise RecordUncertain("S3 record write outcome uncertain; repeat the identical record")
+
+    model.classify_many = counted
+    monkeypatch.setattr(_Cache, "complete_answer", complete_answer)
+
+    async def go():
+        async with client(wrapped, config, account) as http:
+            response = await http.post(
+                "/machine/publications/alpha/operations",
+                json=body("decide", {"bindingRevision": "binding-one", "item": new_item("hn-1")}, "req-paid"),
+            )
+            assert response.status_code == 202
+            with pytest.raises(RecordUncertain):
+                await worker.worker().process(sent.pop(0))
+            assert state["dispatched"] == 1
+            assert any(j["status"] == "running" for j in store.jobs(targets[0].run_id))
 
     asyncio.run(go())
 

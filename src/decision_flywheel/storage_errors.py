@@ -13,6 +13,15 @@ class StorageConflict(RuntimeError):
     """A competing writer changed the record first; the write did not happen."""
 
 
+class ReservationUncertain(RuntimeError):
+    """Writing a decision's reservation failed, so no new paid call follows from it.
+
+    A shared decision's model call happens before its outputs reserve their answers, and its result is already settled
+    in the shared ledger by then, so sending the item again reads that result instead of paying twice. The reservation
+    may still exist, in which case the request refuses a repeat until an operator looks.
+    """
+
+
 class StorageUncertain(RuntimeError):
     """The write may or may not have happened; the handle must be reopened and reconciled."""
 

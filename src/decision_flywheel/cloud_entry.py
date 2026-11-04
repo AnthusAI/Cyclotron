@@ -6,6 +6,8 @@ import os
 import time
 import traceback
 
+from .s3_transient import failure_codes
+
 _cached_runtime = None
 _cached_adapter = None
 
@@ -123,6 +125,7 @@ def describe_failure(error, started, context=None):
         {
             "event": "delivery_failed",
             "errors": classes,
+            "codes": failure_codes(error),
             "frames": frames,
             "elapsedMs": round((time.monotonic() - started) * 1000),
             "remainingMs": remaining() if callable(remaining) else None,

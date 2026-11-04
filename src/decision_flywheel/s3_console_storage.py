@@ -2103,6 +2103,18 @@ class S3ConsoleStorage:
         """Every run's head that is waiting to start (its run has nothing running), oldest run first."""
         return [{"id": r["id"], "run_id": r["run_id"]} for r in self._ready_heads(self._read())]
 
+    def stuck_heads(self):
+        """Every running job that has held its run past ``STUCK_HEAD_MINUTES``, longest first."""
+        value = self._read()
+        found = []
+        for job_id in value["claims"]:
+            entry = self._job_entry(value, job_id)
+            if entry is not None:
+                state = self._stuck_head(value, entry["row"])
+                if state["stuck"]:
+                    found.append({"id": job_id, "run_id": entry["row"]["run_id"], **state})
+        return sorted(found, key=lambda row: -row["runningMinutes"])
+
     def queue_state(self, job_id):
         """Where one job stands in its run's queue: ``position`` counts unfinished jobs ahead of it (0 = next or running)."""
         value = self._read()
