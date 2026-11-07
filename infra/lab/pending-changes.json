@@ -1,4 +1,16 @@
 {
   "description": "Reviewed changes the next deploy makes beyond infra/lab/deployed-template.snapshot.json. JSON Pointer add and remove operations; see pending-changes.md. Empty the list when the snapshot is refreshed after a deploy.",
-  "operations": []
+  "operations": [
+    {
+      "op": "add",
+      "path": "/Resources/RetrainingTaskRole/Properties/Policies/0/PolicyDocument/Statement/-",
+      "value": {
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": {
+          "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-optimizer-??????"
+        }
+      }
+    }
+  ]
 }
