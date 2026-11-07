@@ -1,6 +1,7 @@
 """A standing run retrains itself, over the real hosted API, queue, worker and S3 stores, with scripted models."""
 
 import asyncio
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
@@ -148,8 +149,9 @@ def test_nothing_starts_while_an_adoption_is_waiting():
     assert not may_start({"pending": {"jobId": "x"}, "started": None, "failures": 0}, 1e9)
 
 
-def test_the_optimizer_is_keyed_from_openais_own_secret_never_the_decision_models():
+def test_the_optimizer_is_keyed_from_openais_own_secret_never_the_decision_models(monkeypatch):
     read = []
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=lambda **kwargs: SimpleNamespace(**kwargs)))
 
     class Secrets:
         def get_secret_value(self, SecretId):
