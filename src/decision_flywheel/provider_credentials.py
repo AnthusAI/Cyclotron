@@ -5,7 +5,10 @@ import threading
 
 from .command_refusal import CommandRefused
 
+# The decision model's key (Jev, TypeSafe's hosted model); the name predates Jev.
 SECRET_NAME = "cyclotron/providers/openai"
+# OpenAI's key, for the retraining optimizer (GPT 6 Luna) only. The decision model never reads it.
+OPTIMIZER_SECRET_NAME = "cyclotron/providers/openai-optimizer"
 
 
 class ProviderKeyUnavailable(CommandRefused):

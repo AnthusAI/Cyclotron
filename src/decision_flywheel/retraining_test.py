@@ -1,6 +1,7 @@
 """A standing run retrains itself, over the real hosted API, queue, worker and S3 stores, with scripted models."""
 
 import asyncio
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
@@ -13,6 +14,7 @@ from .hosted_machine_publications_test import ROLE, body, client, decide, fixtur
 from .hosted_publications import PublicationCommandRuntime
 from .iteration_learning_test import Luna
 from .optimizer_agent import OptimizerAgent
+from .provider_credentials_test import KEY
 from .retraining import (
     Deadlined,
     RetrainingState,
@@ -20,6 +22,7 @@ from .retraining import (
     job_decisions,
     look_up_older_decisions,
     may_start,
+    optimizer_transport,
     refresh_votes,
     retrain,
 )
@@ -144,6 +147,20 @@ def test_a_task_that_keeps_failing_is_retried_further_and_further_apart():
 
 def test_nothing_starts_while_an_adoption_is_waiting():
     assert not may_start({"pending": {"jobId": "x"}, "started": None, "failures": 0}, 1e9)
+
+
+def test_the_optimizer_is_keyed_from_openais_own_secret_never_the_decision_models(monkeypatch):
+    read = []
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=lambda **kwargs: SimpleNamespace(**kwargs)))
+
+    class Secrets:
+        def get_secret_value(self, SecretId):
+            read.append(SecretId)
+            return {"SecretString": KEY}
+
+    transport = optimizer_transport(lambda: Secrets())
+    assert read == ["cyclotron/providers/openai-optimizer"]
+    assert transport.client.api_key == KEY
 
 
 def test_a_hung_model_call_fails_instead_of_holding_the_task_open():
