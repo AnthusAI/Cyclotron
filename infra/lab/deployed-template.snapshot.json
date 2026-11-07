@@ -186,6 +186,14 @@
       "Default": "jev-1.13.0",
       "Type": "String"
     },
+    "RetrainingCentralEndpoint": {
+      "Description": "The central API the retraining task configuration names, passed at deploy; the task does not call it for its own work",
+      "Type": "String"
+    },
+    "RetrainingSubnets": {
+      "Description": "Public default-VPC subnets the retraining task runs in; it needs outbound internet only",
+      "Type": "CommaDelimitedList"
+    },
     "StandingRuns": {
       "Default": "",
       "Description": "Reviewed CYCLOTRON_STANDING_RUNS JSON; empty leaves the variable unset",
@@ -299,7 +307,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808"
+          "S3Key": "cyclotron-console/backend/23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb"
         },
         "Environment": {
           "Variables": {
@@ -664,6 +672,13 @@
                       "Ref": "AWS::NoValue"
                     }
                   ]
+                },
+                {
+                  "Action": "s3:GetObject",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*"
+                  }
                 }
               ],
               "Version": "2012-10-17"
@@ -1007,6 +1022,338 @@
       },
       "Type": "AWS::IAM::Role"
     },
+    "RetrainingCheckPermission": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "WorkerFunction"
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "RetrainingCheckSchedule",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::Lambda::Permission"
+    },
+    "RetrainingCheckSchedule": {
+      "Properties": {
+        "Description": "Every 15 minutes, look at each standing run's new votes and start retraining when they are worth it",
+        "ScheduleExpression": "rate(15 minutes)",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "WorkerFunction",
+                "Arn"
+              ]
+            },
+            "Id": "retraining-check",
+            "Input": "{\"operation\":\"retraining-check\"}"
+          }
+        ]
+      },
+      "Type": "AWS::Events::Rule"
+    },
+    "RetrainingCluster": {
+      "Properties": {
+        "ClusterName": "cyclotron-retraining",
+        "Tags": [
+          {
+            "Key": "Product",
+            "Value": "cyclotron"
+          }
+        ]
+      },
+      "Type": "AWS::ECS::Cluster"
+    },
+    "RetrainingExecutionRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/cyclotron-retraining:*"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "write-logs"
+          }
+        ],
+        "RoleName": "cyclotron-retraining-execution"
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "RetrainingLogGroup": {
+      "Properties": {
+        "LogGroupName": "/ecs/cyclotron-retraining",
+        "RetentionInDays": 14
+      },
+      "Type": "AWS::Logs::LogGroup"
+    },
+    "RetrainingTaskDefinition": {
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "EntryPoint": [
+              "python3",
+              "-c",
+              "import boto3,io,os,runpy,sys,zipfile;body=boto3.client('s3').get_object(Bucket=os.environ['CYCLOTRON_PACKAGE_BUCKET'],Key=os.environ['CYCLOTRON_PACKAGE_KEY'])['Body'].read();zipfile.ZipFile(io.BytesIO(body)).extractall('/tmp/package');sys.path.insert(0,'/tmp/package');runpy.run_module('decision_flywheel.retraining',run_name='__main__')"
+            ],
+            "Environment": [
+              {
+                "Name": "CYCLOTRON_ACCOUNT",
+                "Value": {
+                  "Ref": "AWS::AccountId"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_ALLOW_LIVE",
+                "Value": {
+                  "Ref": "AllowLive"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_AUTHORIZATION_ORIGIN",
+                "Value": {
+                  "Ref": "ConsoleAuthorizationOrigin"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_AUTH_BUCKET",
+                "Value": {
+                  "Ref": "AuthBucket"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_BOOKS_BUCKET",
+                "Value": {
+                  "Ref": "BooksBucket"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_CENTRAL_ENDPOINT",
+                "Value": {
+                  "Ref": "RetrainingCentralEndpoint"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_CLIENT_ID",
+                "Value": {
+                  "Ref": "ConsoleClientId"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_ISSUER",
+                "Value": {
+                  "Ref": "ConsoleIssuer"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_PREDICTION_MODEL",
+                "Value": {
+                  "Ref": "PredictionModel"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_PUBLIC_ORIGIN",
+                "Value": "https://lab.cyclotron.anth.us"
+              },
+              {
+                "Name": "CYCLOTRON_QUEUE_URL",
+                "Value": {
+                  "Ref": "CommandQueue"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_REGION",
+                "Value": {
+                  "Ref": "AWS::Region"
+                }
+              },
+              {
+                "Name": "CYCLOTRON_SESSION_KEY_ARN",
+                "Value": {
+                  "Fn::GetAtt": [
+                    "SessionEncryptionKey",
+                    "Arn"
+                  ]
+                }
+              },
+              {
+                "Name": "CYCLOTRON_STANDING_RUNS",
+                "Value": {
+                  "Fn::If": [
+                    "HasTargets",
+                    {
+                      "Ref": "StandingRuns"
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                }
+              },
+              {
+                "Name": "CYCLOTRON_PACKAGE_BUCKET",
+                "Value": "cdk-hnb659fds-assets-682849160744-us-east-1"
+              },
+              {
+                "Name": "CYCLOTRON_PACKAGE_KEY",
+                "Value": "cyclotron-console/backend/23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb"
+              },
+              {
+                "Name": "CYCLOTRON_RETRAIN_ROLE_ARN",
+                "Value": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-retraining-task"
+                }
+              }
+            ],
+            "Essential": true,
+            "Image": "public.ecr.aws/lambda/python:3.13",
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": "/ecs/cyclotron-retraining",
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "retraining"
+              }
+            },
+            "Name": "retraining"
+          }
+        ],
+        "Cpu": "1024",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "RetrainingExecutionRole",
+            "Arn"
+          ]
+        },
+        "Family": "cyclotron-retraining",
+        "Memory": "4096",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Tags": [
+          {
+            "Key": "Product",
+            "Value": "cyclotron"
+          }
+        ],
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "RetrainingTaskRole",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::ECS::TaskDefinition"
+    },
+    "RetrainingTaskRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/payloads/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/console/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/optimizer/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/records/*"
+                    }
+                  ]
+                },
+                {
+                  "Action": "s3:GetObject",
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/workspace/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::cdk-hnb659fds-assets-682849160744-us-east-1/cyclotron-console/backend/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}/*/console/coordination/runtime/*"
+                    }
+                  ]
+                },
+                {
+                  "Action": "secretsmanager:GetSecretValue",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-??????"
+                  }
+                },
+                {
+                  "Action": "s3:ListBucket",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "cyclotron-retraining"
+          }
+        ],
+        "RoleName": "cyclotron-retraining-task"
+      },
+      "Type": "AWS::IAM::Role"
+    },
     "SessionEncryptionAlias": {
       "Properties": {
         "AliasName": "alias/cyclotron-console-sessions",
@@ -1048,7 +1395,7 @@
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-682849160744-us-east-1",
-          "S3Key": "cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808"
+          "S3Key": "cyclotron-console/backend/23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb"
         },
         "Environment": {
           "Variables": {
@@ -1098,6 +1445,21 @@
             "CYCLOTRON_REGION": {
               "Ref": "AWS::Region"
             },
+            "CYCLOTRON_RETRAIN_CLUSTER": {
+              "Ref": "RetrainingCluster"
+            },
+            "CYCLOTRON_RETRAIN_ROLE_ARN": {
+              "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-retraining-task"
+            },
+            "CYCLOTRON_RETRAIN_SUBNETS": {
+              "Fn::Join": [
+                ",",
+                {
+                  "Ref": "RetrainingSubnets"
+                }
+              ]
+            },
+            "CYCLOTRON_RETRAIN_TASK_DEFINITION": "cyclotron-retraining",
             "CYCLOTRON_SESSION_KEY_ARN": {
               "Fn::GetAtt": [
                 "SessionEncryptionKey",
@@ -1342,6 +1704,61 @@
                   "Resource": {
                     "Fn::Sub": "arn:${AWS::Partition}:s3:::${BooksBucket}"
                   }
+                },
+                {
+                  "Action": "ecs:RunTask",
+                  "Condition": {
+                    "ArnEquals": {
+                      "ecs:cluster": {
+                        "Fn::GetAtt": [
+                          "RetrainingCluster",
+                          "Arn"
+                        ]
+                      }
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/cyclotron-retraining:*"
+                  }
+                },
+                {
+                  "Action": "ecs:ListTasks",
+                  "Condition": {
+                    "ArnEquals": {
+                      "ecs:cluster": {
+                        "Fn::GetAtt": [
+                          "RetrainingCluster",
+                          "Arn"
+                        ]
+                      }
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Action": "iam:PassRole",
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "ecs-tasks.amazonaws.com"
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "RetrainingTaskRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "RetrainingExecutionRole",
+                        "Arn"
+                      ]
+                    }
+                  ]
                 }
               ],
               "Version": "2012-10-17"

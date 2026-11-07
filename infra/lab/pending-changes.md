@@ -8,39 +8,9 @@ Reviewed, committed, not yet deployed. `scripts/dev/check_lab_template.sh` and
 snapshot (`aws cloudformation get-template --template-stage Original`), empty
 `operations`, and empty this list.
 
-## Pending: standing runs retrain themselves in the cloud
+**Pending: retraining reads OpenAI's own key.** The retraining task sent the decision model's key (Jev's, stored as `cyclotron/providers/openai`) to OpenAI, so every optimizer call failed with 401. The task now reads OpenAI's key from a separate secret, `cyclotron/providers/openai-optimizer`, created outside the stack like the first. One statement is appended to `/Resources/RetrainingTaskRole/Properties/Policies/0/PolicyDocument/Statement/-`: `secretsmanager:GetSecretValue` on that secret only. No other role can read it, and the decision model never does. Deploy the code with it or after the secret exists; until then the task fails before any provider call, as it does today.
 
-New in the next deploy. The learning job cannot be a Lambda: it grows with votes and already takes about ten minutes
-at 52 votes, against Lambda's 15-minute limit. So it runs as a one-shot Fargate task.
-
-- `RetrainingSubnets` parameter, no default and passed at deploy: three public default-VPC subnets; the task needs outbound internet only.
-- `RetrainingCentralEndpoint` parameter, no default and passed at deploy: the same central API the worker names, which the shared configuration requires.
-- `RetrainingCluster`, `RetrainingLogGroup` (`/ecs/cyclotron-retraining`, 14 days).
-- `RetrainingTaskDefinition`: 1 vCPU, 4 GB, the public `public.ecr.aws/lambda/python:3.13` image. It adds no image repository: the task downloads the same package key as the worker and runs `decision_flywheel.retraining`.
-- `RetrainingExecutionRole`: writes that log group only.
-- `RetrainingTaskRole`: read and write on the console `payloads`, `records`, `coordination/console` and `coordination/optimizer` prefixes; read on `coordination/workspace`, `coordination/runtime` and the code package; list on the books bucket, because the journals treat a missing key as unknown without it; read on the existing `cyclotron/providers/openai` secret. It cannot write runtime journals or read or write the shared-decision ledger: only the worker can change the live store. It sends no queue messages: the once-a-minute sweep starts its job.
-- `RetrainingCheckSchedule`, `RetrainingCheckPermission`: every 15 minutes, invoke the worker with `{"operation":"retraining-check"}`.
-- `WorkerRole` gains three statements: `ecs:RunTask` on that task family in that cluster, `ecs:ListTasks` in that cluster, `iam:PassRole` on the two new roles to `ecs-tasks` only.
-- `WorkerFunction` gains `CYCLOTRON_RETRAIN_CLUSTER`, `_TASK_DEFINITION`, `_SUBNETS` and `_ROLE_ARN`. The last lets the worker accept adoption jobs queued by the task role. The BFF is not told it, so no API route accepts that role.
-- `BffRole` gains `s3:GetObject` on `coordination/optimizer`, read only, so the `report` route can show each site's retraining state.
-
-Paths added:
-
-- `/Parameters/RetrainingSubnets`
-- `/Parameters/RetrainingCentralEndpoint`
-- `/Resources/RetrainingCluster`
-- `/Resources/RetrainingLogGroup`
-- `/Resources/RetrainingExecutionRole`
-- `/Resources/RetrainingTaskRole`
-- `/Resources/RetrainingTaskDefinition`
-- `/Resources/RetrainingCheckSchedule`
-- `/Resources/RetrainingCheckPermission`
-- `/Resources/WorkerRole/Properties/Policies/0/PolicyDocument/Statement/-`
-- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_CLUSTER`
-- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_TASK_DEFINITION`
-- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_SUBNETS`
-- `/Resources/WorkerFunction/Properties/Environment/Variables/CYCLOTRON_RETRAIN_ROLE_ARN`
-- `/Resources/BffRole/Properties/Policies/0/PolicyDocument/Statement/-`
+Previously: standing runs retrain themselves in the cloud, and a failed storage write can no longer hold a run's queue (lab code f339e5b, package sha256 `23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb`), deployed on 2026-11-06 with change set `retraining-f339e5b` at 13:08Z. It added the `RetrainingSubnets` and `RetrainingCentralEndpoint` parameters, the retraining cluster, log group, task definition, execution and task roles, the 15-minute check schedule and its invoke permission, three `WorkerRole` statements (`ecs:RunTask`, `ecs:ListTasks`, `iam:PassRole` to `ecs-tasks` only), four worker settings, and one read-only `BffRole` statement on `coordination/optimizer`. AWS created the `AWSServiceRoleForECS` service-linked role with the cluster. The snapshot was refreshed.
 
 Previously: each CLI login is enrolled at Prospectus (cli-login 0.3.0; lab code 71d601f, package sha256 `12ad7b9fba857da79134ba3f01f5f438ad09a963f1742e30843e228fab17fe78`), deployed on 2026-10-30 with change set `cli-enroll-71d601f`. Code only; the snapshot was refreshed.
 

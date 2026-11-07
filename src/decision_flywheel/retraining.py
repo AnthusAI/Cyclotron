@@ -454,14 +454,23 @@ def retrain(runtime, target, *, model, optimizer, principal, directory, transpor
     return summary
 
 
-def main():
-    """The Fargate task's entry point."""
+def optimizer_transport(secrets_client_factory):
+    """The optimizer's OpenAI client, keyed from OpenAI's own secret, never the decision model's."""
     from openai import OpenAI
 
     from .adapters.openai_optimizer import OpenAIOptimizer
+    from .provider_credentials import OPTIMIZER_SECRET_NAME, SecretsManagerKeySource
+
+    key = SecretsManagerKeySource(secrets_client_factory, name=OPTIMIZER_SECRET_NAME)()
+    return OpenAIOptimizer(
+        OpenAI(api_key=key, max_retries=0, timeout=OPTIMIZER_CALL_SECONDS), model=OPTIMIZER_MODEL, max_calls=1000
+    )
+
+
+def main():
+    """The Fargate task's entry point."""
     from .cloud_entry import runtime
     from .hosted_publications import configured_targets
-    from .provider_credentials import SecretsManagerKeySource
 
     host = runtime()
     account, run = os.environ["CYCLOTRON_RETRAIN_ACCOUNT"], os.environ["CYCLOTRON_RETRAIN_RUN"]
@@ -470,10 +479,7 @@ def main():
     model, _ = host.model_factory(config)
     from botocore.session import get_session
 
-    key = SecretsManagerKeySource(lambda: get_session().create_client("secretsmanager", region_name=host.config.region))()
-    transport = OpenAIOptimizer(
-        OpenAI(api_key=key, max_retries=0, timeout=OPTIMIZER_CALL_SECONDS), model=OPTIMIZER_MODEL, max_calls=1000
-    )
+    transport = optimizer_transport(lambda: get_session().create_client("secretsmanager", region_name=host.config.region))
     with tempfile.TemporaryDirectory() as directory:
         retrain(
             host,

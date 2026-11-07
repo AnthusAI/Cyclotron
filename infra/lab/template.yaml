@@ -548,7 +548,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
+        S3Key: cyclotron-console/backend/23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb
       FunctionName: cyclotron-console-bff
       Handler: decision_flywheel.cloud_entry.bff_handler
       MemorySize: 3008
@@ -674,7 +674,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-682849160744-us-east-1
-        S3Key: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
+        S3Key: cyclotron-console/backend/23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb
       FunctionName: cyclotron-console-worker
       Handler: decision_flywheel.cloud_entry.worker_handler
       MemorySize: 3008
@@ -925,6 +925,10 @@ Resources:
             Action: s3:ListBucket
             Resource:
               Fn::Sub: arn:${AWS::Partition}:s3:::${BooksBucket}
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:cyclotron/providers/openai-optimizer-??????
   RetrainingTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -1010,7 +1014,7 @@ Resources:
         - Name: CYCLOTRON_PACKAGE_BUCKET
           Value: cdk-hnb659fds-assets-682849160744-us-east-1
         - Name: CYCLOTRON_PACKAGE_KEY
-          Value: cyclotron-console/backend/aa0d6b7c48bde658b77b5a718684d3dd59c419483b7860e09e4e85c8748d0808
+          Value: cyclotron-console/backend/23f3d0e6d2a108225e95a1f85c79a3a5e208847d035295dd7eef67be94608dfb
         - Name: CYCLOTRON_RETRAIN_ROLE_ARN
           Value:
             Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cyclotron-retraining-task
