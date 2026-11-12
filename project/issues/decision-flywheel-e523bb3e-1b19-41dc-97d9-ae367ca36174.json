@@ -1,0 +1,70 @@
+{
+  "id": "decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174",
+  "title": "Compose durable owner-grant authority and host worker enforcement",
+  "description": "Owner: cross-account-sharing; integration partner monitoring-central (PR58 owner). Depends on delegation contract and separately coordinated hosted integration. Durable conditional grant/revocation/audit/request reservations, fresh owner/consumer authority, guarded execution, immutable billing attribution and caller-specific receipt access. Never convert sharing into owner membership or console:write. Test concurrency, revocation during execution/disclosure, uncertain provider reconciliation and private history exclusion. Production target approval and credentials remain pending. Does not block original four-output priming.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": "claude-continuation",
+  "creator": null,
+  "parent": "decision-flywheel-e5dcca5a-6438-41ef-b7a9-4f8e8dd56016",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "decision-flywheel-ea811ff3-8dba-4d50-92c9-9d81e8c1e510",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "aeb32231-c0fc-4087-98a9-2de78a9bf313",
+      "author": "home",
+      "text": "Hosted integration preparation remains isolated from the main owner's merged PR58/bootstrap paths. This task owns new publication_sharing_storage.py and adjacent specifications; new publication_sharing_authorization.py and adjacent specifications; cross-module tests/publication_sharing_integration_test.py; and updates to docs/publication-sharing.md. No runtime, worker, console, account-route, bootstrap, infrastructure or credential files are claimed.\n\nUse the existing canonical Journal/S3Journal, not a new persistence system. One explicitly initialized, bounded owner-and-engine ledger commits grants, quotas, requests, source pins and audit atomically through one conditional head write. Never retry transaction bodies or turn uncertain commit acknowledgements into dispatch authority. Every transaction reads current canonical state. Missing/corrupt state, mismatched ownership, exhausted limits or storage outages fail closed.\n\nRequest-local host authentication must re-resolve the verified session and central account authority at every effect boundary. Issue/revoke requires exact owner role plus a separate exact engine/grant-management approval callback; admin/member/console:write alone is insufficient. Consumer membership requires an additional explicit publication-and-operation authorization callback. No new grants, authentication authority, endpoints or production credentials are deployed by this source preparation.\n\nFeature: Durable and freshly authorized publication sharing\nScenario: Concurrent last allowance\nGiven two processes reading one remaining grant allowance in the canonical journal\nWhen both reserve different requests\nThen only one conditional transaction commits\nAnd only its confirmed reservation may dispatch provider work\nScenario: Lost commit acknowledgement\nGiven a reservation or disclosure commit whose outcome becomes uncertain\nWhen the worker restarts or retries the same request\nThen no additional paid call is authorized\nAnd the original reservation and audit remain available for explicit reconciliation\nScenario: Current owner authority\nGiven a valid session with owner, admin, member or viewer role\nWhen it requests grant management\nThen only the current owner with explicit exact-scope grant authority succeeds\nAnd role, session, publication or operation changes fail closed\nScenario: Durable addressed delivery\nGiven one existing central decision and a current consumer-authorized delivery grant\nWhen its scoped receipt is delivered, the service restarts, and the receipt is requested again\nThen source and decision provenance survive\nAnd no repeated classification occurs\nAnd revocation prevents subsequent disclosure\n\nAll acceptance tests use synthetic identities, fake account transport, local or synthetic conditional journal storage and an offline native model. npm/pip install, download and cache operations remain held for cleanup. Source reviews and remote CI continue; real identity mapping does not block these tests.\n",
+      "created_at": "2026-10-20T15:05:41.824434Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
+    },
+    {
+      "id": "0e7abb2c-b8da-435f-82c8-b3bb3059d923",
+      "author": "home",
+      "text": "Source preparation implemented in new publication_sharing_storage.py, publication_sharing_authorization.py and adjacent specs, plus tests/publication_sharing_integration_test.py. No main-owner runtime, worker, console, bootstrap, infrastructure or credential files changed. The existing journal/account/native modules imported by this implementation are identical between the declared develop base and merged PR58 main.\n\nThe canonical S3 journal adapter pins owner/workspace/engine, performs one conditional commit per transaction, retains grant/quota/source/request/audit atomically, never retries transaction bodies, invalidates uncertain handles and reserves revocation capacity. The account adapter pins a verified request session, uses exact owner role plus explicit grant scope, and checks consumers only against their own account read membership plus publication/operation scope. Neither adapter installs a new production authority.\n\nFinal focused verification passed 312 tests: 118 core sharing, 40 durable storage, 70 request authorization, eight composed service/native-engine cases and 76 existing account/journal neighbors. Specs were run red before implementation. Ruff/format, diff check and Kanbus validation pass. The independent cross-repository smoke also passes real adapter/native-engine composition through the existing Papyrus handoff into a separate internal native Cyclotron: one original central call and one internal call, no duplicate central work; receipt possession alone cannot read source data, and revocation prevents subsequent reads/dispatch. The smoke uses synthetic in-process transport, not a deployed HTTP claim.\n\nThe previous PR60 head 4b50f88d774e1617606041a70fcc89dd84f27156 has terminal passing test/diagrams CI in run39444088412. Papyrus PR388 head17d8b6ba11d456b7bb5aede163d2a4a10b2582de has terminal passing Python/TS/package-smoke CI in runs39444134087 and39444134074. The new PR60 source head will be verified separately after publication.\n\nTask remains in progress for reviewed runtime/transport/canonical source and exact scope-authority composition. No production ledger, grant, route, new authentication authority, credentials, site or infrastructure was provisioned. Real identity metadata and exact activation approval remain pending; the parent has requested the one missing account-picker URL. Original priming remains independent.\n",
+      "created_at": "2026-10-20T15:18:35.100347Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
+    },
+    {
+      "id": "0eea5235-c105-4c86-b9ef-7e13b6abdb8d",
+      "author": "home",
+      "text": "Claude continuation checkpoint — implementation paused at the user's usage-limit request. Do not expand work or poll CI until continuation is requested.\n\n- Repository/worktree: AnthusAI/Cyclotron, `/Users/home/Documents/Codex/2026-10-20/task-4/cyclotron-sharing`.\n- Branch: `feature/ea811f-publication-sharing`; draft https://github.com/AnthusAI/Cyclotron/pull/60.\n- Confirmed pushed source checkpoint: `eeed6f27d7bbb321d7c62de697fd5c8a714ca0b4`; implementation commit `36205f952163be68e8510468caecd144fb09bb8e`. Subsequent handoff commits change Kanbus only.\n- Source is complete for grant contract, canonical Journal/S3Journal storage and fresh request-account adapters. Runtime/worker/console/bootstrap/infra files are untouched. Main release/priming owner remains task `01a15715-535d-777d-95d6-a183095000c8`; coordinate new file claims before wiring.\n- Already passed: 312 focused tests, Ruff/format, whitespace, Kanbus validation and independent review. Cross-repository synthetic smoke performs one central and one separate internal classification; no duplicate central call, owner-account impersonation or implicit source-body access. No critical defect identified.\n- Last observed final-source CI: run `39447274810`, https://github.com/AnthusAI/Cyclotron/actions/runs/39447274810, test/diagrams queued. Not polled since pause. Older head `4b50f88d774e1617606041a70fcc89dd84f27156` passed run `39444088412`. A tracker-only push may start newer checks; verify the exact SHA once when resuming.\n\nNo uncommitted source patches exist; worktree was clean before this bookkeeping. Preserve both isolated checkouts and local operator artifacts in their parent directory: `delivery-receipt.json`, private `identity-mapping.md` and `tenant-identity-readback.json`, and `verification/cyclotron_papyrus_hosted_smoke.py`. Keep private evidence out of public issues. Do not reset, clean or delete these directories; a fresh clone can recover the published source but not local evidence.\n\nNext commands after authorization to resume:\n```sh\ncd /Users/home/Documents/Codex/2026-10-20/task-4/cyclotron-sharing\ngit status --short\ngit log -4 --oneline\nkbs show decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174\ngh pr view 60 --repo AnthusAI/Cyclotron --json headRefOid,statusCheckRollup\ngh run view 39447274810 --repo AnthusAI/Cyclotron\n```\nThen compose reviewed runtime/transport, exact-scope entitlement and canonical source adapters. Real named-account/perspective/publication mapping is unresolved; parent has already requested the account-picker URL. Do not use personal/test tenants or create duplicate accounts. Companion Papyrus draft388 and activation task PPY-90711b3b-4684-4782-bb7e-9d788794a373 hold the site requirements.\n\nApprovals already relayed by parent: ordinary Papyrus/Cyclotron merge/main/deploy is approved; user added the pending PyPI publisher. LeftBlock's specific tested-integration push → PR5 develop merge → main promotion/publication is approved for its owner. Two-cache deletion is approved but still needs a fresh installer-safe window; the earlier cache hold was released and cleanup did not run. Do not ask these approvals again or perform their work during this handoff.\n\nStill required: exact Data Parade site/infrastructure targets, live owner grant/output/source/billing/retention scope and any new authentication authority or persistent credentials. General deployment approval does not authorize those security changes. No live grant, credential or infrastructure mutation occurred; all previous Git pushes/PR edits were confirmed and no external mutation has an uncertain outcome.\n",
+      "created_at": "2026-10-20T15:22:58.844751Z",
+      "comment_type": "default",
+      "agent": {
+        "platform": "codex",
+        "model": "GPT-6",
+        "name": "cross-account-sharing"
+      }
+    }
+  ],
+  "created_at": "2026-10-20T14:25:30.022156Z",
+  "updated_at": "2026-10-20T15:22:58.844772Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "codex",
+    "model": "GPT-6",
+    "name": "cross-account-sharing"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {
+    "project_label": "decision-flywheel",
+    "source": "shared"
+  }
+}

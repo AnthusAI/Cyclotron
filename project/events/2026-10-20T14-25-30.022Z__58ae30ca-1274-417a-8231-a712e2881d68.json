@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "58ae30ca-1274-417a-8231-a712e2881d68",
+  "issue_id": "decision-flywheel-e523bb3e-1b19-41dc-97d9-ae367ca36174",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T14:25:30.022Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Compose durable owner-grant authority and host worker enforcement",
+    "description": "Owner: cross-account-sharing; integration partner monitoring-central (PR58 owner). Depends on delegation contract and separately coordinated hosted integration. Durable conditional grant/revocation/audit/request reservations, fresh owner/consumer authority, guarded execution, immutable billing attribution and caller-specific receipt access. Never convert sharing into owner membership or console:write. Test concurrency, revocation during execution/disclosure, uncertain provider reconciliation and private history exclusion. Production target approval and credentials remain pending. Does not block original four-output priming.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": "cross-account-sharing",
+    "parent": "decision-flywheel-e5dcca5a-6438-41ef-b7a9-4f8e8dd56016",
+    "labels": [],
+    "agent": {
+      "platform": "codex",
+      "model": "GPT-6",
+      "name": "cross-account-sharing"
+    }
+  }
+}

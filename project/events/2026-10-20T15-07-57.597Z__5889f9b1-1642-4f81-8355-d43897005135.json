@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "5889f9b1-1642-4f81-8355-d43897005135",
+  "issue_id": "src/decision_flywheel/publication_sharing_authorization.py",
+  "event_type": "coordination.claim",
+  "occurred_at": "2026-10-20T15:07:57.597Z",
+  "actor_id": "cross-account-sharing",
+  "payload": {
+    "owner": "cross-account-sharing",
+    "claim_id": "sharing-authorization-20261020",
+    "lease_expires_at": "2026-10-20T15:12:57.597Z",
+    "contention_window_s": 5,
+    "ttl_s": 300,
+    "revision": 1,
+    "operation_sequence": 1
+  }
+}
